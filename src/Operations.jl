@@ -161,14 +161,17 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
         push!(pkgs, PackageSpec(name, uuid, ver))
     end
     # construct data structures for resolver and call it
-    reqs = Dict{String,Pkg.Types.VersionSet}(string(pkg.uuid) => pkg.version for pkg in pkgs)
+    reqs = Dict{String,Pkg.Types.VersionSet}(string(pkg.uuid) => pkg.version for pkg in 
+                                             filter(pkg -> !(pkg.version isa SHA1), pkgs))
     deps = convert(Dict{String,Dict{VersionNumber,Pkg.Types.Available}}, deps_graph(env, pkgs))
     deps = Pkg.Query.prune_dependencies(reqs, deps)
     vers = convert(Dict{UUID,VersionNumber}, Pkg.Resolve.resolve(reqs, deps))
     find_registered!(env, collect(keys(vers)))
     # update vector of package versions
     for pkg in pkgs
-        pkg.version = vers[pkg.uuid]
+        if haskey(vers, pkg.uuid)
+            pkg.version = vers[pkg.uuid]
+        end
     end
     uuids = UUID[pkg.uuid for pkg in pkgs]
     for (uuid, ver) in vers
@@ -186,8 +189,13 @@ function version_data(env::EnvCache, pkgs::Vector{PackageSpec})
     upstreams = Dict{UUID,Vector{String}}()
     for pkg in pkgs
         uuid = pkg.uuid
-        ver = pkg.version::VersionNumber
+        ver = pkg.version::Union{VersionNumber, SHA1}
         upstreams[uuid] = String[]
+        if ver isa SHA1
+            hashes[uuid] = ver
+            names[uuid] = pkg.name
+            push!(upstreams[uuid], manifest_info(env, uuid)["repo"])
+        end
         for path in registered_paths(env, uuid)
             info = parse_toml(path, "package.toml")
             if haskey(names, uuid)
@@ -199,14 +207,16 @@ function version_data(env::EnvCache, pkgs::Vector{PackageSpec})
             end
             repo = info["repo"]
             repo in upstreams[uuid] || push!(upstreams[uuid], repo)
-            vers = load_versions(path)
-            if haskey(vers, ver)
-                h = vers[ver]
-                if haskey(hashes, uuid)
-                    h == hashes[uuid] ||
-                        warn("$uuid: hash mismatch for version $ver!")
-                else
-                    hashes[uuid] = h
+            if !(ver isa SHA1)
+                vers = load_versions(path)
+                if haskey(vers, ver)
+                    h = vers[ver]
+                    if haskey(hashes, uuid)
+                        h == hashes[uuid] ||
+                            warn("$uuid: hash mismatch for version $ver!")
+                    else
+                        hashes[uuid] = h
+                    end
                 end
             end
         end
@@ -224,7 +234,7 @@ function install(
     name::String,
     hash::SHA1,
     urls::Vector{String},
-    version::Union{VersionNumber,Void} = nothing
+    version::Union{VersionNumber,SHA1,Void} = nothing
 )::Tuple{String,Bool}
     # returns path to version & if it's newly installed
     version_path = find_installed(uuid, hash)
@@ -267,7 +277,7 @@ function install(
     return version_path, true
 end
 
-function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::SHA1, version::VersionNumber)
+function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::SHA1, version::Union{VersionNumber, SHA1})
     infos = get!(env.manifest, name, Dict{String,Any}[])
     info = nothing
     for i in infos
@@ -279,7 +289,9 @@ function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::SHA1, ve
         info = Dict{String,Any}("uuid" => string(uuid))
         push!(infos, info)
     end
-    info["version"] = string(version)
+    if version isa VersionNumber
+        info["version"] = string(version)
+    end
     info["hash-sha1"] = string(hash)
     delete!(info, "deps")
     for path in registered_paths(env, uuid)
@@ -320,7 +332,7 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
     new_versions = UUID[]
     for pkg in pkgs
         uuid = pkg.uuid
-        version = pkg.version::VersionNumber
+        version = pkg.version::Union{VersionNumber, SHA1}
         name, hash = names[uuid], hashes[uuid]
         path, new = install(env, uuid, name, hash, urls[uuid], version)
         update_manifest(env, uuid, name, hash, version)
@@ -489,15 +501,22 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec})
         pkg.version isa UpgradeLevel || continue
         level = pkg.version
         info = manifest_info(env, pkg.uuid)
-        ver = VersionNumber(info["version"])
-        if level == UpgradeLevel(:fixed)
-            pkg.version = VersionNumber(info["version"])
+        if info == nothing
+            error("could not find package `$(pkg.name)` in manifest")
+        end
+        if haskey(info, "version")
+            ver = VersionNumber(info["version"])
+            if level == UpgradeLevel(:fixed)
+                pkg.version = VersionNumber(info["version"])
+            else
+                r = level == UpgradeLevel(:patch) ? VersionRange(ver.major, ver.minor) :
+                    level == UpgradeLevel(:minor) ? VersionRange(ver.major) :
+                    level == UpgradeLevel(:major) ? VersionRange() :
+                        error("unexpected upgrade level: $level")
+                pkg.version = VersionSpec(r)
+            end
         else
-            r = level == UpgradeLevel(:patch) ? VersionRange(ver.major, ver.minor) :
-                level == UpgradeLevel(:minor) ? VersionRange(ver.major) :
-                level == UpgradeLevel(:major) ? VersionRange() :
-                    error("unexpected upgrade level: $level")
-            pkg.version = VersionSpec(r)
+            pkg.version = SHA1(info["hash-sha1"])
         end
     end
     # resolve & apply package versions

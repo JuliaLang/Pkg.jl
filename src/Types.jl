@@ -161,7 +161,7 @@ end
 Base.convert(::Type{UpgradeLevel}, s::String) = UpgradeLevel(Symbol(s))
 Base.convert(::Type{Union{VersionSpec,UpgradeLevel}}, v::VersionRange) = VersionSpec(v)
 
-const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
+const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel, SHA1}
 
 mutable struct PackageSpec
     name::String
