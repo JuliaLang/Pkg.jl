@@ -168,8 +168,9 @@ mutable struct PackageSpec
     uuid::UUID
     version::VersionTypes
     mode::Symbol
-    PackageSpec(name::String, uuid::UUID, version::VersionTypes) =
-        new(name, uuid, version, :project)
+    pinned::Union{Void, Bool} # true if pkg> pin, false if pkg> free, else nothing
+    PackageSpec(name::String, uuid::UUID, version::VersionTypes, project::Symbol) =
+        new(name, uuid, version, project, nothing)
 end
 PackageSpec(name::String, uuid::UUID) =
     PackageSpec(name, uuid, VersionSpec())
@@ -177,6 +178,8 @@ PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
     PackageSpec(name, UUID(zero(UInt128)), version)
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
+PackageSpec(name::String, uuid::UUID, version::VersionTypes) =
+    PackageSpec(name, uuid, version, :project)
 
 has_name(pkg::PackageSpec) = !isempty(pkg.name)
 has_uuid(pkg::PackageSpec) = pkg.uuid != UUID(zero(UInt128))
@@ -190,6 +193,11 @@ function Base.show(io::IO, pkg::PackageSpec)
     if vstr != "VersionSpec(\"*\")"
         (has_name(pkg) || has_uuid(pkg)) && print(io, ", ")
         print(io, vstr)
+    end
+    if pkg.pinned == true
+        print(io, ", pinned")
+    elseif pkg.pinned == false
+        print(io, ", freed")
     end
     print(io, ")")
 end

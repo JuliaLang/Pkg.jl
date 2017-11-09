@@ -31,6 +31,8 @@ const cmds = Dict(
     "test"      => :test,
     "gc"        => :gc,
     "fsck"      => :fsck,
+    "pin"       => :pin,
+    "free"      => :free,
 )
 
 const opts = Dict(
@@ -130,6 +132,8 @@ function do_cmd(repl::Base.REPL.AbstractREPL, input::String)
         cmd == :add    ?    do_add!(env, tokens) :
         cmd == :up     ?     do_up!(env, tokens) :
         cmd == :status ? do_status!(env, tokens) :
+        cmd == :pin    ?    do_pin!(env, tokens) :
+        cmd == :free   ?   do_free!(env, tokens) :
             cmderror("`$cmd` command not yet implemented")
     catch err
         if err isa CommandError
@@ -317,6 +321,52 @@ function do_add!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     registry_resolve!(env, pkgs)
     ensure_resolved(env, pkgs, true)
     Pkg3.Operations.add(env, pkgs)
+end
+
+function do_pin!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}}) # tokens: package names and/or uuids, optionally followed by version specs
+    isempty(tokens) &&
+        cmderror("`pin` – list packages to pin")
+    tokens[1][1] == :ver &&
+        cmderror("package name/uuid must precede version spec `@$(tokens[1][2])`")
+    pkgs = PackageSpec[]
+    while !isempty(tokens)
+        token = shift!(tokens)
+        if token[1] == :pkg
+            push!(pkgs, PackageSpec(token[2:end]...))
+        elseif token[1] == :ver
+            pkgs[end].version = VersionSpec(token[2])
+            isempty(tokens) || tokens[1][1] == :pkg ||
+                cmderror("package name/uuid must precede version spec `@$(tokens[1][2])`")
+        elseif token[1] == :opt
+            cmderror("`pin` doesn't take options: --$(join(token[2:end], '='))")
+        end
+    end
+
+    project_resolve!(env, pkgs)
+    registry_resolve!(env, pkgs)
+    ensure_resolved(env, pkgs, true)
+    Pkg3.Operations.pin(env, pkgs)
+end
+
+function do_free!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}}) # tokens: package names and/or uuids, optionally followed by version specs
+    isempty(tokens) &&
+        cmderror("`pin` – list packages to pin")
+    tokens[1][1] == :ver &&
+        cmderror("package name/uuid must precede version spec `@$(tokens[1][2])`")
+    pkgs = PackageSpec[]
+    while !isempty(tokens)
+        token = shift!(tokens)
+        if token[1] == :pkg
+            push!(pkgs, PackageSpec(token[2:end]...))
+        else
+            cmderror("`free` only takes a list of packages to free")
+        end
+    end
+
+    project_resolve!(env, pkgs)
+    registry_resolve!(env, pkgs)
+    ensure_resolved(env, pkgs, true)
+    Pkg3.Operations.free(env, pkgs)
 end
 
 function do_up!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
