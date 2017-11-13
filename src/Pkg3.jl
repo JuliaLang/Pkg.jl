@@ -3,7 +3,10 @@ module Pkg3
 const DEPOTS = [joinpath(homedir(), ".julia")]
 depots() = DEPOTS
 
+const USE_LIBGIT2_FOR_ALL_DOWNLOADS = false
+
 # load snapshotted dependencies
+include("../ext/BinaryProvider/src/BinaryProvider.jl")
 include("../ext/TOML/src/TOML.jl")
 include("../ext/TerminalMenus/src/TerminalMenus.jl")
 
