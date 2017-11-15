@@ -154,12 +154,23 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
     # anything not mentioned is fixed
     uuids = UUID[pkg.uuid for pkg in pkgs]
     for (name::String, uuid::UUID) in env.project["deps"]
-        uuid in uuids && continue
         info = manifest_info(env, uuid)
+        info == nothing && continue
         haskey(info, "version") || continue
         ver = VersionNumber(info["version"])
-        push!(pkgs, PackageSpec(name, uuid, ver))
+        uuid_idx = findfirst(uuids, uuid)
+        if uuid_idx != 0
+            # If package is not currently being explicitly pinned or freed
+            # and it is currently pinned, enforce keeping the
+            # current version
+            haskey(info, "pinned") && info["pinned"] || continue
+            pkg = pkgs[uuid_idx]
+            pkg.pinned == nothing && (pkg.version = ver)
+        else
+            push!(pkgs, PackageSpec(name, uuid, ver))
+        end
     end
+
     # construct data structures for resolver and call it
     reqs = Dict{String,Pkg.Types.VersionSet}(string(pkg.uuid) => pkg.version for pkg in pkgs)
     deps = convert(Dict{String,Dict{VersionNumber,Pkg.Types.Available}}, deps_graph(env, pkgs))
@@ -267,7 +278,7 @@ function install(
     return version_path, true
 end
 
-function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::SHA1, version::VersionNumber)
+function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::SHA1, version::VersionNumber, pinned::Union{Bool, Void})
     infos = get!(env.manifest, name, Dict{String,Any}[])
     info = nothing
     for i in infos
@@ -281,6 +292,8 @@ function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::SHA1, ve
     end
     info["version"] = string(version)
     info["hash-sha1"] = string(hash)
+    pinned == true && (info["pinned"] = true)
+    pinned == false && delete!(info, "pinned")
     delete!(info, "deps")
     for path in registered_paths(env, uuid)
         data = load_package_data(UUID, joinpath(path, "dependencies.toml"), version)
@@ -323,7 +336,7 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
         version = pkg.version::VersionNumber
         name, hash = names[uuid], hashes[uuid]
         path, new = install(env, uuid, name, hash, urls[uuid], version)
-        update_manifest(env, uuid, name, hash, version)
+        update_manifest(env, uuid, name, hash, version, pkg.pinned)
         new && push!(new_versions, uuid)
     end
     prune_manifest(env)
@@ -505,6 +518,28 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec})
     new = apply_versions(env, pkgs)
     write_env(env) # write env before building
     build_versions(env, new)
+end
+
+function pin(env::EnvCache, pkgs::Vector{PackageSpec})
+    for pkg in pkgs
+        pkg.pinned = true
+    end
+
+    # resolve & apply package versions
+    resolve_versions!(env, pkgs)
+    new = apply_versions(env, pkgs)
+    write_env(env) # write env before building
+end
+
+function free(env::EnvCache, pkgs::Vector{PackageSpec})
+    for pkg in pkgs
+        pkg.pinned = false
+    end
+
+    # resolve & apply package versions
+    resolve_versions!(env, pkgs)
+    new = apply_versions(env, pkgs)
+    write_env(env) # write env before building
 end
 
 end # module
