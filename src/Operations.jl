@@ -5,7 +5,7 @@ using Base: LibGit2
 using Base: Pkg
 using Pkg3.TerminalMenus
 using Pkg3.Types
-import Pkg3: depots
+import Pkg3: depots, BinaryProvider, USE_LIBGIT2_FOR_ALL_DOWNLOADS
 
 const SlugInt = UInt32 # max p = 4
 const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -218,6 +218,13 @@ end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 
+function get_archive_url_for_version(url::String, version)
+    if (m = match(r"https://github.com/(.*?)/(.*?).git", url)) != nothing
+        return "https://github.com/$(m.captures[1])/$(m.captures[2])/archive/v$(version).tar.gz"
+    end
+    return nothing
+end
+
 function install(
     env::EnvCache,
     uuid::UUID,
@@ -229,41 +236,68 @@ function install(
     # returns path to version & if it's newly installed
     version_path = find_installed(uuid, hash)
     ispath(version_path) && return version_path, false
-    upstream_dir = joinpath(depots()[1], "upstream")
-    ispath(upstream_dir) || mkpath(upstream_dir)
-    repo_path = joinpath(upstream_dir, string(uuid))
-    repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
-        info("Cloning [$uuid] $name")
-        LibGit2.clone(urls[1], repo_path, isbare=true)
+    info("Installing $name")
+    http_download_successful = false
+    if !USE_LIBGIT2_FOR_ALL_DOWNLOADS
+        for url in urls
+            archive_url = get_archive_url_for_version(url, version)
+            if archive_url != nothing
+                path = tempname() * ".tar.gz"
+                try
+                    BinaryProvider.download(archive_url, path)
+                catch e
+                    # Would be nice with a better error from BinaryProvider
+                    e isa ErrorException && continue
+                    rethrow(e)
+                end
+                http_download_successful = true
+                dir = joinpath(tempdir(), tempname())
+                mkpath(dir)
+                BinaryProvider.unpack(path, dir)
+                dirs = readdir(dir)
+                @assert length(dirs) == 1
+                !isdir(version_path) && mkpath(version_path)
+                mv(joinpath(dir, dirs[1]), version_path; remove_destination=true)
+            end
+        end
     end
-    git_hash = LibGit2.GitHash(hash.bytes)
-    for i = 2:length(urls)
-        try LibGit2.GitObject(repo, git_hash)
-            break # object was found, we can stop
+    if !http_download_successful || USE_LIBGIT2_FOR_ALL_DOWNLOADS
+        upstream_dir = joinpath(depots()[1], "upstream")
+        ispath(upstream_dir) || mkpath(upstream_dir)
+        repo_path = joinpath(upstream_dir, string(uuid))
+        repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
+            info("Cloning [$uuid] $name")
+            LibGit2.clone(urls[1], repo_path, isbare=true)
+        end
+        git_hash = LibGit2.GitHash(hash.bytes)
+        for i = 2:length(urls)
+            try LibGit2.GitObject(repo, git_hash)
+                break # object was found, we can stop
+            catch err
+                err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+            end
+            url = urls[i]
+            info("Updating $name $(repr(url))")
+            LibGit2.fetch(repo, remoteurl=url, refspecs=refspecs)
+        end
+        tree = try
+            LibGit2.GitObject(repo, git_hash)
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+            error("$name: git object $(string(hash)) could not be found")
         end
-        url = urls[i]
-        info("Updating $name $(repr(url))")
-        LibGit2.fetch(repo, remoteurl=url, refspecs=refspecs)
+        tree isa LibGit2.GitTree ||
+            error("$name: git object $(string(hash)) should be a tree, not $(typeof(tree))")
+        mkpath(version_path)
+        opts = LibGit2.CheckoutOptions(
+            checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
+            target_directory = Base.unsafe_convert(Cstring, version_path)
+        )
+        h = string(hash)[1:16]
+        vstr = version != nothing ? "v$version [$h]" : "[$h]"
+        info("Installing $name $vstr")
+        LibGit2.checkout_tree(repo, tree, options=opts)
     end
-    tree = try
-        LibGit2.GitObject(repo, git_hash)
-    catch err
-        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
-        error("$name: git object $(string(hash)) could not be found")
-    end
-    tree isa LibGit2.GitTree ||
-        error("$name: git object $(string(hash)) should be a tree, not $(typeof(tree))")
-    mkpath(version_path)
-    opts = LibGit2.CheckoutOptions(
-        checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
-        target_directory = Base.unsafe_convert(Cstring, version_path)
-    )
-    h = string(hash)[1:16]
-    vstr = version != nothing ? "v$version [$h]" : "[$h]"
-    info("Installing $name $vstr")
-    LibGit2.checkout_tree(repo, tree, options=opts)
     return version_path, true
 end
 
