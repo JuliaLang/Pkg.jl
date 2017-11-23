@@ -56,6 +56,14 @@ function parse_option(word::AbstractString)
         (:opt, opts[k]) : (:opt, opts[k], String(m.captures[3]))
 end
 
+function parse_string(word::AbstractString)
+    if !endswith(word, "\"")
+        cmderror("invalid string syntax, expected ending `\"`")
+    end
+    str = word[chr2ind(word, 2):chr2ind(word, length(word)-1)]
+    return (:string, str)
+end
+
 let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(?-i)",
     name = raw"(\w+)(?:\.jl)?"
     global name_re = Regex("^$name\$")
@@ -67,7 +75,6 @@ const lex_re = r"^[\?\./\+\-](?!\-) | [^@\s]+\s*=\s*[^@\s]+ | @\s*[^@\s]* | [^@\
 
 function tokenize(cmd::String)::Vector{Tuple{Symbol,Vararg{Any}}}
     tokens = Tuple{Symbol,Vararg{Any}}[]
-    # TODO: handle string-quoted values, e.g. path names
     words = map(m->m.match, eachmatch(lex_re, cmd))
     help_mode = false
     while !isempty(words)
@@ -86,7 +93,9 @@ function tokenize(cmd::String)::Vector{Tuple{Symbol,Vararg{Any}}}
     end
     while !isempty(words)
         word = shift!(words)
-        if word[1] == '-'
+        if word[1] == '"'
+            push!(tokens, parse_string(word))
+        elseif word[1] == '-'
             push!(tokens, parse_option(word))
         elseif word[1] == '@'
             push!(tokens, (:ver, VersionRange(strip(word[2:end]))))
@@ -328,6 +337,8 @@ function do_rm!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
             else
                 cmderror("invalid option for `rm`: --$(token[2])")
             end
+        elseif token[1] == :string
+            cmderror("unexpected string encountered: $(token[2])")
         end
     end
     isempty(pkgs) &&
@@ -352,6 +363,8 @@ function do_add!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
                 cmderror("package name/uuid must precede version spec `@$(tokens[1][2])`")
         elseif token[1] == :opt
             cmderror("`add` doesn't take options: --$(join(token[2:end], '='))")
+        elseif token[1] == :string
+            cmderror("unexpected string encountered: $(token[2])")
         end
     end
     Pkg3.API.add(env, pkgs)
@@ -386,6 +399,8 @@ function do_up!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
             else
                 cmderror("invalid option for `up`: --$(token[2])")
             end
+        elseif token[1] == :string
+            cmderror("unexpected string encountered: $(token[2])")
         end
         last_token_type = token[1]
     end
