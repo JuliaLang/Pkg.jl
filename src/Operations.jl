@@ -5,6 +5,7 @@ using Base: LibGit2
 using Pkg3.TerminalMenus
 using Pkg3.Types
 import Pkg3: Pkg2, depots, BinaryProvider, USE_LIBGIT2_FOR_ALL_DOWNLOADS, NUM_CONCURRENT_DOWNLOADS
+import Pkg3: depots, BinaryProvider, USE_LIBGIT2_FOR_ALL_DOWNLOADS, NUM_CONCURRENT_DOWNLOADS
 
 const SlugInt = UInt32 # max p = 4
 const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -666,5 +667,22 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
                  " errored during testing")
     end
 end
+
+function init(path::String)
+    gitpath = nothing
+    try
+        gitpath = git_discover(path, ceiling = homedir())
+    catch err
+        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+    end
+    path = gitpath == nothing ? path : dirname(dirname(gitpath))
+    try mkpath(path) end
+    for f in ("Project.toml", "Manifest.toml")
+        isfile(joinpath(path, f)) && cmderror("Project already initialized at $path")
+    end
+    touch(joinpath(path, "Project.toml"))
+    info("Initialized project in $path by creating the file Project.toml")
+end
+
 end # module
 
