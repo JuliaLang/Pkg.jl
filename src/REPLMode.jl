@@ -102,7 +102,7 @@ function tokenize(cmd::String)::Vector{Tuple{Symbol,Vararg{Any}}}
     return tokens
 end
 
-function do_cmd(repl::Base.REPL.AbstractREPL, input::String)
+function do_cmd(input::String, repl=nothing)
     try
         tokens = tokenize(input)
         local cmd::Symbol
@@ -132,18 +132,24 @@ function do_cmd(repl::Base.REPL.AbstractREPL, input::String)
         cmd == :status ? do_status!(env, tokens) :
             cmderror("`$cmd` command not yet implemented")
     catch err
-        if err isa CommandError
-            Base.display_error(repl.t.err_stream, ErrorException(err.msg), Ptr{Void}[])
+        out = if repl == nothing
+            STDOUT
         else
-            Base.display_error(repl.t.err_stream, err, Base.catch_backtrace())
+            repl.t.err_strean
+        end
+        if err isa CommandError
+            Base.display_error(out, ErrorException(err.msg), Ptr{Void}[])
+        else
+            Base.display_error(out, err, Base.catch_backtrace())
         end
     end
 end
 
-const help = Base.Markdown.parse("""
+prompt(repl) = repl == nothing ? "juliapkg" : "pkg>"
+help(repl) = begin Base.Markdown.parse("""
     **Synopsis**
 
-        pkg> [--env=...] cmd [opts] [args]
+        $(prompt(repl)) [--env=...] cmd [opts] [args]
 
     **Environment**
 
@@ -168,6 +174,7 @@ const help = Base.Markdown.parse("""
 
     `up`: update packages in manifest
     """)
+end
 
 const helps = Dict(
     :help => md"""
@@ -242,13 +249,8 @@ const helps = Dict(
 function do_help!(
     env::EnvCache,
     tokens::Vector{Tuple{Symbol,Vararg{Any}}},
-    repl::Base.REPL.AbstractREPL,
+    repl,
 )
-    disp = Base.REPL.REPLDisplay(repl)
-    if isempty(tokens)
-        Base.display(disp, help)
-        return
-    end
     help_md = md""
     for token in tokens
         if token[1] == :cmd
@@ -263,7 +265,20 @@ function do_help!(
             error("This should not happen")
         end
     end
-    Base.display(disp, help_md)
+    if repl != nothing
+        disp = Base.REPL.REPLDisplay(repl)
+        if isempty(tokens)
+            Base.display(disp, help(repl))
+            return
+        end
+        Base.display(disp, help_md)
+    else
+        if isempty(tokens)
+            Markdown.term(STDOUT, help(repl))
+            return
+        end
+        Markdown.term(STDOUT, help_md)
+    end
 end
 
 function do_rm!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
@@ -405,7 +420,7 @@ function create_mode(repl, main)
         ok || return REPL.transition(s, :abort)
         input = String(take!(buf))
         REPL.reset(repl)
-        do_cmd(repl, input)
+        do_cmd(input, repl)
         REPL.prepare_next(repl)
         REPL.reset_state(s)
         s.current_mode.sticky || REPL.transition(s, main)
