@@ -1,0 +1,7 @@
+#!/usr/bin/env julia
+
+import Pkg3
+
+@eval Base have_color = true
+Pkg3.REPLMode.do_cmd(join(ARGS, " "))
+
