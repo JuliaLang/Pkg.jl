@@ -138,7 +138,7 @@ Base.convert(::Type{VersionSet}, r::VersionRange{m,2}) where {m} =
 Base.convert(::Type{VersionSet}, r::VersionRange{m,3}) where {m} =
     VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1], r.upper[2], r.upper[3]+1))
 Base.convert(::Type{VersionSet}, s::VersionSpec) = mapreduce(VersionSet, ∪, s.ranges)
-Base.convert(::Type{Available}, t::Tuple{SHA1,Dict{UUID,VersionSpec}}) = Available(t...)
+Base.convert(::Type{Available}, t::Dict{UUID,VersionSpec}) = Available(t)
 
 ## command errors (no stacktrace) ##
 

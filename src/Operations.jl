@@ -116,7 +116,7 @@ load_package_data(f::Base.Callable, path::String, version::VersionNumber) =
     get(load_package_data(f, path, [version]), version, nothing)
 
 function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec})
-    deps = Dict{UUID,Dict{VersionNumber,Tuple{SHA1,Dict{UUID,VersionSpec}}}}()
+    deps = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
     uuids = [pkg.uuid for pkg in pkgs]
     seen = UUID[]
     while true
@@ -135,7 +135,7 @@ function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec})
                     r = get_or_make(Dict{String,VersionSpec}, compatibility, v)
                     q = Dict(u => get_or_make(VersionSpec, r, p) for (p, u) in d)
                     # VERSION in get_or_make(VersionSpec, r, "julia") || continue
-                    deps[uuid][v] = (h, q)
+                    deps[uuid][v] = q
                     for (p, u) in d
                         u in uuids || push!(uuids, u)
                     end

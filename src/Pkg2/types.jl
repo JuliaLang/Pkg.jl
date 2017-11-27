@@ -142,17 +142,14 @@ satisfies(pkg::AbstractString, ver::VersionNumber, reqs::Requires) =
     !haskey(reqs, pkg) || in(ver, reqs[pkg])
 
 struct Available
-    sha1::String
     requires::Requires
 end
 
-==(a::Available, b::Available) = a.sha1 == b.sha1 && a.requires == b.requires
-hash(a::Available, h::UInt) = hash((a.sha1, a.requires), h + (0xbc8ae0de9d11d972 % UInt))
-copy(a::Available) = Available(a.sha1, copy(a.requires))
+==(a::Available, b::Available) = a.requires == b.requires
+hash(a::Available, h::UInt) = hash(a.requires, h + (0xbc8ae0de9d11d972 % UInt))
+copy(a::Available) = Available(copy(a.requires))
 
-show(io::IO, a::Available) = isempty(a.requires) ?
-    print(io, "Available(", repr(a.sha1), ")") :
-    print(io, "Available(", repr(a.sha1), ",", a.requires, ")")
+show(io::IO, a::Available) = print(io, "Available(", a.requires, ")")
 
 struct Fixed
     version::VersionNumber
