@@ -1,8 +1,8 @@
 module API
 
-import Pkg3
-import Pkg3: depots, logdir, TOML
-using Pkg3: Types, Dates
+import ..Pkg3
+import ..Pkg3: depots, logdir, TOML, DEFAULT_DEV_PATH
+using ..Pkg3: Dates, Types
 using Base.Random.UUID
 
 previewmode_info() = info("In preview mode")
@@ -222,6 +222,46 @@ function gc(env::EnvCache=EnvCache(); period = Week(6), preview=env.preview[])
     bytes, mb = Base.prettyprint_getunits(sz, length(Base._mem_units), Int64(1024))
     byte_save_str = length(paths_to_delete) == 0 ? "" : (" saving " * @sprintf("%.3f %s", bytes, Base._mem_units[mb]))
     info("Deleted $(length(paths_to_delete)) package installations", byte_save_str)
+end
+
+function url_and_pkg(url_or_pkg::AbstractString)
+    # try to parse as URL or local path
+    m = match(r"(?:^|[/\\])(\w+?)(?:\.jl)?(?:\.git)?$", url_or_pkg)
+    m === nothing && cmderror("can't determine package name from URL: $url_or_pkg")
+    return url_or_pkg, m.captures[1]
+end
+clone(pkg::String; kwargs...) = clone(EnvCache(), pkg; kwargs...)
+
+function clone(env::EnvCache, url::AbstractString; name=nothing, basepath=get(ENV, "JULIA_DEV_PATH", DEFAULT_DEV_PATH), preview=env.preview[])
+    preview && cmderror("Preview mode not implemented for cloning")
+    if name == nothing
+        url, name = url_and_pkg(url)
+    end
+    pkg = PackageSpec(name=name, path=joinpath(basepath, name), url=url)
+    registry_resolve!(env, [pkg])
+    project_resolve!(env, [pkg])
+    manifest_resolve!(env, [pkg])
+    # Cloning a non existent package, give it a UUID and version
+    if !has_uuid(pkg)
+        pkg.version = v"0.0"
+        pkg.uuid = Base.Random.UUID(rand(UInt128))
+    end
+    ensure_resolved(env, [pkg])
+    Pkg3.Operations.clone(env, [pkg])
+end
+
+
+free(;kwargs...)                           = free(PackageSpec[], kwargs...)
+free(pkg::String; kwargs...)               = free([pkg]; kwargs...)
+free(pkgs::Vector{String}; kwargs...)      = free([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+free(pkgs::Vector{PackageSpec}; kwargs...) = free(EnvCache(), pkgs; kwargs...)
+function free(env::EnvCache, pkgs::Vector{PackageSpec}; preview = env.preview[])
+    env.preview[] = preview
+    preview && previewmode_info()
+    project_resolve!(env, pkgs)
+    manifest_resolve!(env, pkgs)
+    ensure_resolved(env, pkgs)
+    Pkg3.Operations.free(env, pkgs)
 end
 
 end # module

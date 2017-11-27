@@ -1,7 +1,7 @@
 module Display
 
 using Base.Random: UUID
-using Pkg3.Types
+using ..Pkg3.Types
 
 export print_project_diff, print_manifest_diff
 
@@ -12,7 +12,7 @@ const colors = Dict(
     '↑' => :light_yellow,
     '~' => :light_yellow,
     '↓' => :light_magenta,
-    '?' => :red,
+    '?' => :white,
 )
 const color_dark = :light_black
 
@@ -70,17 +70,23 @@ function print_manifest_diff(env₀::EnvCache, env₁::EnvCache)
 end
 
 struct VerInfo
-    hash::SHA1
+    hash_or_path::Union{SHA1, String}
     ver::Union{VersionNumber,Void}
 end
+islocal(v::VerInfo) = v.hash_or_path isa String
 
-vstring(a::VerInfo) =
-    a.ver == nothing ? "[$(string(a.hash)[1:16])]" : "v$(a.ver)"
+function vstring(a::VerInfo)
+    if islocal(a)
+        return "[$(a.hash_or_path)]"
+    else
+        return a.ver == nothing ? "[$(string(a.hash_or_path)[1:16])]" : "v$(a.ver)"
+    end
+end
 
 Base.:(==)(a::VerInfo, b::VerInfo) =
-    a.hash == b.hash && a.ver == b.ver
+    a.hash_or_path == b.hash_or_path && a.ver == b.ver
 
-≈(a::VerInfo, b::VerInfo) = a.hash == b.hash &&
+≈(a::VerInfo, b::VerInfo) = a.hash_or_path isa SHA1 && a.hash_or_path == b.hash_or_path &&
     (a.ver == nothing || b.ver == nothing || a.ver == b.ver)
 
 struct DiffEntry
@@ -99,19 +105,24 @@ function print_diff(io::IO, diff::Vector{DiffEntry})
                 verb = ' '
                 vstr = vstring(x.new)
             else
-                if x.old.hash != x.new.hash && x.old.ver != x.new.ver
+                if x.old.hash_or_path != x.new.hash_or_path && x.old.ver != x.new.ver
                     verb = x.old.ver == nothing || x.new.ver == nothing ||
                            x.old.ver == x.new.ver ? '~' :
                            x.old.ver < x.new.ver  ? '↑' : '↓'
                 else
                     verb = '?'
-                    msg = x.old.hash == x.new.hash ?
+                    msg = x.old.hash_or_path isa SHA1 && x.old.hash_or_path == x.new.hash_or_path ?
                         "hashes match but versions don't: $(x.old.ver) ≠ $(x.new.ver)" :
-                        "versions match but hashes don't: $(x.old.hash) ≠ $(x.new.hash)"
+                        "versions match but hashes don't: $(x.old.hash_or_path) ≠ $(x.new.hash_or_path)"
                     push!(warnings, msg)
                 end
-                vstr = x.old.ver == x.new.ver ? vstring(x.new) :
-                    vstring(x.old) * " ⇒ " * vstring(x.new)
+                # Moving from hash -> path
+                if typeof(x.old.hash_or_path) != typeof(x.new.hash_or_path)
+                    vstr = vstring(x.old) * " ⇒ " * vstring(x.new)
+                else
+                    vstr = x.old.ver == x.new.ver ? vstring(x.new) :
+                        vstring(x.old) * " ⇒ " * vstring(x.new)
+                end
             end
         elseif x.new != nothing
             verb = '+'
@@ -142,9 +153,9 @@ end
 
 function name_ver_info(info::Dict)
     name = info["name"]
-    hash = haskey(info, "hash-sha1") ? SHA1(info["hash-sha1"]) : nothing
+    hash_or_path = haskey(info, "path") ? info["path"] : haskey(info, "hash-sha1") ? SHA1(info["hash-sha1"]) : nothing
     ver = haskey(info, "version") ? VersionNumber(info["version"]) : nothing
-    name, VerInfo(hash, ver)
+    name, VerInfo(hash_or_path, ver)
 end
 
 function manifest_diff(manifest₀::Dict, manifest₁::Dict)

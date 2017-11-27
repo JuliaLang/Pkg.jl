@@ -4,7 +4,7 @@ module Query
 
 import ..PkgError
 using ..Types
-import Pkg3.equalto
+import ...Pkg3.equalto
 
 function init_resolve_backtrace(reqs::Requires, fix::Dict{String,Fixed} = Dict{String,Fixed}())
     bktrc = ResolveBacktrace()
@@ -18,9 +18,10 @@ function init_resolve_backtrace(reqs::Requires, fix::Dict{String,Fixed} = Dict{S
     return bktrc
 end
 
-function check_fixed(reqs::Requires, fix::Dict{String,Fixed}, avail::Dict, uuid_to_name::Dict{String, String})
+function check_fixed(reqs::Requires, fix::Dict{String,Fixed}, uuid_to_name::Dict{String, String})
     for (p1,f1) in fix
         for p2 in keys(f1.requires)
+            #=
             if !(haskey(avail, p2) || haskey(fix, p2))
                 name1 = haskey(uuid_to_name, p1) ? uuid_to_name[p1] : "UNKNOWN"
                 uuid_short1 = p1[1:8]
@@ -28,6 +29,7 @@ function check_fixed(reqs::Requires, fix::Dict{String,Fixed}, avail::Dict, uuid_
                 uuid_short2 = p2[1:8]
                 throw(PkgError("unknown package $name2 [$uuid_short2] required by $name1 [$uuid_short1]"))
             end
+            =#
         end
         if !satisfies(p1, f1.version, reqs)
             name1 = haskey(uuid_to_name, p1) ? uuid_to_name[p1] : "UNKNOWN"

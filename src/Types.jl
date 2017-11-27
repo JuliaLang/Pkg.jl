@@ -1,15 +1,15 @@
 module Types
 
 using Base.Random: UUID
-using Pkg3.Pkg2.Types: VersionSet, Available
-using Pkg3: TOML, TerminalMenus, Dates
 
-import Pkg3
-import Pkg3: depots, logdir, iswindows
+import ..Pkg3
+using ..Pkg3.Pkg2.Types: VersionSet, Available
+using ..Pkg3: TOML, TerminalMenus, Dates
+import ..Pkg3: depots, logdir, iswindows
 
-export SHA1, VersionRange, VersionSpec, PackageSpec, UpgradeLevel, EnvCache,
-    CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
-    project_resolve!, manifest_resolve!, registry_resolve!, ensure_resolved,
+export SHA1, VersionRange, VersionSpec, VersionBound, PackageSpec, UpgradeLevel, EnvCache,
+    CommandError, cmderror, has_name, has_uuid, has_path, has_url, has_version, write_env, parse_toml, find_registered!,
+    project_resolve!, manifest_resolve!, registry_resolve!, path_resolve!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     git_file_stream, read_project, read_manifest, pathrepr, registries
 
@@ -134,8 +134,9 @@ Base.convert(::Type{VersionSet}, r::VersionRange{m,1}) where {m} =
     VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1]+1))
 Base.convert(::Type{VersionSet}, r::VersionRange{m,2}) where {m} =
     VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1], r.upper[2]+1))
-Base.convert(::Type{VersionSet}, r::VersionRange{m,3}) where {m} =
-    VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1], r.upper[2], r.upper[3]+1))
+function Base.convert(::Type{VersionSet}, r::VersionRange{m,3}) where {m}
+    VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1], r.upper[2], r.upper[3] #=+1=#)) # <- overflows on typemax(VersionNumber)
+end
 Base.convert(::Type{VersionSet}, s::VersionSpec) = mapreduce(VersionSet, ∪, s.ranges)
 Base.convert(::Type{Available}, t::Dict{UUID,VersionSpec}) = Available(t)
 
@@ -172,18 +173,30 @@ mutable struct PackageSpec
     uuid::UUID
     version::VersionTypes
     mode::Symbol
-    PackageSpec(name::String, uuid::UUID, version::VersionTypes) =
-        new(name, uuid, version, :project)
+    path::String
+    url::String
+    beingfreed::Bool # TODO: Get rid of this field
+    PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes, project::Symbol=:project,
+            path::AbstractString="", url::AbstractString="", beingfreed=false) =
+    new(name, uuid, version, project, path, url, beingfreed)
 end
-PackageSpec(name::String, uuid::UUID) =
+PackageSpec(name::AbstractString, uuid::UUID) =
     PackageSpec(name, uuid, VersionSpec())
 PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
     PackageSpec(name, UUID(zero(UInt128)), version)
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
+PackageSpec(;name::AbstractString="", uuid::UUID=UUID(zero(UInt128)), version::VersionTypes=VersionSpec(),
+            mode::Symbol=:project, path::AbstractString="", url::AbstractString="", beingfreed::Bool=false) =
+    PackageSpec(name, uuid, version, mode, path, url, beingfreed)
+
 
 has_name(pkg::PackageSpec) = !isempty(pkg.name)
 has_uuid(pkg::PackageSpec) = pkg.uuid != UUID(zero(UInt128))
+has_path(pkg::PackageSpec) = !isempty(pkg.path)
+has_url(pkg::PackageSpec)  = !isempty(pkg.urkl)
+# TODO: Optimize:?
+has_version(pkg::PackageSpec) = !(pkg.version isa VersionSpec && pkg.version.ranges == VersionSpec().ranges)
 
 function Base.show(io::IO, pkg::PackageSpec)
     print(io, "PackageSpec(")
