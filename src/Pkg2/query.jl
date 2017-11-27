@@ -6,6 +6,69 @@ import ..PkgError
 using ..Types
 import Pkg3.equalto
 
+function requirements(reqs::Dict, fix::Dict)
+    bktrc = ResolveBacktrace()
+    for (p,f) in fix
+        bktrc[p] = ResolveBacktraceItem(:fixed, f.version)
+    end
+    for (p,vs) in reqs
+        bktrcp = get!(bktrc, p) do; ResolveBacktraceItem() end
+        push!(bktrcp, :required, vs)
+    end
+
+    for (p1,f1) in fix
+        for p2 in keys(f1.requires)
+  #          haskey(fix, p2) || throw(PkgError("unknown package $p2 required by $p1"))
+        end
+        satisfies(p1, f1.version, reqs) ||
+            warn("$p1 is fixed at $(f1.version) conflicting with top-level requirement: $(reqs[p1])")
+        for (p2,f2) in fix
+            satisfies(p1, f1.version, f2.requires) ||
+                warn("$p1 is fixed at $(f1.version) conflicting with requirement for $p2: $(f2.requires[p1])")
+        end
+    end
+    reqs = deepcopy(reqs)
+    for (p,f) in fix
+        merge_requires!(reqs, f.requires)
+        for (rp,rvs) in f.requires
+            bktrcp = get!(bktrc, rp) do; ResolveBacktraceItem() end
+            push!(bktrcp, p=>bktrc[p], rvs)
+        end
+    end
+    for (p,f) in fix
+        delete!(reqs, p)
+    end
+    reqs, bktrc
+end
+
+
+function check_requirements(reqs::Requires, deps::Dict{String,Dict{VersionNumber,Available}}, fix::Dict)
+    for (p,vs) in reqs
+        if !any(vn->(vn in vs), keys(deps[p]))
+            remaining_vs = VersionSet()
+            err_msg = "fixed packages introduce conflicting requirements for $p: \n"
+            available_list = sort!(collect(keys(deps[p])))
+            for (p1,f1) in fix
+                f1r = f1.requires
+                haskey(f1r, p) || continue
+                err_msg *= "         $p1 requires versions $(f1r[p])"
+                if !any([vn in f1r[p] for vn in available_list])
+                    err_msg *= " [none of the available versions can satisfy this requirement]"
+                end
+                err_msg *= "\n"
+                remaining_vs = intersect(remaining_vs, f1r[p])
+            end
+            if isempty(remaining_vs)
+                err_msg *= "       the requirements are unsatisfiable because their intersection is empty"
+            else
+                err_msg *= "       available versions are $(join(available_list, ", ", " and "))"
+            end
+            throw(PkgError(err_msg))
+        end
+    end
+end
+
+
 # If there are explicitly required packages, dicards all versions outside
 # the allowed range.
 # It also propagates requirements: when all allowed versions of a required package

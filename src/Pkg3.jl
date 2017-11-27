@@ -3,6 +3,7 @@ module Pkg3
 
 const DEPOTS = [joinpath(homedir(), ".julia")]
 depots() = DEPOTS
+const DEFAULT_DEV_PATH = joinpath(homedir(), ".julia", "dev")
 
 const USE_LIBGIT2_FOR_ALL_DOWNLOADS = false
 const NUM_CONCURRENT_DOWNLOADS      = 8
@@ -33,7 +34,7 @@ include("Operations.jl")
 include("REPLMode.jl")
 include("API.jl")
 
-import .API: add, rm, up, test
+import .API: add, rm, up, test, clone, free
 const update = up
 
 @enum LoadErrorChoice LOAD_ERROR_QUERY LOAD_ERROR_INSTALL LOAD_ERROR_ERROR
@@ -44,8 +45,22 @@ end
 
 GLOBAL_SETTINGS = GlobalSettings()
 
+
+if VERSION.minor == 6
+    struct Pkg3Loader end
+
+    Base._str(::Pkg3Loader) = Pkg3Loader()
+
+    function Base.load_hook(::Pkg3Loader, name::String, ::Any)
+        return _find_package(name)
+    end
+else
+    Base.find_package(name::String) = _find_package(name)
+end
+
 function __init__()
-    push!(empty!(LOAD_PATH), dirname(dirname(@__DIR__)))
+    # push!(empty!(LOAD_PATH), dirname(dirname(@__DIR__)))
+    VERSION.minor == 6 && push!(LOAD_PATH, Pkg3Loader())
     isdefined(Base, :active_repl) && REPLMode.repl_init(Base.active_repl)
 end
 
@@ -53,13 +68,6 @@ function Base.julia_cmd(julia::AbstractString)
     cmd = invoke(Base.julia_cmd, Tuple{Any}, julia)
     push!(cmd.exec, "-L$(abspath(@__DIR__, "require.jl"))")
     return cmd
-end
-
-if VERSION < v"0.7.0-DEV.2303"
-    Base.find_in_path(name::String, wd::Void)   = _find_package(name)
-    Base.find_in_path(name::String, wd::String) = _find_package(name)
-else
-    Base.find_package(name::String) = _find_package(name)
 end
 
 function _find_package(name::String)
@@ -72,6 +80,7 @@ function _find_package(name::String)
     end
     info = Pkg3.Operations.package_env_info(base, verb = "use")
     info == nothing && @goto find_global
+    haskey(info, "path") && (path = info["path"]; ispath(path)) && return joinpath(path, "src", name)
     haskey(info, "uuid") || @goto find_global
     haskey(info, "hash-sha1") || @goto find_global
     uuid = Base.Random.UUID(info["uuid"])
@@ -108,6 +117,5 @@ function _find_package(name::String)
     end
     return nothing
 end
-
 
 end # module

@@ -70,8 +70,9 @@ function print_manifest_diff(env₀::EnvCache, env₁::EnvCache)
 end
 
 struct VerInfo
-    hash::SHA1
+    hash::Union{SHA1, Void}
     ver::Union{VersionNumber,Void}
+    path::Union{String, Void}
 end
 
 vstring(a::VerInfo) =

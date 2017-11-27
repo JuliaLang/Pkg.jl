@@ -8,9 +8,9 @@ using Pkg3.TerminalMenus
 import Pkg3
 import Pkg3: depots, iswindows
 
-export SHA1, VersionRange, VersionSpec, PackageSpec, UpgradeLevel, EnvCache,
-    CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
-    project_resolve!, manifest_resolve!, registry_resolve!, ensure_resolved,
+export SHA1, VersionRange, VersionSpec, VersionBound, PackageSpec, UpgradeLevel, EnvCache,
+    CommandError, cmderror, has_name, has_uuid, has_path, has_url, has_version, write_env, parse_toml, find_registered!,
+    project_resolve!, manifest_resolve!, registry_resolve!, path_resolve!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     git_file_stream, read_project, read_manifest, pathrepr
 
@@ -135,8 +135,9 @@ Base.convert(::Type{VersionSet}, r::VersionRange{m,1}) where {m} =
     VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1]+1))
 Base.convert(::Type{VersionSet}, r::VersionRange{m,2}) where {m} =
     VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1], r.upper[2]+1))
-Base.convert(::Type{VersionSet}, r::VersionRange{m,3}) where {m} =
-    VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1], r.upper[2], r.upper[3]+1))
+function Base.convert(::Type{VersionSet}, r::VersionRange{m,3}) where {m}
+    VersionSet(VersionNumber(r.lower.t...), VersionNumber(r.upper[1], r.upper[2], r.upper[3] #=+1=#)) # <- overflows on typemax(VersionNumber)
+end
 Base.convert(::Type{VersionSet}, s::VersionSpec) = mapreduce(VersionSet, ∪, s.ranges)
 Base.convert(::Type{Available}, t::Dict{UUID,VersionSpec}) = Available(t)
 
@@ -172,18 +173,29 @@ mutable struct PackageSpec
     uuid::UUID
     version::VersionTypes
     mode::Symbol
-    PackageSpec(name::String, uuid::UUID, version::VersionTypes) =
-        new(name, uuid, version, :project)
+    path::String
+    url::String
+    PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes, project::Symbol=:project,
+            path::AbstractString="", url::AbstractString="") =
+    new(name, uuid, version, project, path, url)
 end
-PackageSpec(name::String, uuid::UUID) =
+PackageSpec(name::AbstractString, uuid::UUID) =
     PackageSpec(name, uuid, VersionSpec())
 PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
     PackageSpec(name, UUID(zero(UInt128)), version)
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
+PackageSpec(;name::AbstractString="", uuid::UUID=UUID(zero(UInt128)), version::VersionTypes=VersionSpec(),
+            mode::Symbol=:project, path::AbstractString="", url::AbstractString="") =
+    PackageSpec(name, uuid, version, mode, path, url)
+
 
 has_name(pkg::PackageSpec) = !isempty(pkg.name)
 has_uuid(pkg::PackageSpec) = pkg.uuid != UUID(zero(UInt128))
+has_path(pkg::PackageSpec) = !isempty(pkg.path)
+has_url(pkg::PackageSpec)  = !isempty(pkg.urkl)
+# TODO: Optimize:?
+has_version(pkg::PackageSpec) = !(pkg.version isa VersionSpec && pkg.version.ranges == VersionSpec().ranges)
 
 function Base.show(io::IO, pkg::PackageSpec)
     print(io, "PackageSpec(")
@@ -305,7 +317,7 @@ function write_env(env::EnvCache)
     isempty(project["deps"]) && delete!(project, "deps")
     if !isempty(project) || ispath(env.project_file)
         info("Updating $(pathrepr(env, env.project_file))")
-        Pkg3.Display.print_project_diff(old_env, env)
+        #Pkg3.Display.print_project_diff(old_env, env)
         if !env.preview[]
             mkpath(dirname(env.project_file))
             open(env.project_file, "w") do io
@@ -316,7 +328,7 @@ function write_env(env::EnvCache)
     # update the manifest file
     if !isempty(env.manifest) || ispath(env.manifest_file)
         info("Updating $(pathrepr(env, env.manifest_file))")
-        Pkg3.Display.print_manifest_diff(old_env, env)
+        #Pkg3.Display.print_manifest_diff(old_env, env)
         manifest = deepcopy(env.manifest)
         uniques = sort!(collect(keys(manifest)), by=lowercase)
         filter!(name->length(manifest[name]) == 1, uniques)
@@ -477,6 +489,23 @@ function manifest_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
         end
         if has_uuid(pkg) && !has_name(pkg) && pkg.uuid in keys(names)
             pkg.name = names[pkg.uuid]
+        end
+    end
+    return pkgs
+end
+
+
+function path_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
+    paths = Dict{String,String}()
+    for (name, infos) in env.manifest, info in infos
+        haskey(info, "uuid") || continue
+        uuid = info["uuid"]
+        haskey(info, "path") && (paths[uuid] = info["path"])
+    end
+    for pkg in pkgs
+        if !has_path(pkg) && has_uuid(pkg) && haskey(paths, string(pkg.uuid))
+            pkg.path = paths[string(pkg.uuid)]
+            println("Updating path for $pkg")
         end
     end
     return pkgs
