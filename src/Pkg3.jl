@@ -45,7 +45,6 @@ end
 GLOBAL_SETTINGS = GlobalSettings()
 
 function __init__()
-    push!(empty!(LOAD_PATH), dirname(dirname(@__DIR__)))
     isdefined(Base, :active_repl) && REPLMode.repl_init(Base.active_repl)
 end
 
@@ -62,6 +61,17 @@ else
     Base.find_package(name::String) = _find_package(name)
 end
 
+if VERSION < v"0.7.0-DEV.2303"
+    macro return_if_file(path)
+        quote
+            path = $(esc(path))
+            Base.isfile_casesensitive(path) && return path
+        end
+    end
+else
+    import Base.@return_if_file
+end
+
 function _find_package(name::String)
     isabspath(name) && return name
     base = name
@@ -69,6 +79,12 @@ function _find_package(name::String)
         base = name[1:end-3]
     else
         name = string(base, ".jl")
+    end
+    for dir in LOAD_PATH
+       dir = abspath(dir)
+       @return_if_file joinpath(dir, name)
+       @return_if_file joinpath(dir, name, "src", name)
+       @return_if_file joinpath(dir, base, "src", name)
     end
     info = Pkg3.Operations.package_env_info(base, verb = "use")
     info == nothing && @goto find_global
