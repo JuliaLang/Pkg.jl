@@ -168,12 +168,16 @@ function collect_fixed!(env, reqs, deps, pkgs, uuids, seen)
         end
         info = manifest_info(env, uuid)
         version == nothing && info != nothing && haskey(info, "version") && (version = VersionNumber(info["version"]))
+        path == nothing && info != nothing && haskey(info, "path") && (path = info["path"])
         if path != nothing # This is a fixed package
             # A package with a path should have a version
             @assert version != nothing
             # Specify the version of the fixedd package
             pkg = if pkg_idx != 0
-                pkgs[pkg_idx].version = version
+                oldpkg = pkgs[pkg_idx]
+                oldpkg.beingfreed && continue
+                oldpkg.version = version
+                oldpkg.path = path
                 pkgs[pkg_idx]
             else
                 newpkg = PackageSpec(name=name, uuid=uuid, version=version, path=path)
@@ -833,7 +837,7 @@ function free(env::EnvCache, pkgs::Vector{PackageSpec})
         if isempty(registered_name(env, pkg.uuid))
             cmderror("can only free registered packages")
         end
-        pkg.path = ""
+        pkg.beingfreed = true
     end
     resolve_versions!(env, pkgs)
     new = apply_versions(env, pkgs)

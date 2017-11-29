@@ -175,8 +175,9 @@ mutable struct PackageSpec
     mode::Symbol
     path::String
     url::String
+    beingfreed::Bool # TODO: Get rid of this field
     PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes, project::Symbol=:project,
-            path::AbstractString="", url::AbstractString="") =
+            path::AbstractString="", url::AbstractString="", beingfreed=false) =
     new(name, uuid, version, project, path, url)
 end
 PackageSpec(name::AbstractString, uuid::UUID) =
@@ -186,8 +187,8 @@ PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
 PackageSpec(;name::AbstractString="", uuid::UUID=UUID(zero(UInt128)), version::VersionTypes=VersionSpec(),
-            mode::Symbol=:project, path::AbstractString="", url::AbstractString="") =
-    PackageSpec(name, uuid, version, mode, path, url)
+            mode::Symbol=:project, path::AbstractString="", url::AbstractString="", beingfreed::Bool=false) =
+    PackageSpec(name, uuid, version, mode, path, url, beingfreed)
 
 
 has_name(pkg::PackageSpec) = !isempty(pkg.name)
@@ -489,23 +490,6 @@ function manifest_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
         end
         if has_uuid(pkg) && !has_name(pkg) && pkg.uuid in keys(names)
             pkg.name = names[pkg.uuid]
-        end
-    end
-    return pkgs
-end
-
-
-function path_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
-    paths = Dict{String,String}()
-    for (name, infos) in env.manifest, info in infos
-        haskey(info, "uuid") || continue
-        uuid = info["uuid"]
-        haskey(info, "path") && (paths[uuid] = info["path"])
-    end
-    for pkg in pkgs
-        if !has_path(pkg) && has_uuid(pkg) && haskey(paths, string(pkg.uuid))
-            pkg.path = paths[string(pkg.uuid)]
-            println("Updating path for $pkg")
         end
     end
     return pkgs

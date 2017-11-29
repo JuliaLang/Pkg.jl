@@ -17,7 +17,7 @@ function add(env::EnvCache, pkgs::Vector{PackageSpec}; preview::Bool=env.preview
     preview && previewmode_info()
     project_resolve!(env, pkgs)
     registry_resolve!(env, pkgs)
-    path_resolve!(env, pkgs)
+  #  path_resolve!(env)
     ensure_resolved(env, pkgs, true)
     Pkg3.Operations.add(env, pkgs)
 end
@@ -32,7 +32,7 @@ function rm(env::EnvCache, pkgs::Vector{PackageSpec}; preview::Bool=env.preview[
     preview && previewmode_info()
     project_resolve!(env, pkgs)
     manifest_resolve!(env, pkgs)
-    path_resolve!(env, pkgs)
+ #   path_resolve!(env)
     Pkg3.Operations.rm(env, pkgs)
 end
 
@@ -62,7 +62,7 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec};
         manifest_resolve!(env, pkgs)
         ensure_resolved(env, pkgs)
     end
-    path_resolve!(env, pkgs)
+    #path_resolve!(env)
     Pkg3.Operations.up(env, pkgs)
 end
 
@@ -76,7 +76,7 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false, preview=
     preview && previewmode_info()
     project_resolve!(env, pkgs)
     manifest_resolve!(env, pkgs)
-    path_resolve!(env, pkgs)
+   # path_resolve!(env)
     ensure_resolved(env, pkgs)
     Pkg3.Operations.test(env, pkgs; coverage=coverage)
 end
@@ -116,7 +116,7 @@ function clone(env::EnvCache, url::AbstractString; name=nothing, basepath=nothin
     registry_resolve!(env, [pkg])
     project_resolve!(env, [pkg])
     manifest_resolve!(env, [pkg])
-    path_resolve!(env, [pkg])
+    #path_resolve!(env)
     # Cloning a non existent package, give it a UUID and version
     if !has_uuid(pkg)
         pkg.version = v"0.0"
