@@ -75,11 +75,14 @@ struct VerInfo
 end
 islocal(v::VerInfo) = v.hash_or_path isa String
 
-vstring(a::VerInfo) =
-    a.ver == nothing ? "[$(string(a.hash)[1:16])]" : "v$(a.ver)"
+#function vstring(a::VerInfo) =
+    #else
+    #    [$(hash_or_path
+    #if islocal(v)
+    #    a.ver == nothing ? "[$(string(a.hash_or_path)[1:16])]" : "v$(a.ver)"
 
 Base.:(==)(a::VerInfo, b::VerInfo) =
-    a.hash_or_ver == b.hash_or_ver && a.ver == b.ver
+    a.hash_or_path == b.hash_or_path && a.ver == b.ver
 
 ≈(a::VerInfo, b::VerInfo) = a isa SHA1 && a.hash == b.hash &&
     (a.ver == nothing || b.ver == nothing || a.ver == b.ver)
