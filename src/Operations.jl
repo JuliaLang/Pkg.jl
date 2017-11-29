@@ -175,6 +175,7 @@ function collect_fixed!(env, reqs, deps, pkgs, uuids, seen)
             # Specify the version of the fixedd package
             pkg = if pkg_idx != 0
                 oldpkg = pkgs[pkg_idx]
+                # This package is curreently beeing freed, so it is not fixed anymore, bail!
                 oldpkg.beingfreed && continue
                 oldpkg.version = version
                 oldpkg.path = path
