@@ -456,7 +456,7 @@ function do_test!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
 end
 
 function do_clone!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
-    isempty(tokens) && cmderror("fdsfds")
+    isempty(tokens) && cmderror("`clone` take an url to a package to clone")
     local url
     while !isempty(tokens)
         token = shift!(tokens)

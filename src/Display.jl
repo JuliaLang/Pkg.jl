@@ -70,18 +70,18 @@ function print_manifest_diff(env₀::EnvCache, env₁::EnvCache)
 end
 
 struct VerInfo
-    hash::Union{SHA1, Void}
+    hash_or_path::Union{SHA1, String}
     ver::Union{VersionNumber,Void}
-    path::Union{String, Void}
 end
+islocal(v::VerInfo) = v.hash_or_path isa String
 
 vstring(a::VerInfo) =
     a.ver == nothing ? "[$(string(a.hash)[1:16])]" : "v$(a.ver)"
 
 Base.:(==)(a::VerInfo, b::VerInfo) =
-    a.hash == b.hash && a.ver == b.ver
+    a.hash_or_ver == b.hash_or_ver && a.ver == b.ver
 
-≈(a::VerInfo, b::VerInfo) = a.hash == b.hash &&
+≈(a::VerInfo, b::VerInfo) = a isa SHA1 && a.hash == b.hash &&
     (a.ver == nothing || b.ver == nothing || a.ver == b.ver)
 
 struct DiffEntry

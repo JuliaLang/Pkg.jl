@@ -168,8 +168,9 @@ function collect_fixed!(env, reqs, deps, pkgs, uuids, seen)
         end
         info = manifest_info(env, uuid)
         version == nothing && info != nothing && haskey(info, "version") && (version = VersionNumber(info["version"]))
-        @assert version != nothing
         if path != nothing # This is a fixed package
+            # A package with a path should have a version
+            @assert version != nothing
             # Specify the version of the fixedd package
             pkg = if pkg_idx != 0
                 pkgs[pkg_idx].version = version
@@ -225,18 +226,17 @@ end
 function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,VersionNumber}
     info("Resolving package versions")
     # anything not mentioned is fixed
-    # a cloned package might not have an uuid
     uuids = UUID[pkg.uuid for pkg in pkgs]
     uuid_to_name = Dict{String, String}()
     for (name::String, uuid::UUID) in env.project["deps"]
-        uuid in uuids && continue
         uuid_to_name[string(uuid)] = name
+        uuid in uuids && continue
         info = manifest_info(env, uuid)
-        info == nothing && continue # TODO: can this happen?
         haskey(info, "version") || continue
         ver = VersionNumber(info["version"])
         push!(pkgs, PackageSpec(name, uuid, ver))
     end
+    # construct data structures for resolver and call it
     reqs = Dict{String,Pkg2.Types.VersionSet}(string(pkg.uuid) => pkg.version for pkg in pkgs)
     deps = convert(Dict{String,Dict{VersionNumber,Pkg2.Types.Available}}, deps_graph(env, pkgs, reqs))
     for dep_uuid in keys(deps)
@@ -247,8 +247,8 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
     end
     deps = Pkg2.Query.prune_dependencies(reqs, deps, uuid_to_name)
     vers = convert(Dict{UUID,VersionNumber}, Pkg2.Resolve.resolve(reqs, deps, uuid_to_name))
-
     find_registered!(env, collect(keys(vers)))
+    # update vector of package versions
     for pkg in pkgs
         pkg.version = vers[pkg.uuid]
     end
@@ -258,7 +258,6 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
         name = registered_name(env, uuid)
         push!(pkgs, PackageSpec(name, uuid, ver))
     end
-
     return vers
 end
 
@@ -293,7 +292,7 @@ function version_data(env::EnvCache, pkgs::Vector{PackageSpec})
                 end
             end
         end
-        # @assert haskey(hashes, uuid)
+        @assert haskey(hashes, uuid)
     end
     foreach(sort!, values(upstreams))
     return names, hashes, upstreams
@@ -405,8 +404,7 @@ function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::Union{Vo
         @assert hash != nothing
         haskey(info, "path") && delete!(info, "path")
         info["hash-sha1"] = string(hash)
-    end
-    if !isempty(path)
+    else
         haskey(info, "hash-sha1") && delete!(info, "hash-sha1")
         info["path"] = path
     end
@@ -418,10 +416,9 @@ function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::Union{Vo
         deps = Dict{String, String}()
         pkgs = PackageSpec[]
         for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
-            # @assert length(r.versions.intervals) == 1
             push!(pkgs, PackageSpec(r.package))
         end
-        # TODO: Get rid of this?
+        # TODO: Get rid of this one?
         registry_resolve!(env, pkgs)
         for pkg in pkgs
             pkg.name == "julia" && continue
@@ -439,7 +436,6 @@ function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::Union{Vo
             break
         end
     end
-
     return info
 end
 
@@ -819,17 +815,17 @@ function clone(env::EnvCache, pkgs::Vector{PackageSpec})
         end
         env.project["deps"][pkg.name] = string(pkg.uuid)
     end
-  #  try
+    try
         resolve_versions!(env, pkgs)
         new = apply_versions(env, pkgs)
         write_env(env)
         build_versions(env, new)
- #   catch e
- #       for pkg in pkgs
- #           haskey(new_repos, pkg.uuid) && Base.rm(new_repos[pkg.uuid]; recursive = true)
- #       end
- #       rethrow(e)
- #   end
+    catch e
+        for pkg in pkgs
+            haskey(new_repos, pkg.uuid) && Base.rm(new_repos[pkg.uuid]; recursive = true)
+        end
+        rethrow(e)
+    end
 end
 
 function free(env::EnvCache, pkgs::Vector{PackageSpec})

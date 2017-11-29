@@ -107,8 +107,7 @@ end
 clone(pkg::String; kwargs...) = clone(pkg; kwargs...)
 
 function clone(env::EnvCache, url::AbstractString; name=nothing, basepath=nothing, preview=env.preview[])
-    env.preview[] = preview
-    preview && previewmode_info()
+    preview && cmderror("Preview mode not implemented for cloning")
     if name == nothing
         url, name = url_and_pkg(url)
     end
