@@ -12,7 +12,7 @@ const colors = Dict(
     '↑' => :light_yellow,
     '~' => :light_yellow,
     '↓' => :light_magenta,
-    '?' => :red,
+    '?' => :white,
 )
 const color_dark = :light_black
 
@@ -86,7 +86,7 @@ end
 Base.:(==)(a::VerInfo, b::VerInfo) =
     a.hash_or_path == b.hash_or_path && a.ver == b.ver
 
-≈(a::VerInfo, b::VerInfo) = a isa SHA1 && a.hash == b.hash &&
+≈(a::VerInfo, b::VerInfo) = a.hash_or_path isa SHA1 && a.hash_or_path == b.hash_or_path &&
     (a.ver == nothing || b.ver == nothing || a.ver == b.ver)
 
 struct DiffEntry
@@ -113,11 +113,16 @@ function print_diff(io::IO, diff::Vector{DiffEntry})
                     verb = '?'
                     msg = x.old.hash_or_path isa SHA1 && x.old.hash_or_path == x.new.hash_or_path ?
                         "hashes match but versions don't: $(x.old.ver) ≠ $(x.new.ver)" :
-                        "versions match but hashes don't: $(x.old.hash) ≠ $(x.new.hash)"
+                        "versions match but hashes don't: $(x.old.hash_or_path) ≠ $(x.new.hash_or_path)"
                     push!(warnings, msg)
                 end
-                vstr = x.old.ver == x.new.ver ? vstring(x.new) :
-                    vstring(x.old) * " ⇒ " * vstring(x.new)
+                # Moving from hash -> path
+                if typeof(x.old.hash_or_path) != typeof(x.new.hash_or_path)
+                    vstr = vstring(x.old) * " ⇒ " * vstring(x.new)
+                else
+                    vstr = x.old.ver == x.new.ver ? vstring(x.new) :
+                        vstring(x.old) * " ⇒ " * vstring(x.new)
+                end
             end
         elseif x.new != nothing
             verb = '+'

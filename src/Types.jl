@@ -318,7 +318,7 @@ function write_env(env::EnvCache)
     isempty(project["deps"]) && delete!(project, "deps")
     if !isempty(project) || ispath(env.project_file)
         info("Updating $(pathrepr(env, env.project_file))")
-        #Pkg3.Display.print_project_diff(old_env, env)
+        Pkg3.Display.print_project_diff(old_env, env)
         if !env.preview[]
             mkpath(dirname(env.project_file))
             open(env.project_file, "w") do io
@@ -329,7 +329,7 @@ function write_env(env::EnvCache)
     # update the manifest file
     if !isempty(env.manifest) || ispath(env.manifest_file)
         info("Updating $(pathrepr(env, env.manifest_file))")
-        #Pkg3.Display.print_manifest_diff(old_env, env)
+        Pkg3.Display.print_manifest_diff(old_env, env)
         manifest = deepcopy(env.manifest)
         uniques = sort!(collect(keys(manifest)), by=lowercase)
         filter!(name->length(manifest[name]) == 1, uniques)
