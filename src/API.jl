@@ -2,6 +2,7 @@ module API
 
 import Pkg3
 using Pkg3.Types
+using Pkg3.Display.DiffEntry
 using Base.Random.UUID
 
 previewmode_info() = info("In preview mode")
@@ -73,6 +74,22 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false, preview=
     manifest_resolve!(env, pkgs)
     ensure_resolved(env, pkgs)
     Pkg3.Operations.test(env, pkgs; coverage=coverage)
+end
+
+function convert(::Type{Dict{AbstractString, AbstractString}}, diffs::Union{Array{DiffEntry}, Void})    
+    version_status = Dict()
+    diffs == nothing && return version_status
+    for entry in diffs
+        version_status[entry.name] = string(entry.new.ver)
+    end
+    return version_status
+end
+
+status() = status(:combined)
+
+function status(mode::Symbol)
+    diff = Pkg3.Display.status(EnvCache(), mode, true)
+    convert(Dict{AbstractString, AbstractString}, diff)
 end
 
 end # module
