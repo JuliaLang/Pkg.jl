@@ -2,11 +2,10 @@ module Types
 
 using Base.Random: UUID
 using Pkg3.Pkg2.Types: VersionSet, Available
-using Pkg3.TOML
-using Pkg3.TerminalMenus
+using Pkg3: TOML, TerminalMenus, Dates
 
 import Pkg3
-import Pkg3: depots, iswindows
+import Pkg3: depots, logdir, iswindows
 
 export SHA1, VersionRange, VersionSpec, PackageSpec, UpgradeLevel, EnvCache,
     CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
@@ -265,14 +264,15 @@ struct EnvCache
 end
 EnvCache() = EnvCache(get(ENV, "JULIA_ENV", nothing))
 
+usage_hash_manifest(manifest_file, t) = string(manifest_file, "_", hash(t))
 function write_env_usage(manifest_file::AbstractString)
-    logpath = joinpath(depots()[1], "logs")
-    !ispath(logpath) && mkpath(logpath)
-    usage_file = joinpath(logpath, "usage.toml")
+    !ispath(logdir()) && mkpath(logdir())
+    usage_file = joinpath(logdir(), "usage.toml")
     touch(usage_file)
     !isfile(manifest_file) && return
     open(usage_file, "a") do io
-        TOML.print(io, Dict(manifest_file => now()))
+        t = now()
+        TOML.print(io, Dict(usage_hash_manifest(manifest_file, t) => t))
     end
 end
 
