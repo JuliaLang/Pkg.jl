@@ -264,15 +264,13 @@ struct EnvCache
 end
 EnvCache() = EnvCache(get(ENV, "JULIA_ENV", nothing))
 
-usage_hash_manifest(manifest_file, t) = string(manifest_file, "_", hash(t))
 function write_env_usage(manifest_file::AbstractString)
     !ispath(logdir()) && mkpath(logdir())
     usage_file = joinpath(logdir(), "usage.toml")
     touch(usage_file)
     !isfile(manifest_file) && return
     open(usage_file, "a") do io
-        t = now()
-        TOML.print(io, Dict(usage_hash_manifest(manifest_file, t) => t))
+        TOML.print(io, Dict(manifest_file => [Dict("time" => now())]))
     end
 end
 

@@ -97,14 +97,15 @@ function gc(env::EnvCache=EnvCache(); period = Week(6), preview=env.preview[])
 
     # Collect only the manifest that is least recently used
     manifest_date = Dict{String, DateTime}()
-    for (manifest_hash, date) in TOML.parse(String(read(usage_file)))
-        manifestfile = join(split(manifest_hash, "_")[1:end-1])
-        manifest_date[manifestfile] = haskey(manifest_date, manifestfile) ?
-            max(manifest_date[manifestfile], date) : date
+    for (manifest_file, infos) in TOML.parse(String(read(usage_file)))
+        for info in infos
+            date = info["time"]
+            manifest_date[manifest_file] = haskey(manifest_date, date) ? max(manifest_date[date], date) : date
+        end
     end
 
     # Find all reachable packages through manifests recently used
-    new_usage = Dict{String, DateTime}()
+    new_usage = Dict{String, Any}()
     paths_to_keep = String[]
     for (manifestfile, date) in manifest_date
         !isfile(manifestfile) && continue
@@ -112,7 +113,7 @@ function gc(env::EnvCache=EnvCache(); period = Week(6), preview=env.preview[])
             continue
         end
         infos = read_manifest(manifestfile)
-        new_usage[Pkg3.Types.usage_hash_manifest(manifestfile, date)] = date
+        new_usage[manifestfile] = [Dict("time" => date)]
         for entry in infos
             entry isa Pair || continue
             name, _stanzas = entry
