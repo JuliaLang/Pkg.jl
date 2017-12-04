@@ -270,7 +270,8 @@ function write_env_usage(manifest_file::AbstractString)
     touch(usage_file)
     !isfile(manifest_file) && return
     open(usage_file, "a") do io
-        TOML.print(io, Dict(manifest_file => [Dict("time" => now())]))
+        println(io, "[[\"", escape_string(manifest_file), "\"]]")
+        println(io, "time = ", Dates.format(now(), "YYYY-mm-ddTHH:MM:SS.sssZ"))
     end
 end
 
