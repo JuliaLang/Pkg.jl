@@ -245,6 +245,7 @@ struct EnvCache
                 isfile(manifest_file) && break
             end
         end
+        write_env_usage(manifest_file)
         manifest = read_manifest(manifest_file)
         uuids = Dict{String,Vector{UUID}}()
         paths = Dict{UUID,Vector{String}}()
@@ -263,6 +264,17 @@ struct EnvCache
     end
 end
 EnvCache() = EnvCache(get(ENV, "JULIA_ENV", nothing))
+
+function write_env_usage(manifest_file::AbstractString)
+    logpath = joinpath(depots()[1], "logs")
+    !ispath(logpath) && mkpath(logpath)
+    usage_file = joinpath(logpath, "usage.toml")
+    touch(usage_file)
+    !isfile(manifest_file) && return
+    open(usage_file, "a") do io
+        TOML.print(io, Dict(manifest_file => now()))
+    end
+end
 
 function read_project(io::IO)
     project = TOML.parse(io)
