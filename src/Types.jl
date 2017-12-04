@@ -266,16 +266,15 @@ end
 EnvCache() = EnvCache(get(ENV, "JULIA_ENV", nothing))
 
 function write_env_usage(manifest_file::AbstractString)
-    usage_file = joinpath(depots()[1], ".envusage")
+    logpath = joinpath(depots()[1], "logs")
+    !ispath(logpath) && mkpath(logpath)
+    usage_file = joinpath(logpath, "usage.toml")
     touch(usage_file)
     !isfile(manifest_file) && return
-    usage = TOML.parse(String(read(usage_file)))
-    usage[manifest_file] = now()
-    open(usage_file, "w") do io
-        TOML.print(io, usage, sorted=true)
+    open(usage_file, "a") do io
+        TOML.print(io, Dict(manifest_file => now()))
     end
 end
-
 
 function read_project(io::IO)
     project = TOML.parse(io)
