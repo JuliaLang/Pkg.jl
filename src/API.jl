@@ -44,7 +44,7 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec};
     preview && previewmode_info()
 
     # Update the registry
-    errors = Tuple{Exception, String}[]
+    errors = Tuple{String, String}[]
     if env.preview[]
         info("Skipping updating registry in preview mode")
     else
@@ -54,30 +54,31 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec};
             end
             info("Updating registry at $reg")
             LibGit2.with(LibGit2.GitRepo, reg) do repo
-                try
-                    branch = "master"
-                    LibGit2.with(LibGit2.head(repo)) do h
-                        if LibGit2.branch(h) != branch
-                            if LibGit2.isdirty(repo)
-                                cmderror("Not on branch $branch")
-                            end
-                            if !LibGit2.isattached(repo)
-                                cmderror("Detached not on $branch")
-                            end
-                            LibGit2.fetch(repo)
-                            LibGit2.checkout_head(repo)
-                            LibGit2.branch!(repo, branch, track="refs/remotes/origin/$branch")
-                            LibGit2.merge!(repo)
-                        end
-                    end
+                if LibGit2.isdirty(repo)
+                    push!(errors, (reg, "registry dirty"))
+                    return
+                end
+                if !LibGit2.isattached(repo)
+                    push!(errors, (reg, "registry detached"))
+                    return
+                end
+                branch = LibGit2.headname(repo)
+                LibGit2.fetch(repo)
+                ff_succeeded = try
+                    LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
+                catch e
+                    e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow(e)
+                    push!(errors, (reg, "branch origin/$branch not found"))
+                    return
+                end
 
-                    LibGit2.fetch(repo)
-                    ff_succeeded = LibGit2.merge!(repo, fastforward=true)
-                    if !ff_succeeded
-                        LibGit2.rebase!(repo, "origin/$branch")
+                if !ff_succeeded
+                    try LibGit2.rebase!(repo, "origin/$branch")
+                    catch e
+                        e isa LibGit2.GitError || rethrow(e)
+                        push!(errors, (reg, "registry failed to rebase on origin/$branch"))
+                        return
                     end
-                catch err
-                    push!(errors, (err, reg))
                 end
             end
         end
@@ -85,8 +86,8 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec};
 
     if !isempty(errors)
         warn_str = "Some registries failed to update:"
-        for (err, reg) in errors
-            warn_str *= "\n    - $reg — $(sprint(showerror, err, []))"
+        for (reg, err) in errors
+            warn_str *= "\n    — $reg — $err"
         end
         warn(warn_str)
     end
