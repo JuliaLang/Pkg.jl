@@ -42,6 +42,55 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UpgradeLevel(:major), mode::Symbol=:project, preview::Bool=env.preview[])
     env.preview[] = preview
     preview && previewmode_info()
+
+    # Update the registry
+    errors = Tuple{Exception, String}[]
+    if env.preview[]
+        info("Skipping updating registry in preview mode")
+    else
+        for reg in registries()
+            if !isdir(joinpath(reg, ".git"))
+                info("Registry at $reg is not a git repo, skipping update")
+            end
+            info("Updating registry at $reg")
+            LibGit2.with(LibGit2.GitRepo, reg) do repo
+                try
+                    branch = "master"
+                    LibGit2.with(LibGit2.head(repo)) do h
+                        if LibGit2.branch(h) != branch
+                            if LibGit2.isdirty(repo)
+                                cmderror("Not on branch $branch")
+                            end
+                            if !LibGit2.isattached(repo)
+                                cmderror("Detached not on $branch")
+                            end
+                            LibGit2.fetch(repo)
+                            LibGit2.checkout_head(repo)
+                            LibGit2.branch!(repo, branch, track="refs/remotes/origin/$branch")
+                            LibGit2.merge!(repo)
+                        end
+                    end
+
+                    LibGit2.fetch(repo)
+                    ff_succeeded = LibGit2.merge!(repo, fastforward=true)
+                    if !ff_succeeded
+                        LibGit2.rebase!(repo, "origin/$branch")
+                    end
+                catch err
+                    push!(errors, (err, reg))
+                end
+            end
+        end
+    end
+
+    if !isempty(errors)
+        warn_str = "Some registries failed to update:"
+        for (err, reg) in errors
+            warn_str *= "\n    - $reg — $(sprint(showerror, err, []))"
+        end
+        warn(warn_str)
+    end
+
     if isempty(pkgs)
         if mode == :project
             for (name::String, uuid::UUID) in env.project["deps"]
