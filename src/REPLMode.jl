@@ -278,7 +278,7 @@ const helps = Dict(
     coverage enabled.
     """, :gc => md"""
 
-    Deletes packages that are not reached from any environment used within the last 2 weeks.
+    Deletes packages that are not reached from any environment used within the last 6 weeks.
     """
 )
 
