@@ -81,7 +81,7 @@ function deps_from_data(deps_data, uuid_to_name = Dict{String,String}())
             deps[p] = Dict{VersionNumber,Available}()
         end
         if !haskey(deps[p], vn)
-            deps[p][vn] = Available("$(p)_$(vn)_sha1", Dict{String,VersionSet}())
+            deps[p][vn] = Available(Dict{String,VersionSet}())
         end
         isempty(r) && continue
         rp = uuid(r[1])

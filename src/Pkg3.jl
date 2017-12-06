@@ -1,7 +1,6 @@
 __precompile__(true)
 module Pkg3
 
-
 if VERSION < v"0.7.0-DEV.2575"
     const Dates = Base.Dates
 else
@@ -9,6 +8,7 @@ else
 end
 
 const DEPOTS = [joinpath(homedir(), ".julia")]
+const DEFAULT_DEV_PATH = joinpath(DEPOTS[1], "dev")
 depots() = DEPOTS
 logdir() = joinpath(DEPOTS[1], "logs")
 
@@ -30,6 +30,7 @@ if !isdefined(Base, :EqualTo)
 end
 
 # load snapshotted dependencies
+# include("../ext/SHA/src/SHA.jl")
 include("../ext/BinaryProvider/src/BinaryProvider.jl")
 include("../ext/TOML/src/TOML.jl")
 include("../ext/TerminalMenus/src/TerminalMenus.jl")
@@ -41,7 +42,7 @@ include("Operations.jl")
 include("REPLMode.jl")
 include("API.jl")
 
-import .API: add, rm, up, test, gc
+import .API: add, rm, up, test, gc, clone, free
 const update = up
 
 @enum LoadErrorChoice LOAD_ERROR_QUERY LOAD_ERROR_INSTALL LOAD_ERROR_ERROR
@@ -52,8 +53,22 @@ end
 
 GLOBAL_SETTINGS = GlobalSettings()
 
+
+if VERSION.minor == 6
+    struct Pkg3Loader end
+
+    Base._str(::Pkg3Loader) = Pkg3Loader()
+
+    function Base.load_hook(::Pkg3Loader, name::String, ::Any)
+        return _find_package(name)
+    end
+else
+    Base.find_package(name::String) = _find_package(name)
+end
+
 function __init__()
     push!(empty!(LOAD_PATH), dirname(dirname(@__DIR__)))
+    VERSION.minor == 6 && push!(LOAD_PATH, Pkg3Loader())
 
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
@@ -71,13 +86,6 @@ function Base.julia_cmd(julia::AbstractString)
     return cmd
 end
 
-if VERSION < v"0.7.0-DEV.2303"
-    Base.find_in_path(name::String, wd::Void)   = _find_package(name)
-    Base.find_in_path(name::String, wd::String) = _find_package(name)
-else
-    Base.find_package(name::String) = _find_package(name)
-end
-
 function _find_package(name::String)
     isabspath(name) && return name
     base = name
@@ -88,6 +96,7 @@ function _find_package(name::String)
     end
     info = Pkg3.Operations.package_env_info(base, verb = "use")
     info == nothing && @goto find_global
+    haskey(info, "path") && (path = info["path"]; ispath(path)) && return joinpath(path, "src", name)
     haskey(info, "uuid") || @goto find_global
     haskey(info, "hash-sha1") || @goto find_global
     uuid = Base.Random.UUID(info["uuid"])
@@ -124,6 +133,5 @@ function _find_package(name::String)
     end
     return nothing
 end
-
 
 end # module

@@ -8,7 +8,7 @@ else
     using Test
 end
 
-include("resolve.jl")
 include("operations.jl")
+include("resolve.jl")
 
 end # module

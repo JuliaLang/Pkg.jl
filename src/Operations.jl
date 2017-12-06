@@ -2,9 +2,8 @@ module Operations
 
 using Base.Random: UUID
 using Base: LibGit2
-using Pkg3.TerminalMenus
-using Pkg3.Types
-import Pkg3: Pkg2, depots, BinaryProvider, USE_LIBGIT2_FOR_ALL_DOWNLOADS, NUM_CONCURRENT_DOWNLOADS
+using ..Pkg3: TerminalMenus, Types
+import ..Pkg3: Pkg2, depots, equalto, BinaryProvider, USE_LIBGIT2_FOR_ALL_DOWNLOADS, NUM_CONCURRENT_DOWNLOADS
 
 const SlugInt = UInt32 # max p = 4
 const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -115,8 +114,8 @@ end
 load_package_data(f::Base.Callable, path::String, version::VersionNumber) =
     get(load_package_data(f, path, [version]), version, nothing)
 
-function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec})
-    deps = Dict{UUID,Dict{VersionNumber,Tuple{SHA1,Dict{UUID,VersionSpec}}}}()
+function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec}, reqs)
+    deps = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
     uuids = [pkg.uuid for pkg in pkgs]
     seen = UUID[]
     while true
@@ -135,7 +134,7 @@ function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec})
                     r = get_or_make(Dict{String,VersionSpec}, compatibility, v)
                     q = Dict(u => get_or_make(VersionSpec, r, p) for (p, u) in d)
                     # VERSION in get_or_make(VersionSpec, r, "julia") || continue
-                    deps[uuid][v] = (h, q)
+                    deps[uuid][v] = q
                     for (p, u) in d
                         u in uuids || push!(uuids, u)
                     end
@@ -145,6 +144,55 @@ function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec})
         find_registered!(env, uuids)
     end
     return deps
+end
+
+# This also sets the .path field for fixed packages in `pkgs`
+function collect_fixed!(env, pkgs, uuids)
+    fix_deps = PackageSpec[]
+    fixed_pkgs = PackageSpec[]
+    fix_deps_map = Dict{UUID, Vector{PackageSpec}}()
+    uuid_to_pkg = Dict{UUID, PackageSpec}()
+    for pkg in pkgs
+        !has_path(pkg) && continue
+        # A package with a path should have a version
+        @assert pkg.version != nothing
+
+        uuid_to_pkg[pkg.uuid] = pkg
+        # Load the dependencies if this package has a REQUIRE
+        reqfile = joinpath(pkg.path, "REQUIRE")
+        fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
+        !isfile(reqfile) && continue
+        for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
+            # @assert length(r.versions.intervals) == 1
+            pkg_name, version = r.package, r.versions.intervals[1]
+            # TODO: Check VERSION
+            pkg_name == "julia" && continue
+            # Convert to Pkg3 data types
+            vspec = VersionSpec([VersionRange(VersionBound(version.lower),
+                                              VersionBound(version.upper))])
+            deppkg = PackageSpec(pkg_name, vspec)
+            push!(fix_deps_map[pkg.uuid], deppkg)
+            push!(fix_deps, deppkg)
+        end
+    end
+
+    # Look up the UUIDS for all the fixed dependencies in the registry in one shot
+    registry_resolve!(env, fix_deps)
+    fixed = Dict{String, Pkg2.Types.Fixed}()
+    # Collect the dependencies for the fixed packages
+    for (uuid, fixed_pkgs) in fix_deps_map
+        fix_pkg = uuid_to_pkg[uuid]
+        v = Dict{VersionNumber,Dict{UUID,VersionSpec}}()
+        q = Dict{UUID, VersionSpec}()
+        for deppkg in fixed_pkgs
+            if !has_uuid(deppkg)
+                cmderror("Could not find a UUID for package $(pkg.name) in the registry")
+            end
+            q[deppkg.uuid] = deppkg.version
+        end
+        fixed[string(uuid)] = Pkg2.Types.Fixed(fix_pkg.version, q)
+    end
+    return fixed
 end
 
 "Resolve a set of versions given package version specs"
@@ -161,21 +209,35 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
         ver = VersionNumber(info["version"])
         push!(pkgs, PackageSpec(name, uuid, ver))
     end
-    # construct data structures for resolver and call it
+    path_resolve!(env, pkgs)
+
+    # Collect all fixed packages (have a path) and their dependencies
+    fixed = collect_fixed!(env, pkgs, uuids)
     reqs = Dict{String,Pkg2.Types.VersionSet}(string(pkg.uuid) => pkg.version for pkg in pkgs)
-    deps = convert(Dict{String,Dict{VersionNumber,Pkg2.Types.Available}}, deps_graph(env, pkgs))
+    bktrc = Pkg2.Query.init_resolve_backtrace(reqs, fixed)
+    Pkg2.Query.check_fixed(reqs, fixed, uuid_to_name)
+    Pkg2.Query.propagate_fixed!(reqs, bktrc, fixed)
+    # New requirements from the propagation should be added to the list of pacakges
+    for uuid in keys(reqs)
+        if !(uuid in uuids)
+            push!(pkgs, PackageSpec(UUID(uuid)))
+        end
+    end
+    deps = convert(Dict{String,Dict{VersionNumber,Pkg2.Types.Available}}, deps_graph(env, pkgs, reqs))
     for dep_uuid in keys(deps)
         info = manifest_info(env, UUID(dep_uuid))
         if info != nothing
             uuid_to_name[info["uuid"]] = info["name"]
         end
     end
-    deps = Pkg2.Query.prune_dependencies(reqs, deps, uuid_to_name)
+    deps = Pkg2.Query.prune_dependencies(reqs, deps, uuid_to_name, bktrc)
     vers = convert(Dict{UUID,VersionNumber}, Pkg2.Resolve.resolve(reqs, deps, uuid_to_name))
     find_registered!(env, collect(keys(vers)))
     # update vector of package versions
     for pkg in pkgs
-        pkg.version = vers[pkg.uuid]
+        if !has_path(pkg) # Fixed packages already have their version set
+            pkg.version = vers[pkg.uuid]
+        end
     end
     uuids = UUID[pkg.uuid for pkg in pkgs]
     for (uuid, ver) in vers
@@ -217,7 +279,7 @@ function version_data(env::EnvCache, pkgs::Vector{PackageSpec})
                 end
             end
         end
-        @assert haskey(hashes, uuid)
+        # @assert haskey(hashes, uuid)
     end
     foreach(sort!, values(upstreams))
     return names, hashes, upstreams
@@ -312,7 +374,7 @@ function install(
     return version_path, true
 end
 
-function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::SHA1, version::VersionNumber)
+function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::Union{Void, SHA1}, version::VersionNumber, path::AbstractString)
     infos = get!(env.manifest, name, Dict{String,Any}[])
     info = nothing
     for i in infos
@@ -325,13 +387,41 @@ function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::SHA1, ve
         push!(infos, info)
     end
     info["version"] = string(version)
-    info["hash-sha1"] = string(hash)
+    if isempty(path)
+        @assert hash != nothing
+        haskey(info, "path") && delete!(info, "path")
+        info["hash-sha1"] = string(hash)
+    else
+        haskey(info, "hash-sha1") && delete!(info, "hash-sha1")
+        info["path"] = path
+    end
     delete!(info, "deps")
-    for path in registered_paths(env, uuid)
-        data = load_package_data(UUID, joinpath(path, "dependencies.toml"), version)
-        data == nothing && continue
-        info["deps"] = convert(Dict{String,String}, data)
-        break
+    if !isempty(path)
+        reqfile = joinpath(path, "REQUIRE")
+
+        !isfile(reqfile) && return
+        deps = Dict{String, String}()
+        pkgs = PackageSpec[]
+        for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
+            push!(pkgs, PackageSpec(r.package))
+        end
+        # TODO: Get rid of this one?
+        registry_resolve!(env, pkgs)
+        for pkg in pkgs
+            pkg.name == "julia" && continue
+            @assert pkg.uuid != UUID(zero(UInt128))
+            deps[pkg.name] = pkg.uuid
+        end
+        if !isempty(deps)
+            info["deps"] = deps
+        end
+    else
+        for path in registered_paths(env, uuid)
+            data = load_package_data(UUID, joinpath(path, "dependencies.toml"), version)
+            data == nothing && continue
+            info["deps"] = convert(Dict{String,String}, data)
+            break
+        end
     end
     return info
 end
@@ -385,11 +475,16 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
     for i in 1:NUM_CONCURRENT_DOWNLOADS
         @schedule begin
             for pkg in jobs
+                # Check if this is a local package
+                if has_path(pkg)
+                    put!(results, (pkg, pkg.path, pkg.version, nothing, false))
+                    continue
+                end
                 uuid = pkg.uuid
                 version = pkg.version::VersionNumber
-                name, hash = names[uuid], hashes[uuid]
+                name, hash, url = names[uuid], hashes[uuid], urls[uuid]
                 try
-                    version_path, new = install(env, uuid, name, hash, urls[uuid], version)
+                    version_path, new = install(env, uuid, name, hash, url, version)
                     put!(results, (pkg, version_path, version, hash, new))
                 catch e
                     put!(results, e)
@@ -399,7 +494,8 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
     end
 
     textwidth = VERSION < v"0.7.0-DEV.1930" ? Base.strwidth : Base.textwidth
-    max_name = maximum(textwidth(names[pkg.uuid]) for pkg in pkgs)
+    widths = [textwidth(names[pkg.uuid]) for pkg in pkgs if haskey(names, pkg.uuid)]
+    max_name = (length(widths) == 0) ? 0 : maximum(widths)
 
     for _ in 1:length(pkgs)
         r = take!(results)
@@ -409,10 +505,14 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
             vstr = version != nothing ? "v$version" : "[$h]"
             new && info("Installed $(rpad(names[pkg.uuid] * " ", max_name + 2, "─")) $vstr")
         end
-        uuid = pkg.uuid
+        uuid, path = pkg.uuid, pkg.path
         version = pkg.version::VersionNumber
-        name, hash = names[uuid], hashes[uuid]
-        update_manifest(env, uuid, name, hash, version)
+        if haskey(names, uuid)
+            name, hash = names[uuid], hashes[uuid]
+        else
+            name, hash = pkg.name, nothing
+        end
+        update_manifest(env, uuid, name, hash, version, path)
         new && push!(new_versions, uuid)
     end
     prune_manifest(env)
@@ -446,10 +546,12 @@ function build_versions(env::EnvCache, uuids::Vector{UUID})
     for uuid in uuids
         info = manifest_info(env, uuid)
         name = info["name"]
-        # TODO: handle development packages?
-        haskey(info, "hash-sha1") || continue
-        hash = SHA1(info["hash-sha1"])
-        path = find_installed(uuid, hash)
+        path = if haskey(info, "path")
+            info["path"]
+        else
+            hash = SHA1(info["hash-sha1"])
+            find_installed(uuid, hash)
+        end
         ispath(path) || error("Build path for $name does not exist: $path")
         build_file = joinpath(path, "deps", "build.jl")
         ispath(build_file) && push!(builds, (uuid, name, hash, build_file))
@@ -613,8 +715,12 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
     version_paths    = String[]
     for pkg in pkgs
         info = manifest_info(env, pkg.uuid)
-        haskey(info, "hash-sha1") || cmderror("Could not find hash-sha for package $(pkg.name)")
-        version_path = find_installed(pkg.uuid, SHA1(info["hash-sha1"]))
+        version_path = if haskey(info, "path")
+            info["path"]
+        else
+            haskey(info, "hash-sha1") || cmderror("Could not find hash-sha for package $(pkg.name)")
+            find_installed(pkg.uuid, SHA1(info["hash-sha1"]))
+        end
         testfile = joinpath(version_path, "test", "runtests.jl")
         if !isfile(testfile)
             push!(missing_runtests, pkg.name)
@@ -666,5 +772,64 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
                  " errored during testing")
     end
 end
+
+function clone(env::EnvCache, pkgs::Vector{PackageSpec})
+    new_repos = Dict{UUID, String}()
+    for pkg in pkgs
+        if has_uuid(pkg)
+            # This is a registered package, set its version to the maximum version
+            # since we will clone master
+            uuid = pkg.uuid
+            max_version = typemin(VersionNumber)
+            for path in registered_paths(env, uuid)
+                version_info = load_versions(path)
+                max_version = max(max_version, maximum(keys(version_info)))
+            end
+            pkg.version = max_version
+        else
+            # We are cloning a packages that doesn't exist in the registry.
+            # Give it a new UUID and some version
+            pkg.version = v"0.0"
+            pkg.uuid = uuid5(uuid_package, pkg.name)
+        end
+        if isdir(joinpath(pkg.path))
+            if !isfile(joinpath(pkg.path, "src", pkg.name * ".jl"))
+                cmderror("Path $(pkg.path) exists but it does not contain `src/$(pkg).jl.")
+            end
+            info("Path $(pkg.path) exists and looks like a package, using that.")
+        else
+            info("Cloning $(pkg.name) from $(pkg.url) to $(pkg.path)")
+            mkpath(pkg.path)
+            new_repos[pkg.uuid] = pkg.path
+            LibGit2.clone(pkg.url, pkg.path)
+        end
+        env.project["deps"][pkg.name] = string(pkg.uuid)
+    end
+    try
+        resolve_versions!(env, pkgs)
+        new = apply_versions(env, pkgs)
+        write_env(env)
+        build_versions(env, new)
+    catch e
+        for pkg in pkgs
+            haskey(new_repos, pkg.uuid) && Base.rm(new_repos[pkg.uuid]; recursive = true)
+        end
+        rethrow(e)
+    end
+end
+
+function free(env::EnvCache, pkgs::Vector{PackageSpec})
+    for pkg in pkgs
+        if isempty(registered_name(env, pkg.uuid))
+            cmderror("can only free registered packages")
+        end
+        pkg.beingfreed = true
+    end
+    resolve_versions!(env, pkgs)
+    new = apply_versions(env, pkgs)
+    write_env(env) # write env before building
+    build_versions(env, new)
+end
+
 end # module
 
