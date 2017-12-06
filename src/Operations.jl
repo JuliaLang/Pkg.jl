@@ -153,38 +153,26 @@ function collect_fixed!(env, pkgs, uuids)
     fix_deps_map = Dict{UUID, Vector{PackageSpec}}()
     uuid_to_pkg = Dict{UUID, PackageSpec}()
     for pkg in pkgs
-        path    = nothing
-        version = nothing
-        has_path(pkg) && (path = pkg.path)
-        has_version(pkg) && (version = pkg.version)
-        info = manifest_info(env, pkg.uuid)
-        version == nothing && info != nothing && haskey(info, "version") && (version = VersionNumber(info["version"]))
-        path == nothing && info != nothing && haskey(info, "path") && (path = info["path"])
-        if path != nothing # This is a fixed package
-            # Package is actually being freed, so it is not fixed
-            pkg.beingfreed && continue
-            # A package with a path should have a version
-            @assert version != nothing
-            pkg.path = path
-            pkg.version = version
+        !has_path(pkg) && continue
+        # A package with a path should have a version
+        @assert pkg.version != nothing
 
-            uuid_to_pkg[pkg.uuid] = pkg
-            # Load the dependencies if this package has a REQUIRE
-            reqfile = joinpath(path, "REQUIRE")
-            fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
-            !isfile(reqfile) && continue
-            for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
-                # @assert length(r.versions.intervals) == 1
-                pkg_name, version = r.package, r.versions.intervals[1]
-                # TODO: Check VERSION
-                pkg_name == "julia" && continue
-                # Convert to Pkg3 data types
-                vspec = VersionSpec([VersionRange(VersionBound(version.lower),
-                                                  VersionBound(version.upper))])
-                deppkg = PackageSpec(pkg_name, vspec)
-                push!(fix_deps_map[pkg.uuid], deppkg)
-                push!(fix_deps, deppkg)
-            end
+        uuid_to_pkg[pkg.uuid] = pkg
+        # Load the dependencies if this package has a REQUIRE
+        reqfile = joinpath(pkg.path, "REQUIRE")
+        fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
+        !isfile(reqfile) && continue
+        for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
+            # @assert length(r.versions.intervals) == 1
+            pkg_name, version = r.package, r.versions.intervals[1]
+            # TODO: Check VERSION
+            pkg_name == "julia" && continue
+            # Convert to Pkg3 data types
+            vspec = VersionSpec([VersionRange(VersionBound(version.lower),
+                                              VersionBound(version.upper))])
+            deppkg = PackageSpec(pkg_name, vspec)
+            push!(fix_deps_map[pkg.uuid], deppkg)
+            push!(fix_deps, deppkg)
         end
     end
 
@@ -221,6 +209,7 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
         ver = VersionNumber(info["version"])
         push!(pkgs, PackageSpec(name, uuid, ver))
     end
+    path_resolve!(env, pkgs)
 
     # Collect all fixed packages (have a path) and their dependencies
     fixed = collect_fixed!(env, pkgs, uuids)
