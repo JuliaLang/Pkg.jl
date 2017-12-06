@@ -746,6 +746,17 @@ function registry_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     return pkgs
 end
 
+
+function path_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
+    for pkg in pkgs
+        pkg.beingfreed && continue
+        info = manifest_info(env, pkg.uuid)
+        info == nothing && continue
+        haskey(info, "path") && (pkg.path = info["path"])
+        haskey(info, "version") && (pkg.version = VersionNumber(info["version"]))
+    end
+end
+
 "Ensure that all packages are fully resolved"
 function ensure_resolved(
     env::EnvCache,
