@@ -50,6 +50,7 @@ temp_pkg_dir() do project_path
     # Clone an unregistered packge and check that it can be imported
     Pkg3.clone("https://github.com/fredrikekre/ImportMacros.jl")
     @eval import ImportMacros
+    Pkg3.test("ImportMacros")
 
     # Clone an registered packge and check that it can be imported
     Pkg3.clone("https://github.com/KristofferC/TimerOutputs.jl")
