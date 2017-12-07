@@ -57,10 +57,9 @@ temp_pkg_dir() do project_path
         LibGit2.init(tmp)
         mkdir(joinpath(tmp, "subfolder"))
         cd(joinpath(tmp, "subfolder")) do
+            # Haven't initialized here so using the default env
+            @test isinstalled(TEST_PKG)
             withenv("JULIA_ENV" => nothing) do
-                # Haven't initialized here so using the default env
-                @test isinstalled(TEST_PKG)
-                # Initializing, createa a new env
                 Pkg3.init()
                 @test !isinstalled(TEST_PKG)
                 @test isfile(joinpath(tmp, "Project.toml"))

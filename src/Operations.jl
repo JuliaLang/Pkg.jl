@@ -400,7 +400,8 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
     end
 
     textwidth = VERSION < v"0.7.0-DEV.1930" ? Base.strwidth : Base.textwidth
-    max_name = maximum(textwidth(names[pkg.uuid]) for pkg in pkgs)
+    widths = [textwidth(names[pkg.uuid]) for pkg in pkgs]
+    max_name = length(widths) == 0 ? 0 : maximum(widths)
 
     for _ in 1:length(pkgs)
         r = take!(results)
@@ -676,12 +677,10 @@ function init(path::String)
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
     end
     path = gitpath == nothing ? path : dirname(dirname(gitpath))
-    try mkpath(path) end
-    for f in ("Project.toml", "Manifest.toml")
-        isfile(joinpath(path, f)) && cmderror("Project already initialized at $path")
-    end
+    mkpath(path)
+    isfile(joinpath(path, "Project.toml")) && cmderror("Environment already initialized at $path")
     touch(joinpath(path, "Project.toml"))
-    info("Initialized project in $path by creating the file Project.toml")
+    info("Initialized environment in $path by creating the file Project.toml")
 end
 
 end # module
