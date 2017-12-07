@@ -642,7 +642,7 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
                 ("compilecache" ,     Base.JLOptions().use_compilecache) :
                 ("compiled-modules",  Base.JLOptions().use_compiled_modules)
 
-        testcmd = `"import Pkg3; include(\"$testfile\")"`
+        testcmd = `"Pkg3.GLOBAL_SETTINGS.loadmode = Pkg3.LOADMODE_CLOSED; include(\"$testfile\")"`
         cmd = ```
             $(Base.julia_cmd())
             --code-coverage=$(coverage ? "user" : "none")
@@ -650,7 +650,7 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
             --$compilemod_opt=$(Bool(compilemod_val) ? "yes" : "no")
             --check-bounds=yes
             --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
-            $testfile
+            -e $testcmd
         ```
         try
             run(cmd)
