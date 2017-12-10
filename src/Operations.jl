@@ -4,8 +4,7 @@ using Base.Random: UUID
 using Base: LibGit2
 using Pkg3.TerminalMenus
 using Pkg3.Types
-import Pkg3: Pkg2, depots, BinaryProvider, USE_LIBGIT2_FOR_ALL_DOWNLOADS, NUM_CONCURRENT_DOWNLOADS
-import Pkg3: depots, BinaryProvider, USE_LIBGIT2_FOR_ALL_DOWNLOADS, NUM_CONCURRENT_DOWNLOADS
+import Pkg3: GLOBAL_SETTINGS, Pkg2, depots, BinaryProvider
 
 const SlugInt = UInt32 # max p = 4
 const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -246,7 +245,7 @@ function install(
     ispath(version_path) && return version_path, false
     http_download_successful = false
     env.preview[] && return version_path, true
-    if !USE_LIBGIT2_FOR_ALL_DOWNLOADS && version != nothing
+    if !GLOBAL_SETTINGS.use_libgit2_for_all_downloads && version != nothing
         for url in urls
             archive_url = get_archive_url_for_version(url, version)
             if archive_url != nothing
@@ -276,7 +275,7 @@ function install(
             end
         end
     end
-    if !http_download_successful || USE_LIBGIT2_FOR_ALL_DOWNLOADS
+    if !http_download_successful || GLOBAL_SETTINGS.use_libgit2_for_all_downloads
         upstream_dir = joinpath(depots()[1], "upstream")
         ispath(upstream_dir) || mkpath(upstream_dir)
         repo_path = joinpath(upstream_dir, string(uuid))
@@ -375,15 +374,15 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
     # install & update manifest
     new_versions = UUID[]
 
-    jobs = Channel(NUM_CONCURRENT_DOWNLOADS);
-    results = Channel(NUM_CONCURRENT_DOWNLOADS);
+    jobs = Channel(GLOBAL_SETTINGS.num_concurrent_downloads);
+    results = Channel(GLOBAL_SETTINGS.num_concurrent_downloads);
     @schedule begin
         for pkg in pkgs
             put!(jobs, pkg)
         end
     end
 
-    for i in 1:NUM_CONCURRENT_DOWNLOADS
+    for i in 1:GLOBAL_SETTINGS.num_concurrent_downloads
         @schedule begin
             for pkg in jobs
                 uuid = pkg.uuid
@@ -643,7 +642,7 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
                 ("compilecache" ,     Base.JLOptions().use_compilecache) :
                 ("compiled-modules",  Base.JLOptions().use_compiled_modules)
 
-        testcmd = `"import Pkg3; include(\"$testfile\")"`
+        testcmd = `"Pkg3.GLOBAL_SETTINGS.loadmode = Pkg3.LOADMODE_CLOSED; include(\"$testfile\")"`
         cmd = ```
             $(Base.julia_cmd())
             --code-coverage=$(coverage ? "user" : "none")
@@ -651,7 +650,7 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
             --$compilemod_opt=$(Bool(compilemod_val) ? "yes" : "no")
             --check-bounds=yes
             --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
-            $testfile
+            -e $testcmd
         ```
         try
             run(cmd)
