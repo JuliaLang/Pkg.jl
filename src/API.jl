@@ -1,8 +1,8 @@
 module API
 
-import Pkg3
-import Pkg3: depots, logdir, TOML
-using Pkg3: Types, Dates
+import Pkg
+import Pkg: depots, logdir, TOML
+using Pkg: Types, Dates
 using Base.Random.UUID
 
 previewmode_info() = info("In preview mode")
@@ -17,7 +17,7 @@ function add(env::EnvCache, pkgs::Vector{PackageSpec}; preview::Bool=env.preview
     project_resolve!(env, pkgs)
     registry_resolve!(env, pkgs)
     ensure_resolved(env, pkgs, true)
-    Pkg3.Operations.add(env, pkgs)
+    Pkg.Operations.add(env, pkgs)
 end
 
 
@@ -30,7 +30,7 @@ function rm(env::EnvCache, pkgs::Vector{PackageSpec}; preview::Bool=env.preview[
     preview && previewmode_info()
     project_resolve!(env, pkgs)
     manifest_resolve!(env, pkgs)
-    Pkg3.Operations.rm(env, pkgs)
+    Pkg.Operations.rm(env, pkgs)
 end
 
 
@@ -109,7 +109,7 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec};
         manifest_resolve!(env, pkgs)
         ensure_resolved(env, pkgs)
     end
-    Pkg3.Operations.up(env, pkgs)
+    Pkg.Operations.up(env, pkgs)
 end
 
 test(;kwargs...)                           = test(PackageSpec[], kwargs...)
@@ -123,7 +123,7 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false, preview=
     project_resolve!(env, pkgs)
     manifest_resolve!(env, pkgs)
     ensure_resolved(env, pkgs)
-    Pkg3.Operations.test(env, pkgs; coverage=coverage)
+    Pkg.Operations.test(env, pkgs; coverage=coverage)
 end
 
 
@@ -170,7 +170,7 @@ function gc(env::EnvCache=EnvCache(); period = Week(6), preview=env.preview[])
             @assert length(_stanzas) == 1
             stanzas = _stanzas[1]
             if stanzas isa Dict && haskey(stanzas, "uuid") && haskey(stanzas, "hash-sha1")
-                push!(paths_to_keep, Pkg3.Operations.find_installed(UUID(stanzas["uuid"]), SHA1(stanzas["hash-sha1"])))
+                push!(paths_to_keep, Pkg.Operations.find_installed(UUID(stanzas["uuid"]), SHA1(stanzas["hash-sha1"])))
             end
         end
     end
@@ -225,7 +225,7 @@ function gc(env::EnvCache=EnvCache(); period = Week(6), preview=env.preview[])
 end
 
 function init(path = pwd())
-    Pkg3.Operations.init(path)
+    Pkg.Operations.init(path)
 end
 
 end # module

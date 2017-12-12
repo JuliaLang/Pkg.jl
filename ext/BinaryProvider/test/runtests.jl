@@ -545,8 +545,8 @@ end
 
             # Test that we can't guess a manifest path from a package with the wrong
             # url and no products:
-            binpkg3 = BinaryPackage("fakeurl", hash, platform)
-            @test_throws ErrorException uninstall(binpkg3; prefix=prefix, verbose=true)
+            binPkg = BinaryPackage("fakeurl", hash, platform)
+            @test_throws ErrorException uninstall(binPkg; prefix=prefix, verbose=true)
         end
     end
 end

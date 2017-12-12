@@ -2,8 +2,8 @@ module Operations
 
 using Base.Random: UUID
 using Base: LibGit2
-using Pkg3: TerminalMenus, Types, Query, Resolve
-import Pkg3: GLOBAL_SETTINGS, depots, BinaryProvider
+using ..Pkg: TerminalMenus, Types, Query, Resolve
+import ..Pkg: GLOBAL_SETTINGS, depots, BinaryProvider
 
 const SlugInt = UInt32 # max p = 4
 const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -369,6 +369,7 @@ function prune_manifest(env::EnvCache)
 end
 
 function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
+    BinaryProvider.probe_platform_engines!()
     names, hashes, urls = version_data(env, pkgs)
     # install & update manifest
     new_versions = UUID[]
@@ -641,7 +642,7 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
                 ("compilecache" ,     Base.JLOptions().use_compilecache) :
                 ("compiled-modules",  Base.JLOptions().use_compiled_modules)
 
-        testcmd = `"import Pkg3; include(\"$testfile\")"`
+        testcmd = `"import Pkg; include(\"$testfile\")"`
         cmd = ```
             $(Base.julia_cmd())
             --code-coverage=$(coverage ? "user" : "none")

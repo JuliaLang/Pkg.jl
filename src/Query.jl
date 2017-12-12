@@ -4,7 +4,7 @@ module Query
 
 using ..Types
 import ..Types.uuid_julia
-import Pkg3.equalto
+import Pkg.equalto
 
 function init_resolve_backtrace(uuid_to_name::Dict{UUID,String}, reqs::Requires, fix::Dict{UUID,Fixed} = Dict{UUID,Fixed}())
     bktrc = ResolveBacktrace(uuid_to_name)

@@ -53,7 +53,7 @@ mutable struct Interface
         pdict = Dict{UUID,Int}(pkgs[i] => i for i = 1:np)
 
         # generate spp and pvers
-        spp = Vector{Int}(np)
+        spp = Vector{Int}(uninitialized, np)
 
         pvers = [VersionNumber[] for i = 1:np]
 
@@ -83,11 +83,11 @@ mutable struct Interface
         end
 
         ## generate wveights:
-        vweight = Vector{Vector{VersionWeight}}(np)
+        vweight = Vector{Vector{VersionWeight}}(uninitialized, np)
         for p0 = 1:np
             pvers0 = pvers[p0]
             spp0 = spp[p0]
-            vweight0 = vweight[p0] = Vector{VersionWeight}(spp0)
+            vweight0 = vweight[p0] = Vector{VersionWeight}(uninitialized, spp0)
             for v0 = 1:spp0-1
                 vweight0[v0] = VersionWeight(pvers0[v0])
             end

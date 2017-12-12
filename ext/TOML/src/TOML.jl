@@ -1,10 +1,6 @@
 module TOML
 
-    if Base.isdeprecated(Base, :Dates)
-        using Dates
-    else
-        using Base.Dates
-    end
+    using Dates
 
     include("parser.jl")
     include("print.jl")

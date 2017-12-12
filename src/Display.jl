@@ -1,8 +1,7 @@
 module Display
 
 using Base.Random: UUID
-using Pkg3.Types
-
+using Pkg.Types
 export print_project_diff, print_manifest_diff
 
 const colors = Dict(

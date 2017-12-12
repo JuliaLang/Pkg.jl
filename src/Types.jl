@@ -2,10 +2,11 @@ module Types
 
 using Base.Random: UUID
 using SHA
-using Pkg3: TOML, TerminalMenus, Dates
 
-import Pkg3
-import Pkg3: depots, logdir, iswindows
+import Pkg
+using Pkg: TOML, TerminalMenus, Dates
+import Pkg: depots, logdir
+
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, DepsGraph, merge_requires!, satisfies,
@@ -243,7 +244,7 @@ Base.convert(::Type{VersionSpec}, v::AbstractVector) = VersionSpec(map(VersionRa
 
 const empty_versionspec = VersionSpec(VersionRange[])
 # Windows console doesn't like Unicode
-const _empty_symbol = @static iswindows() ? "empty" : "∅"
+const _empty_symbol = @static Sys.iswindows() ? "empty" : "∅"
 
 Base.isempty(s::VersionSpec) = all(isempty, s.ranges)
 @assert isempty(empty_versionspec)
@@ -604,7 +605,7 @@ function write_env(env::EnvCache)
     isempty(project["deps"]) && delete!(project, "deps")
     if !isempty(project) || ispath(env.project_file)
         info("Updating $(pathrepr(env, env.project_file))")
-        Pkg3.Display.print_project_diff(old_env, env)
+        Pkg.Display.print_project_diff(old_env, env)
         if !env.preview[]
             mkpath(dirname(env.project_file))
             open(env.project_file, "w") do io
@@ -615,7 +616,7 @@ function write_env(env::EnvCache)
     # update the manifest file
     if !isempty(env.manifest) || ispath(env.manifest_file)
         info("Updating $(pathrepr(env, env.manifest_file))")
-        Pkg3.Display.print_manifest_diff(old_env, env)
+        Pkg.Display.print_manifest_diff(old_env, env)
         manifest = deepcopy(env.manifest)
         uniques = sort!(collect(keys(manifest)), by=lowercase)
         filter!(name->length(manifest[name]) == 1, uniques)
@@ -641,7 +642,7 @@ function git_discover(
     ceiling::Union{AbstractString,Vector} = "",
     across_fs::Bool = false,
 )
-    sep = @static iswindows() ? ";" : ":"
+    sep = @static Sys.iswindows() ? ";" : ":"
     ceil = ceiling isa AbstractString ? ceiling :
         join(convert(Vector{String}, ceiling), sep)
     buf_ref = Ref(LibGit2.Buffer())
@@ -744,7 +745,7 @@ function init_if_interactive(path::String)
         choice = TerminalMenus.request("Could not find local environment in $(path), do you want to create it?",
                    TerminalMenus.RadioMenu(["yes", "no"]))
         if choice == 1
-            Pkg3.Operations.init(pwd())
+            Pkg.Operations.init(pwd())
             path, gitrepo = find_project(path)
             return path
         end
@@ -1083,7 +1084,7 @@ function pathrepr(env::EnvCache, path::String, base::String=pwd())
             path = relpath(path, repo)
         end
     end
-    if !iswindows() && isabspath(path)
+    if !Sys.iswindows() && isabspath(path)
         home = joinpath(homedir(), "")
         if startswith(path, home)
             path = joinpath("~", path[nextind(path,endof(home)):end])

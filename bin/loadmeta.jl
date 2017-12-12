@@ -3,8 +3,8 @@
 using Base: thispatch, thisminor, nextpatch, nextminor
 using Base.LinAlg: checksquare
 using Base.Random: UUID
-using Pkg3.Types
-using Pkg3.Types: uuid_package, uuid_registry, uuid5
+using Pkg.Types
+using Pkg.Types: uuid_package, uuid_registry, uuid5
 
 include("Pkg2/Pkg2.jl")
 import .Pkg2.Reqs: Reqs, Requirement

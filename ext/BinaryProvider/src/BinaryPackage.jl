@@ -57,7 +57,7 @@ function install(pkg::BinaryPackage; verbose::Bool = false, kwargs...)
 
     # Begin by installing all the dependencies if they are not already
     for dep in pkg.dependencies
-        # TODO: We may want to handle this through `Pkg3` operations
+        # TODO: We may want to handle this through `Pkg` operations
         install(dep; verbose=verbose, kwargs...)
     end
 

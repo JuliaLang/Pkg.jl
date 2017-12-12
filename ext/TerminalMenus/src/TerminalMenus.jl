@@ -1,12 +1,10 @@
 module TerminalMenus
 
-import Pkg3.iswindows
-
 terminal = nothing  # The user terminal
 
 function __init__()
     global terminal
-    terminal = Base.Terminals.TTYTerminal(get(ENV, "TERM", iswindows() ? "" : "dumb"), STDIN, STDOUT, STDERR)
+    terminal = Base.Terminals.TTYTerminal(get(ENV, "TERM", Sys.iswindows() ? "" : "dumb"), STDIN, STDOUT, STDERR)
 end
 
 include("util.jl")

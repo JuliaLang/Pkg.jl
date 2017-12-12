@@ -1,19 +1,21 @@
 module BinaryProvider
 
-import Pkg3: iswindows, isapple, islinux
+const iswindows = Sys.iswindows
+const isapple = Sys.isapple
+const islinux = Sys.islinux
 
 # Include our subprocess running funtionality
 include("OutputCollector.jl")
 # External utilities such as downloading/decompressing tarballs
 include("PlatformEngines.jl")
 # Platform naming
-include("PlatformNames.jl")
+# include("PlatformNames.jl")
 # Everything related to file/path management
-include("Prefix.jl")
+# include("Prefix.jl")
 # Abstraction of "needing" a file, that would trigger an install
-include("Products.jl")
+# include("Products.jl")
 # Abstraction of bundled binary package
-include("BinaryPackage.jl")
+# include("BinaryPackage.jl")
 
 # BinDeps support, disabled for now because I don't particularly want to force
 # users to install BinDeps to install this package.  That seems counter-productive
@@ -28,7 +30,7 @@ function __init__()
     # activate(global_prefix)
 
     # Find the right download/compression engines for this platform
-    probe_platform_engines!()
+    # probe_platform_engines!()
 
     # If we're on a julia that's too old, then fixup the color mappings
     # if !haskey(Base.text_colors, :default)

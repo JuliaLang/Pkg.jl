@@ -100,6 +100,8 @@ function probe_cmd(cmd::Cmd; verbose::Bool = false)
     end
 end
 
+already_probed = false
+
 """
 `probe_platform_engines!(;verbose::Bool = false)`
 
@@ -131,6 +133,9 @@ will be printed and the typical searching will be performed.
 If `verbose` is `true`, print out the various engines as they are searched.
 """
 function probe_platform_engines!(;verbose::Bool = false)
+    if already_probed
+        return
+    end
     global gen_download_cmd, gen_list_tarball_cmd, gen_package_cmd
     global gen_unpack_cmd, parse_tarball_listing, gen_sh_cmd
 
@@ -340,6 +345,8 @@ function probe_platform_engines!(;verbose::Bool = false)
     if !download_found || !compression_found || !sh_found
         error(errmsg)
     end
+
+    global already_probed = true
 end
 
 """

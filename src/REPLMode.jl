@@ -1,9 +1,9 @@
 module REPLMode
 
-import Pkg3
-using Pkg3.Types
-using Pkg3.Display
-using Pkg3.Operations
+import Pkg
+using Pkg.Types
+using Pkg.Display
+using Pkg.Operations
 
 import Base: LineEdit, REPL, REPLCompletions
 import Base.Random: UUID
@@ -341,7 +341,7 @@ function do_rm!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     end
     isempty(pkgs) &&
         cmderror("`rm` – list packages to remove")
-    Pkg3.API.rm(env, pkgs)
+    Pkg.API.rm(env, pkgs)
 end
 
 function do_add!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
@@ -363,7 +363,7 @@ function do_add!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
             cmderror("`add` doesn't take options: --$(join(token[2:end], '='))")
         end
     end
-    Pkg3.API.add(env, pkgs)
+    Pkg.API.add(env, pkgs)
 end
 
 function do_up!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
@@ -398,7 +398,7 @@ function do_up!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
         end
         last_token_type = token[1]
     end
-    Pkg3.API.up(env, pkgs; level=level, mode=mode)
+    Pkg.API.up(env, pkgs; level=level, mode=mode)
 end
 
 function do_status!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
@@ -417,7 +417,7 @@ function do_status!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
             cmderror("`status` does not take arguments")
         end
     end
-    Pkg3.Display.status(env, mode)
+    Pkg.Display.status(env, mode)
 end
 
 # TODO , test recursive dependencies as on option.
@@ -446,19 +446,19 @@ function do_test!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
         end
     end
     isempty(pkgs) && cmderror("`test` takes a set of packages")
-    Pkg3.API.test(env, pkgs; coverage = coverage)
+    Pkg.API.test(env, pkgs; coverage = coverage)
 end
 
 function do_gc!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     !isempty(tokens) && cmderror("`gc` does not take any arguments")
-    Pkg3.API.gc(env)
+    Pkg.API.gc(env)
 end
 
 function do_init!(tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     if !isempty(tokens)
         cmderror("`init` does currently not take any arguments")
     end
-    Pkg3.API.init(pwd())
+    Pkg.API.init(pwd())
 end
 
 

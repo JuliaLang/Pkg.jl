@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-using Pkg3.TOML
+using Pkg.TOML
 using Base: LibGit2
 
 function sha1map(pkgs::Dict{String,Package})
