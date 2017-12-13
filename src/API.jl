@@ -4,7 +4,6 @@ import Pkg3
 using Pkg3.Display.DiffEntry
 import Pkg3: depots, logdir, TOML
 using Pkg3: Types, Dates
-
 using Base.Random.UUID
 
 previewmode_info() = info("In preview mode")
