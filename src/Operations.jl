@@ -45,7 +45,7 @@ function find_installed(uuid::UUID, sha1::SHA1)
     return abspath(depots()[1], "packages", slug)
 end
 
-function package_env_info(pkg::String, env::EnvCache = EnvCache(); verb::String = "choose")
+function package_env_info(pkg::String, env::EnvCache = EnvCache())
     project = env.project
     manifest = env.manifest
     haskey(manifest, pkg) || return nothing
@@ -61,29 +61,8 @@ function package_env_info(pkg::String, env::EnvCache = EnvCache(); verb::String 
         length(infos) > 1 &&
             cmderror("manifest has multiple stanzas for $pkg/$uuid")
         return first(infos)
-    elseif length(infos) == 1
-        return first(infos)
     else
-        options = String[]
-        paths = convert(Dict{String,Vector{String}}, find_registered(pkg))
-        for info in infos
-            uuid = info["uuid"]
-            option = uuid
-            if haskey(paths, uuid)
-                for path in paths[uuid]
-                    info′ = parse_toml(path, "package.toml")
-                    option *= " – $(info′["repo"])"
-                    break
-                end
-            else
-                option *= " – (unregistred)"
-            end
-            push!(options, option)
-        end
-        menu = RadioMenu(options)
-        choice = request("Which $pkg package do you want to use:", menu)
-        choice == -1 && cmderror("Package load aborted")
-        return infos[choice]
+        return first(infos)
     end
 end
 

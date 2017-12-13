@@ -1,11 +1,7 @@
 __precompile__(true)
 module Pkg
 
-if VERSION < v"0.7.0-DEV.2575"
-    const Dates = Base.Dates
-else
-    import Dates
-end
+using Dates
 
 @enum LoadErrorChoice LOAD_ERROR_QUERY LOAD_ERROR_INSTALL LOAD_ERROR_ERROR
 
@@ -70,8 +66,8 @@ function _find_package(name::String)
     else
         name = string(base, ".jl")
     end
-    info = Pkg.Operations.package_env_info(base, verb = "use")
-    info == nothing && @goto find_global
+    info = Pkg.Operations.package_env_info(base)
+    info == nothing && return @goto find_global
     haskey(info, "uuid") || @goto find_global
     haskey(info, "hash-sha1") || @goto find_global
     uuid = Base.Random.UUID(info["uuid"])
@@ -83,32 +79,40 @@ function _find_package(name::String)
     # and query the user (if we are interactive) to install it.
     @label find_global
     if isinteractive()
-        env = Types.EnvCache()
-        pkgspec = [Types.PackageSpec(base)]
-
-        r = Operations.registry_resolve!(env, pkgspec)
-        Types.has_uuid(r[1]) || return nothing
-
-        GLOBAL_SETTINGS.load_error_choice == LOAD_ERROR_INSTALL && @goto install
-        GLOBAL_SETTINGS.load_error_choice == LOAD_ERROR_ERROR   && return nothing
-
-        choice = TerminalMenus.request("Could not find package \e[1m$(base)\e[22m, do you want to install it?",
-                       TerminalMenus.RadioMenu(["yes", "yes (remember)", "no", "no (remember)"]))
-
-        if choice == 3 || choice == 4
-            choice == 4 && (GLOBAL_SETTINGS.load_error_choice = LOAD_ERROR_ERROR)
-            return nothing
-        end
-
-        choice == 2 && (GLOBAL_SETTINGS.load_error_choice = LOAD_ERROR_INSTALL)
-        @label install
-        Pkg.Operations.ensure_resolved(env, pkgspec, true)
-        Pkg.Operations.add(env, pkgspec)
-        return _find_package(name)
+        # Hide this from inference
+        return query_if_interactive[](base, name)::Union{Void, String}
+    else
+        return nothing
     end
-    return nothing
 end
 
-include("pkg_precompile.jl")
+function _query_if_interactive(base, name)
+    env = Types.EnvCache()
+    pkgspec = [Types.PackageSpec(base)]
+
+    r = Operations.registry_resolve!(env, pkgspec)
+    Types.has_uuid(r[1]) || return nothing
+
+    GLOBAL_SETTINGS.load_error_choice == LOAD_ERROR_INSTALL && @goto install
+    GLOBAL_SETTINGS.load_error_choice == LOAD_ERROR_ERROR   && return nothing
+
+    choice = TerminalMenus.request("Could not find package \e[1m$(base)\e[22m, do you want to install it?",
+                   TerminalMenus.RadioMenu(["yes", "yes (remember)", "no", "no (remember)"]))
+
+    if choice == 3 || choice == 4
+        choice == 4 && (GLOBAL_SETTINGS.load_error_choice = LOAD_ERROR_ERROR)
+        return nothing
+    end
+
+    choice == 2 && (GLOBAL_SETTINGS.load_error_choice = LOAD_ERROR_INSTALL)
+    @label install
+    Pkg.Operations.ensure_resolved(env, pkgspec, true)
+    Pkg.Operations.add(env, pkgspec)
+    return _find_package(name)
+end
+
+const query_if_interactive = Ref{Any}(_query_if_interactive)
+
+include("precompile_pkg.jl")
 _precompile_()
 end # module

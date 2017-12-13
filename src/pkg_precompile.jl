@@ -110,4 +110,5 @@ precompile(Tuple{typeof(Base.start), Array{Tuple{Base.Random.UUID, String, Pkg.T
 precompile(Tuple{typeof(Base.done), Array{Tuple{Base.Random.UUID, String, Pkg.Types.SHA1, String}, 1}, Int64})
 precompile(Tuple{typeof(Pkg._find_package), String})
 precompile(Tuple{typeof(Pkg.__init__)})
+precompile(Tuple{Type{Pkg.Display.DiffEntry}, Base.Random.UUID, String, Pkg.Display.VerInfo, Pkg.Display.VerInfo})
 end
