@@ -46,7 +46,9 @@ const update = up
 function __init__()
     vers = "v$(VERSION.major).$(VERSION.minor)"
     unshift!(Base.LOAD_CACHE_PATH, abspath(depots()[1], "lib", vers))
-    Base.find_package_override[] = _find_package
+    Base.__Pkg.find_package[] = _find_package
+    #Base.__Pkg.installed[] = installed
+    Base.__Pkg.dir[] = dir
 
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
