@@ -29,6 +29,7 @@ temp_pkg_dir() do project_path
     Pkg3.add(TEST_PKG; preview = true)
     @test_warn "not in project" Pkg3.API.rm("Example")
     Pkg3.add(TEST_PKG)
+    @test isfile(joinpath(Pkg3.dir(TEST_PKG), "src", TEST_PKG * ".jl"))
     @eval import $(Symbol(TEST_PKG))
     Pkg3.up()
     Pkg3.rm(TEST_PKG; preview = true)
