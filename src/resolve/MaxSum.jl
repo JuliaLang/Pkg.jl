@@ -2,7 +2,7 @@
 
 module MaxSum
 
-include("fieldvalue.jl")
+include("FieldValues.jl")
 
 using .FieldValues, ..VersionWeights, ..PkgToMaxSumInterface
 
@@ -34,6 +34,9 @@ mutable struct MaxSumParams
     end
 end
 
+# aux function to make graph generation consistent across platforms
+sortedpairs(d::Dict) = (k=>d[k] for k in sort!(collect(keys(d))))
+
 # Graph holds the graph structure onto which max-sum is run, in
 # sparse format
 mutable struct Graph
@@ -60,13 +63,13 @@ mutable struct Graph
     #   Used to break symmetry between dependants and
     #   dependencies (introduces a FieldValue at level l3).
     #   The "both" case is for when there are dependency
-    #   relations which go both ways, in which case the
-    #   noise is left to discriminate in case of ties
+    #   relations which go both ways
     gdir::Vector{Vector{Int}}
 
     # adjacency dict:
     #   allows one to retrieve the indices in gadj, so that
     #   gadj[p0][adjdict[p1][p0]] = p1
+    #   ("At which index does package p1 appear in gadj[p0]?")
     adjdict::Vector{Dict{Int,Int}}
 
     # states per package: same as in Interface
@@ -92,12 +95,12 @@ mutable struct Graph
         gdir = [Int[] for i = 1:np]
         adjdict = [Dict{Int,Int}() for i = 1:np]
 
-        for (p,d) in deps
+        for (p,depsp) in sortedpairs(deps)
             p0 = pdict[p]
             vdict0 = vdict[p0]
-            for (vn,a) in d
+            for (vn,vdep) in sortedpairs(depsp)
                 v0 = vdict0[vn]
-                for (rp, rvs) in a.requires
+                for (rp, rvs) in sortedpairs(vdep)
                     p1 = pdict[rp]
 
                     j0 = 1
@@ -186,15 +189,8 @@ mutable struct Messages
         pdict = interface.pdict
         vweight = interface.vweight
 
-        # a "deterministic noise" function based on hashes
-        function noise(p0::Int, v0::Int)
-            s = pkgs[p0] * string(v0 == spp[p0] ? "UNINST" : pvers[p0][v0])
-            Int128(hash(s))
-        end
-
-        # external fields: there are 2 terms, a noise to break potential symmetries
-        #                  and one to favor newest versions over older, and no-version over all
-        fld = [[FieldValue(0, zero(VersionWeight), vweight[p0][v0], (v0==spp[p0]), 0, noise(p0,v0)) for v0 = 1:spp[p0]] for p0 = 1:np]
+        # external fields: favor newest versions over older, and no-version over all
+        fld = [[FieldValue(0, zero(VersionWeight), vweight[p0][v0], (v0==spp[p0]), 0) for v0 = 1:spp[p0]] for p0 = 1:np]
 
         # enforce requirements
         for (rp, rvs) in reqs
@@ -348,14 +344,14 @@ end
 
 # A simple shuffling machinery for the update order in iterate()
 # (woulnd't pass any random quality test but it's arguably enough)
-let step=1
+let step = 1
 global shuffleperm, shuffleperminit
 shuffleperminit() = (step = 1)
 function shuffleperm(graph::Graph)
     perm = graph.perm
     np = graph.np
     for j = np:-1:2
-        k = mod(step,j)+1
+        k = mod(step,j) + 1
         perm[j], perm[k] = perm[k], perm[j]
         step += isodd(j) ? 1 : k
     end
@@ -379,17 +375,30 @@ function iterate(graph::Graph, msgs::Messages)
 end
 
 function decimate1(p0::Int, graph::Graph, msgs::Messages)
-    @assert !msgs.decimated[p0]
-    fld0 = msgs.fld[p0]
+    decimated = msgs.decimated
+    fld = msgs.fld
+    adjdict = graph.adjdict
+    gmsk = graph.gmsk
+
+    @assert !decimated[p0]
+    fld0 = fld[p0]
     s0 = indmax(fld0)
-    #println("DECIMATING $p0 ($(packages()[p0]) s0=$s0)")
+    # only do the decimation if it is consistent with
+    # the previously decimated nodes
+    for p1 in find(decimated)
+        haskey(adjdict[p0], p1) || continue
+        s1 = indmax(fld[p1])
+        j1 = adjdict[p0][p1]
+        gmsk[p1][j1][s0,s1] || return false
+    end
+    #println("DECIMATING $p0 (s0=$s0 fld=$fld0)")
     for v0 = 1:length(fld0)
-        if v0 != s0
-            fld0[v0] = FieldValue(-1)
-        end
+        v0 == s0 && continue
+        fld0[v0] = FieldValue(-1)
     end
     msgs.decimated[p0] = true
     msgs.num_nondecimated -= 1
+    return true
 end
 
 function reset_messages!(msgs::Messages)
@@ -411,16 +420,35 @@ end
 # but the maximum
 function decimate(n::Int, graph::Graph, msgs::Messages)
     #println("DECIMATING $n NODES")
+    adjdict = graph.adjdict
     fld = msgs.fld
     decimated = msgs.decimated
     fldorder = sortperm(fld, by=secondmax)
+    did_dec = false
     for p0 in fldorder
         decimated[p0] && continue
-        decimate1(p0, graph, msgs)
+        did_dec |= decimate1(p0, graph, msgs)
         n -= 1
         n == 0 && break
     end
     @assert n == 0
+    if !did_dec
+        # did not succeed in decimating anything;
+        # try to decimate at least one node
+        for p0 in fldorder
+            decimated[p0] && continue
+            if decimate1(p0, graph, msgs)
+                did_dec = true
+                break
+            end
+        end
+    end
+    if !did_dec
+        # still didn't succeed, give up
+        p0 = first(fldorder[.~(decimated)])
+        throw(UnsatError(p0))
+    end
+
     reset_messages!(msgs)
     return
 end
@@ -429,6 +457,7 @@ end
 # keep converging
 function break_ties(msgs::Messages)
     fld = msgs.fld
+    unbroken_ties = Int[]
     for p0 = 1:length(fld)
         fld0 = fld[p0]
         z = 0
@@ -443,10 +472,12 @@ function break_ties(msgs::Messages)
         end
         if z > 1
             #println("TIE! p0=$p0")
-            decimate1(p0, msgs)
-            return false
+            decimate1(p0, msgs) && return false
+            push!(unbroken_ties, p0)
         end
     end
+    # If there were ties, but none were broken, bail out
+    isempty(unbroken_ties) || throw(PkgError(first(unbroken_ties)))
     return true
 end
 

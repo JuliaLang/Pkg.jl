@@ -2,9 +2,8 @@ module Operations
 
 using Base.Random: UUID
 using Base: LibGit2
-using Pkg3.TerminalMenus
-using Pkg3.Types
-import Pkg3: Pkg2, depots, BinaryProvider, USE_LIBGIT2_FOR_ALL_DOWNLOADS, NUM_CONCURRENT_DOWNLOADS
+using Pkg3: TerminalMenus, Types, Query, Resolve
+import Pkg3: GLOBAL_SETTINGS, depots, BinaryProvider
 
 const SlugInt = UInt32 # max p = 4
 const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -116,7 +115,7 @@ load_package_data(f::Base.Callable, path::String, version::VersionNumber) =
     get(load_package_data(f, path, [version]), version, nothing)
 
 function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec})
-    deps = Dict{UUID,Dict{VersionNumber,Tuple{SHA1,Dict{UUID,VersionSpec}}}}()
+    deps = DepsGraph()
     uuids = [pkg.uuid for pkg in pkgs]
     seen = UUID[]
     while true
@@ -135,7 +134,7 @@ function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec})
                     r = get_or_make(Dict{String,VersionSpec}, compatibility, v)
                     q = Dict(u => get_or_make(VersionSpec, r, p) for (p, u) in d)
                     # VERSION in get_or_make(VersionSpec, r, "julia") || continue
-                    deps[uuid][v] = (h, q)
+                    deps[uuid][v] = q
                     for (p, u) in d
                         u in uuids || push!(uuids, u)
                     end
@@ -152,9 +151,9 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
     info("Resolving package versions")
     # anything not mentioned is fixed
     uuids = UUID[pkg.uuid for pkg in pkgs]
-    uuid_to_name = Dict{String, String}()
+    uuid_to_name = Dict{UUID,String}()
     for (name::String, uuid::UUID) in env.project["deps"]
-        uuid_to_name[string(uuid)] = name
+        uuid_to_name[uuid] = name
         uuid in uuids && continue
         info = manifest_info(env, uuid)
         haskey(info, "version") || continue
@@ -162,16 +161,16 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
         push!(pkgs, PackageSpec(name, uuid, ver))
     end
     # construct data structures for resolver and call it
-    reqs = Dict{String,Pkg2.Types.VersionSet}(string(pkg.uuid) => pkg.version for pkg in pkgs)
-    deps = convert(Dict{String,Dict{VersionNumber,Pkg2.Types.Available}}, deps_graph(env, pkgs))
+    reqs = Requires(pkg.uuid => pkg.version for pkg in pkgs)
+    deps = deps_graph(env, pkgs)
     for dep_uuid in keys(deps)
         info = manifest_info(env, UUID(dep_uuid))
         if info != nothing
-            uuid_to_name[info["uuid"]] = info["name"]
+            uuid_to_name[UUID(info["uuid"])] = info["name"]
         end
     end
-    deps = Pkg2.Query.prune_dependencies(reqs, deps, uuid_to_name)
-    vers = convert(Dict{UUID,VersionNumber}, Pkg2.Resolve.resolve(reqs, deps, uuid_to_name))
+    deps = Query.prune_dependencies(reqs, deps, uuid_to_name)
+    vers = Resolve.resolve(reqs, deps, uuid_to_name)
     find_registered!(env, collect(keys(vers)))
     # update vector of package versions
     for pkg in pkgs
@@ -245,7 +244,7 @@ function install(
     ispath(version_path) && return version_path, false
     http_download_successful = false
     env.preview[] && return version_path, true
-    if !USE_LIBGIT2_FOR_ALL_DOWNLOADS && version != nothing
+    if !GLOBAL_SETTINGS.use_libgit2_for_all_downloads && version != nothing
         for url in urls
             archive_url = get_archive_url_for_version(url, version)
             if archive_url != nothing
@@ -275,7 +274,7 @@ function install(
             end
         end
     end
-    if !http_download_successful || USE_LIBGIT2_FOR_ALL_DOWNLOADS
+    if !http_download_successful || GLOBAL_SETTINGS.use_libgit2_for_all_downloads
         upstream_dir = joinpath(depots()[1], "upstream")
         ispath(upstream_dir) || mkpath(upstream_dir)
         repo_path = joinpath(upstream_dir, string(uuid))
@@ -374,15 +373,15 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
     # install & update manifest
     new_versions = UUID[]
 
-    jobs = Channel(NUM_CONCURRENT_DOWNLOADS);
-    results = Channel(NUM_CONCURRENT_DOWNLOADS);
+    jobs = Channel(GLOBAL_SETTINGS.num_concurrent_downloads);
+    results = Channel(GLOBAL_SETTINGS.num_concurrent_downloads);
     @schedule begin
         for pkg in pkgs
             put!(jobs, pkg)
         end
     end
 
-    for i in 1:NUM_CONCURRENT_DOWNLOADS
+    for i in 1:GLOBAL_SETTINGS.num_concurrent_downloads
         @schedule begin
             for pkg in jobs
                 uuid = pkg.uuid
@@ -399,7 +398,8 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
     end
 
     textwidth = VERSION < v"0.7.0-DEV.1930" ? Base.strwidth : Base.textwidth
-    max_name = maximum(textwidth(names[pkg.uuid]) for pkg in pkgs)
+    widths = [textwidth(names[pkg.uuid]) for pkg in pkgs if haskey(names, pkg.uuid)]
+    max_name = length(widths) == 0 ? 0 : maximum(widths)
 
     for _ in 1:length(pkgs)
         r = take!(results)
@@ -666,5 +666,20 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
                  " errored during testing")
     end
 end
+
+function init(path::String)
+    gitpath = nothing
+    try
+        gitpath = git_discover(path, ceiling = homedir())
+    catch err
+        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+    end
+    path = gitpath == nothing ? path : dirname(dirname(gitpath))
+    mkpath(path)
+    isfile(joinpath(path, "Project.toml")) && cmderror("Environment already initialized at $path")
+    touch(joinpath(path, "Project.toml"))
+    info("Initialized environment in $path by creating the file Project.toml")
+end
+
 end # module
 
