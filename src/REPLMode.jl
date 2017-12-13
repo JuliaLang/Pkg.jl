@@ -298,7 +298,7 @@ const helps = Dict(
         build pkg[=uuid] ...
 
     Run the build script in deps/build.jl for each package in pkgs and all of their dependencies in depth-first recursive order.
-    If no packages are given, runs the build scripts for all packages in the manifest..
+    If no packages are given, runs the build scripts for all packages in the manifest.
     """,
 )
 
