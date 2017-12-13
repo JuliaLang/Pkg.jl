@@ -40,7 +40,7 @@ include("Operations.jl")
 include("REPLMode.jl")
 include("API.jl")
 
-import .API: add, rm, up, test, gc, init
+import .API: add, rm, up, test, gc, init, dir
 const update = up
 
 function __init__()

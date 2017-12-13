@@ -228,5 +228,28 @@ function init(path = pwd())
     Pkg.Operations.init(path)
 end
 
+dir() = error("`Pkg.dir()` is discontinued, use `Pkg.dir(\"Package\")` or `Pkg.dir([\"PackageA\", ...])`")
+
+dir(pkg::String) = dir([pkg])[1]
+function dir(pkgs_str::Vector{String})
+    env = EnvCache()
+    pkgs = [PackageSpec(pkg, :manifest) for pkg in pkgs_str]
+    manifest_resolve!(env, pkgs)
+
+    paths = String[]
+    for pkg in pkgs
+        if !has_uuid(pkg)
+            cmderror("package $pkg not found in the manifest")
+        else
+            info = manifest_info(env, pkg.uuid)
+            sha1 = SHA1(info["hash-sha1"])
+            push!(paths, Pkg3.Operations.find_installed(pkg.uuid, sha1))
+        end
+    end
+    return paths
+end
+
+
+
 end # module
 
