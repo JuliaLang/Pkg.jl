@@ -85,9 +85,9 @@ function convert(::Type{Dict{String, VersionNumber}}, diffs::Union{Array{DiffEnt
     return version_status
 end
 
-status() = status(:combined)
+installed() = installed(:manifest)
 
-function status(mode::Symbol)::Dict{String, VersionNumber}
+function installed(mode::Symbol)::Dict{String, VersionNumber}
     diff = Pkg3.Display.status(EnvCache(), mode, true)
     convert(Dict{String, VersionNumber}, diff)
 end
