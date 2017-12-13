@@ -100,7 +100,7 @@ function _find_package(name::String)
     @label find_global
     if isinteractive()
         # query_if_interactive is hidden from inference
-        # since it has a significant compile cost and is not used
+        # since it has a significant inference cost and is not used
         # when e.g. precompiling modules
         return query_if_interactive[](base, name)::Union{Void, String}
     else
