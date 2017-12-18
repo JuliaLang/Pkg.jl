@@ -1,17 +1,18 @@
 module Types
 
 using Base.Random: UUID
+
+
 using SHA
-using Pkg3: TOML, TerminalMenus, Dates
+import ..Pkg3
+using ..Pkg3: TOML, TerminalMenus, Dates
+import ..Pkg3: depots, logdir, iswindows
 
-import Pkg3
-import Pkg3: depots, logdir, iswindows
-
-export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
+export UUID, pkgID, SHA1, VersionBound, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, PkgError,
     PackageSpec, UpgradeLevel, EnvCache,
-    CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
-    project_resolve!, manifest_resolve!, registry_resolve!, ensure_resolved,
+    CommandError, cmderror, has_name, has_uuid, has_path, has_url, has_version, write_env, parse_toml, find_registered!,
+    project_resolve!, manifest_resolve!, registry_resolve!, path_resolve!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     git_file_stream, git_discover, read_project, read_manifest, pathrepr, registries
 
@@ -365,18 +366,30 @@ mutable struct PackageSpec
     uuid::UUID
     version::VersionTypes
     mode::Symbol
-    PackageSpec(name::String, uuid::UUID, version::VersionTypes) =
-        new(name, uuid, version, :project)
+    path::String
+    url::String
+    beingfreed::Bool # TODO: Get rid of this field
+    PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes, project::Symbol=:project,
+            path::AbstractString="", url::AbstractString="", beingfreed=false) =
+    new(name, uuid, version, project, path, url, beingfreed)
 end
-PackageSpec(name::String, uuid::UUID) =
+PackageSpec(name::AbstractString, uuid::UUID) =
     PackageSpec(name, uuid, VersionSpec())
 PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
-    PackageSpec(name, UUID(zero(UInt128)), version)
+    PackageSpec(name, name == "julia" ? uuid_julia : UUID(zero(UInt128)), version)
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
+PackageSpec(;name::AbstractString="", uuid::UUID=UUID(zero(UInt128)), version::VersionTypes=VersionSpec(),
+            mode::Symbol=:project, path::AbstractString="", url::AbstractString="", beingfreed::Bool=false) =
+    PackageSpec(name, uuid, version, mode, path, url, beingfreed)
+
 
 has_name(pkg::PackageSpec) = !isempty(pkg.name)
 has_uuid(pkg::PackageSpec) = pkg.uuid != UUID(zero(UInt128))
+has_path(pkg::PackageSpec) = !isempty(pkg.path)
+has_url(pkg::PackageSpec)  = !isempty(pkg.urkl)
+# TODO: Optimize:?
+has_version(pkg::PackageSpec) = !(pkg.version isa VersionSpec && pkg.version.ranges == VersionSpec().ranges)
 
 function Base.show(io::IO, pkg::PackageSpec)
     print(io, "PackageSpec(")
