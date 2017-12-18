@@ -1,19 +1,19 @@
 module BinaryProvider
 
-import Pkg3: iswindows, isapple, islinux
+import ..Pkg3: iswindows, isapple, islinux
 
 # Include our subprocess running funtionality
-include("OutputCollector.jl")
+#include("OutputCollector.jl")
 # External utilities such as downloading/decompressing tarballs
 include("PlatformEngines.jl")
 # Platform naming
-include("PlatformNames.jl")
+#include("PlatformNames.jl")
 # Everything related to file/path management
-include("Prefix.jl")
+#include("Prefix.jl")
 # Abstraction of "needing" a file, that would trigger an install
-include("Products.jl")
+#include("Products.jl")
 # Abstraction of bundled binary package
-include("BinaryPackage.jl")
+#include("BinaryPackage.jl")
 
 # BinDeps support, disabled for now because I don't particularly want to force
 # users to install BinDeps to install this package.  That seems counter-productive

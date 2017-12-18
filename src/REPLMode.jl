@@ -1,9 +1,8 @@
 module REPLMode
 
-import Pkg3
-using Pkg3.Types
-using Pkg3.Display
-using Pkg3.Operations
+import ..Pkg3
+import ..Pkg3: default_dev_path
+using ..Pkg3: Types, Display, Operations
 
 import Base: LineEdit, REPL, REPLCompletions
 import Base.Random: UUID
@@ -34,6 +33,8 @@ const cmds = Dict(
     "preview"   => :preview,
     "init"      => :init,
     "build"     => :build,
+    "clone"     => :clone,
+    "free"      => :free,
 )
 
 const opts = Dict(
@@ -47,6 +48,8 @@ const opts = Dict(
     "patch"    => :patch,
     "fixed"    => :fixed,
     "coverage" => :coverage,
+    "path"     => :path,
+    "name"     => :name,
 )
 
 function parse_option(word::AbstractString)
@@ -160,6 +163,8 @@ function do_cmd!(tokens, repl; preview = false)
     cmd == :test    ?    do_test!(env, tokens) :
     cmd == :gc      ?      do_gc!(env, tokens) :
     cmd == :build   ?   do_build!(env, tokens) :
+    cmd == :clone   ?   do_clone!(env, tokens) :
+    cmd == :free    ?    do_free!(env, tokens) :
         cmderror("`$cmd` command not yet implemented")
 end
 
@@ -206,9 +211,13 @@ const help = Base.Markdown.parse("""
 
     `gc`: garbage collect packages not used for a significant time
 
-    `init` initializes an environment in the current, or git base, directory
+    `init`: initializes an environment in the current, or git base, directory
 
-    `build` run the build script for packages
+    `build`: run the build script for packages
+
+    `clone`: clones a package from an url to a local directory
+
+    `free`: start using the registered version of a package instead of the cloned one
     """)
 
 const helps = Dict(
@@ -309,7 +318,25 @@ const helps = Dict(
 
     Run the build script in deps/build.jl for each package in pkgs and all of their dependencies in depth-first recursive order.
     If no packages are given, runs the build scripts for all packages in the manifest.
-    """,
+    """, :clone => md"""
+
+        clone url [--path localpath]
+
+    Clones the package from the git repo at `url` to the path `localpath`, defaulting to `.julia/dev/`
+    in the home directory. A cloned package have its dependencies read from the packages local dependency file
+    instead of the registry. It is never be upgraded, removed, or changed in any way by
+    the package manager. If the package `localpath` exist, no cloning is done and the existing
+    package at that path is used. To `free` a package, i.e., go back to using the the versioned
+    package, use `free`.
+    """, :free => md"""
+
+        free pkg[=uuid]
+
+    Undo the clone command on `pkg`, i.e., instead of using the path where `pkg`
+    was cloned to when loading it, use the standard versioned path.
+    This allows the package to again be upgraded.
+    The directory where the package was originally cloned at is left untouched.
+    """
 )
 
 function do_help!(
@@ -499,6 +526,50 @@ function do_init!(tokens::Vector{Tuple{Symbol,Vararg{Any}}})
         cmderror("`init` does currently not take any arguments")
     end
     Pkg3.API.init(pwd())
+end
+
+function do_clone!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+    isempty(tokens) && cmderror("`clone` take an url to a package to clone")
+    local url
+    basepath = get(ENV, "JULIA_DEV_PATH", default_dev_path())
+    token = shift!(tokens)
+    if token[1] != :string
+        cmderror("expected a url given as a string")
+    end
+    url = token[2]
+    if !isempty(tokens)
+        token = shift!(tokens)
+        if token[1] == :opt
+            if token[2] == :path
+                if isempty(tokens)
+                    cmderror("expected an argument to the `--path` option")
+                else
+                    token = shift!(tokens)
+                    if token[1] != :string
+                        cmderror("expecetd a string argument to the `--path` option")
+                    else
+                        basepath = token[2]
+                    end
+                end
+            else
+                cmderror("`clone` only support the `--path` option")
+            end
+        end
+    end
+    Pkg3.API.clone(env, url, basepath = basepath)
+end
+
+function do_free!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+    pkgs = PackageSpec[]
+    while !isempty(tokens)
+        token = shift!(tokens)
+        if token[1] == :pkg
+            push!(pkgs, PackageSpec(token[2:end]...))
+        else
+            cmderror("free only takes a list of packages")
+        end
+    end
+    Pkg3.API.free(env, pkgs)
 end
 
 

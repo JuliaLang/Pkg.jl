@@ -5,7 +5,7 @@ module Types
 export VersionInterval, VersionSet
 import Base: show, isempty, in, intersect, union!, union, ==, hash, copy, deepcopy_internal
 
-import Pkg3.iswindows
+import ...Pkg3.iswindows
 
 struct VersionInterval
     lower::VersionNumber

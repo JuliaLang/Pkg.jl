@@ -52,6 +52,14 @@ temp_pkg_dir() do project_path
     usage = Pkg3.TOML.parse(String(read(joinpath(Pkg3.logdir(), "usage.toml"))))
     @test any(x -> startswith(x, joinpath(project_path, "Manifest.toml")), keys(usage))
 
+    # Clone an unregistered packge and check that it can be imported
+    Pkg3.clone("https://github.com/fredrikekre/ImportMacros.jl")
+    @eval import ImportMacros
+
+    # Clone a registered packge and check that it can be imported
+    Pkg3.clone("https://github.com/KristofferC/TimerOutputs.jl")
+    @eval import TimerOutputs
+
     nonexisting_pkg = randstring(14)
     @test_throws CommandError Pkg3.add(nonexisting_pkg)
     @test_throws CommandError Pkg3.up(nonexisting_pkg)
@@ -74,6 +82,10 @@ temp_pkg_dir() do project_path
     end
 
     Pkg3.rm(TEST_PKG)
+    # TimerOutputs depends on Crayons, which is therefore still installed
+    @test isinstalled(TEST_PKG)
+    # This removes also Crayons
+    Pkg3.rm("TimerOutputs")
     @test !isinstalled(TEST_PKG)
 
 end

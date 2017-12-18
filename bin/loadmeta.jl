@@ -6,9 +6,9 @@ using Base.Random: UUID
 using Pkg3.Types
 using Pkg3.Types: uuid_package, uuid_registry, uuid5
 
-include("Pkg2/Pkg2.jl")
-import .Pkg2.Reqs: Reqs, Requirement
-import .Pkg2.Types: VersionInterval
+import Pkg3: Pkg2
+import Pkg3.Pkg2.Reqs: Reqs, Requirement
+import Pkg3.Pkg2.Types: VersionInterval
 
 ## Loading data into various data structures ##
 
