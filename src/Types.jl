@@ -8,7 +8,7 @@ import ..Pkg3
 using ..Pkg3: TOML, TerminalMenus, Dates
 import ..Pkg3: depots, logdir, iswindows
 
-export UUID, pkgID, SHA1, VersionBound, VersionRange, VersionSpec, empty_versionspec,
+export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, PkgError,
     PackageSpec, UpgradeLevel, EnvCache,
     CommandError, cmderror, has_name, has_uuid, has_path, has_url, has_version, write_env, parse_toml, find_registered!,

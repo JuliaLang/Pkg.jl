@@ -208,12 +208,7 @@ function collect_fixed!(env, pkgs, uuids)
         fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
         !isfile(reqfile) && continue
         for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
-            # TODO: get all intervals
-            pkg_name, version = r.package, r.versions.intervals[1]
-            # Convert to Pkg3 data types
-            # TODO: the upper bound here is incorrect
-            vspec = VersionSpec([VersionRange(VersionBound(version.lower),
-                                              VersionBound(version.upper))])
+            pkg_name, vspec = r.package, VersionSpec(VersionRange[r.versions.intervals...])
             deppkg = PackageSpec(pkg_name, vspec)
             push!(fix_deps_map[pkg.uuid], deppkg)
             push!(fix_deps, deppkg)
