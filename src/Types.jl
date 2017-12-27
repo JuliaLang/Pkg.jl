@@ -1009,7 +1009,7 @@ find_registered!(env::EnvCache)::Void =
 "Get registered uuids associated with a package name"
 function registered_uuids(env::EnvCache, name::String)::Vector{UUID}
     find_registered!(env, [name], UUID[])
-    return env.uuids[name]
+    return unique(env.uuids[name])
 end
 
 "Get registered paths associated with a package uuid"
@@ -1026,7 +1026,7 @@ end
 
 "Determine a single UUID for a given name, prompting if needed"
 function registered_uuid(env::EnvCache, name::String)::UUID
-    uuids = unique(registered_uuids(env, name))
+    uuids = registered_uuids(env, name)
     length(uuids) == 0 && return UUID(zero(UInt128))
     choices::Vector{String} = []
     choices_cache::Vector{Tuple{UUID, String}} = [] 
@@ -1068,7 +1068,7 @@ function registered_info(env::EnvCache, uuid::UUID, key::String)
     for path in paths
         info = parse_toml(path, "package.toml")
         value = get(info, key, nothing)
-        push!(values, (path,value)) 
+        push!(values, (path, value)) 
     end
     return values
 end
