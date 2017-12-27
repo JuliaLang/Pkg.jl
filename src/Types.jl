@@ -1062,11 +1062,11 @@ end
 function registered_info(env::EnvCache, uuid::UUID, key::String)
     paths = env.paths[uuid]
     isempty(paths) && cmderror("`$uuid` is not registered")
-    values::Vector{Pair{String, String}} = []
+    values::Vector{Tuple{String, String}} = []
     for path in paths
         info = parse_toml(path, "package.toml")
         value = get(info, key, nothing)
-        push!(values,  Pair(path,value)) 
+        push!(values, (path,value)) 
     end
     return values
 end
