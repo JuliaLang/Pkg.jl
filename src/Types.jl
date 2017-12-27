@@ -1030,15 +1030,15 @@ function registered_uuid(env::EnvCache, name::String)::UUID
     length(uuids) == 0 && return UUID(zero(UInt128))
     choices::Vector{String} = []
     choices_cache::Vector{Tuple{UUID, String}} = []
-                         
+    
     for uuid in uuids
         values = registered_info(env, uuid, "repo")
         for value in values
-            push!(choices, "Registry: $(split(value[1],"/")[end-2]) - Path:$(value[2])")
+            push!(choices, "Registry: $(split(value[1],"/")[end-2]) - Path: $(value[2])")
             push!(choices_cache, (uuid, value[1]))
         end
-    end   
-    length(choices_cache) == 1 && return choice_cache[1][1]
+    end
+    length(choices_cache) == 1 && return choices_cache[1][1]
     
     # prompt for which UUID was intended:
     menu = RadioMenu(choices)
@@ -1062,7 +1062,7 @@ function registered_info(env::EnvCache, uuid::UUID, key::String)
     isempty(paths) && cmderror("`$uuid` is not registered")
     values::Vector{Pair{String, String}} = []
     for path in paths
-        info = parse_toml(paths[1], "package.toml")
+        info = parse_toml(path, "package.toml")
         value = get(info, key, nothing)
         push!(values,  Pair(path,value)) 
     end
