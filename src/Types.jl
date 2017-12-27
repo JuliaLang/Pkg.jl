@@ -1053,7 +1053,9 @@ function registered_name(env::EnvCache, uuid::UUID)::String
     names = registered_names(env, uuid)
     length(names) == 0 && return ""
     length(names) == 1 && return names[1]
-    return registered_info(env, uuid, "name")
+    name = distinct(registered_info(env, uuid, "name"))
+    name > 1 && cmderror("package `$uuid` has multiple registered names values: ", join(values, ", "))
+    return name
 end
 
 "Return most current package info for a registered UUID"
