@@ -1029,8 +1029,7 @@ function registered_uuid(env::EnvCache, name::String)::UUID
     uuids = unique(registered_uuids(env, name))
     length(uuids) == 0 && return UUID(zero(UInt128))
     choices::Vector{String} = []
-    choices_cache::Vector{Tuple{UUID, String}} = []
-    
+    choices_cache::Vector{Tuple{UUID, String}} = [] 
     for uuid in uuids
         values = registered_info(env, uuid, "repo")
         for value in values
@@ -1065,7 +1064,7 @@ end
 function registered_info(env::EnvCache, uuid::UUID, key::String)
     paths = env.paths[uuid]
     isempty(paths) && cmderror("`$uuid` is not registered")
-    values::Vector{Tuple{String, String}} = []
+    values = []
     for path in paths
         info = parse_toml(path, "package.toml")
         value = get(info, key, nothing)
