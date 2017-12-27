@@ -1039,13 +1039,12 @@ function registered_uuid(env::EnvCache, name::String)::UUID
         end
     end
     length(choices_cache) == 1 && return choices_cache[1][1]
-    
     # prompt for which UUID was intended:
     menu = RadioMenu(choices)
     choice = request("There are multiple registered `$name` packages, choose one:", menu)
     choice == -1 && return UUID(zero(UInt128))
-    env.paths[choice_cache[choice][1]] = [choice_cache[choice][2]]
-    return choice_cache[choice][1]
+    env.paths[choices_cache[choice][1]] = [choices_cache[choice][2]]
+    return choices_cache[choice][1]
 end
 
 "Determine current name for a given package UUID"
@@ -1053,8 +1052,12 @@ function registered_name(env::EnvCache, uuid::UUID)::String
     names = registered_names(env, uuid)
     length(names) == 0 && return ""
     length(names) == 1 && return names[1]
-    name = distinct(registered_info(env, uuid, "name"))
-    name > 1 && cmderror("package `$uuid` has multiple registered names values: ", join(values, ", "))
+    values = registered_info(env, uuid, "name")
+    name = nothing
+    for value in values
+        name  == nothing && (name = value[2])
+        name != value[2] && cmderror("package `$uuid` has multiple registered name values: $name, $(value[2])")
+    end
     return name
 end
 
