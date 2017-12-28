@@ -225,8 +225,8 @@ function gc(env::EnvCache=EnvCache(); period = Week(6), preview=env.preview[])
 end
 
 
-build(pkg::String) = build([pkg])
-build(pkgs::Vector{String}) = build([PackageSpec(pkg) for pkg in pkgs])
+build(pkgs...) = build([PackageSpec(pkg) for pkg in pkgs])
+build(pkg::Array{Union{}, 1}) = build(PackageSpec[])
 build(pkg::PackageSpec) = build([pkg])
 build(pkgs::Vector{PackageSpec}) = build(EnvCache(), pkgs)
 
