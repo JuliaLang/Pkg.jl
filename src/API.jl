@@ -242,6 +242,7 @@ function build(env::EnvCache, pkgs::Vector{PackageSpec})
     end
     manifest_resolve!(env, pkgs)
     ensure_resolved(env, pkgs)
+    Pkg3.Operations.resolve_versions!(env, pkgs, false)
     Pkg3.Operations.build_versions(env, [pkg.uuid for pkg in pkgs])
 end
 
