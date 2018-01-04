@@ -147,20 +147,18 @@ function deps_graph(env::EnvCache, pkgs::Vector{PackageSpec})
 end
 
 "Resolve a set of versions given package version specs"
-function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec}, fix_all = true)::Dict{UUID,VersionNumber}
+function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,VersionNumber}
     info("Resolving package versions")
+    # anything not mentioned is fixed
     uuids = UUID[pkg.uuid for pkg in pkgs]
     uuid_to_name = Dict{UUID,String}()
-    # anything not mentioned is fixed
-    if fix_all
-        for (name::String, uuid::UUID) in env.project["deps"]
-            uuid_to_name[uuid] = name
-            uuid in uuids && continue
-            info = manifest_info(env, uuid)
-            haskey(info, "version") || continue
-            ver = VersionNumber(info["version"])
-            push!(pkgs, PackageSpec(name, uuid, ver))
-        end
+    for (name::String, uuid::UUID) in env.project["deps"]
+        uuid_to_name[uuid] = name
+        uuid in uuids && continue
+        info = manifest_info(env, uuid)
+        haskey(info, "version") || continue
+        ver = VersionNumber(info["version"])
+        push!(pkgs, PackageSpec(name, uuid, ver))
     end
     # construct data structures for resolver and call it
     reqs = Requires(pkg.uuid => pkg.version for pkg in pkgs)
