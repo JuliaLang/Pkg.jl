@@ -233,7 +233,6 @@ function _get_deps!(env::EnvCache, deps_graph::DepsGraph, uuid::Base.Random.UUID
     end
 end
 
-
 build(pkgs...) = build([PackageSpec(pkg) for pkg in pkgs])
 build(pkg::Array{Union{}, 1}) = build(PackageSpec[])
 build(pkg::PackageSpec) = build([pkg])
