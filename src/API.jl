@@ -224,6 +224,15 @@ function gc(env::EnvCache=EnvCache(); period = Week(6), preview=env.preview[])
     info("Deleted $(length(paths_to_delete)) package installations", byte_save_str)
 end
 
+function _get_deps!(env::EnvCache, deps_graph::DepsGraph, uuid::Base.Random.UUID, version::VersionNumber, uuids::Vector{Base.Random.UUID})
+    for dep_uuid in keys(deps_graph[uuid][version])
+        dep_uuid in uuids && continue
+        push!(uuids, dep_uuid)
+        info = manifest_info(env, dep_uuid)
+        _get_deps!(env, deps_graph, dep_uuid, VersionNumber(info["version"]), uuids)
+    end
+end
+
 
 build(pkgs...) = build([PackageSpec(pkg) for pkg in pkgs])
 build(pkg::Array{Union{}, 1}) = build(PackageSpec[])
@@ -242,8 +251,17 @@ function build(env::EnvCache, pkgs::Vector{PackageSpec})
     end
     manifest_resolve!(env, pkgs)
     ensure_resolved(env, pkgs)
-    Pkg3.Operations.resolve_versions!(env, pkgs, false)
-    Pkg3.Operations.build_versions(env, [pkg.uuid for pkg in pkgs])
+    deps = Pkg3.Operations.deps_graph(env, pkgs)
+    uuids = Base.Random.UUID[]
+    for pkg in pkgs
+        info = manifest_info(env, pkg.uuid)
+        ver = VersionNumber(info["version"])
+        pkg.uuid in uuids && continue
+        push!(uuids, pkg.uuid)
+        _get_deps!(env, deps, pkg.uuid, ver, uuids)
+    end
+    length(uuids) == 0 && (info("No packages to build!"); return)
+    Pkg3.Operations.build_versions(env, uuids)
 end
 
 
