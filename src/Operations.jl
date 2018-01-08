@@ -161,11 +161,13 @@ function deps_graph(env::EnvCache, uuid_to_name::Dict{UUID,String}, reqs::Requir
                 for (vr,dd) in deps_data
                     all_deps_u_vr = get_or_make!(all_deps_u, vr)
                     for (name,other_uuid) in dd
+                        other_uuid in keys(fixed) && continue
                         # check conflicts??
                         all_deps_u_vr[name] = other_uuid
                         other_uuid in uuids || push!(uuids, other_uuid)
                     end
                 end
+                uuid in keys(fixed) && continue
                 for (vr,cd) in compatibility_data
                     all_compat_u_vr = get_or_make!(all_compat_u, vr)
                     for (name,vs) in cd
@@ -192,7 +194,7 @@ function deps_graph(env::EnvCache, uuid_to_name::Dict{UUID,String}, reqs::Requir
 end
 
 # This also sets the .path field for fixed packages in `pkgs`
-function collect_fixed!(env, pkgs, uuids)
+function collect_fixed!(env, pkgs, uuids, uuid_to_name)
     fix_deps = PackageSpec[]
     fixed_pkgs = PackageSpec[]
     fix_deps_map = Dict{UUID,Vector{PackageSpec}}()
@@ -203,6 +205,7 @@ function collect_fixed!(env, pkgs, uuids)
         @assert pkg.version != nothing
 
         uuid_to_pkg[pkg.uuid] = pkg
+        uuid_to_name[pkg.uuid] = pkg.name
         # Load the dependencies if this package has a REQUIRE
         reqfile = joinpath(pkg.path, "REQUIRE")
         fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
@@ -227,6 +230,7 @@ function collect_fixed!(env, pkgs, uuids)
             if !has_uuid(deppkg)
                 cmderror("Could not find a UUID for package $(pkg.name) in the registry")
             end
+            uuid_to_name[deppkg.uuid] = deppkg.name
             q[deppkg.uuid] = deppkg.version
         end
         fixed[uuid] = Fixed(fix_pkg.version, q)
@@ -252,7 +256,7 @@ function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,
 
     reqs = Requires(pkg.uuid => pkg.version for pkg in pkgs if pkg.uuid ≠ uuid_julia)
     # Collect all fixed packages (have a path) and their dependencies
-    fixed = collect_fixed!(env, pkgs, uuids)
+    fixed = collect_fixed!(env, pkgs, uuids, uuid_to_name)
     fixed[uuid_julia] = Fixed(VERSION) # fix julia to current version
     graph = deps_graph(env, uuid_to_name, reqs, fixed)
 
@@ -532,7 +536,7 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
         end
         uuid, path = pkg.uuid, pkg.path
         version = pkg.version::VersionNumber
-        if haskey(names, uuid)
+        if haskey(hashes, uuid)
             name, hash = names[uuid], hashes[uuid]
         else
             name, hash = pkg.name, nothing
@@ -828,7 +832,7 @@ function clone(env::EnvCache, pkgs::Vector{PackageSpec})
                 version_info = load_versions(path)
                 max_version = max(max_version, maximum(keys(version_info)))
             end
-            pkg.version = max_version
+            pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
         else
             # We are cloning a packages that doesn't exist in the registry.
             # Give it a new UUID and some version
