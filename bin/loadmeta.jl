@@ -107,6 +107,8 @@ function load_packages(dir::String)
             v"0.5.1"  => Version("6445c82d0060dbe82b88436f0f4371a4ee64d918"),
             v"0.5.2"  => Version("f4c6c9d4bbbd9587d84494e314f692c15ff1f9c0"),
             v"0.6.0"  => Version("903644385b91ed8d95e5e3a5716c089dd1f1b08a"),
+            v"0.6.1"  => Version("0d7248e2ff65bd6886ba3f003bf5aeab929edab5"),
+            v"0.6.2"  => Version("d386e40c17d43b79fc89d3e579fc04547241787c"),
         ),
     )
     return pkgs
