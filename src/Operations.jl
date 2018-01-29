@@ -304,7 +304,6 @@ function version_data(env::EnvCache, pkgs::Vector{PackageSpec})
                 end
             end
         end
-        # @assert haskey(hashes, uuid)
     end
     foreach(sort!, values(upstreams))
     return names, hashes, upstreams
@@ -399,7 +398,7 @@ function install(
     return version_path, true
 end
 
-function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::Union{Void, SHA1}, version::VersionNumber, path::AbstractString)
+function update_manifest(env::EnvCache, uuid::UUID, name::String, hash_or_path::Union{String, SHA1}, version::VersionNumber)
     infos = get!(env.manifest, name, Dict{String,Any}[])
     info = nothing
     for i in infos
@@ -412,16 +411,19 @@ function update_manifest(env::EnvCache, uuid::UUID, name::String, hash::Union{Vo
         push!(infos, info)
     end
     info["version"] = string(version)
-    if isempty(path)
+    if hash_or_path isa SHA1
+        hash = hash_or_path
         @assert hash != nothing
         haskey(info, "path") && delete!(info, "path")
         info["git-tree-sha1"] = string(hash)
     else
+        path = hash_or_path
         haskey(info, "git-tree-sha1") && delete!(info, "git-tree-sha1")
         info["path"] = path
     end
     delete!(info, "deps")
-    if !isempty(path)
+    if hash_or_path isa String
+        path = hash_or_path
         reqfile = joinpath(path, "REQUIRE")
 
         !isfile(reqfile) && return
@@ -533,11 +535,10 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
         uuid, path = pkg.uuid, pkg.path
         version = pkg.version::VersionNumber
         if haskey(names, uuid)
-            name, hash = names[uuid], hashes[uuid]
+            update_manifest(env, uuid, names[uuid], hashes[uuid], version)
         else
-            name, hash = pkg.name, nothing
+            update_manifest(env, uuid, pkg.name, path, version)
         end
-        update_manifest(env, uuid, name, hash, version, path)
         new && push!(new_versions, uuid)
     end
     prune_manifest(env)

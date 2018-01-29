@@ -249,7 +249,7 @@ function url_and_pkg(url_or_pkg::AbstractString)
 end
 clone(pkg::String; kwargs...) = clone(EnvCache(), pkg; kwargs...)
 
-function clone(env::EnvCache, url::AbstractString; name=nothing, basepath=get(ENV, "JULIA_DEV_PATH", default_dev_path()), preview=env.preview[])
+function clone(env::EnvCache, url::AbstractString; name=nothing, basepath=get(ENV, "JULIA_DEVDIR", default_dev_path()), preview=env.preview[])
     preview && cmderror("Preview mode not implemented for cloning")
     if name == nothing
         url, name = url_and_pkg(url)

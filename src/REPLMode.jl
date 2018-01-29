@@ -531,7 +531,7 @@ end
 function do_clone!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     isempty(tokens) && cmderror("`clone` take an url to a package to clone")
     local url
-    basepath = get(ENV, "JULIA_DEV_PATH", default_dev_path())
+    basepath = get(ENV, "JULIA_DEVDIR", default_dev_path())
     token = shift!(tokens)
     if token[1] != :string
         cmderror("expected a url given as a string")
