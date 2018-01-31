@@ -12,7 +12,7 @@ const colors = Dict(
     '↑' => :light_yellow,
     '~' => :light_yellow,
     '↓' => :light_magenta,
-    '?' => :red,
+    '?' => :white,
 )
 const color_dark = :light_black
 
