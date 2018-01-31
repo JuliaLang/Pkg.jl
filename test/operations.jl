@@ -6,14 +6,17 @@ using Pkg3.Types
 
 function temp_pkg_dir(fn::Function)
     local project_path
+    local dev_dir
     try
         # TODO: Use a temporary depot
         project_path = joinpath(tempdir(), randstring())
-        withenv("JULIA_ENV" => project_path) do
+        dev_dir = joinpath(tempdir(), randstring())
+        withenv("JULIA_ENV" => project_path, "JULIA_DEVDIR" => dev_dir) do
             fn(project_path)
         end
     finally
         rm(project_path, recursive=true, force=true)
+        rm(dev_dir, recursive=true, force=true)
     end
 end
 

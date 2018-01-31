@@ -538,7 +538,7 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
         end
         uuid, path = pkg.uuid, pkg.path
         version = pkg.version::VersionNumber
-        if haskey(names, uuid)
+        if haskey(hashes, uuid)
             update_manifest(env, uuid, names[uuid], hashes[uuid], version)
         else
             update_manifest(env, uuid, pkg.name, path, version)
@@ -572,19 +572,20 @@ end
 function build_versions(env::EnvCache, uuids::Vector{UUID})
     # collect builds for UUIDs with `deps/build.jl` files
     env.preview[] && (info("Skipping building in preview mode"); return)
-    builds = Tuple{UUID,String,SHA1,String}[]
+    builds = Tuple{UUID,String,Union{SHA1, String},String}[]
     for uuid in uuids
         info = manifest_info(env, uuid)
         name = info["name"]
-        path = if haskey(info, "path")
-            info["path"]
+        path, hash = if haskey(info, "path")
+            info["path"], nothing
         else
             hash = SHA1(info["git-tree-sha1"])
-            find_installed(uuid, hash)
+            path = find_installed(uuid, hash)
+            path, hash
         end
         ispath(path) || error("Build path for $name does not exist: $path")
         build_file = joinpath(path, "deps", "build.jl")
-        ispath(build_file) && push!(builds, (uuid, name, hash, build_file))
+        ispath(build_file) && push!(builds, (uuid, name, hash == nothing ? path : hash, build_file))
     end
     # toposort builds by dependencies
     order = dependency_order_uuids(env, map(first, builds))
@@ -592,9 +593,13 @@ function build_versions(env::EnvCache, uuids::Vector{UUID})
     # build each package verions in a child process
     withenv("JULIA_ENV" => env.project_file) do
         LOAD_PATH = filter(x -> x isa AbstractString, Base.LOAD_PATH)
-        for (uuid, name, hash, build_file) in builds
+        for (uuid, name, hash_or_path, build_file) in builds
             log_file = splitext(build_file)[1] * ".log"
-            Base.info("Building $name [$(string(hash)[1:16])]...")
+            if hash_or_path isa SHA1
+                Base.info("Building $name [$(string(hash_or_path)[1:16])]...")
+            else
+                Base.info("Building $name [$hash_or_path]...")
+            end
             Base.info(" → $log_file")
             code = """
                 empty!(Base.LOAD_PATH)
@@ -838,7 +843,8 @@ function clone(env::EnvCache, pkgs::Vector{PackageSpec})
             # We are cloning a packages that doesn't exist in the registry.
             # Give it a new UUID and some version
             pkg.version = v"0.0"
-            pkg.uuid = uuid5(uuid_package, pkg.name)
+            pkg.uuid = Base.Random.UUID(rand(UInt128))
+            info("Cloning an unregistered package, giving it a random UUID of: $(pkg.uuid)")
         end
         if isdir(joinpath(pkg.path))
             if !isfile(joinpath(pkg.path, "src", pkg.name * ".jl"))

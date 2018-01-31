@@ -258,12 +258,6 @@ function clone(env::EnvCache, url::AbstractString; name=nothing, basepath=get(EN
     registry_resolve!(env, [pkg])
     project_resolve!(env, [pkg])
     manifest_resolve!(env, [pkg])
-    # Cloning a non existent package, give it a UUID and version
-    if !has_uuid(pkg)
-        pkg.version = v"0.0"
-        pkg.uuid = Base.Random.UUID(rand(UInt128))
-    end
-    ensure_resolved(env, [pkg])
     Pkg3.Operations.clone(env, [pkg])
 end
 
