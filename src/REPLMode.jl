@@ -8,67 +8,116 @@ import Base: LineEdit, REPL, REPLCompletions
 import Base.Random: UUID
 using Base.Markdown
 
+############
+# Commands #
+############
+@enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
+                   CMD_TEST, CMD_GC, CMD_FSCK, CMD_PREVIEW, CMD_INIT, CMD_BUILD,
+                   CMD_CLONE, CMD_FREE)
+
+struct Command
+    kind::CommandKind
+    val::String
+end
+Base.show(io::IO, cmd::Command) = print(io, cmd.val)
+
 const cmds = Dict(
-    "help"      => :help,
-    "?"         => :help,
-    "status"    => :status,
-    "st"        => :status,
-    "."         => :status,
-    "search"    => :search,
-    "find"      => :search,
-    "/"         => :search,
-    "add"       => :add,
-    "install"   => :add,
-    "+"         => :add,
-    "rm"        => :rm,
-    "remove"    => :rm,
-    "uninstall" => :rm,
-    "-"         => :rm,
-    "up"        => :up,
-    "update"    => :up,
-    "upgrade"   => :up,
-    "test"      => :test,
-    "gc"        => :gc,
-    "fsck"      => :fsck,
-    "preview"   => :preview,
-    "init"      => :init,
-    "build"     => :build,
-    "clone"     => :clone,
-    "free"      => :free,
+    "help"      => CMD_HELP,
+    "?"         => CMD_HELP,
+    "status"    => CMD_STATUS,
+    "st"        => CMD_STATUS,
+    "."         => CMD_STATUS,
+    "search"    => CMD_SEARCH,
+    "find"      => CMD_SEARCH,
+    "/"         => CMD_SEARCH,
+    "add"       => CMD_ADD,
+    "install"   => CMD_ADD,
+    "+"         => CMD_ADD,
+    "rm"        => CMD_RM,
+    "remove"    => CMD_RM,
+    "uninstall" => CMD_RM,
+    "-"         => CMD_RM,
+    "up"        => CMD_UP,
+    "update"    => CMD_UP,
+    "upgrade"   => CMD_UP,
+    "test"      => CMD_TEST,
+    "gc"        => CMD_GC,
+    "fsck"      => CMD_FSCK,
+    "preview"   => CMD_PREVIEW,
+    "init"      => CMD_INIT,
+    "build"     => CMD_BUILD,
+    "clone"     => CMD_CLONE,
+    "free"      => CMD_FREE,
 )
+
+
+###########
+# Options #
+###########
+@enum(OptionKind, OPT_ENV, OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR,
+                  OPT_PATCH, OPT_FIXED, OPT_COVERAGE, OPT_PATH, OPT_NAME)
+
+function Types.PackageMode(opt::OptionKind)
+    opt == OPT_MANIFEST && return PKGMODE_MANIFEST
+    opt == OPT_PROJECT  && return PKGMODE_PROJECT
+    throw(ArgumentError("invalid option $opt"))
+end
+
+function Types.UpgradeLevel(opt::OptionKind)
+    opt == OPT_MAJOR && return UPLEVEL_MAJOR
+    opt == OPT_MINOR && return UPLEVEL_MINOR
+    opt == OPT_PATCH && return UPLEVEL_PATCH
+    opt == OPT_FIXED && return UPLEVEL_FIXED
+    throw(ArgumentError("invalid option $opt"))
+end
+
+struct Option
+    kind::OptionKind
+    val::String
+    argument::Union{String, Void}
+    Option(kind::OptionKind, val::String) = new(kind, val, nothing)
+    function Option(kind::OptionKind, val::String, argument::Union{String, Void})
+        if kind in (OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR,
+                    OPT_MINOR, OPT_PATCH, OPT_FIXED) &&
+                argument !== nothing
+            cmderror("the `$val` option does not take an argument")
+        elseif kind in (OPT_ENV, OPT_PATH) && argument == nothing
+            cmderror("the `$val` option requires an argument")
+        end
+        if kind == OPT_PATH
+            argument =  replace(argument, "~", homedir())
+        end
+        new(kind, val, argument)
+    end
+end
+Base.show(io::IO, opt::Option) = print(io, "--$(opt.val)", opt.argument == nothing ? "" : "=$(opt.argument)")
 
 const opts = Dict(
-    "env"      => :env,
-    "project"  => :project,
-    "p"        => :project,
-    "manifest" => :manifest,
-    "m"        => :manifest,
-    "major"    => :major,
-    "minor"    => :minor,
-    "patch"    => :patch,
-    "fixed"    => :fixed,
-    "coverage" => :coverage,
-    "path"     => :path,
-    "name"     => :name,
+    "env"      => OPT_ENV,
+    "project"  => OPT_PROJECT,
+    "p"        => OPT_PROJECT,
+    "manifest" => OPT_MANIFEST,
+    "m"        => OPT_MANIFEST,
+    "major"    => OPT_MAJOR,
+    "minor"    => OPT_MINOR,
+    "patch"    => OPT_PATCH,
+    "fixed"    => OPT_FIXED,
+    "coverage" => OPT_COVERAGE,
+    "path"     => OPT_PATH,
+    "name"     => OPT_NAME,
 )
 
-function parse_option(word::AbstractString)
+function parse_option(word::AbstractString)::Option
     m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
     m == nothing && cmderror("invalid option: ", repr(word))
     k = m.captures[1] != nothing ? m.captures[1] : m.captures[2]
     haskey(opts, k) || cmderror("invalid option: ", repr(word))
-    m.captures[3] == nothing ?
-        (:opt, opts[k]) : (:opt, opts[k], String(m.captures[3]))
+    return Option(opts[k], String(k), m.captures[3] == nothing ? nothing : String(m.captures[3]))
 end
 
-function parse_string(word::AbstractString)
-    if !endswith(word, "\"")
-        cmderror("invalid string syntax, expected ending `\"`")
-    end
-    str = word[chr2ind(word, 2):chr2ind(word, length(word)-1)]
-    return (:string, str)
-end
-
+###################
+# Package parsing #
+###################
 let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(?-i)",
     name = raw"(\w+)(?:\.jl)?"
     global const name_re = Regex("^$name\$")
@@ -76,47 +125,68 @@ let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(
     global const name_uuid_re = Regex("^$name\\s*=\\s*($uuid)\$")
 end
 
+function parse_package(word::AbstractString)::PackageSpec
+    if ismatch(uuid_re, word)
+        return PackageSpec(UUID(word))
+    elseif ismatch(name_re, word)
+        return PackageSpec(String(match(name_re, word).captures[1]))
+    elseif ismatch(name_uuid_re, word)
+        m = match(name_uuid_re, word)
+        return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
+    else
+        cmderror("`$word` cannot be parsed as a package")
+    end
+end
+
+################
+# REPL parsing #
+################
 const lex_re = r"^[\?\./\+\-](?!\-) | [^@\s]+\s*=\s*[^@\s]+ | @\s*[^@\s]* | [^@\s]+"x
 
-function tokenize(cmd::String)::Vector{Tuple{Symbol,Vararg{Any}}}
-    tokens = Tuple{Symbol,Vararg{Any}}[]
+const Token = Union{Command, Option, VersionRange, String}
+
+function tokenize(cmd::String)::Vector{Token}
+    tokens = Token[]
     words = map(m->m.match, eachmatch(lex_re, cmd))
     help_mode = false
+    preview_mode = false
+    # First parse a Command or a modifier (help / preview) + Command
     while !isempty(words)
         word = shift!(words)
         if word[1] == '-' && length(word) > 1
             push!(tokens, parse_option(word))
         else
-            word in keys(cmds) || cmderror("invalid command: ", repr(word))
-            push!(tokens, (:cmd, cmds[word]))
-            help_mode || cmds[word] != :help && break
-            help_mode = true
+            haskey(cmds, word) || cmderror("invalid command: ", repr(word))
+            cmdkind = cmds[word]
+            push!(tokens, Command(cmdkind, word))
+            preview_mode && break
+            if !(help_mode || preview_mode)
+                cmdkind == CMD_HELP    && (help_mode    = true)
+                cmdkind == CMD_PREVIEW && (preview_mode = true)
+            end
+            help_mode || preview_mode || break
         end
     end
-    if isempty(tokens) || tokens[end][1] != :cmd
+    if isempty(tokens) || !(tokens[end] isa Command)
         cmderror("no package command given")
     end
+    # Now parse the arguments / options to the command
     while !isempty(words)
         word = shift!(words)
-        if word[1] == '"'
-            push!(tokens, parse_string(word))
-        elseif word[1] == '-'
+        if word[1] == '-'
             push!(tokens, parse_option(word))
         elseif word[1] == '@'
-            push!(tokens, (:ver, VersionRange(strip(word[2:end]))))
-        elseif ismatch(uuid_re, word)
-            push!(tokens, (:pkg, UUID(word)))
-        elseif ismatch(name_re, word)
-            push!(tokens, (:pkg, String(match(name_re, word).captures[1])))
-        elseif ismatch(name_uuid_re, word)
-            m = match(name_uuid_re, word)
-            push!(tokens, (:pkg, String(m.captures[1]), UUID(m.captures[2])))
+            push!(tokens, VersionRange(strip(word[2:end])))
         else
-            cmderror("invalid argument: ", repr(word))
+            push!(tokens, String(word))
         end
     end
     return tokens
 end
+
+#############
+# Execution #
+#############
 
 function do_cmd(repl::Base.REPL.AbstractREPL, input::String)
     try
@@ -131,53 +201,46 @@ function do_cmd(repl::Base.REPL.AbstractREPL, input::String)
     end
 end
 
-function do_cmd!(tokens, repl; preview = false)
-    local cmd::Symbol
+function do_cmd!(tokens::Vector{Token}, repl)
+    local cmd::Command
+    local env_opt::Union{String,Void} = get(ENV, "JULIA_ENV", nothing)
     while !isempty(tokens)
         token = shift!(tokens)
-        if token[1] == :cmd
-            cmd = token[2]
+        if token isa Command
+            cmd = token
             break
-        elseif token[1] == :opt
-            if token[2] == :env
-                length(token) == 3 ||
-                    cmderror("the `--env` option requires a value")
-                env_opt = token[3]
+        elseif token isa Option
+            # Only OPT_ENV is allowed before a command
+            if token.kind == OPT_ENV
+                env_opt = token.val
             else
-                cmderror("unrecognized option: `--$(token[2])`")
+                cmderror("unrecognized command option: `$token`")
             end
         else
             cmderror("misplaced token: ", token)
         end
     end
-    cmd == :init && return do_init!(tokens)
-    cmd == :preview && return do_preview!(tokens, repl)
-    local env_opt::Union{String,Void} = get(ENV, "JULIA_ENV", nothing)
     env = EnvCache(env_opt)
-    preview && (env.preview[] = true)
-    cmd == :help    ?    do_help!(env, tokens, repl) :
-    cmd == :rm      ?      do_rm!(env, tokens) :
-    cmd == :add     ?     do_add!(env, tokens) :
-    cmd == :up      ?      do_up!(env, tokens) :
-    cmd == :status  ?  do_status!(env, tokens) :
-    cmd == :test    ?    do_test!(env, tokens) :
-    cmd == :gc      ?      do_gc!(env, tokens) :
-    cmd == :build   ?   do_build!(env, tokens) :
-    cmd == :clone   ?   do_clone!(env, tokens) :
-    cmd == :free    ?    do_free!(env, tokens) :
+    if cmd.kind == CMD_PREVIEW
+        env.preview[] = true
+        cmd = shift!(tokens) # eat the preview token
+    end
+    cmd.kind == CMD_INIT    ?    do_init!(tokens) :
+    cmd.kind == CMD_HELP    ?    do_help!(env, tokens, repl) :
+    cmd.kind == CMD_RM      ?      do_rm!(env, tokens) :
+    cmd.kind == CMD_ADD     ?     do_add!(env, tokens) :
+    cmd.kind == CMD_UP      ?      do_up!(env, tokens) :
+    cmd.kind == CMD_STATUS  ?  do_status!(env, tokens) :
+    cmd.kind == CMD_TEST    ?    do_test!(env, tokens) :
+    cmd.kind == CMD_GC      ?      do_gc!(env, tokens) :
+    cmd.kind == CMD_BUILD   ?   do_build!(env, tokens) :
+    cmd.kind == CMD_CLONE   ?   do_clone!(env, tokens) :
+    cmd.kind == CMD_FREE    ?    do_free!(env, tokens) :
         cmderror("`$cmd` command not yet implemented")
+    return
 end
 
-function do_preview!(tokens, repl)
-    isempty(tokens) && cmderror("`preview` needs a command")
-    word = tokens[1][2]
-    word in keys(cmds) || cmderror("invalid command: ", repr(word))
-    cmds[word] == :init && cmderror("cannot run `init` in preview mode")
-    tokens[1] = (:cmd, cmds[word])
-    do_cmd!(tokens, repl, preview = true)
-end
-
-const help = Base.Markdown.parse("""
+const help = md"""
     **Synopsis**
 
         pkg> [--env=...] cmd [opts] [args]
@@ -218,10 +281,10 @@ const help = Base.Markdown.parse("""
     `clone`: clones a package from an url to a local directory
 
     `free`: start using the registered version of a package instead of the cloned one
-    """)
+    """
 
 const helps = Dict(
-    :help => md"""
+    CMD_HELP => md"""
 
         help
 
@@ -232,7 +295,7 @@ const helps = Dict(
     Display usage information for commands listed.
 
     Available commands: `help`, `status`, `add`, `rm`, `up`
-    """, :status => md"""
+    """, CMD_STATUS => md"""
 
         status
         status [-p|--project]
@@ -244,7 +307,7 @@ const helps = Dict(
     any changes to manifest packages not already listed. In `--project` mode, the
     status of the project file is summarized. In `--project` mode, the status of
     the project file is summarized.
-    """, :add => md"""
+    """, CMD_ADD => md"""
 
         add pkg[=uuid] [@version] ...
 
@@ -253,7 +316,7 @@ const helps = Dict(
     `@version` optionally allows specifying which versions of packages. Versions
     may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
     that matches, or ranges thereof, such as `@1.2-3.4.5`.
-    """, :rm => md"""
+    """, CMD_RM => md"""
 
         rm [-p|--project] pkg[=uuid] ...
 
@@ -272,7 +335,7 @@ const helps = Dict(
     multiple packages in the manifest, `uuid` disambiguates it. Removing a package
     from the manifest forces the removal of all packages that depend on it, as well
     as any no-longer-necessary manifest packages due to project package removals.
-    """, :up => md"""
+    """, CMD_UP => md"""
 
         up [-p|project]  [opts] pkg[=uuid] [@version] ...
         up [-m|manifest] [opts] pkg[=uuid] [@version] ...
@@ -287,14 +350,14 @@ const helps = Dict(
     the following packages to be upgraded only within the current major, minor,
     patch version; if the `--fixed` upgrade level is given, then the following
     packages will not be upgraded at all.
-    """, :preview => md"""
+    """, CMD_PREVIEW => md"""
 
         preview cmd
 
     Runs the command `cmd` in preview mode. This is defined such that no side effects
     will take place i.e. no packages are downloaded and neither the project nor manifest
     is modified.
-    """, :test => md"""
+    """, CMD_TEST => md"""
 
         test [opts] pkg[=uuid] ...
 
@@ -303,22 +366,22 @@ const helps = Dict(
     Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
     in the package directory. The option `--coverage` can be used to run the tests with
     coverage enabled.
-    """, :gc => md"""
+    """, CMD_GC => md"""
 
     Deletes packages that are not reached from any environment used within the last 6 weeks.
-    """, :init => md"""
+    """, CMD_INIT => md"""
 
         init
 
     Creates an environment in the current directory, or the git base directory if the current directory
     is in a git repository.
-    """, :build =>md"""
+    """, CMD_BUILD =>md"""
 
         build pkg[=uuid] ...
 
     Run the build script in deps/build.jl for each package in pkgs and all of their dependencies in depth-first recursive order.
     If no packages are given, runs the build scripts for all packages in the manifest.
-    """, :clone => md"""
+    """, CMD_CLONE => md"""
 
         clone url [--path localpath]
 
@@ -328,7 +391,7 @@ const helps = Dict(
     the package manager. If the package `localpath` exist, no cloning is done and the existing
     package at that path is used. To `free` a package, i.e., go back to using the the versioned
     package, use `free`.
-    """, :free => md"""
+    """, CMD_FREE => md"""
 
         free pkg[=uuid]
 
@@ -340,9 +403,9 @@ const helps = Dict(
 )
 
 function do_help!(
-    env::EnvCache,
-    tokens::Vector{Tuple{Symbol,Vararg{Any}}},
-    repl::Base.REPL.AbstractREPL,
+        env::EnvCache,
+        tokens::Vector{Token},
+        repl::Base.REPL.AbstractREPL,
 )
     disp = Base.REPL.REPLDisplay(repl)
     if isempty(tokens)
@@ -351,13 +414,13 @@ function do_help!(
     end
     help_md = md""
     for token in tokens
-        if token[1] == :cmd
-            if haskey(helps, token[2])
+        if token isa Command
+            if haskey(helps, token.kind)
                 isempty(help_md.content) ||
                 push!(help_md.content, md"---")
-                push!(help_md.content, helps[token[2]].content)
+                push!(help_md.content, helps[token.kind].content)
             else
-                cmderror("Sorry, I don't have any help for the `$(token[2])` command.")
+                cmderror("Sorry, I don't have any help for the `$(token.val)` command.")
             end
         else
             error("This should not happen")
@@ -366,106 +429,100 @@ function do_help!(
     Base.display(disp, help_md)
 end
 
-function do_rm!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+function do_rm!(env::EnvCache, tokens::Vector{Token})
     # tokens: package names and/or uuids
-    mode = :project
+    mode = PKGMODE_PROJECT
     pkgs = PackageSpec[]
     while !isempty(tokens)
         token = shift!(tokens)
-        if token[1] == :pkg
-            push!(pkgs, PackageSpec(token[2:end]...))
+        if token isa String
+            push!(pkgs, parse_package(token))
             pkgs[end].mode = mode
-        elseif token[1] == :ver
+        elseif token isa VersionRange
             cmderror("`rm` does not take version specs")
-        elseif token[1] == :opt
-            if token[2] in (:project, :manifest)
-                length(token) == 2 ||
-                    cmderror("the --$(token[2]) option does not take an argument")
-                mode = token[2]
+        elseif token isa Option
+            if token.kind in (OPT_PROJECT, OPT_MANIFEST)
+                mode = PackageMode(token.kind)
             else
-                cmderror("invalid option for `rm`: --$(token[2])")
+                cmderror("invalid option for `rm`: $token")
             end
-        elseif token[1] == :string
-            cmderror("unexpected string encountered: $(token[2])")
         end
     end
-    isempty(pkgs) &&
-        cmderror("`rm` – list packages to remove")
+    isempty(pkgs) && cmderror("`rm` – list packages to remove")
     Pkg3.API.rm(env, pkgs)
 end
 
-function do_add!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+function do_add!(env::EnvCache, tokens::Vector{Token})
     # tokens: package names and/or uuids, optionally followed by version specs
     isempty(tokens) &&
         cmderror("`add` – list packages to add")
-    tokens[1][1] == :ver &&
-        cmderror("package name/uuid must precede version spec `@$(tokens[1][2])`")
+    tokens isa VersionRange &&
+        cmderror("package must precede version spec `@$(tokens[1][2])`")
     pkgs = PackageSpec[]
+    prev_token_was_package = false
     while !isempty(tokens)
+        parsed_package = false
         token = shift!(tokens)
-        if token[1] == :pkg
-            push!(pkgs, PackageSpec(token[2:end]...))
-        elseif token[1] == :ver
-            pkgs[end].version = VersionSpec(token[2])
-            isempty(tokens) || tokens[1][1] == :pkg ||
-                cmderror("package name/uuid must precede version spec `@$(tokens[1][2])`")
-        elseif token[1] == :opt
-            cmderror("`add` doesn't take options: --$(join(token[2:end], '='))")
-        elseif token[1] == :string
-            cmderror("unexpected string encountered: $(token[2])")
+        if token isa String
+            push!(pkgs, parse_package(token))
+            parsed_package = true
+        elseif token isa VersionRange
+            prev_token_was_package ||
+                cmderror("package name/uuid must precede version spec `@$token`")
+            pkgs[end].version = VersionSpec(token)
+        elseif token isa Option
+            cmderror("`add` doesn't take options: $token")
         end
+        prev_token_was_package = parsed_package
     end
     Pkg3.API.add(env, pkgs)
 end
 
-function do_up!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+function do_up!(env::EnvCache, tokens::Vector{Token})
     # tokens:
     #  - upgrade levels as options: --[fixed|patch|minor|major]
     #  - package names and/or uuids, optionally followed by version specs
-    mode = :project
+    mode = PKGMODE_PROJECT
     pkgs = PackageSpec[]
-    level = UpgradeLevel(:major)
-    last_token_type = :cmd
+    level = UPLEVEL_MAJOR
+    prev_token_was_package = false
     while !isempty(tokens)
+        parsed_package = false
         token = shift!(tokens)
-        if token[1] == :pkg
-            push!(pkgs, PackageSpec(token[2:end]..., level))
+        if token isa String
+            push!(pkgs, parse_package(token))
+            pkgs[end].version = level
             pkgs[end].mode = mode
-        elseif token[1] == :ver
-            pkgs[end].version = VersionSpec(token[2])
-            last_token_type == :pkg ||
-                cmderror("package name/uuid must precede version spec `@$(token[2])`")
-        elseif token[1] == :opt
-            if token[2] in (:project, :manifest)
-                length(token) == 2 ||
-                    cmderror("the --$(token[2]) option does not take an argument")
-                mode = token[2]
-            elseif token[2] in (:major, :minor, :patch, :fixed)
-                length(token) == 2 ||
-                    cmderror("the --$(token[2]) option does not take an argument")
-                level = UpgradeLevel(token[2])
+            parsed_package = true
+        elseif token isa VersionRange
+            prev_token_was_package ||
+                cmderror("package name/uuid must precede version spec `@$token`")
+            pkgs[end].version = VersionSpec(token)
+        elseif token isa Option
+            if token.kind in (OPT_PROJECT, OPT_MANIFEST)
+                mode = PackageMode(token.kind)
+            elseif token.kind in (OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED)
+                level = UpgradeLevel(token.kind)
             else
-                cmderror("invalid option for `up`: --$(token[2])")
+                cmderror("invalid option for `up`: $(token)")
             end
-        elseif token[1] == :string
-            cmderror("unexpected string encountered: $(token[2])")
+        else
+            cmderror("unexpected woed encountered: $(token)")
         end
-        last_token_type = token[1]
+        prev_token_was_package = parsed_package
     end
     Pkg3.API.up(env, pkgs; level=level, mode=mode)
 end
 
-function do_status!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
-    mode = :combined
+function do_status!(env::EnvCache, tokens::Vector{Token})
+    mode = PKGMODE_COMBINED
     while !isempty(tokens)
         token = shift!(tokens)
-        if token[1] == :opt
-            if token[2] in (:project, :manifest)
-                length(token) == 2 ||
-                    cmderror("the --$(token[2]) option does not take an argument")
-                mode = token[2]
+        if token isa Option
+            if token.kind in (OPT_PROJECT, OPT_MANIFEST)
+                mode = PackageMode(token.kind)
             else
-                cmderror("invalid option for `status`: --$(token[2])")
+                cmderror("invalid option for `status`: $(token)")
             end
         else
             cmderror("`status` does not take arguments")
@@ -475,24 +532,20 @@ function do_status!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
 end
 
 # TODO , test recursive dependencies as on option.
-function do_test!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+function do_test!(env::EnvCache, tokens::Vector{Token})
     pkgs = PackageSpec[]
     coverage = false
     while !isempty(tokens)
         token = shift!(tokens)
-        if token[1] == :pkg
-            if length(token) == 2
-                pkg = PackageSpec(token[2])
-                pkg.mode = :manifest
-                push!(pkgs, pkg)
-            else
-                cmderror("`test` only takes a set of packages to test")
-            end
-        elseif token[1] == :opt
-            if token[2] == :coverage
+        if token isa String
+            pkg = parse_package(token)
+            pkg.mode = PKGMODE_MANIFEST
+            push!(pkgs, pkg)
+        elseif token isa Option
+            if token.kind == OPT_COVERAGE
                 coverage = true
             else
-                cmderror("invalid option for `test`: --$(token[2])")
+                cmderror("invalid option for `test`: $token")
             end
         else
             # TODO: Better error message
@@ -503,17 +556,17 @@ function do_test!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     Pkg3.API.test(env, pkgs; coverage = coverage)
 end
 
-function do_gc!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+function do_gc!(env::EnvCache, tokens::Vector{Token})
     !isempty(tokens) && cmderror("`gc` does not take any arguments")
     Pkg3.API.gc(env)
 end
 
-function do_build!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+function do_build!(env::EnvCache, tokens::Vector{Token})
     pkgs = PackageSpec[]
     while !isempty(tokens)
         token = shift!(tokens)
-        if token[1] == :pkg
-            push!(pkgs, PackageSpec(token[2:end]...))
+        if token isa String
+            push!(pkgs, parse_package(token))
         else
             cmderror("`build` only takes a list of packages")
         end
@@ -521,36 +574,29 @@ function do_build!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     Pkg3.API.build(env, pkgs)
 end
 
-function do_init!(tokens::Vector{Tuple{Symbol,Vararg{Any}}})
-    if !isempty(tokens)
-        cmderror("`init` does currently not take any arguments")
+function do_init!(tokens::Vector{Token})
+    path = pwd()
+    while !isempty(tokens)
+        token = shift!(tokens)
+        if token isa Option && token.kind == OPT_PATH
+            path = token.argument
+        else
+            cmderror("`init` only takes a `--path` argument")
+        end
     end
-    Pkg3.API.init(pwd())
+    Pkg3.API.init(path)
 end
 
-function do_clone!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+function do_clone!(env::EnvCache, tokens::Vector{Token})
     isempty(tokens) && cmderror("`clone` take an url to a package to clone")
     local url
     basepath = get(ENV, "JULIA_DEVDIR", default_dev_path())
-    token = shift!(tokens)
-    if token[1] != :string
-        cmderror("expected a url given as a string")
-    end
-    url = token[2]
+    url = shift!(tokens)
     if !isempty(tokens)
         token = shift!(tokens)
-        if token[1] == :opt
-            if token[2] == :path
-                if isempty(tokens)
-                    cmderror("expected an argument to the `--path` option")
-                else
-                    token = shift!(tokens)
-                    if token[1] != :string
-                        cmderror("expecetd a string argument to the `--path` option")
-                    else
-                        basepath = token[2]
-                    end
-                end
+        if token isa Option
+            if token.kind == OPT_PATH
+                basepath = token.argument
             else
                 cmderror("`clone` only support the `--path` option")
             end
@@ -559,12 +605,12 @@ function do_clone!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     Pkg3.API.clone(env, url, basepath = basepath)
 end
 
-function do_free!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
+function do_free!(env::EnvCache, tokens::Vector{Token})
     pkgs = PackageSpec[]
     while !isempty(tokens)
         token = shift!(tokens)
-        if token[1] == :pkg
-            push!(pkgs, PackageSpec(token[2:end]...))
+        if token isa String
+            push!(pkgs, parse_package(token))
         else
             cmderror("free only takes a list of packages")
         end
@@ -572,6 +618,10 @@ function do_free!(env::EnvCache, tokens::Vector{Tuple{Symbol,Vararg{Any}}})
     Pkg3.API.free(env, pkgs)
 end
 
+
+######################
+# REPL mode creation #
+######################
 
 function create_mode(repl, main)
     pkg_mode = LineEdit.Prompt("pkg> ";

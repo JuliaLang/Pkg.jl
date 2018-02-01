@@ -14,7 +14,9 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     CommandError, cmderror, has_name, has_uuid, has_path, has_url, has_version, write_env, parse_toml, find_registered!,
     project_resolve!, manifest_resolve!, registry_resolve!, path_resolve!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
-    git_file_stream, git_discover, read_project, read_manifest, pathrepr, registries
+    git_file_stream, git_discover, read_project, read_manifest, pathrepr, registries,
+    PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
+    UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR
 
 ## ordering of UUIDs ##
 
@@ -347,31 +349,25 @@ end
 
 ## type for expressing operations ##
 
-@enum UpgradeLevel fixed=0 patch=1 minor=2 major=3
+@enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
 
-function Base.convert(::Type{UpgradeLevel}, s::Symbol)
-    s == :fixed ? fixed :
-    s == :patch ? patch :
-    s == :minor ? minor :
-    s == :major ? major :
-    throw(ArgumentError("invalid upgrade bound: $s"))
-end
-Base.convert(::Type{UpgradeLevel}, s::String) = UpgradeLevel(Symbol(s))
 Base.convert(::Type{Union{VersionSpec,UpgradeLevel}}, v::VersionRange) = VersionSpec(v)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
+
+@enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
 mutable struct PackageSpec
     name::String
     uuid::UUID
     version::VersionTypes
-    mode::Symbol
+    mode::PackageMode
     path::String
     url::String
     beingfreed::Bool # TODO: Get rid of this field
-    PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes, project::Symbol=:project,
+    PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes, mode::PackageMode=PKGMODE_PROJECT,
             path::AbstractString="", url::AbstractString="", beingfreed=false) =
-    new(name, uuid, version, project, path, url, beingfreed)
+    new(name, uuid, version, mode, path, url, beingfreed)
 end
 PackageSpec(name::AbstractString, uuid::UUID) =
     PackageSpec(name, uuid, VersionSpec())
@@ -380,7 +376,7 @@ PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
 PackageSpec(;name::AbstractString="", uuid::UUID=UUID(zero(UInt128)), version::VersionTypes=VersionSpec(),
-            mode::Symbol=:project, path::AbstractString="", url::AbstractString="", beingfreed::Bool=false) =
+            mode::PackageMode=PKGMODE_PROJECT, path::AbstractString="", url::AbstractString="", beingfreed::Bool=false) =
     PackageSpec(name, uuid, version, mode, path, url, beingfreed)
 
 
@@ -689,7 +685,7 @@ function project_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     length(uuids) < length(names) && # TODO: handle this somehow?
         warn("duplicate UUID found in project file's [deps] section")
     for pkg in pkgs
-        pkg.mode == :project || continue
+        pkg.mode == PKGMODE_PROJECT || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             pkg.uuid = uuids[pkg.name]
         end
@@ -713,7 +709,7 @@ function manifest_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
         names[uuid] = name # can be duplicate but doesn't matter
     end
     for pkg in pkgs
-        pkg.mode == :manifest || continue
+        pkg.mode == PKGMODE_MANIFEST || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             length(uuids[pkg.name]) == 1 && (pkg.uuid = uuids[pkg.name][1])
         end

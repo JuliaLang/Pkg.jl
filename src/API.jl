@@ -41,7 +41,7 @@ up(pkgs::Vector{String}; kwargs...)      = up([PackageSpec(pkg) for pkg in pkgs]
 up(pkgs::Vector{PackageSpec}; kwargs...) = up(EnvCache(), pkgs; kwargs...)
 
 function up(env::EnvCache, pkgs::Vector{PackageSpec};
-            level::UpgradeLevel=UpgradeLevel(:major), mode::Symbol=:project, preview::Bool=env.preview[])
+            level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT, preview::Bool=env.preview[])
     env.preview[] = preview
     preview && previewmode_info()
 
@@ -95,11 +95,11 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec};
     end
 
     if isempty(pkgs)
-        if mode == :project
+        if mode == PKGMODE_PROJECT
             for (name::String, uuid::UUID) in env.project["deps"]
                 push!(pkgs, PackageSpec(name, uuid, level))
             end
-        elseif mode == :manifest
+        elseif mode == PKGMODE_MANIFEST
             for (name, infos) in env.manifest, info in infos
                 uuid = UUID(info["uuid"])
                 push!(pkgs, PackageSpec(name, uuid, level))
@@ -137,17 +137,17 @@ function convert(::Type{Dict{String, VersionNumber}}, diffs::Union{Array{DiffEnt
     return version_status
 end
 
-function installed(mode::Symbol=:manifest)::Dict{String, VersionNumber}
-    diff = Pkg3.Display.status(EnvCache(), mode, true)
+function installed(mode::PackageMode=PKGMODE_MANIFEST)::Dict{String, VersionNumber}
+    diff = Pkg3.Display.status(EnvCache(), mode, use_as_api = true)
     convert(Dict{String, VersionNumber}, diff)
 end
 
 function recursive_dir_size(path)
     sz = 0
     for (root, dirs, files) in walkdir(path)
-      for file in files
-          sz += stat(joinpath(root, file)).size
-      end
+        for file in files
+            sz += stat(joinpath(root, file)).size
+        end
     end
     return sz
 end
@@ -299,7 +299,7 @@ function build(env::EnvCache, pkgs::Vector{PackageSpec})
        end
    end
    for pkg in pkgs
-       pkg.mode = :manifest
+       pkg.mode = PKGMODE_MANIFEST
    end
    manifest_resolve!(env, pkgs)
    ensure_resolved(env, pkgs)
