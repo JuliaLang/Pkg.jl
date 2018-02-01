@@ -240,7 +240,7 @@ end
 
 "Resolve a set of versions given package version specs"
 function resolve_versions!(env::EnvCache, pkgs::Vector{PackageSpec})::Dict{UUID,VersionNumber}
-    info("Resolving package versions")
+    info("Resolving package versions...")
     # anything not mentioned is fixed
     uuids = UUID[pkg.uuid for pkg in pkgs]
     uuid_to_name = Dict{UUID,String}(uuid_julia => "julia")
@@ -656,7 +656,7 @@ function rm(env::EnvCache, pkgs::Vector{PackageSpec})
     end
     # find project-mode drops
     for pkg in pkgs
-        pkg.mode == :project || continue
+        pkg.mode == PKGMODE_PROJECT || continue
         found = false
         for (name::String, uuid::UUID) in env.project["deps"]
             has_name(pkg) && pkg.name == name ||
@@ -730,12 +730,12 @@ function up(env::EnvCache, pkgs::Vector{PackageSpec})
         level = pkg.version
         info = manifest_info(env, pkg.uuid)
         ver = VersionNumber(info["version"])
-        if level == UpgradeLevel(:fixed)
+        if level == UPLEVEL_FIXED
             pkg.version = VersionNumber(info["version"])
         else
-            r = level == UpgradeLevel(:patch) ? VersionRange(ver.major, ver.minor) :
-                level == UpgradeLevel(:minor) ? VersionRange(ver.major) :
-                level == UpgradeLevel(:major) ? VersionRange() :
+            r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
+                level == UPLEVEL_MINOR ? VersionRange(ver.major) :
+                level == UPLEVEL_MAJOR ? VersionRange() :
                     error("unexpected upgrade level: $level")
             pkg.version = VersionSpec(r)
         end
@@ -823,7 +823,7 @@ function init(path::String)
     mkpath(path)
     isfile(joinpath(path, "Project.toml")) && cmderror("Environment already initialized at $path")
     touch(joinpath(path, "Project.toml"))
-    info("Initialized environment in $path by creating the file Project.toml")
+    info("Initialized environment in $(abspath(path)) by creating the file Project.toml")
 end
 
 function clone(env::EnvCache, pkgs::Vector{PackageSpec})
@@ -848,11 +848,11 @@ function clone(env::EnvCache, pkgs::Vector{PackageSpec})
         end
         if isdir(joinpath(pkg.path))
             if !isfile(joinpath(pkg.path, "src", pkg.name * ".jl"))
-                cmderror("Path $(pkg.path) exists but it does not contain `src/$(pkg).jl.")
+                cmderror("Path $(abspath(pkg.path)) exists but it does not contain `src/$(pkg).jl.")
             end
             info("Path $(pkg.path) exists and looks like a package, using that.")
         else
-            info("Cloning $(pkg.name) from $(pkg.url) to $(pkg.path)")
+            info("Cloning $(pkg.name) from $(pkg.url) to $(abspath(pkg.path))")
             mkpath(pkg.path)
             new_repos[pkg.uuid] = pkg.path
             LibGit2.clone(pkg.url, pkg.path)

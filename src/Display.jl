@@ -16,7 +16,7 @@ const colors = Dict(
 )
 const color_dark = :light_black
 
-function status(env::EnvCache, mode::Symbol, use_as_api=false)
+function status(env::EnvCache, mode::PackageMode; use_as_api=false)
     project₀ = project₁ = env.project
     manifest₀ = manifest₁ = env.manifest
     diff = nothing
@@ -28,25 +28,25 @@ function status(env::EnvCache, mode::Symbol, use_as_api=false)
         project₀ = read_project(git_file_stream(env.git, "HEAD:$project_path", fakeit=true))
         manifest₀ = read_manifest(git_file_stream(env.git, "HEAD:$manifest_path", fakeit=true))
     end
-    if mode == :project || mode == :combined
+    if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         # TODO: handle project deps missing from manifest
         m₀ = filter_manifest(in_project(project₀["deps"]), manifest₀)
         m₁ = filter_manifest(in_project(project₁["deps"]), manifest₁)
-        info("Status ", pathrepr(env, env.project_file))
+        use_as_api || info("Status ", pathrepr(env, env.project_file))
         diff = manifest_diff(m₀, m₁)
         use_as_api || print_diff(diff)
     end
-    if mode == :manifest
-        info("Status ", pathrepr(env, env.manifest_file))
+    if mode == PKGMODE_MANIFEST
+        use_as_api || info("Status ", pathrepr(env, env.manifest_file))
         diff = manifest_diff(manifest₀, manifest₁)
         use_as_api || print_diff(diff)
-    elseif mode == :combined
+    elseif mode == PKGMODE_COMBINED
         p = !in_project(merge(project₀["deps"], project₁["deps"]))
         m₀ = filter_manifest(p, manifest₀)
         m₁ = filter_manifest(p, manifest₁)
         c_diff = filter!(x->x.old != x.new, manifest_diff(m₀, m₁))
         if !isempty(c_diff)
-            info("Status ", pathrepr(env, env.manifest_file))
+            use_as_api || info("Status ", pathrepr(env, env.manifest_file))
             use_as_api || print_diff(c_diff)
             diff =  Base.vcat(c_diff, diff)
         end
