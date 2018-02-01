@@ -202,19 +202,24 @@ function collect_fixed!(env, pkgs, uuids, uuid_to_name)
     for pkg in pkgs
         !has_path(pkg) && continue
         # A package with a path should have a version
-        @assert pkg.version != nothing
+        @assert has_version(pkg)
 
         uuid_to_pkg[pkg.uuid] = pkg
         uuid_to_name[pkg.uuid] = pkg.name
         # Load the dependencies if this package has a REQUIRE
-        reqfile = joinpath(pkg.path, "REQUIRE")
+        reqfiles = [joinpath(pkg.path, "REQUIRE")]
+        if pkg.beingtested
+            push!(reqfiles, joinpath(pkg.path, "test", "REQUIRE"))
+        end
         fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
-        !isfile(reqfile) && continue
-        for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
-            pkg_name, vspec = r.package, VersionSpec(VersionRange[r.versions.intervals...])
-            deppkg = PackageSpec(pkg_name, vspec)
-            push!(fix_deps_map[pkg.uuid], deppkg)
-            push!(fix_deps, deppkg)
+        for reqfile in reqfiles
+            !isfile(reqfile) && continue
+            for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
+                pkg_name, vspec = r.package, VersionSpec(VersionRange[r.versions.intervals...])
+                deppkg = PackageSpec(pkg_name, vspec)
+                push!(fix_deps_map[pkg.uuid], deppkg)
+                push!(fix_deps, deppkg)
+            end
         end
     end
 
@@ -402,7 +407,7 @@ function install(
     return version_path, true
 end
 
-function update_manifest(env::EnvCache, uuid::UUID, name::String, hash_or_path::Union{String, SHA1}, version::VersionNumber)
+function update_manifest(env::EnvCache, uuid::UUID, name::String, hash_or_path::Union{String, SHA1}, version::VersionNumber, beingtested=false)
     infos = get!(env.manifest, name, Dict{String,Any}[])
     info = nothing
     for i in infos
@@ -428,15 +433,19 @@ function update_manifest(env::EnvCache, uuid::UUID, name::String, hash_or_path::
     delete!(info, "deps")
     if hash_or_path isa String
         path = hash_or_path
-        reqfile = joinpath(path, "REQUIRE")
-
-        !isfile(reqfile) && return
+        reqfiles = [joinpath(path, "REQUIRE")]
+        if beingtested
+            push!(reqfiles, joinpath(path, "test", "REQUIRE"))
+        end
         deps = Dict{String,String}()
         pkgs = PackageSpec[]
-        for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
-            push!(pkgs, PackageSpec(r.package))
+        for reqfile in reqfiles
+            !isfile(reqfile) && continue
+            for r in filter!(r->r isa Pkg2.Reqs.Requirement, Pkg2.Reqs.read(reqfile))
+                push!(pkgs, PackageSpec(r.package))
+            end
         end
-        # TODO: Get rid of this one?
+        # TODO: Get rid of this one when we can read UUID from "REQUIRE"  files
         registry_resolve!(env, pkgs)
         for pkg in pkgs
             pkg.name == "julia" && continue
@@ -539,9 +548,9 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
         uuid, path = pkg.uuid, pkg.path
         version = pkg.version::VersionNumber
         if haskey(hashes, uuid)
-            update_manifest(env, uuid, names[uuid], hashes[uuid], version)
+            update_manifest(env, uuid, names[uuid], hashes[uuid], version, pkg.beingtested)
         else
-            update_manifest(env, uuid, pkg.name, path, version)
+            update_manifest(env, uuid, pkg.name, path, version, pkg.beingtested)
         end
         new && push!(new_versions, uuid)
     end
@@ -780,29 +789,39 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false)
             info("In preview mode, skipping tests for $(pkg.name)")
             continue
         end
-        # TODO, cd to test folder (need to be careful with getting the same EnvCache
-        # as for this session in that case
-        compilemod_opt, compilemod_val = VERSION < v"0.7.0-DEV.1735" ?
-                ("compilecache" ,     Base.JLOptions().use_compilecache) :
-                ("compiled-modules",  Base.JLOptions().use_compiled_modules)
+        mktempdir() do tmp
+            withenv("JULIA_ENV" => tmp) do
+                init(tmp)
+                pkg.path = version_path
+                pkg.beingtested = true
+                info = manifest_info(env, pkg.uuid)
+                pkg.version = VersionNumber(info["version"])
+                env = EnvCache()
+                clone(env, [pkg])
+                cd(dirname(testfile)) do
+                    compilemod_opt, compilemod_val = VERSION < v"0.7.0-DEV.1735" ?
+                            ("compilecache" ,     Base.JLOptions().use_compilecache) :
+                            ("compiled-modules",  Base.JLOptions().use_compiled_modules)
 
-        testcmd = `"import Pkg3; include(\"$testfile\")"`
-        cmd = ```
-            $(Base.julia_cmd())
-            --code-coverage=$(coverage ? "user" : "none")
-            --color=$(Base.have_color ? "yes" : "no")
-            --$compilemod_opt=$(Bool(compilemod_val) ? "yes" : "no")
-            --check-bounds=yes
-            --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
-            $testfile
-        ```
-        try
-            run(cmd)
-            info("$(pkg.name) tests passed")
-        catch err
-            push!(pkgs_errored, pkg.name)
+                    testcmd = `"import Pkg3; include(\"$testfile\")"`
+                    cmd = ```
+                        $(Base.julia_cmd())
+                        --code-coverage=$(coverage ? "user" : "none")
+                        --color=$(Base.have_color ? "yes" : "no")
+                        --$compilemod_opt=$(Bool(compilemod_val) ? "yes" : "no")
+                        --check-bounds=yes
+                        --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
+                        $testfile
+                    ```
+                    try
+                        run(cmd)
+                        Base.info("$(pkg.name) tests passed")
+                    catch err
+                        push!(pkgs_errored, pkg.name)
+                    end
+                end
+            end
         end
-
     end
 
     if !isempty(pkgs_errored)
@@ -829,26 +848,9 @@ end
 function clone(env::EnvCache, pkgs::Vector{PackageSpec})
     new_repos = Dict{UUID, String}()
     for pkg in pkgs
-        if has_uuid(pkg)
-            # This is a registered package, set its version to the maximum version
-            # since we will clone master
-            uuid = pkg.uuid
-            max_version = typemin(VersionNumber)
-            for path in registered_paths(env, uuid)
-                version_info = load_versions(path)
-                max_version = max(max_version, maximum(keys(version_info)))
-            end
-            pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
-        else
-            # We are cloning a packages that doesn't exist in the registry.
-            # Give it a new UUID and some version
-            pkg.version = v"0.0"
-            pkg.uuid = Base.Random.UUID(rand(UInt128))
-            info("Cloning an unregistered package, giving it a random UUID of: $(pkg.uuid)")
-        end
         if isdir(joinpath(pkg.path))
             if !isfile(joinpath(pkg.path, "src", pkg.name * ".jl"))
-                cmderror("Path $(pkg.path) exists but it does not contain `src/$(pkg).jl.")
+                cmderror("Path $(pkg.path) exists but it does not contain `src/$(pkg.name).jl.")
             end
             info("Path $(pkg.path) exists and looks like a package, using that.")
         else
