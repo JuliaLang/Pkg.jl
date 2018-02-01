@@ -1,9 +1,9 @@
 module API
 
-import Pkg3
-using Pkg3.Display.DiffEntry
-import Pkg3: depots, logdir, TOML
-using Pkg3: Types, Dates
+import ..Pkg3
+using ..Pkg3: Display.DiffEntry
+import ..Pkg3: depots, logdir, default_dev_path, TOML
+using ..Pkg3: Dates, Types
 using Base.Random.UUID
 
 previewmode_info() = info("In preview mode")
@@ -128,7 +128,7 @@ function test(env::EnvCache, pkgs::Vector{PackageSpec}; coverage=false, preview=
 end
 
 
-function convert(::Type{Dict{String, VersionNumber}}, diffs::Union{Array{DiffEntry}, Void})    
+function convert(::Type{Dict{String, VersionNumber}}, diffs::Union{Array{DiffEntry}, Void})
     version_status = Dict{String, VersionNumber}()
     diffs == nothing && return version_status
     for entry in diffs
@@ -239,18 +239,52 @@ function gc(env::EnvCache=EnvCache(); period = Week(6), preview=env.preview[])
     info("Deleted $(length(paths_to_delete)) package installations", byte_save_str)
 end
 
-function _get_deps!(env::EnvCache, pkgs::Vector{PackageSpec}, uuids::Vector{Base.Random.UUID})
-   for pkg in pkgs
-       info = manifest_info(env, pkg.uuid)
-       pkg.uuid in uuids && continue
-       push!(uuids, pkg.uuid)
-       if haskey(info, "deps")
-           pkgs = [PackageSpec(name, UUID(uuid)) for (name, uuid) in info["deps"]]
-           _get_deps!(env, pkgs, uuids)
-       end
-   end
+
+
+function url_and_pkg(url_or_pkg::AbstractString)
+    # try to parse as URL or local path
+    m = match(r"(?:^|[/\\])(\w+?)(?:\.jl)?(?:\.git)?$", url_or_pkg)
+    m === nothing && cmderror("can't determine package name from URL: $url_or_pkg")
+    return url_or_pkg, m.captures[1]
+end
+clone(pkg::String; kwargs...) = clone(EnvCache(), pkg; kwargs...)
+
+function clone(env::EnvCache, url::AbstractString; name=nothing, basepath=get(ENV, "JULIA_DEVDIR", default_dev_path()), preview=env.preview[])
+    preview && cmderror("Preview mode not implemented for cloning")
+    if name == nothing
+        url, name = url_and_pkg(url)
+    end
+    pkg = PackageSpec(name=name, path=joinpath(basepath, name), url=url)
+    registry_resolve!(env, [pkg])
+    project_resolve!(env, [pkg])
+    manifest_resolve!(env, [pkg])
+    Pkg3.Operations.clone(env, [pkg])
 end
 
+free(;kwargs...)                           = free(PackageSpec[], kwargs...)
+free(pkg::String; kwargs...)               = free([pkg]; kwargs...)
+free(pkgs::Vector{String}; kwargs...)      = free([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+free(pkgs::Vector{PackageSpec}; kwargs...) = free(EnvCache(), pkgs; kwargs...)
+function free(env::EnvCache, pkgs::Vector{PackageSpec}; preview = env.preview[])
+    env.preview[] = preview
+    preview && previewmode_info()
+    project_resolve!(env, pkgs)
+    manifest_resolve!(env, pkgs)
+    ensure_resolved(env, pkgs)
+    Pkg3.Operations.free(env, pkgs)
+end
+
+function _get_deps!(env::EnvCache, pkgs::Vector{PackageSpec}, uuids::Vector{Base.Random.UUID})
+    for pkg in pkgs
+        info = manifest_info(env, pkg.uuid)
+        pkg.uuid in uuids && continue
+        push!(uuids, pkg.uuid)
+        if haskey(info, "deps")
+            pkgs = [PackageSpec(name, UUID(uuid)) for (name, uuid) in info["deps"]]
+            _get_deps!(env, pkgs, uuids)
+        end
+    end
+ end
 
 build(pkgs...) = build([PackageSpec(pkg) for pkg in pkgs])
 build(pkg::Array{Union{}, 1}) = build(PackageSpec[])
@@ -274,7 +308,6 @@ function build(env::EnvCache, pkgs::Vector{PackageSpec})
    length(uuids) == 0 && (info("No packages to build!"); return)
    Pkg3.Operations.build_versions(env, uuids)
 end
-
 
 function init(path = pwd())
     Pkg3.Operations.init(path)
