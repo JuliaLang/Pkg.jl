@@ -369,9 +369,10 @@ mutable struct PackageSpec
     path::String
     url::String
     beingfreed::Bool # TODO: Get rid of this field
+    beingtested::Bool
     PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes, project::Symbol=:project,
-            path::AbstractString="", url::AbstractString="", beingfreed=false) =
-    new(name, uuid, version, project, path, url, beingfreed)
+            path::AbstractString="", url::AbstractString="", beingfreed=false, beingtested=false) =
+    new(name, uuid, version, project, path, url, beingfreed, beingtested)
 end
 PackageSpec(name::AbstractString, uuid::UUID) =
     PackageSpec(name, uuid, VersionSpec())
@@ -380,8 +381,8 @@ PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
 PackageSpec(;name::AbstractString="", uuid::UUID=UUID(zero(UInt128)), version::VersionTypes=VersionSpec(),
-            mode::Symbol=:project, path::AbstractString="", url::AbstractString="", beingfreed::Bool=false) =
-    PackageSpec(name, uuid, version, mode, path, url, beingfreed)
+            mode::Symbol=:project, path::AbstractString="", url::AbstractString="", beingfreed::Bool=false, beingtested=false) =
+    PackageSpec(name, uuid, version, mode, path, url, beingfreed, beingtested)
 
 
 has_name(pkg::PackageSpec) = !isempty(pkg.name)

@@ -258,6 +258,28 @@ function clone(env::EnvCache, url::AbstractString; name=nothing, basepath=get(EN
     registry_resolve!(env, [pkg])
     project_resolve!(env, [pkg])
     manifest_resolve!(env, [pkg])
+    if has_uuid(pkg)
+        if haskey(env.uuids, pkg.name) && pkg.uuid in env.uuids[pkg.name]
+            # This is a registered package, set its version to the maximum version
+            # since we will clone master
+            uuid = pkg.uuid
+            max_version = typemin(VersionNumber)
+            for path in registered_paths(env, uuid)
+                version_info = load_versions(path)
+                max_version = max(max_version, maximum(keys(version_info)))
+            end
+            pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
+        else
+            pkg.version = v"0.0"
+        end
+    else
+        # We are cloning a packages that doesn't exist in the registry.
+        # Give it a new UUID and some version
+        pkg.version = v"0.0"
+        pkg.uuid = Base.Random.UUID(rand(UInt128))
+        info("Cloning an unregistered package, giving it a random UUID of: $(pkg.uuid)")
+    end
+    ensure_resolved(env, [pkg])
     Pkg3.Operations.clone(env, [pkg])
 end
 
@@ -292,21 +314,21 @@ build(pkg::PackageSpec) = build([pkg])
 build(pkgs::Vector{PackageSpec}) = build(EnvCache(), pkgs)
 
 function build(env::EnvCache, pkgs::Vector{PackageSpec})
-   if isempty(pkgs)
-       for (name, infos) in env.manifest, info in infos
-           uuid = UUID(info["uuid"])
-           push!(pkgs, PackageSpec(name, uuid))
-       end
-   end
-   for pkg in pkgs
-       pkg.mode = :manifest
-   end
-   manifest_resolve!(env, pkgs)
-   ensure_resolved(env, pkgs)
-   uuids = Base.Random.UUID[]
-   _get_deps!(env, pkgs, uuids)
-   length(uuids) == 0 && (info("No packages to build!"); return)
-   Pkg3.Operations.build_versions(env, uuids)
+    if isempty(pkgs)
+        for (name, infos) in env.manifest, info in infos
+            uuid = UUID(info["uuid"])
+            push!(pkgs, PackageSpec(name, uuid))
+        end
+    end
+        for pkg in pkgs
+            pkg.mode = :manifest
+        end
+    manifest_resolve!(env, pkgs)
+    ensure_resolved(env, pkgs)
+    uuids = Base.Random.UUID[]
+    _get_deps!(env, pkgs, uuids)
+    length(uuids) == 0 && (info("No packages to build!"); return)
+    Pkg3.Operations.build_versions(env, uuids)
 end
 
 function init(path = pwd())
