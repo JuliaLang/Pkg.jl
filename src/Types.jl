@@ -752,8 +752,10 @@ function path_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
         pkg.beingfreed && continue
         info = manifest_info(env, pkg.uuid)
         info == nothing && continue
-        haskey(info, "path") && (pkg.path = info["path"])
-        haskey(info, "version") && (pkg.version = VersionNumber(info["version"]))
+        if haskey(info, "path")
+            pkg.path = info["path"]
+            haskey(info, "version") && (pkg.version = VersionNumber(info["version"]))
+        end
     end
 end
 
@@ -959,7 +961,7 @@ function registered_uuid(env::EnvCache, name::String)::UUID
     uuids = registered_uuids(env, name)
     length(uuids) == 0 && return UUID(zero(UInt128))
     choices::Vector{String} = []
-    choices_cache::Vector{Tuple{UUID, String}} = [] 
+    choices_cache::Vector{Tuple{UUID, String}} = []
     for uuid in uuids
         values = registered_info(env, uuid, "repo")
         for value in values
@@ -998,7 +1000,7 @@ function registered_info(env::EnvCache, uuid::UUID, key::String)
     for path in paths
         info = parse_toml(path, "package.toml")
         value = get(info, key, nothing)
-        push!(values, (path, value)) 
+        push!(values, (path, value))
     end
     return values
 end
