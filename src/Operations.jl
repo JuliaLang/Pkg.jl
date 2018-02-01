@@ -551,7 +551,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     drop = UUID[]
     # find manifest-mode drops
     for pkg in pkgs
-        pkg.mode == :manifest || continue
+        pkg.mode == PKGMODE_MANIFEST || continue
         info = manifest_info(ctx.env, pkg.uuid)
         if info != nothing
             pkg.uuid in drop || push!(drop, pkg.uuid)
@@ -576,7 +576,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     end
     # find project-mode drops
     for pkg in pkgs
-        pkg.mode == :project || continue
+        pkg.mode == PKGMODE_PROJECT || continue
         found = false
         for (name::String, uuidstr::String) in ctx.env.project["deps"]
             uuid = UUID(uuidstr)
@@ -645,12 +645,12 @@ function up(ctx::Context, pkgs::Vector{PackageSpec})
         level = pkg.version
         info = manifest_info(ctx.env, pkg.uuid)
         ver = VersionNumber(info["version"])
-        if level == UpgradeLevel(:fixed)
+        if level == UPLEVEL_FIXED
             pkg.version = VersionNumber(info["version"])
         else
-            r = level == UpgradeLevel(:patch) ? VersionRange(ver.major, ver.minor) :
-                level == UpgradeLevel(:minor) ? VersionRange(ver.major) :
-                level == UpgradeLevel(:major) ? VersionRange() :
+            r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
+                level == UPLEVEL_MINOR ? VersionRange(ver.major) :
+                level == UPLEVEL_MAJOR ? VersionRange() :
                     error("unexpected upgrade level: $level")
             pkg.version = VersionSpec(r)
         end
@@ -730,7 +730,7 @@ function init(path::String)
     mkpath(path)
     isfile(joinpath(path, "Project.toml")) && cmderror("Environment already initialized at $path")
     touch(joinpath(path, "Project.toml"))
-    @info("Initialized environment in $path by creating the file Project.toml")
+    @info("Initialized environment in $(abspath(path)) by creating the file Project.toml")
 end
 
 end # module

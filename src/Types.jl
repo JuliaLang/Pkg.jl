@@ -19,7 +19,9 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
     project_resolve!, manifest_resolve!, registry_resolve!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
-    git_file_stream, git_discover, read_project, read_manifest, pathrepr, registries
+    git_file_stream, git_discover, read_project, read_manifest, pathrepr, registries,
+    PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
+    UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR
 
 
 ## ordering of UUIDs ##
@@ -365,26 +367,19 @@ end
 
 ## type for expressing operations ##
 
-@enum UpgradeLevel fixed=0 patch=1 minor=2 major=3
-
-function UpgradeLevel(s::Symbol)
-    s == :fixed ? fixed :
-    s == :patch ? patch :
-    s == :minor ? minor :
-    s == :major ? major :
-    throw(ArgumentError("invalid upgrade bound: $s"))
-end
-UpgradeLevel(s::String) = UpgradeLevel(Symbol(s))
+@enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
+@enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
+
 
 mutable struct PackageSpec
     name::String
     uuid::UUID
     version::VersionTypes
-    mode::Symbol
-    PackageSpec(name::String, uuid::UUID, version::VersionTypes) =
-        new(name, uuid, version, :project)
+    mode::PackageMode
+    PackageSpec(name::String, uuid::UUID, version::VersionTypes, mode::PackageMode=PKGMODE_PROJECT) =
+        new(name, uuid, version, mode)
 end
 PackageSpec(name::String, uuid::UUID) =
     PackageSpec(name, uuid, VersionSpec())
@@ -713,7 +708,7 @@ function project_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     length(uuids) < length(names) && # TODO: handle this somehow?
         @warn "duplicate UUID found in project file's [deps] section"
     for pkg in pkgs
-        pkg.mode == :project || continue
+        pkg.mode == PKGMODE_PROJECT || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             pkg.uuid = UUID(uuids[pkg.name])
         end
@@ -737,7 +732,7 @@ function manifest_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
         names[uuid] = name # can be duplicate but doesn't matter
     end
     for pkg in pkgs
-        pkg.mode == :manifest || continue
+        pkg.mode == PKGMODE_MANIFEST || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             length(uuids[pkg.name]) == 1 && (pkg.uuid = UUID(uuids[pkg.name][1]))
         end
