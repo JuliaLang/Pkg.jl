@@ -20,7 +20,7 @@ function status(env::EnvCache, mode::Symbol, use_as_api=false)
     project₀ = project₁ = env.project
     manifest₀ = manifest₁ = env.manifest
     diff = nothing
-    
+
     if env.git != nothing
         git_path = LibGit2.path(env.git)
         project_path = relpath(env.project_file, git_path)

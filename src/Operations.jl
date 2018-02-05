@@ -3,6 +3,7 @@ module Operations
 using Base.Random: UUID
 using Base: LibGit2
 using Pkg3: TerminalMenus, Types, GraphType, Resolve
+using SHA
 import Pkg3: GLOBAL_SETTINGS, depots, BinaryProvider
 import Pkg3.Types: uuid_julia
 
@@ -95,7 +96,15 @@ get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 function load_versions(path::String)
     toml = parse_toml(path, "versions.toml")
-    Dict(VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml)
+    verdata = Dict{VersionNumber, PackageVersionData}()
+    for (ver, d) in toml
+        gitsha = haskey(d, "git-tree-sha1") ? SHA1(d["git-tree-sha1"]) :
+                                             nothing
+        archive = haskey(d, "archive-url") ? Archive(d["archive-url"], SHA256(d["archive-sha256"])) :
+                                             nothing
+        verdata[VersionNumber(ver)] = PackageVersionData(gitsha, archive)
+    end
+    return verdata
 end
 
 function load_package_data(f::Base.Callable, path::String, versions)
@@ -230,6 +239,7 @@ end
 function version_data(env::EnvCache, pkgs::Vector{PackageSpec})
     names = Dict{UUID,String}()
     hashes = Dict{UUID,SHA1}()
+    archives = Dict{UUID,Vector{Union{Archive, Void}}}()
     upstreams = Dict{UUID,Vector{String}}()
     for pkg in pkgs
         uuid = pkg.uuid
@@ -250,105 +260,103 @@ function version_data(env::EnvCache, pkgs::Vector{PackageSpec})
             if haskey(vers, ver)
                 h = vers[ver]
                 if haskey(hashes, uuid)
-                    h == hashes[uuid] ||
+                    h.sha == hashes[uuid] ||
                         warn("$uuid: hash mismatch for version $ver!")
                 else
-                    hashes[uuid] = h
+                    hashes[uuid] = h.sha
                 end
+                haskey(archives, uuid) || (archives[uuid] = Archive[])
+                push!(archives[uuid], h.archive)
             end
         end
         @assert haskey(hashes, uuid)
     end
     foreach(sort!, values(upstreams))
-    return names, hashes, upstreams
+    return names, hashes, upstreams, archives
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
-
-function get_archive_url_for_version(url::String, version)
-    if (m = match(r"https://github.com/(.*?)/(.*?).git", url)) != nothing
-        return "https://github.com/$(m.captures[1])/$(m.captures[2])/archive/v$(version).tar.gz"
-    end
-    return nothing
-end
 
 function install(
     env::EnvCache,
     uuid::UUID,
     name::String,
     hash::SHA1,
+    archives::Vector{Union{Archive, Void}},
     urls::Vector{String},
     version::Union{VersionNumber,Void} = nothing
 )::Tuple{String,Bool}
     # returns path to version & if it's newly installed
     version_path = find_installed(uuid, hash)
     ispath(version_path) && return version_path, false
-    http_download_successful = false
     env.preview[] && return version_path, true
     if !GLOBAL_SETTINGS.use_libgit2_for_all_downloads && version != nothing
-        for url in urls
-            archive_url = get_archive_url_for_version(url, version)
-            if archive_url != nothing
-                path = joinpath(tempdir(), name * "_" * randstring(6) * ".tar.gz")
-                url_success = true
-                try
-                    cmd = BinaryProvider.gen_download_cmd(archive_url, path);
-                    run(cmd, (DevNull, DevNull, DevNull))
-                catch e
-                    e isa InterruptException && rethrow(e)
+        for archive in archives
+            archive === nothing && continue
+            path = joinpath(tempdir(), name * "_" * randstring(6) * ".tar.gz")
+            url_success = true
+            try
+                cmd = BinaryProvider.gen_download_cmd(archive.url, path);
+                run(cmd, DevNull, DevNull, DevNull)
+                dl_sha = open(path) do f
+                    sha256(f)
+                end
+                if dl_sha != archive.shahash.bytes
                     url_success = false
                 end
-                url_success || continue
-                http_download_successful = true
-                dir = joinpath(tempdir(), randstring(12))
-                mkpath(dir)
-                cmd = BinaryProvider.gen_unpack_cmd(path, dir);
-                run(cmd, (DevNull, DevNull, DevNull))
-                dirs = readdir(dir)
-                # 7z on Win might create this spurious file
-                filter!(x -> x != "pax_global_header", dirs)
-                @assert length(dirs) == 1
-                !isdir(version_path) && mkpath(version_path)
-                mv(joinpath(dir, dirs[1]), version_path; remove_destination=true)
-                Base.rm(path; force = true)
-                break # object was found, we can stop
+            catch e
+                e isa InterruptException && rethrow(e)
+                url_success = false
             end
+            url_success || continue
+            dir = joinpath(tempdir(), randstring(12))
+            mkpath(dir)
+            cmd = BinaryProvider.gen_unpack_cmd(path, dir);
+            run(cmd, (DevNull, DevNull, DevNull))
+            dirs = readdir(dir)
+            # 7z on Win might create this spurious file
+            filter!(x -> x != "pax_global_header", dirs)
+            @assert length(dirs) == 1
+            !isdir(version_path) && mkpath(version_path)
+            mv(joinpath(dir, dirs[1]), version_path; remove_destination=true)
+            Base.rm(path; force = true)
+            return version_path, true
         end
     end
-    if !http_download_successful || GLOBAL_SETTINGS.use_libgit2_for_all_downloads
-        upstream_dir = joinpath(depots()[1], "upstream")
-        ispath(upstream_dir) || mkpath(upstream_dir)
-        repo_path = joinpath(upstream_dir, string(uuid))
-        repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
-            # info("Cloning [$uuid] $name")
-            LibGit2.clone(urls[1], repo_path, isbare=true)
-        end
-        git_hash = LibGit2.GitHash(hash.bytes)
-        for i = 2:length(urls)
-            try LibGit2.GitObject(repo, git_hash)
-                break # object was found, we can stop
-            catch err
-                err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
-            end
-            url = urls[i]
-            LibGit2.fetch(repo, remoteurl=url, refspecs=refspecs)
-        end
-        tree = try
-            LibGit2.GitObject(repo, git_hash)
+
+    # Fall back to git if no archive or acrgive download  was not successful
+    upstream_dir = joinpath(depots()[1], "upstream")
+    ispath(upstream_dir) || mkpath(upstream_dir)
+    repo_path = joinpath(upstream_dir, string(uuid))
+    repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
+        # info("Cloning [$uuid] $name")
+        LibGit2.clone(urls[1], repo_path, isbare=true)
+    end
+    git_hash = LibGit2.GitHash(hash.bytes)
+    for i = 2:length(urls)
+        try LibGit2.GitObject(repo, git_hash)
+            break # object was found, we can stop
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
-            error("$name: git object $(string(hash)) could not be found")
         end
-        tree isa LibGit2.GitTree ||
-            error("$name: git object $(string(hash)) should be a tree, not $(typeof(tree))")
-        mkpath(version_path)
-        opts = LibGit2.CheckoutOptions(
-            checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
-            target_directory = Base.unsafe_convert(Cstring, version_path)
-        )
-        h = string(hash)[1:16]
-        LibGit2.checkout_tree(repo, tree, options=opts)
+        url = urls[i]
+        LibGit2.fetch(repo, remoteurl=url, refspecs=refspecs)
     end
+    tree = try
+        LibGit2.GitObject(repo, git_hash)
+    catch err
+        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+        error("$name: git object $(string(hash)) could not be found")
+    end
+    tree isa LibGit2.GitTree ||
+        error("$name: git object $(string(hash)) should be a tree, not $(typeof(tree))")
+    mkpath(version_path)
+    opts = LibGit2.CheckoutOptions(
+        checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
+        target_directory = Base.unsafe_convert(Cstring, version_path)
+    )
+    h = string(hash)[1:16]
+    LibGit2.checkout_tree(repo, tree, options=opts)
     return version_path, true
 end
 
@@ -410,7 +418,7 @@ function prune_manifest(env::EnvCache)
 end
 
 function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
-    names, hashes, urls = version_data(env, pkgs)
+    names, hashes, urls, archives = version_data(env, pkgs)
     # install & update manifest
     new_versions = UUID[]
 
@@ -427,9 +435,9 @@ function apply_versions(env::EnvCache, pkgs::Vector{PackageSpec})::Vector{UUID}
             for pkg in jobs
                 uuid = pkg.uuid
                 version = pkg.version::VersionNumber
-                name, hash = names[uuid], hashes[uuid]
+                name, hash, archive = names[uuid], hashes[uuid], archives[uuid]
                 try
-                    version_path, new = install(env, uuid, name, hash, urls[uuid], version)
+                    version_path, new = install(env, uuid, name, hash, archive, urls[uuid], version)
                     put!(results, (pkg, version_path, version, hash, new))
                 catch e
                     put!(results, e)

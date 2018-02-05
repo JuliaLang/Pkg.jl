@@ -44,7 +44,7 @@ end
 
 include("utils.jl")
 include("sha1map.jl")
-const trees = sha1map(pkgs)
+const trees, archive_shas = sha1map(pkgs)
 
 for (bucket, b_pkgs) in buckets, (pkg, p) in b_pkgs
     url = p.url
@@ -64,6 +64,11 @@ for (bucket, b_pkgs) in buckets, (pkg, p) in b_pkgs
             i > 1 && println(io)
             println(io, "[", toml_key(string(ver)), "]")
             println(io, "git-tree-sha1 = ", repr(trees[uuid][v.sha1]))
+            archive = archive_shas[uuid][v.sha1]
+            if haskey(archive, "url")
+                println(io, "archive-url = ", repr(archive["url"]))
+                println(io, "archive-sha256 = ", repr(archive["sha256-hash"]))
+            end
         end
     end
     versions = sort!(collect(keys(p.versions)))

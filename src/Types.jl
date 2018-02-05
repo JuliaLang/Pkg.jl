@@ -7,7 +7,7 @@ using Pkg3: TOML, TerminalMenus, Dates
 import Pkg3
 import Pkg3: depots, logdir, iswindows
 
-export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
+export UUID, pkgID, SHA1, SHA256, Archive, PackageVersionData, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, PkgError,
     PackageSpec, UpgradeLevel, EnvCache,
     CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
@@ -45,8 +45,19 @@ function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
 end
 
 ## SHA1 ##
+abstract type SHA end
 
-struct SHA1
+Base.convert(::Type{T}, s::String) where {T <: SHA} = T(hex2bytes(s))
+Base.convert(::Type{Vector{UInt8}}, hash::SHA) = hash.bytes
+Base.convert(::Type{String}, hash::SHA) = bytes2hex(Vector{UInt8}(hash))
+
+Base.string(hash::SHA) = String(hash)
+Base.show(io::IO, hash::SHA) = print(io, typeof(hash).name.name, "(", String(hash), ")")
+Base.isless(a::SHA, b::SHA) = lexless(a.bytes, b.bytes)
+Base.hash(a::SHA, h::UInt) = hash((SHA, a.bytes), h)
+Base.:(==)(a::SHA, b::SHA) = a.bytes == b.bytes
+
+struct SHA1 <: SHA
     bytes::Vector{UInt8}
     function SHA1(bytes::Vector{UInt8})
         length(bytes) == 20 ||
@@ -55,15 +66,14 @@ struct SHA1
     end
 end
 
-Base.convert(::Type{SHA1}, s::String) = SHA1(hex2bytes(s))
-Base.convert(::Type{Vector{UInt8}}, hash::SHA1) = hash.bytes
-Base.convert(::Type{String}, hash::SHA1) = bytes2hex(Vector{UInt8}(hash))
-
-Base.string(hash::SHA1) = String(hash)
-Base.show(io::IO, hash::SHA1) = print(io, "SHA1(", String(hash), ")")
-Base.isless(a::SHA1, b::SHA1) = lexless(a.bytes, b.bytes)
-Base.hash(a::SHA1, h::UInt) = hash((SHA1, a.bytes), h)
-Base.:(==)(a::SHA1, b::SHA1) = a.bytes == b.bytes
+struct SHA256 <: SHA
+    bytes::Vector{UInt8}
+    function SHA256(bytes::Vector{UInt8})
+        length(bytes) == 32 ||
+            throw(ArgumentError("wrong number of bytes for SHA256 hash: $(length(bytes))"))
+        return new(bytes)
+    end
+end
 
 ## VersionRange ##
 
@@ -389,6 +399,16 @@ function Base.show(io::IO, pkg::PackageSpec)
         print(io, vstr)
     end
     print(io, ")")
+end
+
+struct Archive
+    url::String
+    shahash::SHA256
+end
+
+struct PackageVersionData
+    sha::SHA1
+    archive::Union{Void, Archive}
 end
 
 ## environment & registry loading & caching ##
@@ -935,7 +955,7 @@ function registered_uuid(env::EnvCache, name::String)::UUID
     uuids = registered_uuids(env, name)
     length(uuids) == 0 && return UUID(zero(UInt128))
     choices::Vector{String} = []
-    choices_cache::Vector{Tuple{UUID, String}} = [] 
+    choices_cache::Vector{Tuple{UUID, String}} = []
     for uuid in uuids
         values = registered_info(env, uuid, "repo")
         for value in values
@@ -974,7 +994,7 @@ function registered_info(env::EnvCache, uuid::UUID, key::String)
     for path in paths
         info = parse_toml(path, "package.toml")
         value = get(info, key, nothing)
-        push!(values, (path, value)) 
+        push!(values, (path, value))
     end
     return values
 end
