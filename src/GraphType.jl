@@ -245,7 +245,7 @@ mutable struct Graph
         data = GraphData(versions, deps, compat, uuid_to_name, verbose = verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
 
-        extended_deps = [[Dict{Int,BitVector}() for v0 = 1:(spp[p0]-1)] for p0 = 1:np]
+        extended_deps = [Vector{Dict{Int,BitVector}}(spp[p0]-1) for p0 = 1:np]
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
@@ -275,7 +275,11 @@ mutable struct Graph
                 get!(req, pdict[uuid]) do; VersionSpec() end
             end
             # Translate the requirements into bit masks
-            req_msk = Dict(p1 => (pvers[p1][1:(spp[p1]-1)] .∈ vs) for (p1,vs) in req)
+            req_msk = Dict{Int,BitVector}()
+            for (p1, vs) in req
+                pv = pvers[p1]
+                req_msk[p1] = [pv[i] ∈ vs for i in 1:(spp[p1]-1)]
+            end
             extended_deps[p0][v0] = req_msk
         end
 
