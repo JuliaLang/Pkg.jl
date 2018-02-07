@@ -270,7 +270,7 @@ const _empty_symbol = @static iswindows() ? "empty" : "∅"
 
 Base.isempty(s::VersionSpec) = all(isempty, s.ranges)
 @assert isempty(empty_versionspec)
-# Hot code
+# Hot code, measure performance before changing
 function Base.intersect(A::VersionSpec, B::VersionSpec)
     (isempty(A) || isempty(B)) && return copy(empty_versionspec)
     ranges = Vector{VersionRange}(length(A.ranges) * length(B.ranges))
