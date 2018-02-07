@@ -147,10 +147,21 @@ mutable struct GraphData
 
         # equivalence classes (at the beginning each state represents just itself)
         eq_vn(v0, p0) = (v0 == spp[p0] ? nothing : pvers[p0][v0])
-        eq_classes = Dict(pkgs[p0] => Dict(eq_vn(v0,p0) => Set([eq_vn(v0,p0)]) for v0 = 1:spp[p0]) for p0 = 1:np)
+
+        # Hot code
+        eq_classes = Dict{UUID,Dict{InstState,Set{InstState}}}()
+        for p0 = 1:np
+            d = Dict{InstState, Set{InstState}}()
+            for v0 = 1:spp[p0]
+                let p0 = p0
+                    d[eq_vn(v0,p0)] = Set([eq_vn(v0,p0)])
+                end
+            end
+            eq_classes[pkgs[p0]] = d
+        end
 
         # the resolution log is actually initialized below
-        rlog = ResolveLog(uuid_to_name, verbose)
+        rlog = ResolveLog(uuid_to_name, false)
 
         data = new(pkgs, np, spp, pdict, pvers, vdict, uuid_to_name, pruned, eq_classes, rlog)
 
@@ -242,10 +253,13 @@ mutable struct Graph
         extra_uuids = union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...)
         extra_uuids ⊆ keys(versions) || error("unknown UUID found in reqs/fixed") # TODO?
 
-        data = GraphData(versions, deps, compat, uuid_to_name, verbose = verbose)
+        data = GraphData(versions, deps, compat, uuid_to_name, verbose = verbose)::GraphData
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
 
-        extended_deps = [Vector{Dict{Int,BitVector}}(spp[p0]-1) for p0 = 1:np]
+        local extended_deps
+        let spp = spp
+            extended_deps = [Vector{Dict{Int,BitVector}}(spp[p0]-1) for p0 = 1:np]::Vector{Vector{Dict{Int, BitVector}}}
+        end
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
@@ -275,17 +289,25 @@ mutable struct Graph
                 get!(req, pdict[uuid]) do; VersionSpec() end
             end
             # Translate the requirements into bit masks
+            # Hot code
             req_msk = Dict{Int,BitVector}()
-            for (p1, vs) in req
+            @inbounds for (p1, vs) in req
                 pv = pvers[p1]
-                req_msk[p1] = [pv[i] ∈ vs for i in 1:(spp[p1]-1)]
+                req_msk_p1 = BitArray(spp[p1] - 1)
+                for i in 1:spp[p1] - 1
+                    req_msk_p1[i] = pv[i] ∈ vs
+                end
+                req_msk[p1] = req_msk_p1
             end
             extended_deps[p0][v0] = req_msk
         end
 
         gadj = [Int[] for p0 = 1:np]
         gmsk = [BitMatrix[] for p0 = 1:np]
-        gconstr = [trues(spp[p0]) for p0 = 1:np]
+        local gconstr
+        let spp = spp
+            gconstr = [trues(spp[p0]) for p0 = 1:np]
+        end
         adjdict = [Dict{Int,Int}() for p0 = 1:np]
 
         for p0 = 1:np, v0 = 1:(spp[p0]-1), (p1,rmsk1) in extended_deps[p0][v0]
