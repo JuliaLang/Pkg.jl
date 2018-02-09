@@ -1004,7 +1004,7 @@ function pathrepr(env::EnvCache, path::String, base::String=pwd())
     if !Sys.iswindows() && isabspath(path)
         home = joinpath(homedir(), "")
         if startswith(path, home)
-            path = joinpath("~", path[nextind(path,endof(home)):end])
+            path = joinpath("~", path[nextind(path, lastindex(home)):end])
         end
     end
     return repr(path)
