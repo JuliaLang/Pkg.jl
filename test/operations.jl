@@ -1,5 +1,7 @@
 module OperationsTest
 
+import Random: randstring
+import LibGit2
 using Test
 using Pkg3
 using Pkg3.Types
@@ -8,33 +10,39 @@ import Random: randstring
 import LibGit2
 
 function temp_pkg_dir(fn::Function)
-    local project_path
+    local env_dir
+    local old_load_path
+    local old_depot_path
     try
-        # TODO: Use a temporary depot
-        project_path = joinpath(tempdir(), randstring())
-        push!(LOAD_PATH, project_path)
-        fn(project_path)
+        old_load_path = copy(LOAD_PATH)
+        old_depot_path = copy(DEPOT_PATH)
+        empty!(LOAD_PATH)
+        empty!(DEPOT_PATH)
+        mktempdir() do env_dir
+            mktempdir() do depot_dir
+                withenv("JULIA_ENV" => env_dir) do # TODO: use Base loading1
+                    pushfirst!(LOAD_PATH, env_dir)
+                    pushfirst!(DEPOT_PATH, depot_dir)
+                    fn(env_dir)
+                end
+            end
+        end
     finally
-        project_path in LOAD_PATH && (deleteat!(LOAD_PATH, findfirst(equalto(project_path), LOAD_PATH)))
-        rm(project_path, recursive=true, force=true)
+        resize!(LOAD_PATH, length(old_load_path))
+        copyto!(LOAD_PATH, old_load_path)
+        resize!(DEPOT_PATH, length(old_depot_path))
+        copyto!(DEPOT_PATH, old_depot_path)
     end
 end
 
-isinstalled(pkg) = Base.find_package(pkg) != nothing
-
-# Tests for Example.jl fail on master,
-# so let's use another small package
-# in the meantime
-const TEST_PKG = "Crayons"
+const TEST_PKG = "Example"
+isinstalled(name) = Base.identify_package(Main, name) !== nothing
 
 temp_pkg_dir() do project_path
     Pkg3.init(project_path)
     Pkg3.add(TEST_PKG; preview = true)
-    # @test_warn "not in project" Pkg3.API.rm("Example")
     Pkg3.add(TEST_PKG)
-    println("Going to import")
     @eval import $(Symbol(TEST_PKG))
-    println("Imported...")
     Pkg3.up()
     Pkg3.rm(TEST_PKG; preview = true)
     @test isinstalled(TEST_PKG)
@@ -61,29 +69,8 @@ temp_pkg_dir() do project_path
     @test_throws CommandError Pkg3.up(nonexisting_pkg)
     # @test_warn "not in project" Pkg3.rm(nonexisting_pkg)
 
-    mktempdir() do tmp
-        LibGit2.init(tmp)
-        mkdir(joinpath(tmp, "subfolder"))
-        cd(joinpath(tmp, "subfolder")) do
-            # Haven't initialized here so using the default env
-            @test isinstalled(TEST_PKG)
-            try
-                saved_load_path = copy(LOAD_PATH)
-                push!(empty!(LOAD_PATH), Base.CurrentEnv())
-                Pkg3.init()
-                @test !isinstalled(TEST_PKG)
-                @test isfile(joinpath(tmp, "Project.toml"))
-                Pkg3.add(TEST_PKG)
-                @test isinstalled(TEST_PKG)
-            finally
-                append!(LOAD_PATH, saved_load_path)
-            end
-        end
-    end
-
     Pkg3.rm(TEST_PKG)
     @test !isinstalled(TEST_PKG)
-
 end
 
 end # module
