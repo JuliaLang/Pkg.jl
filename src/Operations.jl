@@ -254,7 +254,7 @@ function install_archive(
             filter!(x -> x != "pax_global_header", dirs)
             @assert length(dirs) == 1
             !isdir(version_path) && mkpath(version_path)
-            mv(joinpath(dir, dirs[1]), version_path; remove_destination=true)
+            mv(joinpath(dir, dirs[1]), version_path; force=true)
             Base.rm(path; force = true)
             return true
         end
