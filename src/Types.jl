@@ -150,7 +150,7 @@ VersionRange(b::VersionBound=VersionBound()) = VersionRange(b, b)
 VersionRange(t::Integer...)                  = VersionRange(VersionBound(t...))
 VersionRange(v::VersionNumber)               = VersionRange(VersionBound(v))
 function VersionRange(s::AbstractString)
-    m = match(r"^\s*[v]?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*)(?:\s*-\s*[v]?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*))?\s*$", s)
+    m = match(r"^\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*)(?:\s*-\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*))?\s*$", s)
     m == nothing && throw(ArgumentError("invalid version range: $(repr(s))"))
     lower = VersionBound(m.captures[1])
     upper = m.captures[2] != nothing ? VersionBound(m.captures[2]) : lower
