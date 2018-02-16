@@ -22,18 +22,14 @@ function temp_pkg_dir(fn::Function)
         empty!(DEPOT_PATH)
         mktempdir() do env_dir
             mktempdir() do depot_dir
-                withenv("JULIA_ENV" => env_dir) do # TODO: use Base loading1
-                    pushfirst!(LOAD_PATH, env_dir)
-                    pushfirst!(DEPOT_PATH, depot_dir)
-                    fn(env_dir)
-                end
+                pushfirst!(LOAD_PATH, env_dir)
+                pushfirst!(DEPOT_PATH, depot_dir)
+                fn(env_dir)
             end
         end
     finally
-        resize!(LOAD_PATH, length(old_load_path))
-        copyto!(LOAD_PATH, old_load_path)
-        resize!(DEPOT_PATH, length(old_depot_path))
-        copyto!(DEPOT_PATH, old_depot_path)
+        append!(LOAD_PATH, old_load_path)
+        append!(DEPOT_PATH, old_depot_path)
     end
 end
 

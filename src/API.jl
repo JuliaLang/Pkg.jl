@@ -287,7 +287,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
 end
 
 function init(path::String)
-    ctx = Context(env = EnvCache(path))
+    ctx = Context(env = EnvCache(joinpath(path, "Project.toml")))
     Pkg3.Operations.init(ctx)
 end
 
