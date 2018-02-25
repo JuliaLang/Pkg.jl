@@ -678,28 +678,8 @@ for mode in [:search,:keywords,:desc,:name,:deps]
     end |> eval
 end
 
-function findreqs(token)
-    list = String[]
-    data = nothing
-    p = Pkg.dir(token)
-    t = "Project.toml"
-    try
-        (t in readdir(p)) ? (data = Pkg3.TOML.parsefile(joinpath(p,t))) : (return list)
-    catch
-        return list
-    end
-    for key in keys(data["deps"])
-        key ∉ list && push!(list,key)
-        for x in findreqs(key)
-            x ∉ list && push!(list,x)
-        end
-    end
-    return list
-end
-
 function do_info!(tokens::Vector{Token},repl::REPL.AbstractREPL)
     for token in tokens
-        txt = ""
         data = nothing
         p = Pkg.dir(token)
         t = "Project.toml"
@@ -708,21 +688,12 @@ function do_info!(tokens::Vector{Token},repl::REPL.AbstractREPL)
         catch
             continue
         end
-        txt *= "    $(data["name"])\n"
-        txt *= "desc:     $(data["desc"])\n"
-        txt *= "license:  $(data["license"])\n"
-        txt *= "keywords: $(join(data["keywords"],", "))\n"
-        reqs = keys(data["deps"])
-        !isempty(reqs) && (txt *= "requires: $(join(reqs,", "))\n")
-        ns = String[] 
-        for key in reqs
-            for x in findreqs(key)
-                (x ∉ reqs) && (x ∉ ns) && push!(ns,x)
-            end
-        end
-        !isempty(ns) && (txt *= "needs:    $(join(ns,", "))\n")
-        d = Pkg3.pkgsearch(:deps,token)
-        !isempty(d) && (txt *= "deps:     $(join(d,", "))\n")
+        dat = Pkg3.pkginfo(token,data)
+        txt = "    $(dat[1])\ndesc:     $(dat[2])\nlicense:  $(dat[3])\n"
+        !isempty(dat[4]) && (txt *= "keywords: $(join(dat[4],", "))\n")
+        !isempty(dat[5]) && (txt *= "requires: $(join(dat[5],", "))\n")
+        !isempty(dat[6]) && (txt *= "needs:    $(join(dat[6],", "))\n")
+        !isempty(dat[7]) && (txt *= "deps:     $(join(dat[7],", "))\n")
         @info txt
     end
 end
