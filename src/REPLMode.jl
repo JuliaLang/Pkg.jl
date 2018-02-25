@@ -678,26 +678,51 @@ for mode in [:search,:keywords,:desc,:name,:deps]
     end |> eval
 end
 
+function findreqs(token)
+    list = String[]
+    data = nothing
+    p = Pkg.dir(token)
+    t = "Project.toml"
+    try
+        (t in readdir(p)) ? (data = Pkg3.TOML.parsefile(joinpath(p,t))) : (return list)
+    catch
+        return list
+    end
+    for key in keys(data["deps"])
+        key ∉ list && push!(list,key)
+        for x in findreqs(key)
+            x ∉ list && push!(list,x)
+        end
+    end
+    return list
+end
+
 function do_info!(tokens::Vector{Token},repl::REPL.AbstractREPL)
     for token in tokens
-        txt = "\n"
+        txt = ""
         data = nothing
         p = Pkg.dir(token)
         t = "Project.toml"
-        (t in readdir(p)) ? (data = Pkg3.TOML.parsefile(joinpath(p,t))) : continue
-        txt = txt*"name:     $(data["name"])\n"
-        txt = txt*"desc:     $(data["desc"])\n"
-        txt = txt*"license:  $(data["license"])\n"
-        txt = txt*"keywords: $(join(data["keywords"],", "))\n"
-        !isempty(data["deps"]) && (txt = txt*"requires:\n")
-        for key in keys(data["deps"])
-            txt = txt*"          "*key*"\n"
+        try
+            (t in readdir(p)) ? (data = Pkg3.TOML.parsefile(joinpath(p,t))) : continue
+        catch
+            continue
         end
+        txt *= "    $(data["name"])\n"
+        txt *= "desc:     $(data["desc"])\n"
+        txt *= "license:  $(data["license"])\n"
+        txt *= "keywords: $(join(data["keywords"],", "))\n"
+        reqs = keys(data["deps"])
+        !isempty(reqs) && (txt *= "requires: $(join(reqs,", "))\n")
+        ns = String[] 
+        for key in reqs
+            for x in findreqs(key)
+                (x ∉ reqs) && (x ∉ ns) && push!(ns,x)
+            end
+        end
+        !isempty(ns) && (txt *= "needs:    $(join(ns,", "))\n")
         d = Pkg3.pkgsearch(:deps,token)
-        !isempty(d) && (txt = txt*"deps:\n")
-        for key in Pkg3.pkgsearch(:deps,token)
-            txt = txt*"          "*key*"\n"
-        end
+        !isempty(d) && (txt *= "deps:     $(join(d,", "))\n")
         @info txt
     end
 end
