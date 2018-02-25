@@ -39,6 +39,7 @@ include("Display.jl")
 include("Operations.jl")
 include("REPLMode.jl")
 include("API.jl")
+include("Search.jl")
 
 import .API: add, rm, up, test, gc, init, build, installed, pin, free, checkout
 const update = up
