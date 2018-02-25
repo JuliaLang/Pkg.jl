@@ -9,7 +9,7 @@ function keycheck(data::Dict{<:Any,<:Any},str::Array{String,1},mode::Array{Symbo
                 (key == s) && (found = true)
             end
         end
-        if (((:any in mode) && (typeof(data[key]) == String)) ||
+        if (((:search in mode) && (typeof(data[key]) == String)) ||
             ((:name in mode) && (key == "name")) ||
             ((:keywords in mode) && (key == "keywords")) ||
             ((:desc in mode) && (key == "description")))
@@ -27,7 +27,7 @@ end
 # directory search for package toml
 function pkgsearch(mode::Array{Symbol,1},str::Array{String,1})
     m = mode
-    (:any in m) && push!(m,:deps,:name)
+    (:search in m) && push!(m,:deps,:name)
     pkglist = String[]
     path = joinpath(homedir(),"/home/flow/.julia/registries")
     for depot in readdir(path)

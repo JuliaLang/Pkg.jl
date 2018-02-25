@@ -15,7 +15,7 @@ using Pkg3.Operations
 ############
 # Commands #
 ############
-@enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
+@enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP, CMD_INFO,
                    CMD_TEST, CMD_GC, CMD_PREVIEW, CMD_INIT, CMD_BUILD, CMD_FREE,
                    CMD_PIN, CMD_CHECKOUT, CMD_KEYWORDS, CMD_DESC, CMD_DEPS, CMD_NAME)
 
@@ -56,6 +56,7 @@ const cmds = Dict(
     "name"      => CMD_NAME,
     "desc"      => CMD_DESC,
     "deps"      => CMD_DEPS,
+    "info"      => CMD_INFO,
 )
 
 ###########
@@ -254,6 +255,7 @@ function do_cmd!(tokens::Vector{Token}, repl)
     cmd.kind == CMD_DESC     ? Base.invokelatest(    do_desc!, tokens, repl) :
     cmd.kind == CMD_NAME     ? Base.invokelatest(    do_name!, tokens, repl) :
     cmd.kind == CMD_DEPS     ? Base.invokelatest(    do_deps!, tokens, repl) :
+    cmd.kind == CMD_INFO     ? Base.invokelatest(    do_info!, tokens, repl) :
         cmderror("`$cmd` command not yet implemented")
     return
 end
@@ -668,24 +670,36 @@ function do_init!(ctx::Context, tokens::Vector{Token})
     Pkg3.API.init(ctx)
 end
 
-function do_search!(tokens::Vector{Token},repl::REPL.AbstractREPL)
-    @info "found pkgs\n"*join(Pkg3.pkgsearch(:any,tokens...),'\n')
+for mode in [:search,:keywords,:desc,:name,:deps]
+    quote
+        function $(Symbol(:do_,mode,:!))(tokens::Vector{Token},repl::REPL.AbstractREPL)
+            @info "found pkgs\n"*join(Pkg3.pkgsearch(Symbol($(string(mode))),tokens...),'\n')
+        end
+    end |> eval
 end
 
-function do_keywords!(tokens::Vector{Token},repl::REPL.AbstractREPL)
-    @info "found pkgs\n"*join(Pkg3.pkgsearch(:keywords,tokens...),'\n')
-end
-
-function do_desc!(tokens::Vector{Token},repl::REPL.AbstractREPL)
-    @info "found pkgs\n"*join(Pkg3.pkgsearch(:desc,tokens...),'\n')
-end
-
-function do_name!(tokens::Vector{Token},repl::REPL.AbstractREPL)
-    @info "found pkgs\n"*join(Pkg3.pkgsearch(:name,tokens...),'\n')
-end
-
-function do_deps!(tokens::Vector{Token},repl::REPL.AbstractREPL)
-    @info "found pkgs\n"*join(Pkg3.pkgsearch(:deps,tokens...),'\n')
+function do_info!(tokens::Vector{Token},repl::REPL.AbstractREPL)
+    for token in tokens
+        txt = "\n"
+        data = nothing
+        p = Pkg.dir(token)
+        t = "Project.toml"
+        (t in readdir(p)) ? (data = Pkg3.TOML.parsefile(joinpath(p,t))) : continue
+        txt = txt*"name:     $(data["name"])\n"
+        txt = txt*"desc:     $(data["desc"])\n"
+        txt = txt*"license:  $(data["license"])\n"
+        txt = txt*"keywords: $(join(data["keywords"],", "))\n"
+        !isempty(data["deps"]) && (txt = txt*"requires:\n")
+        for key in keys(data["deps"])
+            txt = txt*"          "*key*"\n"
+        end
+        d = Pkg3.pkgsearch(:deps,token)
+        !isempty(d) && (txt = txt*"deps:\n")
+        for key in Pkg3.pkgsearch(:deps,token)
+            txt = txt*"          "*key*"\n"
+        end
+        @info txt
+    end
 end
 
 ######################
