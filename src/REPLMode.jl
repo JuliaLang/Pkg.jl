@@ -245,6 +245,7 @@ function do_cmd!(tokens::Vector{Token}, repl)
     cmd.kind == CMD_PIN      ? Base.invokelatest(     do_pin!, ctx, tokens) :
     cmd.kind == CMD_FREE     ? Base.invokelatest(    do_free!, ctx, tokens) :
     cmd.kind == CMD_CHECKOUT ? Base.invokelatest(do_checkout!, ctx, tokens) :
+    cmd.kind == CMD_SEARCH   ? Base.invokelatest(  do_search!, tokens, repl) :
         cmderror("`$cmd` command not yet implemented")
     return
 end
@@ -659,6 +660,9 @@ function do_init!(ctx::Context, tokens::Vector{Token})
     Pkg3.API.init(ctx)
 end
 
+function do_search!(tokens::Vector{Token},repl::REPL.AbstractREPL)
+    @info "Packages found:\n"*join(Pkg3.pkgsearch(:any,tokens...),'\n')
+end
 
 ######################
 # REPL mode creation #
