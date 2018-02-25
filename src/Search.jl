@@ -28,22 +28,24 @@ end
 function pkgsearch(mode::Array{Symbol,1},str::Array{String,1})
     m = mode
     (:any in m) && push!(m,:deps,:name)
-    pkglist = Array{String}(uninitialized,0)
-    path = joinpath(homedir(),"/home/flow/.julia/registries/Uncurated")
-    data = nothing
-    for (root, dirs, files) in walkdir(path)
-        for dir in dirs
-            found = false
-            for file in readdir(joinpath(root,dir))
-                if endswith(file, ".toml")
-                    (file == "Deps.toml") && (:deps ∉ m) && continue
-                    (file == "Package.toml") && (:name ∉ m) && continue
-                    (file != "Project.toml") && (:deps ∉ m) && (:name ∉ m) && continue
-                    data = TOML.parsefile(joinpath(root,dir,file))
-                    keycheck(data,str,m) && (found = true)
+    pkglist = String[]
+    path = joinpath(homedir(),"/home/flow/.julia/registries")
+    for depot in readdir(path)
+        data = nothing
+        for (root, dirs, files) in walkdir(joinpath(path,depot))
+            for dir in dirs
+                found = false
+                for file in readdir(joinpath(root,dir))
+                    if endswith(file, ".toml")
+                        (file == "Deps.toml") && (:deps ∉ m) && continue
+                        (file == "Package.toml") && (:name ∉ m) && continue
+                        (file != "Project.toml") && (:deps ∉ m) && (:name ∉ m) && continue
+                        data = TOML.parsefile(joinpath(root,dir,file))
+                        keycheck(data,str,m) && (found = true)
+                    end
                 end
+                found && push!(pkglist,dir)
             end
-            found && push!(pkglist,dir)
         end
     end
     return pkglist
