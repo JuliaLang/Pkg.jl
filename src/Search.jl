@@ -13,8 +13,8 @@ function keycheck(data::Dict{<:Any,<:Any},str::Array{String,1},mode::Array{Symbo
             ((:name in mode) && (key == "name")) ||
             ((:keywords in mode) && (key == "keywords")) ||
             ((:desc in mode) && (key == "description")))
-            for s in str
-                contains(data[key],s) && (found = true)
+            for s in lowercase.(str)
+                contains(lowercase(data[key]),s) && (found = true)
             end
         end
         if typeof(data[key]) <: Dict{<:Any,<:Any}

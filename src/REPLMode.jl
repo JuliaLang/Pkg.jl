@@ -17,7 +17,7 @@ using Pkg3.Operations
 ############
 @enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
                    CMD_TEST, CMD_GC, CMD_PREVIEW, CMD_INIT, CMD_BUILD, CMD_FREE,
-                   CMD_PIN, CMD_CHECKOUT)
+                   CMD_PIN, CMD_CHECKOUT, CMD_KEYWORDS, CMD_DESC, CMD_DEPS, CMD_NAME)
 
 struct Command
     kind::CommandKind
@@ -52,6 +52,10 @@ const cmds = Dict(
     "pin"       => CMD_PIN,
     "free"      => CMD_FREE,
     "checkout"  => CMD_CHECKOUT,
+    "keywords"  => CMD_KEYWORDS,
+    "name"      => CMD_NAME,
+    "desc"      => CMD_DESC,
+    "deps"      => CMD_DEPS,
 )
 
 ###########
@@ -246,6 +250,10 @@ function do_cmd!(tokens::Vector{Token}, repl)
     cmd.kind == CMD_FREE     ? Base.invokelatest(    do_free!, ctx, tokens) :
     cmd.kind == CMD_CHECKOUT ? Base.invokelatest(do_checkout!, ctx, tokens) :
     cmd.kind == CMD_SEARCH   ? Base.invokelatest(  do_search!, tokens, repl) :
+    cmd.kind == CMD_KEYWORDS ? Base.invokelatest(do_keywords!, tokens, repl) :
+    cmd.kind == CMD_DESC     ? Base.invokelatest(    do_desc!, tokens, repl) :
+    cmd.kind == CMD_NAME     ? Base.invokelatest(    do_name!, tokens, repl) :
+    cmd.kind == CMD_DEPS     ? Base.invokelatest(    do_deps!, tokens, repl) :
         cmderror("`$cmd` command not yet implemented")
     return
 end
@@ -661,7 +669,23 @@ function do_init!(ctx::Context, tokens::Vector{Token})
 end
 
 function do_search!(tokens::Vector{Token},repl::REPL.AbstractREPL)
-    @info "Packages found:\n"*join(Pkg3.pkgsearch(:any,tokens...),'\n')
+    @info "found pkgs\n"*join(Pkg3.pkgsearch(:any,tokens...),'\n')
+end
+
+function do_keywords!(tokens::Vector{Token},repl::REPL.AbstractREPL)
+    @info "found pkgs\n"*join(Pkg3.pkgsearch(:keywords,tokens...),'\n')
+end
+
+function do_desc!(tokens::Vector{Token},repl::REPL.AbstractREPL)
+    @info "found pkgs\n"*join(Pkg3.pkgsearch(:desc,tokens...),'\n')
+end
+
+function do_name!(tokens::Vector{Token},repl::REPL.AbstractREPL)
+    @info "found pkgs\n"*join(Pkg3.pkgsearch(:name,tokens...),'\n')
+end
+
+function do_deps!(tokens::Vector{Token},repl::REPL.AbstractREPL)
+    @info "found pkgs\n"*join(Pkg3.pkgsearch(:deps,tokens...),'\n')
 end
 
 ######################
