@@ -978,10 +978,10 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
         with_dependencies_loadable_at_toplevel(ctx, pkg; might_need_to_resolve=true) do
             try
                 run(cmd)
+                @info("$(pkg.name) tests passed")
             catch err
                 push!(pkgs_errored, pkg.name)
             end
-            @info("$(pkg.name) tests passed")
         end
     end
 
