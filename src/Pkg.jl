@@ -38,6 +38,7 @@ include("Resolve.jl")
 include("Operations.jl")
 include("API.jl")
 include("REPLMode.jl")
+include("Registry.jl")
 
 # Define new variables so tab comleting Pkg. works.
 const add          = API.add

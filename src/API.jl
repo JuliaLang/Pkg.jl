@@ -370,7 +370,7 @@ end
 
 function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID})
     for pkg in pkgs
-        pkg.uuid in keys(ctx.stdlibs) && continue
+        is_stdlib(ctx, pkg) && continue
         pkg.uuid in uuids && continue
         push!(uuids, pkg.uuid)
         if Types.is_project(ctx.env, pkg)
@@ -448,7 +448,7 @@ precompile() = precompile(Context())
 function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
 
-    pkgids = [Base.PkgId(UUID(uuid), name) for (name, uuid) in ctx.env.project["deps"] if !(UUID(uuid) in  keys(ctx.stdlibs))]
+    pkgids = [Base.PkgId(UUID(uuid), name) for (name, uuid) in ctx.env.project["deps"] if !(is_stdlib(ctx, UUID(uuid)))]
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl"))
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
@@ -531,7 +531,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
             pkg = PackageSpec(pkg_name)
             read_package_from_manifest!(pkg, info)
             push!(pkgs, pkg)
-            pkg.uuid in keys(ctx.stdlibs) && continue
+            is_stdlib(ctx, pkg) && continue
             pkg.path !== nothing && continue
             urls[pkg.uuid] = String[]
             hashes[pkg.uuid] = SHA1(info["git-tree-sha1"])

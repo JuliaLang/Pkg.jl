@@ -20,7 +20,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
-    read_project, read_package, read_manifest, pathrepr, registries,
+    read_project, read_package, read_manifest, pathrepr, registries, is_stdlib,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED, PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED,
@@ -343,6 +343,9 @@ function Context!(ctx::Context; kwargs...)
     end
 end
 
+is_stdlib(ctx::Context, pkg::PackageSpec) = is_stdlib(ctx, pkg.uuid)
+is_stdlib(ctx::Context, uuid::UUID) = uuid in keys(ctx.stdlibs)
+
 function project_compatibility(ctx::Context, name::String)
     v = VersionSpec()
     project = ctx.env.project
@@ -376,6 +379,8 @@ function read_project(file::String)
     isfile(file) ? open(read_project, file) : read_project(devnull)
 end
 
+const UIUD_REG = r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+
 _throw_package_err(x, f) = cmderror("expected a `$x` entry in project file at $(abspath(f))")
 function read_package(f::String)
     project = read_project(f)
@@ -386,6 +391,11 @@ function read_package(f::String)
     if !isfile(entry)
         cmderror("expected the file `src/$name.jl` to exist for package $name at $(dirname(f))")
     end
+    s = lowercase(project["uuid"])
+    if !occursin(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", s)
+        throw(ArgumentError("malformed UUID string: $(repr(s))"))
+    end
+
     return project
 end
 
