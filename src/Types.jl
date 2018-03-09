@@ -9,7 +9,7 @@ using REPL.TerminalMenus
 
 using ..TOML
 import ..Pkg3
-import Pkg3: depots, logdir
+import Pkg3: GitTools, depots, logdir
 
 import Base: SHA1, AbstractEnv
 using SHA
@@ -612,8 +612,7 @@ function handle_repos!(env::EnvCache, pkgs::AbstractVector{PackageSpec}; upgrade
         ispath(clones_dir) || mkpath(clones_dir)
         repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
         repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
-            @info "Cloning package from $(pkg.repo.url)"
-            LibGit2.clone(pkg.repo.url, repo_path, isbare=true)
+            GitTools.clone(pkg.repo.url, repo_path, isbare=true)
         end
         if upgrade
             LibGit2.fetch(repo, remoteurl=pkg.repo.url, refspecs=refspecs)
@@ -855,9 +854,8 @@ function registries()::Vector{String}
         mkpath(user_regs)
         @info "Cloning default registries into $user_regs"
         for (reg, url) in DEFAULT_REGISTRIES
-            @info " [+] $reg = $(repr(url))"
             path = joinpath(user_regs, reg)
-            LibGit2.clone(url, path)
+            GitTools.clone(url, path; header = "$reg: $(repr(url))")
         end
     end
     return [r for d in depots() for r in registries(d)]
