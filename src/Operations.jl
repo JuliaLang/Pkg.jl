@@ -6,7 +6,7 @@ import LibGit2
 
 import REPL
 using REPL.TerminalMenus
-using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..BinaryProvider
+using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..BinaryProvider, ..GitTools
 import ..depots, ..devdir, ..Types.uuid_julia
 
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
@@ -389,8 +389,7 @@ function install_git(
     ispath(clones_dir) || mkpath(clones_dir)
     repo_path = joinpath(clones_dir, string(uuid))
     repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
-        printpkgstyle(ctx, :Cloning, "[$uuid] $name from $(urls[1])")
-        LibGit2.clone(urls[1], repo_path, isbare=true)
+        GitTools.clone(urls[1], repo_path; isbare=true, header = "[$uuid] $name from $(urls[1])")
     end
     git_hash = LibGit2.GitHash(hash.bytes)
     for i = 2:length(urls)

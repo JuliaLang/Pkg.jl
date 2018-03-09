@@ -9,7 +9,7 @@ using REPL.TerminalMenus
 
 using ..TOML
 import ..Pkg3
-import Pkg3: depots, logdir
+import Pkg3: GitTools, depots, logdir
 
 import Base: SHA1, AbstractEnv
 using SHA
@@ -691,8 +691,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
         mkpath(clones_dir)
         repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
         repo, just_cloned = ispath(repo_path) ? (LibGit2.GitRepo(repo_path), false) : begin
-            printpkgstyle(ctx, :Cloning, "package from $(pkg.repo.url)")
-            r = LibGit2.clone(pkg.repo.url, repo_path, isbare=true)
+            r = GitTools.clone(pkg.repo.url, repo_path, isbare=true)
             LibGit2.fetch(r, remoteurl=pkg.repo.url, refspecs=refspecs)
             r, true
         end
@@ -965,9 +964,8 @@ function registries(; clone_default=true)::Vector{String}
             mkpath(user_regs)
             printpkgstyle(stdout, :Cloning, "default registries into $user_regs")
             for (reg, url) in DEFAULT_REGISTRIES
-                printpkgstyle(stdout, :Cloning, "registry $reg from $(repr(url))")
                 path = joinpath(user_regs, reg)
-                repo = LibGit2.clone(url, path)
+                repo = GitTools.clone(url, path; header = "registry $reg from $(repr(url))")
                 close(repo)
             end
         end
