@@ -19,5 +19,6 @@ script:
                                  withenv("JULIA_LOAD_PATH" => Pkg.dir()) do; Pkg.test("Pkg3"; coverage=true); end'
 
 after_success:
+  - julia -e 'cd(Pkg.dir("Pkg3")); Pkg.add("Documenter"); include("docs/make.jl")'
   - julia -e 'cd(Pkg.dir("Pkg3")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
 
