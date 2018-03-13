@@ -46,7 +46,9 @@ received_bytes::Csize_t
 end
 
 function transfer_progress(progress::Ptr{GitTransferProgress}, p::Any)
+
     progress = unsafe_load(progress)
+    @assert p.transfer_progress != C_NULL
     bar = unsafe_pointer_to_objref(p.transfer_progress)
     @assert typeof(bar) == MiniProgressBar
     if progress.total_deltas != 0
