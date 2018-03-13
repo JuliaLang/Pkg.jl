@@ -46,7 +46,7 @@ function transfer_progress(progress::Ptr{LibGit2.GitTransferProgress}, p::Any)
     return Cint(0)
 end
 
-function clone(url, source_path; isbare::Bool=false, header = nothing, branch = nothing)
+function clone(url, source_path; isbare::Bool=false, header = nothing, branch = nothing, credentials = nothing)
     isdir(source_path) && error("$source_path already exists")
     printstyled(stdout, "Cloning "; color = :green, bold=true)
     if header == nothing
@@ -54,12 +54,15 @@ function clone(url, source_path; isbare::Bool=false, header = nothing, branch = 
     else
         println(stdout, header)
     end
-    p = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    cred_payload = LibGit2.CredentialPayload(credentials)
     print(stdout, "\e[?25l")
     try
         GC.@preserve p branch begin
-            callbacks = LibGit2.RemoteCallbacks(transfer_progress=cfunction(transfer_progress, Cint, Tuple{Ptr{LibGit2.GitTransferProgress}, Any}),
-                payload = pointer_from_objref(p))
+            callbacks = LibGit2.RemoteCallbacks(
+                credentials=(LibGit2.credential_cb(), pointer_from_objref(cred_payload)),
+                transfer_progress=(cfunction(transfer_progress, Cint, Tuple{Ptr{LibGit2.GitTransferProgress}, Any}), pointer_from_objref(transfer_payload)),
+            )
             fetch_opts = LibGit2.FetchOptions(callbacks = callbacks)
             if branch == nothing
                 clone_opts = LibGit2.CloneOptions(fetch_opts=fetch_opts, bare=isbare)
@@ -69,12 +72,17 @@ function clone(url, source_path; isbare::Bool=false, header = nothing, branch = 
             return LibGit2.clone(url, source_path, clone_opts)
         end
     catch e
+        if isa(e, LibGit2.GitError) && e.code == LibGit2.Error.EAUTH
+            LibGit2.reject(cred_payload)
+        end
+
         rm(source_path; force=true, recursive=true)
         rethrow(e)
     finally
         print(stdout, "\e[?25h")
         println(stdout)
     end
+    LibGit2.approve(cred_payload)
 end
 
 end # module

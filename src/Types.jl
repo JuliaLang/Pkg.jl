@@ -596,6 +596,7 @@ end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 function handle_repos!(env::EnvCache, pkgs::AbstractVector{PackageSpec}; upgrade=true)
+    creds = LibGit2.CachedCredentials()
     for pkg in pkgs
         pkg.repo == nothing && continue
         # If we did not get the url to the repo yet, try look it up from the registry
@@ -612,10 +613,10 @@ function handle_repos!(env::EnvCache, pkgs::AbstractVector{PackageSpec}; upgrade
         ispath(clones_dir) || mkpath(clones_dir)
         repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
         repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
-            GitTools.clone(pkg.repo.url, repo_path, isbare=true)
+            GitTools.clone(pkg.repo.url, repo_path, isbare=true, credentials=creds)
         end
         if upgrade
-            LibGit2.fetch(repo, remoteurl=pkg.repo.url, refspecs=refspecs)
+            LibGit2.fetch(repo, remoteurl=pkg.repo.url, refspecs=refspecs, credentials=creds)
             rev = pkg.repo.rev
         else
             # Not upgrading so the rev should be the current git-tree-sha
@@ -853,9 +854,10 @@ function registries()::Vector{String}
     if !ispath(user_regs)
         mkpath(user_regs)
         @info "Cloning default registries into $user_regs"
+        creds = LibGit2.CachedCredentials()
         for (reg, url) in DEFAULT_REGISTRIES
             path = joinpath(user_regs, reg)
-            GitTools.clone(url, path; header = "$reg: $(repr(url))")
+            GitTools.clone(url, path; header = "$reg: $(repr(url))", credentials = creds)
         end
     end
     return [r for d in depots() for r in registries(d)]
