@@ -622,14 +622,12 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
             mkpath(clone_path)
             repo_path = joinpath(clone_path, string(hash(pkg.repo.url), "_full"))
             repo, just_cloned = ispath(repo_path) ? (LibGit2.GitRepo(repo_path), false) : begin
-                printpkgstyle(ctx, :Cloning, "package from $(pkg.repo.url)")
-                r = LibGit2.clone(pkg.repo.url, repo_path)
-                GitTools.fetch(r, remoteurl=pkg.repo.url, refspecs=refspecs, credentials=creds)
+                r = GitTools.clone(pkg.repo.url, repo_path)
+                GitTools.fetch(r, pkg.repo.url; refspecs=refspecs, credentials=creds)
                 r, true
             end
             if !just_cloned
-                printpkgstyle(ctx, :Updating, "repo from $(pkg.repo.url)")
-                GitTools.fetch(repo, remoteurl=pkg.repo.url, refspecs=refspecs, credentials=creds)
+                GitTools.fetch(repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
             end
             close(repo)
 
@@ -672,14 +670,14 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
         repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
         repo, just_cloned = ispath(repo_path) ? (LibGit2.GitRepo(repo_path), false) : begin
             r = GitTools.clone(pkg.repo.url, repo_path, isbare=true, credentials=creds)
-            GitTools.fetch(r, remoteurl=pkg.repo.url, refspecs=refspecs, credentials=creds)
+            GitTools.fetch(r, pkg.repo.url; refspecs=refspecs, credentials=creds)
             r, true
         end
         info = manifest_info(env, pkg.uuid)
         pinned = (info != nothing && get(info, "pinned", false))
-        if upgrade_or_add  && !pinned && !just_cloned
-            printpkgstyle(ctx, :Updating, "repo from $(pkg.repo.url)")
-            GitTools.fetch(repo, remoteurl=pkg.repo.url, refspecs=refspecs, credentials=creds)
+        if upgrade_or_add && !pinned && !just_cloned
+            rev = pkg.repo.rev
+            GitTools.fetch(repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
         end
         if upgrade_or_add && !pinned
             rev = pkg.repo.rev
@@ -934,7 +932,8 @@ function registries()::Vector{String}
         printpkgstyle(stdout, :Cloning, "default registries into $user_regs")
         for (reg, url) in DEFAULT_REGISTRIES
             path = joinpath(user_regs, reg)
-            GitTools.clone(url, path; header = "registry $reg from $(repr(url))", credentials = creds)
+            repo = Pkg3.GitTools.clone(url, path; header = "registry $reg from $(repr(url))", credentials = creds)
+            close(repo)
         end
     end
     return [r for d in depots() for r in registries(d)]
@@ -1151,14 +1150,13 @@ pathrepr(path::String, base::String=pwd()) = pathrepr(nothing, path, base)
 function pathrepr(env::Union{Nothing, EnvCache}, path::String, base::String=pwd())
     path = abspath(base, path)
     if env isa EnvCache && env.git != nothing
-        LibGit2.with(LibGit2.GitRepo, LibGit2.path(env.git)) do repo
-            if startswith(base, repo)
-                # we're in the repo => path relative to pwd()
-                path = relpath(path, base)
-            elseif startswith(path, repo)
-                # we're not in repo but path is => path relative to repo
-                path = relpath(path, repo)
-            end
+        repo = LibGit2.path(env.git)
+        if startswith(base, repo)
+            # we're in the repo => path relative to pwd()
+            path = relpath(path, base)
+        elseif startswith(path, repo)
+            # we're not in repo but path is => path relative to repo
+            path = relpath(path, repo)
         end
     end
     if !Sys.iswindows() && isabspath(path)

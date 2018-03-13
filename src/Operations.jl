@@ -391,7 +391,7 @@ function install_git(
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
         end
         url = urls[i]
-        LibGit2.fetch(repo, remoteurl=url, refspecs=refspecs, credentials=creds)
+        GitTools.fetch(repo, url, refspecs=refspecs, credentials=creds)
     end
     tree = try
         with(LibGit2.GitObject, repo, git_hash) do g
