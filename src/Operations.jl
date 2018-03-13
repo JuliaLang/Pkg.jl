@@ -87,7 +87,7 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::D
             @assert pkg.repo !== nothing && pkg.repo.git_tree_sha1 !== nothing
             path = find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
         elseif info !== nothing && haskey(info, "path")
-            pkg.path = info["path"]
+            pkg.path = joinpath(dirname(ctx.env.project_file), info["path"])
             path = pkg.path
         elseif info !== nothing && haskey(info, "repo-url")
             path = find_installed(pkg.name, pkg.uuid, SHA1(info["git-tree-sha1"]))
@@ -97,6 +97,7 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::D
             continue
         end
 
+        path = joinpath(dirname(ctx.env.project_file), path)
         if !isdir(path)
             cmderror("path $(path) for package $(pkg.name) no longer exists. Remove the package or `develop` it at a new path")
         end
@@ -341,8 +342,8 @@ function install_archive(
         if archive_url != nothing
             path = tempname() * randstring(6) * ".tar.gz"
             url_success = true
+            cmd = BinaryProvider.gen_download_cmd(archive_url, path);
             try
-                cmd = BinaryProvider.gen_download_cmd(archive_url, path);
                 run(cmd, (devnull, devnull, devnull))
             catch e
                 e isa InterruptException && rethrow(e)
@@ -352,7 +353,15 @@ function install_archive(
             dir = joinpath(tempdir(), randstring(12))
             mkpath(dir)
             cmd = BinaryProvider.gen_unpack_cmd(path, dir);
-            run(cmd, (devnull, devnull, devnull))
+            # Might fail to extract an archive (Pkg3#190)
+            try
+                run(cmd, (devnull, devnull, devnull))
+            catch e
+                e isa InterruptException && rethrow(e)
+                @warn "failed to extract archive downloaded from $(archive_url)"
+                url_success = false
+            end
+            url_success || continue
             dirs = readdir(dir)
             # 7z on Win might create this spurious file
             filter!(x -> x != "pax_global_header", dirs)
@@ -529,6 +538,16 @@ function find_stdlib_deps(ctx::Context, path::String)
     return stdlib_deps
 end
 
+function relative_project_path_if_in_project(ctx::Context, path::String)
+    # Check if path is in project => relative
+    project_path = dirname(ctx.env.project_file)
+    if startswith(normpath(path), project_path)
+        return relpath(path, project_path)
+    else
+        return abspath(path)
+    end
+end
+
 function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothing})
     env = ctx.env
     uuid, name, version, path, special_action, repo = pkg.uuid, pkg.name, pkg.version, pkg.path, pkg.special_action, pkg.repo
@@ -548,7 +567,7 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
     uuid in keys(ctx.stdlibs) && return info
     info["version"] = string(version)
     hash == nothing ? delete!(info, "git-tree-sha1") : (info["git-tree-sha1"] = string(hash))
-    path == nothing ? delete!(info, "path")          : (info["path"]          = path)
+    path == nothing ? delete!(info, "path")          : (info["path"]          = relative_project_path_if_in_project(ctx, path))
     if special_action in (PKGSPEC_FREED, PKGSPEC_DEVELOPED)
         delete!(info, "pinned")
         delete!(info, "repo-url")
@@ -565,6 +584,7 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
 
     delete!(info, "deps")
     if path != nothing
+        path = joinpath(dirname(ctx.env.project_file), path)
         # Remove when packages uses Project files properly
         dep_pkgs = PackageSpec[]
         stdlib_deps = find_stdlib_deps(ctx, path)
@@ -1002,7 +1022,7 @@ function init(ctx::Context)
         cmderror("Project already initialized at $project_file")
     mkpath(dirname(project_file))
     touch(project_file)
-    printpkgstyle(ctx, :Initialized, "project at ", pathrepr(ctx.env, dirname(project_file)))
+    printpkgstyle(ctx, :Initialized, "project at ", abspath(project_file))
 end
 
 end # module
