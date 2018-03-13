@@ -581,6 +581,8 @@ function do_up!(ctx::Context, tokens::Vector{Token})
             else
                 cmderror("invalid option for `up`: $(token)")
             end
+        elseif token isa Rev
+            @warn "Ignoring git revision `$(token.rev)`, use `add` to track a branch or commit"
         end
         prev_token_was_package = parsed_package
     end
