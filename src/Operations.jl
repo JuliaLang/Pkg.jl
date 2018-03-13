@@ -370,11 +370,12 @@ function install_git(
     version::Union{VersionNumber,Nothing},
     version_path::String
 )::Nothing
+    creds = LibGit2.CachedCredentials()
     clones_dir = joinpath(depots()[1], "clones")
     ispath(clones_dir) || mkpath(clones_dir)
     repo_path = joinpath(clones_dir, string(uuid))
     repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
-        GitTools.clone(urls[1], repo_path; isbare=true, header = "[$uuid] $name from $(urls[1])")
+        GitTools.clone(urls[1], repo_path; isbare=true, header = "[$uuid] $name from $(urls[1])", credentials=creds)
     end
     git_hash = LibGit2.GitHash(hash.bytes)
     for i = 2:length(urls)
@@ -384,7 +385,7 @@ function install_git(
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
         end
         url = urls[i]
-        LibGit2.fetch(repo, remoteurl=url, refspecs=refspecs)
+        LibGit2.fetch(repo, remoteurl=url, refspecs=refspecs, credentials=creds)
     end
     tree = try
         LibGit2.GitObject(repo, git_hash)
@@ -920,6 +921,7 @@ end
 
 function develop(ctx::Context, pkgs_branches::Vector; path = devdir())
     pkgs = PackageSpec[]
+    creds = LibGit2.CachedCredentials()
     for (pkg, branch) in pkgs_branches
         push!(pkgs, pkg)
         ctx.env.project["deps"][pkg.name] = string(pkg.uuid)
@@ -941,7 +943,7 @@ function develop(ctx::Context, pkgs_branches::Vector; path = devdir())
                 for (_, repo) in repos
                     @info "Cloning $(pkg.name) from $(repo) to $path"
                     try
-                        GitTools.clone(repo, pkgpath; branch = branch == nothing ? "" : branch)
+                        GitTools.clone(repo, pkgpath; branch = branch == nothing ? "" : branch, credentials=creds)
                         successfully_cloned = true
                         break
                     catch err
