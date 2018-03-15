@@ -21,7 +21,6 @@ function git_init_package(tmp, path)
     return pkgpath
 end
 
-
 mktempdir() do project_path
     cd(project_path) do
         push!(LOAD_PATH, Base.parse_load_path("@"))
@@ -182,12 +181,44 @@ end
 temp_pkg_dir() do project_path; cd(project_path) do
     try
         pushfirst!(LOAD_PATH, Base.parse_load_path("@"))
-        pkg"init"
         Pkg3.Types.registries()
+        pkg"init"
         c, r = test_complete("add Exam")
         @test "Example" in c
         c, r = test_complete("rm Exam")
         @test isempty(c)
+        Pkg3.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "RequireDependency"))")
+
+        c, r = test_complete("rm RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm -p RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm --project RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm Exam")
+        @test isempty(c)
+        c, r = test_complete("rm -p Exam")
+        @test isempty(c)
+        c, r = test_complete("rm --project Exam")
+        @test isempty(c)
+
+        c, r = test_complete("rm -m RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm --manifest RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm -m Exam")
+        @test "Example" in c
+        c, r = test_complete("rm --manifest Exam")
+        @test "Example" in c
+
+        c, r = test_complete("rm RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm Exam")
+        @test isempty(c)
+        c, r = test_complete("rm -m Exam")
+        c, r = test_complete("rm -m Exam")
+        @test "Example" in c
+
         pkg"add Example"
         c, r = test_complete("rm Exam")
         @test "Example" in c
