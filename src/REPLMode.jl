@@ -743,7 +743,7 @@ pkgstr(str::String) = do_cmd(minirepl[], str)
 commands_sorted = sort!(collect(keys(cmds)))
 options_sorted = sort!(collect(keys(opts)))
 
-mutable struct PkgCompletionProvider <: LineEdit.CompletionProvider end
+struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
 function LineEdit.complete_line(c::PkgCompletionProvider, s)
     partial = REPL.beforecursor(s.input_buffer)
@@ -786,7 +786,6 @@ function complete_package(s, i1, i2, lastcommand)
     return [], 0:-1, false
 end
 
-import .API
 function complete_installed_package(s, i1, i2)
     ips = sort!(collect(keys(filter((p) -> p[2] != nothing, API.installed()))))
     cmp = filter(cmd -> startswith(cmd, s), ips)
@@ -798,11 +797,10 @@ function complete_remote_package(s, i1, i2)
     return cmp, i1:i2, length(cmp) == 1
 end
 
-import .Types
 function collect_package_names()
     r = r"name = \"(.*?)\""
     names = String[]
-    for reg in Types.registries()
+    for reg in Types.registries(;clone_default=false)
         regcontent = read(joinpath(reg, "Registry.toml"), String)
         append!(names, collect(match.captures[1] for match in eachmatch(r, regcontent)))
     end

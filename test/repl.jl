@@ -171,5 +171,28 @@ temp_pkg_dir() do project_path; cd(project_path) do
 end # cd
 end # temp_pkg_dir
 
+test_complete(s) = Pkg3.REPLMode.completions(s,lastindex(s))
+
+# Autocompletions
+temp_pkg_dir() do project_path; cd(project_path) do
+    try
+        pushfirst!(LOAD_PATH, Base.parse_load_path("@"))
+        pkg"init"
+        Pkg3.Types.registries()
+        c, r = test_complete("add Exam")
+        @test "Example" in c
+        c, r = test_complete("rm Exam")
+        @test isempty(c)
+        pkg"add Example"
+        c, r = test_complete("rm Exam")
+        @test "Example" in c
+        c, r = test_complete("add --man")
+        @test "manifest" in c
+        c, r = test_complete("rem")
+        @test "remove" in c
+    finally
+        pop!(LOAD_PATH)
+    end
+end end
 
 end # module
