@@ -777,18 +777,19 @@ function complete_option(s, i1, i2)
     end
 end
 
-function complete_package(s, i1, i2, lastcommand)
+function complete_package(s, i1, i2, lastcommand, project_opt)
     if lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP]
-        return complete_installed_package(s, i1, i2)
+        return complete_installed_package(s, i1, i2, project_opt)
     elseif lastcommand in [CMD_ADD]
         return complete_remote_package(s, i1, i2)
     end
     return [], 0:-1, false
 end
 
-function complete_installed_package(s, i1, i2)
-    ips = sort!(collect(keys(filter((p) -> p[2] != nothing, API.installed()))))
-    cmp = filter(cmd -> startswith(cmd, s), ips)
+function complete_installed_package(s, i1, i2, project_opt)
+    pkgs = project_opt ? API.installed(PKGMODE_PROJECT) : API.installed()
+    pkgs = sort!(collect(keys(filter((p) -> p[2] != nothing, pkgs))))
+    cmp = filter(cmd -> startswith(cmd, s), pkgs)
     return cmp, i1:i2, length(cmp) == 1
 end
 
@@ -810,20 +811,21 @@ end
 function completions(full, index)
     pre = full[1:index]
 
-    pre_words = split(pre, ' ')
+    pre_words = split(pre, ' ', keep=true)
 
     # first word should always be a command
     if isempty(pre_words)
         return complete_command("", 1:1)
     else
         to_complete = pre_words[end]
-        offset = to_complete.offset+1
+        offset = isempty(to_complete) ? index+1 : to_complete.offset+1
         if length(pre_words) == 1
             return complete_command(to_complete, offset, index)
         end
 
         twocommands = false
         lastcommand = nothing
+        project_opt = true
         # this should consume any words up to the current one
         while length(pre_words) > 1
             twocommands = false
@@ -832,6 +834,10 @@ function completions(full, index)
             if !isempty(word) && haskey(cmds, word)
                 lastcommand = cmds[word]
             end
+            if !isempty(word) && first(word) == '-' && haskey(opts, strip(word, '-'))
+                opts[strip(word, '-')] == OPT_PROJECT && (project_opt = true)
+                opts[strip(word, '-')] == OPT_MANIFEST && (project_opt = false)
+            end
         end
 
         if twocommands
@@ -839,7 +845,7 @@ function completions(full, index)
         elseif !isempty(to_complete) && first(to_complete) == '-'
             return complete_option(to_complete, offset, index)
         else
-            return complete_package(to_complete, offset, index, lastcommand)
+            return complete_package(to_complete, offset, index, lastcommand, project_opt)
         end
     end
 end
