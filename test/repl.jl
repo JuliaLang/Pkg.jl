@@ -172,6 +172,11 @@ end # cd
 end # temp_pkg_dir
 
 test_complete(s) = Pkg3.REPLMode.completions(s,lastindex(s))
+apply_completion(str) = begin
+    c, r, s = test_complete(str)
+    @test s == true
+    str[1:prevind(str, first(r))]*first(c)
+end
 
 # Autocompletions
 temp_pkg_dir() do project_path; cd(project_path) do
@@ -190,6 +195,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "manifest" in c
         c, r = test_complete("rem")
         @test "remove" in c
+        @test apply_completion("rm E") == "rm Example"
+        @test apply_completion("add Exampl") == "add Example"
     finally
         pop!(LOAD_PATH)
     end
