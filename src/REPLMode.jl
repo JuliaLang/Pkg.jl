@@ -780,15 +780,33 @@ end
 function complete_package(s, i1, i2, lastcommand)
     if lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP]
         return complete_installed_package(s, i1, i2)
+    elseif lastcommand in [CMD_ADD]
+        return complete_remote_package(s, i1, i2)
     end
     return [], 0:-1, false
 end
 
 import .API
 function complete_installed_package(s, i1, i2)
-    ips = collect(keys(filter((p) -> p[2] != nothing, API.installed())))
+    ips = sort!(collect(keys(filter((p) -> p[2] != nothing, API.installed()))))
     cmp = filter(cmd -> startswith(cmd, s), ips)
     return cmp, i1:i2, length(cmp) == 1
+end
+
+function complete_remote_package(s, i1, i2)
+    cmp = filter(cmd -> startswith(cmd, s), collect_package_names())
+    return cmp, i1:i2, length(cmp) == 1
+end
+
+import .Types
+function collect_package_names()
+    r = r"name = \"(.*?)\""
+    names = String[]
+    for reg in Types.registries()
+        regcontent = read(joinpath(reg, "Registry.toml"), String)
+        append!(names, collect(match.captures[1] for match in eachmatch(r, regcontent)))
+    end
+    return sort!(names)
 end
 
 function completions(full, index)
