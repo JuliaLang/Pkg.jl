@@ -47,6 +47,9 @@ function project(pkg::String, dir::String)
     genfile(pkg, dir, "Project.toml") do io
         print(io,
             """
+            desc = "$pkg"
+            keywords = ["julia"]
+            license = "none"
             name = "$pkg"
             uuid = "$(UUIDs.uuid1())"
             version = "0.1.0"
