@@ -38,6 +38,7 @@ include("GraphType.jl")
 include("Resolve.jl")
 include("Operations.jl")
 include("API.jl")
+include("Search.jl")
 include("REPLMode.jl")
 
 import .API: add, rm, up, test, gc, init, build, installed, pin, free, checkout, develop, generate

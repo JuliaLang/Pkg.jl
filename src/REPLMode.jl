@@ -14,7 +14,8 @@ using ..Types, ..Display, ..Operations
 ############
 @enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
                    CMD_TEST, CMD_GC, CMD_PREVIEW, CMD_INIT, CMD_BUILD, CMD_FREE,
-                   CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP, CMD_GENERATE)
+                   CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP, CMD_GENERATE,
+                   CMD_KEYWORDS, CMD_DESC, CMD_DEPS, CMD_NAME, CMD_INFO)
 
 struct Command
     kind::CommandKind
@@ -52,6 +53,11 @@ const cmds = Dict(
     "develop"   => CMD_DEVELOP,
     "dev"       => CMD_DEVELOP,
     "generate"  => CMD_GENERATE,
+    "keywords"  => CMD_KEYWORDS,
+    "name"      => CMD_NAME,
+    "desc"      => CMD_DESC,
+    "deps"      => CMD_DEPS,
+    "info"      => CMD_INFO,
 )
 
 #################
@@ -269,6 +275,12 @@ function do_cmd!(tokens::Vector{Token}, repl)
     cmd.kind == CMD_PIN      ? Base.invokelatest(           do_pin!, ctx, tokens) :
     cmd.kind == CMD_FREE     ? Base.invokelatest(          do_free!, ctx, tokens) :
     cmd.kind == CMD_GENERATE ? Base.invokelatest(      do_generate!, ctx, tokens) :
+    cmd.kind == CMD_SEARCH   ? Base.invokelatest(        do_search!, tokens) :
+    cmd.kind == CMD_KEYWORDS ? Base.invokelatest(      do_keywords!, tokens) :
+    cmd.kind == CMD_DESC     ? Base.invokelatest(          do_desc!, tokens) :
+    cmd.kind == CMD_NAME     ? Base.invokelatest(          do_name!, tokens) :
+    cmd.kind == CMD_DEPS     ? Base.invokelatest(          do_deps!, tokens) :
+    cmd.kind == CMD_INFO     ? Base.invokelatest(          do_info!, tokens) :
         cmderror("`$cmd` command not yet implemented")
     return
 end
@@ -714,6 +726,33 @@ function do_generate!(ctx::Context, tokens::Vector{Token})
     API.generate(pkg)
 end
 
+for mode in [:search,:keywords,:desc,:name,:deps]
+    quote
+        function $(Symbol(:do_,mode,:!))(tokens::Vector{Token})
+            @info "found pkgs\n"*join(Pkg3.pkgsearch(Symbol($(string(mode))),tokens...),'\n')
+        end
+    end |> eval
+end
+
+function do_info!(tokens::Vector{Token})
+    for token in tokens
+        data = nothing
+        p = Pkg.dir(token)
+        t = "Project.toml"
+        try
+            (t in readdir(p)) ? (data = Pkg3.TOML.parsefile(joinpath(p,t))) : continue
+        catch
+            continue
+        end
+        dat = Pkg3.pkginfo(token,data)
+        txt = "    $(dat[1])\ndesc:     $(dat[2])\nlicense:  $(dat[3])\n"
+        !isempty(dat[4]) && (txt *= "keywords: $(join(dat[4],", "))\n")
+        !isempty(dat[5]) && (txt *= "requires: $(join(dat[5],", "))\n")
+        !isempty(dat[6]) && (txt *= "needs:    $(join(dat[6],", "))\n")
+        !isempty(dat[7]) && (txt *= "deps:     $(join(dat[7],", "))\n")
+        @info txt
+    end
+end
 
 ######################
 # REPL mode creation #
