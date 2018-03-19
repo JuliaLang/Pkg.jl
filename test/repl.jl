@@ -225,7 +225,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("rm Exam")
         @test "Example" in c
         c, r = test_complete("add --man")
-        @test "manifest" in c
+        @test "--manifest" in c
         c, r = test_complete("rem")
         @test "remove" in c
         @test apply_completion("rm E") == "rm Example"

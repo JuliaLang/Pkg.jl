@@ -758,22 +758,15 @@ end
 
 function complete_command(s, i1, i2)
     # only show short form commands when no input is given at all
-    if isempty(s)
-        cmp = filter(cmd -> startswith(cmd, s), all_commands_sorted)
-    else
-        cmp = filter(cmd -> startswith(cmd, s), long_commands)
-    end
+    cmp = filter(cmd -> startswith(cmd, s), isempty(s) ? all_commands_sorted : long_commands)
     return cmp, i1:i2, !isempty(cmp)
 end
 
 function complete_option(s, i1, i2)
     # only show short form options if only a dash is given
-    if length(s) == 1 && first(s) == '-'
-        cmp = filter(cmd -> startswith(cmd, s), all_options_sorted)
-    else
-        cmp = filter(cmd -> startswith(cmd, s), long_options)
-    end
-
+    cmp = filter(cmd -> startswith(cmd, s), length(s) == 1 && first(s) == '-' ?
+                                                all_options_sorted :
+                                                long_options)
     return cmp, i1:i2, !isempty(cmp)
 end
 
