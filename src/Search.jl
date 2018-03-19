@@ -88,6 +88,6 @@ function pkginfo(token,data)
         end
     end
     dat[6] = ns
-    dat[7] = Pkg3.pkgsearch(:deps,token)
+    dat[7] = pkgsearch(:deps,token)
     return dat
 end

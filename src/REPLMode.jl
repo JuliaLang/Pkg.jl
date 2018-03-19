@@ -6,7 +6,7 @@ using UUIDs
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..devdir, ..print_first_command_header, ..API
+import ..devdir, ..print_first_command_header, ..API, ..pkgsearch, ..pkginfo, ..TOML
 using ..Types, ..Display, ..Operations
 
 ############
@@ -729,7 +729,7 @@ end
 for mode in [:search,:keywords,:desc,:name,:deps]
     quote
         function $(Symbol(:do_,mode,:!))(tokens::Vector{Token})
-            @info "found pkgs\n"*join(Pkg3.pkgsearch(Symbol($(string(mode))),tokens...),'\n')
+            @info "found pkgs\n"*join(pkgsearch(Symbol($(string(mode))),tokens...),'\n')
         end
     end |> eval
 end
@@ -737,14 +737,15 @@ end
 function do_info!(tokens::Vector{Token})
     for token in tokens
         data = nothing
-        p = Pkg.dir(token)
+        p = joinpath(homedir(),".julia","v$(VERSION.major).$(VERSION.minor)",token)
         t = "Project.toml"
-        try
-            (t in readdir(p)) ? (data = Pkg3.TOML.parsefile(joinpath(p,t))) : continue
-        catch
+        if t in readdir(p)
+            data = TOML.parsefile(joinpath(p,t))
+        else
+            @info "Could not find Project.toml for $token."
             continue
         end
-        dat = Pkg3.pkginfo(token,data)
+        dat = pkginfo(token,data)
         txt = "    $(dat[1])\ndesc:     $(dat[2])\nlicense:  $(dat[3])\n"
         !isempty(dat[4]) && (txt *= "keywords: $(join(dat[4],", "))\n")
         !isempty(dat[5]) && (txt *= "requires: $(join(dat[5],", "))\n")
