@@ -20,7 +20,7 @@ function print_first_command_header()
     if !PKG3_IS_PRECOMPILED && !haskey(ENV, "JULIA_PKG3_DISABLE_PRECOMPILE_WARNING")
         @info """
         Pkg3 is running without precompile statements, first action will be slow.
-        Rebuild julia with the environment variable `JULIA_PKG3_PRECOMPILE` set to enable precompilation of PKG3.
+        Rebuild julia with the environment variable `JULIA_PKG3_PRECOMPILE` set to enable precompilation of Pkg3.
         This message can be disabled by setting the env variable `JULIA_PKG3_DISABLE_PRECOMPILE_WARNING`.
         """
     end
@@ -32,17 +32,20 @@ include("../ext/TOML/src/TOML.jl")
 
 include("PlatformEngines.jl")
 include("Types.jl")
+include("Display.jl")
 include("Pkg2/Pkg2.jl")
 include("GraphType.jl")
 include("Resolve.jl")
-include("Display.jl")
 include("Operations.jl")
-include("REPLMode.jl")
 include("API.jl")
 include("Search.jl")
+include("REPLMode.jl")
 
-import .API: add, rm, up, test, gc, init, build, installed, pin, free, checkout
+import .API: add, rm, up, test, gc, init, build, installed, pin, free, checkout, develop, generate
 const update = up
+import .REPLMode: @pkg_str
+export @pkg_str
+
 
 function __init__()
     if isdefined(Base, :active_repl)
@@ -57,9 +60,10 @@ function __init__()
     end
 end
 
-using Pkg3.Types
+using .Types
 using UUIDs
 import LibGit2
+import Dates
 # This crashes low memory systems and some of Julia's CI
 # so keep it disabled by default for now.
 if haskey(ENV, "JULIA_PKG3_PRECOMPILE")
