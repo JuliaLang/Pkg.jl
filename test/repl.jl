@@ -230,6 +230,13 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "remove" in c
         @test apply_completion("rm E") == "rm Example"
         @test apply_completion("add Exampl") == "add Example"
+
+        c, r = test_complete("preview r")
+        @test "remove" in c
+        c, r = test_complete("help r")
+        @test "remove" in c
+        @test !("rm" in c)
+
     finally
         popfirst!(LOAD_PATH)
     end
