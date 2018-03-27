@@ -27,6 +27,8 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     printpkgstyle
 
 
+include("versions.jl")
+
 ## ordering of UUIDs ##
 
 Base.isless(a::UUID, b::UUID) = a.value < b.value
@@ -54,7 +56,6 @@ function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
     uuid_short = string(p)[1:8]
     return "$name [$uuid_short]"
 end
-
 
 ####################
 # Requires / Fixed #
@@ -259,7 +260,7 @@ mutable struct EnvCache
         git = ispath(joinpath(project_dir, ".git")) ? LibGit2.GitRepo(project_dir) : nothing
 
         project = read_project(project_file)
-        if any(k->haskey(project, k), ("name", "uuid", "version"))
+        if any(haskey.((project,), ["name", "uuid", "version"]))
             project_package = PackageSpec(
                 get(project, "name", ""),
                 UUID(get(project, "uuid", 0)),
@@ -340,6 +341,16 @@ function Context!(ctx::Context; kwargs...)
     end
 end
 
+function project_compatibility(ctx::Context, name::String)
+    v = VersionSpec()
+    project = ctx.env.project
+    compat = get(project, "compatibility", Dict())
+    if haskey(compat, name)
+        v = VersionSpec(semver_spec(compat[name]))
+    end
+    return v
+end
+
 function write_env_usage(manifest_file::AbstractString)
     !ispath(logdir()) && mkpath(logdir())
     usage_file = joinpath(logdir(), "manifest_usage.toml")
@@ -409,6 +420,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
         pkg.repo == nothing && continue
         pkg.special_action = PKGSPEC_DEVELOPED
         isempty(pkg.repo.url) && set_repo_for_pkg!(env, pkg)
+
 
         if isdir_windows_workaround(pkg.repo.url)
             # Developing a local package, just point `pkg.path` to it
@@ -1008,6 +1020,17 @@ function pathrepr(ctx::Union{Nothing, Context}, path::String, base::String=pwd()
     return "`" * path * "`"
 end
 
+function project_key_order(key::String)
+    key == "name"          && return 1
+    key == "uuid"          && return 2
+    key == "keywords"      && return 3
+    key == "license"       && return 4
+    key == "desc"          && return 5
+    key == "deps"          && return 6
+    key == "compatibility" && return 7
+    return 8
+end
+
 function write_env(ctx::Context; display_diff=true)
     env = ctx.env
     # load old environment for comparison
@@ -1023,7 +1046,7 @@ function write_env(ctx::Context; display_diff=true)
         if !ctx.preview
             mkpath(dirname(env.project_file))
             open(env.project_file, "w") do io
-                TOML.print(io, project, sorted=true)
+                TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
             end
         end
     end

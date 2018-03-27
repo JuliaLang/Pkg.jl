@@ -127,10 +127,10 @@ function Base.print(io::IO, r::VersionRange)
         join(io, r.lower.t, '.')
         print(io, "-*")
     else
-        join(io, r.lower.t, '.')
+        join(io, r.lower.t[1:m], '.')
         if r.lower != r.upper
             print(io, '-')
-            join(io, r.upper.t, '.')
+            join(io, r.upper.t[1:n], '.')
         end
     end
 end
@@ -216,6 +216,8 @@ function Base.intersect(A::VersionSpec, B::VersionSpec)
     end
     VersionSpec(ranges)
 end
+Base.intersect(a::VersionNumber, B::VersionSpec) = a in B ? VersionSpec(a) : empty_versionspec
+Base.intersect(A::VersionSpec, b::VersionNumber) = intersect(b, A)
 
 Base.union(A::VersionSpec, B::VersionSpec) = union!(copy(A), B)
 function Base.union!(A::VersionSpec, B::VersionSpec)
@@ -240,3 +242,58 @@ function Base.print(io::IO, s::VersionSpec)
     print(io, ']')
 end
 Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
+
+
+###################
+# Semver notation #
+###################
+
+const ver_reg = r"^([~^]?)?[v]?([0-9]+?)(?:\.([0-9]+?))?(?:\.([0-9]+?))?$"
+
+function semver_spec(s::String)
+    ranges = VersionRange[]
+    for ver in split(s, ',')
+        push!(ranges, semver_interval(strip(ver)))
+    end
+    return VersionSpec(ranges)
+end
+
+function semver_interval(s::AbstractString)
+    if !occursin(ver_reg, s)
+        error("invalid version specifier: $s")
+    end
+    m = match(ver_reg, s)
+    @assert length(m.captures) == 4
+    n_significant = count(x -> x !== nothing, m.captures) - 1
+    typ, _major, _minor, _patch = m.captures
+    major =                           parse(Int, _major)
+    minor = (n_significant < 2) ? 0 : parse(Int, _minor)
+    patch = (n_significant < 3) ? 0 : parse(Int, _patch)
+    if n_significant == 3 && major == 0 && minor == 0 && patch == 0
+        error("invalid version: $s")
+    end
+    # Default type is :caret
+    vertyp = (typ == "" || typ == "^") ? :caret : :tilde
+    v0 = VersionBound((major, minor, patch))
+    if vertyp == :caret
+        if major != 0
+            return VersionRange(v0, VersionBound((v0[1],)))
+        elseif minor != 0
+            return VersionRange(v0, VersionBound((v0[1], v0[2])))
+        else
+            if n_significant == 1
+                return VersionRange(v0, VersionBound((0,)))
+            elseif n_significant == 2
+                return VersionRange(v0, VersionBound((0, 0,)))
+            else
+                return VersionRange(v0, VersionBound((0, 0, v0[3])))
+            end
+        end
+    else
+        if n_significant == 3 || n_significant == 2
+            return VersionRange(v0, VersionBound((v0[1], v0[2],)))
+        else
+            return VersionRange(v0, VersionBound((v0[1],)))
+        end
+    end
+end
