@@ -35,17 +35,7 @@ function showprogress(io::IO, p::MiniProgressBar)
     print(io, "\r")
 end
 
-Base.@kwdef struct GitTransferProgress
-    total_objects::Cuint
-    indexed_objects::Cuint
-    received_objects::Cuint
-    local_objects::Cuint
-    total_deltas::Cuint
-    indexed_deltas::Cuint
-received_bytes::Csize_t
-end
-
-function transfer_progress(progress::Ptr{GitTransferProgress}, p::Any)
+function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
 
     progress = unsafe_load(progress)
     @assert haskey(p, :transfer_progress)
@@ -68,7 +58,7 @@ function clone(url, source_path; header=nothing, kwargs...)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
-            cfunction(transfer_progress, Cint, Tuple{Ptr{GitTransferProgress}, Any}),
+            cfunction(transfer_progress, Cint, Tuple{Ptr{LibGit2.TransferProgress}, Any}),
             transfer_payload,
         )
     )
@@ -94,7 +84,7 @@ function fetch(repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs.
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
-            cfunction(transfer_progress, Cint, Tuple{Ptr{GitTransferProgress}, Any}),
+            cfunction(transfer_progress, Cint, Tuple{Ptr{LibGit2.TransferProgress}, Any}),
             transfer_payload,
         )
     )
