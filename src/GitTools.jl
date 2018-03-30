@@ -64,7 +64,7 @@ function clone(url, source_path; header=nothing, kwargs...)
     )
     print(stdout, "\e[?25l") # disable cursor
     try
-        return LibGit2.clone(url, source_path, callbacks=callbacks, kwargs...)
+        return LibGit2.clone(url, source_path; callbacks=callbacks, kwargs...)
     catch e
         rm(source_path; force=true, recursive=true)
         rethrow(e)
