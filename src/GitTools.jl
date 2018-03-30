@@ -35,21 +35,11 @@ function showprogress(io::IO, p::MiniProgressBar)
     print(io, "\r")
 end
 
-Base.@kwdef struct GitTransferProgress
-    total_objects::Cuint
-    indexed_objects::Cuint
-    received_objects::Cuint
-    local_objects::Cuint
-    total_deltas::Cuint
-    indexed_deltas::Cuint
-received_bytes::Csize_t
-end
-
-function transfer_progress(progress::Ptr{GitTransferProgress}, p::Any)
+function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
 
     progress = unsafe_load(progress)
-    @assert p.transfer_progress != C_NULL
-    bar = unsafe_pointer_to_objref(p.transfer_progress)
+    @assert haskey(p, :transfer_progress)
+    bar = p[:transfer_progress]
     @assert typeof(bar) == MiniProgressBar
     if progress.total_deltas != 0
         bar.header = "Resolving Deltas:"
@@ -63,65 +53,48 @@ function transfer_progress(progress::Ptr{GitTransferProgress}, p::Any)
     return Cint(0)
 end
 
-function clone(url, source_path; isbare::Bool=false, header = nothing, branch = nothing, credentials = nothing)
-    Pkg3.Types.printpkgstyle(stdout, :Cloning, header == nothing ? string("git-repo `", url, "`") : header)
+function clone(url, source_path; header=nothing, kwargs...)
+    Pkg3.Types.printpkgstyle(stdout, :Cloning, header == nothing ? "git-repo `$url`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    cred_payload = LibGit2.CredentialPayload(credentials)
+    callbacks = LibGit2.Callbacks(
+        :transfer_progress => (
+            cfunction(transfer_progress, Cint, Tuple{Ptr{LibGit2.TransferProgress}, Any}),
+            transfer_payload,
+        )
+    )
     print(stdout, "\e[?25l") # disable cursor
     try
-        GC.@preserve transfer_payload branch begin
-            callbacks = LibGit2.RemoteCallbacks(
-                credentials=(LibGit2.credentials_cb(), pointer_from_objref(cred_payload)),
-                transfer_progress=(cfunction(transfer_progress, Cint, Tuple{Ptr{GitTransferProgress}, Any}), pointer_from_objref(transfer_payload)),
-            )
-            fetch_opts = LibGit2.FetchOptions(callbacks = callbacks)
-            clone_opts = LibGit2.CloneOptions(fetch_opts=fetch_opts, bare=isbare, checkout_branch= branch == nothing ? C_NULL : Cstring(pointer(branch)))
-            return LibGit2.clone(url, source_path, clone_opts)
-        end
+        return LibGit2.clone(url, source_path, callbacks=callbacks, kwargs...)
     catch e
-        if isa(e, LibGit2.GitError) && e.code == LibGit2.Error.EAUTH
-            LibGit2.reject(cred_payload)
-        end
-
         rm(source_path; force=true, recursive=true)
         rethrow(e)
     finally
         print(stdout, "\033[2K") # clear line
         print(stdout, "\e[?25h") # put back cursor
     end
-    LibGit2.approve(cred_payload)
 end
 
-function fetch(repo::LibGit2.GitRepo, remoteurl=nothing; header = nothing, refspecs=String[], credentials=nothing)
-    remote = if remoteurl == nothing
-        LibGit2.get(LibGit2.GitRemote, repo, "origin")
-    else
-        LibGit2.GitRemoteAnon(repo, remoteurl)
+function fetch(repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
+    if remoteurl === nothing
+        remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
+            LibGit2.url(remote)
+        end
     end
-    Pkg3.Types.printpkgstyle(stdout, :Updating, header == nothing ? string("git-repo `", LibGit2.url(remote), "`") : header)
+    Pkg3.Types.printpkgstyle(stdout, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    cred_payload = LibGit2.CredentialPayload(credentials)
+    callbacks = LibGit2.Callbacks(
+        :transfer_progress => (
+            cfunction(transfer_progress, Cint, Tuple{Ptr{LibGit2.TransferProgress}, Any}),
+            transfer_payload,
+        )
+    )
     print(stdout, "\e[?25l") # disable cursor
     try
-        GC.@preserve transfer_payload begin
-            callbacks = LibGit2.RemoteCallbacks(
-                credentials=(LibGit2.credentials_cb(), pointer_from_objref(cred_payload)),
-                transfer_progress=(cfunction(transfer_progress, Cint, Tuple{Ptr{GitTransferProgress}, Any}), pointer_from_objref(transfer_payload)),
-            )
-            fetch_opts = LibGit2.FetchOptions(callbacks = callbacks)
-            return LibGit2.fetch(remote, refspecs; options=fetch_opts)
-        end
-    catch e
-        if isa(e, LibGit2.GitError) && e.code == LibGit2.Error.EAUTH
-            LibGit2.reject(cred_payload)
-        end
-        rethrow(e)
+        return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
     finally
-        close(remote)
         print(stdout, "\033[2K") # clear line
         print(stdout, "\e[?25h") # put back cursor
     end
-    LibGit2.approve(cred_payload)
 end
 
 end # module
