@@ -77,7 +77,13 @@ function update_registry(ctx)
                         return
                     end
                     branch = LibGit2.headname(repo)
-                    GitTools.fetch(repo)
+                    try
+                        GitTools.fetch(repo)
+                    catch e
+                        e isa LibGit2.GitError
+                        push!(errors, (reg, "failed to fetch from repo"))
+                        return
+                    end
                     ff_succeeded = try
                         LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
                     catch e
