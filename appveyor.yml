@@ -35,7 +35,7 @@ build_script:
       using UUIDs;
       before = read(\"Project.toml\", String);
       println(before);
-      after = replace(before, r\"uuid = .*?\\n\" => \"uuid = \\\"\$(uuid4())\\\"\");
+      after = replace(before, r\"uuid = .*?[\\r\\n]+\" => \"uuid = \\\"\$(uuid4())\\\"\");
       println(after);
       write(\"Project.toml\", after);
       @show read(\"Project.toml\", String);
