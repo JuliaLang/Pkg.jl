@@ -33,12 +33,12 @@ build_script:
   - IF EXIST .git\shallow (git fetch --unshallow)
   - C:\projects\julia\bin\julia -e "versioninfo();
       using UUIDs;
-      before = read(\"Project.toml\", String)
-      println(before)
-      after = replace(before, r\"uuid = .*?\\n\" => \"uuid = \\\"\$(uuid4())\\\"\")
-      println(after)
+      before = read(\"Project.toml\", String);
+      println(before);
+      after = replace(before, r\"uuid = .*?\\n\" => \"uuid = \\\"\$(uuid4())\\\"\");
+      println(after);
       write(\"Project.toml\", after);
-      @show read(\"Project.toml\", String)
+      @show read(\"Project.toml\", String);
       import Pkg3; Pkg3.build()"
 
 test_script:
