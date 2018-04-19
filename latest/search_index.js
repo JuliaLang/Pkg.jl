@@ -65,6 +65,14 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
+    "location": "index.html#Precompiling-the-project-1",
+    "page": "Pkg3",
+    "title": "Precompiling the project",
+    "category": "section",
+    "text": "The REPL command precompile can be used to precompile all the dependencies in the project. You can for example do(HelloWorld) pkg> update; precompiledo update the dependencies and then precompile them."
+},
+
+{
     "location": "index.html#Preview-mode-1",
     "page": "Pkg3",
     "title": "Preview mode",
