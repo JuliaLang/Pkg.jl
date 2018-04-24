@@ -961,11 +961,6 @@ function up(ctx::Context, pkgs::Vector{PackageSpec})
         pkg.version isa UpgradeLevel || continue
         level = pkg.version
         info = manifest_info(ctx.env, pkg.uuid)
-        @show ctx.env.project_file
-        @show ctx.env.manifest_file
-        @show pkg.name
-        @show pkg.uuid
-        @show info
         if info !== nothing && haskey(info, "repo-url")
             pkg.repo = Types.GitRepo(info["repo-url"], info["repo-rev"])
             new = handle_repos_add!(ctx, [pkg]; upgrade_or_add = (level == UPLEVEL_MAJOR))
