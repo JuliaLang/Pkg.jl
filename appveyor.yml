@@ -35,8 +35,10 @@ build_script:
       using UUIDs;
       before = read(\"Project.toml\", String);
       println(before);
+      @show before;
       after = replace(before, r\"uuid = .*?[\\r\\n]+\" => \"uuid = \\\"\$(uuid4())\\\"\");
       println(after);
+      @show after;
       write(\"Project.toml\", after);
       @show read(\"Project.toml\", String);
       import Pkg3; Pkg3.build()"
