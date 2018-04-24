@@ -33,6 +33,8 @@ build_script:
 # We swap the uuid for Pkg3 here to make it not load the stdlib
   - IF EXIST .git\shallow (git fetch --unshallow)
   - C:\projects\julia\bin\julia -e "versioninfo();
+      import Pkg3;
+      Pkg3.clone(pwd());
       using UUIDs;
       before = read(\"Project.toml\", String);
       after = replace(before, \"uuid = \\\"44cfe95a-1eb2-52ea-b672-e2afdf69b78f\\\"\" =>
