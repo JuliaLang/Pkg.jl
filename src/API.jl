@@ -11,7 +11,7 @@ import ..Operations, ..Display, ..GitTools, ..Pkg3
 using ..Types, ..TOML
 
 
-preview_info() = printstyled("───── Preview mode ─────\n"; color=Base.info_color(), bold=true)
+preview_info() = printstyled("───── Preview mode XXXXXXXXXX ─────\n"; color=Base.info_color(), bold=true)
 
 include("generate.jl")
 
