@@ -385,8 +385,8 @@ end
 #####################################
 
 function clone(pkg::String...)
-    Base.depwarn("Pkg.clone is only kept for legacy CI script reasons, please use `add`", :clone)
-    add(joinpath(pkg...))
+    Base.depwarn("Pkg.clone is only kept for legacy CI script reasons, please use `add` or `develop` instead", :clone)
+    develop(joinpath(pkg...))
 end
 
 function dir(pkg::String, paths::String...)
