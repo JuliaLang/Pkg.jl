@@ -675,7 +675,13 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
             cp(repo_path, project_path; force=true)
             repo = LibGit2.GitRepo(project_path)
             rev = pkg.repo.rev
-            isempty(rev) && (rev = LibGit2.branch(repo))
+            if isempty(rev)
+                if LibGit2.isattched(rev)
+                    rev = LibGit2.branch(repo)
+                else
+                    rev = string(LibGit2.GitHash(LibGit2.head(repo)))
+                end
+            end
             gitobject, isbranch = checkout_rev!(repo, rev)
             close(repo); close(gitobject)
 
