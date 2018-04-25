@@ -676,7 +676,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
             repo = LibGit2.GitRepo(project_path)
             rev = pkg.repo.rev
             if isempty(rev)
-                if LibGit2.isattched(rev)
+                if LibGit2.isattached(repo)
                     rev = LibGit2.branch(repo)
                 else
                     rev = string(LibGit2.GitHash(LibGit2.head(repo)))
@@ -741,7 +741,13 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
         end
 
         # see if we can get rev as a branch
-        isempty(rev) && (rev = LibGit2.branch(repo); pkg.repo.rev = rev)
+        if isempty(rev)
+            if LibGit2.isattached(repo)
+                rev = LibGit2.branch(repo)
+            else
+                rev = string(LibGit2.GitHash(LibGit2.head(repo)))
+            end
+        end
         gitobject, isbranch = checkout_rev!(repo, rev)
         if !isbranch
             # If the user gave a shortened commit SHA, might as well update it to the full one
