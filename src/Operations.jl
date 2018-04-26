@@ -606,7 +606,8 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
         info["repo-url"] = repo.url
         info["repo-rev"] = repo.rev
         path = find_installed(name, uuid, hash)
-    elseif haskey(info, "repo-url")
+    end
+    if haskey(info, "repo-url")
         path = find_installed(name, uuid, hash)
     end
 
