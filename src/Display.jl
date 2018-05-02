@@ -81,7 +81,7 @@ end
 function print_project_diff(ctx::Context, env₀::EnvCache, env₁::EnvCache)
     pm₀ = filter_manifest(in_project(env₀.project["deps"]), env₀.manifest)
     pm₁ = filter_manifest(in_project(env₁.project["deps"]), env₁.manifest)
-    diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm₀, pm₁))
+     diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm₀, pm₁))
     if isempty(diff)
         printstyled(color = color_dark, " [no changes]\n")
     else
@@ -118,11 +118,12 @@ vstring(ctx::Context, a::VerInfo) =
            )
 
 Base.:(==)(a::VerInfo, b::VerInfo) =
-    a.hash == b.hash && a.ver == b.ver && a.pinned == b.pinned
+    a.hash == b.hash && a.ver == b.ver && a.pinned == b.pinned && a.repo == b.repo
 
 ≈(a::VerInfo, b::VerInfo) = a.hash == b.hash &&
     (a.ver == nothing || b.ver == nothing || a.ver == b.ver) &&
-    (a.pinned == b.pinned)
+    (a.pinned == b.pinned) &&
+    (a.repo == nothing || b.repo == nothing || a.repo == b.repo)
 
 struct DiffEntry
     uuid::UUID
@@ -154,7 +155,7 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry})
                         "versions match but hashes don't: $(x.old.hash) ≠ $(x.new.hash)"
                     push!(warnings, msg)
                 end
-                vstr = (x.old.ver == x.new.ver && x.old.pinned == x.new.pinned) ?
+                vstr = (x.old.ver == x.new.ver && x.old.pinned == x.new.pinned && x.old.repo == x.new.repo) ?
                       vstring(ctx, x.new) :
                       vstring(ctx, x.old) * " ⇒ " * vstring(ctx, x.new)
             end
