@@ -81,7 +81,7 @@ end
 function print_project_diff(ctx::Context, env₀::EnvCache, env₁::EnvCache)
     pm₀ = filter_manifest(in_project(env₀.project["deps"]), env₀.manifest)
     pm₁ = filter_manifest(in_project(env₁.project["deps"]), env₁.manifest)
-     diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm₀, pm₁))
+    diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm₀, pm₁))
     if isempty(diff)
         printstyled(color = color_dark, " [no changes]\n")
     else
