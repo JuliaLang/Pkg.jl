@@ -145,6 +145,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     p2_new_path = joinpath(tmp, "UnregisteredWithoutProject")
                     cp(p1_path, p1_new_path)
                     cp(p2_path, p2_new_path)
+                    chmod(joinpath(p1_new_path, "src", "test.sh"), 0o777)
                     Pkg3.REPLMode.pkgstr("develop $(p1_new_path)")
                     Pkg3.REPLMode.pkgstr("develop $(p2_new_path)")
                     Pkg3.REPLMode.pkgstr("build; precompile")
