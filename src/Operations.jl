@@ -382,8 +382,7 @@ function install_archive(
                 url_success = false
             end
             url_success || continue
-            #dir = joinpath(tempdir_workaround(), randstring(12))
-            dir = joinpath(tempdir(), randstring(12))
+            dir = joinpath(tempdir_workaround(), randstring(12))
             mkpath(dir)
             cmd = BinaryProvider.gen_unpack_cmd(path, dir);
             # Might fail to extract an archive (Pkg3#190)
@@ -507,7 +506,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec})::Vector{UUID}
             end
         end
     end
-    # rm_workaround_tempdir()
+    rm_workaround_tempdir()
 
     missed_packages = Tuple{PackageSpec, String}[]
     for i in 1:length(pkgs_to_install)
