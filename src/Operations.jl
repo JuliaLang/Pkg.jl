@@ -369,9 +369,8 @@ function install_archive(
         if archive_url != nothing
             path = tempname() * randstring(6) * ".tar.gz"
             url_success = true
-            cmd = BinaryProvider.gen_download_cmd(archive_url, path);
             try
-                run(cmd, (devnull, devnull, devnull))
+                download(archive_url, path)
             catch e
                 e isa InterruptException && rethrow(e)
                 url_success = false
