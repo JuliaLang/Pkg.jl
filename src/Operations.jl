@@ -357,7 +357,9 @@ function get_archive_url_for_version(url::String, ref)
     end
     return nothing
 end
-get_archive_url_for_version(url::String, hash::SHA1) = get_archive_url_for_version(url::String, string(hash))
+
+# can be removed after https://github.com/JuliaLang/julia/pull/27036 
+get_archive_url_for_version(url::String, hash::SHA1) = get_archive_url_for_version(url::String, string(hash)) 
 
 # Returns if archive successfully installed
 function install_archive(
