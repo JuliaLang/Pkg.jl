@@ -674,7 +674,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
             close(repo)
 
             # Copy the repo to a temporary place and check out the rev
-            project_path = mktempdir()
+            project_path = Pkg3.Operations.mktempdir_workaround()
             cp(repo_path, project_path; force=true)
             repo = LibGit2.GitRepo(project_path)
             rev = pkg.repo.rev
@@ -774,7 +774,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
         if folder_already_downloaded
             project_path = version_path
         else
-            project_path = mktempdir()
+            project_path = Pkg3.Operations.mktempdir_workaround()
             opts = LibGit2.CheckoutOptions(checkout_strategy=LibGit2.Consts.CHECKOUT_FORCE,
                 target_directory=Base.unsafe_convert(Cstring, project_path))
             LibGit2.checkout_tree(repo, git_tree, options=opts)

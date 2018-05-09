@@ -18,6 +18,11 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
     return abspath(depots()[1], "packages", name, slug)
 end
 
+# Workaround https://github.com/JuliaLang/julia/issues/26907 by not going to /tmp
+mktempdir_workaround() = (mkpath(tempdir_workaround()); mktempdir(tempdir_workaround()))
+tempdir_workaround() = joinpath(depots()[1], "packages", "tmp")
+rm_workaround_tempdir() = Base.rm(tempdir_workaround(); force=true, recursive=true)
+
 function load_versions(path::String)
     toml = parse_toml(path, "Versions.toml")
     return Dict{VersionNumber, SHA1}(VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml)
@@ -380,7 +385,7 @@ function install_archive(
                 url_success = false
             end
             url_success || continue
-            dir = joinpath(tempdir(), randstring(12))
+            dir = joinpath(tempdir_workaround(), randstring(12))
             mkpath(dir)
             cmd = BinaryProvider.gen_unpack_cmd(path, dir);
             # Might fail to extract an archive (Pkg3#190)
@@ -389,6 +394,7 @@ function install_archive(
             catch e
                 e isa InterruptException && rethrow(e)
                 @warn "failed to extract archive downloaded from $(archive_url)"
+                Base.rm(path; force = true)
                 url_success = false
             end
             url_success || continue
@@ -507,6 +513,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
             end
         end
     end
+    rm_workaround_tempdir()
 
     missed_packages = Tuple{PackageSpec, String}[]
     for i in 1:length(pkgs_to_install)

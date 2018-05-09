@@ -63,6 +63,13 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
 
     pkg2 = "UnregisteredWithProject"
     p2 = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg2"))
+    # Test https://github.com/JuliaLang/Pkg3.jl/issues/261
+    chmod(joinpath(tmp_pkg_path, "UnregisteredWithProject", "src", "test.sh"), 0o777)
+    repo = LibGit2.GitRepo(joinpath(tmp_pkg_path, "UnregisteredWithProject"))
+    LibGit2.add!(repo, "*")
+    LibGit2.commit(repo, "change file permission"; author=TEST_SIG, committer=TEST_SIG)
+    LibGit2.close(repo)
+
     Pkg3.REPLMode.pkgstr("add $p2")
     Pkg3.REPLMode.pkgstr("pin $pkg2")
     @eval import $(Symbol(pkg2))
@@ -83,7 +90,6 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
         pkg"update"
         @test Pkg3.installed()[pkg2] == v"0.2.0"
         Pkg3.REPLMode.pkgstr("rm $pkg2")
-
         c = LibGit2.commit(repo, "empty commit"; author = TEST_SIG, committer=TEST_SIG)
         c_hash = LibGit2.GitHash(c)
         Pkg3.REPLMode.pkgstr("add $p2#$c")
@@ -139,6 +145,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     p2_new_path = joinpath(tmp, "UnregisteredWithoutProject")
                     cp(p1_path, p1_new_path)
                     cp(p2_path, p2_new_path)
+                    chmod(joinpath(p1_new_path, "src", "test.sh"), 0o777)
                     Pkg3.REPLMode.pkgstr("develop $(p1_new_path)")
                     Pkg3.REPLMode.pkgstr("develop $(p2_new_path)")
                     Pkg3.REPLMode.pkgstr("build; precompile")
