@@ -14,8 +14,8 @@ using ..Types, ..Display, ..Operations
 ############
 @enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
                    CMD_TEST, CMD_GC, CMD_PREVIEW, CMD_INIT, CMD_BUILD, CMD_FREE,
-                   CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP, CMD_GENERATE,
-                   CMD_KEYWORDS, CMD_DESC, CMD_DEPS, CMD_NAME, CMD_INFO)
+                   CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP, CMD_GENERATE, CMD_PRECOMPILE,
+                   CMD_INSTANTIATE, CMD_KEYWORDS, CMD_DESC, CMD_DEPS, CMD_NAME, CMD_INFO)
 
 struct Command
     kind::CommandKind
@@ -58,6 +58,8 @@ const cmds = Dict(
     "desc"      => CMD_DESC,
     "deps"      => CMD_DEPS,
     "info"      => CMD_INFO,
+    "precompile" => CMD_PRECOMPILE,
+    "instantiate" => CMD_INSTANTIATE,
 )
 
 #################
@@ -141,17 +143,17 @@ let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(
     global const name_uuid_re = Regex("^$name\\s*=\\s*($uuid)\$")
 end
 
-function parse_package(word::AbstractString; context=nothing)# ::PackageSpec
+function parse_package(word::AbstractString; context=nothing)::PackageSpec
     word = replace(word, "~" => homedir())
     if context in (CMD_ADD, CMD_DEVELOP) && isdir(word)
         pkg = PackageSpec()
-        pkg.repo = Types.GitRepo(word)
+        pkg.repo = Types.GitRepo(abspath(word))
         return pkg
-    elseif contains(word, uuid_re)
+    elseif occursin(uuid_re, word)
         return PackageSpec(UUID(word))
-    elseif contains(word, name_re)
+    elseif occursin(name_re, word)
         return PackageSpec(String(match(name_re, word).captures[1]))
-    elseif contains(word, name_uuid_re)
+    elseif occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
     else
@@ -169,14 +171,22 @@ end
 ################
 # REPL parsing #
 ################
-const lex_re = r"^[\?\./\+\-](?!\-) | [^@\#\s]+\s*=\s*[^@\#\s]+ | \#\s*[^@\#\s]* | @\s*[^@\#\s]* | [^@\#\s]+"x
+const lex_re = r"^[\?\./\+\-](?!\-) | [^@\#\s;]+\s*=\s*[^@\#\s;]+ | \#\s*[^@\#\s;]* | @\s*[^@\#\s;]* | [^@\#\s;]+|;"x
 
 const Token = Union{Command, Option, VersionRange, String, Rev}
 
-function tokenize(cmd::String)::Vector{Token}
+function tokenize(cmd::String)::Vector{Vector{Token}}
+    words = map(m->m.match, eachmatch(lex_re, cmd))
+    commands = Vector{Token}[]
+    while !isempty(words)
+        push!(commands, tokenize!(words))
+    end
+    return commands
+end
+
+function tokenize!(words::Vector{<:AbstractString})::Vector{Token}
     print_first_command_header()
     tokens = Token[]
-    words = map(m->m.match, eachmatch(lex_re, cmd))
     help_mode = false
     preview_mode = false
     # First parse a Command or a modifier (help / preview) + Command
@@ -202,7 +212,9 @@ function tokenize(cmd::String)::Vector{Token}
     # Now parse the arguments / options to the command
     while !isempty(words)
         word = popfirst!(words)
-        if first(word) == '-'
+        if word == ";"
+            return tokens
+        elseif first(word) == '-'
             push!(tokens, parse_option(word))
         elseif first(word) == '@'
             push!(tokens, VersionRange(strip(word[2:end])))
@@ -215,14 +227,17 @@ function tokenize(cmd::String)::Vector{Token}
     return tokens
 end
 
+
 #############
 # Execution #
 #############
 
 function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     try
-        tokens = tokenize(input)
-        do_cmd!(tokens, repl)
+        commands = tokenize(input)
+        for command in commands
+            do_cmd!(command, repl)
+        end
     catch err
         if do_rethrow
             rethrow(err)
@@ -281,6 +296,8 @@ function do_cmd!(tokens::Vector{Token}, repl)
     cmd.kind == CMD_NAME     ? Base.invokelatest(          do_name!, tokens) :
     cmd.kind == CMD_DEPS     ? Base.invokelatest(          do_deps!, tokens) :
     cmd.kind == CMD_INFO     ? Base.invokelatest(          do_info!, tokens) :
+    cmd.kind == CMD_PRECOMPILE ? Base.invokelatest(  do_precompile!, ctx, tokens) :
+    cmd.kind == CMD_INSTANTIATE ? Base.invokelatest(do_instantiate!, ctx, tokens) :
         cmderror("`$cmd` command not yet implemented")
     return
 end
@@ -294,6 +311,8 @@ backspace when the input line is empty or press Ctrl+C.
 **Synopsis**
 
     pkg> [--env=...] cmd [opts] [args]
+
+Multiple commands can be given on the same line by interleaving a `;` between the commands.
 
 **Environment**
 
@@ -334,7 +353,11 @@ What action you want the package manager to take:
 
 `develop`: clone the full package repo locally for development
 
-`free`: undos a `pin` or `develop`
+`free`: undoes a `pin`, `develop`, or stops tracking a repo.
+
+`precompile`: precompile all the project dependencies
+
+`instantiate`: downloads all the dependencies for the project
 """
 
 const helps = Dict(
@@ -377,6 +400,9 @@ const helps = Dict(
     may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
     that matches, or ranges thereof, such as `@1.2-3.4.5`. A git-revision can be
     specified by `#branch` or `#commit`.
+
+    If a local path is used as an argument to `add`, the path needs to be a git repository.
+    The project will then track that git repository just like if it is was tracking a remote repository online.
 
     **Examples**
     ```
@@ -478,6 +504,17 @@ const helps = Dict(
     pkg> develop Example#c37b675
     pkg> develop https://github.com/JuliaLang/Example.jl#master
     ```
+    """, CMD_PRECOMPILE => md"""
+        precompile
+
+    Precompile all the dependencies of the project by running `import` on all of them in a new process.
+    """, CMD_INSTANTIATE => md"""
+        instantiate
+        instantiate [-m|--manifest]
+        instantiate [-p|--project]
+
+    Download all the dependencies for the current project at the version given by the project's manifest.
+    If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
     """
 )
 
@@ -755,6 +792,31 @@ function do_info!(tokens::Vector{Token})
     end
 end
 
+function do_precompile!(ctx::Context, tokens::Vector{Token})
+    if !isempty(tokens)
+        cmderror("`precompile` does not take any arguments")
+    end
+    API.precompile(ctx)
+end
+
+function do_instantiate!(ctx::Context, tokens::Vector{Token})
+    manifest = nothing
+    for token in tokens
+        if token isa Option
+            if token.kind == OPT_MANIFEST
+                manifest = true
+            elseif token.kind == OPT_PROJECT
+            manifest = false
+            else
+                cmderror("invalid option for `instantiate`: $(token)")
+            end
+        else
+            cmderror("invalid argument for `instantiate` :$(token)")
+        end
+    end
+    API.instantiate(ctx; manifest=manifest)
+end
+
 ######################
 # REPL mode creation #
 ######################
@@ -782,8 +844,10 @@ end
 pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 
 # handle completions
-commands_sorted = sort!(collect(keys(cmds)))
-options_sorted = sort!(collect(keys(opts)))
+all_commands_sorted = sort!(collect(keys(cmds)))
+long_commands = filter(c -> length(c) > 2, all_commands_sorted)
+all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(collect(keys(opts)))]
+long_options = filter(c -> length(c) > 2, all_options_sorted)
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
@@ -795,49 +859,38 @@ function LineEdit.complete_line(c::PkgCompletionProvider, s)
 end
 
 function complete_command(s, i1, i2)
-    cmp = filter(cmd -> startswith(cmd, s), commands_sorted)
-    return cmp, i1:i2, length(cmp) == 1
+    # only show short form commands when no input is given at all
+    cmp = filter(cmd -> startswith(cmd, s), isempty(s) ? all_commands_sorted : long_commands)
+    return cmp, i1:i2, !isempty(cmp)
 end
 
 function complete_option(s, i1, i2)
-    dashes = 0
-    while !isempty(s) && first(s) == '-'
-        s = s[2:end]
-        dashes += 1
-    end
-
-    cmp = filter(cmd -> startswith(cmd, s), options_sorted)
-
-    isempty(cmp) && (return cmp, 0:-1, false)
-
-    cmp = string.('-'^(2-dashes), cmp)
-
-    if length(cmp) == 1
-        return cmp, i1+dashes:i2, true
-    else
-        return cmp, i1+dashes:i2, false
-    end
+    # only show short form options if only a dash is given
+    cmp = filter(cmd -> startswith(cmd, s), length(s) == 1 && first(s) == '-' ?
+                                                all_options_sorted :
+                                                long_options)
+    return cmp, i1:i2, !isempty(cmp)
 end
 
 function complete_package(s, i1, i2, lastcommand, project_opt)
-    if lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP]
+    if lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN, CMD_CHECKOUT]
         return complete_installed_package(s, i1, i2, project_opt)
-    elseif lastcommand in [CMD_ADD]
+    elseif lastcommand in [CMD_ADD, CMD_DEVELOP]
         return complete_remote_package(s, i1, i2)
     end
-    return [], 0:-1, false
+    return String[], 0:-1, false
 end
 
 function complete_installed_package(s, i1, i2, project_opt)
     pkgs = project_opt ? API.installed(PKGMODE_PROJECT) : API.installed()
     pkgs = sort!(collect(keys(filter((p) -> p[2] != nothing, pkgs))))
     cmp = filter(cmd -> startswith(cmd, s), pkgs)
-    return cmp, i1:i2, length(cmp) == 1
+    return cmp, i1:i2, !isempty(cmp)
 end
 
 function complete_remote_package(s, i1, i2)
     cmp = filter(cmd -> startswith(cmd, s), collect_package_names())
-    return cmp, i1:i2, length(cmp) == 1
+    return cmp, i1:i2, !isempty(cmp)
 end
 
 function collect_package_names()
@@ -853,7 +906,7 @@ end
 function completions(full, index)
     pre = full[1:index]
 
-    pre_words = split(pre, ' ', keep=true)
+    pre_words = split(pre, ' ', keepempty=true)
 
     # first word should always be a command
     if isempty(pre_words)
@@ -861,28 +914,36 @@ function completions(full, index)
     else
         to_complete = pre_words[end]
         offset = isempty(to_complete) ? index+1 : to_complete.offset+1
+
         if length(pre_words) == 1
             return complete_command(to_complete, offset, index)
         end
 
-        twocommands = false
+        # tokenize input, don't offer any completions for invalid commands
+        tokens = try
+            tokenize(join(pre_words[1:end-1], ' '))[end]
+        catch
+            return String[], 0:-1, false
+        end
+
+        tokens = reverse!(tokens)
+
         lastcommand = nothing
         project_opt = true
-        # this should consume any words up to the current one
-        while length(pre_words) > 1
-            twocommands = false
-            word = popfirst!(pre_words)
-            (word == "preview" || word == "help") && (twocommands = true)
-            if !isempty(word) && haskey(cmds, word)
-                lastcommand = cmds[word]
+        for t in tokens
+            if t isa Command
+                lastcommand = t.kind
+                break
             end
-            if !isempty(word) && first(word) == '-' && haskey(opts, strip(word, '-'))
-                opts[strip(word, '-')] == OPT_PROJECT && (project_opt = true)
-                opts[strip(word, '-')] == OPT_MANIFEST && (project_opt = false)
+        end
+        for t in tokens
+            if t isa Option && t.kind in [OPT_PROJECT, OPT_MANIFEST]
+                project_opt = t.kind == OPT_PROJECT
+                break
             end
         end
 
-        if twocommands
+        if lastcommand in [CMD_HELP, CMD_PREVIEW]
             return complete_command(to_complete, offset, index)
         elseif !isempty(to_complete) && first(to_complete) == '-'
             return complete_option(to_complete, offset, index)
@@ -892,9 +953,23 @@ function completions(full, index)
     end
 end
 
+function promptf()
+    env = EnvCache()
+    proj_dir = dirname(env.project_file)
+    if startswith(pwd(), proj_dir) && env.pkg != nothing && !isempty(env.pkg.name)
+        name = env.pkg.name
+    else
+        name = basename(proj_dir)
+    end
+    prefix = string("(", name, ") ")
+    return prefix * "pkg> "
+end
+
 # Set up the repl Pkg REPLMode
 function create_mode(repl, main)
-    pkg_mode = LineEdit.Prompt("pkg> ";
+
+
+    pkg_mode = LineEdit.Prompt(promptf;
         prompt_prefix = Base.text_colors[:blue],
         prompt_suffix = "",
         complete = PkgCompletionProvider(),
@@ -920,8 +995,29 @@ function create_mode(repl, main)
 
     mk = REPL.mode_keymap(main)
 
+    shell_mode = nothing
+    for mode in Base.active_repl.interface.modes
+        if mode isa LineEdit.Prompt
+            mode.prompt == "shell> " && (shell_mode = mode)
+        end
+    end
+
+    repl_keymap = Dict()
+    if shell_mode != nothing
+        repl_keymap[';'] = function (s,o...)
+            if isempty(s) || position(LineEdit.buffer(s)) == 0
+                buf = copy(LineEdit.buffer(s))
+                LineEdit.transition(s, shell_mode) do
+                    LineEdit.state(s, shell_mode).input_buffer = buf
+                end
+            else
+                LineEdit.edit_insert(s, ';')
+            end
+        end
+    end
+
     b = Dict{Any,Any}[
-        skeymap, mk, prefix_keymap, LineEdit.history_keymap,
+        skeymap, repl_keymap, mk, prefix_keymap, LineEdit.history_keymap,
         LineEdit.default_keymap, LineEdit.escape_defaults
     ]
     pkg_mode.keymap_dict = LineEdit.keymap(b)

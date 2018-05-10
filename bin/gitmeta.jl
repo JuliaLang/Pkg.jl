@@ -27,6 +27,7 @@ const STDLIBS = [
     "Serialization"
     "SHA"
     "SharedArrays"
+    "Sockets"
     "SparseArrays"
     "SuiteSparse"
     "Test"
