@@ -15,7 +15,7 @@ function keycheck!(data::Dict{<:Any,<:Any},str::Array{String,1},mode::Array{Symb
             ((:name in mode) && (key == "name")) ||
             ((:desc in mode) && (key == "description")))
             for s in lowercase.(str)
-                contains(lowercase(data[key]),s) && (found = true)
+                occursin(s,lowercase(data[key])) && (found = true)
             end
         end
         if (:keywords in mode) && (key == "keywords")
