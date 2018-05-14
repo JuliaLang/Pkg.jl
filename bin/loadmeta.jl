@@ -151,7 +151,11 @@ for pkg in [
     "S3Dicts"
     "BigArrays"
     "ChainMap"
+    "NanoTimes"
+    "ProjectiveDictionaryPairLearning"
+    "React"
     "PackageGenerator"
+    "Sparrow"
 ]
     delete!(pkgs, pkg)
 end
