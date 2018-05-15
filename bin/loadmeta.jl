@@ -7,12 +7,12 @@ import Pkg3
 using Pkg3.Types
 using Pkg3.Types: uuid_package, uuid_registry, uuid5
 import Pkg3.Pkg2.Reqs: Reqs, Requirement
-import Pkg3.Pkg2.Pkg2Types: VersionInterval
+import Pkg3.Pkg2.Pkg2Types: VersionInterval, VersionSet
 
 ## Loading data into various data structures ##
 
 struct Require
-    versions::VersionInterval
+    versions::VersionSet
     systems::Vector{Symbol}
 end
 
@@ -27,7 +27,8 @@ struct Package
     versions::Dict{VersionNumber,Version}
 end
 
-Require(versions::VersionInterval) = Require(versions, Symbol[])
+Require(versions::VersionSet) = Require(versions, Symbol[])
+Require(version::VersionInterval) = Require(VersionSet([version]), Symbol[])
 Version(sha1::String) = Version(sha1, Dict{String,Require}())
 
 function load_requires(path::String)
@@ -35,9 +36,8 @@ function load_requires(path::String)
     requires["julia"] = Require(VersionInterval())
     isfile(path) || return requires
     for r in filter!(r->r isa Requirement, Reqs.read(path))
-        # @assert length(r.versions.intervals) == 1
         new = haskey(requires, r.package)
-        versions, systems = r.versions.intervals[1], r.system
+        versions, systems = VersionSet(r.versions.intervals), r.system
         if haskey(requires, r.package)
             versions = versions ∩ requires[r.package].versions
             systems  = systems  ∪ requires[r.package].systems
