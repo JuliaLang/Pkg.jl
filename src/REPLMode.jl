@@ -445,13 +445,16 @@ const helps = Dict(
     is modified.
     """, CMD_TEST => md"""
 
-        test [opts] pkg[=uuid] ...
+        test [-p|project]  [opts] pkg[=uuid] ...
+        test [-m|manifest] [opts] pkg[=uuid] ...
 
         opts: --coverage
 
     Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
-    in the package directory. The option `--coverage` can be used to run the tests with
-    coverage enabled.
+    in the package directory. If `project` is passed the versions in the current manifest
+    are ignores and new updated versions are resolved for the test. If `manifest` (default)
+    is passed, the versions in the current manifest are used for the tests.
+    The option `--coverage` can be used to run the tests with coverage enabled.
     """, CMD_GC => md"""
 
     Deletes packages that are not reached from any environment used within the last 6 weeks.
@@ -693,6 +696,7 @@ end
 function do_test!(ctx::Context, tokens::Vector{Token})
     pkgs = PackageSpec[]
     coverage = false
+    manifest = true
     while !isempty(tokens)
         token = popfirst!(tokens)
         if token isa String
@@ -702,6 +706,10 @@ function do_test!(ctx::Context, tokens::Vector{Token})
         elseif token isa Option
             if token.kind == OPT_COVERAGE
                 coverage = true
+            elseif token.kind == OPT_PROJECT
+                manifest = false
+            elseif token.kind == OPT_MANIFEST
+                manifest = true
             else
                 cmderror("invalid option for `test`: $token")
             end
@@ -710,7 +718,7 @@ function do_test!(ctx::Context, tokens::Vector{Token})
             cmderror("invalid usage for `test`")
         end
     end
-    API.test(ctx, pkgs; coverage = coverage)
+    API.test(ctx, pkgs; coverage = coverage, manifest = manifest)
 end
 
 function do_gc!(ctx::Context, tokens::Vector{Token})

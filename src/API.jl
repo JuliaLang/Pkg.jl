@@ -204,7 +204,7 @@ test(pkg::Union{String, PackageSpec}; kwargs...)  = test([pkg]; kwargs...)
 test(pkgs::Vector{String}; kwargs...)             = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 test(pkgs::Vector{PackageSpec}; kwargs...)        = test(Context(), pkgs; kwargs...)
 
-function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...)
+function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, manifest=true, kwargs...)
     print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
@@ -217,7 +217,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...
     project_deps_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
-    Operations.test(ctx, pkgs; coverage=coverage)
+    Operations.test(ctx, pkgs; coverage=coverage, manifest=manifest)
     return
 end
 
