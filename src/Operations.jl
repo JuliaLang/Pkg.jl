@@ -841,6 +841,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     sort!(builds, by = build -> order[first(build)])
     max_name = isempty(builds) ? 0 : maximum(textwidth.([build[2] for build in builds]))
     # build each package verions in a child process
+    build_succeeded = true
     for (uuid, name, hash_or_path, build_file) in builds
         log_file = splitext(build_file)[1] * ".log"
         printpkgstyle(ctx, :Building,
@@ -859,15 +860,23 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
             --eval $code
             ```
-        run_build = () -> begin
-            open(log_file, "w") do log
+        run_build = () ->begin
+            ok = open(log_file, "w") do log
                 success(pipeline(cmd, stdout=log, stderr=log))
-            end ? Base.rm(log_file, force=true) :
+            end
+            if ok
+                Base.rm(log_file, force=true)
+            else
                 @error("Error building `$name`; see log file for further info")
+                build_succeeded = false
+            end
         end
         with_dependencies_loadable_at_toplevel(ctx, PackageSpec(name, uuid); might_need_to_resolve=might_need_to_resolve) do
             run_build()
         end
+    end
+    if !build_succeeded
+        cmderror("at least one package failed to build")
     end
     return
 end
