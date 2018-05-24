@@ -3,12 +3,12 @@
 module ResolveTest
 
 using Test
-using Pkg3.Types
-using Pkg3.GraphType
-using Pkg3.Types: VersionBound
-using Pkg3.Resolve
-using Pkg3.Resolve.VersionWeights
-import Pkg3.Types: uuid5, uuid_package
+using Pkg.Types
+using Pkg.GraphType
+using Pkg.Types: VersionBound
+using Pkg.Resolve
+using Pkg.Resolve.VersionWeights
+import Pkg.Types: uuid5, uuid_package
 
 # print info, stats etc.
 const VERBOSE = false

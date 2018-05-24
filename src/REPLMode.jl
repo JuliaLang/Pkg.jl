@@ -293,7 +293,7 @@ end
 
 const help = md"""
 
-**Welcome to the Pkg3 REPL-mode**. To return to the `julia>` prompt, either press
+**Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
 backspace when the input line is empty or press Ctrl+C.
 
 
@@ -622,8 +622,6 @@ function do_up!(ctx::Context, tokens::Vector{Token})
             else
                 cmderror("invalid option for `up`: $(token)")
             end
-        elseif token isa Rev
-            @warn "Ignoring git revision `$(token.rev)`, use `add` to track a branch or commit"
         end
         prev_token_was_package = parsed_package
     end

@@ -1,4 +1,4 @@
-module Pkg3Tests
+module PkgTests
 
 include("pkg.jl")
 include("resolve.jl")

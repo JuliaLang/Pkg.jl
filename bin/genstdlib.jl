@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-import Pkg3: TOML
+import Pkg: TOML
 
 prefix = joinpath(homedir(), ".julia", "registries", "Stdlib")
 

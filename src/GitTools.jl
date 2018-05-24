@@ -1,6 +1,6 @@
 module GitTools
 
-using ..Pkg3
+using ..Pkg
 import LibGit2
 using Printf
 
@@ -55,7 +55,7 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
 end
 
 function clone(url, source_path; header=nothing, kwargs...)
-    Pkg3.Types.printpkgstyle(stdout, :Cloning, header == nothing ? "git-repo `$url`" : header)
+    Pkg.Types.printpkgstyle(stdout, :Cloning, header == nothing ? "git-repo `$url`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
@@ -81,7 +81,7 @@ function fetch(repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs.
             LibGit2.url(remote)
         end
     end
-    Pkg3.Types.printpkgstyle(stdout, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
+    Pkg.Types.printpkgstyle(stdout, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (

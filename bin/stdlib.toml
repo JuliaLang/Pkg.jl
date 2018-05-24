@@ -14,6 +14,7 @@ STDLIBS = [
     "Logging",
     "Markdown",
     "Mmap",
+    "OldPkg",
     "Pkg",
     "Printf",
     "Profile",

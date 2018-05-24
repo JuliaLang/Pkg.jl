@@ -1,19 +1,12 @@
-# Pkg3.jl
+# Pkg
 
 !!! warning
     This documentation is a work in progress and the information in it might be or become outdated.
 
-Sections:
-
-```@contents
-Pages = [
-    "index.md"]
-```
-
 ## Introduction
 
-Pkg3 is the standard package manager for Julia 1.0 and newer. Unlike traditional
-package managers, which install and manage a single global set of packages, Pkg3
+Pkg is the standard package manager for Julia 1.0 and newer. Unlike traditional
+package managers, which install and manage a single global set of packages, Pkg
 is designed around “environments”: independent sets of packages that can be
 local to an individual project or shared and selected by name. The exact set of
 packages and versions in an environment is captured in a _manifest file_ which
@@ -21,14 +14,14 @@ can be checked into a project repository and tracked in version control,
 significantly improving reproducibility of projects. If you’ve ever tried to run
 code you haven’t used in a while only to find that you can’t get anything to
 work because you’ve updated or uninstalled some of the packages your project was
-using, you’ll understand the motivation for this approach. In Pkg3, since each
+using, you’ll understand the motivation for this approach. In Pkg, since each
 project maintains its own independent set of package versions, you’ll never have
 this problem again. Moreover, if you check out a project on a new system, you
 can simply materialize the environment described by its manifest file and
 immediately be up and running with a known-good set of dependencies.
 
 Since environments are managed and updated independently from each other,
-“dependency hell” is significantly alleviated in Pkg3. If you want to use the
+“dependency hell” is significantly alleviated in Pkg. If you want to use the
 latest and greatest version of some package in a new project but you’re stuck on
 an older version in a different project, that’s no problem – since they have
 separate environments they can just use different versions, which are both
@@ -38,7 +31,7 @@ of packages, they can share installations, avoiding unnecessary duplication of
 the package. Old package versions that are no longer used by any environments
 are periodically “garbage collected” by the package manager.
 
-Pkg3’s approach to local environments may be familiar to people who have used
+Pkg’s approach to local environments may be familiar to people who have used
 Python’s `virtualenv` or Ruby’s `bundler`. In Julia, instead of hacking the
 language’s code loading mechanisms to support environments, we have the benefit
 that Julia natively understands them. In addition, Julia environments are
@@ -48,7 +41,7 @@ easy to work on a project, which provides the primary environment, while still
 having access to all your usual dev tools like profilers, debuggers, and so on,
 just by having an environment including these dev tools later in the load path.
 
-Last but not least, Pkg3 is designed to support federated package registries.
+Last but not least, Pkg is designed to support federated package registries.
 This means that it allows multiple registries managed by different parties to
 interact seamlessly. In particular, this includes private registries which can
 live behind corporate firewalls. You can install and update your own packages

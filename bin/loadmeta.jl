@@ -3,11 +3,11 @@
 using Base: thispatch, thisminor, nextpatch, nextminor
 import LinearAlgebra: checksquare
 import UUIDs
-import Pkg3
-using Pkg3.Types
-using Pkg3.Types: uuid_package, uuid_registry, uuid5
-import Pkg3.Pkg2.Reqs: Reqs, Requirement
-import Pkg3.Pkg2.Pkg2Types: VersionInterval, VersionSet
+import Pkg
+using Pkg.Types
+using Pkg.Types: uuid_package, uuid_registry, uuid5
+import Pkg.Pkg2.Reqs: Reqs, Requirement
+import Pkg.Pkg2.Pkg2Types: VersionInterval, VersionSet
 
 ## Loading data into various data structures ##
 
@@ -142,7 +142,7 @@ end
 
 ## Load package data ##
 
-const pkgs = load_packages(Pkg3.Pkg2.dir("METADATA"))
+const pkgs = load_packages(Pkg.Pkg2.dir("METADATA"))
 # delete packages whose repos that no longer exist:
 for pkg in [
     "CardinalDicts"

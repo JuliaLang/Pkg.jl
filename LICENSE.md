@@ -1,4 +1,4 @@
-The Pkg3.jl package is licensed under the MIT "Expat" License:
+The Pkg.jl package is licensed under the MIT "Expat" License:
 
 > Copyright (c) 2017: Stefan Karpinski.
 >

@@ -1,5 +1,5 @@
 __precompile__(true)
-module Pkg3
+module Pkg
 
 import Random
 import REPL
@@ -14,13 +14,10 @@ function print_first_command_header()
     global have_warned_session
     have_warned_session && return
     isinteractive() || return
-    @info """
-    Pkg3 is still under development, please file issues at `https://github.com/JuliaLang/Pkg3.jl`.
-    """
     if !PKG3_IS_PRECOMPILED && !haskey(ENV, "JULIA_PKG3_DISABLE_PRECOMPILE_WARNING")
         @info """
-        Pkg3 is running without precompile statements, first action will be slow.
-        Rebuild julia with the environment variable `JULIA_PKG3_PRECOMPILE` set to enable precompilation of Pkg3.
+        Pkg is running without precompile statements, first action will be slow.
+        Rebuild julia with the environment variable `JULIA_PKG3_PRECOMPILE` set to enable precompilation of Pkg.
         This message can be disabled by setting the env variable `JULIA_PKG3_DISABLE_PRECOMPILE_WARNING`.
         """
     end

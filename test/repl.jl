@@ -1,14 +1,14 @@
 module REPLTests
 
-using Pkg3
-import Pkg3.Types.CommandError
+using Pkg
+import Pkg.Types.CommandError
 using UUIDs
 using Test
 import LibGit2
 
 include("utils.jl")
 
-const TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time(); digits=0), 0)
+const TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
 const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
 
 function git_init_package(tmp, path)
@@ -35,8 +35,8 @@ mktempdir() do project_path
                 @eval using HelloWorld
                 Base.invokelatest(HelloWorld.greet)
                 @test isfile("Project.toml")
-                Pkg3.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithBuildSpecificTestDeps"))")
-                Pkg3.test("PackageWithBuildSpecificTestDeps")
+                Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithBuildSpecificTestDeps"))")
+                Pkg.test("PackageWithBuildSpecificTestDeps")
             end
         finally
             popfirst!(LOAD_PATH)
@@ -48,28 +48,28 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
     pkg"init"
     pkg"add Example"
     @test isinstalled(TEST_PKG)
-    v = Pkg3.installed()[TEST_PKG.name]
+    v = Pkg.installed()[TEST_PKG.name]
     pkg"rm Example"
     pkg"add Example#master"
     pkg"test Example"
     @test isinstalled(TEST_PKG)
-    @test Pkg3.installed()[TEST_PKG.name] > v
+    @test Pkg.installed()[TEST_PKG.name] > v
     pkg = "UnregisteredWithoutProject"
     p = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg"))
-    Pkg3.REPLMode.pkgstr("add $p; precompile")
+    Pkg.REPLMode.pkgstr("add $p; precompile")
     @eval import $(Symbol(pkg))
-    @test Pkg3.installed()[pkg] == v"0.0"
-    Pkg3.test("UnregisteredWithoutProject")
+    @test Pkg.installed()[pkg] == v"0.0"
+    Pkg.test("UnregisteredWithoutProject")
 
     pkg2 = "UnregisteredWithProject"
     p2 = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg2"))
-    Pkg3.REPLMode.pkgstr("add $p2")
-    Pkg3.REPLMode.pkgstr("pin $pkg2")
+    Pkg.REPLMode.pkgstr("add $p2")
+    Pkg.REPLMode.pkgstr("pin $pkg2")
     @eval import $(Symbol(pkg2))
-    @test Pkg3.installed()[pkg2] == v"0.1.0"
-    Pkg3.REPLMode.pkgstr("free $pkg2")
-    @test_throws CommandError Pkg3.REPLMode.pkgstr("free $pkg2")
-    Pkg3.test("UnregisteredWithProject")
+    @test Pkg.installed()[pkg2] == v"0.1.0"
+    Pkg.REPLMode.pkgstr("free $pkg2")
+    @test_throws CommandError Pkg.REPLMode.pkgstr("free $pkg2")
+    Pkg.test("UnregisteredWithProject")
 
     write(joinpath(p2, "Project.toml"), """
         name = "UnregisteredWithProject"
@@ -81,12 +81,12 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
         LibGit2.add!(repo, "*")
         LibGit2.commit(repo, "bump version"; author = TEST_SIG, committer=TEST_SIG)
         pkg"update"
-        @test Pkg3.installed()[pkg2] == v"0.2.0"
-        Pkg3.REPLMode.pkgstr("rm $pkg2")
+        @test Pkg.installed()[pkg2] == v"0.2.0"
+        Pkg.REPLMode.pkgstr("rm $pkg2")
 
         c = LibGit2.commit(repo, "empty commit"; author = TEST_SIG, committer=TEST_SIG)
         c_hash = LibGit2.GitHash(c)
-        Pkg3.REPLMode.pkgstr("add $p2#$c")
+        Pkg.REPLMode.pkgstr("add $p2#$c")
     end
 
     mktempdir() do tmp_dev_dir
@@ -106,7 +106,7 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
                 mktempdir() do depot_dir
                     pushfirst!(DEPOT_PATH, depot_dir)
                     pkg"instantiate"
-                    @test Pkg3.installed()[pkg2] == v"0.2.0"
+                    @test Pkg.installed()[pkg2] == v"0.2.0"
                 end
             finally
                 empty!(DEPOT_PATH)
@@ -139,19 +139,19 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     p2_new_path = joinpath(tmp, "UnregisteredWithoutProject")
                     cp(p1_path, p1_new_path)
                     cp(p2_path, p2_new_path)
-                    Pkg3.REPLMode.pkgstr("develop $(p1_new_path)")
-                    Pkg3.REPLMode.pkgstr("develop $(p2_new_path)")
-                    Pkg3.REPLMode.pkgstr("build; precompile")
+                    Pkg.REPLMode.pkgstr("develop $(p1_new_path)")
+                    Pkg.REPLMode.pkgstr("develop $(p2_new_path)")
+                    Pkg.REPLMode.pkgstr("build; precompile")
                     @test locate_name("UnregisteredWithProject") == joinpath(p1_new_path, "src", "UnregisteredWithProject.jl")
                     @test locate_name("UnregisteredWithoutProject") == joinpath(p2_new_path, "src", "UnregisteredWithoutProject.jl")
-                    @test Pkg3.installed()["UnregisteredWithProject"] == v"0.1.0"
-                    @test Pkg3.installed()["UnregisteredWithoutProject"] == v"0.0.0"
-                    Pkg3.test("UnregisteredWithoutProject")
-                    Pkg3.test("UnregisteredWithProject")
+                    @test Pkg.installed()["UnregisteredWithProject"] == v"0.1.0"
+                    @test Pkg.installed()["UnregisteredWithoutProject"] == v"0.0.0"
+                    Pkg.test("UnregisteredWithoutProject")
+                    Pkg.test("UnregisteredWithProject")
 
                     pkg"develop Example#c37b675"
                     @test locate_name("Example") ==  joinpath(tmp, "Example", "src", "Example.jl")
-                    Pkg3.test("Example")
+                    Pkg.test("Example")
                 end
             finally
                 empty!(DEPOT_PATH)
@@ -164,19 +164,21 @@ temp_pkg_dir() do project_path; cd(project_path) do
         pushfirst!(LOAD_PATH, Base.parse_load_path("@"))
         mktempdir() do other_dir
             mktempdir() do tmp; cd(tmp) do
-                pkg"generate HelloWorld"
-                cd("HelloWorld") do
-                    pkg"generate SubModule1"
-                    pkg"generate SubModule2"
-                    pkg"develop SubModule1"
-                    mkdir("tests")
-                    cd("tests") do
-                        pkg"develop ../SubModule2"
+                withenv("USER" => "Test User") do
+                    pkg"generate HelloWorld"
+                    cd("HelloWorld") do
+                        pkg"generate SubModule1"
+                        pkg"generate SubModule2"
+                        pkg"develop SubModule1"
+                        mkdir("tests")
+                        cd("tests") do
+                            pkg"develop ../SubModule2"
+                        end
+                        @test Pkg.installed()["SubModule1"] == v"0.1.0"
+                        @test Pkg.installed()["SubModule2"] == v"0.1.0"
                     end
-                    @test Pkg3.installed()["SubModule1"] == v"0.1.0"
-                    @test Pkg3.installed()["SubModule2"] == v"0.1.0"
+                    cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
                 end
-                cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
             end end
             # Check that these didnt generate absolute paths in the Manifest by copying
             # to another directory
@@ -192,7 +194,7 @@ end # cd
 end # temp_pkg_dir
 
 
-test_complete(s) = Pkg3.REPLMode.completions(s,lastindex(s))
+test_complete(s) = Pkg.REPLMode.completions(s,lastindex(s))
 apply_completion(str) = begin
     c, r, s = test_complete(str)
     @test s == true
@@ -203,13 +205,13 @@ end
 temp_pkg_dir() do project_path; cd(project_path) do
     try
         pushfirst!(LOAD_PATH, Base.parse_load_path("@"))
-        Pkg3.Types.registries()
+        Pkg.Types.registries()
         pkg"init"
         c, r = test_complete("add Exam")
         @test "Example" in c
         c, r = test_complete("rm Exam")
         @test isempty(c)
-        Pkg3.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "RequireDependency"))")
+        Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "RequireDependency"))")
 
         c, r = test_complete("rm RequireDep")
         @test "RequireDependency" in c
