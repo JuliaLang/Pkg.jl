@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-import Pkg3.TOML
+import Pkg.TOML
 import LibGit2
 
 const STDLIBS = [
@@ -27,7 +27,6 @@ const STDLIBS = [
     "Serialization"
     "SHA"
     "SharedArrays"
-    "Sockets"
     "SparseArrays"
     "SuiteSparse"
     "Test"

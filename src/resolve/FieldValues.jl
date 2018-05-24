@@ -72,9 +72,9 @@ Base.copy(a::FieldValue) = FieldValue(a.l0, copy(a.l1), copy(a.l2), a.l3)
 # some hard constraint is being violated
 validmax(a::FieldValue) = a.l0 >= 0
 
-# like usual argmax, but favors the highest indices
+# like usual indmax, but favors the highest indices
 # in case of a tie
-function Base.argmax(f::Field)
+function Base.indmax(f::Field)
     m = typemin(FieldValue)
     mi = 0
     for j = length(f):-1:1

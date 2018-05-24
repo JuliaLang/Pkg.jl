@@ -21,7 +21,7 @@ intersect(a::VersionInterval, b::VersionInterval) = VersionInterval(max(a.lower,
 ==(a::VersionInterval, b::VersionInterval) = a.lower == b.lower && a.upper == b.upper
 hash(i::VersionInterval, h::UInt) = hash((i.lower, i.upper), h + (0x0f870a92db508386 % UInt))
 
-# Used to translate from Pkg2 intervals to Pkg3 ranges
+# Used to translate from Pkg2 intervals to Pkg ranges
 function Base.convert(::Type{VersionRange}, a::VersionInterval)
     lower, upper = a.lower, a.upper
 

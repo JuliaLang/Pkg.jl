@@ -7,7 +7,7 @@ import Dates
 import LibGit2
 
 import ..depots, ..logdir, ..devdir, ..print_first_command_header
-import ..Operations, ..Display, ..GitTools, ..Pkg3
+import ..Operations, ..Display, ..GitTools, ..Pkg
 using ..Types, ..TOML
 
 
@@ -15,7 +15,7 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 
 include("generate.jl")
 
-parse_package(pkg) = Pkg3.REPLMode.parse_package(pkg; context=Pkg3.REPLMode.CMD_ADD)
+parse_package(pkg) = Pkg.REPLMode.parse_package(pkg; context=Pkg.REPLMode.CMD_ADD)
 
 add_or_develop(pkg::Union{String, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
 add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([parse_package(pkg) for pkg in pkgs]; kwargs...)
@@ -70,7 +70,7 @@ function update_registry(ctx)
         for reg in registries()
             if isdir(joinpath(reg, ".git"))
                 regpath = pathrepr(ctx, reg)
-                printpkgstyle(ctx, :Updating, "registry at ", regpath)
+                printpkgstyle(ctx, :Updating, "registry at " * regpath)
                 LibGit2.with(LibGit2.GitRepo, reg) do repo
                     if LibGit2.isdirty(repo)
                         push!(errors, (regpath, "registry dirty"))
@@ -409,7 +409,7 @@ function clone(url::String, name::String = "")
 end
 
 function dir(pkg::String, paths::String...)
-    Base.depwarn("Pkg.dir is only kept for legacy CI script reasons", :dir)
+    @warn "Pkg.dir is only kept for legacy CI script reasons" maxlog=1
     pkgid = Base.identify_package(pkg)
     pkgid == nothing && return nothing
     path = Base.locate_package(pkgid)
@@ -462,7 +462,7 @@ function precompile(ctx::Context)
             append!(Base.LOAD_PATH, $(repr(Base.LOAD_PATH)))
             import $pkg
         """
-        printpkgstyle(ctx, :Precompiling, pkg, " [$i of $(length(needs_to_be_precompiled))]")
+        printpkgstyle(ctx, :Precompiling, pkg * " [$i of $(length(needs_to_be_precompiled))]")
         run(pipeline(ignorestatus(```
         $(Base.julia_cmd()) -O$(Base.JLOptions().opt_level) --color=no --history-file=no
         --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
@@ -508,6 +508,13 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
             pkg.path !== nothing && continue
             urls[pkg.uuid] = String[]
             hashes[pkg.uuid] = SHA1(info["git-tree-sha1"])
+
+            if haskey(info, "repo-url")
+                pkg.repo = Types.GitRepo(
+                    info["repo-url"],
+                    info["repo-rev"],
+                    SHA1(info["git-tree-sha1"]))
+            end
         end
     end
     _, urls_ref = Operations.version_data!(ctx, pkgs)
@@ -515,7 +522,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
         append!(urls[uuid], url)
         urls[uuid] = unique(urls[uuid])
     end
-    new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=true)
+    new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=false)
     new_apply = Operations.apply_versions(ctx, pkgs, hashes, urls)
     Operations.build_versions(ctx, union(new_apply, new_git))
 end

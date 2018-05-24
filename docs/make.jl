@@ -1,16 +1,16 @@
-using Documenter, Pkg3
+using Documenter, Pkg
 
 makedocs(
-    modules = [Pkg3],
+    modules = [Pkg],
     format = :html,
-    sitename = "Pkg3.jl",
+    sitename = "Pkg.jl",
     pages = Any[
-        "Pkg3" => "index.md",
+        "Pkg" => "index.md",
     ]
 )
 
 deploydocs(
-    repo = "github.com/JuliaLang/Pkg3.jl",
+    repo = "github.com/JuliaLang/Pkg.jl",
     target = "build",
     julia = "nightly",
     deps = nothing,

@@ -8,8 +8,8 @@ import REPL
 using REPL.TerminalMenus
 
 using ..TOML
-import ..Pkg3
-import Pkg3: GitTools, depots, logdir
+import ..Pkg
+import Pkg: GitTools, depots, logdir
 
 import Base: SHA1, AbstractEnv
 using SHA
@@ -477,7 +477,7 @@ mutable struct EnvCache
                     project_dir isa String && isdir(project_dir) && break
                     project_dir = nothing
                 end
-                project_dir == nothing && error("No Pkg3 environment found in LOAD_PATH")
+                project_dir == nothing && error("No Pkg environment found in LOAD_PATH")
                 project_file = joinpath(project_dir, Base.project_names[end])
             end
         elseif env isa AbstractEnv
@@ -621,7 +621,7 @@ function read_manifest(io::IO)
     return manifest
 end
 function read_manifest(file::String)
-        try isfile(file) ? open(read_manifest, file) : read_manifest(devnull)
+    try isfile(file) ? open(read_manifest, file) : read_manifest(devnull)
     catch err
         err isa ErrorException && startswith(err.msg, "ambiguious dependency") || rethrow(err)
         err.msg *= "In manifest file: $file"
@@ -689,7 +689,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
             close(repo); close(gitobject)
 
             parse_package!(ctx, pkg, project_path)
-            dev_pkg_path = joinpath(Pkg3.devdir(), pkg.name)
+            dev_pkg_path = joinpath(Pkg.devdir(), pkg.name)
             if isdir(dev_pkg_path)
                 if !isfile(joinpath(dev_pkg_path, "src", pkg.name * ".jl"))
                     cmderror("Path `$(dev_pkg_path)` exists but it does not contain `src/$(pkg.name).jl")
@@ -762,7 +762,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
         version_path = nothing
         folder_already_downloaded = false
         if has_uuid(pkg) && has_name(pkg)
-            version_path = Pkg3.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
+            version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
             isdir(version_path) && (folder_already_downloaded = true)
             info = manifest_info(env, pkg.uuid)
             if info != nothing && get(info, "git-tree-sha1", "") == string(pkg.repo.git_tree_sha1) && folder_already_downloaded
@@ -782,7 +782,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
         close(repo); close(git_tree); close(gitobject)
         parse_package!(ctx, pkg, project_path)
         if !folder_already_downloaded
-            version_path = Pkg3.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
+            version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
             mkpath(version_path)
             mv(project_path, version_path; force=true)
             push!(new_uuids, pkg.uuid)
@@ -805,7 +805,7 @@ function parse_package!(ctx, pkg, project_path)
                 pkg.version = VersionNumber(project_data["version"])
             else
                 @warn "project file for $(pkg.name) is missing a `version` entry"
-                Pkg3.Operations.set_maximum_version_registry!(env, pkg)
+                Pkg.Operations.set_maximum_version_registry!(env, pkg)
             end
             break
         end
@@ -835,7 +835,7 @@ function parse_package!(ctx, pkg, project_path)
             pkg.uuid = reg_uuids[1]
             # Old style registered package
             # What version does this package have? We have no idea... let's give it the latest one with a `+`...
-            Pkg3.Operations.set_maximum_version_registry!(env, pkg)
+            Pkg.Operations.set_maximum_version_registry!(env, pkg)
         end
     end
 end
@@ -1219,16 +1219,16 @@ function manifest_info(env::EnvCache, uuid::UUID)::Union{Dict{String,Any},Nothin
 end
 
 # TODO: redirect to ctx stream
-function printpkgstyle(io::IO, cmd::Symbol, text::String...; ignore_indent=false)
+function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false)
     indent = textwidth(string(:Downloaded))
     ignore_indent && (indent = 0)
     printstyled(io, lpad(string(cmd), indent), color=:green, bold=true)
-    println(io, " ", text...)
+    println(io, " ", text)
 end
 
 # TODO: use ctx specific context
-function printpkgstyle(ctx::Context, cmd::Symbol, text::String...; kwargs...)
-    printpkgstyle(stdout, cmd, text...; kwargs...)
+function printpkgstyle(ctx::Context, cmd::Symbol, text::String, ignore_indent::Bool=false)
+    printpkgstyle(stdout, cmd, text)
 end
 
 
@@ -1258,7 +1258,7 @@ function write_env(ctx::Context; display_diff=true)
     if !isempty(project) || ispath(env.project_file)
         if display_diff
             printpkgstyle(ctx, :Updating, pathrepr(ctx, env.project_file))
-            Pkg3.Display.print_project_diff(ctx, old_env, env)
+            Pkg.Display.print_project_diff(ctx, old_env, env)
         end
         if !ctx.preview
             mkpath(dirname(env.project_file))
@@ -1271,7 +1271,7 @@ function write_env(ctx::Context; display_diff=true)
     if !isempty(env.manifest) || ispath(env.manifest_file)
         if display_diff
             printpkgstyle(ctx, :Updating, pathrepr(ctx, env.manifest_file))
-            Pkg3.Display.print_manifest_diff(ctx, old_env, env)
+            Pkg.Display.print_manifest_diff(ctx, old_env, env)
         end
         manifest = deepcopy(env.manifest)
         uniques = sort!(collect(keys(manifest)), by=lowercase)

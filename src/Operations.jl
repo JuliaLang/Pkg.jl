@@ -383,7 +383,7 @@ function install_archive(
             dir = joinpath(tempdir(), randstring(12))
             mkpath(dir)
             cmd = BinaryProvider.gen_unpack_cmd(path, dir);
-            # Might fail to extract an archive (Pkg3#190)
+            # Might fail to extract an archive (Pkg#190)
             try
                 run(cmd, (devnull, devnull, devnull))
             catch e
@@ -423,14 +423,13 @@ function install_git(
         GitTools.clone(urls[1], repo_path; isbare=true, header = "[$uuid] $name from $(urls[1])", credentials=creds)
     end
     git_hash = LibGit2.GitHash(hash.bytes)
-    for i = 2:length(urls)
-        try with(LibGit2.GitObject, repo, git_hash) do g
+    for url in urls
+        try LibGit2.with(LibGit2.GitObject, repo, git_hash) do g
             end
             break # object was found, we can stop
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
         end
-        url = urls[i]
         GitTools.fetch(repo, url, refspecs=refspecs, credentials=creds)
     end
     tree = try
@@ -481,14 +480,14 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
     ########################################
     jobs = Channel(ctx.num_concurrent_downloads);
     results = Channel(ctx.num_concurrent_downloads);
-    @schedule begin
+    @async begin
         for pkg in pkgs_to_install
             put!(jobs, pkg)
         end
     end
 
     for i in 1:ctx.num_concurrent_downloads
-        @schedule begin
+        @async begin
             for (pkg, path) in jobs
                 if ctx.preview
                     put!(results, (pkg, true, path))
@@ -845,7 +844,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     for (uuid, name, hash_or_path, build_file) in builds
         log_file = splitext(build_file)[1] * ".log"
         printpkgstyle(ctx, :Building,
-            rpad(name * " ", max_name + 1, "─"), "→ ", Types.pathrepr(ctx, log_file))
+            rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(ctx, log_file))
         code = """
             empty!(Base.DEPOT_PATH)
             append!(Base.DEPOT_PATH, $(repr(map(abspath, DEPOT_PATH))))
@@ -1101,7 +1100,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
         run_test = () -> begin
             try
                 run(cmd)
-                printpkgstyle(ctx, :Testing, pkg.name, " tests passed ")
+                printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
             catch err
                 push!(pkgs_errored, pkg.name)
             end
@@ -1124,7 +1123,7 @@ function init(ctx::Context)
         cmderror("Project already initialized at $project_file")
     mkpath(dirname(project_file))
     touch(project_file)
-    printpkgstyle(ctx, :Initialized, "project at ", abspath(project_file))
+    printpkgstyle(ctx, :Initialized, "project at " * abspath(project_file))
 end
 
 end # module
