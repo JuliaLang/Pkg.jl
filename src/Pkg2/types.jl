@@ -28,6 +28,9 @@ function Base.convert(::Type{VersionRange}, a::VersionInterval)
     lb = VersionBound(lower.major, lower.minor, lower.patch)
 
     vb = UInt32[upper.major, upper.minor, upper.patch]
+    if typeof(upper.build) == Tuple{String} && vb[3] != typemax(UInt32)
+        vb[3] += 1
+    end
     i = 3
     while i > 0 && vb[i] == 0
         pop!(vb)
