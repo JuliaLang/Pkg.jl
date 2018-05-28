@@ -180,6 +180,23 @@ temp_pkg_dir() do project_path
             end
         end
     end
+
+    @testset "failing building a package should throw" begin
+        mktempdir() do path
+            try
+                cd(path) do
+                    pushfirst!(LOAD_PATH, Base.parse_load_path("@"))
+                    Pkg.generate("FailBuildPkg")
+                    cd("FailBuildPkg") do
+                        write_build(pwd(), "error()")
+                        @test_throws CommandError Pkg.build()
+                    end
+                end
+            finally
+                popfirst!(LOAD_PATH)
+            end
+        end
+    end
 end
 
 temp_pkg_dir() do project_path
