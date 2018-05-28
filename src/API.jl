@@ -7,7 +7,7 @@ import Dates
 import LibGit2
 
 import ..depots, ..logdir, ..devdir, ..print_first_command_header
-import ..Operations, ..Display, ..GitTools, ..Pkg
+import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 
 
@@ -25,11 +25,13 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, k
     print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
+    if !UPDATED_REGISTRY_THIS_SESSION[]
+        update_registry(ctx)
+    end
     if mode == :develop
         new_git = handle_repos_develop!(ctx, pkgs)
     else
         new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=true)
-        update_registry(ctx)
     end
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.env, pkgs)
@@ -115,6 +117,7 @@ function update_registry(ctx)
         end
         @warn warn_str
     end
+    UPDATED_REGISTRY_THIS_SESSION[] = true
     return
 end
 
