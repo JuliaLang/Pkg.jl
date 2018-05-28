@@ -1,3 +1,5 @@
+@show LOAD_PATH
+@show pwd()
 using Example
 using PackageWithBuildSpecificTestDeps
 using Test
