@@ -592,8 +592,41 @@ function write_env_usage(manifest_file::AbstractString)
     close(io)
 end
 
+const UUID_REGEX = r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+
+function verify_project(p::Dict)
+    errors = String[]
+    if haskey(p, "name") && typeof(p["name"]) != String
+        push!(errors, "expected `name` key to have a value of type String")
+    end
+    if haskey(p, "uuid")
+        uuid = p["uuid"]
+        if typeof(uuid) != String || !occursin(UUID_REGEX, uuid)
+            push!(errors, "expectet `uuid` key to be a valid UUID, got \"$uuid\"")
+        end
+    end
+
+    if haskey(p, "deps")
+        if typeof(p["deps"]) != Dict{String, Any}
+            push!(errors, "expected `deps` key to be a dictionary of strings to uuids")
+        else
+            for (pkg, uuid) in p["deps"]
+                @show uuid
+                if typeof(uuid) != String || !occursin(UUID_REGEX, uuid)
+                    push!(errors, "expected values in `deps` to be a valid UUID, got \"$uuid\"")
+                end
+            end
+        end
+    end
+    if !isempty(errors)
+        cmderror(string("project file not valid: \n    ", join(errors, "\n    ")))
+    end
+    return
+end
+
 function read_project(io::IO)
     project = TOML.parse(io)
+    verify_project(project)
     if !haskey(project, "deps")
         project["deps"] = Dict{String,Any}()
     end

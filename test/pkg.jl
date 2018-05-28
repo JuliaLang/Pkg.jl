@@ -190,6 +190,20 @@ temp_pkg_dir() do project_path
     end
 end
 
+@testset "invalid project files"
+    valid_project = Dict{String, Any}(
+        "name" => "Pkg",
+        "uuid" => "73636850-626f-11e8-0514-f13549d99c71",
+        "deps" => Dict{String, Any}(
+            "Dep" => "923ae67c-626f-11e8-112a-ef34696b9b9d"
+        )
+    )
+    @test Pkg.Types.verify_project(valid_project) == nothing # should not throw
+    @test_throws CommandError Pkg.Types.verify_project(Dict{String, Any}("name" => 2))
+    @test_throws CommandError Pkg.Types.verify_project(Dict{String, Any}("uuid" => 2))
+    @test_throws CommandError Pkg.Types.verify_project(Dict{String, Any}("deps" => Dict{String, Any}("foo" => 2)))
+end
+
 include("repl.jl")
 
 end # module
