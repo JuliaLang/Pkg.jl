@@ -28,6 +28,8 @@ function Base.convert(::Type{VersionRange}, a::VersionInterval)
     lb = VersionBound(lower.major, lower.minor, lower.patch)
 
     vb = UInt32[upper.major, upper.minor, upper.patch]
+    # Consider e.g. "0.1.0 0.1.0+" to be the same as VerionRange("0.1.0")
+    # by making the "+" bump the patch version
     if typeof(upper.build) == Tuple{String} && vb[3] != typemax(UInt32)
         vb[3] += 1
     end
