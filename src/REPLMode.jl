@@ -6,8 +6,8 @@ using UUIDs
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..devdir, ..print_first_command_header, ..API
-using ..Types, ..Display, ..Operations
+import ..devdir, ..print_first_command_header
+using ..Types, ..Display, ..Operations, ..API
 
 ############
 # Commands #
@@ -237,8 +237,8 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
         if do_rethrow
             rethrow(err)
         end
-        if err isa CommandError
-            Base.display_error(repl.t.err_stream, ErrorException(err.msg), Ptr{Nothing}[])
+        if err isa CommandError || err isa ResolverError
+            Base.display_error(repl.t.err_stream, ErrorException(sprint(showerror, err)), Ptr{Nothing}[])
         else
             Base.display_error(repl.t.err_stream, err, Base.catch_backtrace())
         end
