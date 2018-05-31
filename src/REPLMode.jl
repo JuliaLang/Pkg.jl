@@ -6,7 +6,7 @@ using UUIDs
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..devdir, ..print_first_command_header
+import ..devdir, ..print_first_command_header, ..Types.isdir_windows_workaround
 using ..Types, ..Display, ..Operations, ..API
 
 ############
@@ -140,7 +140,7 @@ end
 
 function parse_package(word::AbstractString; context=nothing)::PackageSpec
     word = replace(word, "~" => homedir())
-    if context in (CMD_ADD, CMD_DEVELOP) && isdir(word)
+    if context in (CMD_ADD, CMD_DEVELOP) && isdir_windows_workaround(word)
         pkg = PackageSpec()
         pkg.repo = Types.GitRepo(abspath(word))
         return pkg
