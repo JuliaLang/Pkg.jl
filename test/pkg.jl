@@ -229,6 +229,15 @@ temp_pkg_dir() do project_path
     end
 end
 
+@testset "preview generate" begin
+    mktempdir() do tmp
+        cd(tmp) do
+            Pkg.generate("Foo"; preview=true)
+            @test !isdir(joinpath(tmp, "Foo"))
+        end
+    end
+end
+
 include("repl.jl")
 
 end # module
