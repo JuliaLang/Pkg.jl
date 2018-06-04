@@ -235,17 +235,16 @@ function installed(mode::PackageMode=PKGMODE_MANIFEST)
     return version_status
 end
 
-
-function gc(ctx::Context=Context(); period = Dates.Week(6), kwargs...)
+function gc(ctx::Context=Context(); kwargs...)
     print_first_command_header()
     function recursive_dir_size(path)
-        sz = 0
+        size = 0
         for (root, dirs, files) in walkdir(path)
             for file in files
-                sz += stat(joinpath(root, file)).size
+                size += stat(joinpath(root, file)).size
             end
         end
-        return sz
+        return size
     end
 
     Context!(ctx; kwargs...)
@@ -253,7 +252,6 @@ function gc(ctx::Context=Context(); period = Dates.Week(6), kwargs...)
     env = ctx.env
 
     # If the manifest was not used
-    gc_time = Dates.now() - period
     usage_file = joinpath(logdir(), "manifest_usage.toml")
 
     # Collect only the manifest that is least recently used
@@ -268,12 +266,17 @@ function gc(ctx::Context=Context(); period = Dates.Week(6), kwargs...)
     # Find all reachable packages through manifests recently used
     new_usage = Dict{String, Any}()
     paths_to_keep = String[]
+    printpkgstyle(ctx, :Active, "projects files at:")
     for (manifestfile, date) in manifest_date
         !isfile(manifestfile) && continue
-        if date < gc_time
-            continue
+        println("        `$manifestfile`")
+        infos = try
+            read_manifest(manifestfile)
+        catch e
+            @warn "Reading manifest file at $manifestfile failed with error" exception = e
+            nothing
         end
-        infos = read_manifest(manifestfile)
+        infos == nothing && continue
         new_usage[manifestfile] = [Dict("time" => date)]
         for entry in infos
             entry isa Pair || continue
@@ -303,13 +306,24 @@ function gc(ctx::Context=Context(); period = Dates.Week(6), kwargs...)
         end
     end
 
+    pretty_byte_str = (size) -> begin
+        bytes, mb = Base.prettyprint_getunits(size, length(Base._mem_units), Int64(1024))
+        return @sprintf("%.3f %s", bytes, Base._mem_units[mb])
+    end
+
     # Delete paths for noreachable package versions and compute size saved
     sz = 0
     for path in paths_to_delete
-        sz += recursive_dir_size(path)
+        sz_pkg = recursive_dir_size(path)
         if !ctx.preview
-            Base.rm(path; recursive=true)
+            try
+                Base.rm(path; recursive=true)
+            catch
+                @warn "Failed to delete $path"
+            end
         end
+        printpkgstyle(ctx, :Deleted, "$path:" * " " * pretty_byte_str(sz_pkg))
+        sz += sz_pkg
     end
 
     # Delete package paths that are now empty
@@ -331,9 +345,9 @@ function gc(ctx::Context=Context(); period = Dates.Week(6), kwargs...)
             TOML.print(io, new_usage, sorted=true)
         end
     end
-    bytes, mb = Base.prettyprint_getunits(sz, length(Base._mem_units), Int64(1024))
-    byte_save_str = length(paths_to_delete) == 0 ? "" : ("saving " * @sprintf("%.3f %s", bytes, Base._mem_units[mb]))
-    @info("Deleted $(length(paths_to_delete)) package installations $byte_save_str")
+    byte_save_str = length(paths_to_delete) == 0 ? "" : ("saving " * pretty_byte_str(sz))
+    printpkgstyle(ctx, :Deleted, "$(length(paths_to_delete)) package installations $byte_save_str")
+
     ctx.preview && preview_info()
     return
 end
