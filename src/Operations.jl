@@ -715,7 +715,7 @@ end
 # at top level. Therefore we would like to execute the build or testing of a dependency using its own Project file as
 # the current environment. Being backwards compatible with REQUIRE file complicates the story a bit since these packages
 # do not have any Project files.
-function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::PackageSpec; might_need_to_resolve=false)
+function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::PackageSpec; might_need_to_resolve=false, use_manifest=true)
     # localctx is the context for the temporary environment we run the testing / building in
     localctx = deepcopy(mainctx)
     # If pkg or its dependencies are checked out, we will need to resolve
@@ -723,6 +723,8 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     # with `might_need_to_resolve`
     need_to_resolve = false
     is_project = Types.is_project(localctx.env, pkg)
+
+    !use_manifest && empty!(localctx.env.manifest)
 
     if is_project
         foreach(k->delete!(localctx.env.project, k), ("name", "uuid", "version"))
@@ -751,10 +753,13 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         localctx.env.project_file = joinpath(tmpdir, "Project.toml")
         localctx.env.manifest_file = joinpath(tmpdir, "Manifest.toml")
         # Rewrite paths in Manifest since relative paths won't work here due to the temporary environment
-        for (_, infos) in localctx.env.manifest
-            info = infos[1]
-            if haskey(info, "path")
-                info["path"] = project_rel_path(mainctx, info["path"])
+        if use_manifest
+            for (depname, infos) in localctx.env.manifest
+                for info in infos
+                    if haskey(info, "path")
+                        info["path"] = project_rel_path(mainctx, info["path"])
+                    end
+                end
             end
         end
         # If pkg has a test only dependency, definitely need to resolve!
@@ -784,7 +789,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         end
 
         local new
-        will_resolve = might_need_to_resolve && need_to_resolve
+        will_resolve = (might_need_to_resolve && need_to_resolve) || !use_manifest
         if will_resolve
             resolve_versions!(localctx, pkgs)
             new = apply_versions(localctx, pkgs)
@@ -1065,7 +1070,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
     need_to_resolve && build_versions(ctx, new)
 end
 
-function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
+function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, manifest=true)
     # See if we can find the test files for all packages
     missing_runtests = String[]
     testfiles        = String[]
@@ -1131,7 +1136,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
                 push!(pkgs_errored, pkg.name)
             end
         end
-        with_dependencies_loadable_at_toplevel(ctx, pkg; might_need_to_resolve=true) do
+        with_dependencies_loadable_at_toplevel(ctx, pkg; might_need_to_resolve=true, use_manifest = manifest) do
             run_test()
         end
     end
