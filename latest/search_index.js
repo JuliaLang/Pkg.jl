@@ -53,7 +53,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Developing packages",
     "category": "section",
-    "text": "Let’s say we found a bug in one of our dependencies, e.g. JSON that we want to fix. We can get the full git-repo using the develop command(HelloWorld) pkg> develop JSON\n    Cloning package from https://github.com/JuliaIO/JSON.jl.git\n  Resolving package versions...\n   Updating \"~/Documents/HelloWorld/Project.toml\"\n [682c06a0] + JSON v0.17.1+ [~/.julia/dev/JSON]\n...By default, the package get cloned to the ~/.julia/dev folder but can also be set by the JULIA_PKG_DEVDIR environment variable. When we have fixed the bug and checked that JSON now works correctly with our project, we can make a PR to the JSON repository. When the PR has been merged we can go over to track the master branch and finally, when a new release of JSON is made, we can go back to using the versioned JSON using the command free and update (see next section):(HelloWorld) pkg> free JSON\n Resolving package versions...\n  Updating \"~/Documents/HelloWorld/Project.toml\"\n [682c06a0] ~ JSON v0.17.1+ #master ⇒ v0.17.1\n  Updating \"~/Documents/HelloWorld/Manifest.toml\"\n [682c06a0] ~ JSON v0.17.1+ #master ⇒ v0.17.1It is also possible to give a local path as the argument to develop which will not clone anything but simply use that directory for the package.Overriding the dependency path for a non registered package is done by giving the git-repo url as an argument to develop."
+    "text": "Let’s say we found a bug in one of our dependencies, e.g. JSON that we want to fix. We can get the full git-repo using the develop command(HelloWorld) pkg> develop JSON\n    Cloning package from https://github.com/JuliaIO/JSON.jl.git\n  Resolving package versions...\n   Updating \"~/Documents/HelloWorld/Project.toml\"\n [682c06a0] + JSON v0.17.1+ [~/.julia/dev/JSON]\n...By default, the package gets cloned to the ~/.julia/dev folder but can also be set by the JULIA_PKG_DEVDIR environment variable. When we have fixed the bug and checked that JSON now works correctly with our project, we can make a PR to the JSON repository. When the PR has been merged we can go over to track the master branch and finally when a new release of JSON is made, we can go back to using the versioned JSON using the command free and update (see next section):(HelloWorld) pkg> free JSON\n Resolving package versions...\n  Updating \"~/Documents/HelloWorld/Project.toml\"\n [682c06a0] ~ JSON v0.17.1+ #master ⇒ v0.17.1\n  Updating \"~/Documents/HelloWorld/Manifest.toml\"\n [682c06a0] ~ JSON v0.17.1+ #master ⇒ v0.17.1It is also possible to give a local path as the argument to develop which will not clone anything but simply use that directory for the package.Overriding the dependency path for a non-registered package is done by giving the git-repo url as an argument to develop."
 },
 
 {
@@ -61,7 +61,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Updating dependencies",
     "category": "section",
-    "text": "When new versions of packages the project is using  are released, it is a good idea to update. Simply calling up will try to update all the dependencies of the project. Sometimes this is not what you want. You can specify a subset of the dependencies to upgrade by giving them as arguments to up, e.g:(HelloWorld) pkg> up JSONThe version of all other direct dependencies will stay the same. If you only want to update the minor version of packages, to reduce the risk that your project breaks, you can give the --minor flag, e.g:(HelloWorld) pkg> up --minor JSONPackages that track a branch are not updated when a minor upgrade is done. Developed packages are never touched by the package manager.If you just want install the packages that are given by the current Manifest.toml use(HelloWorld) pkg> instantiate"
+    "text": "When new versions of packages the project is using are released, it is a good idea to update. Simply calling up will try to update all the dependencies of the project. Sometimes this is not what you want. You can specify a subset of the dependencies to upgrade by giving them as arguments to up, e.g:(HelloWorld) pkg> up JSONThe version of all other direct dependencies will stay the same. If you only want to update the minor version of packages, to reduce the risk that your project breaks, you can give the --minor flag, e.g:(HelloWorld) pkg> up --minor JSONPackages that track a branch are not updated when a minor upgrade is done. Developed packages are never touched by the package manager.If you just want to install the packages that are given by the current Manifest.toml use(HelloWorld) pkg> instantiate"
 },
 
 {
@@ -77,15 +77,47 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Preview mode",
     "category": "section",
-    "text": "If you just want to see the effects of running a command, but not change your state you can preview a command. For example:(HelloWorld) pkg> preview add Plotsor(HelloWorld) pkg> preview upwill show you the effects adding Plots, or doing a full upgrade, respectively, would have on your project. However, nothing would be installed and your Project.toml and Manfiest.toml are untouched."
+    "text": "If you just want to see the effects of running a command, but not change your state you can preview a command. For example:(HelloWorld) pkg> preview add Plotsor(HelloWorld) pkg> preview upwill show you the effects of adding Plots, or doing a full upgrade, respectively, would have on your project. However, nothing would be installed and your Project.toml and Manfiest.toml are untouched."
 },
 
 {
-    "location": "index.html#Using-someone-elses-project-1",
+    "location": "index.html#Using-someone-else\'s-project-1",
     "page": "Pkg",
-    "title": "Using someone elses project",
+    "title": "Using someone else\'s project",
     "category": "section",
-    "text": "Simple clone their project using e.g. git clone, cd to the project directory and call(SomeProject) pkg> instantiateIf the project contains a manifest, this will install the packages at the same state that is given by that manifest. Otherwise it will resolve the latest versions of the dependencies compatible with the project."
+    "text": "Simple clone their project using e.g. git clone, cd to the project directory and call(SomeProject) pkg> instantiateIf the project contains a manifest, this will install the packages in the same state that is given by that manifest. Otherwise, it will resolve the latest versions of the dependencies compatible with the project."
+},
+
+{
+    "location": "index.html#Compatibility-1",
+    "page": "Pkg",
+    "title": "Compatibility",
+    "category": "section",
+    "text": "Compatibility refers to the ability to restrict what version of the dependencies that your project is compatible with. If the compatibility for a dependency is not given, the project is assumed to be compatible with all versions of that dependency.Compatibility for a dependency is entered in the Project.toml file as for example:[compatibility]\nExample = \"0.4.3\"After a compatibility entry is put into the project file, up can be used to apply it.The format of the version specifier is described in detail below.info: Info\nThere is currently no way to give compatibility from the Pkg REPL mode so for now, one has to manually edit the project file."
+},
+
+{
+    "location": "index.html#Version-specifier-format-1",
+    "page": "Pkg",
+    "title": "Version specifier format",
+    "category": "section",
+    "text": "Similar to other package managers, the Julia package manager respects semantic versioning (semver). As an example, a version specifier is given as e.g. 1.2.3 is therefore assumed to be compatible with the versions [1.2.3 - 2.0.0) where ) is a non-inclusive upper bound. More specifically, a version specifier is either given as a caret specifier, e.g. ~1.2.3  or a tilde specifier ^1.2.3. Caret specifiers are the default and hence 1.2.3 == ~1.2.3. The difference between a caret and tilde is described in the next section."
+},
+
+{
+    "location": "index.html#Caret-specifiers-1",
+    "page": "Pkg",
+    "title": "Caret specifiers",
+    "category": "section",
+    "text": "A caret specifier allows upgrade that would be compatible according to semver. An updated dependency is considered compatible if the new version does not modify the left-most non zero digit in the version specifier.Some examples are shown below.^1.2.3 = [1.2.3, 2.0.0)\n^1.2 = [1.2.0, 2.0.0)\n^1 =  [1.0.0, 2.0.0)\n^0.2.3 = [0.2.3, 0.3.0)\n^0.0.3 = [0.0.3, 0.0.4)\n^0.0 = [0.0.0, 0.1.0)\n^0 = [0.0.0, 1.0.0)While the semver specification says that all versions with a major version of 0 are incompatible with each other, we have made that choice that a version given as 0.a.b is considered compatible with 0.a.c if a != 0 and  c >= b."
+},
+
+{
+    "location": "index.html#Tilde-specifiers-1",
+    "page": "Pkg",
+    "title": "Tilde specifiers",
+    "category": "section",
+    "text": "A tilde specifier provides more limited upgrade possibilities. With a caret, only the last specified digit is allowed to increment by one. This gives the following example.~1.2.3 = [1.2.3, 1.3.0)\n~1.2 = [1.2.0, 1.3.0)\n~1 = [1.0.0, 2.0.0)"
 },
 
 ]}
