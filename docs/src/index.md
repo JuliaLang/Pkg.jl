@@ -104,7 +104,8 @@ by the package manager.
 
 **Environment:** the combination of the top-level name map provided by a project
 file combined with the dependency graph and map from packages to their entry points
-provided by a manifest file. For more detail see the manual section on code loading.
+provided by a manifest file. For more detail see the manual section on
+[code loading](https://docs.julialang.org/en/latest/manual/code-loading/).
 
 - **Explicit environment:** an environment in the form of an explicit project
   file and an optional corresponding manifest file together in a directory. If the
