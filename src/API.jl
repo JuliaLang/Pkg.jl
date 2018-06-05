@@ -208,6 +208,9 @@ test(pkgs::Vector{String}; kwargs...)             = test([PackageSpec(pkg) for p
 test(pkgs::Vector{PackageSpec}; kwargs...)        = test(Context(), pkgs; kwargs...)
 
 function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...)
+    # Always instantiate our context first, to make sure we have everything we need
+    instantiate(ctx; kwargs...)
+
     print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
