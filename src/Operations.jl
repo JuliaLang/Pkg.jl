@@ -933,9 +933,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             ok = open(log_file, "w") do log
                 success(pipeline(cmd, stdout=log, stderr=log))
             end
-            if ok
-                Base.rm(log_file, force=true)
-            else
+            if !ok
                 @error("Error building `$name`; see log file for further info")
                 build_succeeded = false
             end
