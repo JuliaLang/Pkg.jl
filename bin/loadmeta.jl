@@ -152,6 +152,7 @@ for pkg in [
     "BigArrays"
     "ChainMap"
     "NanoTimes"
+    "OnlineMoments"
     "ProjectiveDictionaryPairLearning"
     "React"
     "PackageGenerator"
