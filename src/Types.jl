@@ -1056,22 +1056,28 @@ function write_env(ctx::Context; display_diff=true)
             printpkgstyle(ctx, :Updating, pathrepr(ctx, env.manifest_file))
             Pkg.Display.print_manifest_diff(ctx, old_env, env)
         end
-        manifest = deepcopy(env.manifest)
-        uniques = sort!(collect(keys(manifest)), by=lowercase)
-        filter!(name -> length(manifest[name]) == 1, uniques)
-        uuids = Dict(name => UUID(manifest[name][1]["uuid"]) for name in uniques)
-        for (name, infos) in manifest, info in infos
-            haskey(info, "deps") || continue
-            deps = Dict{String,UUID}(n => UUID(u) for (n, u) in info["deps"])
-            all(d in uniques && uuids[d] == u for (d, u) in deps) || continue
-            info["deps"] = sort!(collect(keys(deps)))
-        end
+        manifest = get_manifest(env)
         if !ctx.preview
             open(env.manifest_file, "w") do io
                 TOML.print(io, manifest, sorted=true)
             end
         end
     end
+end
+
+get_manifest(env::EnvCache) = normalize_manifest!(deepcopy(env.manifest))
+
+function normalize_manifest!(manifest)
+    uniques = sort!(collect(keys(manifest)), by=lowercase)
+    filter!(name -> length(manifest[name]) == 1, uniques)
+    uuids = Dict(name => UUID(manifest[name][1]["uuid"]) for name in uniques)
+    for (name, infos) in manifest, info in infos
+        haskey(info, "deps") || continue
+        deps = Dict{String,UUID}(n => UUID(u) for (n, u) in info["deps"])
+        all(d in uniques && uuids[d] == u for (d, u) in deps) || continue
+        info["deps"] = sort!(collect(keys(deps)))
+    end
+    return manifest
 end
 
 end # module

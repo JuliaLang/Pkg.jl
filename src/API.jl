@@ -238,6 +238,35 @@ function installed(mode::PackageMode=PKGMODE_MANIFEST)
     return version_status
 end
 
+
+"""
+    get_manifest([ctx::Context])::Dict
+
+Get a serializable representation of manifest.
+See also [`write_manifest`](@ref).
+"""
+function get_manifest(ctx::Context=Context())::Dict
+    return Types.get_manifest(ctx.env)
+end
+
+
+"""
+    write_manifest(file_or_io, [ctx::Context])
+
+Write Manifest.toml to `file_or_io`.
+See also [`get_manifest`](@ref).
+"""
+function write_manifest(file::String, args...)
+    open(file, "w") do io
+        write_manifest(io, args...)
+    end
+end
+
+function write_manifest(io::IO, ctx::Context=Context())
+    TOML.print(io, get_manifest(ctx), sorted=true)
+end
+
+
 function gc(ctx::Context=Context(); kwargs...)
     print_first_command_header()
     function recursive_dir_size(path)
