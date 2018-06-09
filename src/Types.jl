@@ -1056,16 +1056,7 @@ function write_env(ctx::Context; display_diff=true)
             printpkgstyle(ctx, :Updating, pathrepr(ctx, env.manifest_file))
             Pkg.Display.print_manifest_diff(ctx, old_env, env)
         end
-        manifest = deepcopy(env.manifest)
-        uniques = sort!(collect(keys(manifest)), by=lowercase)
-        filter!(name -> length(manifest[name]) == 1, uniques)
-        uuids = Dict(name => UUID(manifest[name][1]["uuid"]) for name in uniques)
-        for (name, infos) in manifest, info in infos
-            haskey(info, "deps") || continue
-            deps = Dict{String,UUID}(n => UUID(u) for (n, u) in info["deps"])
-            all(d in uniques && uuids[d] == u for (d, u) in deps) || continue
-            info["deps"] = sort!(collect(keys(deps)))
-        end
+        manifest = get_manifest(env)
         if !ctx.preview
             open(env.manifest_file, "w") do io
                 TOML.print(io, manifest, sorted=true)
@@ -1073,5 +1064,29 @@ function write_env(ctx::Context; display_diff=true)
         end
     end
 end
+
+get_manifest(env::EnvCache; kwargs...) =
+    normalize_manifest!(deepcopy(env.manifest); kwargs...)
+
+function normalize_manifest!(manifest; develop_info=false)
+    uniques = sort!(collect(keys(manifest)), by=lowercase)
+    filter!(name -> length(manifest[name]) == 1, uniques)
+    uuids = Dict(name => UUID(manifest[name][1]["uuid"]) for name in uniques)
+    for (name, infos) in manifest, info in infos
+        haskey(info, "deps") || continue
+        deps = Dict{String,UUID}(n => UUID(u) for (n, u) in info["deps"])
+        all(d in uniques && uuids[d] == u for (d, u) in deps) || continue
+        info["deps"] = sort!(collect(keys(deps)))
+        if develop_info && is_develop(info)
+            git = LibGit2.GitRepo(info["path"])
+            info["repo-rev"] = LibGit2.GitHash(git, "HEAD")
+            info["is-clean"] = length(LibGit2.GitStatus(git)) == 0
+        end
+    end
+    return manifest
+end
+
+is_gitroot(path) = isfile(path) || isdir(path)
+is_develop(info) = haskey(info, "path") && is_gitroot(joinpath(info["path"], ".git"))
 
 end # module

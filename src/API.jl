@@ -238,6 +238,43 @@ function installed(mode::PackageMode=PKGMODE_MANIFEST)
     return version_status
 end
 
+
+"""
+    get_manifest([ctx::Context]; develop_info=false)::Dict
+
+Get a serializable representation of manifest.
+
+If `develop_info` is `true`, each package entry includes the following extra
+information about Git repositories of development mode packages:
+
+- `repo-rev` (`String`): Git hash of the checked out revision.
+- `is-clean` (`Bool`): `true` if and only if the Git repository has no
+  uncommitted changes.
+
+See also [`write_manifest`](@ref).
+"""
+function get_manifest(ctx::Context=Context(); kwargs...)::Dict
+    return Types.get_manifest(ctx.env; kwargs...)
+end
+
+
+"""
+    write_manifest(file_or_io, [ctx::Context]; develop_info=false)
+
+Write Manifest.toml to `file_or_io`.
+See also [`get_manifest`](@ref).
+"""
+function write_manifest(file::String, args...; kwargs...)
+    open(file, "w") do io
+        write_manifest(io, args...; kwargs...)
+    end
+end
+
+function write_manifest(io::IO, ctx::Context=Context(); kwargs...)
+    TOML.print(io, get_manifest(ctx; kwargs...), sorted=true)
+end
+
+
 function gc(ctx::Context=Context(); kwargs...)
     print_first_command_header()
     function recursive_dir_size(path)
