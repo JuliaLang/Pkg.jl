@@ -113,7 +113,7 @@ vstring(ctx::Context, a::VerInfo) =
     string((a.ver == nothing && a.hash != nothing) ? "[$(string(a.hash)[1:16])]" : "",
            a.ver != nothing ? "v$(a.ver)" : "",
            a.path != nothing ? " [$(pathrepr(ctx, a.path))]" : "",
-           a.repo != nothing ? " #$(revstring(a.repo.rev)) [$(a.repo.url)]" : "",
+           a.repo != nothing ? " #$(revstring(a.repo.rev)) ($(a.repo.url))" : "",
            a.pinned == true ? " ⚲" : "",
            )
 
