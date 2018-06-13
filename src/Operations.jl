@@ -170,6 +170,7 @@ function collect_require!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
         end
         # Packages from REQUIRE files need to get their UUID from the registry
         registry_resolve!(ctx.env, fix_deps)
+        project_deps_resolve!(ctx.env, fix_deps)
         ensure_resolved(ctx.env, fix_deps; registry=true)
     end
 end
@@ -667,6 +668,7 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
                     push!(dep_pkgs, PackageSpec(r.package))
                 end
                 registry_resolve!(env, dep_pkgs)
+                project_deps_resolve!(ctx.env, dep_pkgs)
                 ensure_resolved(env, dep_pkgs; registry=true)
                 for dep_pkg in dep_pkgs
                     dep_pkg.name == "julia" && continue
@@ -832,6 +834,7 @@ function pkg2_test_target_compatibility!(ctx, path, pkgs)
             push!(pkgs, PackageSpec(pkg_name, vspec))
         end
         registry_resolve!(ctx.env, pkgs)
+        project_deps_resolve!(ctx.env, pkgs)
         ensure_resolved(ctx.env, pkgs; registry=true)
     end
     return nothing
