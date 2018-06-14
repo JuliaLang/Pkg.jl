@@ -193,6 +193,8 @@ Since we haven't created our own project yet, we are in the default project, loc
 To return to the `julia>` prompt, either press backspace when the input line is empty or press Ctrl+C.
 Help is available by calling `pkg> help`.
 
+The documentation here describes using Pkg from the REPL mode. Documentation of using
+the Pkg API (by calling `Pkg.` functions) is in progress of being written.
 
 ### Adding packages
 
@@ -200,6 +202,8 @@ There are two ways of adding packages, either using the `add` command or the `de
 The most frequently used one is `add` and its usage is described first.
 
 #### Adding registered packages
+
+In the Pkg REPL packages can be added with the `add` command followed by the name of the package, for example:
 
 ```
 (v0.7) pkg> add Example
@@ -215,11 +219,27 @@ The most frequently used one is `add` and its usage is described first.
   [8dfed614] + Test
 ```
 
-Since this is the first time adding anything, the [default registry](https://github.com/JuliaRegistries/Uncurated) is cloned.
+Here we added the package Example to the current project. In this example, we are using a fresh Julia installation,
+and this is our first time adding a package using Pkg. By default, Pkg clones Julia's Uncurated registry,
+and uses this registry to look up packages requested for inclusion in the current environment."
 The status update shows a short form of the package UUID to the left, then the package name, and the version.
 Since standard libraries (e.g. `Test`) are shipped with Julia, they do not have a version. The project status contains the packages
-you have added yourself, in this case, `Example`. The manifest status, in addition, includes the dependencies of explicitly
-added packages.
+you have added yourself, in this case, `Example`:
+
+```
+(v0.7) pkg> st
+    Status `Project.toml`
+  [7876af07] Example v0.5.1
+```
+
+The manifest status, in addition, includes the dependencies of explicitly added packages.
+
+```
+(v0.7) pkg> st --manifest
+    Status `Manifest.toml`
+  [7876af07] Example v0.5.1
+  [8dfed614] Test
+```
 
 It is possible to add multiple packages in one command as `pkg> add A B C`.
 
@@ -232,7 +252,7 @@ julia> Example.hello("User")
 "Hello, User"
 ```
 
-A specific version can be installed by giving by appending a version after a `@` symbol, e.g. `@v0.4`, to the package name:
+A specific version can be installed by appending a version after a `@` symbol, e.g. `@v0.4`, to the package name:
 
 ```
 (v0.7) pkg> add Example@0.4
@@ -322,7 +342,7 @@ The `dev` command fetches a full clone of the package to `~/.julia/dev/` (the pa
 When importing `Example` julia will now import it from `~/.julia/dev/Example` and whatever local changes have been made to the files in that path are consequently
 reflected in the code loaded. When we used `add` we said that we tracked the package repository, we here say that we track the path itself.
 Note that the package manager will never touch any of the files at a tracked path. It is therefore up to you to pull updates, change branches etc.
-If we try to `dev` a package at some branch that already exists at ``~/.julia/dev/` the package manager we will simply use the existing path.
+If we try to `dev` a package at some branch that already exists at `~/.julia/dev/` the package manager we will simply use the existing path.
 For example:
 
 ```
