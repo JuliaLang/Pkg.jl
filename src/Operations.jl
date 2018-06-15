@@ -419,6 +419,8 @@ function install_archive(
     return false
 end
 
+uuid_repo_path(uuid::UUID) = string(uuid)
+
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 function install_git(
     ctx::Context,
@@ -432,7 +434,7 @@ function install_git(
     creds = LibGit2.CachedCredentials()
     clones_dir = joinpath(depots()[1], "clones")
     ispath(clones_dir) || mkpath(clones_dir)
-    repo_path = joinpath(clones_dir, string(uuid))
+    repo_path = joinpath(clones_dir, uuid_repo_path(uuid))
     repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
         GitTools.clone(urls[1], repo_path; isbare=true, header = "[$uuid] $name from $(urls[1])", credentials=creds)
     end

@@ -414,6 +414,9 @@ end
 
 casesensitive_isdir(dir::String) = isdir_windows_workaround(dir) && dir in readdir(joinpath(dir, ".."))
 
+url_repo_path(url::String) = string(hash(url))
+url_repo_path_full(url::String) = string(hash(url), "_full")
+
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     creds = LibGit2.CachedCredentials()
     env = ctx.env
@@ -436,7 +439,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
             # from scratch.
             clone_path = joinpath(depots()[1], "clones")
             mkpath(clone_path)
-            repo_path = joinpath(clone_path, string(hash(pkg.repo.url), "_full"))
+            repo_path = joinpath(clone_path, url_repo_path_full(pkg.repo.url))
             repo, just_cloned = ispath(repo_path) ? (LibGit2.GitRepo(repo_path), false) : begin
                 r = GitTools.clone(pkg.repo.url, repo_path)
                 GitTools.fetch(r, pkg.repo.url; refspecs=refspecs, credentials=creds)
@@ -492,7 +495,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
         isempty(pkg.repo.url) && set_repo_for_pkg!(env, pkg)
         clones_dir = joinpath(depots()[1], "clones")
         mkpath(clones_dir)
-        repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
+        repo_path = joinpath(clones_dir, url_repo_path(pkg.repo.url))
         repo, just_cloned = ispath(repo_path) ? (LibGit2.GitRepo(repo_path), false) : begin
             r = GitTools.clone(pkg.repo.url, repo_path, isbare=true, credentials=creds)
             GitTools.fetch(r, pkg.repo.url; refspecs=refspecs, credentials=creds)
