@@ -153,7 +153,7 @@ end
 ################
 # REPL parsing #
 ################
-const lex_re = r"^[\?\./\+\-](?!\-) | [^@\#\s;]+\s*=\s*[^@\#\s;]+ | \#\s*[^@\#\s;]* | @\s*[^@\#\s;]* | [^@\#\s;]+|;"x
+const lex_re = r"^[\?\./\+\-](?!\-) | ((git|ssh|http(s)?)|(git@[\w\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s;]+\s*=\s*[^@\#\s;]+ | \#\s*[^@\#\s;]* | @\s*[^@\#\s;]* | [^@\#\s;]+|;"x
 
 const Token = Union{Command, Option, VersionRange, String, Rev}
 
@@ -391,6 +391,7 @@ const helps = Dict(
     pkg> add Example#master
     pkg> add Example#c37b675
     pkg> add https://github.com/JuliaLang/Example.jl#master
+    pkg> add git@github.com:JuliaLang/Example.jl.git
     pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
     ```
     """, CMD_RM => md"""
