@@ -167,7 +167,7 @@ end
 ################
 # REPL parsing #
 ################
-const lex_re = r"^[\?\./\+\-](?!\-) | [^@\#\s;]+\s*=\s*[^@\#\s;]+ | \#\s*[^@\#\s;]* | @\s*[^@\#\s;]* | [^@\#\s;]+|;"x
+const lex_re = r"^[\?\./\+\-](?!\-) | git@[^@\#\s;]+ | [^@\#\s;]+\s*=\s*[^@\#\s;]+ | \#\s*[^@\#\s;]* | @\s*[^@\#\s;]* | [^@\#\s;]+|;"x
 
 const Token = Union{Command, Option, VersionRange, String, Rev}
 
