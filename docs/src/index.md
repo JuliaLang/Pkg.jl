@@ -574,16 +574,29 @@ since we are inside the `HelloWorld` project directory):
 Both `Random` and `JSON` got added to the project’s `Project.toml` file, and the resulting dependencies got added to the `Manifest.toml` file.
 The resolver has installed each package with the highest possible version, while still respecting the compatibility that each package enforce on its dependencies.
 
-We can now use both `Random` and `JSON` in our project. Changing `src/HelloWorld.jl` to
+To add a dependency on a *local* package that is *not* a git repository, we can use the `develop` command:
+
+```
+(HelloWorld) pkg> develop /PATH/TO/LOCAL/PACKAGE/MyGreatPackage
+ Resolving package versions...
+  Updating "~/Documents/HelloWorld/Project.toml"
+  [f2b96e9e] + MyGreatPackage v0.1.0 /PATH/TO/LOCAL/PACKAGE/MyGreatPackage
+  Updating "~/Documents/HelloWorld/Manifest.toml"
+  [f2b96e9e] + MyGreatPackage v0.1.0 /PATH/TO/LOCAL/PACKAGE/MyGreatPackage
+```
+
+We can now use `MyGreatPackage`, `Random` and `JSON` in our project. Changing `src/HelloWorld.jl` to
 
 ```
 module HelloWorld
 
 import Random
 import JSON
+using MyGreatPackage
 
 greet() = print("Hello World!")
 greet_alien() = print("Hello ", Random.randstring(8))
+greed_local() = MyGreatPackage.greet()
 
 end # module
 ```
