@@ -55,6 +55,9 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
     @test isinstalled(TEST_PKG)
     v = Pkg.installed()[TEST_PKG.name]
     pkg"rm Example"
+    pkg"add git@github.com:JuliaLang/Example.jl.git"
+    @test isinstalled(TEST_PKG)
+    pkg"rm Example"
     pkg"add Example#master"
     pkg"test Example"
     @test isinstalled(TEST_PKG)
