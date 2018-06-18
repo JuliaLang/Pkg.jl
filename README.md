@@ -5,3 +5,13 @@
 Next-generation package manager for Julia.
 
 Pkg is available from the Julia nightly build or by building the Julia master branch.
+
+
+#### Using the development version of Pkg.jl
+
+If you want to develop this package do the following steps:
+- Clone the repo anywhere.
+- Remove the `uuid = ` line from the `Project.toml` file.
+- Change the current directory to the Pkg repo you just cloned.
+- `import Pkg` will now load the files in the cloned repo instead of the Pkg stdlib .
+- To test your changes, simple `include("test/runtests.jl")`.
