@@ -15,7 +15,7 @@ using ..Types, ..Display, ..Operations, ..API
 @enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
                    CMD_TEST, CMD_GC, CMD_PREVIEW, CMD_INIT, CMD_BUILD, CMD_FREE,
                    CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP, CMD_GENERATE, CMD_PRECOMPILE,
-                   CMD_INSTANTIATE, CMD_RESOLVE)
+                   CMD_INSTANTIATE, CMD_RESOLVE, CMD_START)
 
 struct Command
     kind::CommandKind
@@ -46,6 +46,7 @@ const cmds = Dict(
     "precompile" => CMD_PRECOMPILE,
     "instantiate" => CMD_INSTANTIATE,
     "resolve"   => CMD_RESOLVE,
+    "start"     => CMD_START,
 )
 
 #################
@@ -272,6 +273,7 @@ function do_cmd!(tokens::Vector{Token}, repl)
     cmd.kind == CMD_PIN      ? Base.invokelatest(           do_pin!, ctx, tokens) :
     cmd.kind == CMD_FREE     ? Base.invokelatest(          do_free!, ctx, tokens) :
     cmd.kind == CMD_GENERATE ? Base.invokelatest(      do_generate!, ctx, tokens) :
+    cmd.kind == CMD_START    ? Base.invokelatest(         do_start!, ctx, tokens) :
     cmd.kind == CMD_RESOLVE  ? Base.invokelatest(       do_resolve!, ctx, tokens) :
     cmd.kind == CMD_PRECOMPILE ? Base.invokelatest(  do_precompile!, ctx, tokens) :
     cmd.kind == CMD_INSTANTIATE ? Base.invokelatest(do_instantiate!, ctx, tokens) :
@@ -726,6 +728,23 @@ function do_init!(ctx::Context, tokens::Vector{Token})
         cmderror("`init` does currently not take any arguments")
     end
     API.init(ctx)
+end
+
+function do_start!(ctx::Context, tokens::Vector{Token})
+    isempty(tokens) && cmderror("`start` requires a project name as an argument")
+    local pkg
+    while !isempty(tokens)
+        token = popfirst!(tokens)
+        if token isa String
+            pkg = token
+            break # TODO: error message?
+        else
+            cmderror("`start` takes a name of the project to create")
+        end
+    end
+    API.generate(ctx, pkg)
+    printstyled("Changing directory"; color=:green, bold=true)
+    cd(pkg)
 end
 
 function do_generate!(ctx::Context, tokens::Vector{Token})
