@@ -158,7 +158,8 @@ const lex_re = r"^[\?\./\+\-](?!\-) | ((git|ssh|http(s)?)|(git@[\w\.]+))(:(//)?)
 const Token = Union{Command, Option, VersionRange, String, Rev}
 
 function tokenize(cmd::String)::Vector{Vector{Token}}
-    words = map(m->m.match, eachmatch(lex_re, cmd))
+    unquoted_cmd = replace(cmd, r"(^| )\"(.+)\"( |$)" => s" \2 ")
+    words = map(m->m.match, eachmatch(lex_re, unquoted_cmd))
     commands = Vector{Token}[]
     while !isempty(words)
         push!(commands, tokenize!(words))
