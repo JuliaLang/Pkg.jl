@@ -37,7 +37,7 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, k
     registry_resolve!(ctx.env, pkgs)
     stdlib_resolve!(ctx, pkgs)
     ensure_resolved(ctx.env, pkgs, registry=true)
-    Operations.add_or_develop(ctx, pkgs; new_git=new_git)
+    Operations.add_or_develop(ctx, pkgs; mode=mode, new_git=new_git)
     ctx.preview && preview_info()
     return
 end
