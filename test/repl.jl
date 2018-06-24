@@ -349,13 +349,23 @@ temp_pkg_dir() do project_path
             end
 
             # testing local dir with space in name
-            space_dir = "space dir"
+            dir_name = "space dir"
             pkg_name = "WeirdName77"
-            setup_package(space_dir, pkg_name)
-            uuid = extract_uuid("$space_dir/$pkg_name/Project.toml")
-            Pkg.REPLMode.pkgstr("add \"$space_dir/$pkg_name\"")
+            setup_package(dir_name, pkg_name)
+            uuid = extract_uuid("$dir_name/$pkg_name/Project.toml")
+            Pkg.REPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
             @test isinstalled((name=pkg_name, uuid = UUID(uuid)))
             Pkg.REPLMode.pkgstr("remove \"$pkg_name\"")
+            @test !isinstalled((name=pkg_name, uuid = UUID(uuid)))
+
+            # testing dir name with significant characters
+            dir_name = "some@d;ir#"
+            pkg_name = "WeirdName77"
+            setup_package(dir_name, pkg_name)
+            uuid = extract_uuid("$dir_name/$pkg_name/Project.toml")
+            Pkg.REPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
+            @test isinstalled((name=pkg_name, uuid = UUID(uuid)))
+            Pkg.REPLMode.pkgstr("remove '$pkg_name'")
             @test !isinstalled((name=pkg_name, uuid = UUID(uuid)))
 
             # more complicated input
