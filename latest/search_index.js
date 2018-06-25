@@ -125,7 +125,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Creating your own projects",
     "category": "section",
-    "text": "So far we have added packages to the default project at ~/.julia/environments/v0.7, it is, however, easy to create other, independent, projects. It should be pointed out if two projects uses the same package at the same version, the content of this package is not duplicated. This is done using the init command. Below we make a new directory and create a new project in it:shell> mkdir MyProject\n\nshell> cd MyProject\n/Users/kristoffer/MyProject\n\n(v0.7) pkg> init\nInitialized project at /Users/kristoffer/MyProject/Project.toml\n\n(MyProject) pkg> st\n    Status `Project.toml`Note that the REPL prompt changed when the new project was initiated. Since this is a newly created project, the status command show it contains no packages. Packages added here again in a completely separate environment from the one earlier used."
+    "text": "So far we have added packages to the default project at ~/.julia/environments/v0.7, it is, however, easy to create other, independent, projects. It should be pointed out if two projects uses the same package at the same version, the content of this package is not duplicated. This is done using the init command. Below we make a new directory and create a new project in it:shell> mkdir MyProject\n\nshell> cd MyProject\n/Users/kristoffer/MyProject\n\n(v0.7) pkg> init\nInitialized project at /Users/kristoffer/MyProject/Project.toml\n\n(MyProject) pkg> st\n    Status `Project.toml`Note that the REPL prompt changed when the new project was initiated, in other words, Pkg automatically set the current environment to the one that just got initiated. Since this is a newly created project, the status command show it contains no packages. Packages added here again in a completely separate environment from the one earlier used."
 },
 
 {
@@ -149,7 +149,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Generating files for a package",
     "category": "section",
-    "text": "To generate files for a new package, use pkg> generate.(v0.7) pkg> generate HelloWorldThis creates a new project HelloWorld with the following files (visualized with the external tree command):julia> cd(\"HelloWorld\")\nshell> tree .\n.\n├── Project.toml\n└── src\n    └── HelloWorld.jl\n\n1 directory, 2 filesThe Project.toml file contains the name of the package, its unique UUID, its version, the author and eventual dependencies:name = \"HelloWorld\"\nuuid = \"b4cd1eb8-1e24-11e8-3319-93036a3eb9f3\"\nversion = \"0.1.0\"\nauthor = [\"Some One <someone@email.com>\"]\n\n[deps]The content of src/HelloWorld.jl is:module HelloWorld\n\ngreet() = print(\"Hello World!\")\n\nend # moduleWe can now load the project and use it:julia> import HelloWorld\n\njulia> HelloWorld.greet()\nHello World!"
+    "text": "To generate files for a new package, use pkg> generate.(v0.7) pkg> generate HelloWorldThis creates a new project HelloWorld with the following files (visualized with the external tree command):shell> cd HelloWorld\n\nshell> tree .\n.\n├── Project.toml\n└── src\n    └── HelloWorld.jl\n\n1 directory, 2 filesThe Project.toml file contains the name of the package, its unique UUID, its version, the author and eventual dependencies:name = \"HelloWorld\"\nuuid = \"b4cd1eb8-1e24-11e8-3319-93036a3eb9f3\"\nversion = \"0.1.0\"\nauthor = [\"Some One <someone@email.com>\"]\n\n[deps]The content of src/HelloWorld.jl is:module HelloWorld\n\ngreet() = print(\"Hello World!\")\n\nend # moduleWe can now activate the project and load the package:pkg> activate\n\njulia> import HelloWorld\n\njulia> HelloWorld.greet()\nHello World!"
 },
 
 {
@@ -181,7 +181,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Test-specific dependencies",
     "category": "section",
-    "text": "Sometimes one might to want to use some packages only at testing time but not enforce a dependency on them when the package is used. This is possible by adding dependencies to a \"test target\" to the Project file. Here we add the Test standard library as a test-only dependency by adding the following to the Project file:[target.test.deps]\nTest = \"8dfed614-e22c-5e08-85e1-65c5234f0b40\"We can now use Test in the test script and we can see that it gets installed on testing:shell> cat test/runtests.jl\nusing Test\n@test 1 == 1\n\n(HelloWorld) pkg> test\n   Testing HelloWorld\n Resolving package versions...\n  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Project.toml`\n  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]\n  [8dfed614] + Test\n  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Manifest.toml`\n  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]\n   Testing HelloWorld tests passed```"
+    "text": "Sometimes one might want to use some packages only at testing time but not enforce a dependency on them when the package is used. This is possible by adding dependencies to a \"test target\" to the Project file. Here we add the Test standard library as a test-only dependency by adding the following to the Project file:[target.test.deps]\nTest = \"8dfed614-e22c-5e08-85e1-65c5234f0b40\"We can now use Test in the test script and we can see that it gets installed on testing:shell> cat test/runtests.jl\nusing Test\n@test 1 == 1\n\n(HelloWorld) pkg> test\n   Testing HelloWorld\n Resolving package versions...\n  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Project.toml`\n  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]\n  [8dfed614] + Test\n  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Manifest.toml`\n  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]\n   Testing HelloWorld tests passed```"
 },
 
 {
@@ -221,7 +221,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Precompiling a project",
     "category": "section",
-    "text": "The REPL command precompile can be used to precompile all the dependencies in the project. You can for example do(HelloWorld) pkg> update; precompiledo update the dependencies and then precompile them."
+    "text": "The REPL command precompile can be used to precompile all the dependencies in the project. You can for example do(HelloWorld) pkg> update; precompileto update the dependencies and then precompile them."
 },
 
 {
@@ -237,7 +237,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Using someone else\'s project",
     "category": "section",
-    "text": "Simple clone their project using e.g. git clone, cd to the project directory and call(SomeProject) pkg> instantiateIf the project contains a manifest, this will install the packages in the same state that is given by that manifest. Otherwise, it will resolve the latest versions of the dependencies compatible with the project."
+    "text": "Simply clone their project using e.g. git clone, cd to the project directory and call(v0.7) pkg> activate\n\n(SomeProject) pkg> instantiateIf the project contains a manifest, this will install the packages in the same state that is given by that manifest. Otherwise, it will resolve the latest versions of the dependencies compatible with the project."
 },
 
 ]}
