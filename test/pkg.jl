@@ -235,12 +235,9 @@ temp_pkg_dir() do project_path
         mktempdir() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
             cd(joinpath(dir, "UnregisteredWithProject")) do
-                try
-                    pushfirst!(LOAD_PATH, Base.current_env())
+               with_current_env() do
                     Pkg.up()
                     @test haskey(Pkg.installed(), "Example")
-                finally
-                    popfirst!(LOAD_PATH)
                 end
             end
         end
@@ -248,17 +245,13 @@ temp_pkg_dir() do project_path
 
     @testset "failing building a package should throw" begin
         mktempdir() do path
-            try
-                cd(path) do
-                    pushfirst!(LOAD_PATH, Base.parse_load_path("@"))
-                    Pkg.generate("FailBuildPkg")
-                    cd("FailBuildPkg") do
-                        write_build(pwd(), "error()")
-                        @test_throws CommandError Pkg.build()
-                    end
+            cd(path) do
+                Pkg.generate("FailBuildPkg")
+                cd("FailBuildPkg")
+                with_current_env() do
+                    write_build(pwd(), "error()")
+                    @test_throws CommandError Pkg.build()
                 end
-            finally
-                popfirst!(LOAD_PATH)
             end
         end
     end
@@ -286,12 +279,9 @@ temp_pkg_dir() do project_path
         mktempdir() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
             cd(joinpath(dir, "UnregisteredWithProject")) do
-                try
-                    pushfirst!(LOAD_PATH, Base.current_env())
+                with_current_env() do
                     Pkg.add("Test") # test https://github.com/JuliaLang/Pkg.jl/issues/324
                     Pkg.test()
-                finally
-                    popfirst!(LOAD_PATH)
                 end
             end
         end
