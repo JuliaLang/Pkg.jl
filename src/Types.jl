@@ -570,11 +570,12 @@ end
 
 function parse_package!(ctx, pkg, project_path)
     env = ctx.env
-    found_project_file = false
+    project_file = nothing
     for projname in project_names
-        if isfile(joinpath(project_path, projname))
-            found_project_file = true
-            project_data = parse_toml(project_path, "Project.toml")
+        maybe_project_file = joinpath(project_path, projname)
+        if isfile(maybe_project_file)
+            project_file = maybe_project_file
+            project_data = parse_toml(project_file)
             pkg.uuid = UUID(project_data["uuid"])
             pkg.name = project_data["name"]
             if haskey(project_data, "version")
@@ -586,7 +587,7 @@ function parse_package!(ctx, pkg, project_path)
             break
         end
     end
-    if !found_project_file
+    if nothing === project_file
         @warn "packages will need to have a [Julia]Project.toml file in the future"
         if !isempty(ctx.old_pkg2_clone_name) # remove when legacy CI script support is removed
             pkg.name = ctx.old_pkg2_clone_name
