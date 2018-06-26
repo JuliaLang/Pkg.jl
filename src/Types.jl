@@ -203,6 +203,43 @@ const default_envs = [
     "default",
 ]
 
+function find_project_file(env::Union{Nothing,String}=nothing)
+    project_file = nothing
+    if env isa Nothing
+        for entry in LOAD_PATH
+            project_file = Base.load_path_expand(entry)
+            project_file isa String && !isdir(project_file) && break
+            project_file = nothing
+        end
+        if project_file == nothing
+            project_dir = nothing
+            for entry in LOAD_PATH
+                project_dir = Base.load_path_expand(entry)
+                project_dir isa String && isdir(project_dir) && break
+                project_dir = nothing
+            end
+            project_dir == nothing && error("No Pkg environment found in LOAD_PATH")
+            project_file = joinpath(project_dir, Base.project_names[end])
+        end
+    elseif startswith(env, '@')
+        project_file = Base.load_path_expand(env)
+        project_file === nothing && error("package environment does not exist: $env")
+    elseif env isa String
+        if isdir(env)
+            isempty(readdir(env)) || error("environment is a package directory: $env")
+            project_file = joinpath(env, Base.project_names[end])
+        else
+            project_file = endswith(env, ".toml") ? abspath(env) :
+                abspath(env, Base.project_names[end])
+        end
+    end
+    @assert project_file isa String &&
+    (isfile(project_file) || !ispath(project_file) ||
+     isdir(project_file) && isempty(readdir(project_file)))
+     return project_file
+end
+
+
 mutable struct EnvCache
     # environment info:
     env::Union{Nothing,String}
@@ -224,38 +261,7 @@ mutable struct EnvCache
     paths::Dict{UUID,Vector{String}}
 
     function EnvCache(env::Union{Nothing,String}=nothing)
-        if env isa Nothing
-            project_file = nothing
-            for entry in LOAD_PATH
-                project_file = Base.load_path_expand(entry)
-                project_file isa String && !isdir(project_file) && break
-                project_file = nothing
-            end
-            if project_file == nothing
-                project_dir = nothing
-                for entry in LOAD_PATH
-                    project_dir = Base.load_path_expand(entry)
-                    project_dir isa String && isdir(project_dir) && break
-                    project_dir = nothing
-                end
-                project_dir == nothing && error("No Pkg environment found in LOAD_PATH")
-                project_file = joinpath(project_dir, Base.project_names[end])
-            end
-        elseif startswith(env, '@')
-            project_file = Base.load_path_expand(env)
-            project_file === nothing && error("package environment does not exist: $env")
-        elseif env isa String
-            if isdir(env)
-                isempty(readdir(env)) || error("environment is a package directory: $env")
-                project_file = joinpath(env, Base.project_names[end])
-            else
-                project_file = endswith(env, ".toml") ? abspath(env) :
-                    abspath(env, Base.project_names[end])
-            end
-        end
-        @assert project_file isa String &&
-            (isfile(project_file) || !ispath(project_file) ||
-             isdir(project_file) && isempty(readdir(project_file)))
+        project_file = find_project_file(env)
         project_dir = dirname(project_file)
         git = ispath(joinpath(project_dir, ".git")) ? LibGit2.GitRepo(project_dir) : nothing
 

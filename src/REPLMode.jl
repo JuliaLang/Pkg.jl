@@ -935,29 +935,47 @@ function completions(full, index)
     end
 end
 
+prev_project_file = nothing
+prev_project_timestamp = nothing
+prev_prefix = ""
+
 function promptf()
-    env = try
-        EnvCache()
+    global prev_project_timestamp, prev_prefix, prev_project_file
+    project_file = try
+        Types.find_project_file()
     catch
         nothing
     end
     prefix = ""
-    if env !== nothing
-        proj_dir = dirname(env.project_file)
-        if startswith(pwd(), proj_dir) && env.pkg != nothing && !isempty(env.pkg.name)
-            name = env.pkg.name
+    if project_file !== nothing
+        if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)
+            prefix = prev_prefix
         else
-            name = basename(proj_dir)
+            project = try
+                Types.read_project(project_file)
+            catch
+                nothing
+            end
+            if project !== nothing
+                proj_dir = dirname(project_file)
+                projname = get(project, "name", nothing)
+                if startswith(pwd(), proj_dir) && projname !== nothing
+                    name = projname
+                else
+                    name = basename(proj_dir)
+                end
+                prefix = string("(", name, ") ")
+                prev_prefix = prefix
+                prev_project_timestamp = mtime(project_file)
+                prev_project_file = project_file
+            end
         end
-        prefix = string("(", name, ") ")
     end
     return prefix * "pkg> "
 end
 
 # Set up the repl Pkg REPLMode
 function create_mode(repl, main)
-
-
     pkg_mode = LineEdit.Prompt(promptf;
         prompt_prefix = Base.text_colors[:blue],
         prompt_suffix = "",
