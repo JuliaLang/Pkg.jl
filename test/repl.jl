@@ -151,6 +151,8 @@ end # temp_pkg_dir
 
 
 temp_pkg_dir() do project_path; cd(project_path) do
+    touch("Project.toml")
+    touch("Manifest.toml")
     mktempdir() do tmp
         mktempdir() do depot_dir
             old_depot = copy(DEPOT_PATH)
@@ -158,8 +160,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 empty!(DEPOT_PATH)
                 pushfirst!(DEPOT_PATH, depot_dir)
                 withenv("JULIA_PKG_DEVDIR" => tmp) do
-                    pkg"init"
-
                     # Test an unregistered package
                     p1_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithProject")
                     p2_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithoutProject")
