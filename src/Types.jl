@@ -600,7 +600,7 @@ function parse_package!(ctx, pkg, project_path)
             # This is an unregistered old style package, give it a UUID and a version
             if !has_uuid(pkg)
                 uuid_unreg_pkg = UUID(0xa9a2672e746f11e833ef119c5b888869)
-                pkg.uuid = uuid5(uid_unreg_pkg, pkg.name)
+                pkg.uuid = uuid5(uuid_unreg_pkg, pkg.name)
                 @info "Assigning UUID $(pkg.uuid) to $(pkg.name)"
             end
             pkg.version = v"0.0"
