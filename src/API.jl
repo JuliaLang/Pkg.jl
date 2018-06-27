@@ -590,4 +590,12 @@ function activate(path::Union{String,Nothing}=nothing)
     return ACTIVE_ENV[]
 end
 
+"""
+    setprotocol!(proto::Union{Nothing, AbstractString}=nothing)
+
+Set the protocol used to access GitHub-hosted packages when `add`ing a url or `develop`ing a package.
+Defaults to 'https', with `proto == nothing` delegating the choice to the package developer.
+"""
+setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GitTools.setprotocol!(proto)
+
 end # module
