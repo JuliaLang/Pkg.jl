@@ -733,23 +733,6 @@ function do_init!(ctx::Context, tokens::Vector{Token})
     API.init(ctx)
 end
 
-function do_start!(ctx::Context, tokens::Vector{Token})
-    isempty(tokens) && cmderror("`start` requires a project name as an argument")
-    local pkg
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa String
-            pkg = token
-            break # TODO: error message?
-        else
-            cmderror("`start` takes a name of the project to create")
-        end
-    end
-    API.generate(ctx, pkg)
-    printstyled("Changing directory"; color=:green, bold=true)
-    cd(pkg)
-end
-
 function do_generate!(ctx::Context, tokens::Vector{Token})
     isempty(tokens) && cmderror("`generate` requires a project name as an argument")
     local pkg
