@@ -47,7 +47,6 @@ const cmds = Dict(
     "instantiate" => CMD_INSTANTIATE,
     "resolve"     => CMD_RESOLVE,
     "activate"    => CMD_ACTIVATE,
-    "deactivate"  => CMD_DEACTIVATE,
 )
 
 #################
@@ -278,7 +277,6 @@ function do_cmd!(tokens::Vector{Token}, repl)
     cmd.kind == CMD_PRECOMPILE  ? Base.invokelatest(    do_precompile!, ctx, tokens) :
     cmd.kind == CMD_INSTANTIATE ? Base.invokelatest(   do_instantiate!, ctx, tokens) :
     cmd.kind == CMD_ACTIVATE    ? Base.invokelatest(      do_activate!, ctx, tokens) :
-    cmd.kind == CMD_DEACTIVATE  ? Base.invokelatest(    do_deactivate!, ctx, tokens) :
         cmderror("`$cmd` command not yet implemented")
     return
 end
@@ -344,8 +342,6 @@ developed packages
 `gc`: garbage collect packages not used for a significant time
 
 `activate`: set the primary environment the package manager manipulates
-
-`deactivate`: unset the primary environment the package manager manipulates
 """
 
 const helps = Dict(
@@ -565,9 +561,10 @@ end
 
 function do_add_or_develop!(ctx::Context, tokens::Vector{Token}, cmd::CommandKind)
     @assert cmd in (CMD_ADD, CMD_DEVELOP)
+    mode = cmd == CMD_ADD ? :add : :develop
     # tokens: package names and/or uuids, optionally followed by version specs
     isempty(tokens) &&
-        cmderror("`add` – list packages to add")
+        cmderror("`$mode` – list packages to $mode")
     pkgs = PackageSpec[]
     prev_token_was_package = false
     while !isempty(tokens)
@@ -592,11 +589,11 @@ function do_add_or_develop!(ctx::Context, tokens::Vector{Token}, cmd::CommandKin
                 pkgs[end].repo.rev = token.rev
             end
         elseif token isa Option
-            cmderror("`add` doesn't take options: $token")
+            cmderror("`$mode` doesn't take options: $token")
         end
         prev_token_was_package = parsed_package
     end
-    return API.add_or_develop(ctx, pkgs, mode=(cmd == CMD_ADD ? :add : :develop))
+    return API.add_or_develop(ctx, pkgs, mode=mode)
 end
 
 function do_up!(ctx::Context, tokens::Vector{Token})
@@ -808,11 +805,6 @@ function do_activate!(ctx::Context, tokens::Vector{Token})
         end
         return API.activate(abspath(token))
     end
-end
-
-function do_deactivate!(ctx::Context, tokens::Vector{Token})
-    !isempty(tokens) && cmderror("`deactivate` does not take any arguments")
-    API.deactivate()
 end
 
 ######################
