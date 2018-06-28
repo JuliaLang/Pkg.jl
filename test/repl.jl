@@ -368,25 +368,25 @@ temp_pkg_dir() do project_path
 
             # more complicated input
             ## pkg1
-            dir1 = "two space dir\""
+            dir1 = "two space dir"
             pkg_name1 = "name1"
             setup_package(dir1, pkg_name1)
             uuid1 = extract_uuid("$dir1/$pkg_name1/Project.toml")
 
             ## pkg2
-            dir2 = "two\"quote\"dir"
+            dir2 = "two'quote'dir"
             pkg_name2 = "name2"
             setup_package(dir2, pkg_name2)
             uuid2 = extract_uuid("$dir2/$pkg_name2/Project.toml")
 
-            Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' '$dir2/$pkg_name2'")
+            Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
             @test isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
             @test isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
             Pkg.REPLMode.pkgstr("remove '$pkg_name1' $pkg_name2")
             @test !isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
             @test !isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
 
-            Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' '$dir2/$pkg_name2'")
+            Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
             @test isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
             @test isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
             Pkg.REPLMode.pkgstr("remove '$pkg_name1' \"$pkg_name2\"")
