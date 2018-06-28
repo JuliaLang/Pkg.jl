@@ -24,6 +24,12 @@ add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)       = add_or_develop(Cont
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, kwargs...)
     print_first_command_header()
     Context!(ctx; kwargs...)
+
+    # if julia is passed as a package the solver gets tricked;
+    # this catches the error early on
+    any(pkg->(pkg.name == "julia"), pkgs) &&
+        cmderror("Trying to $mode julia as a package")
+
     ctx.preview && preview_info()
     if !UPDATED_REGISTRY_THIS_SESSION[]
         update_registry(ctx)
@@ -37,6 +43,10 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, k
     registry_resolve!(ctx.env, pkgs)
     stdlib_resolve!(ctx, pkgs)
     ensure_resolved(ctx.env, pkgs, registry=true)
+
+    any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
+        cmderror("Cannot $mode package with the same name or uuid as the project")
+
     Operations.add_or_develop(ctx, pkgs; new_git=new_git)
     ctx.preview && preview_info()
     return
@@ -558,29 +568,34 @@ end
 
 const ACTIVE_ENV = Ref{Union{String,Nothing}}(nothing)
 
-function _activate(env::Union{String,Nothing})
-    if env === nothing
-        @warn "Current directory is not in a project, nothing activated."
-    else
+function activate(path::Union{String,Nothing}=nothing)
+    if path === nothing # reset to default LOAD_PATH
         if !isempty(LOAD_PATH) && ACTIVE_ENV[] === LOAD_PATH[1]
-            LOAD_PATH[1] = env
-        else
-            # TODO: warn if ACTIVE_ENV !== nothing ?
-            pushfirst!(LOAD_PATH, env)
+            popfirst!(LOAD_PATH)
         end
-        ACTIVE_ENV[] = env
+        ACTIVE_ENV[] = nothing
+    else # activate the env found in path
+        env = Base.current_env(path)
+        if env === nothing
+            @warn "Current directory is not in a project, nothing activated."
+        else
+            if !isempty(LOAD_PATH) && ACTIVE_ENV[] === LOAD_PATH[1]
+                LOAD_PATH[1] = env
+            else
+                pushfirst!(LOAD_PATH, env)
+            end
+            ACTIVE_ENV[] = env
+        end
     end
+    return ACTIVE_ENV[]
 end
-activate() = _activate(Base.current_env())
-activate(path::String) = _activate(Base.current_env(path))
 
-function deactivate()
-    if !isempty(LOAD_PATH) && ACTIVE_ENV[] === LOAD_PATH[1]
-        popfirst!(LOAD_PATH)
-    else
-        # warn if ACTIVE_ENV !== nothing ?
-    end
-    ACTIVE_ENV[] = nothing
-end
+"""
+    setprotocol!(proto::Union{Nothing, AbstractString}=nothing)
+
+Set the protocol used to access GitHub-hosted packages when `add`ing a url or `develop`ing a package.
+Defaults to 'https', with `proto == nothing` delegating the choice to the package developer.
+"""
+setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GitTools.setprotocol!(proto)
 
 end # module
