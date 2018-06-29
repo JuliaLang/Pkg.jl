@@ -157,7 +157,6 @@ for pkg in [
     "React"
     "PackageGenerator"
     "Sparrow"
-    "Mads"
 ]
     delete!(pkgs, pkg)
 end
