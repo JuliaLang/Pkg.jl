@@ -151,8 +151,6 @@ end # temp_pkg_dir
 
 
 temp_pkg_dir() do project_path; cd(project_path) do
-    touch("Project.toml")
-    touch("Manifest.toml")
     mktempdir() do tmp
         mktempdir() do depot_dir
             old_depot = copy(DEPOT_PATH)
