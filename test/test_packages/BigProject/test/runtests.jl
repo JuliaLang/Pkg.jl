@@ -7,5 +7,5 @@ using BigProject
 
 # #306 Pkg.jl
 cd("LibFoo.jl") do
-    run(`$(Base.julia_cmd()) test/runtests.jl`)
+    run(`$(Base.julia_cmd()) --project test/runtests.jl`)
 end
