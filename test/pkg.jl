@@ -341,6 +341,16 @@ temp_pkg_dir() do project_path
     end # @testset
 end
 
+temp_pkg_dir() do project_path
+    @testset "invalid repo url" begin
+        cd(project_path) do
+            @test_throws CommandError pkg"add https://github.com"
+            pkg"generate FooBar"
+            @test_throws CommandError pkg"add ./FooBar"
+        end
+    end
+end
+
 include("repl.jl")
 
 end # module

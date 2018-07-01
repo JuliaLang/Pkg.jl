@@ -509,6 +509,37 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     end
 end
 
+function validate_repo_url(repo::GitRepo)
+    url = repo.url
+    if ispath(url)
+        try
+            LibGit2.GitRepo(url)
+        catch err
+            if err isa LibGit2.GitError &&
+                    err.code == LibGit2.Error.ENOTFOUND &&
+                    err.class == LibGit2.Error.Repository
+                cmderror("'$(url)' does not point to a valid git repository")
+            else
+                throw(err)
+            end
+        end
+    else
+        try
+            # try to fetch anything just to see if it throws an error
+            repo = LibGit2.init(mktempdir())
+            remote = LibGit2.GitRemoteAnon(repo, url)
+            LibGit2.fetch(remote, refspecs)
+        catch err
+            if err isa LibGit2.GitError &&
+                    err.class == LibGit2.Error.Net
+                cmderror("'$(url)' does not point to a valid git repository")
+            else
+                throw(err)
+            end
+        end
+    end
+end
+
 function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgrade_or_add::Bool=true)
     Base.shred!(LibGit2.CachedCredentials()) do creds
         env = ctx.env
@@ -517,6 +548,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
             pkg.repo == nothing && continue
             pkg.special_action = PKGSPEC_REPO_ADDED
             isempty(pkg.repo.url) && set_repo_for_pkg!(env, pkg)
+            validate_repo_url(pkg.repo)
             clones_dir = joinpath(depots()[1], "clones")
             mkpath(clones_dir)
             repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
