@@ -15,7 +15,7 @@ function temp_pkg_dir(fn::Function)
         Base.ACTIVE_PROJECT[] = nothing
         mktempdir() do env_dir
             mktempdir() do depot_dir
-                push!(LOAD_PATH, env_dir, "@v#.#", "@stdlib")
+                push!(LOAD_PATH, env_dir, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
                 fn(env_dir)
             end
@@ -47,10 +47,10 @@ function write_build(path, content)
 end
 
 function with_current_env(f)
-    pushfirst!(LOAD_PATH, Base.current_env())
+    Pkg.activate(".")
     try
         f()
     finally
-        popfirst!(LOAD_PATH)
+        Pkg.activate()
     end
 end
