@@ -12,7 +12,6 @@ const STDLIBS = sort!(by = lowercase, [
     "FileWatching"
     "Future"
     "InteractiveUtils"
-    "IterativeEigensolvers"
     "LibGit2"
     "Libdl"
     "LinearAlgebra"
