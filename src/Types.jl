@@ -24,7 +24,8 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED, PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED,
-    printpkgstyle
+    printpkgstyle,
+    projectfile_path
 
 
 include("versions.jl")
@@ -167,6 +168,11 @@ PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
     PackageSpec(name, UUID(zero(UInt128)), version)
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
+function PackageSpec(repo::GitRepo)
+    pkg = PackageSpec()
+    pkg.repo = repo
+    return pkg
+end
 
 has_name(pkg::PackageSpec) = !isempty(pkg.name)
 has_uuid(pkg::PackageSpec) = pkg.uuid != UUID(zero(UInt128))
@@ -194,33 +200,25 @@ function parse_toml(path::String...; fakeit::Bool=false)
     !fakeit || isfile(p) ? TOML.parsefile(p) : Dict{String,Any}()
 end
 
-const project_names = ["JuliaProject.toml", "Project.toml"]
-const manifest_names = ["JuliaManifest.toml", "Manifest.toml"]
-const default_envs = [
-    "v$(VERSION.major).$(VERSION.minor).$(VERSION.patch)",
-    "v$(VERSION.major).$(VERSION.minor)",
-    "v$(VERSION.major)",
-    "default",
-]
+let trynames(names) = begin
+    return root_path::AbstractString -> begin
+        for x in names
+            maybe_file = joinpath(root_path, x)
+            if isfile(maybe_file)
+                return maybe_file
+            end
+        end
+    end
+end # trynames
+    global projectfile_path = trynames(Base.project_names)
+    global manifestfile_path = trynames(Base.manifest_names)
+end # let
 
 function find_project_file(env::Union{Nothing,String}=nothing)
     project_file = nothing
     if env isa Nothing
-        for entry in LOAD_PATH
-            project_file = Base.load_path_expand(entry)
-            project_file isa String && !isdir(project_file) && break
-            project_file = nothing
-        end
-        if project_file == nothing
-            project_dir = nothing
-            for entry in LOAD_PATH
-                project_dir = Base.load_path_expand(entry)
-                project_dir isa String && isdir(project_dir) && break
-                project_dir = nothing
-            end
-            project_dir == nothing && error("No Pkg environment found in LOAD_PATH")
-            project_file = joinpath(project_dir, Base.project_names[end])
-        end
+        project_file = Base.active_project()
+        project_file == nothing && error("no active project")
     elseif startswith(env, '@')
         project_file = Base.load_path_expand(env)
         project_file === nothing && error("package environment does not exist: $env")
@@ -234,8 +232,8 @@ function find_project_file(env::Union{Nothing,String}=nothing)
         end
     end
     @assert project_file isa String &&
-    (isfile(project_file) || !ispath(project_file) ||
-     isdir(project_file) && isempty(readdir(project_file)))
+        (isfile(project_file) || !ispath(project_file) ||
+         isdir(project_file) && isempty(readdir(project_file)))
      return project_file
 end
 
@@ -275,15 +273,13 @@ mutable struct EnvCache
         else
             project_package = nothing
         end
-        if haskey(project, "manifest")
-            manifest_file = abspath(project["manifest"])
-        else
-            dir = abspath(dirname(project_file))
-            for name in manifest_names
-                manifest_file = joinpath(dir, name)
-                isfile(manifest_file) && break
-            end
-        end
+        # determine manifest_file name
+        dir = abspath(dirname(project_file))
+        manifest_file = haskey(project, "manifest") ?
+            abspath(project["manifest"]) :
+            manifestfile_path(dir)
+        # use default name if still not determined
+        (manifest_file === nothing) && (manifest_file = joinpath(dir, "Manifest.toml"))
         write_env_usage(manifest_file)
         manifest = read_manifest(manifest_file)
         uuids = Dict{String,Vector{UUID}}()
@@ -318,8 +314,8 @@ stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
 function gather_stdlib_uuids()
     stdlibs = Dict{UUID,String}()
     for stdlib in readdir(stdlib_dir())
-        projfile = joinpath(stdlib_path(stdlib), "Project.toml")
-        if isfile(projfile)
+        projfile = projectfile_path(stdlib_path(stdlib))
+        if nothing !== projfile
             proj = TOML.parsefile(projfile)
             if haskey(proj, "uuid")
                 stdlibs[UUID(proj["uuid"])] = stdlib
@@ -535,10 +531,8 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
                 end
             end
             gitobject, isbranch = get_object_branch(repo, rev)
-            if !isbranch
-                # If the user gave a shortened commit SHA, might as well update it to the full one
-                pkg.repo.rev = string(LibGit2.GitHash(gitobject))
-            end
+            # If the user gave a shortened commit SHA, might as well update it to the full one
+            pkg.repo.rev = isbranch ? rev : string(LibGit2.GitHash(gitobject))
             git_tree = LibGit2.peel(LibGit2.GitTree, gitobject)
             @assert git_tree isa LibGit2.GitTree
             pkg.repo.git_tree_sha1 = SHA1(string(LibGit2.GitHash(git_tree)))
@@ -578,24 +572,18 @@ end
 
 function parse_package!(ctx, pkg, project_path)
     env = ctx.env
-    project_file = nothing
-    for projname in project_names
-        maybe_project_file = joinpath(project_path, projname)
-        if isfile(maybe_project_file)
-            project_file = maybe_project_file
-            project_data = parse_toml(project_file)
-            pkg.uuid = UUID(project_data["uuid"])
-            pkg.name = project_data["name"]
-            if haskey(project_data, "version")
-                pkg.version = VersionNumber(project_data["version"])
-            else
-                @warn "project file for $(pkg.name) is missing a `version` entry"
-                Pkg.Operations.set_maximum_version_registry!(env, pkg)
-            end
-            break
+    project_file = projectfile_path(project_path)
+    if project_file !== nothing
+        project_data = parse_toml(project_file)
+        pkg.uuid = UUID(project_data["uuid"])
+        pkg.name = project_data["name"]
+        if haskey(project_data, "version")
+            pkg.version = VersionNumber(project_data["version"])
+        else
+            @warn "project file for $(pkg.name) is missing a `version` entry"
+            Pkg.Operations.set_maximum_version_registry!(env, pkg)
         end
-    end
-    if nothing === project_file
+    else
         @warn "packages will need to have a [Julia]Project.toml file in the future"
         if !isempty(ctx.old_pkg2_clone_name) # remove when legacy CI script support is removed
             pkg.name = ctx.old_pkg2_clone_name

@@ -12,7 +12,6 @@ const STDLIBS = sort!(by = lowercase, [
     "FileWatching"
     "Future"
     "InteractiveUtils"
-    "IterativeEigensolvers"
     "LibGit2"
     "Libdl"
     "LinearAlgebra"
@@ -31,6 +30,7 @@ const STDLIBS = sort!(by = lowercase, [
     "SharedArrays"
     "SparseArrays"
     "SuiteSparse"
+    "Statistics"
     "Test"
     "UUIDs"
     "Unicode"
@@ -89,11 +89,14 @@ function gitmeta(pkgs::Dict{String,Package})
                     LibGit2.fetch(repo, remoteurl=p.url, refspecs=["+refs/*:refs/remotes/cache/*"])
                 end
             end
+            failed = false
             git_commit = try LibGit2.GitObject(repo, git_commit_hash)
             catch err
+                failed = true
                 err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
-                error("$pkg: git object $(v.sha1) could not be found")
+                @error("$pkg: git object $(v.sha1) could not be found")
             end
+	    failed && continue
             git_commit isa LibGit2.GitCommit || git_commit isa LibGit2.GitTag ||
                 error("$pkg: git object $(v.sha1) not a commit – $(typeof(git_commit))")
             git_tree = LibGit2.peel(LibGit2.GitTree, git_commit)

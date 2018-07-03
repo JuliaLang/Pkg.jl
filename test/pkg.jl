@@ -56,6 +56,37 @@ import Pkg.Types: semver_spec, VersionSpec
     @test  v"0.0.0"   in semver_spec("0.0")
     @test  v"0.0.99"  in semver_spec("0.0")
     @test !(v"0.1.0"  in semver_spec("0.0"))
+
+    @test semver_spec("<1.2.3") == VersionSpec("0.0.0 - 1.2.2")
+    @test semver_spec("<1.2") == VersionSpec("0.0.0 - 1.1")
+    @test semver_spec("<1") == VersionSpec("0.0.0 - 0")
+    @test semver_spec("<2") == VersionSpec("0.0.0 - 1")
+    @test semver_spec("<0.2.3") == VersionSpec("0.0.0 - 0.2.2")
+    @test semver_spec("<2.0.3") == VersionSpec("0.0.0 - 2.0.2")
+    @test   v"0.2.3" in semver_spec("<0.2.4")
+    @test !(v"0.2.4" in semver_spec("<0.2.4"))
+
+    @test semver_spec("=1.2.3") == VersionSpec("1.2.3")
+    @test semver_spec("=1.2") == VersionSpec("1.2.0")
+    @test semver_spec("  =1") == VersionSpec("1.0.0")
+    @test   v"1.2.3" in semver_spec("=1.2.3")
+    @test !(v"1.2.4" in semver_spec("=1.2.3"))
+    @test !(v"1.2.2" in semver_spec("=1.2.3"))
+
+    @test semver_spec("≥1.3.0") == semver_spec(">=1.3.0")
+
+
+    @test semver_spec(">=   1.2.3") == VersionSpec("1.2.3-*")
+    @test semver_spec(">=1.2  ") == VersionSpec("1.2.0-*")
+    @test semver_spec("  >=  1") == VersionSpec("1.0.0-*")
+    @test   v"1.0.0" in semver_spec(">=1")
+    @test   v"0.0.1" in semver_spec(">=0")
+    @test   v"1.2.3" in semver_spec(">=1.2.3")
+    @test !(v"1.2.2" in semver_spec(">=1.2.3"))
+
+    @test_throws ErrorException semver_spec("^^0.2.3")
+    @test_throws ErrorException semver_spec("^^0.2.3.4")
+    @test_throws ErrorException semver_spec("0.0.0")
 end
 
 # TODO: Should rewrite these tests not to rely on internals like field names
@@ -303,6 +334,44 @@ temp_pkg_dir() do project_path
             end
         end
     end
+end
+
+temp_pkg_dir() do project_path
+    @testset "valid project file names" begin
+        extract_uuid(toml_path) = begin
+            uuid = ""
+            for line in eachline(toml_path)
+                m = match(r"uuid = \"(.+)\"", line)
+                if m !== nothing
+                    uuid = m.captures[1]
+                    break
+                end
+            end
+            return uuid
+        end
+
+        cd(project_path) do
+            mktempdir() do tmp; cd(tmp) do
+                pkg_name = "FooBar"
+                # create a project and grab its uuid
+                Pkg.generate(pkg_name)
+                uuid = extract_uuid(joinpath(pkg_name, "Project.toml"))
+                # activate project env
+                Pkg.activate(abspath(pkg_name))
+                # add an example project to populate manifest file
+                Pkg.add("Example")
+                Pkg.activate()
+                # change away from default names
+                mv(joinpath(pkg_name, "Project.toml"), joinpath(pkg_name, "JuliaProject.toml"))
+                mv(joinpath(pkg_name, "Manifest.toml"), joinpath(pkg_name, "JuliaManifest.toml"))
+                # make sure things still work
+                Pkg.develop(abspath(pkg_name))
+                @test isinstalled((name=pkg_name, uuid=UUID(uuid)))
+                Pkg.rm(pkg_name)
+                @test !isinstalled((name=pkg_name, uuid=UUID(uuid)))
+            end end
+        end # cd project_path
+    end # @testset
 end
 
 include("repl.jl")

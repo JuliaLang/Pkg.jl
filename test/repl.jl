@@ -59,18 +59,21 @@ end
 
 temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
     tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git")
-    @test tokens[1][2] == "git@github.com:JuliaLang/Example.jl.git"
+    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
     tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git#master")
-    @test tokens[1][2] == "git@github.com:JuliaLang/Example.jl.git"
+    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
     @test tokens[1][3].rev == "master"
     tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git#c37b675")
-    @test tokens[1][2] == "git@github.com:JuliaLang/Example.jl.git"
+    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
     @test tokens[1][3].rev == "c37b675"
     tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git@v0.5.0")
-    @test tokens[1][2] == "git@github.com:JuliaLang/Example.jl.git"
+    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
     @test repr(tokens[1][3]) == "VersionRange(\"0.5.0\")"
     tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git@0.5.0")
-    @test tokens[1][2] == "git@github.com:JuliaLang/Example.jl.git"
+    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
+    @test repr(tokens[1][3]) == "VersionRange(\"0.5.0\")"
+    tokens = Pkg.REPLMode.tokenize("add git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git@0.5.0")
+    @test tokens[1][2] ==              "git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git"
     @test repr(tokens[1][3]) == "VersionRange(\"0.5.0\")"
     pkg"init"
     pkg"add Example"
@@ -155,8 +158,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 empty!(DEPOT_PATH)
                 pushfirst!(DEPOT_PATH, depot_dir)
                 withenv("JULIA_PKG_DEVDIR" => tmp) do
-                    pkg"init"
-
                     # Test an unregistered package
                     p1_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithProject")
                     p2_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithoutProject")
@@ -394,6 +395,27 @@ temp_pkg_dir() do project_path
             @test !isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
         end
     end
+end
+
+@testset "uint test `parse_package`" begin
+    name = "FooBar"
+    uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+    url = "https://github.com/JuliaLang/Example.jl"
+    path = "./Foobar"
+    # valid input
+    pkg = Pkg.REPLMode.parse_package(name)
+    @test pkg.name == name
+    pkg = Pkg.REPLMode.parse_package(uuid)
+    @test pkg.uuid == UUID(uuid)
+    pkg = Pkg.REPLMode.parse_package("$name=$uuid")
+    @test (pkg.name == name) && (pkg.uuid == UUID(uuid))
+    pkg = Pkg.REPLMode.parse_package(url; add_or_develop=true)
+    @test (pkg.repo.url == url)
+    pkg = Pkg.REPLMode.parse_package(path; add_or_develop=true)
+    @test (pkg.repo.url == path)
+    # errors
+    @test_throws CommandError Pkg.REPLMode.parse_package(url)
+    @test_throws CommandError Pkg.REPLMode.parse_package(path)
 end
 
 end # module

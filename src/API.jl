@@ -15,7 +15,7 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 
 include("generate.jl")
 
-parse_package(pkg) = Pkg.REPLMode.parse_package(pkg; context=Pkg.REPLMode.CMD_ADD)
+parse_package(pkg) = Pkg.REPLMode.parse_package(pkg; add_or_develop=true)
 
 add_or_develop(pkg::Union{String, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
 add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([parse_package(pkg) for pkg in pkgs]; kwargs...)
@@ -566,28 +566,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
     Operations.build_versions(ctx, union(new_apply, new_git))
 end
 
-const ACTIVE_ENV = Ref{Union{String,Nothing}}(nothing)
-
 function activate(path::Union{String,Nothing}=nothing)
-    if path === nothing # reset to default LOAD_PATH
-        if !isempty(LOAD_PATH) && ACTIVE_ENV[] === LOAD_PATH[1]
-            popfirst!(LOAD_PATH)
-        end
-        ACTIVE_ENV[] = nothing
-    else # activate the env found in path
-        env = Base.current_env(path)
-        if env === nothing
-            @warn "Current directory is not in a project, nothing activated."
-        else
-            if !isempty(LOAD_PATH) && ACTIVE_ENV[] === LOAD_PATH[1]
-                LOAD_PATH[1] = env
-            else
-                pushfirst!(LOAD_PATH, env)
-            end
-            ACTIVE_ENV[] = env
-        end
-    end
-    return ACTIVE_ENV[]
+    Base.ACTIVE_PROJECT[] = Base.load_path_expand(path)
 end
 
 """

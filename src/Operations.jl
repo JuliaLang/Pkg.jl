@@ -128,11 +128,16 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::D
 end
 
 function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps_map::Dict{UUID,Vector{PackageSpec}})
-    project_file = joinpath(path, "Project.toml")
+    project_file = projectfile_path(path)
     fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
-    !isfile(project_file) && return false
+    (project_file === nothing) && return false
     project = read_project(project_file)
     compat = get(project, "compat", Dict())
+    if haskey(compat, "julia")
+        if !(VERSION in Types.semver_spec(compat["julia"]))
+            @warn("julia version requirement for package $(pkg.name) not satisfied")
+        end
+    end
     for (deppkg_name, uuid) in project["deps"]
         vspec = haskey(compat, deppkg_name) ? Types.semver_spec(compat[deppkg_name]) : VersionSpec()
         deppkg = PackageSpec(deppkg_name, UUID(uuid), vspec)
@@ -160,7 +165,7 @@ function collect_require!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
             pkg_name, vspec = r.package, VersionSpec(VersionRange[r.versions.intervals...])
             if pkg_name == "julia"
                 if !(VERSION in vspec)
-                    @warn("julia version requirement for package $pkg not satisfied")
+                    @warn("julia version requirement for package $(pkg.name) not satisfied")
                 end
             else
                 deppkg = PackageSpec(pkg_name, vspec)
@@ -292,6 +297,12 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})::Dict{UUID,V
         end
         pkg.version = v
     end
+    proj_compat = Types.project_compatibility(ctx, "julia")
+    v = intersect(VERSION, proj_compat)
+    if isempty(v)
+        @warn("julia version requirement for project not satisfied")
+    end
+
     # construct data structures for resolver and call it
     reqs = Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
     fixed = collect_fixed!(ctx, pkgs, uuid_to_name)
@@ -651,8 +662,8 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
         deps = Dict{String,String}()
 
         # Check for deps in project file
-        project_file = joinpath(path, "Project.toml")
-        if isfile(project_file)
+        project_file = projectfile_path(path)
+        if nothing !== project_file
             project = read_project(project_file)
             deps = project["deps"]
         else
