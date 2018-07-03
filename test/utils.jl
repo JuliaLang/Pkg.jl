@@ -1,3 +1,8 @@
+first_run = true
+mutable struct RemoveRegistry
+    path::String
+end
+
 function temp_pkg_dir(fn::Function)
     local env_dir
     local old_load_path
@@ -15,6 +20,23 @@ function temp_pkg_dir(fn::Function)
         Base.ACTIVE_PROJECT[] = nothing
         mktempdir() do env_dir
             mktempdir() do depot_dir
+                # In order not to clone the registry over and over we clone it once and then copy thatt_dir
+                # to the correct place in successive uses of this function
+                if first_run
+                    tmp_reg = mktempdir()
+                    # Clone the default registry
+                    push!(DEPOT_PATH, tmp_reg)
+                    Pkg.Types.registries()
+                    # Remove the cloned registry when we are done
+                    global __reg = RemoveRegistry(tmp_reg)
+                    finalizer(__reg) do x
+                        Base.rm(joinpath(x.path, "registries"); recursive=true)
+                    end
+                    empty!(DEPOT_PATH)
+                    global first_run = false
+                else
+                    cp(joinpath(__reg.path, "registries"), joinpath(depot_dir, "registries"))
+                end
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
                 fn(env_dir)
