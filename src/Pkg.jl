@@ -1,4 +1,4 @@
-__precompile__(true)
+# __precompile__(true)
 module Pkg
 
 import Random
@@ -67,7 +67,7 @@ import .REPLMode: @pkg_str
 export @pkg_str
 
 
-function __init__()
+#function __init__()
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
@@ -78,7 +78,7 @@ function __init__()
             end
         end
     end
-end
+#end
 
 using .Types
 using UUIDs
@@ -92,5 +92,7 @@ if haskey(ENV, "JULIA_PKG3_PRECOMPILE")
 else
     const PKG3_IS_PRECOMPILED = false
 end
+
+METADATA_compatible_uuid(pkg::String) = Types.uuid5(Types.uuid_package, pkg)
 
 end # module
