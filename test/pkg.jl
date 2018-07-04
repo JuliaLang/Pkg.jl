@@ -403,9 +403,10 @@ temp_pkg_dir() do project_path
     # `fetch` should warn that it is no longer a git repo
     with_dummy_env() do
         @testset "inconsistent repo state" begin
-            LibGit2.clone("https://github.com/JuliaLang/Example.jl", project_path)
-            Pkg.add(project_path)
-            rm(joinpath(project_path, ".git"); force=true, recursive=true)
+            package_path = joinpath(project_path, "Example")
+            LibGit2.clone("https://github.com/JuliaLang/Example.jl", package_path)
+            Pkg.add(package_path)
+            rm(joinpath(package_path, ".git"); force=true, recursive=true)
             @test_throws CommandError Pkg.up()
         end
     end
