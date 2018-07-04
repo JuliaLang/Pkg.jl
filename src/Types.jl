@@ -500,7 +500,6 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
             pkg.repo == nothing && continue
             pkg.special_action = PKGSPEC_REPO_ADDED
             isempty(pkg.repo.url) && set_repo_for_pkg!(env, pkg)
-            GitTools.validate_git_url(pkg.repo.url)
             clones_dir = joinpath(depots()[1], "clones")
             mkpath(clones_dir)
             repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
