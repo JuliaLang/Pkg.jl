@@ -418,4 +418,29 @@ end
     @test_throws CommandError Pkg.REPLMode.parse_package(path)
 end
 
+function with_dummy_env(f, env_name::AbstractString="Dummy")
+    TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
+    env_path = joinpath(mktempdir(), env_name)
+    Pkg.generate(env_path)
+    repo = LibGit2.init(env_path)
+    LibGit2.add!(repo, "*")
+    LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+    Pkg.activate(env_path)
+    try
+        f()
+    finally
+        Pkg.activate()
+    end
+end
+
+@testset "unit test for REPLMode.promptf" begin
+    with_dummy_env("SomeEnv") do
+        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+    end
+
+    with_dummy_env("Test2") do
+        @test Pkg.REPLMode.promptf() == "(Test2) pkg> "
+    end
+end
+
 end # module
