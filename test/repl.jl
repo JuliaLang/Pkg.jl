@@ -421,28 +421,23 @@ end
     @test_throws CommandError Pkg.REPLMode.parse_package(path)
 end
 
-function with_dummy_env(f, env_name::AbstractString="Dummy")
-    TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
-    env_path = joinpath(mktempdir(), env_name)
-    Pkg.generate(env_path)
-    repo = LibGit2.init(env_path)
-    LibGit2.add!(repo, "*")
-    LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-    Pkg.activate(env_path)
-    try
-        f()
-    finally
-        Pkg.activate()
-    end
-end
-
 @testset "unit test for REPLMode.promptf" begin
-    with_dummy_env("SomeEnv") do
+    with_dummy_env("SomeEnv") do env_path
         @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
     end
 
-    with_dummy_env("Test2") do
+    with_dummy_env("Test2") do env_path
         @test Pkg.REPLMode.promptf() == "(Test2) pkg> "
+        project_path = joinpath(env_path, "Project.toml")
+        new_projectfile = ""
+        newname = "NewName"
+        for line in eachline(project_path; keep=true)
+            new_projectfile = new_projectfile * begin
+                nothing === match(r"name *=.*", line) ? line : "name = \"$newname\"\n"
+            end
+        end
+        write(project_path, new_projectfile)
+        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
     end
 end
 
