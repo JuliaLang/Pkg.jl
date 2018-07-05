@@ -972,7 +972,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             """
         cmd = ```
             $(Base.julia_cmd()) -O0 --color=no --history-file=no
-            --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
+            --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
             --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
             --eval $code
             ```
@@ -1224,7 +1224,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             --color=$(Base.have_color ? "yes" : "no")
             --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
             --check-bounds=yes
-            --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
+            --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
             --eval $code
         ```
         run_test = () -> begin

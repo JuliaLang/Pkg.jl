@@ -504,7 +504,7 @@ function precompile(ctx::Context)
         printpkgstyle(ctx, :Precompiling, pkg * " [$i of $(length(needs_to_be_precompiled))]")
         run(pipeline(ignorestatus(```
         $(Base.julia_cmd()) -O$(Base.JLOptions().opt_level) --color=no --history-file=no
-        --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
+        --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --compiled-modules="yes"
         --depwarn=no
         --eval $code
