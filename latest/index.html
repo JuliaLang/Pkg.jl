@@ -162,7 +162,7 @@ println(&quot;Testing...&quot;)
    Testing HelloWorld
  Resolving package versions...
 Testing...
-   Testing HelloWorld tests passed</code></pre><h4><a class="nav-anchor" id="Test-specific-dependencies-1" href="#Test-specific-dependencies-1">Test-specific dependencies</a></h4><p>Sometimes one might want to use some packages only at testing time but not enforce a dependency on them when the package is used. This is possible by adding dependencies to a &quot;test target&quot; to the Project file. Here we add the <code>Test</code> standard library as a test-only dependency by adding the following to the Project file:</p><pre><code class="language-none">[target.test.deps]
+   Testing HelloWorld tests passed</code></pre><h4><a class="nav-anchor" id="Test-specific-dependencies-1" href="#Test-specific-dependencies-1">Test-specific dependencies</a></h4><p>Sometimes one might want to use some packages only at testing time but not enforce a dependency on them when the package is used. This is possible by adding dependencies to a &quot;test target&quot; to the Project file. Here we add the <code>Test</code> standard library as a test-only dependency by adding the following to the Project file:</p><pre><code class="language-none">[targets.test.deps]
 Test = &quot;8dfed614-e22c-5e08-85e1-65c5234f0b40&quot;</code></pre><p>We can now use <code>Test</code> in the test script and we can see that it gets installed on testing:</p><pre><code class="language-none">shell&gt; cat test/runtests.jl
 using Test
 @test 1 == 1
