@@ -15,11 +15,11 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 
 include("generate.jl")
 
-parse_package(pkg) = Pkg.REPLMode.parse_package(pkg; add_or_develop=true)
 
-add_or_develop(pkg::Union{String, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
-add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([parse_package(pkg) for pkg in pkgs]; kwargs...)
-add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)       = add_or_develop(Context(), pkgs; kwargs...)
+add_or_develop(pkg::Union{String, URL, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
+add_or_develop(pkgs::Vector{String}; kwargs...)     = add_or_develop(map(PackageSpec, pkgs); kwargs...)
+add_or_develop(pkgs::Vector{URL}; kwargs...)        = add_or_develop(map(PackageSpec, pkgs); kwargs...)
+add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)            = add_or_develop(Context(), pkgs; kwargs...)
 
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, kwargs...)
     print_first_command_header()
@@ -444,7 +444,7 @@ function clone(url::String, name::String = "")
     if !isempty(name)
         ctx.old_pkg2_clone_name = name
     end
-    develop(ctx, [parse_package(url)])
+    develop(ctx, [PackageSpec(Types.URL(url))])
 end
 
 function dir(pkg::String, paths::String...)
