@@ -422,11 +422,11 @@ end
 end
 
 @testset "unit test for REPLMode.promptf" begin
-    with_dummy_env("SomeEnv") do
+    with_temp_env("SomeEnv") do
         @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
     end
 
-    with_dummy_env("Test2") do env_path
+    with_temp_env("Test2") do env_path
         @test Pkg.REPLMode.promptf() == "(Test2) pkg> "
         projfile_path = joinpath(env_path, "Project.toml")
         newname = "NewNameII"

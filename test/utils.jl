@@ -55,13 +55,13 @@ function with_current_env(f)
     end
 end
 
-function with_dummy_env(f, env_name::AbstractString="Dummy")
+function with_temp_env(f, env_name::AbstractString="Dummy")
     TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
-    repo = LibGit2.init(env_path)
-    LibGit2.add!(repo, "*")
-    LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+    #repo = LibGit2.init(env_path)
+    #LibGit2.add!(repo, "*")
+    #LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
     Pkg.activate(env_path)
     try
         applicable(f, env_path) ? f(env_path) : f()
