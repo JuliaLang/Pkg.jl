@@ -504,7 +504,8 @@ const helps = Dict(
 
     Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
     in the package directory. The option `--coverage` can be used to run the tests with
-    coverage enabled.
+    coverage enabled. The `startup.jl` file is disabled during testing unless
+    julia is started with `--startup-file=yes`.
     """, CMD_GC => md"""
 
     Deletes packages that cannot be reached from any existing environment.
@@ -518,8 +519,9 @@ const helps = Dict(
 
         build pkg[=uuid] ...
 
-    Run the build script in deps/build.jl for each package in `pkg`` and all of their dependencies in depth-first recursive order.
+    Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
     If no packages are given, runs the build scripts for all packages in the manifest.
+    The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
     """, CMD_PIN => md"""
 
         pin pkg[=uuid] ...
@@ -550,6 +552,7 @@ const helps = Dict(
         precompile
 
     Precompile all the dependencies of the project by running `import` on all of them in a new process.
+    The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
     """, CMD_INSTANTIATE => md"""
         instantiate
         instantiate [-m|--manifest]
