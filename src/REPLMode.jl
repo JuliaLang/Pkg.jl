@@ -6,7 +6,7 @@ using UUIDs
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..devdir, ..print_first_command_header, ..Types.casesensitive_isdir
+import ..devdir, ..Types.casesensitive_isdir
 using ..Types, ..Display, ..Operations, ..API
 
 ############
@@ -224,7 +224,6 @@ function parse_quotes(cmd::String)
 end
 
 function tokenize!(words::Vector{<:AbstractString})::Vector{Token}
-    print_first_command_header()
     tokens = Token[]
     help_mode = false
     preview_mode = false
@@ -991,7 +990,7 @@ prev_prefix = ""
 function promptf()
     global prev_project_timestamp, prev_prefix, prev_project_file
     project_file = try
-        Types.find_project_file()
+        project_file = Base.active_project()
     catch
         nothing
     end

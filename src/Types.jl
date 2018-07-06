@@ -214,29 +214,6 @@ end # trynames
     global manifestfile_path = trynames(Base.manifest_names)
 end # let
 
-function find_project_file(env::Union{Nothing,String}=nothing)
-    project_file = nothing
-    if env isa Nothing
-        project_file = Base.active_project()
-        project_file == nothing && error("no active project")
-    elseif startswith(env, '@')
-        project_file = Base.load_path_expand(env)
-        project_file === nothing && error("package environment does not exist: $env")
-    elseif env isa String
-        if isdir(env)
-            isempty(readdir(env)) || error("environment is a package directory: $env")
-            project_file = joinpath(env, Base.project_names[end])
-        else
-            project_file = endswith(env, ".toml") ? abspath(env) :
-                abspath(env, Base.project_names[end])
-        end
-    end
-    @assert project_file isa String &&
-        (isfile(project_file) || !ispath(project_file) ||
-         isdir(project_file) && isempty(readdir(project_file)))
-     return project_file
-end
-
 
 mutable struct EnvCache
     # environment info:
@@ -259,7 +236,24 @@ mutable struct EnvCache
     paths::Dict{UUID,Vector{String}}
 
     function EnvCache(env::Union{Nothing,String}=nothing)
-        project_file = find_project_file(env)
+        if env isa Nothing
+            project_file = Base.active_project()
+            project_file == nothing && error("no active project")
+        elseif startswith(env, '@')
+            project_file = Base.load_path_expand(env)
+            project_file === nothing && error("package environment does not exist: $env")
+        elseif env isa String
+            if isdir(env)
+                isempty(readdir(env)) || error("environment is a package directory: $env")
+                project_file = joinpath(env, Base.project_names[end])
+            else
+                project_file = endswith(env, ".toml") ? abspath(env) :
+                    abspath(env, Base.project_names[end])
+            end
+        end
+        @assert project_file isa String &&
+            (isfile(project_file) || !ispath(project_file) ||
+             isdir(project_file) && isempty(readdir(project_file)))
         project_dir = dirname(project_file)
         git = ispath(joinpath(project_dir, ".git")) ? LibGit2.GitRepo(project_dir) : nothing
 

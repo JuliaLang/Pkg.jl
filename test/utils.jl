@@ -47,10 +47,10 @@ function write_build(path, content)
 end
 
 function with_current_env(f)
-    Pkg.activate(".")
+    pushfirst!(LOAD_PATH, "@.")
     try
         f()
     finally
-        Pkg.activate()
+        popfirst!(LOAD_PATH)
     end
 end
