@@ -72,6 +72,6 @@ import Dates
 
 METADATA_compatible_uuid(pkg::String) = Types.uuid5(Types.uuid_package, pkg)
 
-include("precompile.jl")
+# include("precompile.jl")
 
 end # module
