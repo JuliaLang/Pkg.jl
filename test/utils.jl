@@ -64,7 +64,7 @@ function with_dummy_env(f, env_name::AbstractString="Dummy")
     LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
     Pkg.activate(env_path)
     try
-        f(env_path)
+        applicable(f, env_path) ? f(env_path) : f()
     finally
         Pkg.activate()
     end

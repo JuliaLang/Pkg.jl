@@ -387,7 +387,7 @@ end
 temp_pkg_dir() do project_path
     # pkg assumes `Example.jl` is still a git repo, it will try to fetch on `update`
     # `fetch` should warn that it is no longer a git repo
-    with_dummy_env() do env_path
+    with_dummy_env() do
         @testset "inconsistent repo state" begin
             package_path = joinpath(project_path, "Example")
             LibGit2.clone("https://github.com/JuliaLang/Example.jl", package_path)

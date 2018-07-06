@@ -422,21 +422,19 @@ end
 end
 
 @testset "unit test for REPLMode.promptf" begin
-    with_dummy_env("SomeEnv") do env_path
+    with_dummy_env("SomeEnv") do
         @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
     end
 
     with_dummy_env("Test2") do env_path
         @test Pkg.REPLMode.promptf() == "(Test2) pkg> "
-        project_path = joinpath(env_path, "Project.toml")
-        new_projectfile = ""
-        newname = "NewName"
-        for line in eachline(project_path; keep=true)
-            new_projectfile = new_projectfile * begin
-                nothing === match(r"name *=.*", line) ? line : "name = \"$newname\"\n"
-            end
+        projfile_path = joinpath(env_path, "Project.toml")
+        newname = "NewNameII"
+        project = Pkg.TOML.parsefile(projfile_path)
+        project["name"] = newname
+        open(projfile_path, "w") do io
+            Pkg.TOML.print(io, project)
         end
-        write(project_path, new_projectfile)
         @test Pkg.REPLMode.promptf() == "($newname) pkg> "
     end
 end
