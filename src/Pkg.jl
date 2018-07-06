@@ -1,4 +1,4 @@
-# __precompile__(true)
+__precompile__(true)
 module Pkg
 
 import Random
@@ -52,7 +52,7 @@ import .REPLMode: @pkg_str
 export @pkg_str
 
 
-#function __init__()
+function __init__()
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
@@ -63,7 +63,7 @@ export @pkg_str
             end
         end
     end
-#end
+end
 
 using .Types
 using UUIDs
