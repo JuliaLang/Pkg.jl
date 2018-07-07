@@ -439,25 +439,20 @@ end
 
         newname = "NewName"
         set_name(projfile_path, newname)
-        # still using old name
         @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
-        # still using old name after cd
         cd(env_path) do
             @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
         end
-        # still using old name after cd back
         @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
 
-        # use new name if change name + immediately cd
         newname = "NewNameII"
         set_name(projfile_path, newname)
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
         end
-        # new name is preserved after cd back
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+
         rm(projfile_path)
-        # fall back to basename when no Project file is present
         @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
     end
 end
