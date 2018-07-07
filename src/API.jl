@@ -423,18 +423,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     return
 end
 
-init(; kwargs...) = init(Context(); kwargs...)
-init(path::String) = init(Context(env=EnvCache(path)), path)
-function init(ctx::Context, path::String=pwd(); kwargs...)
-    Context!(ctx; kwargs...)
-    ctx.preview && preview_info()
-    Context!(ctx; env = EnvCache(joinpath(path, "Project.toml")))
-    Operations.init(ctx)
-    activate(path)
-    ctx.preview && preview_info()
-    return
-end
-
 #####################################
 # Backwards compatibility with Pkg2 #
 #####################################
@@ -504,7 +492,7 @@ function precompile(ctx::Context)
         printpkgstyle(ctx, :Precompiling, pkg * " [$i of $(length(needs_to_be_precompiled))]")
         run(pipeline(ignorestatus(```
         $(Base.julia_cmd()) -O$(Base.JLOptions().opt_level) --color=no --history-file=no
-        --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
+        --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --compiled-modules="yes"
         --depwarn=no
         --eval $code
