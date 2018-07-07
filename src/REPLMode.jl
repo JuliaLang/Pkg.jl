@@ -984,6 +984,12 @@ function promptf()
     end
     prefix = ""
     if project_file !== nothing
+        # debug code
+        if prev_project_timestamp !== nothing
+            println("previous timestamp: [$prev_project_timestamp]")
+            println("mtime:              [$(mtime(project_file))]")
+        end
+        # debug code
         if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)
             prefix = prev_prefix
         else
