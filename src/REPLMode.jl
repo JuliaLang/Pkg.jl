@@ -991,8 +991,10 @@ function promptf()
         end
         # debug code
         if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)
+            println("- cache") #debug
             prefix = prev_prefix
         else
+            println("- new") #debug
             project = try
                 Types.read_project(project_file)
             catch
@@ -1002,8 +1004,10 @@ function promptf()
                 proj_dir = dirname(project_file)
                 projname = get(project, "name", nothing)
                 if startswith(pwd(), proj_dir) && projname !== nothing
+                    println("-- use projname") #debug
                     name = projname
                 else
+                    println("-- use basename") #debug
                     name = basename(proj_dir)
                 end
                 prefix = string("(", name, ") ")
