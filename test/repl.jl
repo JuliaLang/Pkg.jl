@@ -422,20 +422,45 @@ end
 end
 
 @testset "unit test for REPLMode.promptf" begin
-    with_temp_env("SomeEnv") do
-        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
-    end
-
-    with_temp_env("Test2") do env_path
-        @test Pkg.REPLMode.promptf() == "(Test2) pkg> "
-        projfile_path = joinpath(env_path, "Project.toml")
-        newname = "NewNameII"
+    function set_name(projfile_path, newname)
         project = Pkg.TOML.parsefile(projfile_path)
         project["name"] = newname
         open(projfile_path, "w") do io
             Pkg.TOML.print(io, project)
         end
+    end
+
+    with_temp_env("SomeEnv") do
+        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+    end
+
+    env_name = "Test2"
+    with_temp_env(env_name) do env_path
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        projfile_path = joinpath(env_path, "Project.toml")
+
+        newname = "NewName"
+        set_name(projfile_path, newname)
+        # still using old name
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        # still using old name after cd
+        cd(env_path) do
+            @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        end
+        # still using old name after cd back
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+
+        # use new name if change name + immediately cd
+        newname = "NewNameII"
+        set_name(projfile_path, newname)
+        cd(env_path) do
+            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        end
+        # new name is preserved after cd back
         @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        rm(projfile_path)
+        # fall back to basename when no Project file is present
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
     end
 end
 
