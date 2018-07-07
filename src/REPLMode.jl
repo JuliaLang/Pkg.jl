@@ -1003,6 +1003,9 @@ function promptf()
             if project !== nothing
                 proj_dir = dirname(project_file)
                 projname = get(project, "name", nothing)
+                projname === nothing ? println("> no projname") : println("> projname: [$projname]")
+                println("> pwd: $(pwd())")
+                println("> projdir: $proj_dir")
                 if startswith(pwd(), proj_dir) && projname !== nothing
                     println("-- use projname") #debug
                     name = projname
