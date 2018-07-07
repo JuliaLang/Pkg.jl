@@ -448,6 +448,7 @@ end
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
+        println("----") #debug
         cd(env_path) do
             @test Pkg.REPLMode.promptf() == "($newname) pkg> "
         end
