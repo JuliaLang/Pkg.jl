@@ -421,7 +421,7 @@ end
 
 @testset "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
-        sleep(3)
+        sleep(1.1)
         project = Pkg.TOML.parsefile(projfile_path)
         project["name"] = newname
         open(projfile_path, "w") do io
@@ -448,7 +448,6 @@ end
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
-        println("----") #debug
         cd(env_path) do
             @test Pkg.REPLMode.promptf() == "($newname) pkg> "
         end
