@@ -984,33 +984,38 @@ function promptf()
     end
     prefix = ""
     if project_file !== nothing
+        #=
         # debug code
+        println("project_file: [$project_file]")
+        println("* is file: $(isfile(project_file))")
         if prev_project_timestamp !== nothing
             println("previous timestamp: [$prev_project_timestamp]")
             println("mtime:              [$(mtime(project_file))]")
         end
         # debug code
+        =#
         if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)
-            println("- cache") #debug
+            #println("- cache") #debug
             prefix = prev_prefix
         else
-            println("- new") #debug
+            #println("- new") #debug
             project = try
                 Types.read_project(project_file)
             catch
                 nothing
             end
             if project !== nothing
-                proj_dir = dirname(project_file)
+                proj_dir = ispath(project_file) ? realpath(project_file) : project_file
+                proj_dir = dirname(proj_dir)
                 projname = get(project, "name", nothing)
-                projname === nothing ? println("> no projname") : println("> projname: [$projname]")
-                println("> pwd: $(pwd())")
-                println("> projdir: $proj_dir")
+                #projname === nothing ? println("> no projname") : println("> projname: [$projname]")
+                #println("> pwd: $(pwd())")
+                #println("> projdir: $proj_dir")
                 if startswith(pwd(), proj_dir) && projname !== nothing
-                    println("-- use projname") #debug
+                    #println("-- use projname") #debug
                     name = projname
                 else
-                    println("-- use basename") #debug
+                    #println("-- use basename") #debug
                     name = basename(proj_dir)
                 end
                 prefix = string("(", name, ") ")
