@@ -16,10 +16,9 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 include("generate.jl")
 
 
-add_or_develop(pkg::Union{String, URL, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
-add_or_develop(pkgs::Vector{String}; kwargs...)     = add_or_develop(map(PackageSpec, pkgs); kwargs...)
-add_or_develop(pkgs::Vector{URL}; kwargs...)        = add_or_develop(map(PackageSpec, pkgs); kwargs...)
-add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)            = add_or_develop(Context(), pkgs; kwargs...)
+add_or_develop(pkg::Union{String, URL, UUID, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
+add_or_develop(pkgs::Vector{T}; kwargs...) where {T} = add_or_develop(map(PackageSpec, pkgs); kwargs...)
+add_or_develop(pkgs::Vector{PackageSpec}; kwargs...) = add_or_develop(Context(), pkgs; kwargs...)
 
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, kwargs...)
     print_first_command_header()

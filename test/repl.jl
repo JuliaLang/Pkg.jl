@@ -437,4 +437,26 @@ end
     @test_throws CommandError Pkg.REPLMode.parse_package(path)
 end
 
+@testset "compatibility between API.add and REPL add" begin
+    with_temp_env() do env_path
+        Pkg.add(TEST_PKG.name)
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+        Pkg.REPLMode.pkgstr("add $(TEST_PKG.name)")
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+
+        Pkg.add(TEST_PKG.uuid)
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+        Pkg.REPLMode.pkgstr("add $(TEST_PKG.uuid)")
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+    end
+end
+
 end # module
