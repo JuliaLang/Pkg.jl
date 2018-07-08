@@ -217,12 +217,16 @@ end # let
 function find_project_file(env::Union{Nothing,String}=nothing)
     project_file = nothing
     if env isa Nothing
+        println("** 1")
         project_file = Base.active_project()
+        println("active project: [$project_file]")
         project_file == nothing && error("no active project")
     elseif startswith(env, '@')
+        println("** 2")
         project_file = Base.load_path_expand(env)
         project_file === nothing && error("package environment does not exist: $env")
     elseif env isa String
+        println("** 3")
         if isdir(env)
             isempty(readdir(env)) || error("environment is a package directory: $env")
             project_file = joinpath(env, Base.project_names[end])

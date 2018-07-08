@@ -988,8 +988,8 @@ function promptf()
         println("project_file: [$project_file]")
         println("* is file: $(isfile(project_file))")
         if prev_project_timestamp !== nothing
-            println("previous timestamp: [$prev_project_timestamp]")
-            println("mtime:              [$(mtime(project_file))]")
+            #println("previous timestamp: [$prev_project_timestamp]")
+            #println("mtime:              [$(mtime(project_file))]")
         end
         # debug code
         if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)
@@ -1003,15 +1003,15 @@ function promptf()
                 nothing
             end
             if project !== nothing
-                println("project file: [$project_file]")
+                #println("project file: [$project_file]")
                 proj_dir = ispath(project_file) ? realpath(project_file) : project_file
-                println("real path: [$proj_dir]")
+                #println("real path: [$proj_dir]")
                 proj_dir = dirname(proj_dir)
-                println("dirname: [$proj_dir]")
+                #println("dirname: [$proj_dir]")
                 projname = get(project, "name", nothing)
-                projname === nothing ? println("> no projname") : println("> projname: [$projname]")
-                println("> pwd: $(pwd())")
-                println("> projdir: $proj_dir")
+                #projname === nothing ? println("> no projname") : println("> projname: [$projname]")
+                #println("> pwd: $(pwd())")
+                #println("> projdir: $proj_dir")
                 if startswith(pwd(), proj_dir) && projname !== nothing
                     println("-- use projname") #debug
                     name = projname
