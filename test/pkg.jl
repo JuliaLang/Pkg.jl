@@ -114,6 +114,16 @@ end
     @test unified_vb.t == (UInt32(1), UInt32(5), UInt32(0))
 end
 
+@testset "test utilities" begin
+    with_temp_env() do env_path
+        @test Base.active_project() == joinpath(env_path, "Project.toml")
+    end
+
+    with_temp_env("Test2") do env_path
+        @test Base.active_project() == joinpath(env_path, "Project.toml")
+    end
+end
+
 temp_pkg_dir() do project_path
     @testset "simple add and remove with preview" begin
         Pkg.activate(project_path)
