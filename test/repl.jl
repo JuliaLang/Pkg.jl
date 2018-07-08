@@ -438,7 +438,7 @@ end
 end
 
 @testset "compatibility between API.add and REPL add" begin
-    with_temp_env() do env_path
+    with_temp_env() do
         Pkg.add(TEST_PKG.name)
         @test isinstalled(TEST_PKG)
         Pkg.rm(TEST_PKG.name)
@@ -453,6 +453,18 @@ end
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
         Pkg.REPLMode.pkgstr("add $(TEST_PKG.uuid)")
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+    end
+
+    url = "https://github.com/JuliaLang/Example.jl"
+    with_temp_env() do
+        Pkg.REPLMode.pkgstr("add $(url)")
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+        Pkg.add(Pkg.Types.URL(url))
         @test isinstalled(TEST_PKG)
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
