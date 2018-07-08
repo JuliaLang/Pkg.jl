@@ -1003,8 +1003,11 @@ function promptf()
                 nothing
             end
             if project !== nothing
+                println("project file: [$project_file]")
                 proj_dir = ispath(project_file) ? realpath(project_file) : project_file
+                println("real path: [$proj_dir]")
                 proj_dir = dirname(proj_dir)
+                println("dirname: [$proj_dir]")
                 projname = get(project, "name", nothing)
                 projname === nothing ? println("> no projname") : println("> projname: [$projname]")
                 println("> pwd: $(pwd())")
