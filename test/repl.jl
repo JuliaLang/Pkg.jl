@@ -438,28 +438,37 @@ end
 end
 
 @testset "compatibility between API.add and REPL add" begin
-    with_temp_env() do env_path
-        function print_project_file(note)
-            println("START *** $note")
-            for line in eachline(joinpath(env_path, "Project.toml"))
-                println("> $line")
-            end
-            println("END ***")
+    function print_project_file(path::String; note::String="")
+        println("START *** $note")
+        for line in eachline(joinpath(path, "Project.toml"))
+            println("> $line")
         end
+        println("END ***")
+    end
 
+    function try_printing_package()
+        maybe_package = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
+        if maybe_package === nothing
+            println("no package found")
+        else
+            println("found this: $maybe_package")
+        end
+    end
 
+    with_temp_env() do env_path
         Pkg.add(TEST_PKG.name)
         @test isinstalled(TEST_PKG)
-        print_project_file("after add") # debug
+        print_project_file(env_path; note="after add") # debug
         Pkg.rm(TEST_PKG.name)
-        print_project_file("after rm") # debug
+        print_project_file(env_path; note="after rm") # debug
+        try_printing_package()
         @test !isinstalled(TEST_PKG)
         println("-- now REPL")
         Pkg.REPLMode.pkgstr("add $(TEST_PKG.name)")
         @test isinstalled(TEST_PKG)
-        print_project_file("after add") # debug
+        print_project_file(env_path; note="after add") # debug
         Pkg.rm(TEST_PKG.name)
-        print_project_file("after rm") # debug
+        print_project_file(env_path; note="after rm") # debug
         @test !isinstalled(TEST_PKG)
 
         #=
