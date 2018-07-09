@@ -31,7 +31,7 @@ end
     end
 end
 
-
+#=
 @testset "generate args" begin
     @test_throws CommandError pkg"generate"
 end
@@ -468,5 +468,6 @@ end
         @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
     end
 end
+=#
 
 end # module
