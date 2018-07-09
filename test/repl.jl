@@ -22,6 +22,15 @@ function git_init_package(tmp, path)
     return pkgpath
 end
 
+@testset "isolating error" begin
+    env_name = "Test2"
+    with_temp_env(env_name) do env_path
+        projfile_path = joinpath(env_path, "Project.toml")
+        rm(projfile_path)
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+    end
+end
+
 @testset "generate args" begin
     @test_throws CommandError pkg"generate"
 end
@@ -435,8 +444,8 @@ end
 
     env_name = "Test2"
     with_temp_env(env_name) do env_path
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
         projfile_path = joinpath(env_path, "Project.toml")
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
 
         newname = "NewName"
         set_name(projfile_path, newname)
