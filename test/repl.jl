@@ -438,16 +438,33 @@ end
 end
 
 @testset "compatibility between API.add and REPL add" begin
-    with_temp_env() do
+    with_temp_env() do env_path
         Pkg.add(TEST_PKG.name)
         @test isinstalled(TEST_PKG)
+        # debug
+        println("START ***")
+        for line in eachline(joinpath(env_path, "Project.toml"))
+            println("> $line")
+        end
+        println("END ***")
+        # debug
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
+        println("-- now REPL")
         Pkg.REPLMode.pkgstr("add $(TEST_PKG.name)")
         @test isinstalled(TEST_PKG)
+        # debug
+        println("START ***")
+        for line in eachline(joinpath(env_path, "Project.toml"))
+            println("> $line")
+        end
+        println("END ***")
+        # debug
+
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
 
+        #=
         Pkg.add(TEST_PKG.uuid)
         @test isinstalled(TEST_PKG)
         Pkg.rm(TEST_PKG.name)
@@ -456,8 +473,10 @@ end
         @test isinstalled(TEST_PKG)
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
+        =#
     end
 
+    #=
     url = "https://github.com/JuliaLang/Example.jl"
     with_temp_env() do
         Pkg.REPLMode.pkgstr("add $(url)")
@@ -469,6 +488,7 @@ end
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
     end
+    =#
 end
 
 end # module
