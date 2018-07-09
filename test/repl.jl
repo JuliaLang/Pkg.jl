@@ -32,9 +32,22 @@ end
         end
     end
 
+    with_temp_env("SomeEnv") do
+        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+    end
+
     env_name = "Test2"
     with_temp_env(env_name) do env_path
         projfile_path = joinpath(env_path, "Project.toml")
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+
+        newname = "NewName"
+        set_name(projfile_path, newname)
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        cd(env_path) do
+            @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        end
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
 
         println("----") #debug
         newname = "NewNameII"
