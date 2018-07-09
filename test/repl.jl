@@ -447,6 +447,7 @@ end
             println("END ***")
         end
 
+
         Pkg.add(TEST_PKG.name)
         @test isinstalled(TEST_PKG)
         print_project_file("after add") # debug
