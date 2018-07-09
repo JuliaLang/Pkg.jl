@@ -31,6 +31,7 @@ end
     end
 end
 
+
 @testset "generate args" begin
     @test_throws CommandError pkg"generate"
 end
