@@ -439,29 +439,26 @@ end
 
 @testset "compatibility between API.add and REPL add" begin
     with_temp_env() do env_path
+        function print_project_file(note)
+            println("START *** $note")
+            for line in eachline(joinpath(env_path, "Project.toml"))
+                println("> $line")
+            end
+            println("END ***")
+        end
+
         Pkg.add(TEST_PKG.name)
         @test isinstalled(TEST_PKG)
-        # debug
-        println("START ***")
-        for line in eachline(joinpath(env_path, "Project.toml"))
-            println("> $line")
-        end
-        println("END ***")
-        # debug
+        print_project_file("after add") # debug
         Pkg.rm(TEST_PKG.name)
+        print_project_file("after rm") # debug
         @test !isinstalled(TEST_PKG)
         println("-- now REPL")
         Pkg.REPLMode.pkgstr("add $(TEST_PKG.name)")
         @test isinstalled(TEST_PKG)
-        # debug
-        println("START ***")
-        for line in eachline(joinpath(env_path, "Project.toml"))
-            println("> $line")
-        end
-        println("END ***")
-        # debug
-
+        print_project_file("after add") # debug
         Pkg.rm(TEST_PKG.name)
+        print_project_file("after rm") # debug
         @test !isinstalled(TEST_PKG)
 
         #=
