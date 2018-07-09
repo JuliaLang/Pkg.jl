@@ -26,6 +26,7 @@ end
     env_name = "Test2"
     with_temp_env(env_name) do env_path
         projfile_path = joinpath(env_path, "Project.toml")
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
         rm(projfile_path)
         @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
     end
