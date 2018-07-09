@@ -388,10 +388,13 @@ temp_pkg_dir() do project_path
     function with_dummy_env(f)
         TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
         env_path = joinpath(mktempdir(), "Dummy")
-        Pkg.generate(env_path)
-        repo = LibGit2.init(env_path)
-        LibGit2.add!(repo, "*")
-        LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+        withenv("USER" => "Test User") do
+            Pkg.generate(env_path)
+        end
+        LibGit2.with(LibGit2.init(env_path)) do repo
+            LibGit2.add!(repo, "*")
+            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+        end
         Pkg.activate(env_path)
         try
             f()

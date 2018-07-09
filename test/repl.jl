@@ -30,7 +30,7 @@ mktempdir() do project_path
     cd(project_path) do
         withenv("USER" => "Test User") do
             pkg"generate HelloWorld"
-            LibGit2.init(".")
+            LibGit2.close((LibGit2.init(".")))
             cd("HelloWorld")
             with_current_env() do
                 pkg"st"
@@ -346,9 +346,10 @@ temp_pkg_dir() do project_path
                 cd(parent_dir) do
                     Pkg.generate(pkg_name)
                     cd(pkg_name) do
-                        repo = LibGit2.init(joinpath(project_path, parent_dir, pkg_name))
-                        LibGit2.add!(repo, "*")
-                        LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+                        LibGit2.with(LibGit2.init(joinpath(project_path, parent_dir, pkg_name))) do repo
+                            LibGit2.add!(repo, "*")
+                            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+                        end
                     end #cd pkg_name
                 end # cd parent_dir
             end
