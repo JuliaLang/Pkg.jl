@@ -130,7 +130,7 @@ end
 function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
     word = replace(word, "~" => homedir())
     if add_or_develop && casesensitive_isdir(word)
-        return PackageSpec(Types.GitRepo(abspath(word)))
+        return PackageSpec(URL(abspath(word)))
     elseif occursin(uuid_re, word)
         return PackageSpec(UUID(word))
     elseif occursin(name_re, word)
@@ -140,7 +140,7 @@ function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
     elseif add_or_develop
         # Guess it is a url then
-        return PackageSpec(Types.GitRepo(word))
+        return PackageSpec(URL(word))
     else
         cmderror("`$word` cannot be parsed as a package")
     end

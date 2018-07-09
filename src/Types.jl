@@ -16,7 +16,7 @@ using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
-    PackageSpec, EnvCache, Context, Context!,
+    PackageSpec, EnvCache, Context, Context!, URL,
     CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
@@ -138,6 +138,10 @@ end
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
 
+struct URL
+    url::String
+end
+
 mutable struct GitRepo
     url::String
     rev::String
@@ -168,9 +172,9 @@ PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
     PackageSpec(name, UUID(zero(UInt128)), version)
 PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
     PackageSpec("", uuid, version)
-function PackageSpec(repo::GitRepo)
+function PackageSpec(url::URL)
     pkg = PackageSpec()
-    pkg.repo = repo
+    pkg.repo = GitRepo(url.url)
     return pkg
 end
 

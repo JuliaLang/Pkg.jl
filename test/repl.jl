@@ -437,4 +437,65 @@ end
     @test_throws CommandError Pkg.REPLMode.parse_package(path)
 end
 
+@testset "compatibility between API.add and REPL add" begin
+    function print_project_file(path::String; note::String="")
+        println("START *** $note")
+        for line in eachline(joinpath(path, "Project.toml"))
+            println("> $line")
+        end
+        println("END ***")
+    end
+
+    function try_printing_package()
+        maybe_package = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
+        if maybe_package === nothing
+            println("no package found")
+        else
+            println("found this: $maybe_package")
+        end
+    end
+
+    with_temp_env() do env_path
+        Pkg.add(TEST_PKG.name)
+        @test isinstalled(TEST_PKG)
+        print_project_file(env_path; note="after add") # debug
+        Pkg.rm(TEST_PKG.name)
+        print_project_file(env_path; note="after rm") # debug
+        try_printing_package()
+        @test !isinstalled(TEST_PKG)
+        println("-- now REPL")
+        Pkg.REPLMode.pkgstr("add $(TEST_PKG.name)")
+        @test isinstalled(TEST_PKG)
+        print_project_file(env_path; note="after add") # debug
+        Pkg.rm(TEST_PKG.name)
+        print_project_file(env_path; note="after rm") # debug
+        @test !isinstalled(TEST_PKG)
+
+        #=
+        Pkg.add(TEST_PKG.uuid)
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+        Pkg.REPLMode.pkgstr("add $(TEST_PKG.uuid)")
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+        =#
+    end
+
+    #=
+    url = "https://github.com/JuliaLang/Example.jl"
+    with_temp_env() do
+        Pkg.REPLMode.pkgstr("add $(url)")
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+        Pkg.add(Pkg.Types.URL(url))
+        @test isinstalled(TEST_PKG)
+        Pkg.rm(TEST_PKG.name)
+        @test !isinstalled(TEST_PKG)
+    end
+    =#
+end
+
 end # module

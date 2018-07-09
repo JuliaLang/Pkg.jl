@@ -114,6 +114,16 @@ end
     @test unified_vb.t == (UInt32(1), UInt32(5), UInt32(0))
 end
 
+@testset "test utilities" begin
+    with_temp_env() do env_path
+        @test Base.active_project() == joinpath(env_path, "Project.toml")
+    end
+
+    with_temp_env("Test2") do env_path
+        @test Base.active_project() == joinpath(env_path, "Project.toml")
+    end
+end
+
 temp_pkg_dir() do project_path
     @testset "simple add and remove with preview" begin
         Pkg.activate(project_path)
@@ -365,7 +375,7 @@ temp_pkg_dir() do project_path
                 mv(joinpath(pkg_name, "Project.toml"), joinpath(pkg_name, "JuliaProject.toml"))
                 mv(joinpath(pkg_name, "Manifest.toml"), joinpath(pkg_name, "JuliaManifest.toml"))
                 # make sure things still work
-                Pkg.develop(abspath(pkg_name))
+                Pkg.develop(URL(pkg_name))
                 @test isinstalled((name=pkg_name, uuid=UUID(uuid)))
                 Pkg.rm(pkg_name)
                 @test !isinstalled((name=pkg_name, uuid=UUID(uuid)))
@@ -405,7 +415,7 @@ temp_pkg_dir() do project_path
         @testset "inconsistent repo state" begin
             package_path = joinpath(project_path, "Example")
             LibGit2.clone("https://github.com/JuliaLang/Example.jl", package_path)
-            Pkg.add(package_path)
+            Pkg.add(URL(package_path))
             rm(joinpath(package_path, ".git"); force=true, recursive=true)
             @test_throws CommandError Pkg.up()
         end
