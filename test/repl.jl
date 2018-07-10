@@ -437,4 +437,43 @@ end
     @test_throws CommandError Pkg.REPLMode.parse_package(path)
 end
 
+@testset "unit test for REPLMode.promptf" begin
+    function set_name(projfile_path, newname)
+        sleep(1.1)
+        project = Pkg.TOML.parsefile(projfile_path)
+        project["name"] = newname
+        open(projfile_path, "w") do io
+            Pkg.TOML.print(io, project)
+        end
+    end
+
+    with_temp_env("SomeEnv") do
+        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+    end
+
+    env_name = "Test2"
+    with_temp_env(env_name) do env_path
+        projfile_path = joinpath(env_path, "Project.toml")
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+
+        newname = "NewName"
+        set_name(projfile_path, newname)
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        cd(env_path) do
+            @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        end
+        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+
+        newname = "NewNameII"
+        set_name(projfile_path, newname)
+        cd(env_path) do
+            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        end
+        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+
+        #rm(projfile_path)
+        #@test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+    end
+end
+
 end # module
