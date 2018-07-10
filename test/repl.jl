@@ -26,7 +26,7 @@ end
     @test_throws CommandError pkg"generate"
 end
 
-mktempdir() do project_path
+temp_pkg_dir() do project_path
     cd(project_path) do
         withenv("USER" => "Test User") do
             pkg"generate HelloWorld"
