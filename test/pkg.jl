@@ -390,8 +390,9 @@ temp_pkg_dir() do project_path
     with_temp_env() do
         @testset "inconsistent repo state" begin
             package_path = joinpath(project_path, "Example")
-            LibGit2.clone("https://github.com/JuliaLang/Example.jl", package_path)
-            Pkg.add(package_path)
+            LibGit2.with(LibGit2.clone("https://github.com/JuliaLang/Example.jl", package_path)) do repo
+                Pkg.add(package_path)
+            end
             rm(joinpath(package_path, ".git"); force=true, recursive=true)
             @test_throws CommandError Pkg.up()
         end
