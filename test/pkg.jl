@@ -13,6 +13,7 @@ import LibGit2
 
 include("utils.jl")
 
+#=
 const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
 
 import Pkg.Types: semver_spec, VersionSpec
@@ -414,6 +415,7 @@ temp_pkg_dir() do project_path
         end
     end
 end
+=#
 
 include("repl.jl")
 
