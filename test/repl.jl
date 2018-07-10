@@ -471,9 +471,6 @@ end
             @test Pkg.REPLMode.promptf() == "($newname) pkg> "
         end
         @test Pkg.REPLMode.promptf() == "($newname) pkg> "
-
-        #rm(projfile_path)
-        #@test Pkg.REPLMode.promptf() == "($env_name) pkg> "
     end
 end
 
