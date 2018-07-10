@@ -56,7 +56,6 @@ function with_current_env(f)
 end
 
 function with_temp_env(f, env_name::AbstractString="Dummy")
-    TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
