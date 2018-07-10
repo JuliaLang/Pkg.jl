@@ -303,21 +303,27 @@ temp_pkg_dir() do project_path; cd(project_path) do
         cp(joinpath(@__DIR__, "test_packages", "BigProject"), joinpath(tmp, "BigProject"))
         cd(joinpath(tmp, "BigProject"))
         with_current_env() do
-            pkg"dev RecursiveDep2"
-            pkg"dev RecursiveDep"
-            pkg"dev SubModule"
-            pkg"dev SubModule2"
-            pkg"add Random"
-            pkg"add Example"
-            pkg"add JSON"
-            pkg"build"
+            # the command below also tests multiline input
+            pkg"""
+                dev RecursiveDep2
+                dev RecursiveDep
+                dev SubModule
+                dev SubModule2
+                add Random
+                add Example
+                add JSON
+                build
+            """
             @eval using BigProject
             pkg"build BigProject"
             @test_throws CommandError pkg"add BigProject"
-            pkg"test SubModule"
-            pkg"test SubModule2"
-            pkg"test BigProject"
-            pkg"test"
+            # the command below also tests multiline input
+            Pkg.REPLMode.pkgstr("""
+                test SubModule
+                test SubModule2
+                test BigProject
+                test
+                """)
             current_json = Pkg.API.installed()["JSON"]
             old_project = read("Project.toml", String)
             open("Project.toml"; append=true) do io

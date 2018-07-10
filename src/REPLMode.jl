@@ -154,6 +154,8 @@ const lex_re = r"^[\?\./\+\-](?!\-) | ((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)
 const Token = Union{Command, Option, VersionRange, String, Rev}
 
 function tokenize(cmd::String)::Vector{Vector{Token}}
+    # replace new lines with ; to support multiline commands
+    cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
     # phase 1: tokenize accoring to whitespace / quotes
     chunks = parse_quotes(cmd)
     # phase 2: tokenzie unquoted tokens according to pkg REPL syntax
