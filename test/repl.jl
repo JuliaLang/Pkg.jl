@@ -26,6 +26,7 @@ end
     @test_throws CommandError pkg"generate"
 end
 
+
 mktempdir() do project_path
     cd(project_path) do
         withenv("USER" => "Test User") do
@@ -73,6 +74,7 @@ mktempdir() do project_path
     end
 end
 
+#=
 temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
     tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git")
     @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
@@ -479,5 +481,6 @@ end
         @test Pkg.REPLMode.promptf() == "($newname) pkg> "
     end
 end
+=#
 
 end # module
