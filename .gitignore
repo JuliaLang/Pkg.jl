@@ -3,3 +3,4 @@
 *.jl.cov
 *.jl.*.cov
 docs/build
+/Manifest.toml
