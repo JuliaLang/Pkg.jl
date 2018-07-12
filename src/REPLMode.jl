@@ -292,8 +292,8 @@ end
 
 function enforce_argument_order(tokens::Vector{Token})
     prev_token = nothing
-    function check_prev_token(some_type, error_message)
-        !(prev_token isa some_type) && cmderror(error_message)
+    function check_prev_token(valid_type::DataType, error_message::AbstractString)
+        prev_token isa valid_type || cmderror(error_message)
     end
 
     while !isempty(tokens)
