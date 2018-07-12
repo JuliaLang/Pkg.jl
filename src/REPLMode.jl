@@ -153,22 +153,25 @@ const lex_re = r"^[\?\./\+\-](?!\-) | ((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)
 
 const Token = Union{Command, Option, VersionRange, String, Rev}
 
+struct QuotedWord
+    word::String
+    isquoted::Bool
+end
+
 function tokenize(cmd::String)::Vector{Vector{Token}}
     # replace new lines with ; to support multiline commands
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
     # phase 1: tokenize accoring to whitespace / quotes
-    chunks = parse_quotes(cmd)
+    qwords = parse_quotes(cmd)
     # phase 2: tokenzie unquoted tokens according to pkg REPL syntax
     words::Vector{String} = []
-    for chunk in chunks
-        is_quoted = chunk[1]
-        word = chunk[2]
-        if is_quoted
-            push!(words, word)
+    for qword in qwords
+        if qword.isquoted
+            push!(words, qword.word)
         else # break unquoted chunks further according to lexer
             # note: space before `$word` is necessary to keep using current `lex_re`
             #                                                 v
-            append!(words, map(m->m.match, eachmatch(lex_re, " $word")))
+            append!(words, map(m->m.match, eachmatch(lex_re, " $(qword.word)")))
         end
     end
 
@@ -182,13 +185,12 @@ end
 function parse_quotes(cmd::String)
     in_doublequote = false
     in_singlequote = false
-    all_tokens::Array = []
+    qwords::Array{QuotedWord}= []
     token_in_progress::Array{Char} = []
 
     push_token!(is_quoted) = begin
-        complete_token = String(token_in_progress)
+        push!(qwords, QuotedWord(String(token_in_progress), is_quoted))
         empty!(token_in_progress)
-        push!(all_tokens, (is_quoted, complete_token))
     end
 
     for c in cmd
@@ -219,9 +221,7 @@ function parse_quotes(cmd::String)
     end
     # to avoid complexity in the main loop, empty tokens are allowed above and
     # filtered out before returning
-    isnotempty(x) = !isempty(x[2])
-    filter!(isnotempty, all_tokens)
-    return all_tokens
+    return filter(x->!isempty(x.word), qwords)
 end
 
 function tokenize!(words::Vector{<:AbstractString})::Vector{Token}
