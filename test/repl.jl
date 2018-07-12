@@ -492,4 +492,14 @@ end
     end
 end
 
+@testset "Argument order" begin
+    with_temp_env() do
+        @test_throws CommandError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("up #foobar")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("add @0.0.1")
+    end
+end
+
 end # module
