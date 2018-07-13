@@ -164,7 +164,7 @@ function tokenize(cmd::String)::Vector{Vector{Token}}
     # phase 1: tokenize accoring to whitespace / quotes
     qwords = parse_quotes(cmd)
     # phase 2: tokenzie unquoted tokens according to pkg REPL syntax
-    words::Vector{String} = []
+    words = String[]
     for qword in qwords
         if qword.isquoted
             push!(words, qword.word)
@@ -185,8 +185,8 @@ end
 function parse_quotes(cmd::String)
     in_doublequote = false
     in_singlequote = false
-    qwords::Array{QuotedWord}= []
-    token_in_progress::Array{Char} = []
+    qwords = QuotedWord[]
+    token_in_progress = Char[]
 
     push_token!(is_quoted) = begin
         push!(qwords, QuotedWord(String(token_in_progress), is_quoted))
