@@ -6,12 +6,12 @@ function tempdir_util(fn::Function)
         try
             rm(tempdir; recursive=true, force=true)
         catch ex
+            println("** type: [$(typeof(ex))]")
             if ex.prefix == "unlink"
-                println("** type: [$(typeof(ex))]")
                 println("** code: [$(ex.code)]")
                 println("** unlink error: [$ex]")
             elseif ex isa SystemError && ex.prefix == "rmdir"
-                println("** code: [$(ex.code)]")
+                println("** errnum: [$(ex.errnum)]")
                 println("** rmdir error: [$ex]")
             else
                 throw(ex)
