@@ -4,11 +4,13 @@ function temp_pkg_dir(fn::Function)
     local old_depot_path
     local old_home_project
     local old_active_project
+    local old_julia_pkg_devdir
     try
         old_load_path = copy(LOAD_PATH)
         old_depot_path = copy(DEPOT_PATH)
         old_home_project = Base.HOME_PROJECT[]
         old_active_project = Base.ACTIVE_PROJECT[]
+        old_julia_pkg_devdir = get(ENV, "JULIA_PKG_DEVDIR", nothing)
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
@@ -17,6 +19,7 @@ function temp_pkg_dir(fn::Function)
             mktempdir() do depot_dir
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
+                ENV["JULIA_PKG_DEVDIR"] = joinpath(depot_dir, "dev")
                 fn(env_dir)
             end
         end
@@ -27,6 +30,11 @@ function temp_pkg_dir(fn::Function)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
+        if old_julia_pkg_devdir === nothing
+            delete!(ENV, "JULIA_PKG_DEVDIR")
+        else
+            ENV["JULIA_PKG_DEVDIR"] = old_julia_pkg_devdir
+        end
     end
 end
 
