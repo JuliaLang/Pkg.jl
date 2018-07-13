@@ -6,7 +6,15 @@ function tempdir_util(fn::Function)
         try
             rm(tempdir; recursive=true, force=true)
         catch ex
-            println("Exception while cleaning: [$ex]")
+            if ex is UVError && ex.prefix == "unlink"
+                println("** code: [$(ex.code)]")
+                println("** unlink error: [$ex]")
+            elseif ex isa SystemError && ex.prefix == "rmdir"
+                println("** code: [$(ex.code)]")
+                println("** rmdir error: [$ex]")
+            else
+                throw(ex)
+            end
         end
     end
 end
