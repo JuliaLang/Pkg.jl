@@ -1,3 +1,16 @@
+function tempdir_util(fn::Function)
+    tempdir = mktempdir()
+    try
+        fn(tempdir)
+    finally
+        try
+            rm(tempdir; recursive=true, force=true)
+        catch ex
+            println("Exception while cleaning: [$ex]")
+        end
+    end
+end
+
 function temp_pkg_dir(fn::Function)
     local env_dir
     local old_load_path
@@ -13,8 +26,8 @@ function temp_pkg_dir(fn::Function)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        mktempdir() do env_dir
-            mktempdir() do depot_dir
+        tempdir_util() do env_dir
+            tempdir_util() do depot_dir
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
                 fn(env_dir)
@@ -61,6 +74,19 @@ function with_temp_env(f, env_name::AbstractString="Dummy")
     Pkg.activate(env_path)
     try
         applicable(f, env_path) ? f(env_path) : f()
+    finally
+        Pkg.activate()
+    end
+end
+
+function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
+    Pkg.activate(path)
+    try
+        if change_dir
+            cd(fn, path)
+        else
+            fn()
+        end
     finally
         Pkg.activate()
     end
