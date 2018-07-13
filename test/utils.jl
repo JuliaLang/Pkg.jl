@@ -6,7 +6,7 @@ function tempdir_util(fn::Function)
         try
             rm(tempdir; recursive=true, force=true)
         catch ex
-            if ex is UVError && ex.prefix == "unlink"
+            if ex isa UVError && ex.prefix == "unlink"
                 println("** code: [$(ex.code)]")
                 println("** unlink error: [$ex]")
             elseif ex isa SystemError && ex.prefix == "rmdir"
