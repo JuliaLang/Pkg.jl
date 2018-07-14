@@ -355,72 +355,65 @@ temp_pkg_dir() do project_path; cd(project_path) do
     end
 end; end
 
-temp_pkg_dir() do project_path
-    cd(project_path) do
-        @testset "add/remove using quoted local path" begin
-            # utils
-            setup_package(parent_dir, pkg_name) = begin
-                mkdir(parent_dir)
-                cd(parent_dir) do
-                    Pkg.generate(pkg_name)
-                    cd(pkg_name) do
-                        LibGit2.with(LibGit2.init(joinpath(project_path, parent_dir, pkg_name))) do repo
-                            LibGit2.add!(repo, "*")
-                            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-                        end
-                    end #cd pkg_name
-                end # cd parent_dir
-            end
-
-            # testing local dir with space in name
-            dir_name = "space dir"
-            pkg_name = "WeirdName77"
-            setup_package(dir_name, pkg_name)
-            uuid = get_uuid("$dir_name/$pkg_name")
-            Pkg.REPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
-            @test isinstalled((name=pkg_name, uuid = UUID(uuid)))
-            Pkg.REPLMode.pkgstr("remove \"$pkg_name\"")
-            @test !isinstalled((name=pkg_name, uuid = UUID(uuid)))
-
-            # testing dir name with significant characters
-            dir_name = "some@d;ir#"
-            pkg_name = "WeirdName77"
-            setup_package(dir_name, pkg_name)
-            uuid = get_uuid("$dir_name/$pkg_name")
-            Pkg.REPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
-            @test isinstalled((name=pkg_name, uuid = UUID(uuid)))
-            Pkg.REPLMode.pkgstr("remove '$pkg_name'")
-            @test !isinstalled((name=pkg_name, uuid = UUID(uuid)))
-
-            # more complicated input
-            ## pkg1
-            dir1 = "two space dir"
-            pkg_name1 = "name1"
-            setup_package(dir1, pkg_name1)
-            uuid1 = get_uuid("$dir1/$pkg_name1")
-
-            ## pkg2
-            dir2 = "two'quote'dir"
-            pkg_name2 = "name2"
-            setup_package(dir2, pkg_name2)
-            uuid2 = get_uuid("$dir2/$pkg_name2")
-
-            Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
-            @test isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
-            @test isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
-            Pkg.REPLMode.pkgstr("remove '$pkg_name1' $pkg_name2")
-            @test !isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
-            @test !isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
-
-            Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
-            @test isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
-            @test isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
-            Pkg.REPLMode.pkgstr("remove '$pkg_name1' \"$pkg_name2\"")
-            @test !isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
-            @test !isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
-        end
+@testset "add/remove using quoted local path" begin
+    setup_package(dirname, pkg_name) = begin
+        pkg_path = joinpath(dirname, pkg_name)
+        mkdir(dirname)
+        Pkg.generate(pkg_path)
+        repo = LibGit2.init(pkg_path)
+        LibGit2.add!(repo, "*")
+        LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+        return ((name=pkg_name, uuid=UUID(get_uuid(pkg_path))), pkg_path)
     end
-end
+
+    temp_pkg_dir() do project_path; cd(project_path) do
+        # testing local dir with space in name
+        dir_name = "space dir"
+        pkg_name = "WeirdName77"
+        with_temp_env() do
+            (package, pkg_path) = setup_package(dir_name, pkg_name)
+            Pkg.REPLMode.pkgstr("add \"$pkg_path\"")
+            @test isinstalled(package)
+            Pkg.REPLMode.pkgstr("remove \"$pkg_name\"")
+            @test !isinstalled(package)
+        end
+
+        # testing dir name with significant characters
+        dir_name = "some@d;ir#"
+        pkg_name = "WeirdName77"
+        with_temp_env() do
+            (package, pkg_path) = setup_package(dir_name, pkg_name)
+            Pkg.REPLMode.pkgstr("add \"$pkg_path\"")
+            @test isinstalled(package)
+            Pkg.REPLMode.pkgstr("remove '$pkg_name'")
+            @test !isinstalled(package)
+        end
+
+        dir_name = "two space dir"
+        pkg_name = "name1"
+        dir2 = "two'quote'dir"
+        pkg_name2 = "name2"
+        with_temp_env() do
+            (package1, pkg_path1) = setup_package(dir_name, pkg_name)
+            (package2, pkg_path2) = setup_package(dir2, pkg_name2)
+
+            Pkg.REPLMode.pkgstr("add '$pkg_path1' \"$pkg_path2\"")
+            @test isinstalled(package1)
+            @test isinstalled(package2)
+            Pkg.REPLMode.pkgstr("remove '$pkg_name' $pkg_name2")
+            @test !isinstalled(package1)
+            @test !isinstalled(package2)
+
+            Pkg.REPLMode.pkgstr("add \"$pkg_path1\" \"$pkg_path2\"")
+            @test isinstalled(package1)
+            @test isinstalled(package2)
+            Pkg.REPLMode.pkgstr("remove '$pkg_name' \"$pkg_name2\"")
+            @test !isinstalled(package1)
+            @test !isinstalled(package2)
+        end
+    end #cd
+    end #temp_pkg_dir
+end #testset
 
 @testset "unit test `parse_package`" begin
     name = "FooBar"
