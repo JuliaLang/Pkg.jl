@@ -65,3 +65,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy")
         Pkg.activate()
     end
 end
+
+get_uuid(project_path) = get(Pkg.TOML.parsefile(joinpath(project_path, "Project.toml")),
+                             "uuid",
+                             nothing)

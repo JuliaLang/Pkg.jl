@@ -372,24 +372,11 @@ temp_pkg_dir() do project_path
                 end # cd parent_dir
             end
 
-            # extract uuid from a Project.toml file
-            extract_uuid(toml_path) = begin
-                uuid = ""
-                for line in eachline(toml_path)
-                    m = match(r"uuid = \"(.+)\"", line)
-                    if m !== nothing
-                        uuid = m.captures[1]
-                        break
-                    end
-                end
-                return uuid
-            end
-
             # testing local dir with space in name
             dir_name = "space dir"
             pkg_name = "WeirdName77"
             setup_package(dir_name, pkg_name)
-            uuid = extract_uuid("$dir_name/$pkg_name/Project.toml")
+            uuid = get_uuid("$dir_name/$pkg_name")
             Pkg.REPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
             @test isinstalled((name=pkg_name, uuid = UUID(uuid)))
             Pkg.REPLMode.pkgstr("remove \"$pkg_name\"")
@@ -399,7 +386,7 @@ temp_pkg_dir() do project_path
             dir_name = "some@d;ir#"
             pkg_name = "WeirdName77"
             setup_package(dir_name, pkg_name)
-            uuid = extract_uuid("$dir_name/$pkg_name/Project.toml")
+            uuid = get_uuid("$dir_name/$pkg_name")
             Pkg.REPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
             @test isinstalled((name=pkg_name, uuid = UUID(uuid)))
             Pkg.REPLMode.pkgstr("remove '$pkg_name'")
@@ -410,13 +397,13 @@ temp_pkg_dir() do project_path
             dir1 = "two space dir"
             pkg_name1 = "name1"
             setup_package(dir1, pkg_name1)
-            uuid1 = extract_uuid("$dir1/$pkg_name1/Project.toml")
+            uuid1 = get_uuid("$dir1/$pkg_name1")
 
             ## pkg2
             dir2 = "two'quote'dir"
             pkg_name2 = "name2"
             setup_package(dir2, pkg_name2)
-            uuid2 = extract_uuid("$dir2/$pkg_name2/Project.toml")
+            uuid2 = get_uuid("$dir2/$pkg_name2")
 
             Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
             @test isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
