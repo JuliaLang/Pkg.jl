@@ -178,7 +178,7 @@ temp_pkg_dir() do project_path
         Pkg.add(TEST_PKG.name)
         old_v = Pkg.installed()[TEST_PKG.name]
         Pkg.rm(TEST_PKG.name)
-        mktempdir() do devdir
+        tempdir_util() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
                 Pkg.REPLMode.pkgstr("develop $(TEST_PKG.name)")
                 @test isinstalled(TEST_PKG)
@@ -231,7 +231,7 @@ temp_pkg_dir() do project_path
     end
 
     @testset "protocols" begin
-        mktempdir() do devdir
+        tempdir_util() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
                 try
                     Pkg.setprotocol!("notarealprotocol")
@@ -261,7 +261,7 @@ temp_pkg_dir() do project_path
     Pkg.rm(TEST_PKG.name)
 
     @testset "legacy CI script" begin
-        mktempdir() do dir
+        tempdir_util() do dir
             LibGit2.with(LibGit2.clone("https://github.com/JuliaLang/Example.jl", joinpath(dir, "Example.jl"))) do r
                 cd(joinpath(dir, "Example.jl")) do
                     let Pkg = Pkg
@@ -280,7 +280,7 @@ temp_pkg_dir() do project_path
     end
 
     @testset "up in Project without manifest" begin
-        mktempdir() do dir
+        tempdir_util() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
             cd(joinpath(dir, "UnregisteredWithProject")) do
                with_current_env() do
@@ -292,7 +292,7 @@ temp_pkg_dir() do project_path
     end
 
     @testset "failing building a package should throw" begin
-        mktempdir() do path
+        tempdir_util() do path
             cd(path) do
                 Pkg.generate("FailBuildPkg")
                 cd("FailBuildPkg")
@@ -314,7 +314,7 @@ temp_pkg_dir() do project_path
 end
 
 @testset "preview generate" begin
-    mktempdir() do tmp
+    tempdir_util() do tmp
         cd(tmp) do
             Pkg.generate("Foo"; preview=true)
             @test !isdir(joinpath(tmp, "Foo"))
@@ -324,7 +324,7 @@ end
 
 temp_pkg_dir() do project_path
     @testset "test should instantiate" begin
-        mktempdir() do dir
+        tempdir_util() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
             cd(joinpath(dir, "UnregisteredWithProject")) do
                 with_current_env() do
@@ -351,7 +351,7 @@ temp_pkg_dir() do project_path
         end
 
         cd(project_path) do
-            mktempdir() do tmp; cd(tmp) do
+            tempdir_util() do tmp; cd(tmp) do
                 pkg_name = "FooBar"
                 # create a project and grab its uuid
                 Pkg.generate(pkg_name)
