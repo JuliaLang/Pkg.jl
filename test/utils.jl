@@ -8,7 +8,7 @@ function tempdir_util(fn::Function)
         catch ex
             println("** type: [$(typeof(ex))]")
             if ex isa SystemError && ex.prefix == "rmdir" && ex.errnum == 13
-                @warn("tempdir_util: error while cleaning up: $ex")
+                warn("tempdir_util: error while cleaning up: $ex")
             if ex.prefix == "unlink"
                 println("** code: [$(ex.code)]")
                 println("** unlink error: [$ex]")
