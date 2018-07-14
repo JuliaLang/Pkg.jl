@@ -422,7 +422,7 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "uint test `parse_package`" begin
+@testset "unit test `parse_package`" begin
     name = "FooBar"
     uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
     url = "https://github.com/JuliaLang/Example.jl"
