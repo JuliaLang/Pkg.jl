@@ -26,7 +26,7 @@ end
     @test_throws CommandError pkg"generate"
 end
 
-mktempdir() do project_path
+tempdir_util() do project_path
     cd(project_path) do
         withenv("USER" => "Test User") do
             pkg"generate HelloWorld"
@@ -93,7 +93,7 @@ end
     @test repr(tokens[1][3]) == "VersionRange(\"0.5.0\")"
 end
 
-temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
+temp_pkg_dir() do project_path; cd(project_path) do; tempdir_util() do tmp_pkg_path
     pkg"activate ."
     pkg"add Example"
     @test isinstalled(TEST_PKG)
@@ -147,7 +147,7 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
         Pkg.REPLMode.pkgstr("add $p2#$c")
     end
 
-    mktempdir() do tmp_dev_dir
+    tempdir_util() do tmp_dev_dir
     withenv("JULIA_PKG_DEVDIR" => tmp_dev_dir) do
         pkg"develop Example"
 
@@ -161,7 +161,7 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
                 empty!(DEPOT_PATH)
                 write("Project.toml", proj)
                 write("Manifest.toml", manifest)
-                mktempdir() do depot_dir
+                tempdir_util() do depot_dir
                     pushfirst!(DEPOT_PATH, depot_dir)
                     pkg"instantiate"
                     @test Pkg.installed()[pkg2] == v"0.2.0"
@@ -179,8 +179,8 @@ end # temp_pkg_dir
 
 
 temp_pkg_dir() do project_path; cd(project_path) do
-    mktempdir() do tmp
-        mktempdir() do depot_dir
+    tempdir_util() do tmp
+        tempdir_util() do depot_dir
             old_depot = copy(DEPOT_PATH)
             try
                 empty!(DEPOT_PATH)
@@ -214,8 +214,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
         end # withenv
     end # mktempdir
     # nested
-    mktempdir() do other_dir
-        mktempdir() do tmp;
+    tempdir_util() do other_dir
+        tempdir_util() do tmp;
             cd(tmp)
             withenv("USER" => "Test User") do
                 pkg"generate HelloWorld"
@@ -311,7 +311,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
 end end
 
 temp_pkg_dir() do project_path; cd(project_path) do
-    mktempdir() do tmp
+    tempdir_util() do tmp
         cp(joinpath(@__DIR__, "test_packages", "BigProject"), joinpath(tmp, "BigProject"))
         cd(joinpath(tmp, "BigProject"))
         with_current_env() do
