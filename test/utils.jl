@@ -1,3 +1,21 @@
+# this function should temporarily be used instead of `mktempdir`
+function tempdir_util(fn::Function)
+    tempdir = mktempdir()
+    try
+        fn(tempdir)
+    finally
+        try
+            rm(tempdir; recursive=true, force=true)
+        catch ex
+            if ex isa SystemError && ex.prefix == "rmdir" && ex.errnum == 13
+                @warn "tempdir_util: error while cleaning up: $ex"
+            else
+                throw(ex)
+            end
+        end
+    end
+end
+
 function temp_pkg_dir(fn::Function)
     local env_dir
     local old_load_path
@@ -13,8 +31,8 @@ function temp_pkg_dir(fn::Function)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        mktempdir() do env_dir
-            mktempdir() do depot_dir
+        tempdir_util() do env_dir
+            tempdir_util() do depot_dir
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
                 fn(env_dir)
