@@ -8,7 +8,7 @@ function tempdir_util(fn::Function)
             rm(tempdir; recursive=true, force=true)
         catch ex
             if ex isa SystemError && ex.prefix == "rmdir" && ex.errnum == 13
-                @warn "tempdir_util: error while cleaning up: $ex"
+                @error "tempdir_util: error while cleaning up: $ex"
             else
                 throw(ex)
             end
