@@ -338,24 +338,12 @@ end
 
 temp_pkg_dir() do project_path
     @testset "valid project file names" begin
-        extract_uuid(toml_path) = begin
-            uuid = ""
-            for line in eachline(toml_path)
-                m = match(r"uuid = \"(.+)\"", line)
-                if m !== nothing
-                    uuid = m.captures[1]
-                    break
-                end
-            end
-            return uuid
-        end
-
         cd(project_path) do
             mktempdir() do tmp; cd(tmp) do
                 pkg_name = "FooBar"
                 # create a project and grab its uuid
                 Pkg.generate(pkg_name)
-                uuid = extract_uuid(joinpath(pkg_name, "Project.toml"))
+                uuid = get_uuid(pkg_name)
                 # activate project env
                 Pkg.activate(abspath(pkg_name))
                 # add an example project to populate manifest file
