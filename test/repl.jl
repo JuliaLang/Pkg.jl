@@ -26,8 +26,8 @@ end
     @test_throws CommandError pkg"generate"
 end
 
-mktempdir() do project_path
-    cd(project_path) do
+temp_pkg_dir() do project_path
+    with_pkg_env(project_path; change_dir=true) do;
         withenv("USER" => "Test User") do
             pkg"generate HelloWorld"
             LibGit2.close((LibGit2.init(".")))
@@ -489,6 +489,14 @@ end
             @test Pkg.REPLMode.promptf() == "($newname) pkg> "
         end
         @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+    end
+end
+
+@testset "`do_generate!` error paths" begin
+    with_temp_env() do
+        @test_throws CommandError Pkg.REPLMode.pkgstr("generate @0.0.0")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("generate Example Example2")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("generate")
     end
 end
 
