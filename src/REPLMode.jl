@@ -296,8 +296,7 @@ function enforce_argument_order(tokens::Vector{Token})
         prev_token isa valid_type || cmderror(error_message)
     end
 
-    while !isempty(tokens)
-        token = popfirst!(tokens)
+    for token in tokens
         if token isa VersionRange
             check_prev_token(String, "package name/uuid must precede version spec `@$token`")
         elseif token isa Rev
@@ -334,7 +333,7 @@ function do_cmd!(tokens::Vector{Token}, repl)
         cmd = popfirst!(tokens)
     end
 
-    enforce_argument_order(copy(tokens))
+    enforce_argument_order(tokens)
 
     # Using invokelatest to hide the functions from inference.
     # Otherwise it would try to infer everything here.
