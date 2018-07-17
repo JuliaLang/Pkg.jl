@@ -155,6 +155,7 @@ struct Statement
     command::Command
     options::Vector{Option}
     arguments::Vector{String}
+    meta_options::Vector{Option}
 end
 
 struct QuotedWord
@@ -163,27 +164,31 @@ struct QuotedWord
 end
 
 # TODO: only allow flags after commands?
-function tokenize(cmd::String)::Vector{Vector{Token}}
+function parse(cmd::String)::Vector{Vector{Token}}
     # replace new lines with ; to support multiline commands
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
     # tokenize accoring to whitespace / quotes
     qwords = parse_quotes(cmd)
     # tokenzie unquoted tokens according to pkg REPL syntax
     words::Vector{String} = collect(Iterators.flatten(map(qword2word, qwords)))
-    tokens = map(word2token, words)
-    statements = break_statements(tokens)
-    return statements
+    # break up words according to ";"(doing this early makes subsequent processing easier)
+    word_groups = group_words(words)
+    # tokenize
+    token_groups = map(tokenize, words)
+    # statements
+    statements = map()
+    return []
 end
 
-function break_statements(tokens)::Vector{Vector{Token}}
-    statements = Vector{Token}[]
-    x = Token[]
-    for token in tokens
-        if token isa BreakToken
+function group_words(words)::Vector{Vector{String}}
+    statements = Vector{String}[]
+    x = String[]
+    for word in words
+        if word == ";"
             isempty(x) ? cmderror("empty statement") : push!(statements, x)
-            x = Token[]
+            x = String[]
         else
-            push!(x, token) # and here
+            push!(x, word) # and here
         end
     end
     isempty(x) || push!(statements, x)
@@ -194,7 +199,7 @@ const lex_re = r"^[\?\./\+\-](?!\-) | ((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)
 
 function qword2word(qword::QuotedWord)
     return qword.isquoted ? [qword.word] : map(m->m.match, eachmatch(lex_re, " $(qword.word)"))
-    #                                                                       ^
+    #                                                                         ^
     # note: space before `$word` is necessary to keep using current `lex_re`
 end
 
@@ -306,7 +311,7 @@ end
 
 function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     try
-        commands = tokenize(input)
+        commands = parse(input)
         for command in commands
             do_cmd!(command, repl)
         end
@@ -965,7 +970,7 @@ function completions(full, index)
 
         # tokenize input, don't offer any completions for invalid commands
         tokens = try
-            tokenize(join(pre_words[1:end-1], ' '))[end]
+            parse(join(pre_words[1:end-1], ' '))[end]
         catch
             return String[], 0:-1, false
         end
