@@ -149,44 +149,76 @@ end
 ################
 # REPL parsing #
 ################
-const lex_re = r"^[\?\./\+\-](?!\-) | ((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s;]+\s*=\s*[^@\#\s;]+ | \#\s*[^@\#\s;]* | @\s*[^@\#\s;]* | [^@\#\s;]+|;"x
-
-const Token = Union{Command, Option, VersionRange, String, Rev}
+struct BreakToken end
+const Token = Union{Command, Option, VersionRange, String, Rev, BreakToken}
+struct Statement
+    command::Command
+    options::Vector{Option}
+    arguments::Vector{String}
+end
 
 struct QuotedWord
     word::String
     isquoted::Bool
 end
 
+# TODO: only allow flags after commands?
 function tokenize(cmd::String)::Vector{Vector{Token}}
     # replace new lines with ; to support multiline commands
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
-    # phase 1: tokenize accoring to whitespace / quotes
+    # tokenize accoring to whitespace / quotes
     qwords = parse_quotes(cmd)
-    # phase 2: tokenzie unquoted tokens according to pkg REPL syntax
-    words::Vector{String} = []
-    for qword in qwords
-        if qword.isquoted
-            push!(words, qword.word)
-        else # break unquoted chunks further according to lexer
-            # note: space before `$word` is necessary to keep using current `lex_re`
-            #                                                 v
-            append!(words, map(m->m.match, eachmatch(lex_re, " $(qword.word)")))
-        end
-    end
-
-    commands = Vector{Token}[]
-    while !isempty(words)
-        push!(commands, tokenize!(words))
-    end
-    return commands
+    # tokenzie unquoted tokens according to pkg REPL syntax
+    words::Vector{String} = collect(Iterators.flatten(map(qword2word, qwords)))
+    tokens = map(word2token, words)
+    statements = break_statements(tokens)
+    return statements
 end
 
-function parse_quotes(cmd::String)
+function break_statements(tokens)::Vector{Vector{Token}}
+    statements = Vector{Token}[]
+    x = Token[]
+    for token in tokens
+        if token isa BreakToken
+            isempty(x) ? cmderror("empty statement") : push!(statements, x)
+            x = Token[]
+        else
+            push!(x, token) # and here
+        end
+    end
+    isempty(x) || push!(statements, x)
+    return statements
+end
+
+const lex_re = r"^[\?\./\+\-](?!\-) | ((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s;]+\s*=\s*[^@\#\s;]+ | \#\s*[^@\#\s;]* | @\s*[^@\#\s;]* | [^@\#\s;]+|;"x
+
+function qword2word(qword::QuotedWord)
+    return qword.isquoted ? [qword.word] : map(m->m.match, eachmatch(lex_re, " $(qword.word)"))
+    #                                                                       ^
+    # note: space before `$word` is necessary to keep using current `lex_re`
+end
+
+function word2token(word::AbstractString)::Token
+    if haskey(cmds, word)
+        return Command(cmds[word], word)
+    elseif word == ";"
+        return BreakToken()
+    elseif first(word) == '-'
+        return parse_option(word)
+    elseif first(word) == '@'
+        return VersionRange(word[2:end])
+    elseif first(word) == '#'
+        return Rev(word[2:end])
+    else
+        return String(word)
+    end
+end
+
+function parse_quotes(cmd::String)::Vector{QuotedWord}
     in_doublequote = false
     in_singlequote = false
-    qwords::Array{QuotedWord}= []
-    token_in_progress::Array{Char} = []
+    qwords = QuotedWord[]
+    token_in_progress = Char[]
 
     push_token!(is_quoted) = begin
         push!(qwords, QuotedWord(String(token_in_progress), is_quoted))
