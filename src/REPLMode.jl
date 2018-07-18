@@ -338,12 +338,24 @@ end
 function enforce_command_spec(spec::CommandSpec, statement::Statement)
 end
 
+function init_command_spec(command_spec)
+    cmd_spec = Dict() # TODO Dict or k,v array ?
+    for spec in command_spec
+        names = spec[1]
+        x = CommandSpec(spec...)
+        for name in names
+            cmd_spec[name] = x
+        end
+    end
+    return cmd_spec
+end
+
 function do_statement!(statement::Statement, repl)
     ctx = Context(env = EnvCache(nothing))
     # TODO process meta options
-    cmd_spec = get_command_spec(command_spec, statement)
-    enforce_command_spec(cmd_spec, statement)
-    cmd_spec.handler(ctx, statement)
+    spec = cmd_spec[statement.command.val]
+    enforce_command_spec(spec, statement)
+    #TODO spec.handler(ctx, statement)
 
     #=
     if cmd.kind == CMD_PREVIEW
