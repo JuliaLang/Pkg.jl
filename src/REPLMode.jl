@@ -182,11 +182,11 @@ end
 # TODO separate meta_options from options
 function Statement(words)
     statement = Statement()
-    word = pop!(words)
+    word = popfirst!(words)
     while word2token(word) isa Option # TODO replace with MetaOption
         push!(statement.meta_options, word2token(word))
         isempty(words) && cmderror("no command specified")
-        word = pop!(words)
+        word = popfirst!(words)
     end
     cmd = word2token(word)
     cmd isa Command || cmderror("expected command. instead got [$cmd]")
