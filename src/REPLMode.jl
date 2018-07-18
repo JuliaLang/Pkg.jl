@@ -18,7 +18,7 @@ using ..Types, ..Display, ..Operations, ..API
                    CMD_INSTANTIATE, CMD_RESOLVE, CMD_ACTIVATE, CMD_DEACTIVATE)
 
 struct Command
-    kind::CommandKind
+    kind::Union{Nothing, CommandKind}
     val::String
 end
 Base.show(io::IO, cmd::Command) = print(io, cmd.val)
@@ -151,11 +151,12 @@ end
 ################
 struct BreakToken end
 const Token = Union{Command, Option, VersionRange, String, Rev, BreakToken}
-struct Statement
+mutable struct Statement
     command::Command
     options::Vector{Option}
     arguments::Vector{String}
     meta_options::Vector{Option}
+    Statement() = new(Command(nothing, ""), [], [], [])
 end
 
 struct QuotedWord
