@@ -154,7 +154,7 @@ const Token = Union{Command, Option, VersionRange, String, Rev, BreakToken}
 mutable struct Statement
     command::Command
     options::Vector{Option}
-    arguments::Vector{String}
+    arguments::Vector{Token}
     meta_options::Vector{Option}
     Statement() = new(Command(nothing, ""), [], [], [])
 end
