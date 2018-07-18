@@ -83,16 +83,16 @@ end
 struct CommandSpec
     names::Vector{String}
     handler::Function
-    arg_count::Union{Nothing,Int,Vector{Int}} # TODO maybe max/min
+    arg_spec::Union{Nothing,Int,Vector{Int}} # TODO maybe max/min
     options::Vector{Any}
 end
 
 all_command_names = String[]
 all_options = []
-function CommandSpec!(names, api, arg_count, options)
+function CommandSpec!(names, api, arg_spec, options)
     append!(all_command_names, names)
     append!(all_options, options)
-    CommandSpec(names, api, arg_spec, options)
+    return CommandSpec(names, api, arg_spec, options)
 end
 
 ###################
