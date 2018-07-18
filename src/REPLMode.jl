@@ -312,25 +312,10 @@ function enforce_argument_order(tokens)
 end
 
 function do_statement!(statement::Statement, repl)
-    cmd = env_opt = nothing
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa Command
-            cmd = token
-            break
-        elseif token isa Option
-            # Only OPT_ENV is allowed before a command
-            if token.kind == OPT_ENV
-                env_opt = Base.parse_env(token.argument)
-            else
-                cmderror("unrecognized command option: `$token`")
-            end
-        else
-            cmderror("misplaced token: ", token)
-        end
-    end
+    cmd = statement.command
+    tokens = statement.arguments
+    env_opt = nothing
     cmd.kind == CMD_ACTIVATE && return Base.invokelatest(do_activate!, tokens)
-
     ctx = Context(env = EnvCache(env_opt))
     if cmd.kind == CMD_PREVIEW
         ctx.preview = true
@@ -338,7 +323,6 @@ function do_statement!(statement::Statement, repl)
         cmd = popfirst!(tokens)
     end
 
-    enforce_argument_order(tokens)
 
     # Using invokelatest to hide the functions from inference.
     # Otherwise it would try to infer everything here.
