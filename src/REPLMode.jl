@@ -164,7 +164,7 @@ struct QuotedWord
     isquoted::Bool
 end
 
-function parse(cmd::String)::Vector{Vector{Token}}
+function parse(cmd::String)::Vector{Statement}
     # replace new lines with ; to support multiline commands
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
     # tokenize accoring to whitespace / quotes
@@ -175,8 +175,6 @@ function parse(cmd::String)::Vector{Vector{Token}}
     word_groups = group_words(words)
     # create statements
     statements = map(Statement, word_groups)
-    # constraint checking
-    foreach(s->enforce_argument_order(s.arguments), statements)
     return statements
 end
 
@@ -204,7 +202,7 @@ function group_words(words)::Vector{Vector{String}}
             isempty(x) ? cmderror("empty statement") : push!(statements, x)
             x = String[]
         else
-            push!(x, word) # and here
+            push!(x, word)
         end
     end
     isempty(x) || push!(statements, x)
@@ -297,7 +295,7 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     end
 end
 
-function enforce_argument_order(tokens::Vector{Token})
+function enforce_argument_order(tokens)
     prev_token = nothing
     function check_prev_token(valid_type::DataType, error_message::AbstractString)
         prev_token isa valid_type || cmderror(error_message)
