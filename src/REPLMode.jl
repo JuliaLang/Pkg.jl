@@ -9,46 +9,6 @@ import REPL: LineEdit, REPLCompletions
 import ..devdir, ..print_first_command_header, ..Types.casesensitive_isdir
 using ..Types, ..Display, ..Operations, ..API
 
-############
-# Commands #
-############
-
-@enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
-                   CMD_TEST, CMD_GC, CMD_PREVIEW, CMD_INIT, CMD_BUILD, CMD_FREE,
-                   CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP, CMD_GENERATE, CMD_PRECOMPILE,
-                   CMD_INSTANTIATE, CMD_RESOLVE, CMD_ACTIVATE, CMD_DEACTIVATE)
-
-struct Command
-    kind::Union{Nothing, CommandKind}
-    val::String
-end
-Base.show(io::IO, cmd::Command) = print(io, cmd.val)
-
-const cmds = Dict(
-    "help"        => CMD_HELP,
-    "?"           => CMD_HELP,
-    "status"      => CMD_STATUS,
-    "st"          => CMD_STATUS,
-    "add"         => CMD_ADD,
-    "rm"          => CMD_RM,
-    "remove"      => CMD_RM,
-    "up"          => CMD_UP,
-    "update"      => CMD_UP,
-    "test"        => CMD_TEST,
-    "gc"          => CMD_GC,
-    "preview"     => CMD_PREVIEW,
-    "build"       => CMD_BUILD,
-    "pin"         => CMD_PIN,
-    "free"        => CMD_FREE,
-    "develop"     => CMD_DEVELOP,
-    "dev"         => CMD_DEVELOP,
-    "generate"    => CMD_GENERATE,
-    "precompile"  => CMD_PRECOMPILE,
-    "instantiate" => CMD_INSTANTIATE,
-    "resolve"     => CMD_RESOLVE,
-    "activate"    => CMD_ACTIVATE,
-)
-
 #################
 # Git revisions #
 #################
@@ -170,13 +130,13 @@ end
 # REPL parsing #
 ################
 struct BreakToken end
-const Token = Union{Command, Option, VersionRange, String, Rev, BreakToken}
+const Token = Union{Option, VersionRange, String, Rev, BreakToken}
 mutable struct Statement
-    command::Command
+    command::String
     options::Vector{Option}
     arguments::Vector{Token}
     meta_options::Vector{Option}
-    Statement() = new(Command(nothing, ""), [], [], [])
+    Statement() = new("", [], [], [])
 end
 
 struct QuotedWord
@@ -207,10 +167,9 @@ function Statement(words)
         isempty(words) && cmderror("no command specified")
         word = popfirst!(words)
     end
-    cmd = word2token(word)
-    cmd isa Command || cmderror("expected command. instead got [$cmd]")
-    statement.command = cmd
-    statement.arguments = map(x->word2token(x, arg=true), words)
+    word in all_command_names || cmderror("expected command. instead got [$word]")
+    statement.command = word
+    statement.arguments = map(word2token, words)
     # TODO `take` all flags and put them in their own bin
     return statement
 end
@@ -238,10 +197,8 @@ function qword2word(qword::QuotedWord)
     # note: space before `$word` is necessary to keep using current `lex_re`
 end
 
-function word2token(word::AbstractString; arg::Bool=false)::Token
-    if !arg && haskey(cmds, word)
-        return Command(cmds[word], word)
-    elseif first(word) == '-'
+function word2token(word::AbstractString)::Token
+    if first(word) == '-'
         return parse_option(word)
     elseif first(word) == '@'
         return VersionRange(word[2:end])
@@ -353,7 +310,7 @@ end
 function do_statement!(statement::Statement, repl)
     ctx = Context(env = EnvCache(nothing))
     # TODO process meta options
-    spec = cmd_spec[statement.command.val]
+    spec = cmd_spec[statement.command]
     enforce_command_spec(spec, statement)
     #TODO spec.handler(ctx, statement)
 
@@ -448,6 +405,8 @@ developed packages
 `activate`: set the primary environment the package manager manipulates
 """
 
+# TODO should help just be an array parallel to PackageSpec ?
+#=
 const helps = Dict(
     CMD_HELP => md"""
 
@@ -608,6 +567,7 @@ const helps = Dict(
     packages have changed causing the current Manifest to_indices be out of sync.
     """
 )
+=#
 
 function do_help!(
     ctk::Context,
@@ -660,7 +620,7 @@ function do_rm!(ctx::Context, tokens::Vector{Token})
     API.rm(ctx, pkgs)
 end
 
-function do_add_or_develop!(ctx::Context, tokens::Vector{Token}, cmd::CommandKind)
+function do_add_or_develop!(ctx::Context, tokens::Vector{Token}, cmd)
     @assert cmd in (CMD_ADD, CMD_DEVELOP)
     mode = cmd == CMD_ADD ? :add : :develop
     # tokens: package names and/or uuids, optionally followed by version specs
@@ -885,7 +845,7 @@ end
 pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 
 # handle completions
-all_commands_sorted = sort!(collect(keys(cmds)))
+all_commands_sorted = sort(all_command_names)
 long_commands = filter(c -> length(c) > 2, all_commands_sorted)
 all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(collect(keys(opts)))]
 long_options = filter(c -> length(c) > 2, all_options_sorted)
