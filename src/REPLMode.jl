@@ -12,6 +12,84 @@ using ..Types, ..Display, ..Operations, ..API
 ############
 # Commands #
 ############
+
+# TODO how to specify if version specs are allowed ?
+# TODO handle `preview` -> probably with a wrapper
+# TODO dispatch to API or wrapper?
+# TODO concrete difference between API and REPL commands?
+# note: it seems like most String args are meant to be package specs
+# TODO differentatie between switches and 'setters' for options?
+# TODO would invokelatest still be needed at dispatch?
+
+# nothing means don't count
+command_spec = [
+    (   ["test"]
+        ,API.test
+        ,nothing
+        ,[OPT_COVERAGE]
+    ),( ["help", "?"]
+        ,Base.display
+        ,nothing
+        ,[]
+    ),( ["instantiate"]
+        ,API.instantiate
+        ,0
+        ,[OPT_PROJECT, OPT_MANIFEST]
+    ),( ["remove", "rm"]
+        ,API.rm
+        ,nothing
+        ,[OPT_PROJECT, OPT_MANIFEST]
+    ),( ["add"]
+        ,API.add_or_develop
+        ,nothing
+        ,[]
+    ),( ["develop", "dev"]
+        ,API.add_or_develop
+        ,nothing
+        ,[]
+    ),( ["free"]
+        ,API.free
+        ,nothing
+        ,[]
+    ),( ["pin"]
+        ,API.pin
+        ,nothing
+        ,[]
+    ),( ["build"]
+        ,API.build
+        ,nothing
+        ,[]
+    ),( ["resolve"]
+        ,API.resolve
+        ,0
+        ,[]
+    ),( ["activate"]
+        ,API.activate
+        ,[0,1]
+        ,[]
+    ),( ["update", "up"]
+        ,API.up
+        ,nothing
+        ,[OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED]
+    ),( ["generate"]
+        ,API.generate
+        ,1
+        ,[]
+    ),( ["precompile"]
+        ,API.precompile
+        ,0
+        ,[]
+    ),( ["status", "st"]
+        ,Display.status
+        ,0
+        ,[OPT_PROJECT, OPT_MANIFEST]
+    ),( ["gc"]
+        ,API.gc
+        ,0
+        ,[]
+    )
+]
+
 @enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
                    CMD_TEST, CMD_GC, CMD_PREVIEW, CMD_INIT, CMD_BUILD, CMD_FREE,
                    CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP, CMD_GENERATE, CMD_PRECOMPILE,
@@ -191,6 +269,7 @@ function Statement(words)
     cmd isa Command || cmderror("expected command. instead got [$cmd]")
     statement.command = cmd
     statement.arguments = map(x->word2token(x, arg=true), words)
+    # TODO `take` all flags and put them in their own bin
     return statement
 end
 
@@ -311,18 +390,25 @@ function enforce_argument_order(tokens)
     end
 end
 
+function get_command_spec(command_spec, statement::Statement)
+end
+
+function enforce_command_spec(spec::CommandSpec, statement::Statement)
+end
+
 function do_statement!(statement::Statement, repl)
-    cmd = statement.command
-    tokens = statement.arguments
-    env_opt = nothing
-    cmd.kind == CMD_ACTIVATE && return Base.invokelatest(do_activate!, tokens)
-    ctx = Context(env = EnvCache(env_opt))
+    ctx = Context(env = EnvCache(nothing))
+    # TODO process meta options
+    cmd_spec = get_command_spec(command_spec, statement)
+    enforce_command_spec(cmd_spec, statement)
+    cmd_spec.handler(ctx, statement)
+
+    #=
     if cmd.kind == CMD_PREVIEW
         ctx.preview = true
         isempty(tokens) && cmderror("expected a command to preview")
         cmd = popfirst!(tokens)
     end
-
 
     # Using invokelatest to hide the functions from inference.
     # Otherwise it would try to infer everything here.
@@ -344,7 +430,7 @@ function do_statement!(statement::Statement, repl)
     cmd.kind == CMD_PRECOMPILE  ? Base.invokelatest(    do_precompile!, ctx, tokens) :
     cmd.kind == CMD_INSTANTIATE ? Base.invokelatest(   do_instantiate!, ctx, tokens) :
         cmderror("`$cmd` command not yet implemented")
-    return
+    =#
 end
 
 const help = md"""
@@ -765,6 +851,22 @@ function do_build!(ctx::Context, tokens::Vector{Token})
         end
     end
     API.build(ctx, pkgs)
+end
+
+#TODO specify argument types?
+struct CommandSpec
+    names::Vector{String}
+    api::Function
+    arg_count::Union{Nothing,Int,Vector{Int}} # TODO maybe max/min
+    options::Vector{}
+end
+
+all_command_names = String[]
+all_options = []
+function CommandSpec!(names, api, arg_count, options)
+    append!(all_command_names, names)
+    append!(all_options, options)
+    CommandSpec(names, api, arg_spec, options)
 end
 
 function do_generate!(ctx::Context, tokens::Vector{Token})
