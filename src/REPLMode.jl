@@ -173,11 +173,27 @@ function parse(cmd::String)::Vector{Vector{Token}}
     words::Vector{String} = collect(Iterators.flatten(map(qword2word, qwords)))
     # break up words according to ";"(doing this early makes subsequent processing easier)
     word_groups = group_words(words)
-    # tokenize
-    token_groups = map(tokenize, words)
-    # statements
-    statements = map()
-    return []
+    # create statements
+    statements = map(Statement, word_groups)
+    # constraint checking
+    foreach(s->enforce_argument_order(s.arguments), statements)
+    return statements
+end
+
+# TODO separate meta_options from options
+function Statement(words)
+    statement = Statement()
+    word = pop!(words)
+    while word2token(word) isa Option # TODO replace with MetaOption
+        push!(statement.meta_options, word2token(word))
+        isempty(words) && cmderror("no command specified")
+        word = pop!(words)
+    end
+    cmd = word2token(word)
+    cmd isa Command || cmderror("expected command. instead got [$cmd]")
+    statement.command = cmd
+    statement.arguments = map(x->word2token(x, arg=true), words)
+    return statement
 end
 
 function group_words(words)::Vector{Vector{String}}
@@ -203,11 +219,9 @@ function qword2word(qword::QuotedWord)
     # note: space before `$word` is necessary to keep using current `lex_re`
 end
 
-function word2token(word::AbstractString)::Token
-    if haskey(cmds, word)
+function word2token(word::AbstractString; arg::Bool=false)::Token
+    if !arg && haskey(cmds, word)
         return Command(cmds[word], word)
-    elseif word == ";"
-        return BreakToken()
     elseif first(word) == '-'
         return parse_option(word)
     elseif first(word) == '@'
