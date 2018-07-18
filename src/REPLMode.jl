@@ -299,7 +299,7 @@ function init_command_spec(command_spec)
     cmd_spec = Dict() # TODO Dict or k,v array ?
     for spec in command_spec
         names = spec[1]
-        x = CommandSpec(spec...)
+        x = CommandSpec!(spec...)
         for name in names
             cmd_spec[name] = x
         end
