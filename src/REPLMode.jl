@@ -163,7 +163,6 @@ struct QuotedWord
     isquoted::Bool
 end
 
-# TODO: only allow flags after commands?
 function parse(cmd::String)::Vector{Vector{Token}}
     # replace new lines with ; to support multiline commands
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
@@ -274,50 +273,6 @@ function parse_quotes(cmd::String)::Vector{QuotedWord}
     # filtered out before returning
     return filter(x->!isempty(x.word), qwords)
 end
-
-function tokenize!(words::Vector{<:AbstractString})::Vector{Token}
-    print_first_command_header()
-    tokens = Token[]
-    help_mode = false
-    preview_mode = false
-    # First parse a Command or a modifier (help / preview) + Command
-    while !isempty(words)
-        word = popfirst!(words)
-        if word[1] == '-' && length(word) > 1
-            push!(tokens, parse_option(word))
-        else
-            haskey(cmds, word) || cmderror("invalid command: ", repr(word))
-            cmdkind = cmds[word]
-            push!(tokens, Command(cmdkind, word))
-            # If help / preview and not in help mode we want to eat another cmd
-            if !help_mode
-                cmdkind == CMD_HELP    && (help_mode    = true; continue)
-                cmdkind == CMD_PREVIEW && (preview_mode = true; continue)
-            end
-            break
-        end
-    end
-    if isempty(tokens) || !(tokens[end] isa Command)
-        cmderror("no package command given")
-    end
-    # Now parse the arguments / options to the command
-    while !isempty(words)
-        word = popfirst!(words)
-        if word == ";"
-            return tokens
-        elseif first(word) == '-'
-            push!(tokens, parse_option(word))
-        elseif first(word) == '@'
-            push!(tokens, VersionRange(strip(word[2:end])))
-        elseif first(word) == '#'
-            push!(tokens, Rev(word[2:end]))
-        else
-            push!(tokens, String(word))
-        end
-    end
-    return tokens
-end
-
 
 #############
 # Execution #
