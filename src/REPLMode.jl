@@ -279,9 +279,9 @@ end
 
 function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     try
-        commands = parse(input)
-        for command in commands
-            do_cmd!(command, repl)
+        statements = parse(input)
+        for statement in statements
+            do_statement!(statement, repl)
         end
     catch err
         if do_rethrow
@@ -311,7 +311,7 @@ function enforce_argument_order(tokens)
     end
 end
 
-function do_cmd!(tokens::Vector{Token}, repl)
+function do_statement!(statement::Statement, repl)
     cmd = env_opt = nothing
     while !isempty(tokens)
         token = popfirst!(tokens)
