@@ -13,83 +13,6 @@ using ..Types, ..Display, ..Operations, ..API
 # Commands #
 ############
 
-# TODO how to specify if version specs are allowed ?
-# TODO handle `preview` -> probably with a wrapper
-# TODO dispatch to API or wrapper?
-# TODO concrete difference between API and REPL commands?
-# note: it seems like most String args are meant to be package specs
-# TODO differentatie between switches and 'setters' for options?
-# TODO would invokelatest still be needed at dispatch?
-
-# nothing means don't count
-command_spec = [
-    (   ["test"]
-        ,API.test
-        ,nothing
-        ,[OPT_COVERAGE]
-    ),( ["help", "?"]
-        ,Base.display
-        ,nothing
-        ,[]
-    ),( ["instantiate"]
-        ,API.instantiate
-        ,0
-        ,[OPT_PROJECT, OPT_MANIFEST]
-    ),( ["remove", "rm"]
-        ,API.rm
-        ,nothing
-        ,[OPT_PROJECT, OPT_MANIFEST]
-    ),( ["add"]
-        ,API.add_or_develop
-        ,nothing
-        ,[]
-    ),( ["develop", "dev"]
-        ,API.add_or_develop
-        ,nothing
-        ,[]
-    ),( ["free"]
-        ,API.free
-        ,nothing
-        ,[]
-    ),( ["pin"]
-        ,API.pin
-        ,nothing
-        ,[]
-    ),( ["build"]
-        ,API.build
-        ,nothing
-        ,[]
-    ),( ["resolve"]
-        ,API.resolve
-        ,0
-        ,[]
-    ),( ["activate"]
-        ,API.activate
-        ,[0,1]
-        ,[]
-    ),( ["update", "up"]
-        ,API.up
-        ,nothing
-        ,[OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED]
-    ),( ["generate"]
-        ,API.generate
-        ,1
-        ,[]
-    ),( ["precompile"]
-        ,API.precompile
-        ,0
-        ,[]
-    ),( ["status", "st"]
-        ,Display.status
-        ,0
-        ,[OPT_PROJECT, OPT_MANIFEST]
-    ),( ["gc"]
-        ,API.gc
-        ,0
-        ,[]
-    )
-]
-
 @enum(CommandKind, CMD_HELP, CMD_STATUS, CMD_SEARCH, CMD_ADD, CMD_RM, CMD_UP,
                    CMD_TEST, CMD_GC, CMD_PREVIEW, CMD_INIT, CMD_BUILD, CMD_FREE,
                    CMD_PIN, CMD_CHECKOUT, CMD_DEVELOP, CMD_GENERATE, CMD_PRECOMPILE,
@@ -191,6 +114,25 @@ function parse_option(word::AbstractString)::Option
     k = m.captures[1] != nothing ? m.captures[1] : m.captures[2]
     haskey(opts, k) || cmderror("invalid option: ", repr(word))
     return Option(opts[k], String(k), m.captures[3] == nothing ? nothing : String(m.captures[3]))
+end
+
+################
+# Command Spec #
+################
+#TODO specify argument types?
+struct CommandSpec
+    names::Vector{String}
+    handler::Function
+    arg_count::Union{Nothing,Int,Vector{Int}} # TODO maybe max/min
+    options::Vector{Any}
+end
+
+all_command_names = String[]
+all_options = []
+function CommandSpec!(names, api, arg_count, options)
+    append!(all_command_names, names)
+    append!(all_options, options)
+    CommandSpec(names, api, arg_spec, options)
 end
 
 ###################
@@ -853,22 +795,6 @@ function do_build!(ctx::Context, tokens::Vector{Token})
     API.build(ctx, pkgs)
 end
 
-#TODO specify argument types?
-struct CommandSpec
-    names::Vector{String}
-    api::Function
-    arg_count::Union{Nothing,Int,Vector{Int}} # TODO maybe max/min
-    options::Vector{}
-end
-
-all_command_names = String[]
-all_options = []
-function CommandSpec!(names, api, arg_count, options)
-    append!(all_command_names, names)
-    append!(all_options, options)
-    CommandSpec(names, api, arg_spec, options)
-end
-
 function do_generate!(ctx::Context, tokens::Vector{Token})
     isempty(tokens) && cmderror("`generate` requires a project name as an argument")
     token = popfirst!(tokens)
@@ -1172,5 +1098,88 @@ function repl_init(repl)
     main_mode.keymap_dict = LineEdit.keymap_merge(main_mode.keymap_dict, keymap)
     return
 end
+
+########
+# SPEC #
+########
+
+# TODO how to specify if version specs are allowed ?
+# TODO handle `preview` -> probably with a wrapper
+# TODO dispatch to API or wrapper?
+# TODO concrete difference between API and REPL commands?
+# note: it seems like most String args are meant to be package specs
+# TODO differentatie between switches and 'setters' for options?
+# TODO would invokelatest still be needed at dispatch?
+
+# nothing means don't count
+command_spec = [
+    (   ["test"]
+        ,API.test
+        ,nothing
+        ,[OPT_COVERAGE]
+    ),( ["help", "?"]
+        ,Base.display
+        ,nothing
+        ,[]
+    ),( ["instantiate"]
+        ,API.instantiate
+        ,0
+        ,[OPT_PROJECT, OPT_MANIFEST]
+    ),( ["remove", "rm"]
+        ,API.rm
+        ,nothing
+        ,[OPT_PROJECT, OPT_MANIFEST]
+    ),( ["add"]
+        ,do_add_or_develop!
+        ,nothing
+        ,[]
+    ),( ["develop", "dev"]
+        ,API.add_or_develop
+        ,nothing
+        ,[]
+    ),( ["free"]
+        ,API.free
+        ,nothing
+        ,[]
+    ),( ["pin"]
+        ,API.pin
+        ,nothing
+        ,[]
+    ),( ["build"]
+        ,API.build
+        ,nothing
+        ,[]
+    ),( ["resolve"]
+        ,API.resolve
+        ,0
+        ,[]
+    ),( ["activate"]
+        ,API.activate
+        ,[0,1]
+        ,[]
+    ),( ["update", "up"]
+        ,API.up
+        ,nothing
+        ,[OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED]
+    ),( ["generate"]
+        ,API.generate
+        ,1
+        ,[]
+    ),( ["precompile"]
+        ,API.precompile
+        ,0
+        ,[]
+    ),( ["status", "st"]
+        ,Display.status
+        ,0
+        ,[OPT_PROJECT, OPT_MANIFEST]
+    ),( ["gc"]
+        ,API.gc
+        ,0
+        ,[]
+    )
+]
+
+cmd_spec = init_command_spec(command_spec) # TODO should this go here ?
 
 end
