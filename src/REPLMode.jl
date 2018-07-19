@@ -19,8 +19,52 @@ end
 ###########
 # Options #
 ###########
+struct OptionSpec
+    name::String
+    short_name::String
+    is_meta::Bool
+    is_switch::Bool
+end
+
 @enum(OptionKind, OPT_ENV, OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR,
                   OPT_PATCH, OPT_FIXED, OPT_COVERAGE, OPT_NAME)
+
+const OptionDeclaration = Tuple(Union{String,Pair{String}}, Symbol, Symbol)
+declare_options = [
+    ("env", :meta, :arg)
+    ,(["project", "p"], :cmd, :switch)
+    ,(["manifest", "m"], :cmd, :switch)
+    ,("major", :cmd, :switch)
+    ,("minor", :cmd, :switch)
+    ,("patch", :cmd, :switch)
+    ,("fixed", :cmd, :switch)
+    ,("coverage", :cmd, :switch)
+    ,("name", :cmd, :switch)
+]
+
+function init_option_spec(specs::Vector{OptionDeclaration})
+    spec = Dict()
+    for x in specs
+        @assert x[2] in (:meta, :cmd)
+        @assert x[3] in (:arg, :switch)
+
+        names = x[1]
+        name = (names isa Pair ? names.first : names)
+        short_name = (names isa Pair ? names.second : nothing)
+        # TODO assert name matches name regex
+        # TODO assert short_name matches short_name regex; and delete below
+        @assert short_name === nothing || length(short_name) == 1 # short name is only 1 char
+        is_meta = (x[2] == :meta ? true : false)
+        is_switch = (x[3] == :switch ? true : false)
+        @assert get(spec, name, nothing) === nothing # don't overwrite
+        spec[name] = OptionSpec(name, short_name, is_meta, is_switch)
+        @assert get(spec, name, nothing) === nothing # don't overwrite
+        spec[short_name] = spec[name]
+    end
+    return spec
+end
+
+option_spec = init_option_spec(declare_options)
 
 function Types.PackageMode(opt::OptionKind)
     opt == OPT_MANIFEST && return PKGMODE_MANIFEST
@@ -37,11 +81,10 @@ function Types.UpgradeLevel(opt::OptionKind)
 end
 
 struct Option
-    kind::OptionKind
     val::String
     argument::Union{String, Nothing}
-    Option(kind::OptionKind, val::String) = new(kind, val, nothing)
-    function Option(kind::OptionKind, val::String, argument::Union{String, Nothing})
+    Option(val::String) = new(val, nothing)
+    function Option(val::String, argument::Union{String, Nothing})
         if kind in (OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR,
                     OPT_MINOR, OPT_PATCH, OPT_FIXED) &&
                 argument !== nothing
@@ -71,9 +114,11 @@ const opts = Dict(
 function parse_option(word::AbstractString)::Option
     m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
     m == nothing && cmderror("invalid option: ", repr(word))
-    k = m.captures[1] != nothing ? m.captures[1] : m.captures[2]
-    haskey(opts, k) || cmderror("invalid option: ", repr(word))
-    return Option(opts[k], String(k), m.captures[3] == nothing ? nothing : String(m.captures[3]))
+    option_name = (m.captures[1] != nothing ? m.captures[1] : m.captures[2])
+    option_arg = (m.captures[3] == nothing ? nothing : String(m.captures[3]))
+    haskey(option_spec, option_name) || cmderror("invalid option: ", repr(word))
+    spec = option_spec[option_name]
+    return Option(option_name, option_arg)
 end
 
 ################
