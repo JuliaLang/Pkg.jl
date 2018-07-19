@@ -129,8 +129,7 @@ end
 ################
 # REPL parsing #
 ################
-struct BreakToken end
-const Token = Union{Option, VersionRange, String, Rev, BreakToken}
+const Token = Union{Option, VersionRange, String, Rev}
 mutable struct Statement
     command::String
     options::Vector{Option}
