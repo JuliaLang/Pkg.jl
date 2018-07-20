@@ -139,7 +139,7 @@ end
 struct CommandSpec
     names::Vector{String}
     handler::Function
-    arg_spec::Union{Nothing,Int,Vector{Int}} # TODO maybe max/min
+    arg_spec::Vector{Int} # note: just use range operator for max/min
     options::Vector{Any}
 end
 
