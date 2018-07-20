@@ -91,17 +91,10 @@ end
 struct Option
     val::String
     argument::Union{String, Nothing}
-    Option(val::String) = new(val, nothing)
-    function Option(val::String, argument::Union{String, Nothing})
-        if kind in (OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR,
-                    OPT_MINOR, OPT_PATCH, OPT_FIXED) &&
-                argument !== nothing
-            cmderror("the `$val` option does not take an argument")
-        elseif kind in (OPT_ENV,) && argument == nothing
-            cmderror("the `$val` option requires an argument")
-        end
-        new(kind, val, argument)
-    end
+    spec::OptionSpec
+    # TODO stricter types
+    Option(val, spec::OptionSpec) = new(val, nothing, spec)
+    Option(val, arg, spec::OptionSpec) = new(val, arg, spec)
 end
 Base.show(io::IO, opt::Option) = print(io, "--$(opt.val)", opt.argument == nothing ? "" : "=$(opt.argument)")
 
@@ -121,12 +114,22 @@ const opts = Dict(
 
 function parse_option(word::AbstractString)::Option
     m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
-    m == nothing && cmderror("invalid option: ", repr(word))
+    m == nothing && cmderror("malformed option: ", repr(word))
     option_name = (m.captures[1] != nothing ? m.captures[1] : m.captures[2])
     option_arg = (m.captures[3] == nothing ? nothing : String(m.captures[3]))
-    haskey(option_spec, option_name) || cmderror("invalid option: ", repr(word))
-    spec = option_spec[option_name]
-    return Option(option_name, option_arg)
+
+    spec = get(option_spec, option_name, nothing)
+    spec !== nothing || cmderror("option is not registered: ", repr(word))
+
+    if spec.is_switch
+        option_arg === nothing ||
+            cmderror("option '$option_name' does not take an argument, but '$option_arg' given")
+    else # option takes an argument
+        option_arg !== nothing ||
+            cmderror("option '$option_name' expects an argument, but no argument given")
+    end
+
+    return Option(option_name, option_arg, spec)
 end
 
 ################
@@ -161,6 +164,7 @@ end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
+    # TODO avoid Option struct and just return the spec?
     word = replace(word, "~" => homedir())
     if add_or_develop && casesensitive_isdir(word)
         return PackageSpec(Types.GitRepo(abspath(word)))
@@ -214,10 +218,14 @@ end
 function Statement(words)
     statement = Statement()
     word = popfirst!(words)
-    while word2token(word) isa Option # TODO replace with MetaOption
-        push!(statement.meta_options, word2token(word))
+    maybe_option = word2token(word)
+    while maybe_option isa Option # TODO replace with MetaOption
+        maybe_option.spec.is_meta ||
+            cmderror("option '$(maybe_option.spec.name)' is a command option. It must be specified after the command name")
+        push!(statement.meta_options, maybe_option)
         isempty(words) && cmderror("no command specified")
         word = popfirst!(words)
+        maybe_option = word2token(word)
     end
     word in all_command_names || cmderror("expected command. instead got [$word]")
     statement.command = word
