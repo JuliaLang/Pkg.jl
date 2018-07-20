@@ -31,15 +31,15 @@ end
 
 const OptionDeclaration = Tuple(Union{String,Pair{String}}, Symbol, Symbol)
 declare_options = [
-    ("env", :meta, :arg)
-    ,(["project", "p"], :cmd, :switch)
-    ,(["manifest", "m"], :cmd, :switch)
-    ,("major", :cmd, :switch)
-    ,("minor", :cmd, :switch)
-    ,("patch", :cmd, :switch)
-    ,("fixed", :cmd, :switch)
-    ,("coverage", :cmd, :switch)
-    ,("name", :cmd, :switch)
+    ("env", :meta, :arg),
+    (["project", "p"], :cmd, :switch),
+    (["manifest", "m"], :cmd, :switch),
+    ("major", :cmd, :switch),
+    ("minor", :cmd, :switch),
+    ("patch", :cmd, :switch),
+    ("fixed", :cmd, :switch),
+    ("coverage", :cmd, :switch),
+    ("name", :cmd, :switch),
 ]
 
 function init_option_spec(specs::Vector{OptionDeclaration})
@@ -1129,71 +1129,71 @@ end
 
 # nothing means don't count
 command_spec = [
-    (   ["test"]
-        ,API.test
-        ,nothing
-        ,[OPT_COVERAGE]
-    ),( ["help", "?"]
-        ,Base.display
-        ,nothing
-        ,[]
-    ),( ["instantiate"]
-        ,API.instantiate
-        ,0
-        ,[OPT_PROJECT, OPT_MANIFEST]
-    ),( ["remove", "rm"]
-        ,API.rm
-        ,nothing
-        ,[OPT_PROJECT, OPT_MANIFEST]
-    ),( ["add"]
-        ,do_add_or_develop!
-        ,nothing
-        ,[]
-    ),( ["develop", "dev"]
-        ,API.add_or_develop
-        ,nothing
-        ,[]
-    ),( ["free"]
-        ,API.free
-        ,nothing
-        ,[]
-    ),( ["pin"]
-        ,API.pin
-        ,nothing
-        ,[]
-    ),( ["build"]
-        ,API.build
-        ,nothing
-        ,[]
-    ),( ["resolve"]
-        ,API.resolve
-        ,0
-        ,[]
-    ),( ["activate"]
-        ,API.activate
-        ,[0,1]
-        ,[]
-    ),( ["update", "up"]
-        ,API.up
-        ,nothing
-        ,[OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED]
-    ),( ["generate"]
-        ,API.generate
-        ,1
-        ,[]
-    ),( ["precompile"]
-        ,API.precompile
-        ,0
-        ,[]
-    ),( ["status", "st"]
-        ,Display.status
-        ,0
-        ,[OPT_PROJECT, OPT_MANIFEST]
-    ),( ["gc"]
-        ,API.gc
-        ,0
-        ,[]
-    )
+    (   ["test"],
+        API.test,
+        nothing,
+        [OPT_COVERAGE],
+    ),( ["help", "?"],
+        Base.display,
+        nothing,
+        [],
+    ),( ["instantiate"],
+        API.instantiate,
+        0,
+        [OPT_PROJECT, OPT_MANIFEST],
+    ),( ["remove", "rm"],
+        API.rm,
+        nothing,
+        [OPT_PROJECT, OPT_MANIFEST],
+    ),( ["add"],
+        do_add_or_develop!,
+        nothing,
+        [],
+    ),( ["develop", "dev"],
+        API.add_or_develop,
+        nothing,
+        [],
+    ),( ["free"],
+        API.free,
+        nothing,
+        [],
+    ),( ["pin"],
+        API.pin,
+        nothing,
+        [],
+    ),( ["build"],
+        API.build,
+        nothing,
+        [],
+    ),( ["resolve"],
+        API.resolve,
+        0,
+        [],
+    ),( ["activate"],
+        API.activate,
+        [0,1],
+        [],
+    ),( ["update", "up"],
+        API.up,
+        nothing,
+        [OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED],
+    ),( ["generate"],
+        API.generate,
+        1,
+        [],
+    ),( ["precompile"],
+        API.precompile,
+        0,
+        [],
+    ),( ["status", "st"],
+        Display.status,
+        0,
+        [OPT_PROJECT, OPT_MANIFEST],
+    ),( ["gc"],
+        API.gc,
+        0,
+        [],
+    ),
 ]
 
 cmd_spec = init_command_spec(command_spec) # TODO should this go here ?
