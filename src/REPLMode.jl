@@ -354,6 +354,16 @@ function enforce_argument_order(tokens)
 end
 
 function enforce_command_spec(spec::CommandSpec, statement::Statement)
+    # argument count
+    if !isempty(spec.arg_spec)
+        arg_count = length(statement.arguments)
+        println("** arg_count: [$arg_count]")
+        println("** spec: [$(spec.arg_spec)]")
+        #TODO better error messages: length = 0 say no; length > 1 say 'or' ...
+        arg_count in spec.arg_spec ||
+            cmderror("Command `$(statement.command)` expects $(spec.arg_spec) arguments, but given $arg_count.")
+    end
+    # TODO option types
 end
 
 function init_command_spec(command_spec)

@@ -39,6 +39,8 @@ end
     @test length(statement.arguments) == 2
     @test statement.options[1].val == "project"
     @test length(statement.options) == 1
+
+    @test_throws CommandError Pkg.REPLMode.parse("activate one two three")
 end
 
 end # module
