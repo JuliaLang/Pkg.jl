@@ -43,23 +43,31 @@ declare_options = [
 ]
 
 function init_option_spec(specs::Vector{OptionDeclaration})
+    get_names(name::String) = (name, nothing)
+    function get_names(names::Vector{String})
+        @assert length(names) == 2
+        return (names[1], names[2])
+    end
+
     spec = Dict()
     for x in specs
         @assert x[2] in (:meta, :cmd)
         @assert x[3] in (:arg, :switch)
-
-        names = x[1]
-        name = (names isa Pair ? names.first : names)
-        short_name = (names isa Pair ? names.second : nothing)
-        # TODO assert name matches name regex
-        # TODO assert short_name matches short_name regex; and delete below
-        @assert short_name === nothing || length(short_name) == 1 # short name is only 1 char
         is_meta = (x[2] == :meta ? true : false)
         is_switch = (x[3] == :switch ? true : false)
+
+        (name, short_name) = get_names(x[1])
+
+        # register `name` and `short_name`
+        #TODO assert matching lex regex
         @assert get(spec, name, nothing) === nothing # don't overwrite
         spec[name] = OptionSpec(name, short_name, is_meta, is_switch)
-        @assert get(spec, name, nothing) === nothing # don't overwrite
-        spec[short_name] = spec[name]
+        if short_name !== nothing
+            #TODO assert matching lex regex
+            @assert get(spec, short_name, nothing) === nothing # don't overwrite
+            spec[short_name] = spec[name]
+        end
+
     end
     return spec
 end
