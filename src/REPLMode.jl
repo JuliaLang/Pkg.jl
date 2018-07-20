@@ -30,7 +30,7 @@ end
                   OPT_PATCH, OPT_FIXED, OPT_COVERAGE, OPT_NAME)
 
 const OptionDeclaration = Tuple{Union{String,Vector{String}}, Symbol, Symbol}
-declare_options = OptionDeclaration[
+option_declarations = OptionDeclaration[
     ("env", :meta, :arg),
     (["project", "p"], :cmd, :switch),
     (["manifest", "m"], :cmd, :switch),
@@ -72,7 +72,7 @@ function init_option_spec(specs::Vector{OptionDeclaration})
     return spec
 end
 
-option_spec = init_option_spec(declare_options)
+option_specs = init_option_spec(option_declarations)
 
 function Types.PackageMode(opt::OptionKind)
     opt == OPT_MANIFEST && return PKGMODE_MANIFEST
@@ -118,7 +118,7 @@ function parse_option(word::AbstractString)::Option
     option_name = (m.captures[1] != nothing ? m.captures[1] : m.captures[2])
     option_arg = (m.captures[3] == nothing ? nothing : String(m.captures[3]))
 
-    spec = get(option_spec, option_name, nothing)
+    spec = get(option_specs, option_name, nothing)
     spec !== nothing || cmderror("option is not registered: ", repr(word))
 
     if spec.is_switch
@@ -370,7 +370,7 @@ end
 function do_statement!(statement::Statement, repl)
     ctx = Context(env = EnvCache(nothing))
     # TODO process meta options
-    spec = cmd_spec[statement.command]
+    spec = command_specs[statement.command]
     enforce_command_spec(spec, statement)
     #TODO spec.handler(ctx, statement)
 
@@ -1140,12 +1140,11 @@ end
 # TODO dispatch to API or wrapper?
 # TODO concrete difference between API and REPL commands?
 # note: it seems like most String args are meant to be package specs
-# TODO differentatie between switches and 'setters' for options?
 # TODO would invokelatest still be needed at dispatch?
 
 # nothing means don't count
 const CommandDeclaration = Tuple{Vector{String}, Function, Vector{Int}, Vector{Any}}
-command_spec = [
+command_declarations = [
     (   ["test"],
         API.test,
         [],
@@ -1192,27 +1191,27 @@ command_spec = [
         [],
     ),( ["update", "up"],
         API.up,
-        nothing,
+        [],
         [OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED],
     ),( ["generate"],
         API.generate,
-        1,
+        [1],
         [],
     ),( ["precompile"],
         API.precompile,
-        0,
+        [0],
         [],
     ),( ["status", "st"],
         Display.status,
-        0,
+        [0],
         [OPT_PROJECT, OPT_MANIFEST],
     ),( ["gc"],
         API.gc,
-        0,
+        [0],
         [],
     ),
 ]
 
-cmd_spec = init_command_spec(command_spec) # TODO should this go here ?
+command_specs = init_command_spec(command_declarations) # TODO should this go here ?
 
 end
