@@ -214,7 +214,6 @@ function parse(cmd::String)::Vector{Statement}
     return statements
 end
 
-# TODO separate meta_options from options
 function Statement(words)
     statement = Statement()
     word = popfirst!(words)
@@ -347,9 +346,6 @@ function enforce_argument_order(tokens)
         end
         prev_token = token
     end
-end
-
-function get_command_spec(command_spec, statement::Statement)
 end
 
 function enforce_command_spec(spec::CommandSpec, statement::Statement)
