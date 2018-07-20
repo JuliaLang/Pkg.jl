@@ -21,7 +21,7 @@ end
 ###########
 struct OptionSpec
     name::String
-    short_name::String
+    short_name::Union{Nothing,String}
     is_meta::Bool
     is_switch::Bool
 end
@@ -29,8 +29,8 @@ end
 @enum(OptionKind, OPT_ENV, OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR,
                   OPT_PATCH, OPT_FIXED, OPT_COVERAGE, OPT_NAME)
 
-const OptionDeclaration = Tuple(Union{String,Pair{String}}, Symbol, Symbol)
-declare_options = [
+const OptionDeclaration = Tuple{Union{String,Vector{String}}, Symbol, Symbol}
+declare_options = OptionDeclaration[
     ("env", :meta, :arg),
     (["project", "p"], :cmd, :switch),
     (["manifest", "m"], :cmd, :switch),
