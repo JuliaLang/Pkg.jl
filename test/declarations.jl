@@ -31,6 +31,14 @@ end
     statements = Pkg.REPLMode.parse("--env=foobar add Example; rm Example")
     @test statements[1].command == "add"
     @test statements[2].command == "rm"
+
+    statement = Pkg.REPLMode.parse("--env=foobar add --project Example1 Example2")[1]
+    @test statement.command == "add"
+    @test statement.arguments[1] == "Example1"
+    @test statement.arguments[2] == "Example2"
+    @test length(statement.arguments) == 2
+    @test statement.options[1].val == "project"
+    @test length(statement.options) == 1
 end
 
 end # module

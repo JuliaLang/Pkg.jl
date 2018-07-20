@@ -218,6 +218,7 @@ function Statement(words)
     statement = Statement()
     word = popfirst!(words)
     maybe_option = word2token(word)
+    # MetaOptions
     while maybe_option isa Option # TODO replace with MetaOption
         maybe_option.spec.is_meta ||
             cmderror("option '$(maybe_option.spec.name)' is a command option. It must be specified after the command name")
@@ -226,10 +227,14 @@ function Statement(words)
         word = popfirst!(words)
         maybe_option = word2token(word)
     end
+    # command name
     word in all_command_names || cmderror("expected command. instead got [$word]")
     statement.command = word
-    statement.arguments = map(word2token, words)
-    # TODO `take` all flags and put them in their own bin
+    # command arguments
+    for word in words
+        tok = word2token(word)
+        push!((tok isa Option ? statement.options : statement.arguments), tok)
+    end
     return statement
 end
 
