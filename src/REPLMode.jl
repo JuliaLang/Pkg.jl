@@ -143,14 +143,7 @@ struct CommandSpec
     arg_spec::Vector{Int} # note: just use range operator for max/min
     options::Vector{String}
 end
-
 all_command_names = String[]
-all_options = []
-function CommandSpec!(names, api, arg_spec, options)
-    append!(all_command_names, names)
-    append!(all_options, options)
-    return CommandSpec(names, api, arg_spec, options)
-end
 
 ###################
 # Package parsing #
@@ -376,16 +369,19 @@ function CommandSpec!(declaration::CommandDeclaration)
     return CommandSpec(declaration...)
 end
 
-function init_command_spec(command_spec)
-    cmd_spec = Dict() # TODO Dict or k,v array ?
-    for spec in command_spec
-        names = spec[1]
-        x = CommandSpec!(spec...)
+# populate a dictionary: command_name -> command_spec
+function init_command_spec(declarations::Vector{CommandDeclaration})
+    specs = Dict()
+    for declaration in declarations
+        names = declaration[1]
+        spec = CommandSpec!(declaration...)
         for name in names
-            cmd_spec[name] = x
+            # TODO regex check name
+            @assert get(specs, name, nothing) === nothing # don't overwrite
+            specs[name] = spec
         end
     end
-    return cmd_spec
+    return specs
 end
 
 function do_statement!(statement::Statement, repl)
@@ -1164,8 +1160,7 @@ end
 # TODO would invokelatest still be needed at dispatch?
 
 # nothing means don't count
-const CommandDeclaration = Tuple{Vector{String}, Function, Vector{Int}, Vector{Any}}
-command_declarations = [
+command_declarations = CommandDeclaration[
     (   ["test"],
         API.test,
         [],
@@ -1234,5 +1229,6 @@ command_declarations = [
 ]
 
 command_specs = init_command_spec(command_declarations) # TODO should this go here ?
+all_command_names = keys(command_specs)
 
 end
