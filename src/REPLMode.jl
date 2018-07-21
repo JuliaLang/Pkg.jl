@@ -389,7 +389,8 @@ function do_statement!(statement::Statement, repl)
     # TODO process meta options
     spec = command_specs[statement.command]
     enforce_command_spec(spec, statement)
-    #TODO spec.handler(ctx, statement)
+    # TODO is invokelatest still needed?
+    Base.invokelatest(spec.handler, ctx, statement)
 
     #=
     if cmd.kind == CMD_PREVIEW
@@ -826,8 +827,7 @@ function do_test!(ctx::Context, tokens::Vector{Token})
     API.test(ctx, pkgs; coverage = coverage)
 end
 
-function do_gc!(ctx::Context, tokens::Vector{Token})
-    !isempty(tokens) && cmderror("`gc` does not take any arguments")
+function do_gc!(ctx::Context, statement::Statement)
     API.gc(ctx)
 end
 
@@ -1157,7 +1157,6 @@ end
 # TODO dispatch to API or wrapper?
 # TODO concrete difference between API and REPL commands?
 # note: it seems like most String args are meant to be package specs
-# TODO would invokelatest still be needed at dispatch?
 
 # nothing means don't count
 command_declarations = CommandDeclaration[
@@ -1222,7 +1221,7 @@ command_declarations = CommandDeclaration[
         [0],
         ["project", "manifest"],
     ),( ["gc"],
-        API.gc,
+        do_gc!, #
         [0],
         [],
     ),

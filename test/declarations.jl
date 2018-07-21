@@ -67,4 +67,13 @@ end
     end
 end
 
+@testset "gc" begin
+    with_temp_env() do
+        @test_throws CommandError Pkg.REPLMode.pkgstr("gc --project")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("gc --minor")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("gc Example")
+        Pkg.REPLMode.pkgstr("gc")
+    end
+end
+
 end # module
