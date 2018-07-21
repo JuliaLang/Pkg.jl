@@ -338,23 +338,25 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     end
 end
 
-function enforce_argument_order(tokens)
-    prev_token = nothing
-    function check_prev_token(valid_type::DataType, error_message::AbstractString)
-        prev_token isa valid_type || cmderror(error_message)
+function enforce_argument_order(statement::Statement)
+    prev_arg = nothing
+    function check_prev_arg(valid_type::DataType, error_message::AbstractString)
+        prev_arg isa valid_type || cmderror(error_message)
     end
 
-    for token in tokens
-        if token isa VersionRange
-            check_prev_token(String, "package name/uuid must precede version spec `@$token`")
-        elseif token isa Rev
-            check_prev_token(String, "package name/uuid must precede rev spec `#$(token.rev)`")
+    for arg in statement.arguments
+        if arg isa VersionRange
+            check_prev_arg(String, "package name/uuid must precede version spec `@$arg`")
+        elseif arg isa Rev
+            check_prev_arg(String, "package name/uuid must precede rev spec `#$(arg.rev)`")
         end
-        prev_token = token
+        prev_arg = arg
     end
 end
 
 function enforce_command_spec(spec::CommandSpec, statement::Statement)
+    # argument order
+    enforce_argument_order(statement)
     # argument count
     if !isempty(spec.arg_spec)
         arg_count = length(statement.arguments)
