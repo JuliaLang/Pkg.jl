@@ -136,11 +136,12 @@ end
 # Command Spec #
 ################
 #TODO specify argument types?
+const CommandDeclaration = Tuple{Vector{String}, Function, Vector{Int}, Vector{String}}
 struct CommandSpec
     names::Vector{String}
     handler::Function
     arg_spec::Vector{Int} # note: just use range operator for max/min
-    options::Vector{Any}
+    options::Vector{String}
 end
 
 all_command_names = String[]
@@ -1159,7 +1160,7 @@ command_declarations = [
     (   ["test"],
         API.test,
         [],
-        [OPT_COVERAGE],
+        ["coverage"],
     ),( ["help", "?"],
         Base.display,
         [],
@@ -1167,11 +1168,11 @@ command_declarations = [
     ),( ["instantiate"],
         API.instantiate,
         [0],
-        [OPT_PROJECT, OPT_MANIFEST],
+        ["project", "manifest"],
     ),( ["remove", "rm"],
         API.rm,
         [],
-        [OPT_PROJECT, OPT_MANIFEST],
+        ["project", "manifest"],
     ),( ["add"],
         do_add_or_develop!,
         [],
@@ -1203,7 +1204,7 @@ command_declarations = [
     ),( ["update", "up"],
         API.up,
         [],
-        [OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED],
+        ["project", "manifest", "major", "minor", "patch", "fixed"],
     ),( ["generate"],
         API.generate,
         [1],
@@ -1215,7 +1216,7 @@ command_declarations = [
     ),( ["status", "st"],
         Display.status,
         [0],
-        [OPT_PROJECT, OPT_MANIFEST],
+        ["project", "manifest"],
     ),( ["gc"],
         API.gc,
         [0],
