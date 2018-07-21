@@ -374,7 +374,7 @@ function init_command_spec(declarations::Vector{CommandDeclaration})
     specs = Dict()
     for declaration in declarations
         names = declaration[1]
-        spec = CommandSpec!(declaration...)
+        spec = CommandSpec!(declaration)
         for name in names
             # TODO regex check name
             @assert get(specs, name, nothing) === nothing # don't overwrite
