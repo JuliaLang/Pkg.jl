@@ -40,7 +40,31 @@ end
     @test statement.options[1].val == "project"
     @test length(statement.options) == 1
 
-    @test_throws CommandError Pkg.REPLMode.parse("activate one two three")
+end
+
+@testset "argument count" begin
+    with_temp_env() do
+        @test_throws CommandError Pkg.REPLMode.pkgstr("activate one two")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("activate one two three")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("precompile Example")
+    end
+end
+
+@testset "invalid options" begin
+    with_temp_env() do
+        @test_throws CommandError Pkg.REPLMode.pkgstr("rm --minor Example")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("pin --project Example")
+    end
+end
+
+@testset "Argument order" begin
+    with_temp_env() do
+        @test_throws CommandError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("up #foobar")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("add @0.0.1")
+    end
 end
 
 end # module
