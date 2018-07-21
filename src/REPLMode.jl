@@ -365,6 +365,15 @@ function enforce_command_spec(spec::CommandSpec, statement::Statement)
             cmderror("Command `$(statement.command)` expects $(spec.arg_spec) arguments, but given $arg_count.")
     end
     # TODO option types
+    for option in statement.options
+        option.val in spec.options ||
+            cmderror("option '$(option.val)' is not supported by command '$(statement.command)'")
+    end
+end
+
+function CommandSpec!(declaration::CommandDeclaration)
+    # TODO make sure options are 'primary names'
+    return CommandSpec(declaration...)
 end
 
 function init_command_spec(command_spec)
