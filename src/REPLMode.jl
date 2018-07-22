@@ -23,24 +23,31 @@ struct OptionSpec
     name::String
     short_name::Union{Nothing,String}
     is_meta::Bool
-    is_switch::Bool
+    api::Union{Nothing, Pair{Symbol, Any}}
 end
+is_switch(opt::OptionSpec)::Bool = !(opt.api isa Nothing) # TODO is this still needed?
 
 @enum(OptionKind, OPT_ENV, OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR,
                   OPT_PATCH, OPT_FIXED, OPT_COVERAGE, OPT_NAME)
 
-const OptionDeclaration = Tuple{Union{String,Vector{String}}, Symbol, Symbol}
+const OptionDeclaration = Tuple{Union{String,Vector{String}},
+                                Symbol,
+                                Union{Nothing, Pair{Symbol, Any}}}
+# > how about: if both are switches and have the same key then error
+# TODO if arg, provide a function like `resolve_opt` which will apply
+# > the supplied function and return a Pair{Symbol,Any}
+# > ex: ("env", :meta, (:env, arg->EnvCache(Base.parse_env(arg)))),
 option_declarations = OptionDeclaration[
-    ("env", :meta, :arg),
-    (["project", "p"], :cmd, :switch),
-    (["manifest", "m"], :cmd, :switch),
-    ("major", :cmd, :switch),
-    ("minor", :cmd, :switch),
-    ("patch", :cmd, :switch),
-    ("fixed", :cmd, :switch),
-    ("coverage", :cmd, :switch),
-    ("name", :cmd, :switch),
+    ("env", :meta, nothing),
+    (["project", "p"], :cmd, :mode => PKGMODE_PROJECT),
+    (["manifest", "m"], :cmd, :mode => PKGMODE_MANIFEST),
+    ("major", :cmd, :level => UPLEVEL_MAJOR),
+    ("minor", :cmd, :level => UPLEVEL_MINOR),
+    ("patch", :cmd, :level => UPLEVEL_PATCH),
+    ("fixed", :cmd, :level => UPLEVEL_FIXED),
+    ("coverage", :cmd, :coverage => true),
 ]
+#TODO: should this opt be removed: ("name", :cmd, :temp => false)
 
 function init_option_spec(specs::Vector{OptionDeclaration})
     get_names(name::String) = (name, nothing)
@@ -52,16 +59,15 @@ function init_option_spec(specs::Vector{OptionDeclaration})
     spec = Dict()
     for x in specs
         @assert x[2] in (:meta, :cmd)
-        @assert x[3] in (:arg, :switch)
         is_meta = (x[2] == :meta ? true : false)
-        is_switch = (x[3] == :switch ? true : false)
+        api = x[3]
 
         (name, short_name) = get_names(x[1])
 
         # register `name` and `short_name`
         #TODO assert matching lex regex
         @assert get(spec, name, nothing) === nothing # don't overwrite
-        spec[name] = OptionSpec(name, short_name, is_meta, is_switch)
+        spec[name] = OptionSpec(name, short_name, is_meta, api)
         if short_name !== nothing
             #TODO assert matching lex regex
             @assert get(spec, short_name, nothing) === nothing # don't overwrite
@@ -77,14 +83,6 @@ option_specs = init_option_spec(option_declarations)
 function Types.PackageMode(opt::OptionKind)
     opt == OPT_MANIFEST && return PKGMODE_MANIFEST
     opt == OPT_PROJECT  && return PKGMODE_PROJECT
-    throw(ArgumentError("invalid option $opt"))
-end
-
-function Types.UpgradeLevel(opt::OptionKind)
-    opt == OPT_MAJOR && return UPLEVEL_MAJOR
-    opt == OPT_MINOR && return UPLEVEL_MINOR
-    opt == OPT_PATCH && return UPLEVEL_PATCH
-    opt == OPT_FIXED && return UPLEVEL_FIXED
     throw(ArgumentError("invalid option $opt"))
 end
 
@@ -121,7 +119,7 @@ function parse_option(word::AbstractString)::Option
     spec = get(option_specs, option_name, nothing)
     spec !== nothing || cmderror("option is not registered: ", repr(word))
 
-    if spec.is_switch
+    if is_switch(spec)
         option_arg === nothing ||
             cmderror("option '$option_name' does not take an argument, but '$option_arg' given")
     else # option takes an argument
@@ -347,7 +345,7 @@ function enforce_argument_order(statement::Statement)
     end
 end
 
-function enforce_command_spec(spec::CommandSpec, statement::Statement)
+function enforce_spec(spec::CommandSpec, statement::Statement)
     # argument order
     enforce_argument_order(statement)
     # argument count
@@ -357,10 +355,21 @@ function enforce_command_spec(spec::CommandSpec, statement::Statement)
         arg_count in spec.arg_spec ||
             cmderror("Command `$(statement.command)` expects $(spec.arg_spec) arguments, but given $arg_count.")
     end
-    # TODO option types
+    # option types
     for option in statement.options
         option.val in spec.options ||
             cmderror("option '$(option.val)' is not supported by command '$(statement.command)'")
+    end
+    # conflicting options
+    unique_keys = Symbol[]
+    for opt in filter(is_switch, map(opt->opt.spec, statement.options))
+        key = opt.api.first
+        if key in unique_keys
+            conflicting = filter(opt->opt.spec.api.first == key, statement.options)
+            cmderror("Conflicting keys: $conflicting")
+        else
+            push!(unique_keys, key)
+        end
     end
 end
 
@@ -388,7 +397,7 @@ function do_statement!(statement::Statement, repl)
     ctx = Context(env = EnvCache(nothing))
     # TODO process meta options
     spec = command_specs[statement.command]
-    enforce_command_spec(spec, statement)
+    enforce_spec(spec, statement)
     # TODO is invokelatest still needed?
     Base.invokelatest(spec.handler, ctx, statement)
 

@@ -76,4 +76,9 @@ end
     end
 end
 
+@testset "conflicting options" begin
+    @test_throws CommandError Pkg.REPLMode.pkgstr("up --major --minor")
+    @test_throws CommandError Pkg.REPLMode.pkgstr("rm --project --manifest")
+end
+
 end # module
