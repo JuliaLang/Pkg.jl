@@ -813,24 +813,15 @@ function do_status!(ctx::Context, tokens::Vector{Token})
 end
 
 # TODO , test recursive dependencies as on option.
-function do_test!(ctx::Context, tokens::Vector{Token})
+function do_test!(ctx::Context, statement::Statement)
     pkgs = PackageSpec[]
-    coverage = false
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa String
-            pkg = parse_package(token)
-            pkg.mode = PKGMODE_MANIFEST
-            push!(pkgs, pkg)
-        elseif token isa Option
-            if token.kind == OPT_COVERAGE
-                coverage = true
-            else
-                cmderror("invalid option for `test`: $token")
-            end
+    coverage = false #TODO
+    for arg in statement.arguments
+        if arg isa String
+            push!(pkgs, parse_package(arg))
+            pkgs[end].mode = PKGMODE_MANIFEST
         else
-            # TODO: Better error message
-            cmderror("invalid usage for `test`")
+            assert(false)
         end
     end
     API.test(ctx, pkgs; coverage = coverage)
@@ -853,18 +844,11 @@ function do_build!(ctx::Context, tokens::Vector{Token})
     API.build(ctx, pkgs)
 end
 
-function do_generate!(ctx::Context, tokens::Vector{Token})
-    isempty(tokens) && cmderror("`generate` requires a project name as an argument")
-    token = popfirst!(tokens)
-    token isa String || cmderror("`generate` takes a name of the project to create")
-    isempty(tokens) || cmderror("`generate` takes a single project name as an argument")
-    API.generate(ctx, token)
+function do_generate!(ctx::Context, statement::Statement)
+    API.generate(ctx, statement.arguments[1])
 end
 
-function do_precompile!(ctx::Context, tokens::Vector{Token})
-    if !isempty(tokens)
-        cmderror("`precompile` does not take any arguments")
-    end
+function do_precompile!(ctx::Context, statement::Statement)
     API.precompile(ctx)
 end
 
@@ -891,15 +875,14 @@ function do_resolve!(ctx::Context, tokens::Vector{Token})
     API.resolve(ctx)
 end
 
-function do_activate!(tokens::Vector{Token})
-    if isempty(tokens)
+function do_activate!(statement::Statement)
+    if isempty(statement.arguments)
         return API.activate()
     else
-        token = popfirst!(tokens)
-        if !isempty(tokens) || !(token isa String)
+        if !(statement.arguments[1] isa String)
             cmderror("`activate` takes an optional path to the env to activate")
         end
-        return API.activate(abspath(token))
+        return API.activate(abspath(statement.arguments[1]))
     end
 end
 
@@ -1166,11 +1149,12 @@ end
 # TODO dispatch to API or wrapper?
 # TODO concrete difference between API and REPL commands?
 # note: it seems like most String args are meant to be package specs
+# TODO precompile, generate, gc : can be embeded directly
 
 # nothing means don't count
 command_declarations = CommandDeclaration[
     (   ["test"],
-        API.test,
+        do_test!,
         [],
         ["coverage"],
     ),( ["help", "?"],
@@ -1214,15 +1198,15 @@ command_declarations = CommandDeclaration[
         [0,1],
         [],
     ),( ["update", "up"],
-        API.up,
+        do_up!,
         [],
         ["project", "manifest", "major", "minor", "patch", "fixed"],
     ),( ["generate"],
-        API.generate,
+        do_generate!,
         [1],
         [],
     ),( ["precompile"],
-        API.precompile,
+        do_precompile!,
         [0],
         [],
     ),( ["status", "st"],
@@ -1235,6 +1219,9 @@ command_declarations = CommandDeclaration[
         [],
     ),
 ]
+
+#TODO string -> PackageSpec
+#TODO string (rev|versionrange) -> VersionedPackage
 
 command_specs = init_command_spec(command_declarations) # TODO should this go here ?
 all_command_names = keys(command_specs)

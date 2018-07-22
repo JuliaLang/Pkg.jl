@@ -76,6 +76,36 @@ end
     end
 end
 
+@testset "precompile" begin
+    with_temp_env() do
+        @test_throws CommandError Pkg.REPLMode.pkgstr("precompile --project")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("precompile Example")
+        Pkg.REPLMode.pkgstr("precompile")
+    end
+end
+
+@testset "generate" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        @test_throws CommandError Pkg.REPLMode.pkgstr("generate --major Example")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("generate --foobar Example")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("generate Example1 Example2")
+        Pkg.REPLMode.pkgstr("generate Example")
+    end
+    end
+    end
+end
+
+@testset "test" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        Pkg.add("Example")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("test --project Example")
+        Pkg.REPLMode.pkgstr("test --coverage Example")
+        Pkg.REPLMode.pkgstr("test Example")
+    end
+    end
+    end
+end
+
 @testset "conflicting options" begin
     @test_throws CommandError Pkg.REPLMode.pkgstr("up --major --minor")
     @test_throws CommandError Pkg.REPLMode.pkgstr("rm --project --manifest")
