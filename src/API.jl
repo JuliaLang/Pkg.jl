@@ -61,7 +61,12 @@ rm(pkg::Union{String, PackageSpec}; kwargs...)               = rm([pkg]; kwargs.
 rm(pkgs::Vector{String}; kwargs...)      = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 rm(pkgs::Vector{PackageSpec}; kwargs...) = rm(Context(), pkgs; kwargs...)
 
-function rm(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
+    for pkg in pkgs
+        #TODO only overwrite pkg.mode is default value ?
+        pkg.mode = mode
+    end
+
     print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()

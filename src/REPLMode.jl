@@ -26,6 +26,7 @@ struct OptionSpec
     api::Union{Nothing, Pair{Symbol, Any}}
 end
 is_switch(opt::OptionSpec)::Bool = !(opt.api isa Nothing) # TODO is this still needed?
+get_api_opts(statement::Statement) = map(opt->opt.spec.api, statement.options)
 
 @enum(OptionKind, OPT_ENV, OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR,
                   OPT_PATCH, OPT_FIXED, OPT_COVERAGE, OPT_NAME)
@@ -683,28 +684,18 @@ function do_help!(
     Base.display(disp, help_md)
 end
 
-function do_rm!(ctx::Context, tokens::Vector{Token})
+# TODO rm only accepts 'raw' packages (not versioned)
+function do_rm!(ctx::Context, statement::Statement)
     # tokens: package names and/or uuids
-    mode = PKGMODE_PROJECT
     pkgs = PackageSpec[]
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa String
-            push!(pkgs, parse_package(token))
-            pkgs[end].mode = mode
-        elseif token isa VersionRange
-            cmderror("`rm` does not take version specs")
-        elseif token isa Option
-            if token.kind in (OPT_PROJECT, OPT_MANIFEST)
-                mode = PackageMode(token.kind)
-            else
-                cmderror("invalid option for `rm`: $token")
-            end
+    for arg in statement.arguments
+        if arg isa String
+            push!(pkgs, parse_package(arg))
+        else
+            assert(false)
         end
     end
-    isempty(pkgs) &&
-        cmderror("`rm` – list packages to remove")
-    API.rm(ctx, pkgs)
+    API.rm(ctx, pkgs; get_api_opts(statement)...)
 end
 
 function do_add_or_develop!(ctx::Context, tokens::Vector{Token}, cmd)
@@ -738,7 +729,6 @@ end
 
 function do_up!(ctx::Context, statement::Statement)
     pkgs = PackageSpec[]
-    opts = map(opt->opt.spec.api, statement.options)
     for arg in statement.arguments
         if arg isa String
             push!(pkgs, parse_package(arg))
@@ -748,7 +738,7 @@ function do_up!(ctx::Context, statement::Statement)
             assert(false)
         end
     end
-    API.up(ctx, pkgs; opts...)
+    API.up(ctx, pkgs; get_api_opts(statement)...)
 end
 
 function do_pin!(ctx::Context, tokens::Vector{Token})
