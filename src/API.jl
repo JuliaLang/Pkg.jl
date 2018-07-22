@@ -139,6 +139,12 @@ up(pkgs::Vector{PackageSpec}; kwargs...)       = up(Context(), pkgs; kwargs...)
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT, do_update_registry=true, kwargs...)
+    for pkg in pkgs
+        # TODO only override if they are not already set
+        pkg.mode = mode
+        pkg.version = level
+    end
+
     print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()

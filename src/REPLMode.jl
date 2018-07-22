@@ -736,32 +736,19 @@ function do_add_or_develop!(ctx::Context, tokens::Vector{Token}, cmd)
     return API.add_or_develop(ctx, pkgs, mode=mode)
 end
 
-function do_up!(ctx::Context, tokens::Vector{Token})
-    # tokens:
-    #  - upgrade levels as options: --[fixed|patch|minor|major]
-    #  - package names and/or uuids, optionally followed by version specs
+function do_up!(ctx::Context, statement::Statement)
     pkgs = PackageSpec[]
-    mode = PKGMODE_PROJECT
-    level = UPLEVEL_MAJOR
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa String
-            push!(pkgs, parse_package(token))
-            pkgs[end].version = level
-            pkgs[end].mode = mode
-        elseif token isa VersionRange
-            pkgs[end].version = VersionSpec(token)
-        elseif token isa Option
-            if token.kind in (OPT_PROJECT, OPT_MANIFEST)
-                mode = PackageMode(token.kind)
-            elseif token.kind in (OPT_MAJOR, OPT_MINOR, OPT_PATCH, OPT_FIXED)
-                level = UpgradeLevel(token.kind)
-            else
-                cmderror("invalid option for `up`: $(token)")
-            end
+    opts = map(opt->opt.spec.api, statement.options)
+    for arg in statement.arguments
+        if arg isa String
+            push!(pkgs, parse_package(arg))
+        elseif arg isa VersionRange
+            pkgs[end].version = VersionSpec(arg)
+        else
+            assert(false)
         end
     end
-    API.up(ctx, pkgs; level=level, mode=mode)
+    API.up(ctx, pkgs; opts...)
 end
 
 function do_pin!(ctx::Context, tokens::Vector{Token})
