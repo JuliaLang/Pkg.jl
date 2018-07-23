@@ -257,43 +257,46 @@ mutable struct EnvCache
     # registered package info:
     uuids::Dict{String,Vector{UUID}}
     paths::Dict{UUID,Vector{String}}
+    names::Dict{UUID,Vector{String}}
+end
 
-    function EnvCache(env::Union{Nothing,String}=nothing)
-        project_file = find_project_file(env)
-        project_dir = dirname(project_file)
-        git = ispath(joinpath(project_dir, ".git")) ? project_dir : nothing
+function EnvCache(env::Union{Nothing,String}=nothing)
+    project_file = find_project_file(env)
+    project_dir = dirname(project_file)
+    git = ispath(joinpath(project_dir, ".git")) ? project_dir : nothing
 
-        project = read_project(project_file)
-        if any(haskey.((project,), ["name", "uuid", "version"]))
-            project_package = PackageSpec(
-                get(project, "name", ""),
-                UUID(get(project, "uuid", 0)),
-                VersionNumber(get(project, "version", "0.0")),
-            )
-        else
-            project_package = nothing
-        end
-        # determine manifest_file name
-        dir = abspath(dirname(project_file))
-        manifest_file = haskey(project, "manifest") ?
-            abspath(project["manifest"]) :
-            manifestfile_path(dir)
-        # use default name if still not determined
-        (manifest_file === nothing) && (manifest_file = joinpath(dir, "Manifest.toml"))
-        write_env_usage(manifest_file)
-        manifest = read_manifest(manifest_file)
-        uuids = Dict{String,Vector{UUID}}()
-        paths = Dict{UUID,Vector{String}}()
-        return new(env,
-            git,
-            project_file,
-            manifest_file,
-            project_package,
-            project,
-            manifest,
-            uuids,
-            paths,)
+    project = read_project(project_file)
+    if any(haskey.((project,), ["name", "uuid", "version"]))
+        project_package = PackageSpec(
+            get(project, "name", ""),
+            UUID(get(project, "uuid", 0)),
+            VersionNumber(get(project, "version", "0.0")),
+        )
+    else
+        project_package = nothing
     end
+    # determine manifest_file name
+    dir = abspath(dirname(project_file))
+    manifest_file = haskey(project, "manifest") ?
+        abspath(project["manifest"]) :
+        manifestfile_path(dir)
+    # use default name if still not determined
+    (manifest_file === nothing) && (manifest_file = joinpath(dir, "Manifest.toml"))
+    write_env_usage(manifest_file)
+    manifest = read_manifest(manifest_file)
+    uuids = Dict{String,Vector{UUID}}()
+    paths = Dict{UUID,Vector{String}}()
+    names = Dict{UUID,Vector{String}}()
+    return EnvCache(env,
+        git,
+        project_file,
+        manifest_file,
+        project_package,
+        project,
+        manifest,
+        uuids,
+        paths,
+        names,)
 end
 
 collides_with_project(env::EnvCache, pkg::PackageSpec) =
@@ -845,6 +848,7 @@ const REGISTRY_CACHE = Dict{String, Tuple{Float64, Dict{String, Any}}}()
 function read_registry(reg_file)
     t = mtime(reg_file)
     if haskey(REGISTRY_CACHE, reg_file)
+        println("Cache hit")
         prev_t, registry = REGISTRY_CACHE[reg_file]
         t == prev_t && return registry
     end
@@ -889,6 +893,7 @@ function find_registered!(env::EnvCache,
     # initialize env entries for names and uuids
     for name in names; env.uuids[name] = UUID[]; end
     for uuid in uuids; env.paths[uuid] = String[]; end
+    for uuid in uuids; env.names[uuid] = String[]; end
 
     # note: empty vectors will be left for names & uuids that aren't found
     for registry in registries()
@@ -899,6 +904,7 @@ function find_registered!(env::EnvCache,
               path = abspath(registry, pkgdata["path"])
               push!(get!(env.uuids, name, UUID[]), uuid)
               push!(get!(env.paths, uuid, String[]), path)
+              push!(get!(env.names, uuid, String[]), name)
         end
     end
     for d in (env.uuids, env.paths, env.names)
@@ -930,7 +936,7 @@ end
 #Get registered names associated with a package uuid
 function registered_names(env::EnvCache, uuid::UUID)::Vector{String}
     find_registered!(env, String[], [uuid])
-    String[n for (n, uuids) in env.uuids for u in uuids if u == uuid]
+    return env.names[uuid]
 end
 
 # Determine a single UUID for a given name, prompting if needed
