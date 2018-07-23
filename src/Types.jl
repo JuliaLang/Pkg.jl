@@ -839,14 +839,20 @@ function registries(; clone_default=true)::Vector{String}
     return [r for d in depots() for r in registries(d)]
 end
 
-const line_re = r"""
-    ^ \s*
-    ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})
-    \s* = \s* \{
-    \s* name \s* = \s* "([^"]*)" \s*,
-    \s* path \s* = \s* "([^"]*)" \s*,?
-    \s* \} \s* $
-"""x
+
+const REGISTRY_CACHE = Dict{String, Tuple{Float64, Dict{String, Any}}}()
+
+function read_registry(reg_file)
+    t = mtime(reg_file)
+    if haskey(REGISTRY_CACHE, reg_file)
+        prev_t, registry = REGISTRY_CACHE[reg_file]
+        t == prev_t && return registry
+    end
+    registry = TOML.parsefile(reg_file)
+    REGISTRY_CACHE[reg_file] = (t, registry)
+    return registry
+end
+
 
 # Lookup package names & uuids in a single pass through registries
 function find_registered!(env::EnvCache,
@@ -880,62 +886,24 @@ function find_registered!(env::EnvCache,
     end
     # if there's still nothing to look for, return early
     isempty(names) && isempty(uuids) && return
-
-    # build regexs for names and uuids
-    uuid_re = sprint() do io
-        if !isempty(uuids)
-        print(io, raw"^( ")
-        for (i, uuid) in enumerate(uuids)
-            1 < i && print(io, " | ")
-            print(io, raw"\Q", uuid, raw"\E")
-        end
-        print(io, raw" )\b")
-    end
-    end
-    name_re = sprint() do io
-        if !isempty(names)
-        print(io, raw"\bname \s* = \s* \"( ")
-        for (i, name) in enumerate(names)
-            1 < i && print(io, " | ")
-            print(io, raw"\Q", name, raw"\E")
-        end
-        print(io, raw" )\"")
-    end
-    end
-    regex = if !isempty(uuids) && !isempty(names)
-        Regex("( $uuid_re | $name_re )", "x")
-    elseif !isempty(uuids)
-        Regex(uuid_re, "x")
-    elseif !isempty(names)
-        Regex(name_re, "x")
-    else
-        error("this should not happen")
-    end
-
     # initialize env entries for names and uuids
     for name in names; env.uuids[name] = UUID[]; end
     for uuid in uuids; env.paths[uuid] = String[]; end
-    # note: empty vectors will be left for names & uuids that aren't found
 
-    # search through all registries
+    # note: empty vectors will be left for names & uuids that aren't found
     for registry in registries()
-        open(joinpath(registry, "Registry.toml")) do io
-            # skip forward until [packages] section
-            for line in eachline(io)
-            occursin(r"^ \s* \[ \s* packages \s* \] \s* $"x, line) && break
+        data = read_registry(joinpath(registry, "Registry.toml"))
+        for (_uuid, pkgdata) in data["packages"]
+              uuid = UUID(_uuid)
+              name = pkgdata["name"]
+              path = abspath(registry, pkgdata["path"])
+              push!(get!(env.uuids, name, UUID[]), uuid)
+              push!(get!(env.paths, uuid, String[]), path)
         end
-            # find lines with uuid or name we're looking for
-            for line in eachline(io)
-            occursin(regex, line) || continue
-            m = match(line_re, line)
-            m == nothing &&
-                    error("misformatted registry.toml package entry: $line")
-            uuid = UUID(m.captures[1])
-            name = Base.unescape_string(m.captures[2])
-            path = abspath(registry, Base.unescape_string(m.captures[3]))
-            push!(get!(env.uuids, name, typeof(uuid)[]), uuid)
-            push!(get!(env.paths, uuid, typeof(path)[]), path)
-        end
+    end
+    for d in (env.uuids, env.paths, env.names)
+        for (k, v) in d
+            unique!(v)
         end
     end
 end
