@@ -10,20 +10,9 @@ logdir() = joinpath(depots()[1], "logs")
 devdir() = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots()[1], "dev"))
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 
-have_warned_session = false
-function print_first_command_header()
-    global have_warned_session
-    have_warned_session && return
-    isinteractive() || return
-    if !PKG3_IS_PRECOMPILED && !haskey(ENV, "JULIA_PKG3_DISABLE_PRECOMPILE_WARNING")
-        @info """
-        Pkg is running without precompile statements, first action will be slow.
-        Rebuild julia with the environment variable `JULIA_PKG3_PRECOMPILE` set to enable precompilation of Pkg.
-        This message can be disabled by setting the env variable `JULIA_PKG3_DISABLE_PRECOMPILE_WARNING`.
-        """
-    end
-    have_warned_session = true
-end
+export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
+export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
+export PackageSpec
 
 # load snapshotted dependencies
 include("../ext/TOML/src/TOML.jl")
@@ -39,31 +28,310 @@ include("Operations.jl")
 include("API.jl")
 include("REPLMode.jl")
 
+import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
+import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
+
+"""
+    PackageMode
+
+An enum with the instances
+
+  * `PKGMODE_MANIFEST`
+  * `PKGMODE_PROJECT`
+
+Determines if operations should be made on a project or manifest level.
+Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.rm`](@ref).
+"""
+const PackageMode = Types.PackageMode
+
+
+"""
+    UpgradeLevel
+
+An enum with the instances
+
+  * `UPLEVEL_FIXED`
+  * `UPLEVEL_PATCH`
+  * `UPLEVEL_MINOR`
+  * `UPLEVEL_MAJOR`
+
+Determines how much a package is allowed to be updated.
+Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.update`](@ref).
+"""
+const UpgradeLevel = Types.UpgradeLevel
+
 # Define new variables so tab comleting Pkg. works.
-const add          = API.add
-const rm           = API.rm
-const up           = API.up
-const test         = API.test
-const gc           = API.gc
-const build        = API.build
-const installed    = API.installed
-const pin          = API.pin
-const free         = API.free
-const checkout     = API.checkout
-const develop      = API.develop
-const generate     = API.generate
-const instantiate  = API.instantiate
-const resolve      = API.resolve
-const status       = Display.status
-const update       = up
-const activate     = API.activate
+"""
+    Pkg.add(pkg::Union{String, Vector{String})
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}})
+
+Adds a package to the current project. This package will be available using the
+`import` and `using` keywords in the Julia REPL and if the current project is
+a package, also inside that package.
+
+## Examples
+
+```julia-repl
+julia> Pkg.add("Example") # Add a package from registry
+
+julia> Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version
+
+julia> Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url
+
+julia> Pkg.add(PackageSpec(url="/remote/mycompany/juliapackages/OurPackage"))` # From path (has to be a gitrepo)
+```
+
+See also [`PackageSpec`](@ref).
+"""
+const add = API.add
+
+"""
+    Pkg.rm(pkg::Union{String, Vector{String})
+    Pkg.rm(pkg::Union{PackageSpec, Vector{PackageSpec}})
+
+Removes a package from the current project. If the `mode` of `pkg` is
+`PKGMODE_MANIFEST` also remove it from the manifest including all
+recursive dependencies of `pkg`.
+
+See also [`PackageSpec`](@ref), [`PackageMode`](@ref).
+"""
+const rm = API.rm
+
+"""
+    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT)
+    Pkg.update(pkg::Union{String, Vector{String})
+    Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
+
+Updates a package `pkg`. If no posistional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
+If no positional argument is given `level` can be used to control what how much packages are allowed to be upgraded (major, minor, patch, fixed).
+
+See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
+"""
+const update = API.up
+
+
+"""
+    Pkg.test(; coverage::Bool=true)
+    Pkg.test(pkg::Union{String, Vector{String}; coverage::Bool=true)
+    Pkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; coverage::Bool=true)
+
+Run the tests for package `pkg` or if no positional argument is given to `test`,
+the current project is tested (which thus needs to be a package).
+A package is tested by running its `test/runtests.jl` file.
+
+The tests are run by generating a temporary environment with only `pkg` and its dependencies
+(recursively) in it. If a manifest exist, the versions in that manifest is used, otherwise
+a feasible set of package are resolved and installed.
+
+During the test, test-specific dependencies are active, which are
+given in the project file as
+
+```
+[targets.test.deps]
+TestDep = "uuid"
+```
+
+where `uuid` is the uuid for `TestDep`.
+
+Coverage statistics for the packages may be generated by
+passing coverage=true. The default behavior is not to run coverage.
+
+The tests are spawned in a new process with `check-bounds=yes` and by default `startup-file=no`.
+If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
+"""
+const test = API.test
+
+"""
+    Pkg.gc()
+
+Garbage collect packages that are no longer reachable from any project.
+Only packages that are tracked by version are deleted, so no packages
+that might contain local changes are touched.
+"""
+const gc = API.gc
+
+
+"""
+    Pkg.build()
+    Pkg.build(pkg::Union{String, Vector{String})
+    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}})
+
+Run the build script in deps/build.jl for `pkg` and all of the dependencies in
+depth-first recursive order.
+If no argument is given to `build`, the current project is built, which thus needs
+to be a package.
+This function is called automatically one any package that gets installed
+for the first time.
+
+"""
+const build = API.build
+
+# TODO: decide what to do with this
+const installed = API.installed
+
+"""
+    Pkg.pin(pkg::Union{String, Vector{String})
+    Pkg.pin(pkgs::Union{Packagespec, Vector{Packagespec}})
+
+Pin a package to the current version (or the one given in the `packagespec`.
+a pinned package will never be updated.
+"""
+const pin = API.pin
+
+"""
+    Pkg.free(pkg::Union{String, Vector{String})
+    Pkg.free(pkgs::Union{Packagespec, Vector{Packagespec}})
+
+Free a package which removes a `pin` if it exists, or if the package is tracking a path,
+e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
+
+## Examples
+
+```
+Pkg.free("Package")
+Pkg.free(PackageSpec("Package"))
+```
+"""
+const free = API.free
+
+
+"""
+    Pkg.develop(pkg::Union{String, Vector{String})
+    Pkg.develop(pkgs::Union{Packagespec, Vector{Packagespec}})
+
+Makes a package available for development by tracking it by path.
+If `pkg` is given with only a name or by a URL the packages will be downloaded
+to the location by the environment variable `JULIA_PKG_DEVDIR` with
+`.julia/dev` as the default.
+
+If `pkg` is given as a local path, the package at that path will be tracked.
+
+## Examples
+
+```
+# By name
+Pkg.develop("Example")
+
+# By url
+Pkg.develop(PackageSpec(url="https://github.com/JuliaLang/Compat.jl", rev="master"))
+
+# By path (also uses url keyword to PackageSpec)
+Pkg.develop(PackageSpec(url="MyJuliaPackages/Package.jl")
+```
+
+See also [`PackageSpec`](@ref)
+
+"""
+const develop = API.develop
+
+#TODO: Will probably be deprecated for something in PkgDev
+const generate = API.generate
+
+"""
+    Pkg.instantiate()
+
+If a `Manifest.toml` file exist in the current project, download all
+the packages declared in that manifest.
+Else, resolve a set of feasible packages from the `Project.toml` files
+and install them.
+"""
+const instantiate = API.instantiate
+
+"""
+    Pkg.resolve()
+
+Update the current manifest with eventual changes to the dependency graph
+from packages that are tracking a path.
+"""
+const resolve = API.resolve
+
+"""
+    Pkg.status(mode::PackageMode=PKGMODE_PROJECT)
+
+Prints out the status of the project/manifest.
+If `mode` is `PKGMODE_PROJECT` prints out status about only those packages
+that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`
+also print for those in the manifest (recursive dependencies).
+"""
+const status = API.status
+
+
+"""
+    Pkg.activate([s::String])
+
+Activate the environment at `s`. The active environment is the environment
+that the package manager modifies when it runs command.
+The logic for what path is activated is as follows:
+
+  * If `s` is a path that exist, that environment will be activcated.
+  * If `s` is a package name in the current projec activate that is tracking a path,
+activate the environment at that path.
+  * If `s` is a non-existing path, activate that path.
+
+
+If no argument is given to `activate`, activate the home project,
+which is the one specified by either `--project` command line when starting julia,
+or `JULIA_PROJECT` environment variable.
+
+# Examples
+
+```
+Pkg.activate()
+Pkg.activate("local/path")
+Pkg.activate("MyDependency")
+```
+"""
+const activate = API.activate
+
+
+"""
+    PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
+    PackageSpec(; name, url, rev, version, mode, level)
+
+A `PackageSpec` is a representation of a package with various metadata.
+This includes:
+
+  * The `name` of the package.
+  * The package unique `uuid`.
+  * A `version` (for example when adding a package. When upgrading, can also be an instance of
+   the enum [`UpgradeLevel`](@ref)
+  * A `url` (which might also be a local path) and an optional git `rev`ision.
+   `rev` could be a branch name or a git commit SHA.
+  * A `mode`, which is an instance of the enum [`PackageMode`](@ref) which can be either `PKGMODE_PROJECT` or
+   `PKGMODE_MANIFEST`, defaults to `PKGMODE_PROJECT`. Used in e.g. [`Pkg.rm`](@ref).
+
+Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
+in the vector.
+
+Below is a comparison between the REPL version and the `PackageSpec` version:
+
+| `REPL`               | `API`                                         |
+|:---------------------|:----------------------------------------------|
+| `Package`            | `PackageSpec("Package")`                      |
+| `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`  |
+| `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d..."`  |
+| `Package#master`     | `PackageSpec(name="Package", rev="master")`   |
+| `local/path#feature` | `PackageSpec(url="local/path"; rev="feature)` |
+| `www.mypkg.com`      | `PackageSpec("url=www.mypkg.com")`              |
+| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`|
+| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR`)|
+"""
+const PackageSpec = Types.PackageSpec
+
+"""
+    setprotocol!(proto::Union{Nothing, AbstractString}=nothing)
+
+Set the protocol used to access GitHub-hosted packages when `add`ing a url or `develop`ing a package.
+Defaults to 'https', with `proto == nothing` delegating the choice to the package developer.
+"""
 const setprotocol! = API.setprotocol!
+
 
 # legacy CI script support
 import .API: clone, dir
 
 import .REPLMode: @pkg_str
-export @pkg_str
+export @pkg_str, PackageSpec
 
 
 #function __init__()
@@ -79,17 +347,12 @@ export @pkg_str
     end
 #end
 
-using .Types
-using UUIDs
-import LibGit2
-import Dates
-# This crashes low memory systems and some of Julia's CI
-# so keep it disabled by default for now.
-if haskey(ENV, "JULIA_PKG3_PRECOMPILE")
-    const PKG3_IS_PRECOMPILED = true
-    include("precompile.jl")
-else
-    const PKG3_IS_PRECOMPILED = false
+module PrecompileArea
+    using ..Types
+    using UUIDs
+    import LibGit2
+    import Dates
+    # include("precompile.jl")
 end
 
 METADATA_compatible_uuid(pkg::String) = Types.uuid5(Types.uuid_package, pkg)
