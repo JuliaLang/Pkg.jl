@@ -5,14 +5,16 @@ import Pkg.Types.CommandError
 using Test
 include("utils.jl")
 
-@testset "`parse_option` error paths" begin
-    # unregistered options
-    @test_throws CommandError Pkg.REPLMode.parse_option("-x")
-    @test_throws CommandError Pkg.REPLMode.parse_option("--notanoption")
-    # argument options
-    @test_throws CommandError Pkg.REPLMode.parse_option("--env")
-    # switch options
-    @test_throws CommandError Pkg.REPLMode.parse_option("--project=foobar")
+@testset "`parse_option` unit tests" begin
+    opt = Pkg.REPLMode.parse_option("-x")
+    @test opt.val == "x"
+    @test opt.argument === nothing
+    opt = Pkg.REPLMode.parse_option("--hello")
+    @test opt.val == "hello"
+    @test opt.argument === nothing
+    opt = Pkg.REPLMode.parse_option("--env=some")
+    @test opt.val == "env"
+    @test opt.argument == "some"
 end
 
 @testset "option class error paths" begin
