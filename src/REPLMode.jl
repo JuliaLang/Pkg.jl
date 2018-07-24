@@ -548,7 +548,7 @@ end
 
 # TODO , test recursive dependencies as on option.
 function do_test!(ctx::Context, command::PkgCommand)
-    command.arguments = map(arg->arg.mode = PKGMODE_MANIFEST, command.arguments)
+    foreach(arg -> arg.mode = PKGMODE_MANIFEST, command.arguments)
     API.test(ctx, command.arguments; get_api_opts(command)...)
 end
 
