@@ -842,13 +842,12 @@ function registries(; clone_default=true)::Vector{String}
     return [r for d in depots() for r in registries(d)]
 end
 
-
+# path -> (mtime, TOML Dict)
 const REGISTRY_CACHE = Dict{String, Tuple{Float64, Dict{String, Any}}}()
 
 function read_registry(reg_file)
     t = mtime(reg_file)
     if haskey(REGISTRY_CACHE, reg_file)
-        println("Cache hit")
         prev_t, registry = REGISTRY_CACHE[reg_file]
         t == prev_t && return registry
     end
