@@ -19,130 +19,106 @@ end
 ###########
 # Options #
 ###########
+#TODO should this opt be removed: ("name", :cmd, :temp => false)
+#TODO Nothing is a placeholder: api will be Union{Pair{Symbol, Function}, Pair{Symbol, Any}}
 struct OptionSpec
     name::String
     short_name::Union{Nothing,String}
-    is_meta::Bool
     api::Union{Nothing, Pair{Symbol, Any}}
 end
-is_switch(opt::OptionSpec)::Bool = !(opt.api isa Nothing) # TODO is this still needed?
-get_api_opts(statement::Statement) = map(opt->opt.spec.api, statement.options)
+is_switch(opt::OptionSpec)::Bool = !(opt.api isa Nothing)
 
-@enum(OptionKind, OPT_ENV, OPT_PROJECT, OPT_MANIFEST, OPT_MAJOR, OPT_MINOR,
-                  OPT_PATCH, OPT_FIXED, OPT_COVERAGE, OPT_NAME)
+const OptionDeclaration = Tuple{Union{String,Vector{String}}, # name + short_name?
+                                Union{Nothing, Pair{Symbol, Any}} # api keywords
+                                }
 
-const OptionDeclaration = Tuple{Union{String,Vector{String}},
-                                Symbol,
-                                Union{Nothing, Pair{Symbol, Any}}}
-# > how about: if both are switches and have the same key then error
-# TODO if arg, provide a function like `resolve_opt` which will apply
-# > the supplied function and return a Pair{Symbol,Any}
-# > ex: ("env", :meta, (:env, arg->EnvCache(Base.parse_env(arg)))),
-option_declarations = OptionDeclaration[
-    ("env", :meta, nothing),
-    (["project", "p"], :cmd, :mode => PKGMODE_PROJECT),
-    (["manifest", "m"], :cmd, :mode => PKGMODE_MANIFEST),
-    ("major", :cmd, :level => UPLEVEL_MAJOR),
-    ("minor", :cmd, :level => UPLEVEL_MINOR),
-    ("patch", :cmd, :level => UPLEVEL_PATCH),
-    ("fixed", :cmd, :level => UPLEVEL_FIXED),
-    ("coverage", :cmd, :coverage => true),
-]
-#TODO: should this opt be removed: ("name", :cmd, :temp => false)
-
-function init_option_spec(specs::Vector{OptionDeclaration})
+function OptionSpec(x::OptionDeclaration)::OptionSpec
     get_names(name::String) = (name, nothing)
     function get_names(names::Vector{String})
         @assert length(names) == 2
         return (names[1], names[2])
     end
 
-    spec = Dict()
-    for x in specs
-        @assert x[2] in (:meta, :cmd)
-        is_meta = (x[2] == :meta ? true : false)
-        api = x[3]
-
-        (name, short_name) = get_names(x[1])
-
-        # register `name` and `short_name`
-        #TODO assert matching lex regex
-        @assert get(spec, name, nothing) === nothing # don't overwrite
-        spec[name] = OptionSpec(name, short_name, is_meta, api)
-        if short_name !== nothing
-            #TODO assert matching lex regex
-            @assert get(spec, short_name, nothing) === nothing # don't overwrite
-            spec[short_name] = spec[name]
-        end
-
-    end
-    return spec
+    api = x[2]
+    (name, short_name) = get_names(x[1])
+    #TODO assert matching lex regex
+    return OptionSpec(name, short_name, api)
 end
 
-option_specs = init_option_spec(option_declarations)
-
-function Types.PackageMode(opt::OptionKind)
-    opt == OPT_MANIFEST && return PKGMODE_MANIFEST
-    opt == OPT_PROJECT  && return PKGMODE_PROJECT
-    throw(ArgumentError("invalid option $opt"))
+function OptionSpecs(decs::Vector{OptionDeclaration})::Dict{String, OptionSpec}
+    specs = Dict()
+    for x in decs
+        opt_spec = OptionSpec(x)
+        @assert get(specs, opt_spec.name, nothing) === nothing # don't overwrite
+        specs[opt_spec.name] = opt_spec
+        if opt_spec.short_name !== nothing
+            @assert get(specs, opt_spec.short_name, nothing) === nothing # don't overwrite
+            specs[opt_spec.short_name] = opt_spec
+        end
+    end
+    return specs
 end
 
 struct Option
     val::String
-    argument::Union{String, Nothing}
-    spec::OptionSpec
-    # TODO stricter types
-    Option(val, spec::OptionSpec) = new(val, nothing, spec)
-    Option(val, arg, spec::OptionSpec) = new(val, arg, spec)
+    argument::Union{Nothing,String}
+    Option(val::AbstractString) = new(val, nothing)
+    Option(val::AbstractString, arg::Union{Nothing,String}) = new(val, arg)
 end
 Base.show(io::IO, opt::Option) = print(io, "--$(opt.val)", opt.argument == nothing ? "" : "=$(opt.argument)")
-
-const opts = Dict(
-    "env"      => OPT_ENV,
-    "project"  => OPT_PROJECT,
-    "p"        => OPT_PROJECT,
-    "manifest" => OPT_MANIFEST,
-    "m"        => OPT_MANIFEST,
-    "major"    => OPT_MAJOR,
-    "minor"    => OPT_MINOR,
-    "patch"    => OPT_PATCH,
-    "fixed"    => OPT_FIXED,
-    "coverage" => OPT_COVERAGE,
-    "name"     => OPT_NAME,
-)
 
 function parse_option(word::AbstractString)::Option
     m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
     m == nothing && cmderror("malformed option: ", repr(word))
     option_name = (m.captures[1] != nothing ? m.captures[1] : m.captures[2])
     option_arg = (m.captures[3] == nothing ? nothing : String(m.captures[3]))
-
-    spec = get(option_specs, option_name, nothing)
-    spec !== nothing || cmderror("option is not registered: ", repr(word))
-
-    if is_switch(spec)
-        option_arg === nothing ||
-            cmderror("option '$option_name' does not take an argument, but '$option_arg' given")
-    else # option takes an argument
-        option_arg !== nothing ||
-            cmderror("option '$option_name' expects an argument, but no argument given")
-    end
-
-    return Option(option_name, option_arg, spec)
+    return Option(option_name, option_arg)
 end
+
+# TODO if arg option, provide a function like `resolve_opt` which will apply
+# > the supplied function and return a Pair{Symbol,Any}
+# > ex: ("env", :meta, (:env, arg->EnvCache(Base.parse_env(arg)))),
+meta_option_declarations = OptionDeclaration[
+    ("env", nothing),
+]
+meta_option_specs = OptionSpecs(meta_option_declarations)
 
 ################
 # Command Spec #
 ################
-#TODO specify argument types?
-const CommandDeclaration = Tuple{Vector{String}, Function, Vector{Int}, Vector{String}}
+@enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
+struct ArgSpec
+    class::ArgClass
+    count::Vector{Int}
+end
+
+const CommandDeclaration = Tuple{Vector{String}, # names
+                                 Function, # handler
+                                 Tuple{ArgClass, Vector{Int}}, # argument count
+                                 Vector{OptionDeclaration} # options
+                                 }
 struct CommandSpec
     names::Vector{String}
     handler::Function
-    arg_spec::Vector{Int} # note: just use range operator for max/min
-    options::Vector{String}
+    argument_spec::ArgSpec # note: just use range operator for max/min
+    option_specs::Dict{String, OptionSpec}
 end
-all_command_names = String[]
+command_specs = Dict{String,CommandSpec}() # TODO remove this ?
+
+# populate a dictionary: command_name -> command_spec
+function init_command_spec(declarations::Vector{CommandDeclaration})::Dict{String,CommandSpec}
+    specs = Dict()
+    for dec in declarations
+        names = dec[1]
+        spec = CommandSpec(dec[1], dec[2], ArgSpec(dec[3]...), OptionSpecs(dec[end]))
+        for name in names
+            # TODO regex check name
+            @assert get(specs, name, nothing) === nothing # don't overwrite
+            specs[name] = spec
+        end
+    end
+    return specs
+end
 
 ###################
 # Package parsing #
@@ -157,7 +133,6 @@ end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
-    # TODO avoid Option struct and just return the spec?
     word = replace(word, "~" => homedir())
     if add_or_develop && casesensitive_isdir(word)
         return PackageSpec(Types.GitRepo(abspath(word)))
@@ -179,12 +154,11 @@ end
 ################
 # REPL parsing #
 ################
-const Token = Union{Option, VersionRange, String, Rev}
 mutable struct Statement
     command::String
-    options::Vector{Option}
-    arguments::Vector{Token}
-    meta_options::Vector{Option}
+    options::Vector{String}
+    arguments::Vector{String}
+    meta_options::Vector{String}
     Statement() = new("", [], [], [])
 end
 
@@ -207,26 +181,25 @@ function parse(cmd::String)::Vector{Statement}
     return statements
 end
 
+# vector of words -> structured statement
+# minimal checking is done in this phase
 function Statement(words)
+    is_option(word) = first(word) == '-'
     statement = Statement()
     word = popfirst!(words)
-    maybe_option = word2token(word)
-    # MetaOptions
-    while maybe_option isa Option # TODO replace with MetaOption
-        maybe_option.spec.is_meta ||
-            cmderror("option '$(maybe_option.spec.name)' is a command option. It must be specified after the command name")
-        push!(statement.meta_options, maybe_option)
+
+    # meta options
+    while is_option(word)
+        push!(statement.meta_options, word)
         isempty(words) && cmderror("no command specified")
         word = popfirst!(words)
-        maybe_option = word2token(word)
     end
     # command name
-    word in all_command_names || cmderror("expected command. instead got [$word]")
+    word in keys(command_specs) || cmderror("expected command. instead got [$word]")
     statement.command = word
     # command arguments
     for word in words
-        tok = word2token(word)
-        push!((tok isa Option ? statement.options : statement.arguments), tok)
+        push!((is_option(word) ? statement.options : statement.arguments), word)
     end
     return statement
 end
@@ -252,18 +225,6 @@ function qword2word(qword::QuotedWord)
     return qword.isquoted ? [qword.word] : map(m->m.match, eachmatch(lex_re, " $(qword.word)"))
     #                                                                         ^
     # note: space before `$word` is necessary to keep using current `lex_re`
-end
-
-function word2token(word::AbstractString)::Token
-    if first(word) == '-'
-        return parse_option(word)
-    elseif first(word) == '@'
-        return VersionRange(word[2:end])
-    elseif first(word) == '#'
-        return Rev(word[2:end])
-    else
-        return String(word)
-    end
 end
 
 function parse_quotes(cmd::String)::Vector{QuotedWord}
@@ -308,15 +269,178 @@ function parse_quotes(cmd::String)::Vector{QuotedWord}
     return filter(x->!isempty(x.word), qwords)
 end
 
+##############
+# PkgCommand #
+##############
+const Token = Union{String, VersionRange, Rev}
+const PkgArguments = Union{Vector{String}, Vector{PackageSpec}}
+struct PkgCommand
+    meta_options::Vector{Option}
+    name::String
+    options::Vector{Option}
+    arguments::PkgArguments
+    PkgCommand() = new([], "", [], [])
+    PkgCommand(meta_opts, cmd_name, opts, args) = new(meta_opts, cmd_name, opts, args)
+end
+# TODO handle options which take an argument
+function get_api_opts(command::PkgCommand)
+    specs = command_specs[command.name].option_specs
+    return map(opt->specs[opt.val].api, command.options)
+end
+
+function enforce_argument_order(args::Vector{Token})
+    prev_arg = nothing
+    function check_prev_arg(valid_type::DataType, error_message::AbstractString)
+        prev_arg isa valid_type || cmderror(error_message)
+    end
+
+    for arg in args
+        if arg isa VersionRange
+            check_prev_arg(String, "package name/uuid must precede version spec `@$arg`")
+        elseif arg isa Rev
+            check_prev_arg(String, "package name/uuid must precede rev spec `#$(arg.rev)`")
+        end
+        prev_arg = arg
+    end
+end
+
+function word2token(word::AbstractString)::Token
+    if first(word) == '@'
+        return VersionRange(word[2:end])
+    elseif first(word) == '#'
+        return Rev(word[2:end])
+    else
+        return String(word)
+    end
+end
+
+function enforce_arg_spec(raw_args::Vector{String}, class::ArgClass)
+    # TODO is there a more idiomatic way to do this?
+    function has_types(arguments::Vector{Token}, types::Vector{DataType})
+        return !isempty(filter(x->typeof(x) in types, arguments))
+    end
+
+    class == ARG_RAW && return raw_args
+    args::Vector{Token} = map(word2token, raw_args)
+    class == ARG_ALL && return args
+
+    if class == ARG_PKG && has_types(args, [VersionRange, Rev])
+        cmderror("no versioned packages allowed")
+    elseif class == ARG_REV && has_types(args, [VersionRange])
+        cmderror("no versioned packages allowed")
+    elseif class == ARG_VERSION && has_types(args, [Rev])
+        cmderror("no reved packages allowed")
+    end
+    return args
+end
+
+function package_args(args::Vector{Token})::Vector{PackageSpec}
+    pkgs = PackageSpec[]
+    for arg in args
+        if arg isa String
+            push!(pkgs, parse_package(arg; add_or_develop=true)) #TODO how to handle add_or_develop?
+        elseif arg isa VersionRange
+            pkgs[end].version = arg
+        elseif arg isa Rev
+            pkg = pkgs[end]
+            if pkg.repo == nothing
+                pkg.repo = Types.GitRepo("", arg.rev)
+            else
+                pkgs[end].repo.rev = arg.rev
+            end
+        else
+            assert(false)
+        end
+    end
+    return pkgs
+end
+
+function enforce_arg_count(count::Vector{Int}, args::PkgArguments)
+    isempty(count) && return
+    length(args) in count ||
+        cmderror("Wrong number of arguments")
+end
+
+function enforce_args(raw_args::Vector{String}, spec::ArgSpec)::PkgArguments
+    if spec.class == ARG_RAW
+        enforce_arg_count(spec.count, raw_args)
+        return raw_args
+    end
+
+    args = enforce_arg_spec(raw_args, spec.class)
+    enforce_argument_order(args)
+    pkgs = package_args(args)
+    enforce_arg_count(spec.count, pkgs)
+    return pkgs
+end
+
+function enforce_option_form(option::String, specs::Dict{String,OptionSpec})::Option
+    opt = parse_option(option)
+    if is_switch(specs[opt.val])
+        opt.argument === nothing ||
+            cmderror("option '$(opt.val)' does not take an argument, but '$(opt.argument)' given")
+    else # option takes an argument
+        opt.argument !== nothing ||
+            cmderror("option '$(opt.val)' expects an argument, but no argument given")
+    end
+    return opt
+end
+
+function enforce_meta_options(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
+    meta_opt_names = keys(specs)
+    return map(options) do opt
+        tok = enforce_option_form(opt, specs)
+        tok.val in meta_opt_names ||
+            cmderror("option '$opt' is not a valid meta option.")
+            #TODO hint that maybe they intended to use it as a command option
+        return tok
+    end
+end
+
+function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec}, cmd::String)::Vector{Option}
+    unique_keys = Symbol[]
+    get_key(opt::Option) = specs[opt.val].api.first
+
+    # final parsing
+    toks = map(x->enforce_option_form(x,specs), options)
+    # checking
+    for opt in toks
+        # valid option
+        opt.val in keys(specs) ||
+            cmderror("option '$(opt.val)' is not supported by command '$cmd'")
+        # conflicting options
+        key = get_key(opt)
+        if key in unique_keys
+            conflicting = filter(opt->get_key(opt) == key, toks)
+            cmderror("Conflicting options: $conflicting")
+        else
+            push!(unique_keys, key)
+        end
+    end
+    return toks
+end
+
+# this the entry point for the majority of input checks
+function PkgCommand(statement::Statement)
+    meta_opts = enforce_meta_options(statement.meta_options,
+                                     meta_option_specs)
+    args = enforce_args(statement.arguments,
+                        command_specs[statement.command].argument_spec)
+    opts = enforce_opts(statement.options,
+                        command_specs[statement.command].option_specs,
+                        statement.command)
+    return PkgCommand(meta_opts, statement.command, opts, args)
+end
+
 #############
 # Execution #
 #############
-
 function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     try
         statements = parse(input)
-        for statement in statements
-            do_statement!(statement, repl)
+        commands = map(PkgCommand, statements)
+        for cmd in commands
+            do_cmd!(cmd, repl)
         end
     catch err
         if do_rethrow
@@ -330,77 +454,12 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     end
 end
 
-function enforce_argument_order(statement::Statement)
-    prev_arg = nothing
-    function check_prev_arg(valid_type::DataType, error_message::AbstractString)
-        prev_arg isa valid_type || cmderror(error_message)
-    end
-
-    for arg in statement.arguments
-        if arg isa VersionRange
-            check_prev_arg(String, "package name/uuid must precede version spec `@$arg`")
-        elseif arg isa Rev
-            check_prev_arg(String, "package name/uuid must precede rev spec `#$(arg.rev)`")
-        end
-        prev_arg = arg
-    end
-end
-
-function enforce_spec(spec::CommandSpec, statement::Statement)
-    # argument order
-    enforce_argument_order(statement)
-    # argument count
-    if !isempty(spec.arg_spec)
-        arg_count = length(statement.arguments)
-        #TODO better error messages: length = 0 say no; length > 1 say 'or' ...
-        arg_count in spec.arg_spec ||
-            cmderror("Command `$(statement.command)` expects $(spec.arg_spec) arguments, but given $arg_count.")
-    end
-    # option types
-    for option in statement.options
-        option.val in spec.options ||
-            cmderror("option '$(option.val)' is not supported by command '$(statement.command)'")
-    end
-    # conflicting options
-    unique_keys = Symbol[]
-    for opt in filter(is_switch, map(opt->opt.spec, statement.options))
-        key = opt.api.first
-        if key in unique_keys
-            conflicting = filter(opt->opt.spec.api.first == key, statement.options)
-            cmderror("Conflicting keys: $conflicting")
-        else
-            push!(unique_keys, key)
-        end
-    end
-end
-
-function CommandSpec!(declaration::CommandDeclaration)
-    # TODO make sure options are 'primary names'
-    return CommandSpec(declaration...)
-end
-
-# populate a dictionary: command_name -> command_spec
-function init_command_spec(declarations::Vector{CommandDeclaration})
-    specs = Dict()
-    for declaration in declarations
-        names = declaration[1]
-        spec = CommandSpec!(declaration)
-        for name in names
-            # TODO regex check name
-            @assert get(specs, name, nothing) === nothing # don't overwrite
-            specs[name] = spec
-        end
-    end
-    return specs
-end
-
-function do_statement!(statement::Statement, repl)
+function do_cmd!(command::PkgCommand, repl)
     ctx = Context(env = EnvCache(nothing))
-    # TODO process meta options
-    spec = command_specs[statement.command]
-    enforce_spec(spec, statement)
+    # TODO handle meta options
+    spec = command_specs[command.name]
     # TODO is invokelatest still needed?
-    Base.invokelatest(spec.handler, ctx, statement)
+    Base.invokelatest(spec.handler, ctx, command)
 
     #=
     if cmd.kind == CMD_PREVIEW
@@ -432,231 +491,6 @@ function do_statement!(statement::Statement, repl)
     =#
 end
 
-const help = md"""
-
-**Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
-backspace when the input line is empty or press Ctrl+C.
-
-
-**Synopsis**
-
-    pkg> [--env=...] cmd [opts] [args]
-
-Multiple commands can be given on the same line by interleaving a `;` between the commands.
-
-**Environment**
-
-The `--env` meta option determines which project environment to manipulate. By
-default, this looks for a git repo in the parents directories of the current
-working directory, and if it finds one, it uses that as an environment. Otherwise,
-it uses a named environment (typically found in `~/.julia/environments`) looking
-for environments named `v$(VERSION.major).$(VERSION.minor).$(VERSION.patch)`,
-`v$(VERSION.major).$(VERSION.minor)`,  `v$(VERSION.major)` or `default` in order.
-
-**Commands**
-
-What action you want the package manager to take:
-
-`help`: show this message
-
-`status`: summarize contents of and changes to environment
-
-`add`: add packages to project
-
-`develop`: clone the full package repo locally for development
-
-`rm`: remove packages from project or manifest
-
-`up`: update packages in manifest
-
-`test`: run tests for packages
-
-`build`: run the build script for packages
-
-`pin`: pins the version of packages
-
-`free`: undoes a `pin`, `develop`, or stops tracking a repo.
-
-`instantiate`: downloads all the dependencies for the project
-
-`resolve`: resolves to update the manifest from changes in dependencies of
-developed packages
-
-`generate`: generate files for a new project
-
-`preview`: previews a subsequent command without affecting the current state
-
-`precompile`: precompile all the project dependencies
-
-`gc`: garbage collect packages not used for a significant time
-
-`activate`: set the primary environment the package manager manipulates
-"""
-
-# TODO should help just be an array parallel to PackageSpec ?
-#=
-const helps = Dict(
-    CMD_HELP => md"""
-
-        help
-
-    Display this message.
-
-        help cmd ...
-
-    Display usage information for commands listed.
-
-    Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
-    """, CMD_STATUS => md"""
-
-        status
-        status [-p|--project]
-        status [-m|--manifest]
-
-    Show the status of the current environment. By default, the full contents of
-    the project file is summarized, showing what version each package is on and
-    how it has changed since the last git commit (if in a git repo), as well as
-    any changes to manifest packages not already listed. In `--project` mode, the
-    status of the project file is summarized. In `--project` mode, the status of
-    the project file is summarized.
-    """, CMD_GENERATE => md"""
-
-        generate pkgname
-
-    Create a project called `pkgname` in the current folder.
-    """,
-    CMD_ADD => md"""
-
-        add pkg[=uuid] [@version] [#rev] ...
-
-    Add package `pkg` to the current project file. If `pkg` could refer to
-    multiple different packages, specifying `uuid` allows you to disambiguate.
-    `@version` optionally allows specifying which versions of packages. Versions
-    may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
-    that matches, or ranges thereof, such as `@1.2-3.4.5`. A git-revision can be
-    specified by `#branch` or `#commit`.
-
-    If a local path is used as an argument to `add`, the path needs to be a git repository.
-    The project will then track that git repository just like if it is was tracking a remote repository online.
-
-    **Examples**
-    ```
-    pkg> add Example
-    pkg> add Example@0.5
-    pkg> add Example#master
-    pkg> add Example#c37b675
-    pkg> add https://github.com/JuliaLang/Example.jl#master
-    pkg> add git@github.com:JuliaLang/Example.jl.git
-    pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
-    ```
-    """, CMD_RM => md"""
-
-        rm [-p|--project] pkg[=uuid] ...
-
-    Remove package `pkg` from the project file. Since the name `pkg` can only
-    refer to one package in a project this is unambiguous, but you can specify
-    a `uuid` anyway, and the command is ignored, with a warning if package name
-    and UUID do not mactch. When a package is removed from the project file, it
-    may still remain in the manifest if it is required by some other package in
-    the project. Project mode operation is the default, so passing `-p` or
-    `--project` is optional unless it is preceded by the `-m` or `--manifest`
-    options at some earlier point.
-
-        rm [-m|--manifest] pkg[=uuid] ...
-
-    Remove package `pkg` from the manifest file. If the name `pkg` refers to
-    multiple packages in the manifest, `uuid` disambiguates it. Removing a package
-    from the manifest forces the removal of all packages that depend on it, as well
-    as any no-longer-necessary manifest packages due to project package removals.
-    """, CMD_UP => md"""
-
-        up [-p|project]  [opts] pkg[=uuid] [@version] ...
-        up [-m|manifest] [opts] pkg[=uuid] [@version] ...
-
-        opts: --major | --minor | --patch | --fixed
-
-    Update the indicated package within the constraints of the indicated version
-    specifications. Versions may be specified by `@1`, `@1.2`, `@1.2.3`, allowing
-    any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
-    In `--project` mode, package specifications only match project packages, while
-    in `manifest` mode they match any manifest package. Bound level options force
-    the following packages to be upgraded only within the current major, minor,
-    patch version; if the `--fixed` upgrade level is given, then the following
-    packages will not be upgraded at all.
-    """, CMD_PREVIEW => md"""
-
-        preview cmd
-
-    Runs the command `cmd` in preview mode. This is defined such that no side effects
-    will take place i.e. no packages are downloaded and neither the project nor manifest
-    is modified.
-    """, CMD_TEST => md"""
-
-        test [opts] pkg[=uuid] ...
-
-        opts: --coverage
-
-    Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
-    in the package directory. The option `--coverage` can be used to run the tests with
-    coverage enabled. The `startup.jl` file is disabled during testing unless
-    julia is started with `--startup-file=yes`.
-    """, CMD_GC => md"""
-
-    Deletes packages that cannot be reached from any existing environment.
-    """, CMD_BUILD =>md"""
-
-        build pkg[=uuid] ...
-
-    Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
-    If no packages are given, runs the build scripts for all packages in the manifest.
-    The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
-    """, CMD_PIN => md"""
-
-        pin pkg[=uuid] ...
-
-    Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-    A pinned package has the symbol `⚲` next to its version in the status list.
-    """, CMD_FREE => md"""
-        free pkg[=uuid] ...
-
-    Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
-    makes the package no longer being checked out.
-    """, CMD_DEVELOP => md"""
-        develop pkg[=uuid] [#rev] ...
-
-    Make a package available for development. If `pkg` is an existing local path that path will be recorded in
-    the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The clone is stored in `devdir`,
-    which defaults to `~/.julia/dev` and is set by the environment variable `JULIA_PKG_DEVDIR`.
-    This operation is undone by `free`.
-
-    *Example*
-    ```jl
-    pkg> develop Example
-    pkg> develop Example#master
-    pkg> develop Example#c37b675
-    pkg> develop https://github.com/JuliaLang/Example.jl#master
-    ```
-    """, CMD_PRECOMPILE => md"""
-        precompile
-
-    Precompile all the dependencies of the project by running `import` on all of them in a new process.
-    The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
-    """, CMD_INSTANTIATE => md"""
-        instantiate
-        instantiate [-m|--manifest]
-        instantiate [-p|--project]
-
-    Download all the dependencies for the current project at the version given by the project's manifest.
-    If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
-    """, CMD_RESOLVE => md"""
-        resolve
-
-    Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
-    packages have changed causing the current Manifest to_indices be out of sync.
-    """
-)
-=#
-
 function do_help!(
     ctk::Context,
     tokens::Vector{Token},
@@ -684,183 +518,67 @@ function do_help!(
     Base.display(disp, help_md)
 end
 
-# TODO rm only accepts 'raw' packages (not versioned)
-function do_rm!(ctx::Context, statement::Statement)
-    # tokens: package names and/or uuids
-    pkgs = PackageSpec[]
-    for arg in statement.arguments
-        if arg isa String
-            push!(pkgs, parse_package(arg))
-        else
-            assert(false)
-        end
-    end
-    API.rm(ctx, pkgs; get_api_opts(statement)...)
-end
-
-function do_add_or_develop!(ctx::Context, tokens::Vector{Token}, cmd)
-    @assert cmd in (CMD_ADD, CMD_DEVELOP)
-    mode = cmd == CMD_ADD ? :add : :develop
-    # tokens: package names and/or uuids, optionally followed by version specs
-    isempty(tokens) &&
-        cmderror("`$mode` – list packages to $mode")
-    pkgs = PackageSpec[]
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa String
-            push!(pkgs, parse_package(token; add_or_develop=true))
-            cmd == CMD_DEVELOP && pkgs[end].repo == nothing && (pkgs[end].repo = Types.GitRepo("", ""))
-        elseif token isa VersionRange
-            pkgs[end].version = VersionSpec(token)
-        elseif token isa Rev
-            # WE did not get the repo from the
-            pkg = pkgs[end]
-            if pkg.repo == nothing
-                pkg.repo = Types.GitRepo("", token.rev)
-            else
-                pkgs[end].repo.rev = token.rev
-            end
-        elseif token isa Option
-            cmderror("`$mode` doesn't take options: $token")
-        end
-    end
-    return API.add_or_develop(ctx, pkgs, mode=mode)
-end
-
-function do_up!(ctx::Context, statement::Statement)
-    pkgs = PackageSpec[]
-    for arg in statement.arguments
-        if arg isa String
-            push!(pkgs, parse_package(arg))
-        elseif arg isa VersionRange
-            pkgs[end].version = VersionSpec(arg)
-        else
-            assert(false)
-        end
-    end
-    API.up(ctx, pkgs; get_api_opts(statement)...)
-end
-
-function do_pin!(ctx::Context, tokens::Vector{Token})
-    pkgs = PackageSpec[]
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa String
-            push!(pkgs, parse_package(token))
-        elseif token isa VersionRange
-            if token.lower != token.upper
-                cmderror("pinning a package requires a single version, not a versionrange")
-            end
-            pkgs[end].version = VersionSpec(token)
-        else
-            cmderror("free only takes a list of packages ")
-        end
-    end
-    API.pin(ctx, pkgs)
-end
-
-function do_free!(ctx::Context, tokens::Vector{Token})
-    pkgs = PackageSpec[]
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa String
-            push!(pkgs, parse_package(token))
-        else
-            cmderror("free only takes a list of packages")
-        end
-    end
-    API.free(ctx, pkgs)
-end
-
-function do_status!(ctx::Context, tokens::Vector{Token})
-    mode = PKGMODE_COMBINED
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa Option
-            if token.kind in (OPT_PROJECT, OPT_MANIFEST)
-                mode = PackageMode(token.kind)
-            else
-                cmderror("invalid option for `status`: $(token)")
-            end
-        else
-            cmderror("`status` does not take arguments")
-        end
-    end
-    Display.status(ctx, mode)
+# TODO set default Display.status keyword: mode = PKGMODE_COMBINED
+# - if not possible, do it manually here
+function do_status!(ctx::Context, statement::Statement)
+    Display.status(ctx, get_api_opts(statement)...)
 end
 
 # TODO , test recursive dependencies as on option.
-function do_test!(ctx::Context, statement::Statement)
-    pkgs = PackageSpec[]
-    coverage = false #TODO
-    for arg in statement.arguments
-        if arg isa String
-            push!(pkgs, parse_package(arg))
-            pkgs[end].mode = PKGMODE_MANIFEST
-        else
-            assert(false)
-        end
+function do_test!(ctx::Context, command::PkgCommand)
+    for arg in command.arguments
+        arg.mode = PKGMODE_MANIFEST
     end
-    API.test(ctx, pkgs; coverage = coverage)
+    API.test(ctx, command.arguments; get_api_opts(statement)...)
 end
 
-function do_gc!(ctx::Context, statement::Statement)
-    API.gc(ctx)
-end
+do_precompile!(ctx::Context, command::PkgCommand) = API.precompile(ctx)
 
-function do_build!(ctx::Context, tokens::Vector{Token})
-    pkgs = PackageSpec[]
-    while !isempty(tokens)
-        token = popfirst!(tokens)
-        if token isa String
-            push!(pkgs, parse_package(token))
-        else
-            cmderror("`build` only takes a list of packages")
-        end
-    end
-    API.build(ctx, pkgs)
-end
+do_resolve!(ctx::Context, command::PkgCommand) = API.resolve(ctx)
 
-function do_generate!(ctx::Context, statement::Statement)
-    API.generate(ctx, statement.arguments[1])
-end
+do_gc!(ctx::Context, command::PkgCommand) =
+    API.gc(ctx; get_api_opts(command)...)
 
-function do_precompile!(ctx::Context, statement::Statement)
-    API.precompile(ctx)
-end
+do_instantiate!(ctx::Context, command::PkgCommand) =
+    API.instantiate(ctx; get_api_opts(command)...)
 
-function do_instantiate!(ctx::Context, tokens::Vector{Token})
-    manifest = nothing
-    for token in tokens
-        if token isa Option
-            if token.kind == OPT_MANIFEST
-                manifest = true
-            elseif token.kind == OPT_PROJECT
-            manifest = false
-            else
-                cmderror("invalid option for `instantiate`: $(token)")
-            end
-        else
-            cmderror("invalid argument for `instantiate` :$(token)")
-        end
-    end
-    API.instantiate(ctx; manifest=manifest)
-end
+do_generate!(ctx::Context, command::PkgCommand) =
+    API.generate(ctx, command.arguments[1])
 
-function do_resolve!(ctx::Context, tokens::Vector{Token})
-    !isempty(tokens) && cmderror("`resolve` does not take any arguments")
-    API.resolve(ctx)
-end
+do_build!(ctx::Context, command::PkgCommand) =
+    API.build(ctx, command.arguments, get_api_opts(command)...)
 
-function do_activate!(statement::Statement)
-    if isempty(statement.arguments)
+do_rm!(ctx::Context, command::PkgCommand) =
+    API.rm(ctx, command.arguments; get_api_opts(statement)...)
+
+do_free!(ctx::Context, command::PkgCommand) =
+    API.free(ctx, command.arguments; get_api_opts(statement)...)
+
+do_up!(ctx::Context, command::PkgCommand) =
+    API.up(ctx, command.arguments; get_api_opts(command)...)
+
+# TODO needs isapplicable?
+function do_activate!(command::PkgCommand)
+    if isempty(command.arguments)
         return API.activate()
     else
-        if !(statement.arguments[1] isa String)
-            cmderror("`activate` takes an optional path to the env to activate")
-        end
-        return API.activate(abspath(statement.arguments[1]))
+        return API.activate(abspath(command.arguments[1]))
     end
+end
+
+function do_pin!(ctx::Context, command::PkgCommand)
+    for arg in command.arguments
+        if arg.version.lower != arg.version.upper # TODO check for unspecified version
+            cmderror("pinning a package requires a single version, not a versionrange")
+        end
+    end
+    API.pin(ctx, command.arguments; get_api_opts(command)...)
+end
+
+function do_add_or_develop!(ctx::Context, command::PkgCommand)
+    api_opts = get_api_opts(command)
+    push!(api_opts, :mode => (command.name == "add" ? :add : :develop))
+    return API.add_or_develop(ctx, command.arguments; api_opts...)
 end
 
 ######################
@@ -891,10 +609,12 @@ end
 pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 
 # handle completions
-all_commands_sorted = sort(all_command_names)
+all_commands_sorted = sort(collect(String,keys(command_specs)))
 long_commands = filter(c -> length(c) > 2, all_commands_sorted)
-all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(collect(keys(opts)))]
-long_options = filter(c -> length(c) > 2, all_options_sorted)
+# TODO all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(collect(keys(opts)))]
+all_options_sorted = []
+# TODO long_options = filter(c -> length(c) > 2, all_options_sorted)
+long_options = []
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
@@ -1121,86 +841,324 @@ end
 # SPEC #
 ########
 
-# TODO how to specify if version specs are allowed ?
 # TODO handle `preview` -> probably with a wrapper
-# TODO dispatch to API or wrapper?
 # TODO concrete difference between API and REPL commands?
 # note: it seems like most String args are meant to be package specs
-# TODO precompile, generate, gc : can be embeded directly
+# note: precompile, generate, gc : can be embeded directly
+# TODO should warn on zero args?
 
 # nothing means don't count
 command_declarations = CommandDeclaration[
     (   ["test"],
         do_test!,
-        [],
-        ["coverage"],
+        (ARG_PKG, []),
+        [
+            ("coverage", :coverage => true),
+        ],
     ),( ["help", "?"],
-        Base.display,
-        [],
+        do_help!,
+        (ARG_RAW, []),
         [],
     ),( ["instantiate"],
-        API.instantiate,
-        [0],
-        ["project", "manifest"],
+        do_instantiate!,
+        (ARG_RAW, [0]),
+        [
+            (["project", "p"], :manifest => false),
+            (["manifest", "m"], :manifest => true),
+        ],
     ),( ["remove", "rm"],
-        API.rm,
-        [],
-        ["project", "manifest"],
+        do_rm!,
+        (ARG_PKG, []),
+        [
+            (["project", "p"], :mode => PKGMODE_PROJECT),
+            (["manifest", "m"], :mode => PKGMODE_MANIFEST),
+        ],
     ),( ["add"],
         do_add_or_develop!,
-        [],
+        (ARG_ALL, []),
         [],
     ),( ["develop", "dev"],
-        API.add_or_develop,
-        [],
+        do_add_or_develop!,
+        (ARG_ALL, []),
         [],
     ),( ["free"],
-        API.free,
-        [],
+        do_free!,
+        (ARG_PKG, []),
         [],
     ),( ["pin"],
-        API.pin,
-        [],
+        do_pin!,
+        (ARG_VERSION, []),
         [],
     ),( ["build"],
-        API.build,
-        [],
+        do_build!,
+        (ARG_PKG, []),
         [],
     ),( ["resolve"],
-        API.resolve,
-        [0],
+        do_resolve!,
+        (ARG_RAW, [0]),
         [],
     ),( ["activate"],
         API.activate,
-        [0,1],
+        (ARG_RAW, [0,1]),
         [],
     ),( ["update", "up"],
         do_up!,
-        [],
-        ["project", "manifest", "major", "minor", "patch", "fixed"],
+        (ARG_VERSION, []),
+        [
+            (["project", "p"], :mode => PKGMODE_PROJECT),
+            (["manifest", "m"], :mode => PKGMODE_MANIFEST),
+            ("major", :level => UPLEVEL_MAJOR),
+            ("minor", :level => UPLEVEL_MINOR),
+            ("patch", :level => UPLEVEL_PATCH),
+            ("fixed", :level => UPLEVEL_FIXED),
+        ],
     ),( ["generate"],
         do_generate!,
-        [1],
+        (ARG_RAW, [1]),
         [],
     ),( ["precompile"],
         do_precompile!,
-        [0],
+        (ARG_RAW, [0]),
         [],
     ),( ["status", "st"],
         Display.status,
-        [0],
-        ["project", "manifest"],
+        (ARG_RAW, [0]),
+        [
+            (["project", "p"], :mode => PKGMODE_PROJECT),
+            (["manifest", "m"], :mode => PKGMODE_MANIFEST),
+        ],
     ),( ["gc"],
-        do_gc!, #
-        [0],
+        do_gc!,
+        (ARG_RAW, [0]),
         [],
     ),
 ]
 
-#TODO string -> PackageSpec
-#TODO string (rev|versionrange) -> VersionedPackage
-
 command_specs = init_command_spec(command_declarations) # TODO should this go here ?
-all_command_names = keys(command_specs)
 
-end
+const help = md"""
+
+**Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
+backspace when the input line is empty or press Ctrl+C.
+
+
+**Synopsis**
+
+    pkg> [--env=...] cmd [opts] [args]
+
+Multiple commands can be given on the same line by interleaving a `;` between the commands.
+
+**Environment**
+
+The `--env` meta option determines which project environment to manipulate. By
+default, this looks for a git repo in the parents directories of the current
+working directory, and if it finds one, it uses that as an environment. Otherwise,
+it uses a named environment (typically found in `~/.julia/environments`) looking
+for environments named `v$(VERSION.major).$(VERSION.minor).$(VERSION.patch)`,
+`v$(VERSION.major).$(VERSION.minor)`,  `v$(VERSION.major)` or `default` in order.
+
+**Commands**
+
+What action you want the package manager to take:
+
+`help`: show this message
+
+`status`: summarize contents of and changes to environment
+
+`add`: add packages to project
+
+`develop`: clone the full package repo locally for development
+
+`rm`: remove packages from project or manifest
+
+`up`: update packages in manifest
+
+`test`: run tests for packages
+
+`build`: run the build script for packages
+
+`pin`: pins the version of packages
+
+`free`: undoes a `pin`, `develop`, or stops tracking a repo.
+
+`instantiate`: downloads all the dependencies for the project
+
+`resolve`: resolves to update the manifest from changes in dependencies of
+developed packages
+
+`generate`: generate files for a new project
+
+`preview`: previews a subsequent command without affecting the current state
+
+`precompile`: precompile all the project dependencies
+
+`gc`: garbage collect packages not used for a significant time
+
+`activate`: set the primary environment the package manager manipulates
+"""
+
+# TODO should help just be an array parallel to PackageSpec ?
+#=
+const helps = Dict(
+    CMD_HELP => md"""
+
+        help
+
+    Display this message.
+
+        help cmd ...
+
+    Display usage information for commands listed.
+
+    Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
+    """, CMD_STATUS => md"""
+
+        status
+        status [-p|--project]
+        status [-m|--manifest]
+
+    Show the status of the current environment. By default, the full contents of
+    the project file is summarized, showing what version each package is on and
+    how it has changed since the last git commit (if in a git repo), as well as
+    any changes to manifest packages not already listed. In `--project` mode, the
+    status of the project file is summarized. In `--project` mode, the status of
+    the project file is summarized.
+    """, CMD_GENERATE => md"""
+
+        generate pkgname
+
+    Create a project called `pkgname` in the current folder.
+    """,
+    CMD_ADD => md"""
+
+        add pkg[=uuid] [@version] [#rev] ...
+
+    Add package `pkg` to the current project file. If `pkg` could refer to
+    multiple different packages, specifying `uuid` allows you to disambiguate.
+    `@version` optionally allows specifying which versions of packages. Versions
+    may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
+    that matches, or ranges thereof, such as `@1.2-3.4.5`. A git-revision can be
+    specified by `#branch` or `#commit`.
+
+    If a local path is used as an argument to `add`, the path needs to be a git repository.
+    The project will then track that git repository just like if it is was tracking a remote repository online.
+
+    **Examples**
+    ```
+    pkg> add Example
+    pkg> add Example@0.5
+    pkg> add Example#master
+    pkg> add Example#c37b675
+    pkg> add https://github.com/JuliaLang/Example.jl#master
+    pkg> add git@github.com:JuliaLang/Example.jl.git
+    pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
+    ```
+    """, CMD_RM => md"""
+
+        rm [-p|--project] pkg[=uuid] ...
+
+    Remove package `pkg` from the project file. Since the name `pkg` can only
+    refer to one package in a project this is unambiguous, but you can specify
+    a `uuid` anyway, and the command is ignored, with a warning if package name
+    and UUID do not mactch. When a package is removed from the project file, it
+    may still remain in the manifest if it is required by some other package in
+    the project. Project mode operation is the default, so passing `-p` or
+    `--project` is optional unless it is preceded by the `-m` or `--manifest`
+    options at some earlier point.
+
+        rm [-m|--manifest] pkg[=uuid] ...
+
+    Remove package `pkg` from the manifest file. If the name `pkg` refers to
+    multiple packages in the manifest, `uuid` disambiguates it. Removing a package
+    from the manifest forces the removal of all packages that depend on it, as well
+    as any no-longer-necessary manifest packages due to project package removals.
+    """, CMD_UP => md"""
+
+        up [-p|project]  [opts] pkg[=uuid] [@version] ...
+        up [-m|manifest] [opts] pkg[=uuid] [@version] ...
+
+        opts: --major | --minor | --patch | --fixed
+
+    Update the indicated package within the constraints of the indicated version
+    specifications. Versions may be specified by `@1`, `@1.2`, `@1.2.3`, allowing
+    any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
+    In `--project` mode, package specifications only match project packages, while
+    in `manifest` mode they match any manifest package. Bound level options force
+    the following packages to be upgraded only within the current major, minor,
+    patch version; if the `--fixed` upgrade level is given, then the following
+    packages will not be upgraded at all.
+    """, CMD_PREVIEW => md"""
+
+        preview cmd
+
+    Runs the command `cmd` in preview mode. This is defined such that no side effects
+    will take place i.e. no packages are downloaded and neither the project nor manifest
+    is modified.
+    """, CMD_TEST => md"""
+
+        test [opts] pkg[=uuid] ...
+
+        opts: --coverage
+
+    Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
+    in the package directory. The option `--coverage` can be used to run the tests with
+    coverage enabled. The `startup.jl` file is disabled during testing unless
+    julia is started with `--startup-file=yes`.
+    """, CMD_GC => md"""
+
+    Deletes packages that cannot be reached from any existing environment.
+    """, CMD_BUILD =>md"""
+
+        build pkg[=uuid] ...
+
+    Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
+    If no packages are given, runs the build scripts for all packages in the manifest.
+    The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
+    """, CMD_PIN => md"""
+
+        pin pkg[=uuid] ...
+
+    Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
+    A pinned package has the symbol `⚲` next to its version in the status list.
+    """, CMD_FREE => md"""
+        free pkg[=uuid] ...
+
+    Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
+    makes the package no longer being checked out.
+    """, CMD_DEVELOP => md"""
+        develop pkg[=uuid] [#rev] ...
+
+    Make a package available for development. If `pkg` is an existing local path that path will be recorded in
+    the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The clone is stored in `devdir`,
+    which defaults to `~/.julia/dev` and is set by the environment variable `JULIA_PKG_DEVDIR`.
+    This operation is undone by `free`.
+
+    *Example*
+    ```jl
+    pkg> develop Example
+    pkg> develop Example#master
+    pkg> develop Example#c37b675
+    pkg> develop https://github.com/JuliaLang/Example.jl#master
+    ```
+    """, CMD_PRECOMPILE => md"""
+        precompile
+
+    Precompile all the dependencies of the project by running `import` on all of them in a new process.
+    The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
+    """, CMD_INSTANTIATE => md"""
+        instantiate
+        instantiate [-m|--manifest]
+        instantiate [-p|--project]
+
+    Download all the dependencies for the current project at the version given by the project's manifest.
+    If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+    """, CMD_RESOLVE => md"""
+        resolve
+
+    Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
+    packages have changed causing the current Manifest to_indices be out of sync.
+    """
+)
+=#
+
+end #module

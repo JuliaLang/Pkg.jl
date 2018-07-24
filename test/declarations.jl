@@ -106,6 +106,24 @@ end
     end
 end
 
+@testset "build" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        @test_throws CommandError Pkg.REPLMode.pkgstr("build --project")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("build --minor")
+    end
+    end
+    end
+end
+
+@testset "free" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        @test_throws CommandError Pkg.REPLMode.pkgstr("free --project")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("free --major")
+    end
+    end
+    end
+end
+
 @testset "conflicting options" begin
     @test_throws CommandError Pkg.REPLMode.pkgstr("up --major --minor")
     @test_throws CommandError Pkg.REPLMode.pkgstr("rm --project --manifest")
