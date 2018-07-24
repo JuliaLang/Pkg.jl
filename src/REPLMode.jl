@@ -334,11 +334,13 @@ function enforce_arg_spec(raw_args::Vector{String}, class::ArgClass)
     return args
 end
 
-function package_args(args::Vector{Token})::Vector{PackageSpec}
+function package_args(args::Vector{Token}, cmd::String)::Vector{PackageSpec}
     pkgs = PackageSpec[]
     for arg in args
         if arg isa String
-            push!(pkgs, parse_package(arg; add_or_develop=true)) #TODO how to handle add_or_develop?
+            # TODO is there a way to avoid add_or_develop?
+            opt = (:add_or_develop => (command_specs[cmd].handler == add_or_develop!))
+            push!(pkgs, parse_package(arg; opt...))
         elseif arg isa VersionRange
             pkgs[end].version = arg
         elseif arg isa Rev
@@ -361,7 +363,7 @@ function enforce_arg_count(count::Vector{Int}, args::PkgArguments)
         cmderror("Wrong number of arguments")
 end
 
-function enforce_args(raw_args::Vector{String}, spec::ArgSpec)::PkgArguments
+function enforce_args(raw_args::Vector{String}, spec::ArgSpec, cmd::String)::PkgArguments
     if spec.class == ARG_RAW
         enforce_arg_count(spec.count, raw_args)
         return raw_args
@@ -369,7 +371,7 @@ function enforce_args(raw_args::Vector{String}, spec::ArgSpec)::PkgArguments
 
     args = enforce_arg_spec(raw_args, spec.class)
     enforce_argument_order(args)
-    pkgs = package_args(args)
+    pkgs = package_args(args, cmd)
     enforce_arg_count(spec.count, pkgs)
     return pkgs
 end
@@ -425,7 +427,8 @@ function PkgCommand(statement::Statement)
     meta_opts = enforce_meta_options(statement.meta_options,
                                      meta_option_specs)
     args = enforce_args(statement.arguments,
-                        command_specs[statement.command].argument_spec)
+                        command_specs[statement.command].argument_spec,
+                        statement.command)
     opts = enforce_opts(statement.options,
                         command_specs[statement.command].option_specs,
                         statement.command)
