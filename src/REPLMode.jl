@@ -376,8 +376,11 @@ function enforce_args(raw_args::Vector{String}, spec::ArgSpec, cmd::String)::Pkg
     return pkgs
 end
 
-function enforce_option_form(option::String, specs::Dict{String,OptionSpec})::Option
+function enforce_option(option::String, specs::Dict{String,OptionSpec})::Option
     opt = parse_option(option)
+    spec = get(specs, opt.val, nothing)
+    spec !== nothing ||
+        cmderror("option '$(opt.val)' is not a valid option")
     if is_switch(specs[opt.val])
         opt.argument === nothing ||
             cmderror("option '$(opt.val)' does not take an argument, but '$(opt.argument)' given")
@@ -391,7 +394,7 @@ end
 function enforce_meta_options(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
     meta_opt_names = keys(specs)
     return map(options) do opt
-        tok = enforce_option_form(opt, specs)
+        tok = enforce_option(opt, specs)
         tok.val in meta_opt_names ||
             cmderror("option '$opt' is not a valid meta option.")
             #TODO hint that maybe they intended to use it as a command option
@@ -404,7 +407,7 @@ function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec}, c
     get_key(opt::Option) = specs[opt.val].api.first
 
     # final parsing
-    toks = map(x->enforce_option_form(x,specs), options)
+    toks = map(x->enforce_option(x,specs), options)
     # checking
     for opt in toks
         # valid option
