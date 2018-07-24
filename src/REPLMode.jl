@@ -293,14 +293,12 @@ function get_api_opts(options::Vector{Option},
                       )::Vector{Pair{Symbol,Any}}
     return map(options) do opt
         spec = specs[opt.val]
-        return spec.api.first => begin
-            # opt is switch
-            spec.is_switch && return spec.api.second
-            # no opt wrapper -> just use raw argument
-            spec.api.second === nothing && return opt.argument
-            # given opt wrapper
-            return spec.api.second(opt.argument)
-        end
+        # opt is switch
+        spec.is_switch && return spec.api
+        # no opt wrapper -> just use raw argument
+        spec.api.second === nothing && return spec.api.first => opt.argument
+        # given opt wrapper
+        return spec.api.first => spec.api.second(opt.argument)
     end
 end
 
