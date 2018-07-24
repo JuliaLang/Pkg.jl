@@ -16,7 +16,7 @@ using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
-    PackageSpec, EnvCache, Context, Context!,
+    PackageSpec, EnvCache, Context, Context!, get_deps,
     CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
@@ -237,7 +237,6 @@ function find_project_file(env::Union{Nothing,String}=nothing)
      return project_file
 end
 
-
 mutable struct EnvCache
     # environment info:
     env::Union{Nothing,String}
@@ -343,6 +342,31 @@ function Context!(ctx::Context; kwargs...)
         setfield!(ctx, k, v)
     end
 end
+
+function deps_names(project::Dict, target::Union{Nothing,String}=nothing)::Vector{String}
+    deps = sort!(collect(keys(project["deps"])))
+    !haskey(project, "targets") && return deps
+    targets = project["targets"]
+    # main deps are those that don't appear in any targets
+    for target_deps in values(targets)
+        setdiff!(deps, target_deps)
+    end
+    # if target doesn't exist or is empty (main) return
+    (target === nothing || !haskey(targets, target)) && return deps
+    # target deps are main deps + those listed for the target
+    return append!(deps, targets[target])
+end
+
+function get_deps(project::Dict, target::Union{Nothing,String}=nothing)
+    target_deps = deps_names(project, target)
+    filter(project["deps"]) do (dep, _)
+        dep in target_deps
+    end
+end
+get_deps(env::EnvCache, target::Union{Nothing,String}=nothing) =
+    get_deps(env.project, target)
+get_deps(ctx::Context, target::Union{Nothing,String}=nothing) =
+    get_deps(ctx.env, target)
 
 function project_compatibility(ctx::Context, name::String)
     v = VersionSpec()
