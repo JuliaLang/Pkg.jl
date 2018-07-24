@@ -20,16 +20,17 @@ end
 # Options #
 ###########
 #TODO should this opt be removed: ("name", :cmd, :temp => false)
-#TODO Nothing is a placeholder: api will be Union{Pair{Symbol, Function}, Pair{Symbol, Any}}
 struct OptionSpec
     name::String
     short_name::Union{Nothing,String}
-    api::Union{Nothing, Pair{Symbol, Any}}
+    api::Pair{Symbol, Any}
+    is_switch::Bool
 end
-is_switch(opt::OptionSpec)::Bool = !(opt.api isa Nothing)
 
+@enum(OptionClass, OPT_ARG, OPT_SWITCH)
 const OptionDeclaration = Tuple{Union{String,Vector{String}}, # name + short_name?
-                                Union{Nothing, Pair{Symbol, Any}} # api keywords
+                                OptionClass, # arg or switch
+                                Pair{Symbol, Any} # api keywords
                                 }
 
 function OptionSpec(x::OptionDeclaration)::OptionSpec
@@ -39,10 +40,14 @@ function OptionSpec(x::OptionDeclaration)::OptionSpec
         return (names[1], names[2])
     end
 
-    api = x[2]
+    is_switch = x[2] == OPT_SWITCH
+    api = x[3]
     (name, short_name) = get_names(x[1])
     #TODO assert matching lex regex
-    return OptionSpec(name, short_name, api)
+    if !is_switch
+        @assert api.second === nothing || hasmethod(api.second, Tuple{String})
+    end
+    return OptionSpec(name, short_name, api, is_switch)
 end
 
 function OptionSpecs(decs::Vector{OptionDeclaration})::Dict{String, OptionSpec}
@@ -75,11 +80,8 @@ function parse_option(word::AbstractString)::Option
     return Option(option_name, option_arg)
 end
 
-# TODO if arg option, provide a function like `resolve_opt` which will apply
-# > the supplied function and return a Pair{Symbol,Any}
-# > ex: ("env", :meta, (:env, arg->EnvCache(Base.parse_env(arg)))),
 meta_option_declarations = OptionDeclaration[
-    ("env", nothing),
+    ("env", OPT_ARG, :env => arg->EnvCache(Base.parse_env(arg)))
 ]
 meta_option_specs = OptionSpecs(meta_option_declarations)
 
@@ -282,10 +284,24 @@ struct PkgCommand
     PkgCommand() = new([], "", [], [])
     PkgCommand(meta_opts, cmd_name, opts, args) = new(meta_opts, cmd_name, opts, args)
 end
-# TODO handle options which take an argument
-function get_api_opts(command::PkgCommand)
-    specs = command_specs[command.name].option_specs
-    return map(opt->specs[opt.val].api, command.options)
+
+get_api_opts(command::PkgCommand)::Vector{Pair{Symbol,Any}} =
+    get_api_opts(command.options, command_specs[command.name].option_specs)
+
+function get_api_opts(options::Vector{Option},
+                      specs::Dict{String, OptionSpec},
+                      )::Vector{Pair{Symbol,Any}}
+    return map(options) do opt
+        spec = specs[opt.val]
+        return spec.api.first => begin
+            # opt is switch
+            spec.is_switch && return spec.api.second
+            # no opt wrapper -> just use raw argument
+            spec.api.second === nothing && return opt.argument
+            # given opt wrapper
+            return spec.api.second(opt.argument)
+        end
+    end
 end
 
 function enforce_argument_order(args::Vector{Token})
@@ -381,7 +397,7 @@ function enforce_option(option::String, specs::Dict{String,OptionSpec})::Option
     spec = get(specs, opt.val, nothing)
     spec !== nothing ||
         cmderror("option '$(opt.val)' is not a valid option")
-    if is_switch(specs[opt.val])
+    if spec.is_switch
         opt.argument === nothing ||
             cmderror("option '$(opt.val)' does not take an argument, but '$(opt.argument)' given")
     else # option takes an argument
@@ -461,8 +477,8 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
 end
 
 function do_cmd!(command::PkgCommand, repl)
-    ctx = Context(env = EnvCache(nothing))
-    # TODO handle meta options
+    meta_opts = get_api_opts(command.meta_options, meta_option_specs)
+    ctx = Context(meta_opts...)
     spec = command_specs[command.name]
     # TODO is invokelatest still needed?
     Base.invokelatest(spec.handler, ctx, command)
@@ -857,7 +873,7 @@ command_declarations = CommandDeclaration[
         do_test!,
         (ARG_PKG, []),
         [
-            ("coverage", :coverage => true),
+            ("coverage", OPT_SWITCH, :coverage => true),
         ],
     ),( ["help", "?"],
         do_help!,
@@ -867,15 +883,15 @@ command_declarations = CommandDeclaration[
         do_instantiate!,
         (ARG_RAW, [0]),
         [
-            (["project", "p"], :manifest => false),
-            (["manifest", "m"], :manifest => true),
+            (["project", "p"], OPT_SWITCH, :manifest => false),
+            (["manifest", "m"], OPT_SWITCH, :manifest => true),
         ],
     ),( ["remove", "rm"],
         do_rm!,
         (ARG_PKG, []),
         [
-            (["project", "p"], :mode => PKGMODE_PROJECT),
-            (["manifest", "m"], :mode => PKGMODE_MANIFEST),
+            (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
+            (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
         ],
     ),( ["add"],
         do_add_or_develop!,
@@ -909,12 +925,12 @@ command_declarations = CommandDeclaration[
         do_up!,
         (ARG_VERSION, []),
         [
-            (["project", "p"], :mode => PKGMODE_PROJECT),
-            (["manifest", "m"], :mode => PKGMODE_MANIFEST),
-            ("major", :level => UPLEVEL_MAJOR),
-            ("minor", :level => UPLEVEL_MINOR),
-            ("patch", :level => UPLEVEL_PATCH),
-            ("fixed", :level => UPLEVEL_FIXED),
+            (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
+            (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
+            ("major", OPT_SWITCH, :level => UPLEVEL_MAJOR),
+            ("minor", OPT_SWITCH, :level => UPLEVEL_MINOR),
+            ("patch", OPT_SWITCH, :level => UPLEVEL_PATCH),
+            ("fixed", OPT_SWITCH, :level => UPLEVEL_FIXED),
         ],
     ),( ["generate"],
         do_generate!,
@@ -928,8 +944,8 @@ command_declarations = CommandDeclaration[
         Display.status,
         (ARG_RAW, [0]),
         [
-            (["project", "p"], :mode => PKGMODE_PROJECT),
-            (["manifest", "m"], :mode => PKGMODE_MANIFEST),
+            (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
+            (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
         ],
     ),( ["gc"],
         do_gc!,
