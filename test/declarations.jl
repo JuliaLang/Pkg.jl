@@ -22,24 +22,62 @@ end
     #TODO @test_throws CommandError Pkg.REPLMode.parse("add --env=foobar Example")
 end
 
-@testset "`parse` unit tests" begin
-    statement = Pkg.REPLMode.parse("--env=foobar add Example")[1]
-    @test statement.command == "add"
-    @test statement.meta_options[1].spec.name == "env"
-    @test statement.meta_options[1].argument == "foobar"
+@testset "`parse` integration tests" begin
+    @test isempty(Pkg.REPLMode.parse(""))
 
-    statements = Pkg.REPLMode.parse("--env=foobar add Example; rm Example")
+    statement = Pkg.REPLMode.parse("up")[1]
+    @test statement.command == "up"
+    @test isempty(statement.meta_options)
+    @test isempty(statement.options)
+    @test isempty(statement.arguments)
+
+    statement = Pkg.REPLMode.parse("dev Example")[1]
+    @test statement.command == "dev"
+    @test isempty(statement.meta_options)
+    @test isempty(statement.options)
+    @test statement.arguments == ["Example"]
+
+    statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
+    @test statement.command == "dev"
+    @test isempty(statement.meta_options)
+    @test isempty(statement.options)
+    @test statement.arguments == ["Example", "#foo", "#bar"]
+
+    statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
+    @test statement.command == "dev"
+    @test isempty(statement.meta_options)
+    @test isempty(statement.options)
+    @test statement.arguments == ["Example", "#foo", "Example", "@v0.0.1"]
+
+    statement = Pkg.REPLMode.parse("--one -t add --first --second arg1")[1]
+    @test statement.command == "add"
+    @test statement.meta_options == ["--one", "-t"]
+    @test statement.options == ["--first", "--second"]
+    @test statement.arguments == ["arg1"]
+
+    statements = Pkg.REPLMode.parse("--one -t add --first -o arg1; --meta pin -x -a arg0 Example")
     @test statements[1].command == "add"
-    @test statements[2].command == "rm"
+    @test statements[1].meta_options == ["--one", "-t"]
+    @test statements[1].options == ["--first", "-o"]
+    @test statements[1].arguments == ["arg1"]
+    @test statements[2].command == "pin"
+    @test statements[2].meta_options == ["--meta"]
+    @test statements[2].options == ["-x", "-a"]
+    @test statements[2].arguments == ["arg0", "Example"]
 
-    statement = Pkg.REPLMode.parse("--env=foobar add --project Example1 Example2")[1]
-    @test statement.command == "add"
-    @test statement.arguments[1] == "Example1"
-    @test statement.arguments[2] == "Example2"
-    @test length(statement.arguments) == 2
-    @test statement.options[1].val == "project"
-    @test length(statement.options) == 1
-
+    statements = Pkg.REPLMode.parse("up; --meta -x pin --first; dev")
+    @test statements[1].command == "up"
+    @test isempty(statements[1].meta_options)
+    @test isempty(statements[1].options)
+    @test isempty(statements[1].arguments)
+    @test statements[2].command == "pin"
+    @test statements[2].meta_options == ["--meta", "-x"]
+    @test statements[2].options == ["--first"]
+    @test isempty(statements[2].arguments)
+    @test statements[3].command == "dev"
+    @test isempty(statements[3].meta_options)
+    @test isempty(statements[3].options)
+    @test isempty(statements[3].arguments)
 end
 
 @testset "argument count" begin
