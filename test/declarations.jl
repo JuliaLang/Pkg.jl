@@ -17,13 +17,6 @@ include("utils.jl")
     @test opt.argument == "some"
 end
 
-@testset "option class error paths" begin
-    # command options
-    @test_throws CommandError Pkg.REPLMode.parse("--project add Example")
-    # meta options
-    #TODO @test_throws CommandError Pkg.REPLMode.parse("add --env=foobar Example")
-end
-
 @testset "`parse` integration tests" begin
     @test isempty(Pkg.REPLMode.parse(""))
 
@@ -82,45 +75,64 @@ end
     @test isempty(statements[3].arguments)
 end
 
-@testset "argument count" begin
-    with_temp_env() do
+@testset "argument count errors" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws CommandError Pkg.REPLMode.pkgstr("activate one two")
         @test_throws CommandError Pkg.REPLMode.pkgstr("activate one two three")
         @test_throws CommandError Pkg.REPLMode.pkgstr("precompile Example")
     end
+    end
+    end
 end
 
 @testset "invalid options" begin
-    with_temp_env() do
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws CommandError Pkg.REPLMode.pkgstr("rm --minor Example")
         @test_throws CommandError Pkg.REPLMode.pkgstr("pin --project Example")
+    end
+    end
     end
 end
 
 @testset "Argument order" begin
-    with_temp_env() do
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws CommandError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
         @test_throws CommandError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
         @test_throws CommandError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
         @test_throws CommandError Pkg.REPLMode.pkgstr("up #foobar")
         @test_throws CommandError Pkg.REPLMode.pkgstr("add @0.0.1")
     end
+    end
+    end
+end
+
+@testset "conflicting options" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        @test_throws CommandError Pkg.REPLMode.pkgstr("up --major --minor")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("rm --project --manifest")
+    end
+    end
+    end
 end
 
 @testset "gc" begin
-    with_temp_env() do
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws CommandError Pkg.REPLMode.pkgstr("gc --project")
         @test_throws CommandError Pkg.REPLMode.pkgstr("gc --minor")
         @test_throws CommandError Pkg.REPLMode.pkgstr("gc Example")
         Pkg.REPLMode.pkgstr("gc")
     end
+    end
+    end
 end
 
 @testset "precompile" begin
-    with_temp_env() do
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws CommandError Pkg.REPLMode.pkgstr("precompile --project")
         @test_throws CommandError Pkg.REPLMode.pkgstr("precompile Example")
         Pkg.REPLMode.pkgstr("precompile")
+    end
+    end
     end
 end
 
@@ -162,11 +174,6 @@ end
     end
     end
     end
-end
-
-@testset "conflicting options" begin
-    @test_throws CommandError Pkg.REPLMode.pkgstr("up --major --minor")
-    @test_throws CommandError Pkg.REPLMode.pkgstr("rm --project --manifest")
 end
 
 end # module
