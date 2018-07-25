@@ -88,22 +88,30 @@ meta_option_specs = OptionSpecs(meta_option_declarations)
 ################
 # Command Spec #
 ################
+@enum(CommandKind, CMD_HELP, CMD_RM, CMD_ADD, CMD_DEVELOP, CMD_UP,
+                   CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
+                   CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
+                   CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW
+                   )
 @enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
 struct ArgSpec
     class::ArgClass
     count::Vector{Int}
 end
-
-const CommandDeclaration = Tuple{Vector{String}, # names
+const CommandDeclaration = Tuple{CommandKind,
+                                 Vector{String}, # names
                                  Function, # handler
                                  Tuple{ArgClass, Vector{Int}}, # argument count
-                                 Vector{OptionDeclaration} # options
+                                 Vector{OptionDeclaration}, # options
+                                 Union{Nothing, Markdown.MD}, #help
                                  }
 struct CommandSpec
+    kind::CommandKind
     names::Vector{String}
     handler::Function
     argument_spec::ArgSpec # note: just use range operator for max/min
     option_specs::Dict{String, OptionSpec}
+    help::Union{Nothing, Markdown.MD}
 end
 command_specs = Dict{String,CommandSpec}() # TODO remove this ?
 
@@ -111,8 +119,13 @@ command_specs = Dict{String,CommandSpec}() # TODO remove this ?
 function init_command_spec(declarations::Vector{CommandDeclaration})::Dict{String,CommandSpec}
     specs = Dict()
     for dec in declarations
-        names = dec[1]
-        spec = CommandSpec(dec[1], dec[2], ArgSpec(dec[3]...), OptionSpecs(dec[end]))
+        names = dec[2]
+        spec = CommandSpec(dec[1],
+                           names,
+                           dec[3],
+                           ArgSpec(dec[4]...),
+                           OptionSpecs(dec[5]),
+                           dec[end])
         for name in names
             # TODO regex check name
             @assert get(specs, name, nothing) === nothing # don't overwrite
@@ -478,6 +491,13 @@ function do_cmd!(command::PkgCommand, repl)
     meta_opts = get_api_opts(command.meta_options, meta_option_specs)
     ctx = Context(meta_opts...)
     spec = command_specs[command.name]
+
+    # REPL specific commands
+    if spec.kind == CMD_HELP
+        return Base.invokelatest(do_help!, ctx, command, repl)
+    end
+
+    # API commands
     # TODO is invokelatest still needed?
     Base.invokelatest(spec.handler, ctx, command)
 
@@ -511,11 +531,7 @@ function do_cmd!(command::PkgCommand, repl)
     =#
 end
 
-function do_help!(
-    ctk::Context,
-    command::PkgCommand,
-    repl::REPL.AbstractREPL,
-)
+function do_help!(ctk::Context, command::PkgCommand, repl::REPL.AbstractREPL)
     disp = REPL.REPLDisplay(repl)
     if isempty(command.arguments)
         Base.display(disp, help)
@@ -540,6 +556,8 @@ end
 function do_status!(ctx::Context, statement::Statement)
     Display.status(ctx, get_api_opts(statement)...)
 end
+
+do_preview!(ctx::Context, command::PkgCommand) = nothing
 
 # TODO , test recursive dependencies as on option.
 function do_test!(ctx::Context, command::PkgCommand)
@@ -864,13 +882,14 @@ end
 
 # nothing means don't count
 command_declarations = CommandDeclaration[
-    (   ["test"],
+    (   CMD_TEST,
+        ["test"],
         do_test!,
         (ARG_PKG, []),
         [
             ("coverage", OPT_SWITCH, :coverage => true),
         ],
-        """
+        md"""
 
         test [opts] pkg[=uuid] ...
 
@@ -881,11 +900,12 @@ command_declarations = CommandDeclaration[
     coverage enabled. The `startup.jl` file is disabled during testing unless
     julia is started with `--startup-file=yes`.
         """,
-    ),( ["help", "?"],
+    ),( CMD_HELP,
+        ["help", "?"],
         do_help!,
         (ARG_RAW, []),
         [],
-        """
+        md"""
 
         help
 
@@ -897,14 +917,15 @@ command_declarations = CommandDeclaration[
 
     Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
         """,
-    ),( ["instantiate"],
+    ),( CMD_INSTANTIATE,
+        ["instantiate"],
         do_instantiate!,
         (ARG_RAW, [0]),
         [
             (["project", "p"], OPT_SWITCH, :manifest => false),
             (["manifest", "m"], OPT_SWITCH, :manifest => true),
         ],
-        """
+        md"""
         instantiate
         instantiate [-m|--manifest]
         instantiate [-p|--project]
@@ -912,14 +933,15 @@ command_declarations = CommandDeclaration[
     Download all the dependencies for the current project at the version given by the project's manifest.
     If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
         """,
-    ),( ["remove", "rm"],
+    ),( CMD_RM,
+        ["remove", "rm"],
         do_rm!,
         (ARG_PKG, []),
         [
             (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
             (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
         ],
-        """
+        md"""
 
         rm [-p|--project] pkg[=uuid] ...
 
@@ -939,11 +961,12 @@ command_declarations = CommandDeclaration[
     from the manifest forces the removal of all packages that depend on it, as well
     as any no-longer-necessary manifest packages due to project package removals.
         """,
-    ),( ["add"],
+    ),( CMD_ADD,
+        ["add"],
         do_add_or_develop!,
         (ARG_ALL, []),
         [],
-        """
+        md"""
 
         add pkg[=uuid] [@version] [#rev] ...
 
@@ -968,11 +991,12 @@ command_declarations = CommandDeclaration[
     pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
     ```
         """,
-    ),( ["develop", "dev"],
+    ),( CMD_DEVELOP,
+        ["develop", "dev"],
         do_add_or_develop!,
         (ARG_ALL, []),
         [],
-        """
+        md"""
         develop pkg[=uuid] [#rev] ...
 
     Make a package available for development. If `pkg` is an existing local path that path will be recorded in
@@ -988,32 +1012,35 @@ command_declarations = CommandDeclaration[
     pkg> develop https://github.com/JuliaLang/Example.jl#master
     ```
         """,
-    ),( ["free"],
+    ),( CMD_FREE,
+        ["free"],
         do_free!,
         (ARG_PKG, []),
         [],
-        """
+        md"""
         free pkg[=uuid] ...
 
     Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
     makes the package no longer being checked out.
         """,
-    ),( ["pin"],
+    ),( CMD_PIN,
+        ["pin"],
         do_pin!,
         (ARG_VERSION, []),
         [],
-        """
+        md"""
 
         pin pkg[=uuid] ...
 
     Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
     A pinned package has the symbol `⚲` next to its version in the status list.
         """,
-    ),( ["build"],
+    ),( CMD_BUILD,
+        ["build"],
         do_build!,
         (ARG_PKG, []),
         [],
-        """
+        md"""
 
         build pkg[=uuid] ...
 
@@ -1021,22 +1048,25 @@ command_declarations = CommandDeclaration[
     If no packages are given, runs the build scripts for all packages in the manifest.
     The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
         """,
-    ),( ["resolve"],
+    ),( CMD_RESOLVE,
+        ["resolve"],
         do_resolve!,
         (ARG_RAW, [0]),
         [],
-        """
+        md"""
         resolve
 
     Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
     packages have changed causing the current Manifest to_indices be out of sync.
         """,
-    ),( ["activate"],
+    ),( CMD_ACTIVATE,
+        ["activate"],
         API.activate,
         (ARG_RAW, [0,1]),
         [],
         nothing,
-    ),( ["update", "up"],
+    ),( CMD_UP,
+        ["update", "up"],
         do_up!,
         (ARG_VERSION, []),
         [
@@ -1047,7 +1077,7 @@ command_declarations = CommandDeclaration[
             ("patch", OPT_SWITCH, :level => UPLEVEL_PATCH),
             ("fixed", OPT_SWITCH, :level => UPLEVEL_FIXED),
         ],
-       """
+        md"""
 
         up [-p|project]  [opts] pkg[=uuid] [@version] ...
         up [-m|manifest] [opts] pkg[=uuid] [@version] ...
@@ -1063,34 +1093,37 @@ command_declarations = CommandDeclaration[
     patch version; if the `--fixed` upgrade level is given, then the following
     packages will not be upgraded at all.
         """,
-    ),( ["generate"],
+    ),( CMD_GENERATE,
+        ["generate"],
         do_generate!,
         (ARG_RAW, [1]),
         [],
-        """
+        md"""
 
         generate pkgname
 
     Create a project called `pkgname` in the current folder.
         """,
-    ),( ["precompile"],
+    ),( CMD_PRECOMPILE,
+        ["precompile"],
         do_precompile!,
         (ARG_RAW, [0]),
         [],
-        """
+        md"""
         precompile
 
     Precompile all the dependencies of the project by running `import` on all of them in a new process.
     The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
         """,
-    ),( ["status", "st"],
+    ),( CMD_STATUS,
+        ["status", "st"],
         Display.status,
         (ARG_RAW, [0]),
         [
             (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
             (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
         ],
-        """
+        md"""
 
         status
         status [-p|--project]
@@ -1103,19 +1136,21 @@ command_declarations = CommandDeclaration[
     status of the project file is summarized. In `--project` mode, the status of
     the project file is summarized.
         """,
-    ),( ["gc"],
+    ),( CMD_GC,
+        ["gc"],
         do_gc!,
         (ARG_RAW, [0]),
         [],
-        """
+        md"""
 
     Deletes packages that cannot be reached from any existing environment.
         """,
-    ),( ["preview"],
+    ),( CMD_PREVIEW,
+        ["preview"],
         do_preview!,
         (ARG_RAW, [1]), #TODO check this
         [], # TODO check this
-        """
+        md"""
 
         preview cmd
 
