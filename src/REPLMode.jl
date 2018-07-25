@@ -513,27 +513,24 @@ end
 
 function do_help!(
     ctk::Context,
-    tokens::Vector{Token},
+    command::PkgCommand,
     repl::REPL.AbstractREPL,
 )
     disp = REPL.REPLDisplay(repl)
-    if isempty(tokens)
+    if isempty(command.arguments)
         Base.display(disp, help)
         return
     end
     help_md = md""
-    for token in tokens
-        if token isa Command
-            if haskey(helps, token.kind)
-                isempty(help_md.content) ||
-                push!(help_md.content, md"---")
-                push!(help_md.content, helps[token.kind].content)
-            else
-                cmderror("Sorry, I don't have any help for the `$(token.val)` command.")
-            end
-        else
-            error("invalid usage of help command")
-        end
+    for arg in command.arguments
+        spec = get(command_specs, arg, nothing)
+        spec === nothing &&
+            cmderror("'$arg' does not name a command")
+        spec.help === nothing &&
+            cmderror("Sorry, I don't have any help for the `$arg` command.")
+        isempty(help_md.content) ||
+            push!(help_md.content, md"---")
+        push!(help_md.content, spec.help)
     end
     Base.display(disp, help_md)
 end
@@ -873,10 +870,33 @@ command_declarations = CommandDeclaration[
         [
             ("coverage", OPT_SWITCH, :coverage => true),
         ],
+        """
+
+        test [opts] pkg[=uuid] ...
+
+        opts: --coverage
+
+    Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
+    in the package directory. The option `--coverage` can be used to run the tests with
+    coverage enabled. The `startup.jl` file is disabled during testing unless
+    julia is started with `--startup-file=yes`.
+        """,
     ),( ["help", "?"],
         do_help!,
         (ARG_RAW, []),
         [],
+        """
+
+        help
+
+    Display this message.
+
+        help cmd ...
+
+    Display usage information for commands listed.
+
+    Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
+        """,
     ),( ["instantiate"],
         do_instantiate!,
         (ARG_RAW, [0]),
@@ -884,6 +904,14 @@ command_declarations = CommandDeclaration[
             (["project", "p"], OPT_SWITCH, :manifest => false),
             (["manifest", "m"], OPT_SWITCH, :manifest => true),
         ],
+        """
+        instantiate
+        instantiate [-m|--manifest]
+        instantiate [-p|--project]
+
+    Download all the dependencies for the current project at the version given by the project's manifest.
+    If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+        """,
     ),( ["remove", "rm"],
         do_rm!,
         (ARG_PKG, []),
@@ -891,34 +919,123 @@ command_declarations = CommandDeclaration[
             (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
             (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
         ],
+        """
+
+        rm [-p|--project] pkg[=uuid] ...
+
+    Remove package `pkg` from the project file. Since the name `pkg` can only
+    refer to one package in a project this is unambiguous, but you can specify
+    a `uuid` anyway, and the command is ignored, with a warning if package name
+    and UUID do not mactch. When a package is removed from the project file, it
+    may still remain in the manifest if it is required by some other package in
+    the project. Project mode operation is the default, so passing `-p` or
+    `--project` is optional unless it is preceded by the `-m` or `--manifest`
+    options at some earlier point.
+
+        rm [-m|--manifest] pkg[=uuid] ...
+
+    Remove package `pkg` from the manifest file. If the name `pkg` refers to
+    multiple packages in the manifest, `uuid` disambiguates it. Removing a package
+    from the manifest forces the removal of all packages that depend on it, as well
+    as any no-longer-necessary manifest packages due to project package removals.
+        """,
     ),( ["add"],
         do_add_or_develop!,
         (ARG_ALL, []),
         [],
+        """
+
+        add pkg[=uuid] [@version] [#rev] ...
+
+    Add package `pkg` to the current project file. If `pkg` could refer to
+    multiple different packages, specifying `uuid` allows you to disambiguate.
+    `@version` optionally allows specifying which versions of packages. Versions
+    may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
+    that matches, or ranges thereof, such as `@1.2-3.4.5`. A git-revision can be
+    specified by `#branch` or `#commit`.
+
+    If a local path is used as an argument to `add`, the path needs to be a git repository.
+    The project will then track that git repository just like if it is was tracking a remote repository online.
+
+    **Examples**
+    ```
+    pkg> add Example
+    pkg> add Example@0.5
+    pkg> add Example#master
+    pkg> add Example#c37b675
+    pkg> add https://github.com/JuliaLang/Example.jl#master
+    pkg> add git@github.com:JuliaLang/Example.jl.git
+    pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
+    ```
+        """,
     ),( ["develop", "dev"],
         do_add_or_develop!,
         (ARG_ALL, []),
         [],
+        """
+        develop pkg[=uuid] [#rev] ...
+
+    Make a package available for development. If `pkg` is an existing local path that path will be recorded in
+    the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The clone is stored in `devdir`,
+    which defaults to `~/.julia/dev` and is set by the environment variable `JULIA_PKG_DEVDIR`.
+    This operation is undone by `free`.
+
+    *Example*
+    ```jl
+    pkg> develop Example
+    pkg> develop Example#master
+    pkg> develop Example#c37b675
+    pkg> develop https://github.com/JuliaLang/Example.jl#master
+    ```
+        """,
     ),( ["free"],
         do_free!,
         (ARG_PKG, []),
         [],
+        """
+        free pkg[=uuid] ...
+
+    Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
+    makes the package no longer being checked out.
+        """,
     ),( ["pin"],
         do_pin!,
         (ARG_VERSION, []),
         [],
+        """
+
+        pin pkg[=uuid] ...
+
+    Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
+    A pinned package has the symbol `⚲` next to its version in the status list.
+        """,
     ),( ["build"],
         do_build!,
         (ARG_PKG, []),
         [],
+        """
+
+        build pkg[=uuid] ...
+
+    Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
+    If no packages are given, runs the build scripts for all packages in the manifest.
+    The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
+        """,
     ),( ["resolve"],
         do_resolve!,
         (ARG_RAW, [0]),
         [],
+        """
+        resolve
+
+    Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
+    packages have changed causing the current Manifest to_indices be out of sync.
+        """,
     ),( ["activate"],
         API.activate,
         (ARG_RAW, [0,1]),
         [],
+        nothing,
     ),( ["update", "up"],
         do_up!,
         (ARG_VERSION, []),
@@ -930,14 +1047,42 @@ command_declarations = CommandDeclaration[
             ("patch", OPT_SWITCH, :level => UPLEVEL_PATCH),
             ("fixed", OPT_SWITCH, :level => UPLEVEL_FIXED),
         ],
+       """
+
+        up [-p|project]  [opts] pkg[=uuid] [@version] ...
+        up [-m|manifest] [opts] pkg[=uuid] [@version] ...
+
+        opts: --major | --minor | --patch | --fixed
+
+    Update the indicated package within the constraints of the indicated version
+    specifications. Versions may be specified by `@1`, `@1.2`, `@1.2.3`, allowing
+    any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
+    In `--project` mode, package specifications only match project packages, while
+    in `manifest` mode they match any manifest package. Bound level options force
+    the following packages to be upgraded only within the current major, minor,
+    patch version; if the `--fixed` upgrade level is given, then the following
+    packages will not be upgraded at all.
+        """,
     ),( ["generate"],
         do_generate!,
         (ARG_RAW, [1]),
         [],
+        """
+
+        generate pkgname
+
+    Create a project called `pkgname` in the current folder.
+        """,
     ),( ["precompile"],
         do_precompile!,
         (ARG_RAW, [0]),
         [],
+        """
+        precompile
+
+    Precompile all the dependencies of the project by running `import` on all of them in a new process.
+    The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
+        """,
     ),( ["status", "st"],
         Display.status,
         (ARG_RAW, [0]),
@@ -945,10 +1090,39 @@ command_declarations = CommandDeclaration[
             (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
             (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
         ],
+        """
+
+        status
+        status [-p|--project]
+        status [-m|--manifest]
+
+    Show the status of the current environment. By default, the full contents of
+    the project file is summarized, showing what version each package is on and
+    how it has changed since the last git commit (if in a git repo), as well as
+    any changes to manifest packages not already listed. In `--project` mode, the
+    status of the project file is summarized. In `--project` mode, the status of
+    the project file is summarized.
+        """,
     ),( ["gc"],
         do_gc!,
         (ARG_RAW, [0]),
         [],
+        """
+
+    Deletes packages that cannot be reached from any existing environment.
+        """,
+    ),( ["preview"],
+        do_preview!,
+        (ARG_RAW, [1]), #TODO check this
+        [], # TODO check this
+        """
+
+        preview cmd
+
+    Runs the command `cmd` in preview mode. This is defined such that no side effects
+    will take place i.e. no packages are downloaded and neither the project nor manifest
+    is modified.
+        """,
     ),
 ]
 
@@ -1014,169 +1188,5 @@ developed packages
 
 `activate`: set the primary environment the package manager manipulates
 """
-
-# TODO should help just be an array parallel to PackageSpec ?
-#=
-const helps = Dict(
-    CMD_HELP => md"""
-
-        help
-
-    Display this message.
-
-        help cmd ...
-
-    Display usage information for commands listed.
-
-    Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
-    """, CMD_STATUS => md"""
-
-        status
-        status [-p|--project]
-        status [-m|--manifest]
-
-    Show the status of the current environment. By default, the full contents of
-    the project file is summarized, showing what version each package is on and
-    how it has changed since the last git commit (if in a git repo), as well as
-    any changes to manifest packages not already listed. In `--project` mode, the
-    status of the project file is summarized. In `--project` mode, the status of
-    the project file is summarized.
-    """, CMD_GENERATE => md"""
-
-        generate pkgname
-
-    Create a project called `pkgname` in the current folder.
-    """,
-    CMD_ADD => md"""
-
-        add pkg[=uuid] [@version] [#rev] ...
-
-    Add package `pkg` to the current project file. If `pkg` could refer to
-    multiple different packages, specifying `uuid` allows you to disambiguate.
-    `@version` optionally allows specifying which versions of packages. Versions
-    may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
-    that matches, or ranges thereof, such as `@1.2-3.4.5`. A git-revision can be
-    specified by `#branch` or `#commit`.
-
-    If a local path is used as an argument to `add`, the path needs to be a git repository.
-    The project will then track that git repository just like if it is was tracking a remote repository online.
-
-    **Examples**
-    ```
-    pkg> add Example
-    pkg> add Example@0.5
-    pkg> add Example#master
-    pkg> add Example#c37b675
-    pkg> add https://github.com/JuliaLang/Example.jl#master
-    pkg> add git@github.com:JuliaLang/Example.jl.git
-    pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
-    ```
-    """, CMD_RM => md"""
-
-        rm [-p|--project] pkg[=uuid] ...
-
-    Remove package `pkg` from the project file. Since the name `pkg` can only
-    refer to one package in a project this is unambiguous, but you can specify
-    a `uuid` anyway, and the command is ignored, with a warning if package name
-    and UUID do not mactch. When a package is removed from the project file, it
-    may still remain in the manifest if it is required by some other package in
-    the project. Project mode operation is the default, so passing `-p` or
-    `--project` is optional unless it is preceded by the `-m` or `--manifest`
-    options at some earlier point.
-
-        rm [-m|--manifest] pkg[=uuid] ...
-
-    Remove package `pkg` from the manifest file. If the name `pkg` refers to
-    multiple packages in the manifest, `uuid` disambiguates it. Removing a package
-    from the manifest forces the removal of all packages that depend on it, as well
-    as any no-longer-necessary manifest packages due to project package removals.
-    """, CMD_UP => md"""
-
-        up [-p|project]  [opts] pkg[=uuid] [@version] ...
-        up [-m|manifest] [opts] pkg[=uuid] [@version] ...
-
-        opts: --major | --minor | --patch | --fixed
-
-    Update the indicated package within the constraints of the indicated version
-    specifications. Versions may be specified by `@1`, `@1.2`, `@1.2.3`, allowing
-    any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
-    In `--project` mode, package specifications only match project packages, while
-    in `manifest` mode they match any manifest package. Bound level options force
-    the following packages to be upgraded only within the current major, minor,
-    patch version; if the `--fixed` upgrade level is given, then the following
-    packages will not be upgraded at all.
-    """, CMD_PREVIEW => md"""
-
-        preview cmd
-
-    Runs the command `cmd` in preview mode. This is defined such that no side effects
-    will take place i.e. no packages are downloaded and neither the project nor manifest
-    is modified.
-    """, CMD_TEST => md"""
-
-        test [opts] pkg[=uuid] ...
-
-        opts: --coverage
-
-    Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
-    in the package directory. The option `--coverage` can be used to run the tests with
-    coverage enabled. The `startup.jl` file is disabled during testing unless
-    julia is started with `--startup-file=yes`.
-    """, CMD_GC => md"""
-
-    Deletes packages that cannot be reached from any existing environment.
-    """, CMD_BUILD =>md"""
-
-        build pkg[=uuid] ...
-
-    Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
-    If no packages are given, runs the build scripts for all packages in the manifest.
-    The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
-    """, CMD_PIN => md"""
-
-        pin pkg[=uuid] ...
-
-    Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-    A pinned package has the symbol `⚲` next to its version in the status list.
-    """, CMD_FREE => md"""
-        free pkg[=uuid] ...
-
-    Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
-    makes the package no longer being checked out.
-    """, CMD_DEVELOP => md"""
-        develop pkg[=uuid] [#rev] ...
-
-    Make a package available for development. If `pkg` is an existing local path that path will be recorded in
-    the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The clone is stored in `devdir`,
-    which defaults to `~/.julia/dev` and is set by the environment variable `JULIA_PKG_DEVDIR`.
-    This operation is undone by `free`.
-
-    *Example*
-    ```jl
-    pkg> develop Example
-    pkg> develop Example#master
-    pkg> develop Example#c37b675
-    pkg> develop https://github.com/JuliaLang/Example.jl#master
-    ```
-    """, CMD_PRECOMPILE => md"""
-        precompile
-
-    Precompile all the dependencies of the project by running `import` on all of them in a new process.
-    The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
-    """, CMD_INSTANTIATE => md"""
-        instantiate
-        instantiate [-m|--manifest]
-        instantiate [-p|--project]
-
-    Download all the dependencies for the current project at the version given by the project's manifest.
-    If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
-    """, CMD_RESOLVE => md"""
-        resolve
-
-    Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
-    packages have changed causing the current Manifest to_indices be out of sync.
-    """
-)
-=#
 
 end #module
