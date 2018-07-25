@@ -884,7 +884,7 @@ function collect_target_deps!(
         targets = project["targets"]
         haskey(targets, target) || return
         for pkg in targets[target]
-            uuid = UUID(ctx.env.project["deps"][pkg])
+            uuid = UUID(ctx.env.project["extras"][pkg])
             push!(pkgs, PackageSpec(pkg, uuid))
         end
     end
