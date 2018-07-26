@@ -873,14 +873,6 @@ end
 ########
 # SPEC #
 ########
-
-# TODO handle `preview` -> probably with a wrapper
-# TODO concrete difference between API and REPL commands?
-# note: it seems like most String args are meant to be package specs
-# note: precompile, generate, gc : can be embeded directly
-# TODO should warn on zero args?
-
-# nothing means don't count
 command_declarations = CommandDeclaration[
     (   CMD_TEST,
         ["test"],
