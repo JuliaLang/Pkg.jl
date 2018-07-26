@@ -366,9 +366,8 @@ function package_args(args::Vector{Token}, cmd::String)::Vector{PackageSpec}
     pkgs = PackageSpec[]
     for arg in args
         if arg isa String
-            # TODO is there a way to avoid add_or_develop?
-            opt = [:add_or_develop => (command_specs[cmd].handler == do_add_or_develop!)]
-            push!(pkgs, parse_package(arg; opt...))
+            is_add_or_develop = command_specs[cmd].kind in (CMD_ADD, CMD_DEVELOP)
+            push!(pkgs, parse_package(arg; add_or_develop=is_add_or_develop))
         elseif arg isa VersionRange
             pkgs[end].version = arg
         elseif arg isa Rev
