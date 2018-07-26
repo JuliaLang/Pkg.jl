@@ -1084,7 +1084,7 @@ command_declarations = CommandDeclaration[
         """,
     ),( CMD_ACTIVATE,
         ["activate"],
-        API.activate,
+        do_activate!,
         (ARG_RAW, [0,1]),
         [],
         nothing,
