@@ -289,6 +289,7 @@ end
 ##############
 const Token = Union{String, VersionRange, Rev}
 const PkgArguments = Union{Vector{String}, Vector{PackageSpec}}
+#TODO embed spec in PkgCommand?
 struct PkgCommand
     meta_options::Vector{Option}
     name::String
@@ -623,9 +624,17 @@ function do_pin!(ctx::Context, command::PkgCommand)
     API.pin(ctx, command.arguments; get_api_opts(command)...)
 end
 
-function do_add_or_develop!(ctx::Context, command::PkgCommand)
+function do_add!(ctx::Context, command::PkgCommand)
     api_opts = get_api_opts(command)
-    push!(api_opts, :mode => (command.name == "add" ? :add : :develop))
+    push!(api_opts, :mode => :add)
+    return API.add_or_develop(ctx, command.arguments; api_opts...)
+end
+
+function do_develop!(ctx::Context, command::PkgCommand)
+    api_opts = get_api_opts(command)
+    push!(api_opts, :mode => :develop)
+    foreach(pkg->pkg.repo === nothing && (pkg.repo = Types.GitRepo("", "")),
+            command.arguments)
     return API.add_or_develop(ctx, command.arguments; api_opts...)
 end
 
@@ -978,7 +987,7 @@ command_declarations = CommandDeclaration[
         """,
     ),( CMD_ADD,
         ["add"],
-        do_add_or_develop!,
+        do_add!,
         (ARG_ALL, []),
         [],
         md"""
@@ -1008,7 +1017,7 @@ command_declarations = CommandDeclaration[
         """,
     ),( CMD_DEVELOP,
         ["develop", "dev"],
-        do_add_or_develop!,
+        do_develop!,
         (ARG_ALL, []),
         [],
         md"""
