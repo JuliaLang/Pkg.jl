@@ -194,7 +194,7 @@ Since we haven't created our own project yet, we are in the default project, loc
 To return to the `julia>` prompt, either press backspace when the input line is empty or press Ctrl+C.
 Help is available by calling `pkg> help`.
 If you are in an environment that does not have access to a REPL you can still use the REPL mode commands using
-the string macro `pkg` avaiable after `using Pkg`. The command `pkg"cmd"` would be equivalent to executing `cmd`
+the string macro `pkg` available after `using Pkg`. The command `pkg"cmd"` would be equivalent to executing `cmd`
 in the REPL mode.
 
 The documentation here describes using Pkg from the REPL mode. Documentation of using
