@@ -616,7 +616,8 @@ do_activate!(command::PkgCommand) =
 
 function do_pin!(ctx::Context, command::PkgCommand)
     for arg in command.arguments
-        if arg.version.lower != arg.version.upper # TODO check for unspecified version
+        # TODO not sure this is correct
+        if arg.version.ranges[1].lower != arg.version.ranges[1].upper
             cmderror("pinning a package requires a single version, not a versionrange")
         end
     end
