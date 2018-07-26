@@ -346,25 +346,31 @@ function Context!(ctx::Context; kwargs...)
     end
 end
 
+# target === nothing : main dependencies
+# target === "*"     : main + all extras
+# target === "name"  : named target deps
+
 function deps_names(project::Dict, target::Union{Nothing,String}=nothing)::Vector{String}
     deps = sort!(collect(keys(project["deps"])))
-    !haskey(project, "targets") && return deps
+    target == "*" && return !haskey(project, "extras") ? deps :
+        sort!(union!(deps, collect(keys(project["extras"]))))
+    haskey(project, "targets") || return deps
     targets = project["targets"]
-    # main deps are those that don't appear in any targets
-    for target_deps in values(targets)
-        setdiff!(deps, target_deps)
-    end
-    # if target doesn't exist or is empty (main) return
-    (target === nothing || !haskey(targets, target)) && return deps
-    # target deps are main deps + those listed for the target
-    return append!(deps, targets[target])
+    haskey(targets, target) || return deps
+    return sort!(union!(deps, targets[target]))
 end
 
 function get_deps(project::Dict, target::Union{Nothing,String}=nothing)
-    target_deps = deps_names(project, target)
-    filter(project["deps"]) do (dep, _)
-        dep in target_deps
+    names = deps_names(project, target)
+    deps = filter(((dep, _),) -> dep in names, project["deps"])
+    extras = get(project, "extras", Dict{String,Any}())
+    for name in names
+        haskey(deps, name) && continue
+        haskey(extras, name) ||
+            cmderror("target `$target` has unlisted dependency `$name`")
+        deps[name] = extras[name]
     end
+    return deps
 end
 get_deps(env::EnvCache, target::Union{Nothing,String}=nothing) =
     get_deps(env.project, target)
