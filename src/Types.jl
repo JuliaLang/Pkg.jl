@@ -337,7 +337,7 @@ Base.@kwdef mutable struct Context
     graph_verbose::Bool = false
     stdlibs::Dict{UUID,String} = gather_stdlib_uuids()
     # Remove next field when support for Pkg2 CI scripts is removed
-    currently_running_target::Bool =false
+    currently_running_target::Bool = false
     old_pkg2_clone_name::String = ""
 end
 
