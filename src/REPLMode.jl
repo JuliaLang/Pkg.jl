@@ -495,6 +495,14 @@ function do_cmd!(command::PkgCommand, repl)
     # REPL specific commands
     if spec.kind == CMD_HELP
         return Base.invokelatest(do_help!, ctx, command, repl)
+    elseif spec.kind == CMD_PREVIEW
+        ctx.preview = true
+        cmd = command.arguments[1]
+        cmd_spec = get(command_specs, cmd, nothing)
+        cmd_spec === nothing &&
+            cmderror("'$cmd' is not a valid command")
+        spec = cmd_spec
+        command = PkgCommand([], cmd, [], PackageSpec[])
     end
 
     # API commands
@@ -502,11 +510,6 @@ function do_cmd!(command::PkgCommand, repl)
     Base.invokelatest(spec.handler, ctx, command)
 
     #=
-    if cmd.kind == CMD_PREVIEW
-        ctx.preview = true
-        isempty(tokens) && cmderror("expected a command to preview")
-        cmd = popfirst!(tokens)
-    end
 
     # Using invokelatest to hide the functions from inference.
     # Otherwise it would try to infer everything here.
@@ -557,6 +560,7 @@ function do_status!(ctx::Context, statement::Statement)
     Display.status(ctx, get_api_opts(statement)...)
 end
 
+# TODO remove the need to specify a handler function (not needed for REPL commands)
 do_preview!(ctx::Context, command::PkgCommand) = nothing
 
 # TODO , test recursive dependencies as on option.
@@ -582,10 +586,10 @@ do_build!(ctx::Context, command::PkgCommand) =
     API.build(ctx, command.arguments, get_api_opts(command)...)
 
 do_rm!(ctx::Context, command::PkgCommand) =
-    API.rm(ctx, command.arguments; get_api_opts(statement)...)
+    API.rm(ctx, command.arguments; get_api_opts(command)...)
 
 do_free!(ctx::Context, command::PkgCommand) =
-    API.free(ctx, command.arguments; get_api_opts(statement)...)
+    API.free(ctx, command.arguments; get_api_opts(command)...)
 
 do_up!(ctx::Context, command::PkgCommand) =
     API.up(ctx, command.arguments; get_api_opts(command)...)
@@ -1148,8 +1152,8 @@ command_declarations = CommandDeclaration[
     ),( CMD_PREVIEW,
         ["preview"],
         do_preview!,
-        (ARG_RAW, [1]), #TODO check this
-        [], # TODO check this
+        (ARG_RAW, [1]),
+        [],
         md"""
 
         preview cmd
