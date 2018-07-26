@@ -507,7 +507,11 @@ function do_cmd!(command::PkgCommand, repl)
 
     # API commands
     # TODO is invokelatest still needed?
-    Base.invokelatest(spec.handler, ctx, command)
+    if applicable(spec.handler, ctx, command)
+        Base.invokelatest(spec.handler, ctx, command)
+    else
+        Base.invokelatest(spec.handler, command)
+    end
 
     #=
 
@@ -605,14 +609,10 @@ do_free!(ctx::Context, command::PkgCommand) =
 do_up!(ctx::Context, command::PkgCommand) =
     API.up(ctx, command.arguments; get_api_opts(command)...)
 
-# TODO needs isapplicable?
-function do_activate!(command::PkgCommand)
-    if isempty(command.arguments)
-        return API.activate()
-    else
-        return API.activate(abspath(command.arguments[1]))
-    end
-end
+do_activate!(command::PkgCommand) =
+    isempty(command.arguments) ?
+        API.activate() :
+        API.activate(abspath(command.arguments[1]))
 
 function do_pin!(ctx::Context, command::PkgCommand)
     for arg in command.arguments
