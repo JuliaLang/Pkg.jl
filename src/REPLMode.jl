@@ -512,30 +512,6 @@ function do_cmd!(command::PkgCommand, repl)
     else
         Base.invokelatest(spec.handler, command)
     end
-
-    #=
-
-    # Using invokelatest to hide the functions from inference.
-    # Otherwise it would try to infer everything here.
-    cmd.kind == CMD_INIT        ? Base.invokelatest(          do_init!, ctx, tokens) :
-    cmd.kind == CMD_HELP        ? Base.invokelatest(          do_help!, ctx, tokens, repl) :
-    cmd.kind == CMD_RM          ? Base.invokelatest(            do_rm!, ctx, tokens) :
-    cmd.kind == CMD_ADD         ? Base.invokelatest(do_add_or_develop!, ctx, tokens, CMD_ADD) :
-    cmd.kind == CMD_CHECKOUT    ? Base.invokelatest(do_add_or_develop!, ctx, tokens, CMD_DEVELOP) :
-    cmd.kind == CMD_DEVELOP     ? Base.invokelatest(do_add_or_develop!, ctx, tokens, CMD_DEVELOP) :
-    cmd.kind == CMD_UP          ? Base.invokelatest(            do_up!, ctx, tokens) :
-    cmd.kind == CMD_STATUS      ? Base.invokelatest(        do_status!, ctx, tokens) :
-    cmd.kind == CMD_TEST        ? Base.invokelatest(          do_test!, ctx, tokens) :
-    cmd.kind == CMD_GC          ? Base.invokelatest(            do_gc!, ctx, tokens) :
-    cmd.kind == CMD_BUILD       ? Base.invokelatest(         do_build!, ctx, tokens) :
-    cmd.kind == CMD_PIN         ? Base.invokelatest(           do_pin!, ctx, tokens) :
-    cmd.kind == CMD_FREE        ? Base.invokelatest(          do_free!, ctx, tokens) :
-    cmd.kind == CMD_GENERATE    ? Base.invokelatest(      do_generate!, ctx, tokens) :
-    cmd.kind == CMD_RESOLVE     ? Base.invokelatest(       do_resolve!, ctx, tokens) :
-    cmd.kind == CMD_PRECOMPILE  ? Base.invokelatest(    do_precompile!, ctx, tokens) :
-    cmd.kind == CMD_INSTANTIATE ? Base.invokelatest(   do_instantiate!, ctx, tokens) :
-        cmderror("`$cmd` command not yet implemented")
-    =#
 end
 
 function do_help!(ctk::Context, command::PkgCommand, repl::REPL.AbstractREPL)
