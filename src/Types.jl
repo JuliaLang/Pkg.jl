@@ -337,6 +337,7 @@ Base.@kwdef mutable struct Context
     graph_verbose::Bool = false
     stdlibs::Dict{UUID,String} = gather_stdlib_uuids()
     # Remove next field when support for Pkg2 CI scripts is removed
+    currently_running_target::Bool = false
     old_pkg2_clone_name::String = ""
 end
 
@@ -346,25 +347,31 @@ function Context!(ctx::Context; kwargs...)
     end
 end
 
+# target === nothing : main dependencies
+# target === "*"     : main + all extras
+# target === "name"  : named target deps
+
 function deps_names(project::Dict, target::Union{Nothing,String}=nothing)::Vector{String}
     deps = sort!(collect(keys(project["deps"])))
-    !haskey(project, "targets") && return deps
+    target == "*" && return !haskey(project, "extras") ? deps :
+        sort!(union!(deps, collect(keys(project["extras"]))))
+    haskey(project, "targets") || return deps
     targets = project["targets"]
-    # main deps are those that don't appear in any targets
-    for target_deps in values(targets)
-        setdiff!(deps, target_deps)
-    end
-    # if target doesn't exist or is empty (main) return
-    (target === nothing || !haskey(targets, target)) && return deps
-    # target deps are main deps + those listed for the target
-    return append!(deps, targets[target])
+    haskey(targets, target) || return deps
+    return sort!(union!(deps, targets[target]))
 end
 
 function get_deps(project::Dict, target::Union{Nothing,String}=nothing)
-    target_deps = deps_names(project, target)
-    filter(project["deps"]) do (dep, _)
-        dep in target_deps
+    names = deps_names(project, target)
+    deps = filter(((dep, _),) -> dep in names, project["deps"])
+    extras = get(project, "extras", Dict{String,Any}())
+    for name in names
+        haskey(deps, name) && continue
+        haskey(extras, name) ||
+            cmderror("target `$target` has unlisted dependency `$name`")
+        deps[name] = extras[name]
     end
+    return deps
 end
 get_deps(env::EnvCache, target::Union{Nothing,String}=nothing) =
     get_deps(env.project, target)
@@ -1077,7 +1084,7 @@ function write_env(ctx::Context; display_diff=true)
     project = deepcopy(env.project)
     isempty(project["deps"]) && delete!(project, "deps")
     if !isempty(project) || ispath(env.project_file)
-        if display_diff
+        if display_diff && !(ctx.currently_running_target)
             printpkgstyle(ctx, :Updating, pathrepr(ctx, env.project_file))
             Pkg.Display.print_project_diff(ctx, old_env, env)
         end
@@ -1090,7 +1097,7 @@ function write_env(ctx::Context; display_diff=true)
     end
     # update the manifest file
     if !isempty(env.manifest) || ispath(env.manifest_file)
-        if display_diff
+        if display_diff && !(ctx.currently_running_target)
             printpkgstyle(ctx, :Updating, pathrepr(ctx, env.manifest_file))
             Pkg.Display.print_manifest_diff(ctx, old_env, env)
         end
