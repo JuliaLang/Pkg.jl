@@ -585,10 +585,31 @@ do_free!(ctx::Context, command::PkgCommand) =
 do_up!(ctx::Context, command::PkgCommand) =
     API.up(ctx, command.arguments; get_api_opts(command)...)
 
-do_activate!(command::PkgCommand) =
-    isempty(command.arguments) ?
-        API.activate() :
-        API.activate(abspath(command.arguments[1]))
+function do_activate!(ctx::Context, command::PkgCommand)
+    if isempty(command.arguments)
+        return API.activate()
+    end
+
+    path = command.arguments[1]
+    env = Base.active_project() === nothing ? nothing : ctx.env
+    devpath = nothing
+    if env !== nothing && haskey(env.project["deps"], path)
+        uuid = UUID(env.project["deps"][path])
+        info = manifest_info(env, uuid)
+        devpath = haskey(info, "path") ? info["path"] : nothing
+    end
+    # `pkg> activate path` does the following
+    # 1. if path exists, activate that
+    # 2. if path exists in deps, and the dep is deved, activate that path (`devpath`) above
+    # 3. activate the non-existing directory (e.g. as in `pkg> activate . for initing a new dev`)
+    if Types.isdir_windows_workaround(path)
+        API.activate(abspath(path))
+    elseif devpath !== nothing
+        API.activate(abspath(devpath))
+    else
+        API.activate(abspath(path))
+    end
+end
 
 function do_pin!(ctx::Context, command::PkgCommand)
     for arg in command.arguments
