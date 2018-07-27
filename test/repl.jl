@@ -74,23 +74,27 @@ temp_pkg_dir() do project_path
 end
 
 @testset "tokens" begin
-    tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git")
-    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
-    tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git#master")
-    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
-    @test tokens[1][3].rev == "master"
-    tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git#c37b675")
-    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
-    @test tokens[1][3].rev == "c37b675"
-    tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git@v0.5.0")
-    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
-    @test repr(tokens[1][3]) == "VersionRange(\"0.5.0\")"
-    tokens = Pkg.REPLMode.tokenize("add git@github.com:JuliaLang/Example.jl.git@0.5.0")
-    @test tokens[1][2] ==              "git@github.com:JuliaLang/Example.jl.git"
-    @test repr(tokens[1][3]) == "VersionRange(\"0.5.0\")"
-    tokens = Pkg.REPLMode.tokenize("add git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git@0.5.0")
-    @test tokens[1][2] ==              "git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git"
-    @test repr(tokens[1][3]) == "VersionRange(\"0.5.0\")"
+    statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git")[1]
+    @test statement.command == "add"
+    @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
+    statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#master")[1]
+    @test statement.command == "add"
+    @test length(statement.arguments) == 2
+    @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
+    @test statement.arguments[2] == "#master"
+    statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#c37b675")[1]
+    @test statement.command == "add"
+    @test length(statement.arguments) == 2
+    @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
+    @test statement.arguments[2] == "#c37b675"
+    statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git@v0.5.0")[1]
+    @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
+    @test statement.arguments[2] == "@v0.5.0"
+    statement = Pkg.REPLMode.parse("add git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git@0.5.0")[1]
+    @test statement.command == "add"
+    @test length(statement.arguments) == 2
+    @test statement.arguments[1] == "git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git"
+    @test statement.arguments[2] == "@0.5.0"
 end
 
 temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
