@@ -1137,8 +1137,8 @@ command_declarations = CommandDeclaration[
     the project file is summarized, showing what version each package is on and
     how it has changed since the last git commit (if in a git repo), as well as
     any changes to manifest packages not already listed. In `--project` mode, the
-    status of the project file is summarized. In `--project` mode, the status of
-    the project file is summarized.
+    status of the project file is summarized. In `--manifest` mode the output also
+    includes the dependencies of explicitly added packages.
         """,
     ),( CMD_GC,
         ["gc"],
