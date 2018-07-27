@@ -663,12 +663,27 @@ end
 pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 
 # handle completions
+all_commands_sorted = []
+long_commands = []
+all_options_sorted = []
+long_options = []
+
 all_commands_sorted = sort(collect(String,keys(command_specs)))
 long_commands = filter(c -> length(c) > 2, all_commands_sorted)
-# TODO all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(collect(keys(opts)))]
-all_options_sorted = []
-# TODO long_options = filter(c -> length(c) > 2, all_options_sorted)
-long_options = []
+function all_options()
+    all_opts = []
+    for command in values(command_specs)
+        for opt_spec in command.option_specs
+            push!(all_opts, opt_spec.name)
+            opt_spec.short_name !== nothing && push!(all_opts, opt_spec.short_name)
+        end
+        println("all_opts: [$(all_opts)]")
+    end
+    unique!(all_opts)
+    return all_opts
+end
+all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(all_options())]
+long_options = filter(c -> length(c) > 2, all_options_sorted)
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
@@ -694,7 +709,7 @@ function complete_option(s, i1, i2)
 end
 
 function complete_package(s, i1, i2, lastcommand, project_opt)
-    if lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN, CMD_CHECKOUT]
+    if lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN]
         return complete_installed_package(s, i1, i2, project_opt)
     elseif lastcommand in [CMD_ADD, CMD_DEVELOP]
         return complete_remote_package(s, i1, i2)
@@ -753,25 +768,18 @@ function completions(full, index)
         end
 
         # tokenize input, don't offer any completions for invalid commands
-        tokens = try
+        statement = try
             parse(join(pre_words[1:end-1], ' '))[end]
         catch
             return String[], 0:-1, false
         end
 
-        tokens = reverse!(tokens)
-
-        lastcommand = nothing
+        cmd = get(command_specs, statement.command, nothing)
+        lastcommand = cmd === nothing ? nothing : cmd.kind
         project_opt = true
-        for t in tokens
-            if t isa Command
-                lastcommand = t.kind
-                break
-            end
-        end
-        for t in tokens
-            if t isa Option && t.kind in [OPT_PROJECT, OPT_MANIFEST]
-                project_opt = t.kind == OPT_PROJECT
+        for opt in statement.options
+            if opt in ["--manifest", "--project", "-m", "-p"]
+                project_opt = opt in ["--project", "-p"]
                 break
             end
         end
@@ -1187,6 +1195,24 @@ command_declarations = CommandDeclaration[
 ]
 
 command_specs = init_command_spec(command_declarations) # TODO should this go here ?
+all_commands_sorted = sort(collect(String,keys(command_specs)))
+long_commands = filter(c -> length(c) > 2, all_commands_sorted)
+function all_options()
+    all_opts = []
+    for command in values(command_specs)
+        for opt_spec in values(command.option_specs)
+            push!(all_opts, opt_spec.name)
+            opt_spec.short_name !== nothing && push!(all_opts, opt_spec.short_name)
+        end
+    end
+    unique!(all_opts)
+    return all_opts
+end
+all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(all_options())]
+long_options = filter(c -> length(c) > 2, all_options_sorted)
+
+println("all_commands_sorted [$(all_commands_sorted)]")
+println("all_options_sorted [$(all_options_sorted)]")
 
 const help = md"""
 
