@@ -538,7 +538,6 @@ end
 
 @testset "`do_generate!` error paths" begin
     with_temp_env() do
-        @test_throws CommandError Pkg.REPLMode.pkgstr("generate @0.0.0")
         @test_throws CommandError Pkg.REPLMode.pkgstr("generate Example Example2")
         @test_throws CommandError Pkg.REPLMode.pkgstr("generate")
     end
