@@ -6,7 +6,7 @@ using UUIDs
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..devdir, ..print_first_command_header, ..Types.casesensitive_isdir, ..TOML
+import ..devdir, ..Types.casesensitive_isdir, ..TOML
 using ..Types, ..Display, ..Operations, ..API
 
 ############
@@ -225,7 +225,6 @@ function parse_quotes(cmd::String)
 end
 
 function tokenize!(words::Vector{<:AbstractString})::Vector{Token}
-    print_first_command_header()
     tokens = Token[]
     help_mode = false
     preview_mode = false
@@ -646,7 +645,6 @@ function do_add_or_develop!(ctx::Context, tokens::Vector{Token}, cmd::CommandKin
         token = popfirst!(tokens)
         if token isa String
             push!(pkgs, parse_package(token; add_or_develop=true))
-            cmd == CMD_DEVELOP && pkgs[end].repo == nothing && (pkgs[end].repo = Types.GitRepo("", ""))
         elseif token isa VersionRange
             pkgs[end].version = VersionSpec(token)
         elseif token isa Rev
