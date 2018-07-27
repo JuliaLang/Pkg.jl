@@ -70,7 +70,7 @@ Add a package to the current project. This package will be available using the
 a package, also inside that package.
 
 # Examples
-```jl
+```julia
 Pkg.add("Example") # Add a package from registry
 Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version
 Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url
@@ -170,7 +170,7 @@ const installed = API.installed
     Pkg.pin(pkgs::Union{Packagespec, Vector{Packagespec}})
 
 Pin a package to the current version (or the one given in the `packagespec` or a certain
-git revision. A pinned package is never be updated.
+git revision. A pinned package is never updated.
 """
 const pin = API.pin
 
@@ -182,7 +182,7 @@ Free a package which removes a `pin` if it exists, or if the package is tracking
 e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
 
 # Examples
-```jl
+```julia
 Pkg.free("Package")
 Pkg.free(PackageSpec("Package"))
 ```
@@ -202,7 +202,7 @@ to the location by the environment variable `JULIA_PKG_DEVDIR` with
 If `pkg` is given as a local path, the package at that path will be tracked.
 
 # Examples
-```jl
+```julia
 # By name
 Pkg.develop("Example")
 
