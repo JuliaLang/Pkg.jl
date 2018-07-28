@@ -6,7 +6,7 @@ using UUIDs
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..devdir, ..print_first_command_header, ..Types.casesensitive_isdir, ..TOML
+import ..devdir, ..Types.casesensitive_isdir, ..TOML
 using ..Types, ..Display, ..Operations, ..API
 
 #################

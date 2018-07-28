@@ -6,7 +6,7 @@ import Random
 import Dates
 import LibGit2
 
-import ..depots, ..logdir, ..devdir, ..print_first_command_header
+import ..depots, ..logdir, ..devdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 
@@ -15,15 +15,24 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 
 include("generate.jl")
 
-parse_package(pkg) = Pkg.REPLMode.parse_package(pkg; add_or_develop=true)
+function check_package_name(x::String)
+    if !(occursin(Pkg.REPLMode.name_re, x))
+         cmderror("$x is not a valid packagename")
+    end
+    return PackageSpec(x)
+end
 
 add_or_develop(pkg::Union{String, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
-add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([parse_package(pkg) for pkg in pkgs]; kwargs...)
+add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([check_package_name(pkg) for pkg in pkgs]; kwargs...)
 add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)       = add_or_develop(Context(), pkgs; kwargs...)
 
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, kwargs...)
-    print_first_command_header()
     Context!(ctx; kwargs...)
+
+    # All developed packages should go through handle_repos_develop so just give them an empty repo
+    for pkg in pkgs
+        mode == :develop && pkg.repo == nothing && (pkg.repo = Types.GitRepo())
+    end
 
     # if julia is passed as a package the solver gets tricked;
     # this catches the error early on
@@ -54,12 +63,10 @@ end
 
 add(args...; kwargs...) = add_or_develop(args...; mode = :add, kwargs...)
 develop(args...; kwargs...) = add_or_develop(args...; mode = :develop, kwargs...)
-@deprecate checkout develop
 
-
-rm(pkg::Union{String, PackageSpec}; kwargs...)               = rm([pkg]; kwargs...)
-rm(pkgs::Vector{String}; kwargs...)      = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-rm(pkgs::Vector{PackageSpec}; kwargs...) = rm(Context(), pkgs; kwargs...)
+rm(pkg::Union{String, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
+rm(pkgs::Vector{String}; kwargs...)            = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+rm(pkgs::Vector{PackageSpec}; kwargs...)       = rm(Context(), pkgs; kwargs...)
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
     for pkg in pkgs
@@ -67,7 +74,6 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
         pkg.mode = mode
     end
 
-    print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     project_deps_resolve!(ctx.env, pkgs)
@@ -184,7 +190,6 @@ pin(pkgs::Vector{String}; kwargs...)            = pin([PackageSpec(pkg) for pkg 
 pin(pkgs::Vector{PackageSpec}; kwargs...)       = pin(Context(), pkgs; kwargs...)
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
-    print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     project_deps_resolve!(ctx.env, pkgs)
@@ -199,7 +204,6 @@ free(pkgs::Vector{String}; kwargs...)            = free([PackageSpec(pkg) for pk
 free(pkgs::Vector{PackageSpec}; kwargs...)       = free(Context(), pkgs; kwargs...)
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
-    print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     registry_resolve!(ctx.env, pkgs)
@@ -231,7 +235,6 @@ test(pkgs::Vector{String}; kwargs...)             = test([PackageSpec(pkg) for p
 test(pkgs::Vector{PackageSpec}; kwargs...)        = test(Context(), pkgs; kwargs...)
 
 function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...)
-    print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     if isempty(pkgs)
@@ -262,7 +265,6 @@ function installed(mode::PackageMode=PKGMODE_MANIFEST)
 end
 
 function gc(ctx::Context=Context(); kwargs...)
-    print_first_command_header()
     function recursive_dir_size(path)
         size = 0
         for (root, dirs, files) in walkdir(path)
@@ -395,13 +397,12 @@ function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}
     return
 end
 
+
 build(pkgs...) = build([PackageSpec(pkg) for pkg in pkgs])
 build(pkg::Array{Union{}, 1}) = build(PackageSpec[])
 build(pkg::PackageSpec) = build([pkg])
 build(pkgs::Vector{PackageSpec}) = build(Context(), pkgs)
-
 function build(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
-    print_first_command_header()
     Context!(ctx; kwargs...)
 
     ctx.preview && preview_info()
@@ -441,7 +442,7 @@ function clone(url::String, name::String = "")
     if !isempty(name)
         ctx.old_pkg2_clone_name = name
     end
-    develop(ctx, [parse_package(url)])
+    develop(ctx, [Pkg.REPLMode.parse_package(url; add_or_develop=true)])
 end
 
 function dir(pkg::String, paths::String...)
@@ -561,6 +562,13 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
     new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=false)
     new_apply = Operations.apply_versions(ctx, pkgs, hashes, urls)
     Operations.build_versions(ctx, union(new_apply, new_git))
+end
+
+
+status(mode=PKGMODE_PROJECT) = status(Context(), mode)
+function status(ctx::Context, mode=PKGMODE_PROJECT)
+    Pkg.Display.status(ctx, mode)
+    return
 end
 
 function activate(path::Union{String,Nothing}=nothing)
