@@ -150,7 +150,7 @@ end
 function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
     word = replace(word, "~" => homedir())
     if add_or_develop && casesensitive_isdir(word)
-        return PackageSpec(Types.GitRepo(abspath(word)))
+        return PackageSpec(Types.GitRepo(word))
     elseif occursin(uuid_re, word)
         return PackageSpec(UUID(word))
     elseif occursin(name_re, word)
@@ -598,7 +598,7 @@ function do_activate!(ctx::Context, command::PkgCommand)
     if env !== nothing && haskey(env.project["deps"], path)
         uuid = UUID(env.project["deps"][path])
         info = manifest_info(env, uuid)
-        devpath = haskey(info, "path") ? info["path"] : nothing
+        devpath = haskey(info, "path") ? joinpath(dirname(env.project_file), info["path"]) : nothing
     end
     # `pkg> activate path` does the following
     # 1. if path exists, activate that
