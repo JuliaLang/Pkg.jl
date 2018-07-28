@@ -537,7 +537,7 @@ function do_help!(ctk::Context, command::PkgCommand, repl::REPL.AbstractREPL)
 end
 
 # TODO set default Display.status keyword: mode = PKGMODE_COMBINED
-function get_api_key(key::Symbol, api_opts::Vector{Pair{Symbol, Any}})
+function key_api(key::Symbol, api_opts::Vector{Pair{Symbol, Any}})
     index = findfirst(x->x.first == key, api_opts)
     if index !== nothing
         return api_opts[index].second
@@ -545,12 +545,12 @@ function get_api_key(key::Symbol, api_opts::Vector{Pair{Symbol, Any}})
 end
 
 set_default_key!(opt, api_opts::Vector{Pair{Symbol, Any}}) =
-    get_api_key(opt.first, api_opts) === nothing && push!(api_opts, opt)
+    key_api(opt.first, api_opts) === nothing && push!(api_opts, opt)
 
 function do_status!(ctx::Context, command::PkgCommand)
     api_opts = get_api_opts(command)
     set_default_key!(:mode => PKGMODE_COMBINED, api_opts)
-    Display.status(ctx, get_api_key(:mode, api_opts))
+    Display.status(ctx, key_api(:mode, api_opts))
 end
 
 # TODO remove the need to specify a handler function (not needed for REPL commands)
