@@ -733,4 +733,39 @@ end
     @test_throws CommandError Pkg.REPLMode.group_words([";", "add", "Example"])
 end
 
+@testset "tests for api opts" begin
+    specs = Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[
+        (["project", "p"], Pkg.REPLMode.OPT_SWITCH, :mode => Pkg.Types.PKGMODE_PROJECT),
+        (["manifest", "m"], Pkg.REPLMode.OPT_SWITCH, :mode => Pkg.Types.PKGMODE_MANIFEST),
+        ("major", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_MAJOR),
+        ("minor", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_MINOR),
+        ("patch", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_PATCH),
+        ("fixed", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_FIXED),
+        ("rawnum", Pkg.REPLMode.OPT_ARG, :num => nothing),
+        ("plus", Pkg.REPLMode.OPT_ARG, :num => x->parse(Int,x)+1),
+    ])
+
+    api_opts = Pkg.REPLMode.get_api_opts([
+        Pkg.REPLMode.Option("manifest"),
+        Pkg.REPLMode.Option("patch"),
+        Pkg.REPLMode.Option("rawnum", "5"),
+    ], specs)
+
+    @test Pkg.REPLMode.key_api(:foo, api_opts) === nothing
+    @test Pkg.REPLMode.key_api(:mode, api_opts) == Pkg.Types.PKGMODE_MANIFEST
+    @test Pkg.REPLMode.key_api(:level, api_opts) == Pkg.Types.UPLEVEL_PATCH
+    @test Pkg.REPLMode.key_api(:num, api_opts) == "5"
+
+    api_opts = Pkg.REPLMode.get_api_opts([
+        Pkg.REPLMode.Option("project"),
+        Pkg.REPLMode.Option("patch"),
+        Pkg.REPLMode.Option("plus", "5"),
+    ], specs)
+
+    @test Pkg.REPLMode.key_api(:foo, api_opts) === nothing
+    @test Pkg.REPLMode.key_api(:mode, api_opts) == Pkg.Types.PKGMODE_PROJECT
+    @test Pkg.REPLMode.key_api(:level, api_opts) == Pkg.Types.UPLEVEL_PATCH
+    @test Pkg.REPLMode.key_api(:num, api_opts) == 6
+end
+
 end # module
