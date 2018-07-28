@@ -1211,9 +1211,6 @@ end
 all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(all_options())]
 long_options = filter(c -> length(c) > 2, all_options_sorted)
 
-println("all_commands_sorted [$(all_commands_sorted)]")
-println("all_options_sorted [$(all_options_sorted)]")
-
 const help = md"""
 
 **Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
