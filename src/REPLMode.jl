@@ -219,6 +219,8 @@ function Statement(words)
     return statement
 end
 
+# break up words according to `;`(doing this early makes subsequent processing easier)
+# the final group does not require a trailing `;`
 function group_words(words)::Vector{Vector{String}}
     statements = Vector{String}[]
     x = String[]

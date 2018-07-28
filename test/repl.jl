@@ -714,4 +714,23 @@ end
     end
 end
 
+@testset "unit tests for `group_words`" begin
+    # simple
+    groups = Pkg.REPLMode.group_words(["add", "Example"])
+    @test length(groups) == 1
+    @test groups[1][1] == "add"
+    @test groups[1][2] == "Example"
+    # statement break
+    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b"])
+    @test length(groups) == 2
+    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b", ";", "d"])
+    @test length(groups) == 3
+    # trailing statement break
+    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b", ";"])
+    @test length(groups) == 2
+    # errors
+    @test_throws CommandError Pkg.REPLMode.group_words(["a", "b", ";", ";", "a", "b"])
+    @test_throws CommandError Pkg.REPLMode.group_words([";", "add", "Example"])
+end
+
 end # module
