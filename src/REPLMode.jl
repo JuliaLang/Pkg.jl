@@ -1028,13 +1028,18 @@ command_declarations = CommandDeclaration[
         ["develop", "dev"],
         do_develop!,
         (ARG_ALL, []),
-        [],
+        [
+            ("local", OPT_SWITCH, :devdir => true),
+            ("shared", OPT_SWITCH, :devdir => false),
+        ],
         md"""
-        develop pkg[=uuid] [#rev] ...
+        develop [--shared|--local] pkg[=uuid] [#rev] ...
 
     Make a package available for development. If `pkg` is an existing local path that path will be recorded in
-    the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The clone is stored in `devdir`,
-    which defaults to `~/.julia/dev` and is set by the environment variable `JULIA_PKG_DEVDIR`.
+    the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The location of the clone is
+    controlled by the `--shared` (default) and `--local` arguments. The `--shared` location defaults to
+    `~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable. When `--local` is given,
+    the clone is placed in a `dev` folder in the current project.
     This operation is undone by `free`.
 
     *Example*
@@ -1043,6 +1048,7 @@ command_declarations = CommandDeclaration[
     pkg> develop Example#master
     pkg> develop Example#c37b675
     pkg> develop https://github.com/JuliaLang/Example.jl#master
+    pkg> develop --local Example
     ```
         """,
     ),( CMD_FREE,
