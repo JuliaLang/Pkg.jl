@@ -632,8 +632,6 @@ end
 function do_develop!(ctx::Context, command::PkgCommand)
     api_opts = get_api_opts(command)
     push!(api_opts, :mode => :develop)
-    foreach(pkg->pkg.repo === nothing && (pkg.repo = Types.GitRepo("", "")),
-            command.arguments)
     return API.add_or_develop(ctx, command.arguments; api_opts...)
 end
 
