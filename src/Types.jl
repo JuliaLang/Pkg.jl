@@ -480,7 +480,7 @@ end
 
 casesensitive_isdir(dir::String) = isdir_windows_workaround(dir) && dir in readdir(joinpath(dir, ".."))
 
-function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
+function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, devdir::String)
     Base.shred!(LibGit2.CachedCredentials()) do creds
         env = ctx.env
         new_uuids = UUID[]
@@ -546,7 +546,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec})
                 end
 
                 parse_package!(ctx, pkg, project_path)
-                dev_pkg_path = joinpath(Pkg.devdir(), pkg.name)
+                dev_pkg_path = joinpath(devdir, pkg.name)
                 if isdir(dev_pkg_path)
                     if !isfile(joinpath(dev_pkg_path, "src", pkg.name * ".jl"))
                         cmderror("Path `$(dev_pkg_path)` exists but it does not contain `src/$(pkg.name).jl")
