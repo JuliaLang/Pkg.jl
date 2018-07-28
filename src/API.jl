@@ -155,7 +155,6 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         pkg.version = level
     end
 
-    print_first_command_header()
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     do_update_registry && update_registry(ctx)
