@@ -277,7 +277,7 @@ function parse_quotes(cmd::String)::Vector{QuotedWord}
         end
     end
     if (in_doublequote || in_singlequote)
-        ArgumentError("unterminated quote")
+        cmderror("unterminated quote")
     else
         push_token!(false)
     end

@@ -807,4 +807,55 @@ end
     @test Pkg.REPLMode.key_api(:num, api_opts) == 6
 end
 
+@testset "meta option errors" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        # unregistered meta options
+        @test_throws CommandError Pkg.REPLMode.pkgstr("--foo=foo add Example")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("--bar add Example")
+        @test_throws CommandError Pkg.REPLMode.pkgstr("-x add Example")
+        # malformed, but registered meta option
+        @test_throws CommandError Pkg.REPLMode.pkgstr("--env Example")
+    end
+    end
+    end
+end
+
+@testset "activate" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        mkdir("Foo")
+        pkg"activate"
+        default = Base.active_project()
+        pkg"activate Foo"
+        @test Base.active_project() == joinpath(pwd(), "Foo", "Project.toml")
+        pkg"activate"
+        @test Base.active_project() == default
+    end
+    end
+    end
+end
+
+@testset "`parse_quotes` unit tests" begin
+    qwords = Pkg.REPLMode.parse_quotes("\"Don't\" forget to '\"test\"'")
+    @test qwords[1].isquoted
+    @test qwords[1].word == "Don't"
+    @test !qwords[2].isquoted
+    @test qwords[2].word == "forget"
+    @test !qwords[3].isquoted
+    @test qwords[3].word == "to"
+    @test qwords[4].isquoted
+    @test qwords[4].word == "\"test\""
+    @test_throws CommandError Pkg.REPLMode.parse_quotes("Don't")
+    @test_throws CommandError Pkg.REPLMode.parse_quotes("Unterminated \"quote") #"
+end
+
+@testset "argument kinds" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        @test_throws CommandError pkg"pin Example#foo"
+        @test_throws CommandError pkg"test Example#foo"
+        @test_throws CommandError pkg"test Example@v0.0.1"
+    end
+    end
+    end
+end
+
 end # module
