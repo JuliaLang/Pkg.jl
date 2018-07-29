@@ -365,11 +365,11 @@ for i = 1:16
             Pkg.activate(pkg_path)
             # add an example project to populate manifest file
             Pkg.add("Example")
+            Pkg.activate(default)
             # change away from default names
             mv(joinpath(pkg_path, "Project.toml"), joinpath(pkg_path, "JuliaProject.toml"))
             mv(joinpath(pkg_path, "Manifest.toml"), joinpath(pkg_path, "JuliaManifest.toml"))
             # make sure things still work
-            Pkg.activate(default)
             Pkg.develop(PackageSpec(url = pkg_path))
             @test isinstalled((name=pkg_name, uuid=UUID(uuid)))
             Pkg.rm(pkg_name)
