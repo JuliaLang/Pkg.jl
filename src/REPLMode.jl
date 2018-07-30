@@ -116,7 +116,7 @@ end
 command_specs = Dict{String,CommandSpec}() # TODO remove this ?
 
 # populate a dictionary: command_name -> command_spec
-function init_command_spec(declarations::Vector{CommandDeclaration})::Dict{String,CommandSpec}
+function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,CommandSpec}
     specs = Dict()
     for dec in declarations
         names = dec[2]
@@ -455,7 +455,7 @@ function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec}, c
 end
 
 # this the entry point for the majority of input checks
-function PkgCommand(statement::Statement)
+function PkgCommand(statement::Statement)::PkgCommand
     meta_opts = enforce_meta_options(statement.meta_options,
                                      meta_option_specs)
     args = enforce_args(statement.arguments,
@@ -1200,7 +1200,7 @@ command_declarations = CommandDeclaration[
     ),
 ]
 
-command_specs = init_command_spec(command_declarations) # TODO should this go here ?
+command_specs = CommandSpecs(command_declarations) # TODO should this go here ?
 all_commands_sorted = sort(collect(String,keys(command_specs)))
 long_commands = filter(c -> length(c) > 2, all_commands_sorted)
 function all_options()
