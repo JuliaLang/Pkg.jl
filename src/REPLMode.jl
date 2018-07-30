@@ -520,11 +520,7 @@ function do_cmd!(command::PkgCommand, repl)
 
     # API commands
     # TODO is invokelatest still needed?
-    if applicable(spec.handler, ctx, command)
-        Base.invokelatest(spec.handler, ctx, command)
-    else
-        Base.invokelatest(spec.handler, command)
-    end
+    Base.invokelatest(spec.handler, ctx, command.arguments, APIOptions(command))
 end
 
 function do_help!(ctk::Context, command::PkgCommand, repl::REPL.AbstractREPL)
@@ -548,52 +544,53 @@ function do_help!(ctk::Context, command::PkgCommand, repl::REPL.AbstractREPL)
 end
 
 # TODO set default Display.status keyword: mode = PKGMODE_COMBINED
-function do_status!(ctx::Context, command::PkgCommand)
-    api_opts = APIOptions(command)
+function do_status!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
     set_default!(:mode => PKGMODE_COMBINED, api_opts)
     Display.status(ctx, key_api(:mode, api_opts))
 end
 
 # TODO remove the need to specify a handler function (not needed for REPL commands)
-do_preview!(ctx::Context, command::PkgCommand) = nothing
+do_preview!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) = nothing
 
 # TODO , test recursive dependencies as on option.
-function do_test!(ctx::Context, command::PkgCommand)
-    foreach(arg -> arg.mode = PKGMODE_MANIFEST, command.arguments)
-    API.test(ctx, command.arguments; APIOptions(command)...)
+function do_test!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
+    foreach(arg -> arg.mode = PKGMODE_MANIFEST, args)
+    API.test(ctx, args; api_opts...)
 end
 
-do_precompile!(ctx::Context, command::PkgCommand) = API.precompile(ctx)
+do_precompile!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.precompile(ctx)
 
-do_resolve!(ctx::Context, command::PkgCommand) = API.resolve(ctx)
+do_resolve!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.resolve(ctx)
 
-do_gc!(ctx::Context, command::PkgCommand) =
-    API.gc(ctx; APIOptions(command)...)
+do_gc!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.gc(ctx; api_opts...)
 
-do_instantiate!(ctx::Context, command::PkgCommand) =
-    API.instantiate(ctx; APIOptions(command)...)
+do_instantiate!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.instantiate(ctx; api_opts...)
 
-do_generate!(ctx::Context, command::PkgCommand) =
-    API.generate(ctx, command.arguments[1])
+do_generate!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.generate(ctx, args[1])
 
-do_build!(ctx::Context, command::PkgCommand) =
-    API.build(ctx, command.arguments, APIOptions(command)...)
+do_build!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.build(ctx, args; api_opts...)
 
-do_rm!(ctx::Context, command::PkgCommand) =
-    API.rm(ctx, command.arguments; APIOptions(command)...)
+do_rm!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.rm(ctx, args; api_opts...)
 
-do_free!(ctx::Context, command::PkgCommand) =
-    API.free(ctx, command.arguments; APIOptions(command)...)
+do_free!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.free(ctx, args; api_opts...)
 
-do_up!(ctx::Context, command::PkgCommand) =
-    API.up(ctx, command.arguments; APIOptions(command)...)
+do_up!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
+    API.up(ctx, args; api_opts...)
 
-function do_activate!(ctx::Context, command::PkgCommand)
-    if isempty(command.arguments)
+function do_activate!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
+    if isempty(args)
         return API.activate()
     end
 
-    path = command.arguments[1]
+    path = args[1]
     env = Base.active_project() === nothing ? nothing : ctx.env
     devpath = nothing
     if env !== nothing && haskey(env.project["deps"], path)
@@ -614,26 +611,24 @@ function do_activate!(ctx::Context, command::PkgCommand)
     end
 end
 
-function do_pin!(ctx::Context, command::PkgCommand)
-    for arg in command.arguments
+function do_pin!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
+    for arg in args
         # TODO not sure this is correct
         if arg.version.ranges[1].lower != arg.version.ranges[1].upper
             cmderror("pinning a package requires a single version, not a versionrange")
         end
     end
-    API.pin(ctx, command.arguments; APIOptions(command)...)
+    API.pin(ctx, args; api_opts...)
 end
 
-function do_add!(ctx::Context, command::PkgCommand)
-    api_opts = APIOptions(command)
+function do_add!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
     push!(api_opts, :mode => :add)
-    return API.add_or_develop(ctx, command.arguments; api_opts...)
+    API.add_or_develop(ctx, args; api_opts...)
 end
 
-function do_develop!(ctx::Context, command::PkgCommand)
-    api_opts = APIOptions(command)
+function do_develop!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
     push!(api_opts, :mode => :develop)
-    return API.add_or_develop(ctx, command.arguments; api_opts...)
+    API.add_or_develop(ctx, args; api_opts...)
 end
 
 ######################
