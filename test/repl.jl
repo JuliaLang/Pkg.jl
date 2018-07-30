@@ -784,7 +784,7 @@ end
         ("plus", Pkg.REPLMode.OPT_ARG, :num => x->parse(Int,x)+1),
     ])
 
-    api_opts = Pkg.REPLMode.get_api_opts([
+    api_opts = Pkg.REPLMode.APIOptions([
         Pkg.REPLMode.Option("manifest"),
         Pkg.REPLMode.Option("patch"),
         Pkg.REPLMode.Option("rawnum", "5"),
@@ -795,7 +795,7 @@ end
     @test Pkg.REPLMode.key_api(:level, api_opts) == Pkg.Types.UPLEVEL_PATCH
     @test Pkg.REPLMode.key_api(:num, api_opts) == "5"
 
-    api_opts = Pkg.REPLMode.get_api_opts([
+    api_opts = Pkg.REPLMode.APIOptions([
         Pkg.REPLMode.Option("project"),
         Pkg.REPLMode.Option("patch"),
         Pkg.REPLMode.Option("plus", "5"),
