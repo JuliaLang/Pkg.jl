@@ -801,10 +801,15 @@ end
         Pkg.REPLMode.Option("plus", "5"),
     ], specs)
 
-    @test Pkg.REPLMode.key_api(:foo, api_opts) === nothing
     @test Pkg.REPLMode.key_api(:mode, api_opts) == Pkg.Types.PKGMODE_PROJECT
     @test Pkg.REPLMode.key_api(:level, api_opts) == Pkg.Types.UPLEVEL_PATCH
     @test Pkg.REPLMode.key_api(:num, api_opts) == 6
+
+    @test Pkg.REPLMode.key_api(:foo, api_opts) === nothing
+    Pkg.REPLMode.set_default!(:foo => "bar", api_opts)
+    @test Pkg.REPLMode.key_api(:foo, api_opts) == "bar"
+    Pkg.REPLMode.set_default!(:level => "bar", api_opts)
+    @test Pkg.REPLMode.key_api(:level, api_opts) == Pkg.Types.UPLEVEL_PATCH
 end
 
 @testset "meta option errors" begin
@@ -845,7 +850,7 @@ end
     @test qwords[4].isquoted
     @test qwords[4].word == "\"test\""
     @test_throws CommandError Pkg.REPLMode.parse_quotes("Don't")
-    @test_throws CommandError Pkg.REPLMode.parse_quotes("Unterminated \"quote") #"
+    @test_throws CommandError Pkg.REPLMode.parse_quotes("Unterminated \"quot")
 end
 
 @testset "argument kinds" begin
