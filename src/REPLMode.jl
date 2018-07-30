@@ -301,12 +301,13 @@ struct PkgCommand
     PkgCommand(meta_opts, cmd_name, opts, args) = new(meta_opts, cmd_name, opts, args)
 end
 
-get_api_opts(command::PkgCommand)::Vector{Pair{Symbol,Any}} =
-    get_api_opts(command.options, command_specs[command.name].option_specs)
+const APIOption = Pair{Symbol, Any}
+APIOptions(command::PkgCommand)::Vector{APIOption} =
+    APIOptions(command.options, command_specs[command.name].option_specs)
 
-function get_api_opts(options::Vector{Option},
-                      specs::Dict{String, OptionSpec},
-                      )::Vector{Pair{Symbol,Any}}
+function APIOptions(options::Vector{Option},
+                    specs::Dict{String, OptionSpec},
+                    )::Vector{APIOption}
     return map(options) do opt
         spec = specs[opt.val]
         # opt is switch
@@ -317,6 +318,16 @@ function get_api_opts(options::Vector{Option},
         return spec.api.first => spec.api.second(opt.argument)
     end
 end
+
+function key_api(key::Symbol, api_opts::Vector{APIOption})
+    index = findfirst(x->x.first == key, api_opts)
+    if index !== nothing
+        return api_opts[index].second
+    end
+end
+
+set_default!(opt, api_opts::Vector{APIOption}) =
+    key_api(opt.first, api_opts) === nothing && push!(api_opts, opt)
 
 function enforce_argument_order(args::Vector{Token})
     prev_arg = nothing
@@ -490,7 +501,7 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
 end
 
 function do_cmd!(command::PkgCommand, repl)
-    meta_opts = get_api_opts(command.meta_options, meta_option_specs)
+    meta_opts = APIOptions(command.meta_options, meta_option_specs)
     ctx = Context(meta_opts...)
     spec = command_specs[command.name]
 
@@ -537,19 +548,9 @@ function do_help!(ctk::Context, command::PkgCommand, repl::REPL.AbstractREPL)
 end
 
 # TODO set default Display.status keyword: mode = PKGMODE_COMBINED
-function key_api(key::Symbol, api_opts::Vector{Pair{Symbol, Any}})
-    index = findfirst(x->x.first == key, api_opts)
-    if index !== nothing
-        return api_opts[index].second
-    end
-end
-
-set_default_key!(opt, api_opts::Vector{Pair{Symbol, Any}}) =
-    key_api(opt.first, api_opts) === nothing && push!(api_opts, opt)
-
 function do_status!(ctx::Context, command::PkgCommand)
-    api_opts = get_api_opts(command)
-    set_default_key!(:mode => PKGMODE_COMBINED, api_opts)
+    api_opts = APIOptions(command)
+    set_default!(:mode => PKGMODE_COMBINED, api_opts)
     Display.status(ctx, key_api(:mode, api_opts))
 end
 
@@ -559,7 +560,7 @@ do_preview!(ctx::Context, command::PkgCommand) = nothing
 # TODO , test recursive dependencies as on option.
 function do_test!(ctx::Context, command::PkgCommand)
     foreach(arg -> arg.mode = PKGMODE_MANIFEST, command.arguments)
-    API.test(ctx, command.arguments; get_api_opts(command)...)
+    API.test(ctx, command.arguments; APIOptions(command)...)
 end
 
 do_precompile!(ctx::Context, command::PkgCommand) = API.precompile(ctx)
@@ -567,25 +568,25 @@ do_precompile!(ctx::Context, command::PkgCommand) = API.precompile(ctx)
 do_resolve!(ctx::Context, command::PkgCommand) = API.resolve(ctx)
 
 do_gc!(ctx::Context, command::PkgCommand) =
-    API.gc(ctx; get_api_opts(command)...)
+    API.gc(ctx; APIOptions(command)...)
 
 do_instantiate!(ctx::Context, command::PkgCommand) =
-    API.instantiate(ctx; get_api_opts(command)...)
+    API.instantiate(ctx; APIOptions(command)...)
 
 do_generate!(ctx::Context, command::PkgCommand) =
     API.generate(ctx, command.arguments[1])
 
 do_build!(ctx::Context, command::PkgCommand) =
-    API.build(ctx, command.arguments, get_api_opts(command)...)
+    API.build(ctx, command.arguments, APIOptions(command)...)
 
 do_rm!(ctx::Context, command::PkgCommand) =
-    API.rm(ctx, command.arguments; get_api_opts(command)...)
+    API.rm(ctx, command.arguments; APIOptions(command)...)
 
 do_free!(ctx::Context, command::PkgCommand) =
-    API.free(ctx, command.arguments; get_api_opts(command)...)
+    API.free(ctx, command.arguments; APIOptions(command)...)
 
 do_up!(ctx::Context, command::PkgCommand) =
-    API.up(ctx, command.arguments; get_api_opts(command)...)
+    API.up(ctx, command.arguments; APIOptions(command)...)
 
 function do_activate!(ctx::Context, command::PkgCommand)
     if isempty(command.arguments)
@@ -620,17 +621,17 @@ function do_pin!(ctx::Context, command::PkgCommand)
             cmderror("pinning a package requires a single version, not a versionrange")
         end
     end
-    API.pin(ctx, command.arguments; get_api_opts(command)...)
+    API.pin(ctx, command.arguments; APIOptions(command)...)
 end
 
 function do_add!(ctx::Context, command::PkgCommand)
-    api_opts = get_api_opts(command)
+    api_opts = APIOptions(command)
     push!(api_opts, :mode => :add)
     return API.add_or_develop(ctx, command.arguments; api_opts...)
 end
 
 function do_develop!(ctx::Context, command::PkgCommand)
-    api_opts = get_api_opts(command)
+    api_opts = APIOptions(command)
     push!(api_opts, :mode => :develop)
     return API.add_or_develop(ctx, command.arguments; api_opts...)
 end
