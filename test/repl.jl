@@ -550,11 +550,11 @@ end
 
         newname = "NewName"
         set_name(projfile_path, newname)
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
