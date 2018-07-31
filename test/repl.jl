@@ -75,15 +75,15 @@ end
 
 @testset "tokens" begin
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git")[1]
-    @test statement.command == "add"
+    @test "add" in statement.command.names
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#master")[1]
-    @test statement.command == "add"
+    @test "add" in statement.command.names
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "#master"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#c37b675")[1]
-    @test statement.command == "add"
+    @test "add" in statement.command.names
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "#c37b675"
@@ -91,7 +91,7 @@ end
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "@v0.5.0"
     statement = Pkg.REPLMode.parse("add git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git@0.5.0")[1]
-    @test statement.command == "add"
+    @test "add" in statement.command.names
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git"
     @test statement.arguments[2] == "@0.5.0"
@@ -598,55 +598,55 @@ end
     @test isempty(Pkg.REPLMode.parse(""))
 
     statement = Pkg.REPLMode.parse("up")[1]
-    @test statement.command == "up"
+    @test statement.command.kind == Pkg.REPLMode.CMD_UP
     @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test isempty(statement.arguments)
 
     statement = Pkg.REPLMode.parse("dev Example")[1]
-    @test statement.command == "dev"
+    @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example"]
 
     statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
-    @test statement.command == "dev"
+    @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "#bar"]
 
     statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
-    @test statement.command == "dev"
+    @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "Example", "@v0.0.1"]
 
     statement = Pkg.REPLMode.parse("--one -t add --first --second arg1")[1]
-    @test statement.command == "add"
+    @test statement.command.kind == Pkg.REPLMode.CMD_ADD
     @test statement.meta_options == ["--one", "-t"]
     @test statement.options == ["--first", "--second"]
     @test statement.arguments == ["arg1"]
 
     statements = Pkg.REPLMode.parse("--one -t add --first -o arg1; --meta pin -x -a arg0 Example")
-    @test statements[1].command == "add"
+    @test statements[1].command.kind == Pkg.REPLMode.CMD_ADD
     @test statements[1].meta_options == ["--one", "-t"]
     @test statements[1].options == ["--first", "-o"]
     @test statements[1].arguments == ["arg1"]
-    @test statements[2].command == "pin"
+    @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
     @test statements[2].meta_options == ["--meta"]
     @test statements[2].options == ["-x", "-a"]
     @test statements[2].arguments == ["arg0", "Example"]
 
     statements = Pkg.REPLMode.parse("up; --meta -x pin --first; dev")
-    @test statements[1].command == "up"
+    @test statements[1].command.kind == Pkg.REPLMode.CMD_UP
     @test isempty(statements[1].meta_options)
     @test isempty(statements[1].options)
     @test isempty(statements[1].arguments)
-    @test statements[2].command == "pin"
+    @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
     @test statements[2].meta_options == ["--meta", "-x"]
     @test statements[2].options == ["--first"]
     @test isempty(statements[2].arguments)
-    @test statements[3].command == "dev"
+    @test statements[3].command.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statements[3].meta_options)
     @test isempty(statements[3].options)
     @test isempty(statements[3].arguments)
@@ -834,6 +834,17 @@ end
         @test Base.active_project() == joinpath(pwd(), "Foo", "Project.toml")
         pkg"activate"
         @test Base.active_project() == default
+    end
+    end
+    end
+end
+
+@testset "subcommands" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do
+        Pkg.REPLMode.pkg"package add Example"
+        @test isinstalled(TEST_PKG)
+        Pkg.REPLMode.pkg"package rm Example"
+        @test !isinstalled(TEST_PKG)
     end
     end
     end

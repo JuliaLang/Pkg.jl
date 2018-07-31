@@ -91,7 +91,8 @@ meta_option_specs = OptionSpecs(meta_option_declarations)
 @enum(CommandKind, CMD_HELP, CMD_RM, CMD_ADD, CMD_DEVELOP, CMD_UP,
                    CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
                    CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
-                   CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW
+                   CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW,
+                   CMD_REGISTRY_ADD,
                    )
 @enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
 struct ArgSpec
@@ -115,6 +116,18 @@ struct CommandSpec
 end
 command_specs = Dict{String,CommandSpec}() # TODO remove this ?
 
+function SuperSpecs(foo)::Dict{String,Dict{String,CommandSpec}}
+    super_specs = Dict()
+    for x in foo
+        sub_specs = CommandSpecs(x.second)
+        for name in x.first
+            @assert get(super_specs, name, nothing) === nothing
+            super_specs[name] = sub_specs
+        end
+    end
+    return super_specs
+end
+
 # populate a dictionary: command_name -> command_spec
 function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,CommandSpec}
     specs = Dict()
@@ -128,7 +141,7 @@ function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,Com
                            dec[end])
         for name in names
             # TODO regex check name
-            @assert get(specs, name, nothing) === nothing # don't overwrite
+            @assert get(specs, name, nothing) === nothing
             specs[name] = spec
         end
     end
@@ -170,11 +183,11 @@ end
 # REPL parsing #
 ################
 mutable struct Statement
-    command::String
+    command::Union{Nothing,CommandSpec}
     options::Vector{String}
     arguments::Vector{String}
     meta_options::Vector{String}
-    Statement() = new("", [], [], [])
+    Statement() = new(nothing, [], [], [])
 end
 
 struct QuotedWord
@@ -201,17 +214,24 @@ end
 function Statement(words)
     is_option(word) = first(word) == '-'
     statement = Statement()
-    word = popfirst!(words)
 
+    word = popfirst!(words)
     # meta options
     while is_option(word)
         push!(statement.meta_options, word)
         isempty(words) && cmderror("no command specified")
         word = popfirst!(words)
     end
-    # command name
-    word in keys(command_specs) || cmderror("expected command. instead got [$word]")
-    statement.command = word
+    # command
+    if word in keys(super_specs)
+        super = super_specs[word]
+        word = popfirst!(words)
+    else
+        super = super_specs["package"]
+    end
+    command = get(super, word, nothing)
+    command !== nothing || cmderror("expected command. instead got [$word]")
+    statement.command = command
     # command arguments
     for word in words
         push!((is_option(word) ? statement.options : statement.arguments), word)
@@ -294,7 +314,7 @@ const PkgArguments = Union{Vector{String}, Vector{PackageSpec}}
 #TODO embed spec in PkgCommand?
 struct PkgCommand
     meta_options::Vector{Option}
-    name::String
+    spec::CommandSpec
     options::Vector{Option}
     arguments::PkgArguments
     PkgCommand() = new([], "", [], [])
@@ -303,7 +323,7 @@ end
 
 const APIOption = Pair{Symbol, Any}
 APIOptions(command::PkgCommand)::Vector{APIOption} =
-    APIOptions(command.options, command_specs[command.name].option_specs)
+    APIOptions(command.options, command.spec.option_specs)
 
 function APIOptions(options::Vector{Option},
                     specs::Dict{String, OptionSpec},
@@ -375,11 +395,11 @@ function enforce_arg_spec(raw_args::Vector{String}, class::ArgClass)
     return args
 end
 
-function package_args(args::Vector{Token}, cmd::String)::Vector{PackageSpec}
+function package_args(args::Vector{Token}, spec::CommandSpec)::Vector{PackageSpec}
     pkgs = PackageSpec[]
     for arg in args
         if arg isa String
-            is_add_or_develop = command_specs[cmd].kind in (CMD_ADD, CMD_DEVELOP)
+            is_add_or_develop = spec.kind in (CMD_ADD, CMD_DEVELOP)
             push!(pkgs, parse_package(arg; add_or_develop=is_add_or_develop))
         elseif arg isa VersionRange
             pkgs[end].version = arg
@@ -403,7 +423,7 @@ function enforce_arg_count(count::Vector{Int}, args::PkgArguments)
         cmderror("Wrong number of arguments")
 end
 
-function enforce_args(raw_args::Vector{String}, spec::ArgSpec, cmd::String)::PkgArguments
+function enforce_args(raw_args::Vector{String}, spec::ArgSpec, cmd_spec::CommandSpec)::PkgArguments
     if spec.class == ARG_RAW
         enforce_arg_count(spec.count, raw_args)
         return raw_args
@@ -411,7 +431,7 @@ function enforce_args(raw_args::Vector{String}, spec::ArgSpec, cmd::String)::Pkg
 
     args = enforce_arg_spec(raw_args, spec.class)
     enforce_argument_order(args)
-    pkgs = package_args(args, cmd)
+    pkgs = package_args(args, cmd_spec)
     enforce_arg_count(spec.count, pkgs)
     return pkgs
 end
@@ -442,17 +462,17 @@ function enforce_meta_options(options::Vector{String}, specs::Dict{String,Option
     end
 end
 
-function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec}, cmd::String)::Vector{Option}
+function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
     unique_keys = Symbol[]
     get_key(opt::Option) = specs[opt.val].api.first
 
     # final parsing
-    toks = map(x->enforce_option(x,specs), options)
+    toks = map(x->enforce_option(x,specs),options)
     # checking
     for opt in toks
         # valid option
         opt.val in keys(specs) ||
-            cmderror("option '$(opt.val)' is not supported by command '$cmd'")
+            cmderror("option '$(opt.val)' is not supported")
         # conflicting options
         key = get_key(opt)
         if key in unique_keys
@@ -470,11 +490,9 @@ function PkgCommand(statement::Statement)::PkgCommand
     meta_opts = enforce_meta_options(statement.meta_options,
                                      meta_option_specs)
     args = enforce_args(statement.arguments,
-                        command_specs[statement.command].argument_spec,
+                        statement.command.argument_spec,
                         statement.command)
-    opts = enforce_opts(statement.options,
-                        command_specs[statement.command].option_specs,
-                        statement.command)
+    opts = enforce_opts(statement.options, statement.command.option_specs)
     return PkgCommand(meta_opts, statement.command, opts, args)
 end
 
@@ -503,7 +521,7 @@ end
 function do_cmd!(command::PkgCommand, repl)
     meta_opts = APIOptions(command.meta_options, meta_option_specs)
     ctx = Context(meta_opts...)
-    spec = command_specs[command.name]
+    spec = command.spec
 
     # REPL specific commands
     if spec.kind == CMD_HELP
@@ -556,6 +574,14 @@ do_preview!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) = not
 function do_test!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
     foreach(arg -> arg.mode = PKGMODE_MANIFEST, args)
     API.test(ctx, args; api_opts...)
+end
+
+function do_registry_add!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
+    println("This is a dummy function for now")
+    println("My args are:")
+    for arg in args
+        println("- $arg")
+    end
 end
 
 do_precompile!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption}) =
@@ -673,7 +699,6 @@ function all_options()
             push!(all_opts, opt_spec.name)
             opt_spec.short_name !== nothing && push!(all_opts, opt_spec.short_name)
         end
-        println("all_opts: [$(all_opts)]")
     end
     unique!(all_opts)
     return all_opts
@@ -770,8 +795,7 @@ function completions(full, index)
             return String[], 0:-1, false
         end
 
-        cmd = get(command_specs, statement.command, nothing)
-        lastcommand = cmd === nothing ? nothing : cmd.kind
+        lastcommand = statement.command.kind
         project_opt = true
         for opt in statement.options
             if opt in ["--manifest", "--project", "-m", "-p"]
@@ -910,293 +934,307 @@ end
 ########
 # SPEC #
 ########
-command_declarations = CommandDeclaration[
-    (   CMD_TEST,
-        ["test"],
-        do_test!,
-        (ARG_PKG, []),
-        [
-            ("coverage", OPT_SWITCH, :coverage => true),
-        ],
-        md"""
+command_declarations = [
+["registry"] => CommandDeclaration[
+(
+    CMD_REGISTRY_ADD,
+    ["add"],
+    do_registry_add!,
+    (ARG_PKG, []),
+    [],
+    nothing,
+),
+], #registry
 
-        test [opts] pkg[=uuid] ...
+["package"] => CommandDeclaration[
+(   CMD_TEST,
+    ["test"],
+    do_test!,
+    (ARG_PKG, []),
+    [
+        ("coverage", OPT_SWITCH, :coverage => true),
+    ],
+    md"""
 
-        opts: --coverage
+    test [opts] pkg[=uuid] ...
 
-    Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
-    in the package directory. The option `--coverage` can be used to run the tests with
-    coverage enabled. The `startup.jl` file is disabled during testing unless
-    julia is started with `--startup-file=yes`.
-        """,
-    ),( CMD_HELP,
-        ["help", "?"],
-        do_help!,
-        (ARG_RAW, []),
-        [],
-        md"""
+    opts: --coverage
 
-        help
+Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
+in the package directory. The option `--coverage` can be used to run the tests with
+coverage enabled. The `startup.jl` file is disabled during testing unless
+julia is started with `--startup-file=yes`.
+    """,
+),( CMD_HELP,
+    ["help", "?"],
+    do_help!,
+    (ARG_RAW, []),
+    [],
+    md"""
 
-    Display this message.
+    help
 
-        help cmd ...
+Display this message.
 
-    Display usage information for commands listed.
+    help cmd ...
 
-    Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
-        """,
-    ),( CMD_INSTANTIATE,
-        ["instantiate"],
-        do_instantiate!,
-        (ARG_RAW, [0]),
-        [
-            (["project", "p"], OPT_SWITCH, :manifest => false),
-            (["manifest", "m"], OPT_SWITCH, :manifest => true),
-        ],
-        md"""
-        instantiate
-        instantiate [-m|--manifest]
-        instantiate [-p|--project]
+Display usage information for commands listed.
 
-    Download all the dependencies for the current project at the version given by the project's manifest.
-    If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
-        """,
-    ),( CMD_RM,
-        ["remove", "rm"],
-        do_rm!,
-        (ARG_PKG, []),
-        [
-            (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
-            (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
-        ],
-        md"""
+Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
+    """,
+),( CMD_INSTANTIATE,
+    ["instantiate"],
+    do_instantiate!,
+    (ARG_RAW, [0]),
+    [
+        (["project", "p"], OPT_SWITCH, :manifest => false),
+        (["manifest", "m"], OPT_SWITCH, :manifest => true),
+    ],
+    md"""
+    instantiate
+    instantiate [-m|--manifest]
+    instantiate [-p|--project]
 
-        rm [-p|--project] pkg[=uuid] ...
+Download all the dependencies for the current project at the version given by the project's manifest.
+If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+    """,
+),( CMD_RM,
+    ["remove", "rm"],
+    do_rm!,
+    (ARG_PKG, []),
+    [
+        (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
+        (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
+    ],
+    md"""
 
-    Remove package `pkg` from the project file. Since the name `pkg` can only
-    refer to one package in a project this is unambiguous, but you can specify
-    a `uuid` anyway, and the command is ignored, with a warning if package name
-    and UUID do not mactch. When a package is removed from the project file, it
-    may still remain in the manifest if it is required by some other package in
-    the project. Project mode operation is the default, so passing `-p` or
-    `--project` is optional unless it is preceded by the `-m` or `--manifest`
-    options at some earlier point.
+    rm [-p|--project] pkg[=uuid] ...
 
-        rm [-m|--manifest] pkg[=uuid] ...
+Remove package `pkg` from the project file. Since the name `pkg` can only
+refer to one package in a project this is unambiguous, but you can specify
+a `uuid` anyway, and the command is ignored, with a warning if package name
+and UUID do not mactch. When a package is removed from the project file, it
+may still remain in the manifest if it is required by some other package in
+the project. Project mode operation is the default, so passing `-p` or
+`--project` is optional unless it is preceded by the `-m` or `--manifest`
+options at some earlier point.
 
-    Remove package `pkg` from the manifest file. If the name `pkg` refers to
-    multiple packages in the manifest, `uuid` disambiguates it. Removing a package
-    from the manifest forces the removal of all packages that depend on it, as well
-    as any no-longer-necessary manifest packages due to project package removals.
-        """,
-    ),( CMD_ADD,
-        ["add"],
-        do_add!,
-        (ARG_ALL, []),
-        [],
-        md"""
+    rm [-m|--manifest] pkg[=uuid] ...
 
-        add pkg[=uuid] [@version] [#rev] ...
+Remove package `pkg` from the manifest file. If the name `pkg` refers to
+multiple packages in the manifest, `uuid` disambiguates it. Removing a package
+from the manifest forces the removal of all packages that depend on it, as well
+as any no-longer-necessary manifest packages due to project package removals.
+    """,
+),( CMD_ADD,
+    ["add"],
+    do_add!,
+    (ARG_ALL, []),
+    [],
+    md"""
 
-    Add package `pkg` to the current project file. If `pkg` could refer to
-    multiple different packages, specifying `uuid` allows you to disambiguate.
-    `@version` optionally allows specifying which versions of packages. Versions
-    may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
-    that matches, or ranges thereof, such as `@1.2-3.4.5`. A git-revision can be
-    specified by `#branch` or `#commit`.
+    add pkg[=uuid] [@version] [#rev] ...
 
-    If a local path is used as an argument to `add`, the path needs to be a git repository.
-    The project will then track that git repository just like if it is was tracking a remote repository online.
+Add package `pkg` to the current project file. If `pkg` could refer to
+multiple different packages, specifying `uuid` allows you to disambiguate.
+`@version` optionally allows specifying which versions of packages. Versions
+may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
+that matches, or ranges thereof, such as `@1.2-3.4.5`. A git-revision can be
+specified by `#branch` or `#commit`.
 
-    **Examples**
-    ```
-    pkg> add Example
-    pkg> add Example@0.5
-    pkg> add Example#master
-    pkg> add Example#c37b675
-    pkg> add https://github.com/JuliaLang/Example.jl#master
-    pkg> add git@github.com:JuliaLang/Example.jl.git
-    pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
-    ```
-        """,
-    ),( CMD_DEVELOP,
-        ["develop", "dev"],
-        do_develop!,
-        (ARG_ALL, []),
-        [
-            ("local", OPT_SWITCH, :devdir => true),
-            ("shared", OPT_SWITCH, :devdir => false),
-        ],
-        md"""
-        develop [--shared|--local] pkg[=uuid] [#rev] ...
+If a local path is used as an argument to `add`, the path needs to be a git repository.
+The project will then track that git repository just like if it is was tracking a remote repository online.
 
-    Make a package available for development. If `pkg` is an existing local path that path will be recorded in
-    the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The location of the clone is
-    controlled by the `--shared` (default) and `--local` arguments. The `--shared` location defaults to
-    `~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable. When `--local` is given,
-    the clone is placed in a `dev` folder in the current project.
-    This operation is undone by `free`.
+**Examples**
+```
+pkg> add Example
+pkg> add Example@0.5
+pkg> add Example#master
+pkg> add Example#c37b675
+pkg> add https://github.com/JuliaLang/Example.jl#master
+pkg> add git@github.com:JuliaLang/Example.jl.git
+pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
+```
+    """,
+),( CMD_DEVELOP,
+    ["develop", "dev"],
+    do_develop!,
+    (ARG_ALL, []),
+    [
+        ("local", OPT_SWITCH, :devdir => true),
+        ("shared", OPT_SWITCH, :devdir => false),
+    ],
+    md"""
+    develop [--shared|--local] pkg[=uuid] [#rev] ...
 
-    *Example*
-    ```jl
-    pkg> develop Example
-    pkg> develop Example#master
-    pkg> develop Example#c37b675
-    pkg> develop https://github.com/JuliaLang/Example.jl#master
-    pkg> develop --local Example
-    ```
-        """,
-    ),( CMD_FREE,
-        ["free"],
-        do_free!,
-        (ARG_PKG, []),
-        [],
-        md"""
-        free pkg[=uuid] ...
+Make a package available for development. If `pkg` is an existing local path that path will be recorded in
+the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The location of the clone is
+controlled by the `--shared` (default) and `--local` arguments. The `--shared` location defaults to
+`~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable. When `--local` is given,
+the clone is placed in a `dev` folder in the current project.
+This operation is undone by `free`.
 
-    Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
-    makes the package no longer being checked out.
-        """,
-    ),( CMD_PIN,
-        ["pin"],
-        do_pin!,
-        (ARG_VERSION, []),
-        [],
-        md"""
+*Example*
+```jl
+pkg> develop Example
+pkg> develop Example#master
+pkg> develop Example#c37b675
+pkg> develop https://github.com/JuliaLang/Example.jl#master
+pkg> develop --local Example
+```
+    """,
+),( CMD_FREE,
+    ["free"],
+    do_free!,
+    (ARG_PKG, []),
+    [],
+    md"""
+    free pkg[=uuid] ...
 
-        pin pkg[=uuid] ...
+Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
+makes the package no longer being checked out.
+    """,
+),( CMD_PIN,
+    ["pin"],
+    do_pin!,
+    (ARG_VERSION, []),
+    [],
+    md"""
 
-    Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-    A pinned package has the symbol `⚲` next to its version in the status list.
-        """,
-    ),( CMD_BUILD,
-        ["build"],
-        do_build!,
-        (ARG_PKG, []),
-        [],
-        md"""
+    pin pkg[=uuid] ...
 
-        build pkg[=uuid] ...
+Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
+A pinned package has the symbol `⚲` next to its version in the status list.
+    """,
+),( CMD_BUILD,
+    ["build"],
+    do_build!,
+    (ARG_PKG, []),
+    [],
+    md"""
 
-    Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
-    If no packages are given, runs the build scripts for all packages in the manifest.
-    The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
-        """,
-    ),( CMD_RESOLVE,
-        ["resolve"],
-        do_resolve!,
-        (ARG_RAW, [0]),
-        [],
-        md"""
-        resolve
+    build pkg[=uuid] ...
 
-    Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
-    packages have changed causing the current Manifest to_indices be out of sync.
-        """,
-    ),( CMD_ACTIVATE,
-        ["activate"],
-        do_activate!,
-        (ARG_RAW, [0,1]),
-        [],
-        nothing,
-    ),( CMD_UP,
-        ["update", "up"],
-        do_up!,
-        (ARG_VERSION, []),
-        [
-            (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
-            (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
-            ("major", OPT_SWITCH, :level => UPLEVEL_MAJOR),
-            ("minor", OPT_SWITCH, :level => UPLEVEL_MINOR),
-            ("patch", OPT_SWITCH, :level => UPLEVEL_PATCH),
-            ("fixed", OPT_SWITCH, :level => UPLEVEL_FIXED),
-        ],
-        md"""
+Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
+If no packages are given, runs the build scripts for all packages in the manifest.
+The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
+    """,
+),( CMD_RESOLVE,
+    ["resolve"],
+    do_resolve!,
+    (ARG_RAW, [0]),
+    [],
+    md"""
+    resolve
 
-        up [-p|project]  [opts] pkg[=uuid] [@version] ...
-        up [-m|manifest] [opts] pkg[=uuid] [@version] ...
+Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
+packages have changed causing the current Manifest to_indices be out of sync.
+    """,
+),( CMD_ACTIVATE,
+    ["activate"],
+    do_activate!,
+    (ARG_RAW, [0,1]),
+    [],
+    nothing,
+),( CMD_UP,
+    ["update", "up"],
+    do_up!,
+    (ARG_VERSION, []),
+    [
+        (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
+        (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
+        ("major", OPT_SWITCH, :level => UPLEVEL_MAJOR),
+        ("minor", OPT_SWITCH, :level => UPLEVEL_MINOR),
+        ("patch", OPT_SWITCH, :level => UPLEVEL_PATCH),
+        ("fixed", OPT_SWITCH, :level => UPLEVEL_FIXED),
+    ],
+    md"""
 
-        opts: --major | --minor | --patch | --fixed
+    up [-p|project]  [opts] pkg[=uuid] [@version] ...
+    up [-m|manifest] [opts] pkg[=uuid] [@version] ...
 
-    Update the indicated package within the constraints of the indicated version
-    specifications. Versions may be specified by `@1`, `@1.2`, `@1.2.3`, allowing
-    any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
-    In `--project` mode, package specifications only match project packages, while
-    in `manifest` mode they match any manifest package. Bound level options force
-    the following packages to be upgraded only within the current major, minor,
-    patch version; if the `--fixed` upgrade level is given, then the following
-    packages will not be upgraded at all.
-        """,
-    ),( CMD_GENERATE,
-        ["generate"],
-        do_generate!,
-        (ARG_RAW, [1]),
-        [],
-        md"""
+    opts: --major | --minor | --patch | --fixed
 
-        generate pkgname
+Update the indicated package within the constraints of the indicated version
+specifications. Versions may be specified by `@1`, `@1.2`, `@1.2.3`, allowing
+any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
+In `--project` mode, package specifications only match project packages, while
+in `manifest` mode they match any manifest package. Bound level options force
+the following packages to be upgraded only within the current major, minor,
+patch version; if the `--fixed` upgrade level is given, then the following
+packages will not be upgraded at all.
+    """,
+),( CMD_GENERATE,
+    ["generate"],
+    do_generate!,
+    (ARG_RAW, [1]),
+    [],
+    md"""
 
-    Create a project called `pkgname` in the current folder.
-        """,
-    ),( CMD_PRECOMPILE,
-        ["precompile"],
-        do_precompile!,
-        (ARG_RAW, [0]),
-        [],
-        md"""
-        precompile
+    generate pkgname
 
-    Precompile all the dependencies of the project by running `import` on all of them in a new process.
-    The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
-        """,
-    ),( CMD_STATUS,
-        ["status", "st"],
-        do_status!,
-        (ARG_RAW, [0]),
-        [
-            (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
-            (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
-        ],
-        md"""
+Create a project called `pkgname` in the current folder.
+    """,
+),( CMD_PRECOMPILE,
+    ["precompile"],
+    do_precompile!,
+    (ARG_RAW, [0]),
+    [],
+    md"""
+    precompile
 
-        status
-        status [-p|--project]
-        status [-m|--manifest]
+Precompile all the dependencies of the project by running `import` on all of them in a new process.
+The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
+    """,
+),( CMD_STATUS,
+    ["status", "st"],
+    do_status!,
+    (ARG_RAW, [0]),
+    [
+        (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
+        (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
+    ],
+    md"""
 
-    Show the status of the current environment. By default, the full contents of
-    the project file is summarized, showing what version each package is on and
-    how it has changed since the last git commit (if in a git repo), as well as
-    any changes to manifest packages not already listed. In `--project` mode, the
-    status of the project file is summarized. In `--manifest` mode the output also
-    includes the dependencies of explicitly added packages.
-        """,
-    ),( CMD_GC,
-        ["gc"],
-        do_gc!,
-        (ARG_RAW, [0]),
-        [],
-        md"""
+    status
+    status [-p|--project]
+    status [-m|--manifest]
 
-    Deletes packages that cannot be reached from any existing environment.
-        """,
-    ),( CMD_PREVIEW,
-        ["preview"],
-        do_preview!,
-        (ARG_RAW, [1]),
-        [],
-        md"""
+Show the status of the current environment. By default, the full contents of
+the project file is summarized, showing what version each package is on and
+how it has changed since the last git commit (if in a git repo), as well as
+any changes to manifest packages not already listed. In `--project` mode, the
+status of the project file is summarized. In `--manifest` mode the output also
+includes the dependencies of explicitly added packages.
+    """,
+),( CMD_GC,
+    ["gc"],
+    do_gc!,
+    (ARG_RAW, [0]),
+    [],
+    md"""
 
-        preview cmd
+Deletes packages that cannot be reached from any existing environment.
+    """,
+),( CMD_PREVIEW,
+    ["preview"],
+    do_preview!,
+    (ARG_RAW, [1]),
+    [],
+    md"""
 
-    Runs the command `cmd` in preview mode. This is defined such that no side effects
-    will take place i.e. no packages are downloaded and neither the project nor manifest
-    is modified.
-        """,
-    ),
-]
+    preview cmd
 
-command_specs = CommandSpecs(command_declarations) # TODO should this go here ?
+Runs the command `cmd` in preview mode. This is defined such that no side effects
+will take place i.e. no packages are downloaded and neither the project nor manifest
+is modified.
+    """,
+),
+], #package
+] #command_declarations
+
+super_specs = SuperSpecs(command_declarations) # TODO should this go here ?
+command_specs = super_specs["package"]
 all_commands_sorted = sort(collect(String,keys(command_specs)))
 long_commands = filter(c -> length(c) > 2, all_commands_sorted)
 function all_options()
