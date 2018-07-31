@@ -476,9 +476,9 @@ function precompile(ctx::Context)
             end
         end
         if !found_matching_precompile
-            # Only precompile packages that has contains `__precompile__` or `__precompile__(true)`
+            # Don't bother attempting to precompile packages that appear to contain `__precompile__(false)`
             source = read(sourcepath, String)
-            if occursin(r"__precompile__\(\)|__precompile__\(true\)", source)
+            if !occursin(r"__precompile__\(false\)", source)
                 push!(needs_to_be_precompiled, pkg.name)
             end
         end
