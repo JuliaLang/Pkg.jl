@@ -599,7 +599,7 @@ do_free!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
 do_up!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
     API.up(Context!(ctx), args; collect(api_opts)...)
 
-function do_activate!(ctx::Context, args::PkgArguments, api_opts::Vector{APIOption})
+function do_activate!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
     # TODO: Remove the ctx argument to this function.
     if isempty(args)
         return API.activate(nothing)
