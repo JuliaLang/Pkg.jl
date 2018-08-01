@@ -857,11 +857,9 @@ end
     @test qwords[1].isquoted
     @test qwords[1].word == "Don't"
     @test !qwords[2].isquoted
-    @test qwords[2].word == "forget"
-    @test !qwords[3].isquoted
-    @test qwords[3].word == "to"
-    @test qwords[4].isquoted
-    @test qwords[4].word == "\"test\""
+    @test qwords[2].word == " forget to "
+    @test qwords[3].isquoted
+    @test qwords[3].word == "\"test\""
     @test_throws CommandError Pkg.REPLMode.parse_quotes("Don't")
     @test_throws CommandError Pkg.REPLMode.parse_quotes("Unterminated \"quot")
 end
