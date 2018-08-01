@@ -100,7 +100,7 @@ struct ArgSpec
 end
 const CommandDeclaration = Tuple{CommandKind,
                                  Vector{String}, # names
-                                 Function, # handler
+                                 Union{Nothing,Function}, # handler
                                  Tuple{ArgClass, Vector{Int}}, # argument count
                                  Vector{OptionDeclaration}, # options
                                  Union{Nothing, Markdown.MD}, #help
@@ -108,7 +108,7 @@ const CommandDeclaration = Tuple{CommandKind,
 struct CommandSpec
     kind::CommandKind
     names::Vector{String}
-    handler::Function
+    handler::Union{Nothing,Function}
     argument_spec::ArgSpec # note: just use range operator for max/min
     option_specs::Dict{String, OptionSpec}
     help::Union{Nothing, Markdown.MD}
@@ -528,7 +528,12 @@ function do_cmd!(command::PkgCommand, repl)
 
     # API commands
     # TODO is invokelatest still needed?
-    Base.invokelatest(spec.handler, context, command.arguments, APIOptions(command))
+    api_opts = APIOptions(command)
+    if applicable(spec.handler, context, command.arguments, api_opts)
+        Base.invokelatest(spec.handler, context, command.arguments, api_opts)
+    else
+        Base.invokelatest(spec.handler, command.arguments, api_opts)
+    end
 end
 
 function do_help!(command::PkgCommand, repl::REPL.AbstractREPL)
@@ -554,9 +559,6 @@ end
 # TODO set default Display.status keyword: mode = PKGMODE_COMBINED
 do_status!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
     Display.status(Context!(ctx), get(api_opts, :mode, PKGMODE_COMBINED))
-
-# TODO remove the need to specify a handler function (not needed for REPL commands)
-do_preview!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) = nothing
 
 # TODO , test recursive dependencies as on option.
 function do_test!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
@@ -599,8 +601,7 @@ do_free!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
 do_up!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
     API.up(Context!(ctx), args; collect(api_opts)...)
 
-function do_activate!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
-    # TODO: Remove the ctx argument to this function.
+function do_activate!(args::PkgArguments, api_opts::APIOptions)
     if isempty(args)
         return API.activate(nothing)
     else
@@ -936,7 +937,7 @@ julia is started with `--startup-file=yes`.
     """,
 ),( CMD_HELP,
     ["help", "?"],
-    do_help!,
+    nothing,
     (ARG_RAW, []),
     [],
     md"""
@@ -1187,7 +1188,7 @@ Deletes packages that cannot be reached from any existing environment.
     """,
 ),( CMD_PREVIEW,
     ["preview"],
-    do_preview!,
+    nothing,
     (ARG_RAW, [1]),
     [],
     md"""
