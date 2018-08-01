@@ -109,17 +109,17 @@ function load_packages(dir::String)
             v"0.6.1"  => Version("0d7248e2ff65bd6886ba3f003bf5aeab929edab5"),
             v"0.6.2"  => Version("d386e40c17d43b79fc89d3e579fc04547241787c"),
             v"0.7.0"  => Version("e0ad15af54feecbc4e4b91281c2c15eeca7d6515"), # dummy commit, not actual 0.7!
+            v"1.0.0"  => Version("0ef882679f00d331467b23ffe89906505f5774bf"), # dummy commit, not actual 1.0
         ),
     )
     return pkgs
 end
 
-@eval julia_versions() = $([VersionNumber(0,m) for m=1:7])
+@eval julia_versions() = $([[VersionNumber(0,m) for m=1:7]; VersionNumber(1,0)])
 julia_versions(f::Function) = filter(f, julia_versions())
 julia_versions(vi::VersionInterval) = julia_versions(v->v in vi)
 
 macro clean(ex) :(x = $(esc(ex)); $(esc(:clean)) &= x; x) end
-
 function prune!(pkgs::AbstractDict{String,Package})
     # remove unsatisfiable versions
     while true
@@ -141,7 +141,6 @@ function prune!(pkgs::AbstractDict{String,Package})
 end
 
 ## Load package data ##
-
 const pkgs = load_packages(Pkg.Pkg2.dir("METADATA"))
 # delete packages whose repos that no longer exist:
 for pkg in [
