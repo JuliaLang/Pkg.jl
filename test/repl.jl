@@ -42,16 +42,7 @@ temp_pkg_dir() do project_path
             end
         end
 
-        pkg"dev Example"
-        devdir = joinpath(DEPOT_PATH[1], "dev", "Example")
-        @test isdir(devdir)
-        rm(devdir; recursive=true)
-        @test !isdir(devdir)
-        pkg"dev Example#DO_NOT_REMOVE"
-        @test isdir(devdir)
-        LibGit2.with(LibGit2.GitRepo(devdir)) do repo
-            @test LibGit2.branch(repo) == "DO_NOT_REMOVE"
-        end
+        @test_throws CommandError pkg"dev Example#blergh"
 
         withenv("USER" => "Test User") do
             pkg"generate Foo"
