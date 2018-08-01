@@ -3,9 +3,9 @@
 prefix = joinpath(homedir(), ".julia", "registries", "Uncurated")
 
 write_toml(prefix, "Registry") do io
-    repo = "https://github.com/JuliaRegistries/Uncurated.git"
+    repo = "https://github.com/JuliaRegistries/General.git"
     uuid = string(uuid5(uuid_registry, repo))
-    println(io, "name = ", repr("Uncurated"))
+    println(io, "name = ", repr("General"))
     println(io, "uuid = ", repr(uuid))
     println(io, "repo = ", repr(repo))
     println(io, "\ndescription = \"\"\"")
@@ -88,7 +88,7 @@ for (bucket, b_pkgs) in buckets, (pkg, p) in b_pkgs
             val == nothing && continue
             haskey(data, ver) || (data[ver] = Dict{String,String}())
             # BinDeps injects a dependency on Libdl
-            if name == "Deps" && dep == "BinDeps"
+            if name == "Deps" && (dep == "BinDeps" || dep == "BinaryProvider")
                 data[ver]["Libdl"] = "\"8f399da3-3557-5675-b5ff-fb832c97cbdb\""
             end
             data[ver][dep] = val
