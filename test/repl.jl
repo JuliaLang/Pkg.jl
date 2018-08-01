@@ -74,6 +74,10 @@ temp_pkg_dir() do project_path
 end
 
 @testset "tokens" begin
+    statement = Pkg.REPLMode.parse("?dev")[1]
+    @test statement.command.kind == Pkg.REPLMode.CMD_HELP
+    @test length(statement.arguments) == 1
+    @test statement.arguments[1] == "dev"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git")[1]
     @test "add" in statement.command.names
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
