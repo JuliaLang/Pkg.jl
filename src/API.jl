@@ -569,8 +569,7 @@ function status(ctx::Context, mode=PKGMODE_PROJECT)
     return
 end
 
-activate() = activate(nothing)
-activate(path::Nothing) = (Base.ACTIVE_PROJECT[] = Base.load_path_expand(path))
+activate() = (Base.ACTIVE_PROJECT[] = Base.load_path_expand(nothing))
 function activate(path::String)
     devpath = nothing
     env = Base.active_project() === nothing ? nothing : EnvCache()
