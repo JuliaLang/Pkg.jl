@@ -879,7 +879,7 @@ function ensure_resolved(env::EnvCache,
     cmderror(msg)
 end
 
-const DEFAULT_REGISTRIES = Dict("Uncurated" => "https://github.com/JuliaRegistries/Uncurated.git")
+const DEFAULT_REGISTRIES = Dict("General" => "https://github.com/JuliaRegistries/General.git")
 
 # Return paths of all registries in a depot
 function registries(depot::String)::Vector{String}
