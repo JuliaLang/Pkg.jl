@@ -7,7 +7,7 @@ import LibGit2
 import REPL
 using REPL.TerminalMenus
 using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..BinaryProvider, ..GitTools, ..Display
-import ..depots, ..devdir, ..Types.uuid_julia
+import ..depots, ..depots1, ..devdir, ..Types.uuid_julia
 
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
     slug = Base.version_slug(uuid, sha1)
@@ -15,7 +15,7 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
         path = abspath(depot, "packages", name, slug)
         ispath(path) && return path
     end
-    return abspath(depots()[1], "packages", name, slug)
+    return abspath(depots1(), "packages", name, slug)
 end
 
 function load_versions(path::String)
@@ -479,7 +479,7 @@ function install_git(
     tree = nothing
     try
         repo, git_hash = Base.shred!(LibGit2.CachedCredentials()) do creds
-            clones_dir = joinpath(depots()[1], "clones")
+            clones_dir = joinpath(depots1(), "clones")
             ispath(clones_dir) || mkpath(clones_dir)
             repo_path = joinpath(clones_dir, string(uuid))
             repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin

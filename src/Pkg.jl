@@ -5,8 +5,14 @@ import REPL
 using REPL.TerminalMenus
 
 depots() = Base.DEPOT_PATH
-logdir() = joinpath(depots()[1], "logs")
-devdir() = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots()[1], "dev"))
+function depots1()
+    d = depots()
+    isempty(d) && cmderror("no depots found in DEPOT_PATH")
+    return d[1]
+end
+
+logdir() = joinpath(depots1(), "logs")
+devdir() = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "dev"))
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
