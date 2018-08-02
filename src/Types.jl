@@ -296,7 +296,7 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         abspath(project["manifest"]) :
         manifestfile_path(dir)
     # use default name if still not determined
-    (manifest_file === nothing) && (manifest_file = joinpath(dir, "Manifest.toml"))
+    manifest_file = something(manifest_file, joinpath(dir, "Manifest.toml"))
     write_env_usage(manifest_file)
     manifest = read_manifest(manifest_file)
     uuids = Dict{String,Vector{UUID}}()
@@ -424,13 +424,27 @@ function write_env_usage(manifest_file::AbstractString)
     close(io)
 end
 
+project_toplevel_spec = [
+    "desc", "keywords", "license", "name", "authors", "description", "uuid",
+    "deps", "extras", "targets",
+]
+
+function enforce_project!(project)
+    for key in keys(project)
+        key in project_toplevel_spec ||
+            cmderror("Unrecognized entry in project file: '$key'")
+    end
+end
+
 function read_project(io::IO)
     project = TOML.parse(io)
     if !haskey(project, "deps")
         project["deps"] = Dict{String,Any}()
     end
+    enforce_project!(project)
     return project
 end
+
 function read_project(file::String)
     isfile(file) ? open(read_project, file) : read_project(devnull)
 end
@@ -465,6 +479,7 @@ function read_manifest(io::IO)
     end
     return manifest
 end
+
 function read_manifest(file::String)
     try isfile(file) ? open(read_manifest, file) : read_manifest(devnull)
     catch err
