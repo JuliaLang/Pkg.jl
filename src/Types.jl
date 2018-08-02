@@ -9,7 +9,7 @@ using REPL.TerminalMenus
 
 using ..TOML
 import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
-import Pkg: GitTools, depots, logdir
+import Pkg: GitTools, depots, depots1, logdir
 
 import Base: SHA1
 using SHA
@@ -518,7 +518,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                 # We save the repo in case another environement wants to
                 # develop from the same repo, this avoids having to reclone it
                 # from scratch.
-                clone_path = joinpath(depots()[1], "clones")
+                clone_path = joinpath(depots1(), "clones")
                 mkpath(clone_path)
                 repo_path = joinpath(clone_path, string(hash(pkg.repo.url), "_full"))
                 repo = nothing
@@ -594,7 +594,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
             pkg.repo == nothing && continue
             pkg.special_action = PKGSPEC_REPO_ADDED
             isempty(pkg.repo.url) && set_repo_for_pkg!(env, pkg)
-            clones_dir = joinpath(depots()[1], "clones")
+            clones_dir = joinpath(depots1(), "clones")
             mkpath(clones_dir)
             repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
             repo = nothing
@@ -894,7 +894,7 @@ end
 # Return paths of all registries in all depots
 function registries(; clone_default=true)::Vector{String}
     isempty(depots()) && return String[]
-    user_regs = abspath(depots()[1], "registries")
+    user_regs = abspath(depots1(), "registries")
     if clone_default
         if !ispath(user_regs)
             mkpath(user_regs)
