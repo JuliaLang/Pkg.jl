@@ -18,7 +18,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
     PackageSpec, EnvCache, Context, Context!, get_deps,
     CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
-    project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
+    project_resolve!, project_deps_resolve!, manifest_resolve!, pkg_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
@@ -146,15 +146,14 @@ mutable struct PackageSpec
     name::String
     uuid::UUID
     version::VersionTypes
-    mode::PackageMode
     path::Union{Nothing,String}
     special_action::PackageSpecialAction # If the package is currently being pinned, freed etc
     repo::Union{Nothing,GitRepo}
 end
-PackageSpec() = PackageSpec("", UUID(zero(UInt128)), VersionSpec(), PKGMODE_PROJECT, nothing, PKGSPEC_NOTHING, nothing)
+PackageSpec() = PackageSpec("", UUID(zero(UInt128)), VersionSpec(), nothing, PKGSPEC_NOTHING, nothing)
 PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes,
-            mode::PackageMode=PKGMODE_PROJECT, path=nothing, special_action=PKGSPEC_NOTHING,
-            repo=nothing) = PackageSpec(String(name), uuid, version, mode, path, special_action, repo)
+            path=nothing, special_action=PKGSPEC_NOTHING, repo=nothing) =
+    PackageSpec(String(name), uuid, version, path, special_action, repo)
 PackageSpec(name::AbstractString, uuid::UUID) =
     PackageSpec(name, uuid, VersionSpec())
 PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
@@ -168,8 +167,9 @@ function PackageSpec(repo::GitRepo)
 end
 
 # kwarg constructor
-function PackageSpec(;name::AbstractString="", uuid::Union{String, UUID}=UUID(0), version::Union{VersionNumber, String} = "*",
-                     url = nothing, rev = nothing, mode::PackageMode = PKGMODE_PROJECT)
+function PackageSpec(;name::AbstractString="", uuid::Union{String, UUID}=UUID(0),
+                     version::Union{VersionNumber, String} = "*", url = nothing,
+                     rev = nothing)
     if url !== nothing || rev !== nothing
         repo = GitRepo(url=url, rev=rev)
     else
@@ -178,7 +178,7 @@ function PackageSpec(;name::AbstractString="", uuid::Union{String, UUID}=UUID(0)
 
     version = VersionSpec(version)
     uuid isa String && (uuid = UUID(uuid))
-    PackageSpec(name, uuid, version, mode, nothing, PKGSPEC_NOTHING, repo)
+    PackageSpec(name, uuid, version, nothing, PKGSPEC_NOTHING, repo)
 end
 
 has_name(pkg::PackageSpec) = !isempty(pkg.name)
@@ -768,6 +768,14 @@ function project_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     end
 end
 
+function pkg_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec}, mode)
+    if mode == PKGMODE_PROJECT
+        project_deps_resolve!(env, pkgs)
+    elseif mode == PKGMODE_MANIFEST
+        manifest_resolve!(env, pkgs)
+    end
+end
+
 # Disambiguate name/uuid package specifications using project info.
 function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     uuids = env.project["deps"]
@@ -775,7 +783,6 @@ function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     length(uuids) < length(names) && # TODO: handle this somehow?
         cmderror("duplicate UUID found in project file's [deps] section")
     for pkg in pkgs
-        pkg.mode == PKGMODE_PROJECT || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             pkg.uuid = UUID(uuids[pkg.name])
         end
@@ -797,7 +804,6 @@ function manifest_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
         names[uuid] = name # can be duplicate but doesn't matter
     end
     for pkg in pkgs
-        pkg.mode == PKGMODE_MANIFEST || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             length(uuids[pkg.name]) == 1 && (pkg.uuid = UUID(uuids[pkg.name][1]))
         end

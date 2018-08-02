@@ -561,10 +561,8 @@ do_status!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
     Display.status(Context!(ctx), get(api_opts, :mode, PKGMODE_COMBINED))
 
 # TODO , test recursive dependencies as on option.
-function do_test!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
-    foreach(arg -> arg.mode = PKGMODE_MANIFEST, args)
+do_test!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
     API.test(Context!(ctx), args; collect(api_opts)...)
-end
 
 function do_registry_add!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
     println("This is a dummy function for now")

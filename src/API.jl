@@ -68,16 +68,10 @@ rm(pkgs::Vector{String}; kwargs...)            = rm([PackageSpec(pkg) for pkg in
 rm(pkgs::Vector{PackageSpec}; kwargs...)       = rm(Context(), pkgs; kwargs...)
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
-    for pkg in pkgs
-        #TODO only overwrite pkg.mode is default value ?
-        pkg.mode = mode
-    end
-
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
-    project_deps_resolve!(ctx.env, pkgs)
-    manifest_resolve!(ctx.env, pkgs)
-    Operations.rm(ctx, pkgs)
+    pkg_resolve!(ctx.env, pkgs, mode)
+    Operations.rm(ctx, pkgs; mode=mode)
     ctx.preview && preview_info()
     return
 end
@@ -149,11 +143,7 @@ up(pkgs::Vector{PackageSpec}; kwargs...)       = up(Context(), pkgs; kwargs...)
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT, do_update_registry=true, kwargs...)
-    for pkg in pkgs
-        # TODO only override if they are not already set
-        pkg.mode = mode
-        pkg.version = level
-    end
+    foreach(pkg->pkg.version = level, pkgs)
 
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
@@ -171,8 +161,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             end
         end
     else
-        project_deps_resolve!(ctx.env, pkgs)
-        manifest_resolve!(ctx.env, pkgs)
+        pkg_resolve!(ctx.env, pkgs, mode)
         ensure_resolved(ctx.env, pkgs)
     end
     Operations.up(ctx, pkgs)
@@ -207,9 +196,6 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     registry_resolve!(ctx.env, pkgs)
     uuids_in_registry = UUID[]
     for pkg in pkgs
-        pkg.mode = PKGMODE_MANIFEST
-    end
-    for pkg in pkgs
         has_uuid(pkg) && push!(uuids_in_registry, pkg.uuid)
     end
     manifest_resolve!(ctx.env, pkgs)
@@ -241,7 +227,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...
         push!(pkgs, ctx.env.pkg)
     end
     project_resolve!(ctx.env, pkgs)
-    project_deps_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
     if !ctx.preview && (Operations.any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file))
@@ -413,9 +398,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
                 push!(pkgs, PackageSpec(name, uuid))
             end
         end
-    end
-    for pkg in pkgs
-        pkg.mode = PKGMODE_MANIFEST
     end
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env, pkgs)
