@@ -289,8 +289,6 @@ This includes:
    the enum [`UpgradeLevel`](@ref)
   * A `url` (which might also be a local path) and an optional git `rev`ision.
    `rev` could be a branch name or a git commit SHA.
-  * A `mode`, which is an instance of the enum [`PackageMode`](@ref) which can be either `PKGMODE_PROJECT` or
-   `PKGMODE_MANIFEST`, defaults to `PKGMODE_PROJECT`. Used in e.g. [`Pkg.rm`](@ref).
 
 Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
 in the vector.
@@ -305,7 +303,6 @@ Below is a comparison between the REPL version and the `PackageSpec` version:
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`   |
 | `local/path#feature` | `PackageSpec(url="local/path"; rev="feature)` |
 | `www.mypkg.com`      | `PackageSpec("url=www.mypkg.com")`              |
-| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`|
 | `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR`)|
 """
 const PackageSpec = Types.PackageSpec
