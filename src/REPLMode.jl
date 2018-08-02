@@ -617,15 +617,11 @@ function do_pin!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
     API.pin(Context!(ctx), args; collect(api_opts)...)
 end
 
-function do_add!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
-    api_opts[:mode] = :add
-    API.add_or_develop(Context!(ctx), args; collect(api_opts)...)
-end
+do_add!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
+    API.add(Context!(ctx), args; collect(api_opts)...)
 
-function do_develop!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
-    api_opts[:mode] = :develop
-    API.add_or_develop(Context!(ctx), args; collect(api_opts)...)
-end
+do_develop!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
+    API.develop(Context!(ctx), args; collect(api_opts)...)
 
 ######################
 # REPL mode creation #

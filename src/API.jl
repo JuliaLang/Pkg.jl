@@ -26,26 +26,28 @@ add_or_develop(pkg::Union{String, PackageSpec}; kwargs...) = add_or_develop([pkg
 add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([check_package_name(pkg) for pkg in pkgs]; kwargs...)
 add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)       = add_or_develop(Context(), pkgs; kwargs...)
 
-function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, devdir::Bool=false, kwargs...)
+function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; isadd::Bool, devdir::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
 
     devdir = devdir ? joinpath(dirname(ctx.env.project_file), "dev") : nothing
 
     # All developed packages should go through handle_repos_develop so just give them an empty repo
-    for pkg in pkgs
-        mode == :develop && pkg.repo == nothing && (pkg.repo = Types.GitRepo())
+    if !isadd
+        for pkg in pkgs
+            pkg.repo == nothing && (pkg.repo = Types.GitRepo())
+        end
     end
 
     # if julia is passed as a package the solver gets tricked;
     # this catches the error early on
     any(pkg->(pkg.name == "julia"), pkgs) &&
-        cmderror("Trying to $mode julia as a package")
+        cmderror("Trying to $(isadd ? "add" : "dev") julia as a package")
 
     ctx.preview && preview_info()
-    if mode == :develop
-        new_git = handle_repos_develop!(ctx, pkgs, something(devdir, Pkg.devdir()))
-    else
+    if isadd
         new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=true)
+    else
+        new_git = handle_repos_develop!(ctx, pkgs, something(devdir, Pkg.devdir()))
     end
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.env, pkgs)
@@ -53,15 +55,15 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, d
     ensure_resolved(ctx.env, pkgs, registry=true)
 
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
-        cmderror("Cannot $mode package with the same name or uuid as the project")
+        cmderror("Cannot $(isadd ? "add" : "dev") package with the same name or uuid as the project")
 
     Operations.add_or_develop(ctx, pkgs; new_git=new_git)
     ctx.preview && preview_info()
     return
 end
 
-add(args...; kwargs...) = add_or_develop(args...; mode = :add, kwargs...)
-develop(args...; kwargs...) = add_or_develop(args...; mode = :develop, kwargs...)
+add(args...; kwargs...) = add_or_develop(args...; isadd=true, kwargs...)
+develop(args...; kwargs...) = add_or_develop(args...; isadd=false, kwargs...)
 
 rm(pkg::Union{String, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
 rm(pkgs::Vector{String}; kwargs...)            = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
