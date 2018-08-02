@@ -425,7 +425,7 @@ function write_env_usage(manifest_file::AbstractString)
 end
 
 project_toplevel_spec = [
-    "desc", "keywords", "license", "name", "authors", "description", "uuid",
+    "desc", "keywords", "license", "name", "authors", "uuid",
     "deps", "extras", "targets",
 ]
 

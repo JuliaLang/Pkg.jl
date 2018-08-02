@@ -429,6 +429,11 @@ temp_pkg_dir() do project_path
     end
 end
 
+@testset "`enforce_project!` unit tests" begin
+    @test_throws CommandError Pkg.Types.enforce_project!(Dict(
+        "name" => "Example", "foo" => "bar"))
+end
+
 include("repl.jl")
 include("api.jl")
 
