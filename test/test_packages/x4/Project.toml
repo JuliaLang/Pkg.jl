@@ -1,7 +1,0 @@
-authors = ["David Varela <00.varela.david@gmail.com>"]
-name = "x4"
-uuid = "4fd42e72-96b5-11e8-0dce-ad5abf6c76be"
-version = "0.1.0"
-
-[deps]
-"x3" = "53501efc-96b1-11e8-0d90-e1a45c33f0f8"

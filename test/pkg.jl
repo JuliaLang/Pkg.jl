@@ -431,13 +431,14 @@ end
 
 @testset "dependency of test dependency (#567)" begin
     tmpdir = mktempdir()
-    cp("test/test_packages/x1", tmpdir)
-    cp("test/test_packages/x2", tmpdir)
-    cp("test/test_packages/x3", tmpdir)
-    cp("test/test_packages/x4", tmpdir)
-    temp_pkg_dir() do project_path; cd(tmpdir) do
-        Pkg.activate("x4")
+    cp("test/test_packages/x1", joinpath(tmpdir, "x1"))
+    cp("test/test_packages/x2", joinpath(tmpdir, "x2"))
+    cp("test/test_packages/x3", joinpath(tmpdir, "x3"))
+    temp_pkg_dir() do project_path; cd(tmpdir) do; with_temp_env() do
+        Pkg.REPLMode.pkgstr("dev $(joinpath(tmpdir, "x3"))")
         Pkg.test("x3")
+    end
+    end
     end
 end
 
