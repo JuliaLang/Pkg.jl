@@ -7,7 +7,7 @@ using REPL.TerminalMenus
 depots() = Base.DEPOT_PATH
 function depots1()
     d = depots()
-    isempty(d) && cmderror("no depots found in DEPOT_PATH")
+    isempty(d) && pkgerror("no depots found in DEPOT_PATH")
     return d[1]
 end
 
