@@ -42,7 +42,7 @@ temp_pkg_dir() do project_path
             end
         end
 
-        @test_throws CommandError pkg"dev Example#blergh"
+        @test_throws PkgError pkg"dev Example#blergh"
 
         withenv("USER" => "Test User") do
             pkg"generate Foo"
@@ -204,10 +204,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     @test Pkg.installed()["UnregisteredWithoutProject"] == v"0.0.0"
                     Pkg.test("UnregisteredWithoutProject")
                     Pkg.test("UnregisteredWithProject")
-
-                    pkg"develop Example#c37b675"
-                    @test Base.find_package("Example") ==  joinpath(tmp, "Example", "src", "Example.jl")
-                    Pkg.test("Example")
                 end
             finally
                 empty!(DEPOT_PATH)

@@ -398,7 +398,7 @@ function package_args(args::Vector{Token}, spec::CommandSpec)::Vector{PackageSpe
             pkgs[end].version = arg
         elseif arg isa Rev
             if spec.kind == CMD_DEVELOP
-                cmderror("a git revision cannot be given to `develop`")
+                pkgerror("a git revision cannot be given to `develop`")
             end
             pkg = pkgs[end]
             if pkg.repo == nothing

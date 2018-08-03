@@ -511,7 +511,9 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                     # Relative paths are given relative pwd() so we
                     # translate that to be relative the project instead.
                     # `realpath` is needed to expand symlinks before taking the relative path.
-                    pkg.path = relpath(realpath(abspath(pkg.repo.url)), realpath(dirname(ctx.env.project_file)))
+                    project_dir = dirname(ctx.env.project_file)
+                    isdir(project_dir) && (project_dir = realpath(project_dir))
+                    pkg.path = relpath(realpath(abspath(pkg.repo.url)), project_dir)
                 end
                 folder_already_downloaded = true
                 project_path = pkg.repo.url

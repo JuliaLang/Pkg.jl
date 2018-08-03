@@ -34,7 +34,7 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, s
         if mode == :develop
             pkg.repo == nothing && (pkg.repo = Types.GitRepo())
             if !isempty(pkg.repo.rev)
-                cmderror("git revision cannot be given to `develop`")
+                pkgerror("git revision cannot be given to `develop`")
             end
         end
     end
