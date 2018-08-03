@@ -424,15 +424,41 @@ function write_env_usage(manifest_file::AbstractString)
     close(io)
 end
 
-project_toplevel_spec = [
-    "desc", "keywords", "license", "name", "authors", "uuid",
-    "deps", "extras", "targets",
+project_toplevel_specs = [
+    semver_spec("^0") => [
+        "desc", "keywords", "license", "name", "authors", "uuid", "metadata",
+        "deps", "extras", "targets",
+    ],
+    semver_spec("^0.5") => ["introduced0.5"],
+    semver_spec("^0.6") => ["introduced0.6"],
+    semver_spec("^1") => [
+        "desc", "keywords", "license", "name", "authors", "uuid", "metadata",
+        "deps", "extras", "targets", "newone",
+    ],
 ]
 
 function enforce_project!(project)
-    for key in keys(project)
-        key in project_toplevel_spec ||
-            cmderror("Unrecognized entry in project file: '$key'")
+    # grab Project.toml version
+    pkg_version = get(project, "pkg-version", nothing)
+    if pkg_version === nothing
+        @warn("no Pkg version found in `Project.toml`: assuming old version")
+        pkg_version = "0.1.0"
+    end
+    pkg_version = VersionNumber(pkg_version)
+    # compile all applicable specs
+    spec = String[]
+    for versioned_spec in project_toplevel_specs
+        if x in versioned_spec.first
+            append!(spec, versioned_spec.second)
+        end
+    end
+    if isempty(spec)
+        cmderror("`Project.toml` was created by a newer `Pkg`. Refusing to read.")
+    end
+    # check
+    unrecognized_keys = filter(x->!(x in spec), collect(keys(project)))
+    if !isempty(unrecognized_keys)
+        cmderror("Unrecognized entries in project file: '$unrecognized_keys'")
     end
 end
 
