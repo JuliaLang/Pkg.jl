@@ -429,6 +429,18 @@ temp_pkg_dir() do project_path
     end
 end
 
+@testset "dependency of test dependency (#567)" begin
+    tmpdir = mktempdir()
+    cp("test/test_packages/x1", tmpdir)
+    cp("test/test_packages/x2", tmpdir)
+    cp("test/test_packages/x3", tmpdir)
+    cp("test/test_packages/x4", tmpdir)
+    temp_pkg_dir() do project_path; cd(tmpdir) do
+        Pkg.activate("x4")
+        Pkg.test("x3")
+    end
+end
+
 include("repl.jl")
 include("api.jl")
 
