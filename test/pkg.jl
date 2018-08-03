@@ -436,7 +436,7 @@ end
     cp("test/test_packages/x3", joinpath(tmpdir, "x3"))
     temp_pkg_dir() do project_path; cd(tmpdir) do; with_temp_env() do
         Pkg.REPLMode.pkgstr("dev $(joinpath(tmpdir, "x3"))")
-        Pkg.test("x3")
+        Pkg.resolve()
     end
     end
     end
