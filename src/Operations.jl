@@ -1310,6 +1310,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
             --check-bounds=yes
             --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
+            --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
             --eval $code
         ```
         run_test = () -> begin
