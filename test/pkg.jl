@@ -430,15 +430,14 @@ temp_pkg_dir() do project_path
 end
 
 @testset "dependency of test dependency (#567)" begin
-    tmpdir = mktempdir()
-    cp("test/test_packages/x1", joinpath(tmpdir, "x1"))
-    cp("test/test_packages/x2", joinpath(tmpdir, "x2"))
-    cp("test/test_packages/x3", joinpath(tmpdir, "x3"))
-    temp_pkg_dir() do project_path; cd(tmpdir) do; with_temp_env() do
-        Pkg.REPLMode.pkgstr("dev $(joinpath(tmpdir, "x3"))")
-        Pkg.resolve()
-    end
-    end
+    mktempdir() do tmpdir
+        temp_pkg_dir() do project_path; cd(tmpdir) do; with_temp_env() do
+            for x in ["x1", "x2", "x3"]
+                cp(joinpath(@__DIR__, "test_packages/$x"), joinpath(tmpdir, "$x"))
+                Pkg.develop(Pkg.PackageSpec(url = joinpath(tmpdir, x)))
+            end
+            Pkg.test("x3")
+        end end end
     end
 end
 
