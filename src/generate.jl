@@ -3,7 +3,7 @@ function generate(ctx::Context, path::String; kwargs...)
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     dir, pkg = dirname(path), basename(path)
-    isdir(path) && cmderror("$(abspath(path)) already exists")
+    isdir(path) && pkgerror("$(abspath(path)) already exists")
     printstyled("Generating"; color=:green, bold=true)
     print(" project $pkg:\n")
     project(pkg, dir; preview=ctx.preview)
@@ -36,7 +36,7 @@ function project(pkg::String, dir::String; preview::Bool)
     end
 
     if name == nothing
-        cmderror("could not determine user, please set ", Sys.iswindows() ? "USERNAME" : "USER",
+        pkgerror("could not determine user, please set ", Sys.iswindows() ? "USERNAME" : "USER",
                  " environment variable")
     end
 

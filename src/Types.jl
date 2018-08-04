@@ -9,7 +9,7 @@ using REPL.TerminalMenus
 
 using ..TOML
 import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
-import Pkg: GitTools, depots, logdir
+import Pkg: GitTools, depots, depots1, logdir
 
 import Base: SHA1
 using SHA
@@ -17,8 +17,9 @@ using SHA
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
     PackageSpec, EnvCache, Context, Context!, get_deps,
-    CommandError, cmderror, has_name, has_uuid, write_env, parse_toml, find_registered!,
-    project_resolve!, project_deps_resolve!, manifest_resolve!, pkg_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
+    PkgError, pkgerror, has_name, has_uuid, write_env, parse_toml, find_registered!,
+    project_resolve!, project_deps_resolve!, manifest_resolve!, pkg_resolve!, registry_resolve!,
+    stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
@@ -112,11 +113,11 @@ end
 #################
 # Command Error #
 #################
-struct CommandError <: Exception
+struct PkgError <: Exception
     msg::String
 end
-cmderror(msg::String...) = throw(CommandError(join(msg)))
-Base.show(io::IO, err::CommandError) = print(io, err.msg)
+pkgerror(msg::String...) = throw(PkgError(join(msg)))
+Base.show(io::IO, err::PkgError) = print(io, err.msg)
 
 
 ###############
@@ -150,7 +151,6 @@ mutable struct PackageSpec
     special_action::PackageSpecialAction # If the package is currently being pinned, freed etc
     repo::Union{Nothing,GitRepo}
 end
-PackageSpec() = PackageSpec("", UUID(zero(UInt128)), VersionSpec(), nothing, PKGSPEC_NOTHING, nothing)
 PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes,
             path=nothing, special_action=PKGSPEC_NOTHING, repo=nothing) =
     PackageSpec(String(name), uuid, version, path, special_action, repo)
@@ -168,9 +168,13 @@ end
 
 # kwarg constructor
 function PackageSpec(;name::AbstractString="", uuid::Union{String, UUID}=UUID(0),
-                     version::Union{VersionNumber, String} = "*", url = nothing,
-                     rev = nothing)
-    if url !== nothing || rev !== nothing
+                     version::Union{VersionNumber, String, VersionSpec} = VersionSpec(),
+                     url = nothing, rev = nothing, path=nothing)
+    if url !== nothing || path !== nothing || rev !== nothing
+        if path !== nothing || url !== nothing
+            path !== nothing && url !== nothing && pkgerror("cannot specify both path and url")
+            url = url == nothing ? path : url
+        end
         repo = GitRepo(url=url, rev=rev)
     else
         repo = nothing
@@ -189,7 +193,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     f = ["name" => pkg.name, "uuid" => has_uuid(pkg) ? pkg.uuid : "", "v" => (vstr == "VersionSpec(\"*\")" ? "" : vstr)]
     if pkg.repo !== nothing
         if !isempty(pkg.repo.url)
-            push!(f, "url/path" => pkg.repo.url)
+            push!(f, "url/path" => string("\"", pkg.repo.url, "\""))
         end
         if !isempty(pkg.repo.rev)
             push!(f, "rev" => pkg.repo.rev)
@@ -392,7 +396,7 @@ function get_deps(project::Dict, target::Union{Nothing,String}=nothing)
     for name in names
         haskey(deps, name) && continue
         haskey(extras, name) ||
-            cmderror("target `$target` has unlisted dependency `$name`")
+            pkgerror("target `$target` has unlisted dependency `$name`")
         deps[name] = extras[name]
     end
     return deps
@@ -435,7 +439,7 @@ function read_project(file::String)
     isfile(file) ? open(read_project, file) : read_project(devnull)
 end
 
-_throw_package_err(x, f) = cmderror("expected a `$x` entry in project file at $(abspath(f))")
+_throw_package_err(x, f) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
 function read_package(f::String)
     project = read_project(f)
     haskey(project, "name") || _throw_package_err("name", f)
@@ -443,7 +447,7 @@ function read_package(f::String)
     name = project["name"]
     entry = joinpath(dirname(f), "src", "$name.jl")
     if !isfile(entry)
-        cmderror("expected the file `src/$name.jl` to exist for package $name at $(dirname(f))")
+        pkgerror("expected the file `src/$name.jl` to exist for package $name at $(dirname(f))")
     end
     return project
 end
@@ -518,7 +522,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                 # We save the repo in case another environement wants to
                 # develop from the same repo, this avoids having to reclone it
                 # from scratch.
-                clone_path = joinpath(depots()[1], "clones")
+                clone_path = joinpath(depots1(), "clones")
                 mkpath(clone_path)
                 repo_path = joinpath(clone_path, string(hash(pkg.repo.url), "_full"))
                 repo = nothing
@@ -565,7 +569,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                 dev_pkg_path = joinpath(devdir, pkg.name)
                 if isdir(dev_pkg_path)
                     if !isfile(joinpath(dev_pkg_path, "src", pkg.name * ".jl"))
-                        cmderror("Path `$(dev_pkg_path)` exists but it does not contain `src/$(pkg.name).jl")
+                        pkgerror("Path `$(dev_pkg_path)` exists but it does not contain `src/$(pkg.name).jl")
                     else
                         @info "Path `$(dev_pkg_path)` exists and looks like the correct package, using existing path instead of cloning"
                     end
@@ -594,7 +598,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
             pkg.repo == nothing && continue
             pkg.special_action = PKGSPEC_REPO_ADDED
             isempty(pkg.repo.url) && set_repo_for_pkg!(env, pkg)
-            clones_dir = joinpath(depots()[1], "clones")
+            clones_dir = joinpath(depots1(), "clones")
             mkpath(clones_dir)
             repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
             repo = nothing
@@ -699,8 +703,12 @@ function parse_package!(ctx, pkg, project_path)
             pkg.name = ctx.old_pkg2_clone_name
         else
             # This is an old style package, get the name from src/PackageName
-            m = match(reg_pkg, pkg.repo.url)
-            m === nothing && cmderror("cannot determine package name from URL: $(pkg.repo.url)")
+            if isdir_windows_workaround(pkg.repo.url)
+                m = match(reg_pkg, abspath(pkg.repo.url))
+            else
+                m = match(reg_pkg, pkg.repo.url)
+            end
+            m === nothing && pkgerror("cannot determine package name from URL or path: $(pkg.repo.url)")
             pkg.name = m.captures[1]
         end
         reg_uuids = registered_uuids(env, pkg.name)
@@ -747,7 +755,7 @@ function get_object_branch(repo, rev)
             gitobject = LibGit2.GitObject(repo, rev)
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
-            cmderror("git object $(rev) could not be found")
+            pkgerror("git object $(rev) could not be found")
         end
     end
     return gitobject, isbranch
@@ -781,7 +789,7 @@ function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     uuids = env.project["deps"]
     names = Dict(uuid => name for (uuid, name) in uuids)
     length(uuids) < length(names) && # TODO: handle this somehow?
-        cmderror("duplicate UUID found in project file's [deps] section")
+        pkgerror("duplicate UUID found in project file's [deps] section")
     for pkg in pkgs
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             pkg.uuid = UUID(uuids[pkg.name])
@@ -882,10 +890,10 @@ function ensure_resolved(env::EnvCache,
     end
         print(io, "Please specify by known `name=uuid`.")
     end
-    cmderror(msg)
+    pkgerror(msg)
 end
 
-const DEFAULT_REGISTRIES = Dict("Uncurated" => "https://github.com/JuliaRegistries/Uncurated.git")
+const DEFAULT_REGISTRIES = Dict("General" => "https://github.com/JuliaRegistries/General.git")
 
 # Return paths of all registries in a depot
 function registries(depot::String)::Vector{String}
@@ -900,7 +908,7 @@ end
 # Return paths of all registries in all depots
 function registries(; clone_default=true)::Vector{String}
     isempty(depots()) && return String[]
-    user_regs = abspath(depots()[1], "registries")
+    user_regs = abspath(depots1(), "registries")
     if clone_default
         if !ispath(user_regs)
             mkpath(user_regs)
@@ -1051,7 +1059,7 @@ function registered_name(env::EnvCache, uuid::UUID)::String
     name = nothing
     for value in values
         name  == nothing && (name = value[2])
-        name != value[2] && cmderror("package `$uuid` has multiple registered name values: $name, $(value[2])")
+        name != value[2] && pkgerror("package `$uuid` has multiple registered name values: $name, $(value[2])")
     end
     return name
 end
@@ -1059,7 +1067,7 @@ end
 # Return most current package info for a registered UUID
 function registered_info(env::EnvCache, uuid::UUID, key::String)
     paths = env.paths[uuid]
-    isempty(paths) && cmderror("`$uuid` is not registered")
+    isempty(paths) && pkgerror("`$uuid` is not registered")
     values = []
     for path in paths
         info = parse_toml(path, "Package.toml")

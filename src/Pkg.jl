@@ -5,8 +5,15 @@ import REPL
 using REPL.TerminalMenus
 
 depots() = Base.DEPOT_PATH
-logdir() = joinpath(depots()[1], "logs")
-devdir() = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots()[1], "dev"))
+function depots1()
+    d = depots()
+    isempty(d) && pkgerror("no depots found in DEPOT_PATH")
+    return d[1]
+end
+
+logdir() = joinpath(depots1(), "logs")
+devdir() = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "dev"))
+envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
@@ -250,17 +257,19 @@ const status = API.status
 
 
 """
-    Pkg.activate([s::String])
+    Pkg.activate([s::String]; shared::Bool=false)
 
 Activate the environment at `s`. The active environment is the environment
 that is modified by executing package commands.
 The logic for what path is activated is as follows:
 
-  * If `s` is a path that exist, that environment will be activcated.
-  * If `s` is a package name in the current projec activate that is tracking a path,
-activate the environment at that path.
+  * If `shared` is `true`, the first existing environment named `s` from the depots
+    in the depot stack will be activated. If no such environment exists yet,
+    activate it in the first depot.
+  * If `s` is a path that exist, that environment will be activated.
+  * If `s` is a package name in the current project activate that is tracking a path,
+    activate the environment at that path.
   * If `s` is a non-existing path, activate that path.
-
 
 If no argument is given to `activate`, activate the home project,
 which is the one specified by either `--project` command line when starting julia,
@@ -278,7 +287,7 @@ const activate = API.activate
 
 """
     PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
-    PackageSpec(; name, url, rev, version, mode, level)
+    PackageSpec(; name, url, path, rev, version, mode, level)
 
 A `PackageSpec` is a representation of a package with various metadata.
 This includes:
@@ -287,8 +296,8 @@ This includes:
   * The package unique `uuid`.
   * A `version` (for example when adding a package. When upgrading, can also be an instance of
    the enum [`UpgradeLevel`](@ref)
-  * A `url` (which might also be a local path) and an optional git `rev`ision.
-   `rev` could be a branch name or a git commit SHA.
+  * A `url` and an optional git `rev`ision. `rev` could be a branch name or a git commit SHA.
+  * A local path `path`. This is equivalent to using the `url` argument but can be more descriptive.
 
 Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
 in the vector.
@@ -301,8 +310,8 @@ Below is a comparison between the REPL version and the `PackageSpec` version:
 | `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`  |
 | `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d..."`  |
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`   |
-| `local/path#feature` | `PackageSpec(url="local/path"; rev="feature)` |
-| `www.mypkg.com`      | `PackageSpec("url=www.mypkg.com")`              |
+| `local/path#feature` | `PackageSpec(path="local/path"; rev="feature)` |
+| `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`              |
 | `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR`)|
 """
 const PackageSpec = Types.PackageSpec
