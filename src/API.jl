@@ -26,25 +26,26 @@ add_or_develop(pkg::Union{String, PackageSpec}; kwargs...) = add_or_develop([pkg
 add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([check_package_name(pkg) for pkg in pkgs]; kwargs...)
 add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)       = add_or_develop(Context(), pkgs; kwargs...)
 
-function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, shared::Bool=true, kwargs...)
+function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; isadd::Bool, shared::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
 
     # All developed packages should go through handle_repos_develop so just give them an empty repo
-    for pkg in pkgs
-        mode == :develop && pkg.repo == nothing && (pkg.repo = Types.GitRepo())
+    if !isadd
+        for pkg in pkgs
+            pkg.repo == nothing && (pkg.repo = Types.GitRepo())
+        end
     end
 
     # if julia is passed as a package the solver gets tricked;
     # this catches the error early on
     any(pkg->(pkg.name == "julia"), pkgs) &&
-        pkgerror("Trying to $mode julia as a package")
-
+        cmderror("Trying to $(isadd ? "add" : "dev") julia as a package")
     ctx.preview && preview_info()
-    if mode == :develop
+    if isadd
+        new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=true)
+    else
         devdir = shared ? Pkg.devdir() : joinpath(dirname(ctx.env.project_file), "dev")
         new_git = handle_repos_develop!(ctx, pkgs, devdir)
-    else
-        new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=true)
     end
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.env, pkgs)
@@ -52,31 +53,25 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, s
     ensure_resolved(ctx.env, pkgs, registry=true)
 
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
-        pkgerror("Cannot $mode package with the same name or uuid as the project")
+        pkgerror("Cannot $(isadd ? "add" : "dev") package with the same name or uuid as the project")
 
     Operations.add_or_develop(ctx, pkgs; new_git=new_git)
     ctx.preview && preview_info()
     return
 end
 
-add(args...; kwargs...) = add_or_develop(args...; mode = :add, kwargs...)
-develop(args...; shared=true, kwargs...) = add_or_develop(args...; mode = :develop, shared = shared, kwargs...)
+add(args...; kwargs...) = add_or_develop(args...; isadd=true, kwargs...)
+develop(args...; shared=true, kwargs...) = add_or_develop(args...; isadd=false, shared = shared, kwargs...)
 
 rm(pkg::Union{String, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
 rm(pkgs::Vector{String}; kwargs...)            = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 rm(pkgs::Vector{PackageSpec}; kwargs...)       = rm(Context(), pkgs; kwargs...)
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
-    for pkg in pkgs
-        #TODO only overwrite pkg.mode is default value ?
-        pkg.mode = mode
-    end
-
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
-    project_deps_resolve!(ctx.env, pkgs)
-    manifest_resolve!(ctx.env, pkgs)
-    Operations.rm(ctx, pkgs)
+    pkg_resolve!(ctx.env, pkgs, mode)
+    Operations.rm(ctx, pkgs; mode=mode)
     ctx.preview && preview_info()
     return
 end
@@ -148,11 +143,7 @@ up(pkgs::Vector{PackageSpec}; kwargs...)       = up(Context(), pkgs; kwargs...)
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT, do_update_registry=true, kwargs...)
-    for pkg in pkgs
-        # TODO only override if they are not already set
-        pkg.mode = mode
-        pkg.version = level
-    end
+    foreach(pkg->pkg.version = level, pkgs)
 
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
@@ -170,8 +161,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             end
         end
     else
-        project_deps_resolve!(ctx.env, pkgs)
-        manifest_resolve!(ctx.env, pkgs)
+        pkg_resolve!(ctx.env, pkgs, mode)
         ensure_resolved(ctx.env, pkgs)
     end
     Operations.up(ctx, pkgs)
@@ -206,9 +196,6 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     registry_resolve!(ctx.env, pkgs)
     uuids_in_registry = UUID[]
     for pkg in pkgs
-        pkg.mode = PKGMODE_MANIFEST
-    end
-    for pkg in pkgs
         has_uuid(pkg) && push!(uuids_in_registry, pkg.uuid)
     end
     manifest_resolve!(ctx.env, pkgs)
@@ -240,7 +227,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...
         push!(pkgs, ctx.env.pkg)
     end
     project_resolve!(ctx.env, pkgs)
-    project_deps_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
     if !ctx.preview && (Operations.any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file))
@@ -413,9 +399,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
                 push!(pkgs, PackageSpec(name, uuid))
             end
         end
-    end
-    for pkg in pkgs
-        pkg.mode = PKGMODE_MANIFEST
     end
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env, pkgs)
