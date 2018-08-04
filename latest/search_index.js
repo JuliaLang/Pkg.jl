@@ -13,7 +13,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Pkg",
     "title": "Pkg",
     "category": "section",
-    "text": "warning: Warning\nThis documentation is a work in progress and the information in it might be or become outdated."
+    "text": ""
 },
 
 {
