@@ -490,6 +490,13 @@ function isdir_windows_workaround(path::String)
     end
 end
 
+# try to call realpath on as much as possible
+function safe_realpath(path)
+    ispath(path) && return realpath(path)
+    a, b = splitdir(path)
+    return joinpath(safe_realpath(a), b)
+end
+
 casesensitive_isdir(dir::String) = isdir_windows_workaround(dir) && dir in readdir(joinpath(dir, ".."))
 
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, devdir::String)
@@ -511,7 +518,8 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                     # Relative paths are given relative pwd() so we
                     # translate that to be relative the project instead.
                     # `realpath` is needed to expand symlinks before taking the relative path.
-                    pkg.path = relpath(realpath(abspath(pkg.repo.url)), realpath(dirname(ctx.env.project_file)))
+                    pkg.path = relpath(safe_realpath(abspath(pkg.repo.url)),
+                                       safe_realpath(dirname(ctx.env.project_file)))
                 end
                 folder_already_downloaded = true
                 project_path = pkg.repo.url

@@ -330,6 +330,21 @@ cd(mktempdir()) do
     end
 end
 
+# test relative dev paths (#490) without existing Project.toml
+temp_pkg_dir() do depot
+    cd(mktempdir()) do
+        pkg"activate NonExistent"
+        withenv("USER" => "Test User") do
+            pkg"generate Foo"
+        end
+        # this dev should not error even if NonExistent/Project.toml file is non-existent
+        @test !isdir("NonExistent")
+        pkg"dev Foo"
+        manifest = Pkg.Types.Context().env.manifest
+        @test manifest["Foo"][1]["path"] == joinpath("..", "Foo")
+    end
+end
+
 # develop with --shared and --local
 using Pkg.Types: manifest_info, EnvCache
 cd(mktempdir()) do

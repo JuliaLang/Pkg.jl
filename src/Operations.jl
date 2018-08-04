@@ -656,7 +656,8 @@ function relative_project_path_if_in_project(ctx::Context, path::String)
     end
 end
 
-project_rel_path(ctx::Context, path::String) = joinpath(dirname(ctx.env.project_file), path)
+project_rel_path(ctx::Context, path::String) =
+    normpath(joinpath(dirname(ctx.env.project_file), path))
 
 function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothing})
     env = ctx.env
