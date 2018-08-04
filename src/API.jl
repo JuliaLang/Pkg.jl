@@ -60,8 +60,8 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; isadd::Bool, sh
     return
 end
 
-add(args...; kwargs...) = add_or_develop(args...; isadd = :add, kwargs...)
-develop(args...; shared=true, kwargs...) = add_or_develop(args...; isadd = :develop, shared = shared, kwargs...)
+add(args...; kwargs...) = add_or_develop(args...; isadd=true, kwargs...)
+develop(args...; shared=true, kwargs...) = add_or_develop(args...; isadd=false, shared = shared, kwargs...)
 
 rm(pkg::Union{String, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
 rm(pkgs::Vector{String}; kwargs...)            = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
