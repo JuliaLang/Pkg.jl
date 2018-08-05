@@ -93,7 +93,7 @@ meta_option_specs = OptionSpecs(meta_option_declarations)
                    CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW,
                    CMD_REGISTRY_ADD,
                    )
-@enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
+@enum(ArgClass, ARG_RAW, ARG_PKG_BARE, ARG_PKG_NO_REV, ARG_PKG_NO_VERSION, ARG_PKG)
 struct ArgSpec
     class::ArgClass
     count::Vector{Int}
@@ -369,20 +369,18 @@ function word2token(word::AbstractString)::Token
 end
 
 function enforce_arg_spec(raw_args::Vector{String}, class::ArgClass)
-    # TODO is there a more idiomatic way to do this?
-    function has_types(arguments::Vector{Token}, types::Vector{DataType})
-        return !isempty(filter(x->typeof(x) in types, arguments))
-    end
+    has_types(arguments::Vector{Token}, types::Vector{DataType}) =
+        any(x->typeof(x) in types, arguments)
 
     class == ARG_RAW && return raw_args
     args::Vector{Token} = map(word2token, raw_args)
-    class == ARG_ALL && return args
+    class == ARG_PKG && return args
 
-    if class == ARG_PKG && has_types(args, [VersionRange, Rev])
+    if class == ARG_PKG_BARE && has_types(args, [VersionRange, Rev])
+        pkgerror("no versioned or reved packages allowed")
+    elseif class == ARG_PKG_NO_VERSION && has_types(args, [VersionRange])
         pkgerror("no versioned packages allowed")
-    elseif class == ARG_REV && has_types(args, [VersionRange])
-        pkgerror("no versioned packages allowed")
-    elseif class == ARG_VERSION && has_types(args, [Rev])
+    elseif class == ARG_PKG_NO_REV && has_types(args, [Rev])
         pkgerror("no reved packages allowed")
     end
     return args
@@ -397,9 +395,6 @@ function package_args(args::Vector{Token}, spec::CommandSpec)::Vector{PackageSpe
         elseif arg isa VersionRange
             pkgs[end].version = arg
         elseif arg isa Rev
-            if spec.kind == CMD_DEVELOP
-                pkgerror("a git revision cannot be given to `develop`")
-            end
             pkg = pkgs[end]
             if pkg.repo == nothing
                 pkg.repo = Types.GitRepo("", arg.rev)
@@ -901,7 +896,7 @@ command_declarations = [
     CMD_REGISTRY_ADD,
     ["add"],
     do_registry_add!,
-    (ARG_PKG, []),
+    (ARG_PKG_BARE, []),
     [],
     nothing,
 ),
@@ -911,7 +906,7 @@ command_declarations = [
 (   CMD_TEST,
     ["test"],
     do_test!,
-    (ARG_PKG, []),
+    (ARG_PKG_BARE, []),
     [
         ("coverage", OPT_SWITCH, :coverage => true),
     ],
@@ -962,7 +957,7 @@ If no manifest exists or the `--project` option is given, resolve and download t
 ),( CMD_RM,
     ["remove", "rm"],
     do_rm!,
-    (ARG_PKG, []),
+    (ARG_PKG_BARE, []),
     [
         (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
         (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
@@ -990,7 +985,7 @@ as any no-longer-necessary manifest packages due to project package removals.
 ),( CMD_ADD,
     ["add"],
     do_add!,
-    (ARG_ALL, []),
+    (ARG_PKG, []),
     [],
     md"""
 
@@ -1020,7 +1015,7 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ),( CMD_DEVELOP,
     ["develop", "dev"],
     do_develop!,
-    (ARG_ALL, []),
+    (ARG_PKG_NO_REV, []),
     [
         ("local", OPT_SWITCH, :shared => false),
         ("shared", OPT_SWITCH, :shared => true),
@@ -1047,7 +1042,7 @@ pkg> develop --local Example
 ),( CMD_FREE,
     ["free"],
     do_free!,
-    (ARG_PKG, []),
+    (ARG_PKG_BARE, []),
     [],
     md"""
     free pkg[=uuid] ...
@@ -1058,7 +1053,7 @@ makes the package no longer being checked out.
 ),( CMD_PIN,
     ["pin"],
     do_pin!,
-    (ARG_VERSION, []),
+    (ARG_PKG_NO_REV, []),
     [],
     md"""
 
@@ -1070,7 +1065,7 @@ A pinned package has the symbol `⚲` next to its version in the status list.
 ),( CMD_BUILD,
     ["build"],
     do_build!,
-    (ARG_PKG, []),
+    (ARG_PKG_BARE, []),
     [],
     md"""
 
@@ -1111,7 +1106,7 @@ it will be placed in the first depot of the stack.
 ),( CMD_UP,
     ["update", "up"],
     do_up!,
-    (ARG_VERSION, []),
+    (ARG_PKG_NO_REV, []),
     [
         (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
         (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
