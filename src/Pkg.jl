@@ -335,7 +335,7 @@ import .REPLMode: @pkg_str
 export @pkg_str, PackageSpec
 
 
-#function __init__()
+function __init__()
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
@@ -346,7 +346,7 @@ export @pkg_str, PackageSpec
             end
         end
     end
-#end
+end
 
 module PrecompileArea
     using ..Types

@@ -655,7 +655,7 @@ REPL.REPLDisplay(repl::MiniREPL) = repl.display
 
 const minirepl = Ref{MiniREPL}()
 
-#= __init__() = =# minirepl[] = MiniREPL()
+__init__() = minirepl[] = MiniREPL()
 
 macro pkg_str(str::String)
     :($(do_cmd)(minirepl[], $str; do_rethrow=true))
