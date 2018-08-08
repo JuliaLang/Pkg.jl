@@ -96,14 +96,14 @@ meta_option_specs = OptionSpecs(meta_option_declarations)
 @enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
 struct ArgSpec
     count::Vector{Int} # note: just use range operator for max/min
-    parser::Union{Nothing, Function}
+    parser::Function
     parser_keys::Vector{Pair{Symbol, Any}}
 end
 const CommandDeclaration = Tuple{CommandKind,
                                  Vector{String}, # names
                                  Union{Nothing,Function}, # handler
                                  Tuple{Vector{Int}, # count
-                                       Union{Nothing, Function}, # parser
+                                       Function, # parser
                                        Vector{Pair{Symbol, Any}}, # parser keys
                                        }, # arguments
                                  Vector{OptionDeclaration}, # options
@@ -418,9 +418,7 @@ function parse_pkg(raw_args::Vector{String}; valid=[], add_or_dev=false)
 end
 
 function enforce_argument(raw_args::Vector{String}, spec::ArgSpec)::PkgArguments
-    args = spec.parser === nothing ?
-        raw_args :
-        args = spec.parser(raw_args; spec.parser_keys...)
+    args = spec.parser(raw_args; spec.parser_keys...)
     enforce_argument_count(spec.count, args)
     return args
 end
@@ -893,7 +891,7 @@ command_declarations = [
     CMD_REGISTRY_ADD,
     ["add"],
     do_registry_add!,
-    ([], nothing, []),
+    ([], identity, []),
     [],
     nothing,
 ),
@@ -921,7 +919,7 @@ julia is started with `--startup-file=yes`.
 ),( CMD_HELP,
     ["help", "?"],
     nothing,
-    ([], nothing, []),
+    ([], identity, []),
     [],
     md"""
 
@@ -938,7 +936,7 @@ Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`
 ),( CMD_INSTANTIATE,
     ["instantiate"],
     do_instantiate!,
-    ([0], nothing, []),
+    ([0], identity, []),
     [
         (["project", "p"], OPT_SWITCH, :manifest => false),
         (["manifest", "m"], OPT_SWITCH, :manifest => true),
@@ -1075,7 +1073,7 @@ The `startup.jl` file is disabled during building unless julia is started with `
 ),( CMD_RESOLVE,
     ["resolve"],
     do_resolve!,
-    ([0], nothing, []),
+    ([0], identity, []),
     [],
     md"""
     resolve
@@ -1086,7 +1084,7 @@ packages have changed causing the current Manifest to_indices be out of sync.
 ),( CMD_ACTIVATE,
     ["activate"],
     do_activate!,
-    ([0,1], nothing, []),
+    ([0,1], identity, []),
     [
         ("shared", OPT_SWITCH, :shared => true),
     ],
@@ -1131,7 +1129,7 @@ packages will not be upgraded at all.
 ),( CMD_GENERATE,
     ["generate"],
     do_generate!,
-    ([1], nothing, []),
+    ([1], identity, []),
     [],
     md"""
 
@@ -1142,7 +1140,7 @@ Create a project called `pkgname` in the current folder.
 ),( CMD_PRECOMPILE,
     ["precompile"],
     do_precompile!,
-    ([0], nothing, []),
+    ([0], identity, []),
     [],
     md"""
     precompile
@@ -1153,7 +1151,7 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
 ),( CMD_STATUS,
     ["status", "st"],
     do_status!,
-    ([0], nothing, []),
+    ([0], identity, []),
     [
         (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
         (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
@@ -1174,7 +1172,7 @@ includes the dependencies of explicitly added packages.
 ),( CMD_GC,
     ["gc"],
     do_gc!,
-    ([0], nothing, []),
+    ([0], identity, []),
     [],
     md"""
 
@@ -1183,7 +1181,7 @@ Deletes packages that cannot be reached from any existing environment.
 ),( CMD_PREVIEW,
     ["preview"],
     nothing,
-    ([1], nothing, []),
+    ([1], identity, []),
     [],
     md"""
 
