@@ -518,28 +518,26 @@ end
 
 function do_cmd!(command::PkgCommand, repl)
     context = APIOptions(command.meta_options, meta_option_specs)
-    spec = command.spec
 
     # REPL specific commands
-    if spec.kind == CMD_HELP
+    if command.spec.kind == CMD_HELP
         return Base.invokelatest(do_help!, command, repl)
-    elseif spec.kind == CMD_PREVIEW
+    elseif command.spec.kind == CMD_PREVIEW
         context[:preview] = true
-        cmd = command.arguments[1]
-        cmd_spec = get(command_specs, cmd, nothing)
-        cmd_spec === nothing &&
-            pkgerror("'$cmd' is not a valid command")
-        spec = cmd_spec
-        command = PkgCommand([], cmd, [], PackageSpec[])
+        commands = map(PkgCommand, parse(command.arguments[1]))
+        if length(commands) != 1
+            pkgerror("Only preview one command at a time")
+        end
+        command = commands[1]
     end
 
     # API commands
     # TODO is invokelatest still needed?
     api_opts = APIOptions(command)
-    if applicable(spec.handler, context, command.arguments, api_opts)
-        Base.invokelatest(spec.handler, context, command.arguments, api_opts)
+    if applicable(command.spec.handler, context, command.arguments, api_opts)
+        Base.invokelatest(command.spec.handler, context, command.arguments, api_opts)
     else
-        Base.invokelatest(spec.handler, command.arguments, api_opts)
+        Base.invokelatest(command.spec.handler, command.arguments, api_opts)
     end
 end
 
@@ -655,7 +653,7 @@ REPL.REPLDisplay(repl::MiniREPL) = repl.display
 
 const minirepl = Ref{MiniREPL}()
 
-#= __init__() = =# minirepl[] = MiniREPL()
+__init__() = minirepl[] = MiniREPL()
 
 macro pkg_str(str::String)
     :($(do_cmd)(minirepl[], $str; do_rethrow=true))

@@ -870,6 +870,17 @@ end
     end end end
 end
 
+@testset "preview" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        pkg"add Example"
+        pkg"preview 'rm Example'"
+        @test isinstalled(TEST_PKG)
+        pkg"rm Example"
+        pkg"preview 'add Example'"
+        @test !isinstalled(TEST_PKG)
+    end end end
+end
+
 @testset "`parse_quotes` unit tests" begin
     qwords = Pkg.REPLMode.parse_quotes("\"Don't\" forget to '\"test\"'")
     @test qwords[1].isquoted
