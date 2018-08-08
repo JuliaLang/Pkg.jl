@@ -81,6 +81,7 @@ end
 
 meta_option_declarations = OptionDeclaration[
     ("env", OPT_ARG, :env => arg->EnvCache(Base.parse_env(arg)))
+    ("preview", OPT_SWITCH, :preview => true)
 ]
 meta_option_specs = OptionSpecs(meta_option_declarations)
 
@@ -522,13 +523,6 @@ function do_cmd!(command::PkgCommand, repl)
     # REPL specific commands
     if command.spec.kind == CMD_HELP
         return Base.invokelatest(do_help!, command, repl)
-    elseif command.spec.kind == CMD_PREVIEW
-        context[:preview] = true
-        commands = map(PkgCommand, parse(command.arguments[1]))
-        if length(commands) != 1
-            pkgerror("Only preview one command at a time")
-        end
-        command = commands[1]
     end
 
     # API commands
