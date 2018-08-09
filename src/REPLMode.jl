@@ -195,7 +195,71 @@ struct QuotedWord
     isquoted::Bool
 end
 
-function parse(cmd::String)::Vector{Statement}
+function unwrap_option(option::String)
+    if startswith(option, "--")
+        return length(option) == 2 ? "" : option[3:end]
+    elseif length(option) == 2
+        return option[end]
+    end
+end
+
+wrap_option(option::String) =
+    length(option) == 1 ? "-$option" : "--$option"
+
+function _statement(words)
+    is_option(word) = first(word) == '-'
+
+    word = popfirst!(words)
+    # meta options
+    while is_option(word)
+        if isempty(words)
+            if unwrap_option(word) in keys(meta_option_specs)
+                return :cmd, "", nothing, true
+            else
+                return :meta, word, nothing, true
+            end
+        end
+        word = popfirst!(words)
+    end
+    # command
+    if word == "preview"
+        if isempty(words)
+            return :cmd, "", nothing, true
+        end
+        word = popfirst!(words)
+    end
+    if word in keys(super_specs) # have a super command
+        super = super_specs[word]
+        if isempty(words)
+            return :sub, "", super, true
+        end
+        word = popfirst!(words)
+        command = get(super, word, nothing)
+        if command === nothing
+            if isempty(words)
+                return :sub, word, super, true
+            else
+                return nothing
+            end
+        end
+    elseif get(super_specs["package"], word, nothing) !== nothing # given a "package" command
+        command = get(super_specs["package"], word, nothing)
+    elseif isempty(words) # try to complete the super command
+        return :cmd, word, nothing, true
+    else
+        return nothing
+    end
+    if isempty(words)
+        return :arg, word, command, true
+    end
+    word = words[end]
+    manifest = any(x->x in ["--manifest", "-m"], filter(is_option, words))
+    return is_option(word) ?
+        (:opt, word, command, true) :
+        (:arg, word, command, !manifest)
+end
+
+function parse(cmd::String; for_completions=false)
     # replace new lines with ; to support multiline commands
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
     # tokenize accoring to whitespace / quotes
@@ -205,8 +269,10 @@ function parse(cmd::String)::Vector{Statement}
     # break up words according to ";"(doing this early makes subsequent processing easier)
     word_groups = group_words(words)
     # create statements
-    statements = map(Statement, word_groups)
-    return statements
+    if for_completions
+        return _statement(word_groups[end])
+    end
+    return map(Statement, word_groups)
 end
 
 # vector of words -> structured statement
@@ -228,10 +294,12 @@ function Statement(words)::Statement
         if !("--preview" in statement.meta_options)
             push!(statement.meta_options, "--preview")
         end
+        isempty(words) && pkgerror("preview requires a command")
         word = popfirst!(words)
     end
     if word in keys(super_specs)
         super = super_specs[word]
+        isempty(words) && pkgerror("no subcommand specified")
         word = popfirst!(words)
     else
         super = super_specs["package"]
@@ -663,10 +731,8 @@ end
 pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 
 # handle completions
-all_commands_sorted = []
-long_commands = []
-all_options_sorted = []
-long_options = []
+command_names = []
+meta_option_names = []
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
@@ -675,20 +741,6 @@ function LineEdit.complete_line(c::PkgCompletionProvider, s)
     full = LineEdit.input_string(s)
     ret, range, should_complete = completions(full, lastindex(partial))
     return ret, partial[range], should_complete
-end
-
-function complete_command(s, i1, i2)
-    # only show short form commands when no input is given at all
-    cmp = filter(cmd -> startswith(cmd, s), isempty(s) ? all_commands_sorted : long_commands)
-    return cmp, i1:i2, !isempty(cmp)
-end
-
-function complete_option(s, i1, i2)
-    # only show short form options if only a dash is given
-    cmp = filter(cmd -> startswith(cmd, s), length(s) == 1 && first(s) == '-' ?
-                                                all_options_sorted :
-                                                long_options)
-    return cmp, i1:i2, !isempty(cmp)
 end
 
 function complete_package(s, i1, i2, lastcommand, project_opt)
@@ -736,43 +788,34 @@ end
 
 function completions(full, index)
     pre = full[1:index]
-
-    pre_words = split(pre, ' ', keepempty=true)
-
-    # first word should always be a command
-    if isempty(pre_words)
-        return complete_command("", 1:1)
+    if isempty(pre)
+        return command_names, 0:-1, false
+    end
+    x = parse(pre; for_completions=true)
+    if x === nothing # failed parse (invalid command name)
+        return String[], 0:-1, false
+    end
+    (key, to_complete, spec, proj) = x
+    last = split(pre, ' ', keepempty=true)[end]
+    offset = isempty(last) ? index+1 : last.offset+1
+    if last != to_complete # require a space before completing next field
+        return String[], 0:-1, false
+    end
+    possible = key == :meta ? meta_opt_names :
+        key == :cmd ? command_names :
+        key == :sub ? sort(collect(keys(spec))) :
+        key == :opt ? sort(map(wrap_option, collect(keys(spec.option_specs)))) :
+        nothing
+    if possible !== nothing
+        completions = filter(x->startswith(x,to_complete), possible)
+        return completions, offset:index, !isempty(completions)
+    end
+    # argument completions
+    if spec.kind == CMD_HELP
+        completions = filter(x->startswith(x,to_complete), command_names)
+        return completions, offset:index, !isempty(completions)
     else
-        to_complete = pre_words[end]
-        offset = isempty(to_complete) ? index+1 : to_complete.offset+1
-
-        if length(pre_words) == 1
-            return complete_command(to_complete, offset, index)
-        end
-
-        # tokenize input, don't offer any completions for invalid commands
-        statement = try
-            parse(join(pre_words[1:end-1], ' '))[end]
-        catch
-            return String[], 0:-1, false
-        end
-
-        lastcommand = statement.command.kind
-        project_opt = true
-        for opt in statement.options
-            if opt in ["--manifest", "--project", "-m", "-p"]
-                project_opt = opt in ["--project", "-p"]
-                break
-            end
-        end
-
-        if lastcommand in [CMD_HELP, CMD_PREVIEW]
-            return complete_command(to_complete, offset, index)
-        elseif !isempty(to_complete) && first(to_complete) == '-'
-            return complete_option(to_complete, offset, index)
-        else
-            return complete_package(to_complete, offset, index, lastcommand, project_opt)
-        end
+        return complete_package(to_complete, offset, index, spec.kind, proj)
     end
 end
 
@@ -1207,22 +1250,11 @@ is modified.
 ] #command_declarations
 
 super_specs = SuperSpecs(command_declarations)
+meta_opt_names = sort(map(wrap_option, collect(keys(meta_option_specs))))
+command_names = sort(append!(collect(keys(super_specs)),
+                              collect(keys(super_specs["package"]))))
+# TODO remove this
 command_specs = super_specs["package"]
-all_commands_sorted = sort(collect(String,keys(command_specs)))
-long_commands = filter(c -> length(c) > 2, all_commands_sorted)
-function all_options()
-    all_opts = []
-    for command in values(command_specs)
-        for opt_spec in values(command.option_specs)
-            push!(all_opts, opt_spec.name)
-            opt_spec.short_name !== nothing && push!(all_opts, opt_spec.short_name)
-        end
-    end
-    unique!(all_opts)
-    return all_opts
-end
-all_options_sorted = [length(opt) > 1 ? "--$opt" : "-$opt" for opt in sort!(all_options())]
-long_options = filter(c -> length(c) > 2, all_options_sorted)
 
 const help = md"""
 

@@ -345,6 +345,38 @@ cd(mktempdir()) do
     @test manifest_info(EnvCache(), uuid)["path"] == joinpath("dev", "Example")
 end
 
+@testset "parse completions" begin
+    # meta options
+    @test parse("--pre"; for_completions=true) == (:meta, "--pre", nothing)
+    @test parse("--meta --pre"; for_completions=true) == (:meta, "--pre", nothing)
+    @test parse("--meta -"; for_completions=true) == (:meta, "-", nothing)
+    @test parse("--meta --"; for_completions=true) == (:meta, "--", nothing)
+    # commands
+    @test parse("--preview"; for_completions=true) == (:cmd, "", nothing)
+    @test parse("--preview ad"; for_completions=true) == (:cmd, "ad", nothing)
+    @test parse("--meta --preview r"; for_completions=true) == (:cmd, "r", nothing)
+    @test parse("--preview reg"; for_completions=true) == (:cmd, "reg", nothing)
+    # sub commands
+    @test parse("--preview registry"; for_completions=true) ==
+        (:sub, "", super_specs["registry"])
+    @test parse("--preview registry a"; for_completions=true) ==
+        (:sub, "a", super_specs["registry"])
+    # options
+    @test parse("add -"; for_completions=true) ==
+        (:opt, "-", super_specs["package"]["add"])
+    @test parse("up --m"; for_completions=true) ==
+        (:opt, "--m", super_specs["package"]["up"])
+    @test parse("up --major --pro"; for_completions=true) ==
+        (:opt, "--pro", super_specs["package"]["up"])
+    @test parse("foo --maj"; for_completions=true) ===
+        nothing
+    # arguments
+    @test parse("up --major Ex"; for_completions=true) ==
+        (:arg, "Ex", super_specs["package"]["up"])
+    @test parse("--preview up --major foo Ex"; for_completions=true) ==
+        (:arg, "Ex", super_specs["package"]["up"])
+end
+
 test_complete(s) = Pkg.REPLMode.completions(s,lastindex(s))
 apply_completion(str) = begin
     c, r, s = test_complete(str)
@@ -406,7 +438,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
     @test "remove" in c
     c, r = test_complete("help r")
     @test "remove" in c
-    @test !("rm" in c)
 
     c, r = test_complete("add REPL")
     # Filtered by version
