@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module Types
 
 using UUIDs
@@ -16,7 +18,7 @@ using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
-    PackageSpec, EnvCache, Context, Context!, get_deps,
+    PackageSpec, EnvCache, Context, Context!,
     PkgError, pkgerror, has_name, has_uuid, write_env, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
@@ -110,7 +112,7 @@ function Base.showerror(io::IO, pkgerr::ResolverError)
 end
 
 #################
-# Command Error #
+# Pkg Error #
 #################
 struct PkgError <: Exception
     msg::String
@@ -490,13 +492,6 @@ function isdir_windows_workaround(path::String)
     end
 end
 
-# try to call realpath on as much as possible
-function safe_realpath(path)
-    ispath(path) && return realpath(path)
-    a, b = splitdir(path)
-    return joinpath(safe_realpath(a), b)
-end
-
 casesensitive_isdir(dir::String) = isdir_windows_workaround(dir) && dir in readdir(joinpath(dir, ".."))
 
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, devdir::String)
@@ -518,8 +513,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                     # Relative paths are given relative pwd() so we
                     # translate that to be relative the project instead.
                     # `realpath` is needed to expand symlinks before taking the relative path.
-                    pkg.path = relpath(safe_realpath(abspath(pkg.repo.url)),
-                                       safe_realpath(dirname(ctx.env.project_file)))
+                    pkg.path = relpath(realpath(abspath(pkg.repo.url)), realpath(dirname(ctx.env.project_file)))
                 end
                 folder_already_downloaded = true
                 project_path = pkg.repo.url
@@ -593,10 +587,12 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
     end
 end
 
-function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgrade_or_add::Bool=true)
+function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
+                           upgrade_or_add::Bool=true, credentials=nothing)
     # Always update the registry when adding
     UPDATED_REGISTRY_THIS_SESSION[] || Pkg.API.update_registry(ctx)
-    Base.shred!(LibGit2.CachedCredentials()) do creds
+    creds = credentials !== nothing ? credentials : LibGit2.CachedCredentials()
+    try
         env = ctx.env
         new_uuids = UUID[]
         for pkg in pkgs
@@ -686,6 +682,8 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
             @assert pkg.version isa VersionNumber
         end
         return new_uuids
+    finally
+        creds !== credentials && Base.shred!(creds)
     end
 end
 
@@ -908,8 +906,19 @@ end
 function registries(; clone_default=true)::Vector{String}
     isempty(depots()) && return String[]
     user_regs = abspath(depots1(), "registries")
+    # TODO: delete the following let block in Julia 1.0
+    let uncurated = joinpath(user_regs, "Uncurated"),
+        general = joinpath(user_regs, "General")
+        if ispath(uncurated) && !ispath(general)
+            mv(uncurated, general)
+            git_config_file = joinpath(general, ".git", "config")
+            cfg = read(git_config_file, String)
+            cfg = replace(cfg, r"\bUncurated\b" => "General")
+            write(git_config_file, cfg)
+        end
+    end
     if clone_default
-        if !ispath(user_regs)
+        if !ispath(user_regs) || isempty(readdir(user_regs))
             mkpath(user_regs)
             Base.shred!(LibGit2.CachedCredentials()) do creds
                 printpkgstyle(stdout, :Cloning, "default registries into $user_regs")

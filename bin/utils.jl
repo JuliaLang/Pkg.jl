@@ -1,4 +1,5 @@
 #!/usr/bin/env julia
+# This file is a part of Julia. License is MIT: https://julialang.org/license
 
 function packagelt(a::String, b::String)
     a == "julia" && b != "julia" && return true
@@ -50,8 +51,6 @@ compress_versions(f::Function, from::Vector{VersionNumber}) =
     compress_versions(filter(f, from), from)
 compress_versions(vi::VersionInterval, from::Vector{VersionNumber}) =
     compress_versions(v->v in vi, from)
-compress_versions(vs::VersionSet, from::Vector{VersionNumber}) =
-    compress_versions(v->v in vs, from)
 compress_versions(inc, from) = compress_versions(inc, collect(from))
 
 versions_string(p::Pair) = versions_string(p...)

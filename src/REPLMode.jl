@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module REPLMode
 
 using Markdown
@@ -395,7 +397,7 @@ function package_args(args::Vector{Token}, spec::CommandSpec)::Vector{PackageSpe
             is_add_or_develop = spec.kind in (CMD_ADD, CMD_DEVELOP)
             push!(pkgs, parse_package(arg; add_or_develop=is_add_or_develop))
         elseif arg isa VersionRange
-            pkgs[end].version = arg
+            pkgs[end].version = VersionSpec(arg)
         elseif arg isa Rev
             if spec.kind == CMD_DEVELOP
                 pkgerror("a git revision cannot be given to `develop`")
@@ -799,11 +801,13 @@ function promptf()
                 nothing
             end
             if project !== nothing
+                proj_dir = ispath(project_file) ? realpath(project_file) : project_file
+                proj_dir = dirname(proj_dir)
                 projname = get(project, "name", nothing)
-                if projname !== nothing
+                if startswith(pwd(), proj_dir) && projname !== nothing
                     name = projname
                 else
-                    name = basename(dirname(project_file))
+                    name = basename(proj_dir)
                 end
                 prefix = string("(", name, ") ")
                 prev_prefix = prefix
