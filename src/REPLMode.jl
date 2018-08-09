@@ -223,6 +223,13 @@ function Statement(words)::Statement
         word = popfirst!(words)
     end
     # command
+    # special handling for `preview`, just convert it to a meta option under the hood
+    if word == "preview"
+        if !("--preview" in statement.meta_options)
+            push!(statement.meta_options, "--preview")
+        end
+        word = popfirst!(words)
+    end
     if word in keys(super_specs)
         super = super_specs[word]
         word = popfirst!(words)
@@ -1180,7 +1187,9 @@ includes the dependencies of explicitly added packages.
 
 Deletes packages that cannot be reached from any existing environment.
     """,
-),( CMD_PREVIEW,
+),( # preview is not a regular command.
+    # this is here so that preview appears as a registered command to users
+    CMD_PREVIEW,
     ["preview"],
     nothing,
     (ARG_RAW, [1]),
