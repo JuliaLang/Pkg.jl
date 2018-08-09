@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module Operations
 
 using UUIDs
@@ -10,12 +12,15 @@ using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..BinaryProvider, ..GitTools, ..D
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia
 
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
-    slug = Base.version_slug(uuid, sha1)
-    for depot in depots()
-        path = abspath(depot, "packages", name, slug)
-        ispath(path) && return path
+    slug_default = Base.version_slug(uuid, sha1)
+    # 4 used to be the default so look there first
+    for slug in (Base.version_slug(uuid, sha1, 4), slug_default)
+        for depot in depots()
+            path = abspath(depot, "packages", name, slug)
+            ispath(path) && return path
+        end
     end
-    return abspath(depots1(), "packages", name, slug)
+    return abspath(depots1(), "packages", name, slug_default)
 end
 
 function load_versions(path::String)
@@ -293,18 +298,14 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
 end
 
 # Resolve a set of versions given package version specs
-function resolve_versions!(
-    ctx::Context,
-    pkgs::Vector{PackageSpec},
-    target::Union{Nothing, String} = nothing,
-)::Dict{UUID,VersionNumber}
+function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})::Dict{UUID,VersionNumber}
     printpkgstyle(ctx, :Resolving, "package versions...")
     # anything not mentioned is fixed
     uuids = UUID[pkg.uuid for pkg in pkgs]
     uuid_to_name = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
     uuid_to_name[uuid_julia] = "julia"
 
-    for (name::String, uuidstr::String) in get_deps(ctx, target)
+    for (name::String, uuidstr::String) in ctx.env.project["deps"]
         uuid = UUID(uuidstr)
         uuid_to_name[uuid] = name
 
@@ -656,8 +657,7 @@ function relative_project_path_if_in_project(ctx::Context, path::String)
     end
 end
 
-project_rel_path(ctx::Context, path::String) =
-    normpath(joinpath(dirname(ctx.env.project_file), path))
+project_rel_path(ctx::Context, path::String) = joinpath(dirname(ctx.env.project_file), path)
 
 function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothing})
     env = ctx.env
@@ -791,11 +791,6 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     need_to_resolve = false
     is_project = Types.is_project(localctx.env, pkg)
 
-    target = nothing
-    if pkg.special_action == PKGSPEC_TESTED
-        target = "test"
-    end
-
     # Only put `pkg` and its deps + target deps (recursively) in the temp project
     collect_deps!(seen, pkg) = begin
         pkg.uuid in seen && return
@@ -818,7 +813,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         localctx.env.pkg = nothing
         localctx.env.project["deps"][pkg.name] = string(pkg.uuid)
         localctx.env.manifest[pkg.name] = [Dict(
-            "deps" => get_deps(mainctx, target),
+            "deps" => mainctx.env.project["deps"],
             "uuid" => string(pkg.uuid),
             "path" => dirname(localctx.env.project_file),
             "version" => string(pkg.version)
@@ -833,7 +828,11 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     end
 
     pkgs = PackageSpec[]
-    if target !== nothing
+    target = ""
+    if pkg.special_action == PKGSPEC_TESTED
+        target = "test"
+    end
+    if !isempty(target)
         collect_target_deps!(localctx, pkgs, pkg, target)
         seen_uuids = Set{UUID}()
         for dpkg in pkgs
@@ -897,12 +896,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     end
 end
 
-function collect_target_deps!(
-    ctx::Context,
-    pkgs::Vector{PackageSpec},
-    pkg::PackageSpec,
-    target::String,
-)
+function collect_target_deps!(ctx::Context, pkgs::Vector{PackageSpec}, pkg::PackageSpec, target::String)
     # Find the path to the package
     if pkg.uuid in keys(ctx.stdlibs)
         path = Types.stdlib_path(pkg.name)
@@ -947,7 +941,7 @@ function collect_target_deps!(
             push!(pkgs, PackageSpec(pkg, uuid))
         end
     end
-    return
+    return nothing
 end
 
 # Pkg2 test/REQUIRE compatibility
@@ -1039,32 +1033,27 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     order = dependency_order_uuids(ctx, map(first, builds))
     sort!(builds, by = build -> order[first(build)])
     max_name = isempty(builds) ? 0 : maximum(textwidth.([build[2] for build in builds]))
-    # build each package verions in a child process
-    build_succeeded = true
+    # build each package versions in a child process
     for (uuid, name, hash_or_path, build_file, version) in builds
         log_file = splitext(build_file)[1] * ".log"
         printpkgstyle(ctx, :Building,
             rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(ctx, log_file))
         code = """
-            empty!(Base.DEPOT_PATH)
-            append!(Base.DEPOT_PATH, $(repr(map(abspath, DEPOT_PATH))))
-            empty!(Base.DL_LOAD_PATH)
-            append!(Base.DL_LOAD_PATH, $(repr(map(abspath, Base.DL_LOAD_PATH))))
+            $(Base.load_path_setup_code(false))
             cd($(repr(dirname(build_file))))
             include($(repr(build_file)))
             """
         cmd = ```
             $(Base.julia_cmd()) -O0 --color=no --history-file=no
-            --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
+            --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
             --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
             --eval $code
             ```
-        run_build = () ->begin
+        run_build = () -> begin
             ok = open(log_file, "w") do log
                 success(pipeline(cmd, stdout=log, stderr=log))
             end
             if !ok
-                build_succeeded = false
                 n_lines = isinteractive() ? 100 : 5000
                 # TODO: Extract last n  lines more efficiently
                 log_lines = readlines(log_file)
@@ -1083,9 +1072,6 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
                                                might_need_to_resolve=might_need_to_resolve) do localctx
             run_build()
         end
-    end
-    if !build_succeeded
-        pkgerror("at least one package failed to build")
     end
     return
 end
@@ -1149,15 +1135,6 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         @info "No changes"
         return
     end
-    deps_names = collect(keys(ctx.env.project["deps"]))
-    if haskey(ctx.env.project, "targets")
-        filter!(ctx.env.project["targets"]) do (target, deps)
-            !isempty(filter!(in(deps_names), deps))
-        end
-        if isempty(ctx.env.project["targets"])
-            delete!(ctx.env.project, "targets")
-        end
-    end
     # only keep reachable manifest entires
     prune_manifest(ctx.env)
     # update project & manifest
@@ -1192,33 +1169,36 @@ end
 function up(ctx::Context, pkgs::Vector{PackageSpec})
     # resolve upgrade levels to version specs
     new_git = UUID[]
-    for pkg in pkgs
-        if pkg.uuid in keys(ctx.stdlibs)
-            pkg.version = VersionSpec()
-            continue
-        end
-        pkg.version isa UpgradeLevel || continue
-        level = pkg.version
-        info = manifest_info(ctx.env, pkg.uuid)
-        if info !== nothing && haskey(info, "repo-url")
-            pkg.repo = Types.GitRepo(info["repo-url"], info["repo-rev"])
-            new = handle_repos_add!(ctx, [pkg]; upgrade_or_add = (level == UPLEVEL_MAJOR))
-            append!(new_git, new)
-        else
-            if info !== nothing
-                pkg.uuid in keys(ctx.stdlibs) && continue
-                ver = VersionNumber(info["version"])
-                if level == UPLEVEL_FIXED
-                    pkg.version = VersionNumber(info["version"])
-                else
-                    r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
-                        level == UPLEVEL_MINOR ? VersionRange(ver.major) :
-                        level == UPLEVEL_MAJOR ? VersionRange() :
-                            error("unexpected upgrade level: $level")
-                    pkg.version = VersionSpec(r)
-                end
-            else
+    Base.shred!(LibGit2.CachedCredentials()) do creds
+        for pkg in pkgs
+            if pkg.uuid in keys(ctx.stdlibs)
                 pkg.version = VersionSpec()
+                continue
+            end
+            pkg.version isa UpgradeLevel || continue
+            level = pkg.version
+            info = manifest_info(ctx.env, pkg.uuid)
+            if info !== nothing && haskey(info, "repo-url")
+                pkg.repo = Types.GitRepo(info["repo-url"], info["repo-rev"])
+                new = handle_repos_add!(ctx, [pkg]; credentials=creds,
+                                        upgrade_or_add = (level == UPLEVEL_MAJOR))
+                append!(new_git, new)
+            else
+                if info !== nothing
+                    pkg.uuid in keys(ctx.stdlibs) && continue
+                    ver = VersionNumber(info["version"])
+                    if level == UPLEVEL_FIXED
+                        pkg.version = VersionNumber(info["version"])
+                    else
+                        r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
+                            level == UPLEVEL_MINOR ? VersionRange(ver.major) :
+                            level == UPLEVEL_MAJOR ? VersionRange() :
+                                error("unexpected upgrade level: $level")
+                        pkg.version = VersionSpec(r)
+                    end
+                else
+                    pkg.version = VersionSpec()
+                end
             end
         end
     end
@@ -1304,10 +1284,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             continue
         end
         code = """
-            empty!(Base.DEPOT_PATH)
-            append!(Base.DEPOT_PATH, $(repr(map(abspath, DEPOT_PATH))))
-            empty!(Base.DL_LOAD_PATH)
-            append!(Base.DL_LOAD_PATH, $(repr(map(abspath, Base.DL_LOAD_PATH))))
+            $(Base.load_path_setup_code(false))
             cd($(repr(dirname(testfile))))
             include($(repr(testfile)))
             """

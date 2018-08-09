@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 function temp_pkg_dir(fn::Function)
     local env_dir
     local old_load_path
@@ -47,11 +49,11 @@ function write_build(path, content)
 end
 
 function with_current_env(f)
-    Pkg.activate(".")
+    pushfirst!(LOAD_PATH, "@.")
     try
         f()
     finally
-        Pkg.activate()
+        popfirst!(LOAD_PATH)
     end
 end
 

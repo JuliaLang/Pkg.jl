@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module OperationsTest
 
 import Random: randstring
@@ -282,27 +284,22 @@ temp_pkg_dir() do project_path
     @testset "add julia" begin
         @test_throws PkgError Pkg.add("julia")
     end
+end
+
+temp_pkg_dir() do project_path
+    @testset "libgit2 downloads" begin
+        Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
+        @test haskey(Pkg.installed(), TEST_PKG.name)
+        Pkg.rm(TEST_PKG.name)
+    end
 
     @testset "up in Project without manifest" begin
         mktempdir() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
             cd(joinpath(dir, "UnregisteredWithProject")) do
-               with_current_env() do
+                with_current_env() do
                     Pkg.update()
                     @test haskey(Pkg.API.__installed(), "Example")
-                end
-            end
-        end
-    end
-
-    @testset "failing building a package should throw" begin
-        mktempdir() do path
-            cd(path) do
-                Pkg.generate("FailBuildPkg")
-                cd("FailBuildPkg")
-                with_current_env() do
-                    write_build(pwd(), "error()")
-                    @test_throws PkgError Pkg.build()
                 end
             end
         end
@@ -320,6 +317,10 @@ temp_pkg_dir() do project_path
         @test haskey(Pkg.API.__installed(), "JSON")
         Pkg.rm("JSON")
     end
+end
+
+@testset "parse package url win" begin
+    @test typeof(Pkg.REPLMode.parse_package("https://github.com/abc/ABC.jl"; add_or_develop=true)) == PackageSpec
 end
 
 @testset "preview generate" begin
@@ -345,6 +346,7 @@ temp_pkg_dir() do project_path
     end
 end
 
+#=
 temp_pkg_dir() do project_path
     @testset "valid project file names" begin
         extract_uuid(toml_path) = begin
@@ -363,7 +365,9 @@ temp_pkg_dir() do project_path
             mktempdir() do tmp; cd(tmp) do
                 pkg_name = "FooBar"
                 # create a project and grab its uuid
-                Pkg.generate(pkg_name)
+                withenv("USER" => "Test User") do
+                    Pkg.generate(pkg_name)
+                end
                 uuid = extract_uuid(joinpath(pkg_name, "Project.toml"))
                 # activate project env
                 Pkg.activate(abspath(pkg_name))
@@ -382,6 +386,7 @@ temp_pkg_dir() do project_path
         end # cd project_path
     end # @testset
 end
+=#
 
 temp_pkg_dir() do project_path
     @testset "invalid repo url" begin
@@ -392,6 +397,7 @@ temp_pkg_dir() do project_path
         end
     end
 end
+
 
 temp_pkg_dir() do project_path
     # pkg assumes `Example.jl` is still a git repo, it will try to fetch on `update`
