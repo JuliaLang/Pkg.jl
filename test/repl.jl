@@ -429,7 +429,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
     pkg"add Example"
     c, r = test_complete("rm Exam")
     @test "Example" in c
-    c, r = test_complete("add --man")
+    c, r = test_complete("up --man")
     @test "--manifest" in c
     c, r = test_complete("rem")
     @test "remove" in c
