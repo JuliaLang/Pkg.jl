@@ -229,15 +229,16 @@ function _statement(words)
         word = popfirst!(words)
     end
     if word in keys(super_specs) # have a super command
+        super_name = word
         super = super_specs[word]
         if isempty(words)
-            return :sub, "", super, true
+            return :sub, "", super_name, true
         end
         word = popfirst!(words)
         command = get(super, word, nothing)
         if command === nothing
             if isempty(words)
-                return :sub, word, super, true
+                return :sub, word, super_name, true
             else
                 return nothing
             end
@@ -731,8 +732,15 @@ end
 pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 
 # handle completions
-command_names = []
-meta_option_names = []
+mutable struct CompletionCache
+    commands::Vector{String}
+    meta_options::Vector{String}
+    options::Dict{CommandKind, Vector{String}}
+    subcommands::Dict{String, Vector{String}}
+    CompletionCache() = new([],[],Dict(),Dict())
+end
+
+completion_cache = CompletionCache()
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
@@ -801,10 +809,10 @@ function completions(full, index)
     if last != to_complete # require a space before completing next field
         return String[], 0:-1, false
     end
-    possible = key == :meta ? meta_opt_names :
-        key == :cmd ? command_names :
-        key == :sub ? sort(collect(keys(spec))) :
-        key == :opt ? sort(map(wrap_option, collect(keys(spec.option_specs)))) :
+    possible = key == :meta ? completion_cache.meta_options :
+        key == :cmd ? completion_cache.commands :
+        key == :sub ? completion_cache.subcommands[spec] :
+        key == :opt ? completion_cache.options[spec.kind] :
         nothing
     if possible !== nothing
         completions = filter(x->startswith(x,to_complete), possible)
@@ -812,7 +820,7 @@ function completions(full, index)
     end
     # argument completions
     if spec.kind == CMD_HELP
-        completions = filter(x->startswith(x,to_complete), command_names)
+        completions = filter(x->startswith(x,to_complete), completion_cache.commands)
         return completions, offset:index, !isempty(completions)
     else
         return complete_package(to_complete, offset, index, spec.kind, proj)
@@ -1250,9 +1258,17 @@ is modified.
 ] #command_declarations
 
 super_specs = SuperSpecs(command_declarations)
-meta_opt_names = sort(map(wrap_option, collect(keys(meta_option_specs))))
-command_names = sort(append!(collect(keys(super_specs)),
-                              collect(keys(super_specs["package"]))))
+# cache things you need for completions
+completion_cache.meta_options = sort(map(wrap_option, collect(keys(meta_option_specs))))
+completion_cache.commands = sort(append!(collect(keys(super_specs)),
+                                         collect(keys(super_specs["package"]))))
+for (k, v) in pairs(super_specs)
+    completion_cache.subcommands[k] = sort(collect(keys(v)))
+    for spec in values(v)
+        completion_cache.options[spec.kind] =
+            sort(map(wrap_option, collect(keys(spec.option_specs))))
+    end
+end
 # TODO remove this
 command_specs = super_specs["package"]
 
