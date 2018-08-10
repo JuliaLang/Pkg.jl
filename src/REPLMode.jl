@@ -206,7 +206,7 @@ end
 wrap_option(option::String) =
     length(option) == 1 ? "-$option" : "--$option"
 
-function _statement(words)
+function _statement(words)::Tuple{Symbol,String,Any,Bool}
     is_option(word) = first(word) == '-'
 
     word = popfirst!(words)
@@ -751,15 +751,6 @@ function LineEdit.complete_line(c::PkgCompletionProvider, s)
     return ret, partial[range], should_complete
 end
 
-function complete_package(s, i1, i2, lastcommand, project_opt)
-    if lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN]
-        return complete_installed_package(s, i1, i2, project_opt)
-    elseif lastcommand in [CMD_ADD, CMD_DEVELOP]
-        return complete_remote_package(s, i1, i2)
-    end
-    return String[], 0:-1, false
-end
-
 function complete_installed_package(s, i1, i2, project_opt)
     pkgs = project_opt ? API.__installed(PKGMODE_PROJECT) : API.__installed()
     pkgs = sort!(collect(keys(filter((p) -> p[2] != nothing, pkgs))))
@@ -794,37 +785,46 @@ function complete_remote_package(s, i1, i2)
     return cmp, i1:i2, !isempty(cmp)
 end
 
-function completions(full, index)
+function complete_argument(to_complete, i1, i2, lastcommand, project_opt
+                           )::Tuple{Vector{String},UnitRange{Int},Bool}
+    if lastcommand == CMD_HELP
+        completions = filter(x->startswith(x,to_complete),
+                             completion_cache.commands::Vector{String})
+        return completions, i1:i2, !isempty(completions)
+    elseif lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN]
+        return complete_installed_package(to_complete, i1, i2, project_opt)
+    elseif lastcommand in [CMD_ADD, CMD_DEVELOP]
+        return complete_remote_package(to_complete, i1, i2)
+    end
+    return String[], 0:-1, false
+end
+
+function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
     pre = full[1:index]
     if isempty(pre)
-        return command_names, 0:-1, false
+        return completion_cache.commands, 0:-1, false
     end
     x = parse(pre; for_completions=true)
     if x === nothing # failed parse (invalid command name)
         return String[], 0:-1, false
     end
-    (key, to_complete, spec, proj) = x
+    (key::Symbol, to_complete::String, spec, proj::Bool) = x
     last = split(pre, ' ', keepempty=true)[end]
     offset = isempty(last) ? index+1 : last.offset+1
     if last != to_complete # require a space before completing next field
         return String[], 0:-1, false
     end
-    possible = key == :meta ? completion_cache.meta_options :
+    if key == :arg
+        return complete_argument(to_complete, offset, index, spec.kind, proj)
+    end
+    possible::Vector{String} =
+        key == :meta ? completion_cache.meta_options :
         key == :cmd ? completion_cache.commands :
         key == :sub ? completion_cache.subcommands[spec] :
         key == :opt ? completion_cache.options[spec.kind] :
-        nothing
-    if possible !== nothing
-        completions = filter(x->startswith(x,to_complete), possible)
-        return completions, offset:index, !isempty(completions)
-    end
-    # argument completions
-    if spec.kind == CMD_HELP
-        completions = filter(x->startswith(x,to_complete), completion_cache.commands)
-        return completions, offset:index, !isempty(completions)
-    else
-        return complete_package(to_complete, offset, index, spec.kind, proj)
-    end
+        String[]
+    completions = filter(x->startswith(x,to_complete), possible)
+    return completions, offset:index, !isempty(completions)
 end
 
 prev_project_file = nothing
