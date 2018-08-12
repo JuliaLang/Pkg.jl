@@ -5,7 +5,6 @@ module Pkg
 import Random
 import REPL
 
-# legacy CI script support
 export @pkg_str
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
@@ -37,10 +36,11 @@ include("Operations.jl")
 include("API.jl")
 include("REPLMode.jl")
 
-import .API: clone, dir
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
+# legacy CI script support
+import .API: clone, dir
 
 
 """
