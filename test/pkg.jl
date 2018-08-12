@@ -346,6 +346,7 @@ temp_pkg_dir() do project_path
     end
 end
 
+# This test seems to error on AppVeyor so disable for now
 #=
 temp_pkg_dir() do project_path
     @testset "valid project file names" begin
@@ -365,9 +366,7 @@ temp_pkg_dir() do project_path
             mktempdir() do tmp; cd(tmp) do
                 pkg_name = "FooBar"
                 # create a project and grab its uuid
-                withenv("USER" => "Test User") do
-                    Pkg.generate(pkg_name)
-                end
+                Pkg.generate(pkg_name)
                 uuid = extract_uuid(joinpath(pkg_name, "Project.toml"))
                 # activate project env
                 Pkg.activate(abspath(pkg_name))
@@ -397,7 +396,6 @@ temp_pkg_dir() do project_path
         end
     end
 end
-
 
 temp_pkg_dir() do project_path
     # pkg assumes `Example.jl` is still a git repo, it will try to fetch on `update`
