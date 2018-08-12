@@ -298,14 +298,18 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
 end
 
 # Resolve a set of versions given package version specs
-function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})::Dict{UUID,VersionNumber}
+function resolve_versions!(
+    ctx::Context,
+    pkgs::Vector{PackageSpec},
+    target::Union{Nothing, String} = nothing,
+)::Dict{UUID,VersionNumber}
     printpkgstyle(ctx, :Resolving, "package versions...")
     # anything not mentioned is fixed
     uuids = UUID[pkg.uuid for pkg in pkgs]
     uuid_to_name = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
     uuid_to_name[uuid_julia] = "julia"
 
-    for (name::String, uuidstr::String) in ctx.env.project["deps"]
+    for (name::String, uuidstr::String) in get_deps(ctx, target)
         uuid = UUID(uuidstr)
         uuid_to_name[uuid] = name
 
@@ -657,7 +661,8 @@ function relative_project_path_if_in_project(ctx::Context, path::String)
     end
 end
 
-project_rel_path(ctx::Context, path::String) = joinpath(dirname(ctx.env.project_file), path)
+project_rel_path(ctx::Context, path::String) =
+    normpath(joinpath(dirname(ctx.env.project_file), path))
 
 function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothing})
     env = ctx.env
@@ -791,6 +796,11 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     need_to_resolve = false
     is_project = Types.is_project(localctx.env, pkg)
 
+    target = nothing
+    if pkg.special_action == PKGSPEC_TESTED
+        target = "test"
+    end
+
     # Only put `pkg` and its deps + target deps (recursively) in the temp project
     collect_deps!(seen, pkg) = begin
         pkg.uuid in seen && return
@@ -813,7 +823,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         localctx.env.pkg = nothing
         localctx.env.project["deps"][pkg.name] = string(pkg.uuid)
         localctx.env.manifest[pkg.name] = [Dict(
-            "deps" => mainctx.env.project["deps"],
+            "deps" => get_deps(mainctx, target),
             "uuid" => string(pkg.uuid),
             "path" => dirname(localctx.env.project_file),
             "version" => string(pkg.version)
@@ -828,11 +838,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     end
 
     pkgs = PackageSpec[]
-    target = ""
-    if pkg.special_action == PKGSPEC_TESTED
-        target = "test"
-    end
-    if !isempty(target)
+    if target !== nothing
         collect_target_deps!(localctx, pkgs, pkg, target)
         seen_uuids = Set{UUID}()
         for dpkg in pkgs
@@ -896,7 +902,12 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     end
 end
 
-function collect_target_deps!(ctx::Context, pkgs::Vector{PackageSpec}, pkg::PackageSpec, target::String)
+function collect_target_deps!(
+    ctx::Context,
+    pkgs::Vector{PackageSpec},
+    pkg::PackageSpec,
+    target::String,
+)
     # Find the path to the package
     if pkg.uuid in keys(ctx.stdlibs)
         path = Types.stdlib_path(pkg.name)
@@ -941,7 +952,7 @@ function collect_target_deps!(ctx::Context, pkgs::Vector{PackageSpec}, pkg::Pack
             push!(pkgs, PackageSpec(pkg, uuid))
         end
     end
-    return nothing
+    return
 end
 
 # Pkg2 test/REQUIRE compatibility
@@ -1045,7 +1056,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             """
         cmd = ```
             $(Base.julia_cmd()) -O0 --color=no --history-file=no
-            --startup-file=$(Base.JLOptions().startupfile != 2 ? "yes" : "no")
+            --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
             --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
             --eval $code
             ```
@@ -1134,6 +1145,15 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     if length(ctx.env.project["deps"]) == n
         @info "No changes"
         return
+    end
+    deps_names = collect(keys(ctx.env.project["deps"]))
+    if haskey(ctx.env.project, "targets")
+        filter!(ctx.env.project["targets"]) do (target, deps)
+            !isempty(filter!(in(deps_names), deps))
+        end
+        if isempty(ctx.env.project["targets"])
+            delete!(ctx.env.project, "targets")
+        end
     end
     # only keep reachable manifest entires
     prune_manifest(ctx.env)

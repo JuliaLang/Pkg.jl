@@ -51,6 +51,8 @@ compress_versions(f::Function, from::Vector{VersionNumber}) =
     compress_versions(filter(f, from), from)
 compress_versions(vi::VersionInterval, from::Vector{VersionNumber}) =
     compress_versions(v->v in vi, from)
+compress_versions(vs::VersionSet, from::Vector{VersionNumber}) =
+    compress_versions(v->v in vs, from)
 compress_versions(inc, from) = compress_versions(inc, collect(from))
 
 versions_string(p::Pair) = versions_string(p...)
