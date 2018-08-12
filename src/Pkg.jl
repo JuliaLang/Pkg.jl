@@ -379,7 +379,7 @@ module PrecompileArea
     import LibGit2
     import REPL
     import SHA
-    include("precompile.jl")
+    # include("precompile.jl")
 end
 
 end # module
