@@ -657,7 +657,7 @@ REPL.REPLDisplay(repl::MiniREPL) = repl.display
 
 const minirepl = Ref{MiniREPL}()
 
-#= __init__() = =# minirepl[] = MiniREPL()
+__init__() = minirepl[] = MiniREPL()
 
 macro pkg_str(str::String)
     :($(do_cmd)(minirepl[], $str; do_rethrow=true))
@@ -801,13 +801,11 @@ function promptf()
                 nothing
             end
             if project !== nothing
-                proj_dir = ispath(project_file) ? realpath(project_file) : project_file
-                proj_dir = dirname(proj_dir)
                 projname = get(project, "name", nothing)
-                if startswith(pwd(), proj_dir) && projname !== nothing
+                if projname !== nothing
                     name = projname
                 else
-                    name = basename(proj_dir)
+                    name = basename(dirname(project_file))
                 end
                 prefix = string("(", name, ") ")
                 prev_prefix = prefix

@@ -18,7 +18,7 @@ using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
-    PackageSpec, EnvCache, Context, Context!,
+    PackageSpec, EnvCache, Context, Context!, get_deps,
     PkgError, pkgerror, has_name, has_uuid, write_env, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
@@ -492,6 +492,13 @@ function isdir_windows_workaround(path::String)
     end
 end
 
+# try to call realpath on as much as possible
+function safe_realpath(path)
+    ispath(path) && return realpath(path)
+    a, b = splitdir(path)
+    return joinpath(safe_realpath(a), b)
+end
+
 casesensitive_isdir(dir::String) = isdir_windows_workaround(dir) && dir in readdir(joinpath(dir, ".."))
 
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, devdir::String)
@@ -513,7 +520,8 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                     # Relative paths are given relative pwd() so we
                     # translate that to be relative the project instead.
                     # `realpath` is needed to expand symlinks before taking the relative path.
-                    pkg.path = relpath(realpath(abspath(pkg.repo.url)), realpath(dirname(ctx.env.project_file)))
+                    pkg.path = relpath(safe_realpath(abspath(pkg.repo.url)),
+                                       safe_realpath(dirname(ctx.env.project_file)))
                 end
                 folder_already_downloaded = true
                 project_path = pkg.repo.url

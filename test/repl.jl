@@ -311,6 +311,21 @@ cd(mktempdir()) do
     @test manifest["SubModule"][1]["path"] == joinpath("..", "SubModule")
 end
 
+# test relative dev paths (#490) without existing Project.toml
+temp_pkg_dir() do depot
+    cd(mktempdir()) do
+        pkg"activate NonExistent"
+        withenv("USER" => "Test User") do
+            pkg"generate Foo"
+        end
+        # this dev should not error even if NonExistent/Project.toml file is non-existent
+        @test !isdir("NonExistent")
+        pkg"dev Foo"
+        manifest = Pkg.Types.Context().env.manifest
+        @test manifest["Foo"][1]["path"] == joinpath("..", "Foo")
+    end
+end
+
 # develop with --shared and --local
 using Pkg.Types: manifest_info, EnvCache
 cd(mktempdir()) do
@@ -397,14 +412,17 @@ temp_pkg_dir() do project_path; cd(project_path) do
         cp(joinpath(@__DIR__, "test_packages", "BigProject"), joinpath(tmp, "BigProject"))
         cd(joinpath(tmp, "BigProject"))
         with_current_env() do
-            pkg"dev RecursiveDep2"
-            pkg"dev RecursiveDep"
-            pkg"dev SubModule"
-            pkg"dev SubModule2"
-            pkg"add Random"
-            pkg"add Example"
-            pkg"add JSON"
-            pkg"build"
+            # the command below also tests multiline input
+            pkg"""
+                dev RecursiveDep2
+                dev RecursiveDep
+                dev SubModule
+                dev SubModule2
+                add Random
+                add Example
+                add JSON
+                build
+            """
             @eval using BigProject
             pkg"build BigProject"
             @test_throws PkgError pkg"add BigProject"
@@ -558,11 +576,11 @@ end
 
         newname = "NewName"
         set_name(projfile_path, newname)
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
