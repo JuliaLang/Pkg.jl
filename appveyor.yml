@@ -16,7 +16,9 @@ platform:
 
 branches:
   only:
-    - master
+    # - master
+    - staging
+    - trying
     - /release-.*/
 
 notifications:
