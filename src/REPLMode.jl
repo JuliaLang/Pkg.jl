@@ -1040,9 +1040,8 @@ This operation is undone by `free`.
 *Example*
 ```jl
 pkg> develop Example
-pkg> develop Example#master
-pkg> develop Example#c37b675
-pkg> develop https://github.com/JuliaLang/Example.jl#master
+pkg> develop https://github.com/JuliaLang/Example.jl
+pkg> develop ~/mypackages/Example
 pkg> develop --local Example
 ```
     """,
