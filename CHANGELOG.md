@@ -7,5 +7,18 @@ New features
 Bug fixes
 ----------
 
+* The `gc` command no longer crashes when it encounters normal files
+  (like `.DS_Store`) in the `packages` directory. ([#634])
+* Removed incorrect documentation stating that git revisions could be used
+  with `develop`. ([#639])
+* Packages no longer erronously updates on non updating commands like `add` ([#642])
+
 Deprecated or removed
 ---------------------
+
+
+<!--- LINKS -->
+
+[#634]: https://github.com/JuliaLang/Pkg.jl/pull/634
+[#639]: https://github.com/JuliaLang/Pkg.jl/pull/639
+[#642]: https://github.com/JuliaLang/Pkg.jl/pull/642
