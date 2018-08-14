@@ -349,9 +349,9 @@ end
     @test Pkg.REPLMode.parse("--preview reg"; for_completions=true) == (:cmd, "reg", nothing, true)
     # sub commands
     @test Pkg.REPLMode.parse("--preview registry"; for_completions=true) ==
-        (:sub, "", Pkg.REPLMode.super_specs["registry"], true)
+        (:sub, "", "registry", true)
     @test Pkg.REPLMode.parse("--preview registry a"; for_completions=true) ==
-        (:sub, "a", Pkg.REPLMode.super_specs["registry"], true)
+        (:sub, "a", "registry", true)
     # options
     @test Pkg.REPLMode.parse("add -"; for_completions=true) ==
         (:opt, "-", Pkg.REPLMode.super_specs["package"]["add"], true)
