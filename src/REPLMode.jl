@@ -252,7 +252,7 @@ function _statement(words)::Tuple{Symbol,String,Any,Bool}
         return nothing
     end
     if isempty(words)
-        return :arg, word, command, true
+        return :arg, "", command, true
     end
     word = words[end]
     manifest = any(x->x in ["--manifest", "-m"], filter(is_option, words))
