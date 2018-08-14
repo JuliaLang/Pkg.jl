@@ -207,7 +207,7 @@ end
 wrap_option(option::String) =
     length(option) == 1 ? "-$option" : "--$option"
 
-function _statement(words)::Tuple{Symbol,String,Any,Bool}
+function _statement(words)
     is_option(word) = first(word) == '-'
 
     word = popfirst!(words)
