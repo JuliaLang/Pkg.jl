@@ -74,7 +74,7 @@ validmax(a::FieldValue) = a.l0 >= 0
 
 # like usual argmax, but favors the highest indices
 # in case of a tie
-function argmax(f::Field)
+function Base.argmax(f::Field)
     m = typemin(FieldValue)
     mi = 0
     for j = length(f):-1:1

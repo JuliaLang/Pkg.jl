@@ -1,4 +1,5 @@
 #!/usr/bin/env julia
+# This file is a part of Julia. License is MIT: https://julialang.org/license
 
 import Pkg.TOML
 import LibGit2
@@ -18,7 +19,6 @@ const STDLIBS = sort!(by = lowercase, [
     "Logging"
     "Markdown"
     "Mmap"
-    "OldPkg"
     "Pkg"
     "Printf"
     "Profile"

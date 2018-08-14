@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 # Content in this file is extracted from BinaryProvider.jl, see LICENSE.method
 
 module BinaryProvider
@@ -338,7 +340,7 @@ function parse_7z_list(output::AbstractString)
 
     # Find index of " Name". (can't use `findfirst(generator)` until this is
     # closed: https://github.com/JuliaLang/julia/issues/16884
-    header_row = find(occursin(" Name", l) && occursin(" Attr", l) for l in lines)[1]
+    header_row = findall(occursin(" Name", l) && occursin(" Attr", l) for l in lines)[1]
     name_idx = search(lines[header_row], "Name")[1]
     attr_idx = search(lines[header_row], "Attr")[1] - 1
 
@@ -365,7 +367,7 @@ end
 """
 `parse_7z_list(output::AbstractString)`
 
-Given the output of `tar -t`, parse out the listed filenames.  This funciton
+Given the output of `tar -t`, parse out the listed filenames.  This function
 used by `list_tarball_files`.
 """
 function parse_tar_list(output::AbstractString)

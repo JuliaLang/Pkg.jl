@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module OperationsTest
 
 import Random: randstring
@@ -125,6 +127,12 @@ temp_pkg_dir() do project_path
         @test isinstalled(TEST_PKG)
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
+        # https://github.com/JuliaLang/Pkg.jl/issues/601
+        pkgdir = joinpath(Pkg.depots1(), "packages")
+        touch(joinpath(pkgdir, ".DS_Store"))
+        Pkg.gc()
+        rm(joinpath(pkgdir, ".DS_Store"))
+        @test isempty(readdir(pkgdir))
     end
 
     @testset "package with wrong UUID" begin
@@ -142,6 +150,9 @@ temp_pkg_dir() do project_path
         # VersionRange
         Pkg.add(PackageSpec(TEST_PKG.name, VersionSpec(VersionRange("0.3.0-0.3.2"))))
         @test Pkg.API.__installed()[TEST_PKG.name] == v"0.3.2"
+        # Check that adding another packages doesn't upgrade other packages
+        Pkg.add("Test")
+        @test Pkg.API.__installed()[TEST_PKG.name] == v"0.3.2"
         Pkg.update(; level = UPLEVEL_PATCH)
         @test Pkg.API.__installed()[TEST_PKG.name] == v"0.3.3"
         Pkg.update(; level = UPLEVEL_MINOR)
@@ -151,7 +162,6 @@ temp_pkg_dir() do project_path
 
     @testset "testing" begin
         # TODO: Check that preview = true doesn't actually execute the test
-        # TODO: Test-only dependencies
         Pkg.add(TEST_PKG.name)
         Pkg.test(TEST_PKG.name; coverage=true)
         pkgdir = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
@@ -282,27 +292,22 @@ temp_pkg_dir() do project_path
     @testset "add julia" begin
         @test_throws PkgError Pkg.add("julia")
     end
+end
+
+temp_pkg_dir() do project_path
+    @testset "libgit2 downloads" begin
+        Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
+        @test haskey(Pkg.installed(), TEST_PKG.name)
+        Pkg.rm(TEST_PKG.name)
+    end
 
     @testset "up in Project without manifest" begin
         mktempdir() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
             cd(joinpath(dir, "UnregisteredWithProject")) do
-               with_current_env() do
+                with_current_env() do
                     Pkg.update()
                     @test haskey(Pkg.API.__installed(), "Example")
-                end
-            end
-        end
-    end
-
-    @testset "failing building a package should throw" begin
-        mktempdir() do path
-            cd(path) do
-                Pkg.generate("FailBuildPkg")
-                cd("FailBuildPkg")
-                with_current_env() do
-                    write_build(pwd(), "error()")
-                    @test_throws PkgError Pkg.build()
                 end
             end
         end
@@ -320,6 +325,10 @@ temp_pkg_dir() do project_path
         @test haskey(Pkg.API.__installed(), "JSON")
         Pkg.rm("JSON")
     end
+end
+
+@testset "parse package url win" begin
+    @test typeof(Pkg.REPLMode.parse_package("https://github.com/abc/ABC.jl"; add_or_develop=true)) == PackageSpec
 end
 
 @testset "preview generate" begin
@@ -345,6 +354,8 @@ temp_pkg_dir() do project_path
     end
 end
 
+# This test seems to error on AppVeyor so disable for now
+#=
 temp_pkg_dir() do project_path
     @testset "valid project file names" begin
         extract_uuid(toml_path) = begin
@@ -382,6 +393,7 @@ temp_pkg_dir() do project_path
         end # cd project_path
     end # @testset
 end
+=#
 
 temp_pkg_dir() do project_path
     @testset "invalid repo url" begin
@@ -407,6 +419,51 @@ temp_pkg_dir() do project_path
         end
     end
 end
+
+temp_pkg_dir() do project_path; cd(project_path) do
+    @testset "instantiating updated repo" begin
+        tmp = mktempdir()
+        cd(tmp)
+        depo1 = mktempdir()
+        depo2 = mktempdir()
+
+        empty!(DEPOT_PATH)
+        pushfirst!(DEPOT_PATH, depo1)
+        LibGit2.close(LibGit2.clone("https://github.com/JuliaLang/Example.jl", "Example.jl"))
+        mkdir("machine1")
+        cd("machine1")
+        Pkg.activate(".")
+        Pkg.add(PackageSpec(path="../Example.jl"))
+        cd("..")
+        cp("machine1", "machine2")
+        empty!(DEPOT_PATH)
+        pushfirst!(DEPOT_PATH, depo2)
+        cd("machine2")
+        Pkg.activate(".")
+        Pkg.instantiate()
+        cd("..")
+        cd("Example.jl")
+        open("README.md", "a") do io
+            print(io, "Hello")
+        end
+        LibGit2.with(LibGit2.GitRepo(".")) do repo
+            LibGit2.add!(repo, "*")
+            LibGit2.commit(repo, "changes"; author=TEST_SIG, committer=TEST_SIG)
+        end
+        cd("../machine1")
+        empty!(DEPOT_PATH)
+        pushfirst!(DEPOT_PATH, depo1)
+        Pkg.activate(".")
+        Pkg.update()
+        cd("..")
+        cp("machine1/Manifest.toml", "machine2/Manifest.toml"; force=true)
+        cd("machine2")
+        empty!(DEPOT_PATH)
+        pushfirst!(DEPOT_PATH, depo2)
+        Pkg.activate(".")
+        Pkg.instantiate()
+    end
+end end
 
 temp_pkg_dir() do project_path
     cd(project_path) do
