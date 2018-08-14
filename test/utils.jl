@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 function temp_pkg_dir(fn::Function)
     local env_dir
     local old_load_path
@@ -63,6 +65,19 @@ function with_temp_env(f, env_name::AbstractString="Dummy")
     Pkg.activate(env_path)
     try
         applicable(f, env_path) ? f(env_path) : f()
+    finally
+        Pkg.activate()
+    end
+end
+
+function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
+    Pkg.activate(path)
+    try
+        if change_dir
+            cd(fn, path)
+        else
+            fn()
+        end
     finally
         Pkg.activate()
     end
