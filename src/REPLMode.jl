@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module REPLMode
 
 using Markdown
@@ -79,9 +81,8 @@ function parse_option(word::AbstractString)::Option
     return Option(option_name, option_arg)
 end
 
-meta_option_declarations = OptionDeclaration[
-    ("env", OPT_ARG, :env => arg->EnvCache(Base.parse_env(arg)))
-]
+# declare meta options here
+meta_option_declarations = OptionDeclaration[]
 meta_option_specs = OptionSpecs(meta_option_declarations)
 
 ################
@@ -362,7 +363,7 @@ function package_args(args::Vector{Token}; add_or_dev=false)::Vector{PackageSpec
         if arg isa String
             push!(pkgs, parse_package(arg; add_or_develop=add_or_dev))
         elseif arg isa VersionRange
-            pkgs[end].version = arg
+            pkgs[end].version = VersionSpec(arg)
         elseif arg isa Rev
             pkg = pkgs[end]
             if pkg.repo == nothing
@@ -686,9 +687,20 @@ function complete_package(s, i1, i2, lastcommand, project_opt)
     if lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN]
         return complete_installed_package(s, i1, i2, project_opt)
     elseif lastcommand in [CMD_ADD, CMD_DEVELOP]
-        return complete_remote_package(s, i1, i2)
+        if occursin(Base.Filesystem.path_separator_re, s)
+            return complete_local_path(s, i1, i2)
+        else
+            rps = complete_remote_package(s, i1, i2)
+            lps = complete_local_path(s, i1, i2)
+            return vcat(rps[1], lps[1]), isempty(rps[1]) ? lps[2] : i1:i2, length(rps[1]) + length(lps[1]) > 0
+        end
     end
     return String[], 0:-1, false
+end
+
+function complete_local_path(s, i1, i2)
+    cmp = REPL.REPLCompletions.complete_path(s, i2)
+    [REPL.REPLCompletions.completion_text(p) for p in cmp[1]], cmp[2], !isempty(cmp[1])
 end
 
 function complete_installed_package(s, i1, i2, project_opt)
@@ -1028,9 +1040,8 @@ This operation is undone by `free`.
 *Example*
 ```jl
 pkg> develop Example
-pkg> develop Example#master
-pkg> develop Example#c37b675
-pkg> develop https://github.com/JuliaLang/Example.jl#master
+pkg> develop https://github.com/JuliaLang/Example.jl
+pkg> develop ~/mypackages/Example
 pkg> develop --local Example
 ```
     """,
@@ -1221,18 +1232,9 @@ backspace when the input line is empty or press Ctrl+C.
 
 **Synopsis**
 
-    pkg> [--env=...] cmd [opts] [args]
+    pkg> cmd [opts] [args]
 
 Multiple commands can be given on the same line by interleaving a `;` between the commands.
-
-**Environment**
-
-The `--env` meta option determines which project environment to manipulate. By
-default, this looks for a git repo in the parents directories of the current
-working directory, and if it finds one, it uses that as an environment. Otherwise,
-it uses a named environment (typically found in `~/.julia/environments`) looking
-for environments named `v$(VERSION.major).$(VERSION.minor).$(VERSION.patch)`,
-`v$(VERSION.major).$(VERSION.minor)`,  `v$(VERSION.major)` or `default` in order.
 
 **Commands**
 

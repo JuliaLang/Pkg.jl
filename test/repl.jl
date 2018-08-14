@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module REPLTests
 
 using Pkg
@@ -7,9 +9,6 @@ using Test
 import LibGit2
 
 include("utils.jl")
-
-const TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
-const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
 
 function git_init_package(tmp, path)
     base = basename(path)
@@ -28,25 +27,21 @@ end
 
 temp_pkg_dir() do project_path
     with_pkg_env(project_path; change_dir=true) do;
-        withenv("USER" => "Test User") do
-            pkg"generate HelloWorld"
-            LibGit2.close((LibGit2.init(".")))
-            cd("HelloWorld")
-            with_current_env() do
-                pkg"st"
-                @eval using HelloWorld
-                Base.invokelatest(HelloWorld.greet)
-                @test isfile("Project.toml")
-                Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithBuildSpecificTestDeps"))")
-                Pkg.test("PackageWithBuildSpecificTestDeps")
-            end
+        pkg"generate HelloWorld"
+        LibGit2.close((LibGit2.init(".")))
+        cd("HelloWorld")
+        with_current_env() do
+            pkg"st"
+            @eval using HelloWorld
+            Base.invokelatest(HelloWorld.greet)
+            @test isfile("Project.toml")
+            Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithBuildSpecificTestDeps"))")
+            Pkg.test("PackageWithBuildSpecificTestDeps")
         end
 
         @test_throws PkgError pkg"dev Example#blergh"
 
-        withenv("USER" => "Test User") do
-            pkg"generate Foo"
-        end
+        pkg"generate Foo"
         pkg"dev Foo"
         mv(joinpath("Foo", "src", "Foo.jl"), joinpath("Foo", "src", "Foo2.jl"))
         @test_throws PkgError pkg"dev Foo"
@@ -94,7 +89,7 @@ end
 
 temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
     pkg"activate ."
-    pkg"add Example"
+    pkg"add Example@0.5"
     @test isinstalled(TEST_PKG)
     v = Pkg.API.__installed()[TEST_PKG.name]
     pkg"rm Example"
@@ -215,32 +210,30 @@ temp_pkg_dir() do project_path; cd(project_path) do
     mktempdir() do other_dir
         mktempdir() do tmp;
             cd(tmp)
-            withenv("USER" => "Test User") do
-                pkg"generate HelloWorld"
-                cd("HelloWorld") do
-                    with_current_env() do
-                        pkg"generate SubModule1"
-                        pkg"generate SubModule2"
-                        pkg"develop SubModule1"
-                        mkdir("tests")
-                        cd("tests")
-                        pkg"develop ../SubModule2"
-                        @test Pkg.API.__installed()["SubModule1"] == v"0.1.0"
-                        @test Pkg.API.__installed()["SubModule2"] == v"0.1.0"
-                        # make sure paths to SubModule1 and SubModule2 are relative
-                        manifest = Pkg.Types.Context().env.manifest
-                        @test manifest["SubModule1"][1]["path"] == "SubModule1"
-                        @test manifest["SubModule2"][1]["path"] == "SubModule2"
-                    end
-                end
-                cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
-                cd(joinpath(other_dir, "HelloWorld"))
+            pkg"generate HelloWorld"
+            cd("HelloWorld") do
                 with_current_env() do
-                    # Check that these didnt generate absolute paths in the Manifest by copying
-                    # to another directory
-                    @test Base.find_package("SubModule1") == joinpath(pwd(), "SubModule1", "src", "SubModule1.jl")
-                    @test Base.find_package("SubModule2") == joinpath(pwd(), "SubModule2", "src", "SubModule2.jl")
+                    pkg"generate SubModule1"
+                    pkg"generate SubModule2"
+                    pkg"develop SubModule1"
+                    mkdir("tests")
+                    cd("tests")
+                    pkg"develop ../SubModule2"
+                    @test Pkg.API.__installed()["SubModule1"] == v"0.1.0"
+                    @test Pkg.API.__installed()["SubModule2"] == v"0.1.0"
+                    # make sure paths to SubModule1 and SubModule2 are relative
+                    manifest = Pkg.Types.Context().env.manifest
+                    @test manifest["SubModule1"][1]["path"] == "SubModule1"
+                    @test manifest["SubModule2"][1]["path"] == "SubModule2"
                 end
+            end
+            cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
+            cd(joinpath(other_dir, "HelloWorld"))
+            with_current_env() do
+                # Check that these didn't generate absolute paths in the Manifest by copying
+                # to another directory
+                @test Base.find_package("SubModule1") == joinpath(pwd(), "SubModule1", "src", "SubModule1.jl")
+                @test Base.find_package("SubModule2") == joinpath(pwd(), "SubModule2", "src", "SubModule2.jl")
             end
         end
     end
@@ -248,73 +241,71 @@ end # cd
 end # temp_pkg_dir
 
 # activate
-cd(mktempdir()) do
-    path = pwd()
-    pkg"activate ."
-    @test Base.active_project() == joinpath(path, "Project.toml")
-    # tests illegal names for shared environments
-    @test_throws Pkg.Types.PkgError pkg"activate --shared ."
-    @test_throws Pkg.Types.PkgError pkg"activate --shared ./Foo"
-    @test_throws Pkg.Types.PkgError pkg"activate --shared Foo/Bar"
-    @test_throws Pkg.Types.PkgError pkg"activate --shared ../Bar"
-    # check that those didn't change te enviroment
-    @test Base.active_project() == joinpath(path, "Project.toml")
-    mkdir("Foo")
-    cd(mkdir("modules")) do
-        withenv("USER" => "Test User") do
+temp_pkg_dir() do project_path
+    cd(mktempdir()) do
+        path = pwd()
+        pkg"activate ."
+        @test Base.active_project() == joinpath(path, "Project.toml")
+        # tests illegal names for shared environments
+        @test_throws Pkg.Types.PkgError pkg"activate --shared ."
+        @test_throws Pkg.Types.PkgError pkg"activate --shared ./Foo"
+        @test_throws Pkg.Types.PkgError pkg"activate --shared Foo/Bar"
+        @test_throws Pkg.Types.PkgError pkg"activate --shared ../Bar"
+        # check that those didn't change te enviroment
+        @test Base.active_project() == joinpath(path, "Project.toml")
+        mkdir("Foo")
+        cd(mkdir("modules")) do
             pkg"generate Foo"
         end
+        pkg"develop modules/Foo"
+        pkg"activate Foo" # activate path Foo over deps Foo
+        @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
+        pkg"activate ."
+        @test_logs (:info, r"activating new environment at ") pkg"activate --shared Foo" # activate shared Foo
+        @test Base.active_project() == joinpath(Pkg.envdir(), "Foo", "Project.toml")
+        pkg"activate ."
+        rm("Foo"; force=true, recursive=true)
+        pkg"activate Foo" # activate path from developed Foo
+        @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
+        pkg"activate ."
+        @test_logs (:info, r"activating new environment at ") pkg"activate ./Foo" # activate empty directory Foo (sidestep the developed Foo)
+        @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
+        pkg"activate ."
+        @test_logs (:info, r"activating new environment at ") pkg"activate Bar" # activate empty directory Bar
+        @test Base.active_project() == joinpath(path, "Bar", "Project.toml")
+        pkg"activate ."
+        pkg"add Example" # non-deved deps should not be activated
+        @test_logs (:info, r"activating new environment at ") pkg"activate Example"
+        @test Base.active_project() == joinpath(path, "Example", "Project.toml")
+        pkg"activate ."
+        cd(mkdir("tests"))
+        pkg"activate Foo" # activate developed Foo from another directory
+        @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
+        tmpdepot = mktempdir()
+        tmpdir = mkpath(joinpath(tmpdepot, "environments", "Foo"))
+        push!(Base.DEPOT_PATH, tmpdepot)
+        pkg"activate --shared Foo" # activate existing shared Foo
+        @test Base.active_project() == joinpath(tmpdir, "Project.toml")
+        pop!(Base.DEPOT_PATH)
+        pkg"activate" # activate home project
+        @test Base.ACTIVE_PROJECT[] === nothing
     end
-    pkg"develop modules/Foo"
-    pkg"activate Foo" # activate path Foo over deps Foo
-    @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
-    pkg"activate ."
-    @test_logs (:info, r"new shared environment") pkg"activate --shared Foo" # activate shared Foo
-    @test Base.active_project() == joinpath(Pkg.envdir(), "Foo", "Project.toml")
-    pkg"activate ."
-    rm("Foo"; force=true, recursive=true)
-    pkg"activate Foo" # activate path from developed Foo
-    @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
-    pkg"activate ."
-    @test_logs (:info, r"new environment") pkg"activate ./Foo" # activate empty directory Foo (sidestep the developed Foo)
-    @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
-    pkg"activate ."
-    @test_logs (:info, r"new environment") pkg"activate Bar" # activate empty directory Bar
-    @test Base.active_project() == joinpath(path, "Bar", "Project.toml")
-    pkg"activate ."
-    pkg"add Example" # non-deved deps should not be activated
-    @test_logs (:info, r"new environment") pkg"activate Example"
-    @test Base.active_project() == joinpath(path, "Example", "Project.toml")
-    pkg"activate ."
-    cd(mkdir("tests"))
-    pkg"activate Foo" # activate developed Foo from another directory
-    @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
-    tmpdepot = mktempdir()
-    tmpdir = mkpath(joinpath(tmpdepot, "environments", "Foo"))
-    push!(Base.DEPOT_PATH, tmpdepot)
-    pkg"activate --shared Foo" # activate existing shared Foo
-    @test Base.active_project() == joinpath(tmpdir, "Project.toml")
-    pop!(Base.DEPOT_PATH)
-    pkg"activate" # activate home project
-    @test Base.ACTIVE_PROJECT[] === nothing
 end
 
 # test relative dev paths (#490)
 cd(mktempdir()) do
-    withenv("USER" => "Test User") do
-        pkg"generate HelloWorld"
-        cd("HelloWorld")
-        pkg"generate SubModule"
-        cd(mkdir("tests"))
-        pkg"activate ."
-        pkg"develop .." # HelloWorld
-        pkg"develop ../SubModule"
-        @test Pkg.installed()["HelloWorld"] == v"0.1.0"
-        @test Pkg.installed()["SubModule"] == v"0.1.0"
-        manifest = Pkg.Types.Context().env.manifest
-        @test manifest["HelloWorld"][1]["path"] == ".."
-        @test manifest["SubModule"][1]["path"] == joinpath("..", "SubModule")
-    end
+    pkg"generate HelloWorld"
+    cd("HelloWorld")
+    pkg"generate SubModule"
+    cd(mkdir("tests"))
+    pkg"activate ."
+    pkg"develop .." # HelloWorld
+    pkg"develop ../SubModule"
+    @test Pkg.installed()["HelloWorld"] == v"0.1.0"
+    @test Pkg.installed()["SubModule"] == v"0.1.0"
+    manifest = Pkg.Types.Context().env.manifest
+    @test manifest["HelloWorld"][1]["path"] == ".."
+    @test manifest["SubModule"][1]["path"] == joinpath("..", "SubModule")
 end
 
 # test relative dev paths (#490) without existing Project.toml
@@ -348,69 +339,79 @@ end
 test_complete(s) = Pkg.REPLMode.completions(s,lastindex(s))
 apply_completion(str) = begin
     c, r, s = test_complete(str)
-    @test s == true
     str[1:prevind(str, first(r))]*first(c)
 end
 
 # Autocompletions
 temp_pkg_dir() do project_path; cd(project_path) do
-    Pkg.Types.registries()
-    pkg"activate ."
-    c, r = test_complete("add Exam")
-    @test "Example" in c
-    c, r = test_complete("rm Exam")
-    @test isempty(c)
-    Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "RequireDependency"))")
+    @testset "tab completion" begin
+        Pkg.Types.registries()
+        pkg"activate ."
+        c, r = test_complete("add Exam")
+        @test "Example" in c
+        c, r = test_complete("rm Exam")
+        @test isempty(c)
+        Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "RequireDependency"))")
 
-    c, r = test_complete("rm RequireDep")
-    @test "RequireDependency" in c
-    c, r = test_complete("rm -p RequireDep")
-    @test "RequireDependency" in c
-    c, r = test_complete("rm --project RequireDep")
-    @test "RequireDependency" in c
-    c, r = test_complete("rm Exam")
-    @test isempty(c)
-    c, r = test_complete("rm -p Exam")
-    @test isempty(c)
-    c, r = test_complete("rm --project Exam")
-    @test isempty(c)
+        c, r = test_complete("rm RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm -p RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm --project RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm Exam")
+        @test isempty(c)
+        c, r = test_complete("rm -p Exam")
+        @test isempty(c)
+        c, r = test_complete("rm --project Exam")
+        @test isempty(c)
 
-    c, r = test_complete("rm -m RequireDep")
-    @test "RequireDependency" in c
-    c, r = test_complete("rm --manifest RequireDep")
-    @test "RequireDependency" in c
-    c, r = test_complete("rm -m Exam")
-    @test "Example" in c
-    c, r = test_complete("rm --manifest Exam")
-    @test "Example" in c
+        c, r = test_complete("rm -m RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm --manifest RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm -m Exam")
+        @test "Example" in c
+        c, r = test_complete("rm --manifest Exam")
+        @test "Example" in c
 
-    c, r = test_complete("rm RequireDep")
-    @test "RequireDependency" in c
-    c, r = test_complete("rm Exam")
-    @test isempty(c)
-    c, r = test_complete("rm -m Exam")
-    c, r = test_complete("rm -m Exam")
-    @test "Example" in c
+        c, r = test_complete("rm RequireDep")
+        @test "RequireDependency" in c
+        c, r = test_complete("rm Exam")
+        @test isempty(c)
+        c, r = test_complete("rm -m Exam")
+        c, r = test_complete("rm -m Exam")
+        @test "Example" in c
 
-    pkg"add Example"
-    c, r = test_complete("rm Exam")
-    @test "Example" in c
-    c, r = test_complete("add --man")
-    @test "--manifest" in c
-    c, r = test_complete("rem")
-    @test "remove" in c
-    @test apply_completion("rm E") == "rm Example"
-    @test apply_completion("add Exampl") == "add Example"
+        pkg"add Example"
+        c, r = test_complete("rm Exam")
+        @test "Example" in c
+        c, r = test_complete("add --man")
+        @test "--manifest" in c
+        c, r = test_complete("rem")
+        @test "remove" in c
+        @test apply_completion("rm E") == "rm Example"
+        @test apply_completion("add Exampl") == "add Example"
 
-    c, r = test_complete("preview r")
-    @test "remove" in c
-    c, r = test_complete("help r")
-    @test "remove" in c
-    @test !("rm" in c)
+        c, r = test_complete("preview r")
+        @test "remove" in c
+        c, r = test_complete("help r")
+        @test "remove" in c
+        @test !("rm" in c)
 
-    c, r = test_complete("add REPL")
-    # Filtered by version
-    @test !("REPL" in c)
+        c, r = test_complete("add REPL")
+        # Filtered by version
+        @test !("REPL" in c)
+
+        mkdir("testdir")
+        c, r = test_complete("add ")
+        @test Sys.iswindows() ? ("testdir\\\\" in c) : ("testdir/" in c)
+        @test "Example" in c
+        @test apply_completion("add tes") == (Sys.iswindows() ? "add testdir\\\\" : "add testdir/")
+        @test apply_completion("add ./tes") == (Sys.iswindows() ? "add ./testdir\\\\" : "add ./testdir/")
+        c, r = test_complete("dev ./")
+        @test (Sys.iswindows() ? ("testdir\\\\" in c) : ("testdir/" in c))
+    end
 end end
 
 temp_pkg_dir() do project_path; cd(project_path) do
@@ -844,7 +845,6 @@ end
         @test_throws PkgError Pkg.REPLMode.pkgstr("--foo=foo add Example")
         @test_throws PkgError Pkg.REPLMode.pkgstr("--bar add Example")
         @test_throws PkgError Pkg.REPLMode.pkgstr("-x add Example")
-        # malformed, but registered meta option
         @test_throws PkgError Pkg.REPLMode.pkgstr("--env Example")
     end end end
 end

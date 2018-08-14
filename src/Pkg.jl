@@ -1,13 +1,19 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module Pkg
 
 import Random
 import REPL
-using REPL.TerminalMenus
+
+export @pkg_str
+export PackageSpec
+export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
+export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 
 depots() = Base.DEPOT_PATH
 function depots1()
     d = depots()
-    isempty(d) && pkgerror("no depots found in DEPOT_PATH")
+    isempty(d) && Pkg.Types.pkgerror("no depots found in DEPOT_PATH")
     return d[1]
 end
 
@@ -15,10 +21,6 @@ logdir() = joinpath(depots1(), "logs")
 devdir() = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
-
-export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
-export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
-export PackageSpec
 
 # load snapshotted dependencies
 include("../ext/TOML/src/TOML.jl")
@@ -34,8 +36,12 @@ include("Operations.jl")
 include("API.jl")
 include("REPLMode.jl")
 
+import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
+# legacy CI script support
+import .API: clone, dir
+
 
 """
     PackageMode
@@ -213,10 +219,10 @@ If `pkg` is given as a local path, the package at that path will be tracked.
 Pkg.develop("Example")
 
 # By url
-Pkg.develop(PackageSpec(url="https://github.com/JuliaLang/Compat.jl", rev="master"))
+Pkg.develop(PackageSpec(url="https://github.com/JuliaLang/Compat.jl"))
 
-# By path (also uses url keyword to PackageSpec)
-Pkg.develop(PackageSpec(url="MyJuliaPackages/Package.jl")
+# By path
+Pkg.develop(PackageSpec(path="MyJuliaPackages/Package.jl")
 ```
 
 See also [`PackageSpec`](@ref)
@@ -328,14 +334,8 @@ Defaults to 'https', with `proto == nothing` delegating the choice to the packag
 const setprotocol! = API.setprotocol!
 
 
-# legacy CI script support
-import .API: clone, dir
 
-import .REPLMode: @pkg_str
-export @pkg_str, PackageSpec
-
-
-#function __init__()
+function __init__()
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
@@ -346,16 +346,31 @@ export @pkg_str, PackageSpec
             end
         end
     end
-#end
-
-module PrecompileArea
-    using ..Types
-    using UUIDs
-    import LibGit2
-    import Dates
-    # include("precompile.jl")
 end
 
 METADATA_compatible_uuid(pkg::String) = Types.uuid5(Types.uuid_package, pkg)
+
+##################
+# Precompilation #
+##################
+
+const CTRL_C = '\x03'
+const precompile_script = """
+    import Pkg
+    tmp = mktempdir()
+    cd(tmp)
+    empty!(DEPOT_PATH)
+    pushfirst!(DEPOT_PATH, tmp)
+    # Prevent cloning registry
+    mkdir("registries")
+    touch("registries/blocker") # prevents default registry from cloning
+    touch("Project.toml")
+    ] activate .
+    $CTRL_C
+    Pkg.add("Test") # adding an stdlib doesn't require internet access
+    ] add Te\t\t$CTRL_C
+    ] st
+    $CTRL_C
+    rm(tmp; recursive=true)"""
 
 end # module

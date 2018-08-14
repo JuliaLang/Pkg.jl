@@ -1,6 +1,7 @@
 language: julia
 
 julia:
+  - 1.0
   - nightly
 
 os:
@@ -15,7 +16,9 @@ before_script:
 
 branches:
   only:
-    - master
+    - staging
+    - trying
+    - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi

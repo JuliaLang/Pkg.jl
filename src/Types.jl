@@ -1,3 +1,5 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
 module Types
 
 using UUIDs
@@ -110,7 +112,7 @@ function Base.showerror(io::IO, pkgerr::ResolverError)
 end
 
 #################
-# Command Error #
+# Pkg Error #
 #################
 struct PkgError <: Exception
     msg::String
@@ -556,7 +558,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                     else
                         rev = string(LibGit2.GitHash(LibGit2.head(repo)))
                     end
-                    gitobject, isbranch = get_object_branch(repo, rev)
+                    gitobject, isbranch = get_object_branch(repo, rev, creds)
                     try
                         LibGit2.transact(repo) do r
                             if isbranch
@@ -588,15 +590,18 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
                 pkg.path = Pkg.Operations.relative_project_path_if_in_project(ctx, dev_pkg_path)
             end
             @assert pkg.path != nothing
+            @assert has_uuid(pkg)
         end
         return new_uuids
     end
 end
 
-function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgrade_or_add::Bool=true)
+function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
+                           upgrade_or_add::Bool=true, credentials=nothing)
     # Always update the registry when adding
     UPDATED_REGISTRY_THIS_SESSION[] || Pkg.API.update_registry(ctx)
-    Base.shred!(LibGit2.CachedCredentials()) do creds
+    creds = credentials !== nothing ? credentials : LibGit2.CachedCredentials()
+    try
         env = ctx.env
         new_uuids = UUID[]
         for pkg in pkgs
@@ -611,35 +616,32 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
             project_path = nothing
             folder_already_downloaded = false
             try
-                repo, just_cloned = ispath(repo_path) ? (LibGit2.GitRepo(repo_path), false) : begin
-                    r = GitTools.clone(pkg.repo.url, repo_path, isbare=true, credentials=creds)
-                    GitTools.fetch(r, pkg.repo.url; refspecs=refspecs, credentials=creds)
-                    r, true
+                repo = if ispath(repo_path)
+                    LibGit2.GitRepo(repo_path)
+                else
+                    GitTools.clone(pkg.repo.url, repo_path, isbare=true, credentials=creds)
                 end
                 info = manifest_info(env, pkg.uuid)
                 pinned = (info != nothing && get(info, "pinned", false))
-                if upgrade_or_add && !pinned && !just_cloned
-                    rev = pkg.repo.rev
-                    GitTools.fetch(repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
-                end
                 upgrading = upgrade_or_add && !pinned
                 if upgrading
+                    GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
                     rev = pkg.repo.rev
+                    # see if we can get rev as a branch
+                    if isempty(rev)
+                        if LibGit2.isattached(repo)
+                            rev = LibGit2.branch(repo)
+                        else
+                            rev = string(LibGit2.GitHash(LibGit2.head(repo)))
+                        end
+                    end
                 else
                     # Not upgrading so the rev should be the current git-tree-sha
                     rev = info["git-tree-sha1"]
                     pkg.version = VersionNumber(info["version"])
                 end
 
-                # see if we can get rev as a branch
-                if isempty(rev)
-                    if LibGit2.isattached(repo)
-                        rev = LibGit2.branch(repo)
-                    else
-                        rev = string(LibGit2.GitHash(LibGit2.head(repo)))
-                    end
-                end
-                gitobject, isbranch = get_object_branch(repo, rev)
+                gitobject, isbranch = get_object_branch(repo, rev, creds)
                 # If the user gave a shortened commit SHA, might as well update it to the full one
                 try
                     if upgrading
@@ -656,7 +658,6 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
                             info = manifest_info(env, pkg.uuid)
                             if info != nothing && get(info, "git-tree-sha1", "") == string(pkg.repo.git_tree_sha1) && folder_already_downloaded
                                 # Same tree sha and this version already downloaded, nothing left to do
-                                pkg.version = VersionNumber(info["version"])
                                 do_nothing_more = true
                             end
                         end
@@ -683,9 +684,11 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec}; upgr
                 mv(project_path, version_path; force=true)
                 push!(new_uuids, pkg.uuid)
             end
-            @assert pkg.version isa VersionNumber
+            @assert has_uuid(pkg)
         end
         return new_uuids
+    finally
+        creds !== credentials && Base.shred!(creds)
     end
 end
 
@@ -696,14 +699,7 @@ function parse_package!(ctx, pkg, project_path)
         project_data = read_package(project_file)
         pkg.uuid = UUID(project_data["uuid"])
         pkg.name = project_data["name"]
-        if haskey(project_data, "version")
-            pkg.version = VersionNumber(project_data["version"])
-        else
-            @warn "project file for $(pkg.name) at $(project_path) is missing a `version` entry"
-            Pkg.Operations.set_maximum_version_registry!(env, pkg)
-        end
     else
-        # @warn "package $(pkg.name) at $(project_path) will need to have a [Julia]Project.toml file in the future"
         if !isempty(ctx.old_pkg2_clone_name) # remove when legacy CI script support is removed
             pkg.name = ctx.old_pkg2_clone_name
         else
@@ -725,14 +721,9 @@ function parse_package!(ctx, pkg, project_path)
                 pkg.uuid = uuid5(uuid_unreg_pkg, pkg.name)
                 @info "Assigning UUID $(pkg.uuid) to $(pkg.name)"
             end
-            pkg.version = v"0.0"
         else
-            # TODO: Fix
             @assert length(reg_uuids) == 1
             pkg.uuid = reg_uuids[1]
-            # Old style registered package
-            # What version does this package have? We have no idea... let's give it the latest one with a `+`...
-            Pkg.Operations.set_maximum_version_registry!(env, pkg)
         end
     end
 end
@@ -746,7 +737,7 @@ function set_repo_for_pkg!(env, pkg)
     _, pkg.repo.url = Types.registered_info(env, pkg.uuid, "repo")[1]
 end
 
-function get_object_branch(repo, rev)
+function get_object_branch(repo, rev, creds)
     gitobject = nothing
     isbranch = false
     try
@@ -760,7 +751,13 @@ function get_object_branch(repo, rev)
             gitobject = LibGit2.GitObject(repo, rev)
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
-            pkgerror("git object $(rev) could not be found")
+            GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
+            try
+                gitobject = LibGit2.GitObject(repo, rev)
+            catch err
+                err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+                pkgerror("git object $(rev) could not be found")
+            end
         end
     end
     return gitobject, isbranch
@@ -908,8 +905,19 @@ end
 function registries(; clone_default=true)::Vector{String}
     isempty(depots()) && return String[]
     user_regs = abspath(depots1(), "registries")
+    # TODO: delete the following let block in Julia 1.0
+    let uncurated = joinpath(user_regs, "Uncurated"),
+        general = joinpath(user_regs, "General")
+        if ispath(uncurated) && !ispath(general)
+            mv(uncurated, general)
+            git_config_file = joinpath(general, ".git", "config")
+            cfg = read(git_config_file, String)
+            cfg = replace(cfg, r"\bUncurated\b" => "General")
+            write(git_config_file, cfg)
+        end
+    end
     if clone_default
-        if !ispath(user_regs)
+        if !ispath(user_regs) || isempty(readdir(user_regs))
             mkpath(user_regs)
             Base.shred!(LibGit2.CachedCredentials()) do creds
                 printpkgstyle(stdout, :Cloning, "default registries into $user_regs")
