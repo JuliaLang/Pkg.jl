@@ -65,15 +65,15 @@ end
     @test length(statement.arguments) == 1
     @test statement.arguments[1] == "dev"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git")[1]
-    @test "add" in statement.command.names
+    @test "add" == statement.command.canonical_name
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#master")[1]
-    @test "add" in statement.command.names
+    @test "add" == statement.command.canonical_name
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "#master"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#c37b675")[1]
-    @test "add" in statement.command.names
+    @test "add" == statement.command.canonical_name
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "#c37b675"
@@ -81,7 +81,7 @@ end
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "@v0.5.0"
     statement = Pkg.REPLMode.parse("add git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git@0.5.0")[1]
-    @test "add" in statement.command.names
+    @test "add" == statement.command.canonical_name
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git"
     @test statement.arguments[2] == "@0.5.0"
@@ -431,6 +431,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "remove" in c
         c, r = test_complete("help r")
         @test "remove" in c
+        @test !("rm" in c)
 
         c, r = test_complete("add REPL")
         # Filtered by version

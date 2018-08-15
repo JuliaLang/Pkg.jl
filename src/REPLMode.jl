@@ -109,7 +109,8 @@ const CommandDeclaration = Tuple{CommandKind,
                                  }
 struct CommandSpec
     kind::CommandKind
-    names::Vector{String}
+    canonical_name::String
+    short_name::Union{Nothing,String}
     handler::Union{Nothing,Function}
     argument_spec::ArgSpec # note: just use range operator for max/min
     option_specs::Dict{String, OptionSpec}
@@ -135,7 +136,8 @@ function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,Com
     for dec in declarations
         names = dec[2]
         spec = CommandSpec(dec[1],
-                           names,
+                           names[1],
+                           length(names) == 2 ? names[2] : nothing,
                            dec[3],
                            ArgSpec(dec[4]...),
                            OptionSpecs(dec[5]),
@@ -612,6 +614,20 @@ function do_cmd!(command::PkgCommand, repl)
     end
 end
 
+function CommandSpec(command_name::String)::Union{Nothing,CommandSpec}
+    # maybe a "package" command
+    spec = get(super_specs["package"], command_name, nothing)
+    if spec !== nothing
+        return spec
+    end
+    # maybe a "compound command"
+    m = match(r"(\w+)-(\w+)", command_name)
+    m !== nothing || (return nothing)
+    super = get(super_specs, m.captures[1], nothing)
+    super !== nothing || (return nothing)
+    return get(super, m.captures[2], nothing)
+end
+
 function do_help!(command::PkgCommand, repl::REPL.AbstractREPL)
     disp = REPL.REPLDisplay(repl)
     if isempty(command.arguments)
@@ -620,9 +636,10 @@ function do_help!(command::PkgCommand, repl::REPL.AbstractREPL)
     end
     help_md = md""
     for arg in command.arguments
-        spec = get(command_specs, arg, nothing)
-        spec === nothing &&
+        spec = CommandSpec(arg)
+        if spec === nothing
             pkgerror("'$arg' does not name a command")
+        end
         spec.help === nothing &&
             pkgerror("Sorry, I don't have any help for the `$arg` command.")
         isempty(help_md.content) ||
@@ -735,10 +752,11 @@ pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 # handle completions
 mutable struct CompletionCache
     commands::Vector{String}
+    canonical_names::Vector{String}
     meta_options::Vector{String}
     options::Dict{CommandKind, Vector{String}}
     subcommands::Dict{String, Vector{String}}
-    CompletionCache() = new([],[],Dict(),Dict())
+    CompletionCache() = new([],[],[],Dict(),Dict())
 end
 
 completion_cache = CompletionCache()
@@ -794,8 +812,7 @@ end
 function complete_argument(to_complete, i1, i2, lastcommand, project_opt
                            )::Tuple{Vector{String},UnitRange{Int},Bool}
     if lastcommand == CMD_HELP
-        completions = filter(x->startswith(x,to_complete),
-                             completion_cache.commands::Vector{String})
+        completions = filter(x->startswith(x,to_complete), completion_cache.canonical_names)
         return completions, i1:i2, !isempty(completions)
     elseif lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN]
         return complete_installed_package(to_complete, i1, i2, project_opt)
@@ -1273,6 +1290,19 @@ super_specs = SuperSpecs(command_declarations)
 completion_cache.meta_options = sort(map(wrap_option, collect(keys(meta_option_specs))))
 completion_cache.commands = sort(append!(collect(keys(super_specs)),
                                          collect(keys(super_specs["package"]))))
+let names = String[]
+    for (super, specs) in pairs(super_specs)
+        super == "package" && continue # skip "package"
+        for spec in unique(values(specs))
+            push!(names, join([super, spec.canonical_name], "-"))
+        end
+    end
+    for spec in unique(values(super_specs["package"]))
+        push!(names, spec.canonical_name)
+    end
+    completion_cache.canonical_names = names
+    sort!(completion_cache.canonical_names)
+end
 for (k, v) in pairs(super_specs)
     completion_cache.subcommands[k] = sort(collect(keys(v)))
     for spec in values(v)
