@@ -545,8 +545,10 @@ function do_help!(command::PkgCommand, repl::REPL.AbstractREPL)
         spec = get(command_specs, arg, nothing)
         spec === nothing &&
             pkgerror("'$arg' does not name a command")
-        spec.help === nothing &&
-            pkgerror("Sorry, I don't have any help for the `$arg` command.")
+        if spec.help === nothing
+            @warn("Sorry, I don't have any help for the `$arg` command.")
+            continue
+        end
         isempty(help_md.content) ||
             push!(help_md.content, md"---")
         push!(help_md.content, spec.help)
