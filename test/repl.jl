@@ -3,6 +3,7 @@
 module REPLTests
 
 using Pkg
+using Pkg.Types: manifest_info, EnvCache
 import Pkg.Types.PkgError
 using UUIDs
 using Test
@@ -308,6 +309,23 @@ cd(mktempdir()) do
     @test manifest["SubModule"][1]["path"] == joinpath("..", "SubModule")
 end
 
+# path should not be relative when devdir() happens to be in project
+# unless user used dev --local.
+temp_pkg_dir() do depot
+    cd(mktempdir()) do
+        uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
+        pkg"activate ."
+        withenv("JULIA_PKG_DEVDIR" => joinpath(pwd(), "dev")) do
+            pkg"dev Example"
+            @test manifest_info(EnvCache(), uuid)["path"] == joinpath(pwd(), "dev", "Example")
+            pkg"dev --shared Example"
+            @test manifest_info(EnvCache(), uuid)["path"] == joinpath(pwd(), "dev", "Example")
+            pkg"dev --local Example"
+            @test manifest_info(EnvCache(), uuid)["path"] == joinpath("dev", "Example")
+        end
+    end
+end
+
 # test relative dev paths (#490) without existing Project.toml
 temp_pkg_dir() do depot
     cd(mktempdir()) do
@@ -324,7 +342,6 @@ temp_pkg_dir() do depot
 end
 
 # develop with --shared and --local
-using Pkg.Types: manifest_info, EnvCache
 cd(mktempdir()) do
     uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
     pkg"activate ."
