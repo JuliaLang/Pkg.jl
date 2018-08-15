@@ -537,10 +537,7 @@ function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec})::
     toks = map(x->enforce_option(x,specs),options)
     # checking
     for opt in toks
-        # valid option
-        opt.val in keys(specs) ||
-            pkgerror("option '$(opt.val)' is not supported")
-        # conflicting options
+        # check for conflicting options
         key = get_key(opt)
         if key in unique_keys
             conflicting = filter(opt->get_key(opt) == key, toks)
