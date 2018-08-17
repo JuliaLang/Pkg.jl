@@ -97,14 +97,14 @@ meta_option_specs = OptionSpecs(meta_option_declarations)
                    )
 @enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
 struct ArgSpec
-    count::Vector{Int} # note: just use range operator for max/min
+    count::Pair
     parser::Function
     parser_keys::Vector{Pair{Symbol, Any}}
 end
 const CommandDeclaration = Tuple{CommandKind,
                                  Vector{String}, # names
                                  Union{Nothing,Function}, # handler
-                                 Tuple{Vector{Int}, # count
+                                 Tuple{Pair, # count
                                        Function, # parser
                                        Vector{Pair{Symbol, Any}}, # parser keys
                                        }, # arguments
@@ -428,10 +428,9 @@ function APIOptions(options::Vector{Option},
     return Dict(keyword_vec)
 end
 
-# TODO vector of what?
-function enforce_argument_count(count::Vector{Int}, args::PkgArguments)
-    isempty(count) && return
-    length(args) in count ||
+function enforce_argument_count(spec::Pair, args::PkgArguments)
+    count = length(args)
+    spec.first <= count <= spec.second ||
         pkgerror("Wrong number of arguments")
 end
 
@@ -970,7 +969,7 @@ command_declarations = [
     CMD_REGISTRY_ADD,
     ["add"],
     do_registry_add!,
-    ([], identity, []),
+    (1=>Inf, identity, []),
     [],
     nothing,
 ),
@@ -980,7 +979,7 @@ command_declarations = [
 (   CMD_TEST,
     ["test"],
     do_test!,
-    ([], parse_pkg, []),
+    (0=>Inf, parse_pkg, []),
     [
         ("coverage", OPT_SWITCH, :coverage => true),
     ],
@@ -998,7 +997,7 @@ julia is started with `--startup-file=yes`.
 ),( CMD_HELP,
     ["help", "?"],
     nothing,
-    ([], identity, []),
+    (0=>Inf, identity, []),
     [],
     md"""
 
@@ -1015,7 +1014,7 @@ Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`
 ),( CMD_INSTANTIATE,
     ["instantiate"],
     do_instantiate!,
-    ([0], identity, []),
+    (0=>0, identity, []),
     [
         (["project", "p"], OPT_SWITCH, :manifest => false),
         (["manifest", "m"], OPT_SWITCH, :manifest => true),
@@ -1031,7 +1030,7 @@ If no manifest exists or the `--project` option is given, resolve and download t
 ),( CMD_RM,
     ["remove", "rm"],
     do_rm!,
-    ([], parse_pkg, []),
+    (1=>Inf, parse_pkg, []),
     [
         (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
         (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
@@ -1059,7 +1058,7 @@ as any no-longer-necessary manifest packages due to project package removals.
 ),( CMD_ADD,
     ["add"],
     do_add!,
-    ([], parse_pkg, [:add_or_dev => true, :valid => [VersionRange, Rev]]),
+    (1=>Inf, parse_pkg, [:add_or_dev => true, :valid => [VersionRange, Rev]]),
     [],
     md"""
 
@@ -1089,7 +1088,7 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ),( CMD_DEVELOP,
     ["develop", "dev"],
     do_develop!,
-    ([], parse_pkg, [:add_or_dev => true, :valid => [VersionRange]]),
+    (1=>Inf, parse_pkg, [:add_or_dev => true, :valid => [VersionRange]]),
     [
         ("local", OPT_SWITCH, :shared => false),
         ("shared", OPT_SWITCH, :shared => true),
@@ -1115,7 +1114,7 @@ pkg> develop --local Example
 ),( CMD_FREE,
     ["free"],
     do_free!,
-    ([], parse_pkg, []),
+    (1=>Inf, parse_pkg, []),
     [],
     md"""
     free pkg[=uuid] ...
@@ -1126,7 +1125,7 @@ makes the package no longer being checked out.
 ),( CMD_PIN,
     ["pin"],
     do_pin!,
-    ([], parse_pkg, [:valid => [VersionRange]]),
+    (1=>Inf, parse_pkg, [:valid => [VersionRange]]),
     [],
     md"""
 
@@ -1138,7 +1137,7 @@ A pinned package has the symbol `⚲` next to its version in the status list.
 ),( CMD_BUILD,
     ["build"],
     do_build!,
-    ([], parse_pkg, []),
+    (0=>Inf, parse_pkg, []),
     [],
     md"""
 
@@ -1151,7 +1150,7 @@ The `startup.jl` file is disabled during building unless julia is started with `
 ),( CMD_RESOLVE,
     ["resolve"],
     do_resolve!,
-    ([0], identity, []),
+    (0=>0, identity, []),
     [],
     md"""
     resolve
@@ -1162,7 +1161,7 @@ packages have changed causing the current Manifest to_indices be out of sync.
 ),( CMD_ACTIVATE,
     ["activate"],
     do_activate!,
-    ([0,1], identity, []),
+    (0=>1, identity, []),
     [
         ("shared", OPT_SWITCH, :shared => true),
     ],
@@ -1179,7 +1178,7 @@ it will be placed in the first depot of the stack.
 ),( CMD_UP,
     ["update", "up"],
     do_up!,
-    ([], parse_pkg, [:valid => [VersionRange]]),
+    (0=>Inf, parse_pkg, [:valid => [VersionRange]]),
     [
         (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
         (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
@@ -1207,7 +1206,7 @@ packages will not be upgraded at all.
 ),( CMD_GENERATE,
     ["generate"],
     do_generate!,
-    ([1], identity, []),
+    (1=>1, identity, []),
     [],
     md"""
 
@@ -1218,7 +1217,7 @@ Create a project called `pkgname` in the current folder.
 ),( CMD_PRECOMPILE,
     ["precompile"],
     do_precompile!,
-    ([0], identity, []),
+    (0=>0, identity, []),
     [],
     md"""
     precompile
@@ -1229,7 +1228,7 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
 ),( CMD_STATUS,
     ["status", "st"],
     do_status!,
-    ([0], identity, []),
+    (0=>0, identity, []),
     [
         (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
         (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
@@ -1250,7 +1249,7 @@ includes the dependencies of explicitly added packages.
 ),( CMD_GC,
     ["gc"],
     do_gc!,
-    ([0], identity, []),
+    (0=>0, identity, []),
     [],
     md"""
 
@@ -1261,7 +1260,7 @@ Deletes packages that cannot be reached from any existing environment.
     CMD_PREVIEW,
     ["preview"],
     nothing,
-    ([1], identity, []),
+    (1=>Inf, identity, []),
     [],
     md"""
 
