@@ -333,7 +333,7 @@ is_project_uuid(env::EnvCache, uuid::UUID) =
 ###########
 # Context #
 ###########
-stdlib_dir() = joinpath(Sys.BINDIR, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)")
+stdlib_dir() = normpath(joinpath(Sys.BINDIR, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
 stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
 function gather_stdlib_uuids()
     stdlibs = Dict{UUID,String}()
@@ -1113,20 +1113,12 @@ function printpkgstyle(ctx::Context, cmd::Symbol, text::String, ignore_indent::B
 end
 
 
-function pathrepr(ctx::Union{Nothing, Context}, path::String, base::String=pwd())
-    project_path = dirname(ctx.env.project_file)
-    path = joinpath(project_path, path)
-    if startswith(path, project_path) && startswith(base, project_path)
-        # We are in project and path is in project
-        path = relpath(path, base)
+function pathrepr(path::String)
+    # print stdlib paths as @stdlib/Name
+    if startswith(path, stdlib_dir())
+        path = "@stdlib/" * basename(path)
     end
-    if !Sys.iswindows() && isabspath(path)
-        home = joinpath(homedir(), "")
-        if startswith(path, home)
-            path = joinpath("~", path[nextind(path, lastindex(home)):end])
-        end
-    end
-    return "`" * path * "`"
+    return "`" * Base.contractuser(path) * "`"
 end
 
 function project_key_order(key::String)
@@ -1149,7 +1141,7 @@ function write_env(ctx::Context; display_diff=true)
     isempty(project["deps"]) && delete!(project, "deps")
     if !isempty(project) || ispath(env.project_file)
         if display_diff && !(ctx.currently_running_target)
-            printpkgstyle(ctx, :Updating, pathrepr(ctx, env.project_file))
+            printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
             Pkg.Display.print_project_diff(ctx, old_env, env)
         end
         if !ctx.preview
@@ -1162,7 +1154,7 @@ function write_env(ctx::Context; display_diff=true)
     # update the manifest file
     if !isempty(env.manifest) || ispath(env.manifest_file)
         if display_diff && !(ctx.currently_running_target)
-            printpkgstyle(ctx, :Updating, pathrepr(ctx, env.manifest_file))
+            printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
             Pkg.Display.print_manifest_diff(ctx, old_env, env)
         end
         manifest = deepcopy(env.manifest)
