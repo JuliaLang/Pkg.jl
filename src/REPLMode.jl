@@ -109,6 +109,7 @@ const CommandDeclaration = Tuple{CommandKind,
                                        Vector{Pair{Symbol, Any}}, # parser keys
                                        }, # arguments
                                  Vector{OptionDeclaration}, # options
+                                 String, #description
                                  Union{Nothing, Markdown.MD}, #help
                                  }
 struct CommandSpec
@@ -118,6 +119,7 @@ struct CommandSpec
     handler::Union{Nothing,Function}
     argument_spec::ArgSpec
     option_specs::Dict{String, OptionSpec}
+    description::String
     help::Union{Nothing, Markdown.MD}
 end
 command_specs = Dict{String,CommandSpec}() # TODO remove this ?
@@ -145,6 +147,7 @@ function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,Com
                            dec[3],
                            ArgSpec(dec[4]...),
                            OptionSpecs(dec[5]),
+                           dec[6],
                            dec[end])
         for name in names
             # TODO regex check name
@@ -964,6 +967,7 @@ end
 # SPEC #
 ########
 command_declarations = [
+#=
 ["registry"] => CommandDeclaration[
 (
     CMD_REGISTRY_ADD,
@@ -971,9 +975,11 @@ command_declarations = [
     do_registry_add!,
     (1=>Inf, identity, []),
     [],
+    "Currently just a placeholder for a future command",
     nothing,
 ),
 ], #registry
+=#
 
 ["package"] => CommandDeclaration[
 (   CMD_TEST,
@@ -983,6 +989,7 @@ command_declarations = [
     [
         ("coverage", OPT_SWITCH, :coverage => true),
     ],
+    "run tests for packages",
     md"""
 
     test [opts] pkg[=uuid] ...
@@ -999,6 +1006,7 @@ julia is started with `--startup-file=yes`.
     nothing,
     (0=>Inf, identity, []),
     [],
+    "show this message",
     md"""
 
     help
@@ -1019,6 +1027,7 @@ Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`
         (["project", "p"], OPT_SWITCH, :manifest => false),
         (["manifest", "m"], OPT_SWITCH, :manifest => true),
     ],
+    "downloads all the dependencies for the project",
     md"""
     instantiate
     instantiate [-m|--manifest]
@@ -1035,6 +1044,7 @@ If no manifest exists or the `--project` option is given, resolve and download t
         (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
         (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
     ],
+    "remove packages from project or manifest",
     md"""
 
     rm [-p|--project] pkg[=uuid] ...
@@ -1060,6 +1070,7 @@ as any no-longer-necessary manifest packages due to project package removals.
     do_add!,
     (1=>Inf, parse_pkg, [:add_or_dev => true, :valid => [VersionRange, Rev]]),
     [],
+    "add packages to project",
     md"""
 
     add pkg[=uuid] [@version] [#rev] ...
@@ -1093,6 +1104,7 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
         ("local", OPT_SWITCH, :shared => false),
         ("shared", OPT_SWITCH, :shared => true),
     ],
+    "clone the full package repo locally for development",
     md"""
     develop [--shared|--local] pkg[=uuid] ...
 
@@ -1116,6 +1128,7 @@ pkg> develop --local Example
     do_free!,
     (1=>Inf, parse_pkg, []),
     [],
+    "undoes a `pin`, `develop`, or stops tracking a repo",
     md"""
     free pkg[=uuid] ...
 
@@ -1127,6 +1140,7 @@ makes the package no longer being checked out.
     do_pin!,
     (1=>Inf, parse_pkg, [:valid => [VersionRange]]),
     [],
+    "pins the version of packages",
     md"""
 
     pin pkg[=uuid] ...
@@ -1139,6 +1153,7 @@ A pinned package has the symbol `⚲` next to its version in the status list.
     do_build!,
     (0=>Inf, parse_pkg, []),
     [],
+    "run the build script for packages",
     md"""
 
     build pkg[=uuid] ...
@@ -1152,6 +1167,7 @@ The `startup.jl` file is disabled during building unless julia is started with `
     do_resolve!,
     (0=>0, identity, []),
     [],
+    "resolves to update the manifest from changes in dependencies of developed packages",
     md"""
     resolve
 
@@ -1165,6 +1181,7 @@ packages have changed causing the current Manifest to_indices be out of sync.
     [
         ("shared", OPT_SWITCH, :shared => true),
     ],
+    "set the primary environment the package manager manipulates",
     md"""
     activate
     activate [--shared] path
@@ -1187,6 +1204,7 @@ it will be placed in the first depot of the stack.
         ("patch", OPT_SWITCH, :level => UPLEVEL_PATCH),
         ("fixed", OPT_SWITCH, :level => UPLEVEL_FIXED),
     ],
+    "update packages in manifest",
     md"""
 
     up [-p|project]  [opts] pkg[=uuid] [@version] ...
@@ -1208,6 +1226,7 @@ packages will not be upgraded at all.
     do_generate!,
     (1=>1, identity, []),
     [],
+    "generate files for a new project",
     md"""
 
     generate pkgname
@@ -1219,6 +1238,7 @@ Create a project called `pkgname` in the current folder.
     do_precompile!,
     (0=>0, identity, []),
     [],
+    "precompile all the project dependencies",
     md"""
     precompile
 
@@ -1233,6 +1253,7 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
         (["project", "p"], OPT_SWITCH, :mode => PKGMODE_PROJECT),
         (["manifest", "m"], OPT_SWITCH, :mode => PKGMODE_MANIFEST),
     ],
+    "summarize contents of and changes to environment",
     md"""
 
     status
@@ -1251,6 +1272,7 @@ includes the dependencies of explicitly added packages.
     do_gc!,
     (0=>0, identity, []),
     [],
+    "garbage collect packages not used for a significant time",
     md"""
 
 Deletes packages that cannot be reached from any existing environment.
@@ -1262,6 +1284,7 @@ Deletes packages that cannot be reached from any existing environment.
     nothing,
     (1=>Inf, identity, []),
     [],
+    "previews a subsequent command without affecting the current state",
     md"""
 
     preview cmd
@@ -1315,43 +1338,11 @@ backspace when the input line is empty or press Ctrl+C.
 Multiple commands can be given on the same line by interleaving a `;` between the commands.
 
 **Commands**
-
-What action you want the package manager to take:
-
-`help`: show this message
-
-`status`: summarize contents of and changes to environment
-
-`add`: add packages to project
-
-`develop`: clone the full package repo locally for development
-
-`rm`: remove packages from project or manifest
-
-`up`: update packages in manifest
-
-`test`: run tests for packages
-
-`build`: run the build script for packages
-
-`pin`: pins the version of packages
-
-`free`: undoes a `pin`, `develop`, or stops tracking a repo.
-
-`instantiate`: downloads all the dependencies for the project
-
-`resolve`: resolves to update the manifest from changes in dependencies of
-developed packages
-
-`generate`: generate files for a new project
-
-`preview`: previews a subsequent command without affecting the current state
-
-`precompile`: precompile all the project dependencies
-
-`gc`: garbage collect packages not used for a significant time
-
-`activate`: set the primary environment the package manager manipulates
 """
+
+for command in completion_cache.canonical_names
+    spec = CommandSpec(command)
+    push!(help.content, Markdown.parse("`$command`: $(spec.description)"))
+end
 
 end #module
