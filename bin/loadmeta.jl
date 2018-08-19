@@ -110,6 +110,7 @@ function load_packages(dir::String)
             v"0.6.2"  => Version("d386e40c17d43b79fc89d3e579fc04547241787c"),
             v"0.7.0"  => Version("e0ad15af54feecbc4e4b91281c2c15eeca7d6515"), # dummy commit, not actual 0.7!
             v"1.0.0"  => Version("0ef882679f00d331467b23ffe89906505f5774bf"), # dummy commit, not actual 1.0
+            v"1.1.0"  => Version("6ef1d76c50a39c0ce68b4e42948a1499c1551415"), # dummy commit, not actual 1.1
         ),
     )
     return pkgs
