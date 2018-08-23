@@ -31,7 +31,6 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     projectfile_path,
     RegistrySpec
 
-
 include("versions.jl")
 
 ## ordering of UUIDs ##
@@ -376,18 +375,24 @@ is_project_uuid(env::EnvCache, uuid::UUID) =
 ###########
 stdlib_dir() = normpath(joinpath(Sys.BINDIR, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
 stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
-function gather_stdlib_uuids()
-    stdlibs = Dict{UUID,String}()
-    for stdlib in readdir(stdlib_dir())
-        projfile = projectfile_path(stdlib_path(stdlib))
-        if nothing !== projfile
-            proj = TOML.parsefile(projfile)
-            if haskey(proj, "uuid")
-                stdlibs[UUID(proj["uuid"])] = stdlib
-            end
-        end
+const STDLIB = Ref{Dict{UUID,String}}()
+function load_stdlib()
+    stdlib = Dict{UUID,String}()
+    for name in readdir(stdlib_dir())
+        projfile = projectfile_path(stdlib_path(name))
+        nothing === projfile && continue
+        project = TOML.parsefile(projfile)
+        uuid = get(project, "uuid", nothing)
+        nothing === uuid && continue
+        stdlib[UUID(uuid)] = name
     end
-    return stdlibs
+    return stdlib
+end
+function stdlib()
+    if !isassigned(STDLIB)
+        STDLIB[] = load_stdlib()
+    end
+    return deepcopy(STDLIB[])
 end
 
 # ENV variables to set some of these defaults?
@@ -400,7 +405,7 @@ Base.@kwdef mutable struct Context
     # the future. It currently stands as an unofficial workaround for issue #795.
     num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
     graph_verbose::Bool = false
-    stdlibs::Dict{UUID,String} = gather_stdlib_uuids()
+    stdlibs::Dict{UUID,String} = stdlib()
     # Remove next field when support for Pkg2 CI scripts is removed
     currently_running_target::Bool = false
     old_pkg2_clone_name::String = ""
@@ -1006,8 +1011,9 @@ function stdlib_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
                 name == pkg.name && (pkg.uuid = uuid)
             end
         end
-        if has_uuid(pkg) && !has_name(pkg)
-            haskey(ctx.stdlibs, pkg.uuid) && (pkg.name = ctx.stdlibs[pkg.uuid])
+        if !has_name(pkg) && has_uuid(pkg)
+            name = get(ctx.stdlibs, pkg.uuid, nothing)
+            nothing !== name && (pkg.name = name)
         end
     end
 end
