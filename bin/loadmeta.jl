@@ -167,4 +167,53 @@ for pkg in [
 ]
     delete!(pkgs, pkg)
 end
+
+# cap julia version for probably-0.7-incompatible packages
+
+const date_cutoff = 1531526400 # July 14, 2018
+const all_vers = julia_versions()
+const old_vers = julia_versions(v -> v < v"0.7")
+const meta_dir = Pkg.Pkg2.dir("METADATA")
+
+const time_map = Dict{Tuple{String,VersionNumber},Int}()
+let t = 0
+    for line in eachline(`git -C $meta_dir log --format=%ct --name-only`)
+        if (m = match(r"^(\d+)$", line)) !== nothing
+            t = parse(Int, line)
+        elseif (m = match(r"^([^/]+)/versions/(\d+\.\d+\.\d+)/requires$", line)) !== nothing
+            pkg = String(m.captures[1])
+            ver = VersionNumber(m.captures[2])
+            haskey(time_map, (pkg, ver)) && continue
+            time_map[pkg,ver] = t
+        end
+    end
+end
+
+function cap_07_incompatible!(pkg::String, ver::VersionNumber, reqs::Dict{String,Require})
+    jvers = reqs["julia"].versions
+    ivals = jvers.intervals
+    isempty(ivals) && return
+    if !isempty(ivals[end]) && !any(v->v in ivals[end] && v < v"0.7", all_vers)
+        # has interval only containing 0.7+ versions => 0.7 compatible
+        return # no change
+    elseif pkg != "Compat" && !haskey(reqs, "Compat") && any(v in jvers for v in old_vers)
+        # supports an older julia & doesn't use Compat => 0.7 incompatible
+        # fall through
+    elseif v"0.7" in jvers || v"1.0" in jvers
+        # claims to support 0.7+ & tagged after date cutoff => 0.7 compatible
+        get(time_map, (pkg, ver), 0) ≥ date_cutoff && return # no change
+    end
+    # cap supported Julia versions at 0.6
+    ivals[end] = VersionInterval(ivals[end].lower, v"0.7-")
+    return
+end
+
+for (pkg, p) in pkgs
+    pkg == "julia" && continue
+    for (ver, v) in p.versions
+        cap_07_incompatible!(pkg, ver, v.requires)
+    end
+end
+
+# prune versions that can't be satisfied
 prune!(pkgs)
