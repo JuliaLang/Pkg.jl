@@ -504,6 +504,19 @@ end
     @test Pkg.Types.pathrepr(path) == "`@stdlib/Test`"
 end
 
+@testset "stdlib_resolve!" begin
+    a = Pkg.Types.PackageSpec(name="Markdown")
+    b = Pkg.Types.PackageSpec(uuid=UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
+    Pkg.Types.stdlib_resolve!([a, b])
+    @test a.uuid == UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
+    @test b.name == "Profile"
+
+    x = Pkg.Types.PackageSpec(name="Markdown", uuid=UUID("d6f4376e-aef5-505a-96c1-9c027394607a"))
+    Pkg.Types.stdlib_resolve!([x])
+    @test x.name == "Markdown"
+    @test x.uuid == UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
+end
+
 include("repl.jl")
 include("api.jl")
 
