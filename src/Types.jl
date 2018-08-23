@@ -335,19 +335,22 @@ is_project_uuid(env::EnvCache, uuid::UUID) =
 ###########
 stdlib_dir() = normpath(joinpath(Sys.BINDIR, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
 stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
-function gather_stdlib_uuids()
-    stdlibs = Dict{UUID,String}()
-    for stdlib in readdir(stdlib_dir())
-        projfile = projectfile_path(stdlib_path(stdlib))
-        if nothing !== projfile
-            proj = TOML.parsefile(projfile)
-            if haskey(proj, "uuid")
-                stdlibs[UUID(proj["uuid"])] = stdlib
-            end
-        end
+function gather_stdlib()
+    by_uuid = Dict{UUID, String}()
+    by_name = Dict{String, UUID}()
+    for name in readdir(stdlib_dir())
+        projfile = projectfile_path(stdlib_path(name))
+        nothing === projfile && continue
+        project = TOML.parsefile(projfile)
+        uuid = get(project, "uuid", nothing)
+        nothing === uuid && continue
+        uuid = UUID(uuid)
+        by_uuid[uuid] = name
+        by_name[name] = uuid
     end
-    return stdlibs
+    return by_uuid, by_name
 end
+stdlib_by_uuid, stdlib_by_name = gather_stdlib()
 
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
@@ -357,7 +360,6 @@ Base.@kwdef mutable struct Context
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
     graph_verbose::Bool = false
-    stdlibs::Dict{UUID,String} = gather_stdlib_uuids()
     # Remove next field when support for Pkg2 CI scripts is removed
     currently_running_target::Bool = false
     old_pkg2_clone_name::String = ""
@@ -843,16 +845,20 @@ function registry_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     return pkgs
 end
 
-function stdlib_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
-    for pkg in pkgs
-        @assert has_name(pkg) || has_uuid(pkg)
-        if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in ctx.stdlibs
-                name == pkg.name && (pkg.uuid = uuid)
+function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
+    @assert all(pkg->has_name(pkg) || has_uuid(pkg), pkgs)
+    need_resolve = filter(pkg->!has_name(pkg) || !has_uuid(pkg), pkgs)
+    for pkg in need_resolve
+        if has_name(pkg)
+            uuid = get(stdlib_by_name, pkg.name, nothing)
+            if nothing !== uuid
+                pkg.uuid = uuid
             end
-        end
-        if has_uuid(pkg) && !has_name(pkg)
-            haskey(ctx.stdlibs, pkg.uuid) && (pkg.name = ctx.stdlibs[pkg.uuid])
+        else
+            name = get(stdlib_by_uuid, pkg.uuid, nothing)
+            if nothing !== name
+                pkg.name = name
+            end
         end
     end
 end
