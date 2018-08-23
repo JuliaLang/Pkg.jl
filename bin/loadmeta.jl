@@ -158,6 +158,7 @@ for pkg in [
     "React"
     "PackageGenerator"
     "Sparrow"
+    "KeyedTables"
 ]
     delete!(pkgs, pkg)
 end

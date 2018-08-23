@@ -69,7 +69,7 @@ function gitmeta(pkgs::Dict{String,Package})
         updated = false
         repo_path = joinpath(homedir(), ".julia", "clones", uuid)
         repo = nothing
-        for (ver, v) in p.versions
+        for (ver, v) in sort!(collect(p.versions), by=first, rev=true)
             haskey(d[uuid], v.sha1) &&
             (v"0.7" ∉ v.requires["julia"].versions ||
             haskey(s[uuid], v.sha1)) && continue
