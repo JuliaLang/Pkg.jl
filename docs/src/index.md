@@ -537,6 +537,12 @@ Note that only packages in `~/.julia/packages` are deleted.
 A package is a project with a `name`, `uuid` and `version` entry in the `Project.toml` file `src/PackageName.jl` file that defines the module `PackageName`.
 This file is executed when the package is loaded.
 
+!!! note
+    Registering and tagging packages to the registry is still a work in progress and we refer 
+    to the [old way of doing this](https://docs.julialang.org/en/v0.6.4/manual/packages/#Tagging-and-Publishing-Your-Package-1).
+    Packages registered like this are automatically transferred to the General registry.
+
+
 ### Generating files for a package
 
 To generate files for a new package, use `pkg> generate`.
@@ -732,6 +738,7 @@ Compatibility for a dependency is entered in the `Project.toml` file as for exam
 ```toml
 [compat]
 Example = "0.4.3"
+julia = "1"
 ```
 
 After a compatibility entry is put into the project file, `up` can be used to apply it.
