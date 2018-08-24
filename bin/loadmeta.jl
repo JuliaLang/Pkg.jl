@@ -193,8 +193,10 @@ function cap_07_incompatible!(pkg::String, ver::VersionNumber, reqs::Dict{String
     jvers = reqs["julia"].versions
     ivals = jvers.intervals
     isempty(ivals) && return
-    if !isempty(ivals[end]) && !any(v->v in ivals[end] && v < v"0.7", all_vers)
-        # has interval only containing 0.7+ versions => 0.7 compatible
+    if !isempty(ivals[end]) &&
+        (ivals[end].upper < v"∞" || !any(v->v in ivals[end] && v < v"0.7", all_vers))
+        # has final interval with explicit upper bound => leave alone
+        # or interval only containing 0.7+ versions => 0.7 compatible
         return # no change
     elseif pkg != "Compat" && !haskey(reqs, "Compat") && any(v in jvers for v in old_vers)
         # supports an older julia & doesn't use Compat => 0.7 incompatible
