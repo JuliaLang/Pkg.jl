@@ -174,6 +174,7 @@ const date_cutoff = 1531526400 # July 14, 2018
 const all_vers = julia_versions()
 const old_vers = julia_versions(v -> v < v"0.7")
 const meta_dir = Pkg.Pkg2.dir("METADATA")
+const passing = readlines("bin/passing.txt")
 
 const time_map = Dict{Tuple{String,VersionNumber},Int}()
 let t = 0
@@ -193,8 +194,9 @@ function cap_07_incompatible!(pkg::String, ver::VersionNumber, reqs::Dict{String
     jvers = reqs["julia"].versions
     ivals = jvers.intervals
     isempty(ivals) && return
-    if !isempty(ivals[end]) &&
+    if pkg in passing && ver ≥ maximum(keys(pkgs[pkg].versions)) || !isempty(ivals[end]) &&
         (ivals[end].upper < v"∞" || !any(v->v in ivals[end] && v < v"0.7", all_vers))
+        # in the "passing list" from pkgeval and maxiumal version => leave alone
         # has final interval with explicit upper bound => leave alone
         # or interval only containing 0.7+ versions => 0.7 compatible
         return # no change
