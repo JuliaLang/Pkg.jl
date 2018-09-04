@@ -171,9 +171,8 @@ end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
-    word = replace(word, "~" => homedir())
-    if add_or_develop && casesensitive_isdir(word)
-        return PackageSpec(Types.GitRepo(word))
+    if add_or_develop && casesensitive_isdir(expanduser(word))
+        return PackageSpec(Types.GitRepo(expanduser(word)))
     elseif occursin(uuid_re, word)
         return PackageSpec(UUID(word))
     elseif occursin(name_re, word)
@@ -690,7 +689,7 @@ function do_activate!(args::PkgArguments, api_opts::APIOptions)
     if isempty(args)
         return API.activate()
     else
-        return API.activate(args[1]; collect(api_opts)...)
+        return API.activate(expanduser(args[1]); collect(api_opts)...)
     end
 end
 

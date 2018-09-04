@@ -505,7 +505,7 @@ function relative_project_path(ctx::Context, path::String)
                    safe_realpath(dirname(ctx.env.project_file)))
 end
 
-casesensitive_isdir(dir::String) = isdir_windows_workaround(dir) && dir in readdir(joinpath(dir, ".."))
+casesensitive_isdir(dir::String) = isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
 
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}; shared::Bool)
     Base.shred!(LibGit2.CachedCredentials()) do creds

@@ -290,6 +290,11 @@ temp_pkg_dir() do project_path
         pop!(Base.DEPOT_PATH)
         pkg"activate" # activate home project
         @test Base.ACTIVE_PROJECT[] === nothing
+        # expansion of ~
+        if !Sys.iswindows()
+            pkg"activate ~/Foo"
+            @test Base.active_project() == joinpath(homedir(), "Foo", "Project.toml")
+        end
     end
 end
 
@@ -592,11 +597,11 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "uint test `parse_package`" begin
+@testset "unit test `parse_package`" begin; cd(mktempdir()) do
     name = "FooBar"
     uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
     url = "https://github.com/JuliaLang/Example.jl"
-    path = "./Foobar"
+    path = "./Foobar"; mkdir("Foobar")
     # valid input
     pkg = Pkg.REPLMode.parse_package(name)
     @test pkg.name == name
@@ -605,13 +610,24 @@ end
     pkg = Pkg.REPLMode.parse_package("$name=$uuid")
     @test (pkg.name == name) && (pkg.uuid == UUID(uuid))
     pkg = Pkg.REPLMode.parse_package(url; add_or_develop=true)
-    @test (pkg.repo.url == url)
+    @test pkg.repo.url == url
     pkg = Pkg.REPLMode.parse_package(path; add_or_develop=true)
-    @test (pkg.repo.url == path)
+    @test pkg.repo.url == path
+    # expansion of ~
+    if !Sys.iswindows()
+        tildepath = "~/Foobaz"
+        try
+            mkdir(expanduser(tildepath))
+            pkg = Pkg.REPLMode.parse_package(tildepath; add_or_develop=true)
+            @test pkg.repo.url == expanduser(tildepath)
+        finally
+            rm(expanduser(tildepath); force = true)
+        end
+    end
     # errors
     @test_throws PkgError Pkg.REPLMode.parse_package(url)
     @test_throws PkgError Pkg.REPLMode.parse_package(path)
-end
+end end
 
 @testset "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
