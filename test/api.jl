@@ -8,7 +8,7 @@ include("utils.jl")
 
 @testset "Pkg.activate" begin
     temp_pkg_dir() do project_path
-        cd(mktempdir()) do
+        cd_tempdir() do tmp
             path = pwd()
             Pkg.activate(".")
             mkdir("Foo")

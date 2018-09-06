@@ -67,6 +67,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy")
         applicable(f, env_path) ? f(env_path) : f()
     finally
         Pkg.activate()
+        Base.rm(env_path; force = true, recursive = true)
     end
 end
 

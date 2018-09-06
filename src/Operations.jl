@@ -485,6 +485,7 @@ function install_archive(
             !isdir(version_path) && mkpath(version_path)
             mv(joinpath(dir, dirs[1]), version_path; force=true)
             Base.rm(path; force = true)
+            Base.rm(dir; force = true)
             return true
         end
     end
