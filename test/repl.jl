@@ -243,7 +243,7 @@ end # temp_pkg_dir
 
 # activate
 temp_pkg_dir() do project_path
-    cd(mktempdir()) do
+    cd_tempdir() do tmp
         path = pwd()
         pkg"activate ."
         @test Base.active_project() == joinpath(path, "Project.toml")
@@ -282,7 +282,7 @@ temp_pkg_dir() do project_path
         cd(mkdir("tests"))
         pkg"activate Foo" # activate developed Foo from another directory
         @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
-        tmpdepot = mktempdir()
+        tmpdepot = mktempdir(tmp)
         tmpdir = mkpath(joinpath(tmpdepot, "environments", "Foo"))
         push!(Base.DEPOT_PATH, tmpdepot)
         pkg"activate --shared Foo" # activate existing shared Foo
@@ -294,7 +294,7 @@ temp_pkg_dir() do project_path
 end
 
 # test relative dev paths (#490)
-cd(mktempdir()) do
+cd_tempdir() do tmp
     pkg"generate HelloWorld"
     cd("HelloWorld")
     pkg"generate SubModule"
@@ -312,7 +312,7 @@ end
 # path should not be relative when devdir() happens to be in project
 # unless user used dev --local.
 temp_pkg_dir() do depot
-    cd(mktempdir()) do
+    cd_tempdir() do tmp
         uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
         pkg"activate ."
         withenv("JULIA_PKG_DEVDIR" => joinpath(pwd(), "dev")) do
@@ -328,7 +328,7 @@ end
 
 # test relative dev paths (#490) without existing Project.toml
 temp_pkg_dir() do depot
-    cd(mktempdir()) do
+    cd_tempdir() do tmp
         pkg"activate NonExistent"
         withenv("USER" => "Test User") do
             pkg"generate Foo"
@@ -342,7 +342,7 @@ temp_pkg_dir() do depot
 end
 
 # develop with --shared and --local
-cd(mktempdir()) do
+cd_tempdir() do tmp
     uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
     pkg"activate ."
     pkg"develop Example" # test default
