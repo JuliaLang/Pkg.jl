@@ -1,6 +1,8 @@
 #!/usr/bin/env julia
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+import Random: randstring
+
 prefix = joinpath(homedir(), ".julia", "registries", "General")
 
 write_toml(prefix, "Registry") do io
@@ -35,7 +37,8 @@ end
 const trees, stdlibs = gitmeta(pkgs)
 
 for pkg in STDLIBS
-    tree = stdlib_trees[pkg]
+    # tree = stdlib_trees[pkg]
+    tree = randstring()
     deps = Dict(dep => Require(VersionInterval()) for dep in stdlib_deps[pkg])
     pkgs[pkg] = Package(
         UUID(stdlib_uuids[pkg]),
