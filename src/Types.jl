@@ -153,6 +153,8 @@ mutable struct PackageSpec
     special_action::PackageSpecialAction # If the package is currently being pinned, freed etc
     repo::Union{Nothing,GitRepo}
 end
+PackageSpec(pkg::PackageSpec) =
+    PackageSpec(pkg.name, pkg.uuid, pkg.version, pkg.mode, pkg.path, pkg.special_action, pkg.repo)
 PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes,
             mode::PackageMode=PKGMODE_PROJECT, path=nothing, special_action=PKGSPEC_NOTHING,
             repo=nothing) = PackageSpec(String(name), uuid, version, mode, path, special_action, repo)

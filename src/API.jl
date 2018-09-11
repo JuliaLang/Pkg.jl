@@ -25,8 +25,8 @@ function check_package_name(x::String)
 end
 
 add_or_develop(pkg::Union{String, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
-add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([check_package_name(pkg) for pkg in pkgs]; kwargs...)
-add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)       = add_or_develop(Context(), pkgs; kwargs...)
+add_or_develop(pkgs::Vector{<:Union{String, PackageSpec}}; kwargs...) =
+    add_or_develop(Context(), PackageSpec.(pkgs); kwargs...)
 
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, shared::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
@@ -69,8 +69,8 @@ add(args...; kwargs...) = add_or_develop(args...; mode = :add, kwargs...)
 develop(args...; shared=true, kwargs...) = add_or_develop(args...; mode = :develop, shared = shared, kwargs...)
 
 rm(pkg::Union{String, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
-rm(pkgs::Vector{String}; kwargs...)            = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-rm(pkgs::Vector{PackageSpec}; kwargs...)       = rm(Context(), pkgs; kwargs...)
+rm(pkgs::pkgs::Vector{<:Union{String, PackageSpec}}; kwargs...) =
+    rm(Context(), PackageSpec.(pkgs); kwargs...)
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
     for pkg in pkgs
@@ -161,8 +161,8 @@ end
 up(ctx::Context; kwargs...)                    = up(ctx, PackageSpec[]; kwargs...)
 up(; kwargs...)                                = up(PackageSpec[]; kwargs...)
 up(pkg::Union{String, PackageSpec}; kwargs...) = up([pkg]; kwargs...)
-up(pkgs::Vector{String}; kwargs...)            = up([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-up(pkgs::Vector{PackageSpec}; kwargs...)       = up(Context(), pkgs; kwargs...)
+up(pkgs::Vector{<:Union{String, PackageSpec}}; kwargs...) =
+    up(Context(), PackageSpec.(pkgs); kwargs...)
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT, do_update_registry=true, kwargs...)
@@ -201,8 +201,8 @@ resolve(ctx::Context=Context()) =
     up(ctx, level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, do_update_registry=false)
 
 pin(pkg::Union{String, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
-pin(pkgs::Vector{String}; kwargs...)            = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-pin(pkgs::Vector{PackageSpec}; kwargs...)       = pin(Context(), pkgs; kwargs...)
+pin(pkgs::Vector{<:Union{String, PackageSpec}}; kwargs...) =
+    pin(Context(), PackageSpec.(pkgs); kwargs...)
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     Context!(ctx; kwargs...)
@@ -215,8 +215,8 @@ end
 
 
 free(pkg::Union{String, PackageSpec}; kwargs...) = free([pkg]; kwargs...)
-free(pkgs::Vector{String}; kwargs...)            = free([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-free(pkgs::Vector{PackageSpec}; kwargs...)       = free(Context(), pkgs; kwargs...)
+free(pkgs::Vector{<:Union{String, PackageSpec}}; kwargs...) =
+    free(Context(), PackageSpec.(pkgs); kwargs...)
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     Context!(ctx; kwargs...)
@@ -246,8 +246,8 @@ end
 
 test(;kwargs...)                                  = test(PackageSpec[]; kwargs...)
 test(pkg::Union{String, PackageSpec}; kwargs...)  = test([pkg]; kwargs...)
-test(pkgs::Vector{String}; kwargs...)             = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-test(pkgs::Vector{PackageSpec}; kwargs...)        = test(Context(), pkgs; kwargs...)
+test(pkgs::Vector{<:Union{String, PackageSpec}}; kwargs...) =
+    test(Context(), PackageSpec.(pkgs); kwargs...)
 
 function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...)
     Context!(ctx; kwargs...)
