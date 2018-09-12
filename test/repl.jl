@@ -455,9 +455,17 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "remove" in c
         @test !("rm" in c)
 
+        # stdlibs
+        c, r = test_complete("add Stat")
+        @test "Statistics" in c
+        c, r = test_complete("add Lib")
+        @test "LibGit2" in c
         c, r = test_complete("add REPL")
-        # Filtered by version
-        @test !("REPL" in c)
+        @test "REPL" in c
+
+        # upper bounded
+        c, r = test_complete("add Chu")
+        @test !("Chunks" in c)
 
         mkdir("testdir")
         c, r = test_complete("add ")
