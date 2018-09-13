@@ -16,16 +16,35 @@ before_script:
 
 branches:
   only:
+    - master
     - staging
     - trying
     - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
 
+stages:
+  - name: test
+    # test only on bors trying and bors staging
+    if: branch IN (trying, staging)
+  - name: docs
+    # build docs on bors trying, bors staging, master and for tags
+    if: branch IN (trying, staging) OR (branch = master AND type = push) OR tag IS present
+
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia --project --check-bounds=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\""));
+  - julia --project --check-bounds=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"));
                                            import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
 
+jobs:
+  include:
+    - stage: docs
+      julia: nightly
+      os: linux
+      script:
+        - julia -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"))'
+        - julia --project -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
+        - julia --project=docs --color=yes docs/make.jl
+      after_success: skip
+
 after_success:
-  - julia --project -e 'import Pkg; Pkg.add("Documenter"); include("docs/make.jl")'
   - julia --project -e 'import Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
 
