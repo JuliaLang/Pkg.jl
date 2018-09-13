@@ -1,5 +1,85 @@
 # Pkg
 
+## Quickstart
+
+From the Julia REPL, press `]`, to enter the Pkg REPL.
+You should see the following prompt:
+
+```
+(v1.0) pkg>
+```
+
+To add a package, use the `add` command
+
+```
+(v1.0) pkg> add Plots
+```
+
+Multiple packages may be specified:
+
+```
+(v1.0) pkg> add Plots JuMP DataFrames
+```
+
+To remove a package, use the `rm` command.
+`rm` can also accept multiple packages:
+
+```
+(v1.0) pkg> rm JuMP DataFrames
+```
+
+So far, we have specified by names in a registry.
+If you want to add a package which is not in a registry,
+you can specify the location directly:
+
+```
+(v1.0) pkg> add https://github.com/JuliaPlots/Plots
+```
+
+To remove this package, use `rm` and specify the package by name (not URL!):
+
+```
+(v1.0) pkg> rm Plots
+```
+
+This should cover most use cases for simple package management: adding and removing dependencies.
+But say you are working on a project and you encounter a bug in one of your dependencies!
+How would you access the source? `Pkg` can help you out with `develop`:
+
+```
+(v1.0) pkg> develop --local Example
+```
+
+The `Example` package is now cloned to the `dev` subdirectory of your project directory.
+You can edit `Example`'s source and any changes you make will be visible to your project.
+
+Once upstream `Example` has been patched, you can stop tracking the local clone.
+Do this with a `free` command:
+
+```
+(v1.0) pkg> free Example
+```
+
+Now you are back to using the version of `Example` in the registry.
+
+If you are ever stuck, ask `Pkg` for help:
+
+```
+(v1.0) pkg> ?
+```
+
+You should see a list of available commands along with short descriptions.
+
+You can ask for more thorough help for a specific command:
+
+```
+(v1.0) pkg> ?develop
+```
+
+This quickstart should get you started with `Pkg`'s common use cases,
+but there is still lots more that `Pkg` has to offer in terms of powerful package management.
+Keep reading to find out!
+
 ## Introduction
 
 Pkg is the standard package manager for Julia 1.0 and newer. Unlike traditional
