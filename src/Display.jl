@@ -186,6 +186,10 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry}, status=false)
         printstyled(io, " [$(string(x.uuid)[1:8])]"; color = color_dark)
         printstyled(io, "$v $(x.name) $vstr\n"; color = colors[verb])
     end
+    if isempty(diff)
+        str = ctx.env.git === nothing ? "  (empty environment)\n" : "  (no changes since last commit)\n"
+        printstyled(str, color = color_dark)
+    end
     if status && some_packages_not_downloaded
         @warn "Some packages (indicated with a red arrow) are not downloaded, use `instantiate` to instantiate the current environment"
     end
