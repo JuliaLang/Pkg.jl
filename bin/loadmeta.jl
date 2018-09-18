@@ -176,6 +176,18 @@ const old_vers = julia_versions(v -> v < v"0.7")
 const meta_dir = Pkg.Pkg2.dir("METADATA")
 const passing = readlines("bin/passing.txt")
 
+for pkg in passing
+    haskey(pkgs, pkg) || continue
+    p = pkgs[pkg]
+    ver = maximum(keys(p.versions))
+    v = p.versions[ver]
+    for dep in keys(v.requires)
+        dep == "julia" && continue
+        dep in passing || push!(passing, dep)
+    end
+end
+sort!(passing, by=lowercase)
+
 const time_map = Dict{Tuple{String,VersionNumber},Int}()
 let t = 0
     for line in eachline(`git -C $meta_dir log --format=%ct --name-only`)
