@@ -445,7 +445,7 @@ To explicitly run the build step for a package the `build` command is used:
 (v1.0) pkg> build MbedTLS
   Building MbedTLS → `~/.julia/packages/MbedTLS/h1Vu/deps/build.log`
 
-shell> cat ~/.julia/packages/MbedTLS/h1Vu/deps/build.log
+julia> print(read("~/.julia/packages/MbedTLS/h1Vu/deps/build.log",String))
 ┌ Warning: `wait(t::Task)` is deprecated, use `fetch(t)` instead.
 │   caller = macro expansion at OutputCollector.jl:63 [inlined]
 └ @ Core OutputCollector.jl:63
@@ -460,10 +460,10 @@ It should be pointed out if two projects uses the same package at the same versi
 In order to create a new project, create a directory for it and then activate that directory to make it the "active project" which package operations manipulate:
 
 ```
-shell> mkdir MyProject
+julia> mkdir("MyProject")
 
-shell> cd MyProject
-/Users/kristoffer/MyProject
+julia> cd("MyProject")
+/Users/UserName/MyProject
 
 (v1.0) pkg> activate .
 
@@ -474,36 +474,80 @@ shell> cd MyProject
 Note that the REPL prompt changed when the new project is activated. Since this is a newly created project, the status command show it contains no packages, and in fact, it has no project or manifest file until we add a package to it:
 
 ```
-shell> ls -l
-total 0
+julia> readdir()
+0-element Array{String,1}
 
 (MyProject) pkg> add Example
-  Updating registry at `~/.julia/registries/General`
-  Updating git-repo `https://github.com/JuliaRegistries/General.git`
  Resolving package versions...
+ Installed Example ─ v0.5.1
   Updating `Project.toml`
   [7876af07] + Example v0.5.1
   Updating `Manifest.toml`
   [7876af07] + Example v0.5.1
+  [2a0f44e3] + Base64
+  [8ba89e20] + Distributed
+  [b77e0a4c] + InteractiveUtils
+  [8f399da3] + Libdl
+  [37e2e46d] + LinearAlgebra
+  [56ddb016] + Logging
+  [d6f4376e] + Markdown
+  [9a3f8284] + Random
+  [9e88b42a] + Serialization
+  [6462fe0b] + Sockets
   [8dfed614] + Test
 
-shell> ls -l
-total 8
--rw-r--r-- 1 stefan staff 207 Jul  3 16:35 Manifest.toml
--rw-r--r-- 1 stefan staff  56 Jul  3 16:35 Project.toml
+julia> readdir()
+2-element Array{String,1}:
+ "Manifest.toml"
+ "Project.toml"
 
-shell> cat Project.toml
+julia> print(read("Project.toml",String))
 [deps]
 Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 
-shell> cat Manifest.toml
+> print(read("Manifest.toml",String))
+[[Base64]]
+uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[Distributed]]
+deps = ["LinearAlgebra", "Random", "Serialization", "Sockets"]
+uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+
 [[Example]]
 deps = ["Test"]
-git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
-uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 version = "0.5.1"
 
+[[InteractiveUtils]]
+deps = ["LinearAlgebra", "Markdown"]
+uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+
+[[Libdl]]
+uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
+
+[[LinearAlgebra]]
+deps = ["Libdl"]
+uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[[Logging]]
+uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
+
+[[Markdown]]
+deps = ["Base64"]
+uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
+
+[[Random]]
+deps = ["Serialization"]
+uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[[Serialization]]
+uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+
+[[Sockets]]
+uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
+
 [[Test]]
+deps = ["Distributed", "InteractiveUtils", "Logging", "Random"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ```
 
@@ -548,7 +592,7 @@ To generate files for a new package, use `pkg> generate`.
 This creates a new project `HelloWorld` with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
 
 ```jl
-shell> cd HelloWorld
+julia> cd("HelloWorld")
 
 shell> tree .
 .
@@ -640,21 +684,21 @@ The build step is executed the first time a package is installed or when explici
 A package is built by executing the file `deps/build.jl`.
 
 ```
-shell> cat deps/build.log
+julia> print(read("deps/build.log",String))
 I am being built...
 
 (HelloWorld) pkg> build
   Building HelloWorld → `deps/build.log`
  Resolving package versions...
 
-shell> cat deps/build.log
+julia> print(read("deps/build.log",String))
 I am being built...
 ```
 
 If the build step fails, the output of the build step is printed to the console
 
 ```
-shell> cat deps/build.jl
+julia> print(read("deps/build.log",String))
 error("Ooops")
 
 (HelloWorld) pkg> build
@@ -679,7 +723,7 @@ error("Ooops")
 When a package is tested the file `test/runtests.jl` is executed.
 
 ```
-shell> cat test/runtests.jl
+julia> print(read("test/runtests.jl",String))
 println("Testing...")
 (HelloWorld) pkg> test
    Testing HelloWorld
@@ -707,7 +751,7 @@ test = ["Test"]
 We can now use `Test` in the test script and we can see that it gets installed on testing:
 
 ```
-shell> cat test/runtests.jl
+julia> print(read("test/runtests.jl",String))
 using Test
 @test 1 == 1
 
