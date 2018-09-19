@@ -180,7 +180,7 @@ managed by system administrators.
 
 The Pkg REPL-mode is entered from the Julia REPL using the key `]`.
 
-```
+```julia-repl
 (v1.0) pkg>
 ```
 
@@ -206,7 +206,7 @@ The most frequently used one is `add` and its usage is described first.
 
 In the Pkg REPL packages can be added with the `add` command followed by the name of the package, for example:
 
-```
+```julia-repl
 (v1.0) pkg> add Example
    Cloning default registries into /Users/kristoffer/.julia/registries
    Cloning registry General from "https://github.com/JuliaRegistries/General.git"
@@ -227,7 +227,7 @@ The status update shows a short form of the package UUID to the left, then the p
 Since standard libraries (e.g. `Test`) are shipped with Julia, they do not have a version. The project status contains the packages
 you have added yourself, in this case, `Example`:
 
-```
+```julia-repl
 (v1.0) pkg> st
     Status `Project.toml`
   [7876af07] Example v0.5.1
@@ -235,7 +235,7 @@ you have added yourself, in this case, `Example`:
 
 The manifest status, in addition, includes the dependencies of explicitly added packages.
 
-```
+```julia-repl
 (v1.0) pkg> st --manifest
     Status `Manifest.toml`
   [7876af07] Example v0.5.1
@@ -246,7 +246,7 @@ It is possible to add multiple packages in one command as `pkg> add A B C`.
 
 After a package is added to the project, it can be loaded in Julia:
 
-```
+```julia-repl
 julia> using Example
 
 julia> Example.hello("User")
@@ -255,7 +255,7 @@ julia> Example.hello("User")
 
 A specific version can be installed by appending a version after a `@` symbol, e.g. `@v0.4`, to the package name:
 
-```
+```julia-repl
 (v1.0) pkg> add Example@0.4
  Resolving package versions...
   Updating `~/.julia/environments/v1.0/Project.toml`
@@ -267,7 +267,7 @@ A specific version can be installed by appending a version after a `@` symbol, e
 If the master branch (or a certain commit SHA) of `Example` has a hotfix that has not yet included in a registered version,
 we can explicitly track a branch (or commit) by appending `#branch` (or `#commit`) to the package name:
 
-```
+```julia-repl
 (v1.0) pkg> add Example#master
   Updating git-repo `https://github.com/JuliaLang/Example.jl.git`
  Resolving package versions...
@@ -282,7 +282,7 @@ When updating packages, we will pull updates from that branch.
 
 To go back to tracking the registry version of `Example`, the command `free` is used:
 
-```
+```julia-repl
 (v1.0) pkg> free Example
  Resolving package versions...
   Updating `~/.julia/environments/v1.0/Project.toml`
@@ -296,7 +296,7 @@ To go back to tracking the registry version of `Example`, the command `free` is 
 
 If a package is not in a registry, it can still be added by instead of the package name giving the URL to the repository to `add`.
 
-```
+```julia-repl
 (v1.0) pkg> add https://github.com/fredrikekre/ImportMacros.jl
   Updating git-repo `https://github.com/fredrikekre/ImportMacros.jl`
  Resolving package versions...
@@ -329,7 +329,7 @@ However, when you are developing a package, it is more convenient to load packag
 
 Let's try to `dev` a registered package:
 
-```
+```julia-repl
 (v1.0) pkg> dev Example
   Updating git-repo `https://github.com/JuliaLang/Example.jl.git`
  Resolving package versions...
@@ -346,7 +346,7 @@ Note that the package manager will never touch any of the files at a tracked pat
 If we try to `dev` a package at some branch that already exists at `~/.julia/dev/` the package manager we will simply use the existing path.
 For example:
 
-```
+```julia-repl
 (v1.0) pkg> dev Example
   Updating git-repo `https://github.com/JuliaLang/Example.jl.git`
 [ Info: Path `/Users/kristoffer/.julia/dev/Example` exists and looks like the correct package, using existing path instead of cloning
@@ -360,7 +360,7 @@ The path will be recorded relative to the project file, unless it is given as an
 
 To stop tracking a path and use the registered version again, use `free`
 
-```
+```julia-repl
 (v1.0) pkg> free Example
  Resolving package versions...
   Updating `~/.julia/environments/v1.0/Project.toml`
@@ -395,7 +395,7 @@ to the latest compatible version. Sometimes this is not what you want. You can s
 
 The version of all other packages direct dependencies will stay the same. If you only want to update the minor version of packages, to reduce the risk that your project breaks, you can give the `--minor` flag, e.g:
 
-```
+```julia-repl
 (v1.0) pkg> up --minor Example
 ```
 
@@ -406,7 +406,7 @@ Packages that track a path are never touched by the package manager.
 
 A pinned package will never be updated. A package can be pinned using `pin` as for example
 
-```
+```julia-repl
 (v1.0) pkg> pin Example
  Resolving package versions...
   Updating `~/.julia/environments/v1.0/Project.toml`
@@ -417,7 +417,7 @@ A pinned package will never be updated. A package can be pinned using `pin` as f
 
 Note the pin symbol `⚲` showing that the package is pinned. Removing the pin is done using `free`
 
-```
+```julia-repl
 (v1.0) pkg> free Example
   Updating `~/.julia/environments/v1.0/Project.toml`
   [7876af07] ~ Example v0.5.1 ⚲ ⇒ v0.5.1
@@ -429,7 +429,7 @@ Note the pin symbol `⚲` showing that the package is pinned. Removing the pin i
 
 The tests for a package can be run using `test`command:
 
-```
+```julia-repl
 (v1.0) pkg> test Example
    Testing Example
    Testing Example tests passed
@@ -441,7 +441,7 @@ The build step of a package is automatically run when a package is first install
 The output of the build process is directed to a file.
 To explicitly run the build step for a package the `build` command is used:
 
-```
+```julia-repl
 (v1.0) pkg> build MbedTLS
   Building MbedTLS → `~/.julia/packages/MbedTLS/h1Vu/deps/build.log`
 
@@ -459,7 +459,7 @@ So far we have added packages to the default project at `~/.julia/environments/v
 It should be pointed out if two projects uses the same package at the same version, the content of this package is not duplicated.
 In order to create a new project, create a directory for it and then activate that directory to make it the "active project" which package operations manipulate:
 
-```
+```julia-repl
 julia> mkdir("MyProject")
 
 julia> cd("MyProject")
@@ -473,7 +473,7 @@ julia> cd("MyProject")
 
 Note that the REPL prompt changed when the new project is activated. Since this is a newly created project, the status command show it contains no packages, and in fact, it has no project or manifest file until we add a package to it:
 
-```
+```julia-repl
 julia> readdir()
 0-element Array{String,1}
 
@@ -561,7 +561,7 @@ Pkg keeps a log of all projects used so it can go through the log and see exactl
 and what packages those projects used. The rest can be deleted.
 This is done with the `gc` command:
 
-```
+```julia-repl
 (v1.0) pkg> gc
     Active manifests at:
         `/Users/kristoffer/BinaryProvider/Manifest.toml`
@@ -585,13 +585,13 @@ This file is executed when the package is loaded.
 
 To generate files for a new package, use `pkg> generate`.
 
-```
+```julia-repl
 (v1.0) pkg> generate HelloWorld
 ```
 
 This creates a new project `HelloWorld` with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
 
-```jl
+```julia-repl
 julia> cd("HelloWorld")
 
 shell> tree .
@@ -626,7 +626,7 @@ end # module
 
 We can now activate the project and load the package:
 
-```jl
+```julia-repl
 pkg> activate .
 
 julia> import HelloWorld
@@ -641,7 +641,7 @@ Let’s say we want to use the standard library package `Random` and the registe
 We simply `add` these packages (note how the prompt now shows the name of the newly generated project,
 since we are inside the `HelloWorld` project directory):
 
-```
+```julia-repl
 (HelloWorld) pkg> add Random JSON
  Resolving package versions...
   Updating "~/Documents/HelloWorld/Project.toml"
@@ -673,7 +673,7 @@ end # module
 
 and reloading the package, the new `greet_alien` function that uses `Random` can be used:
 
-```
+```julia-repl
 julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
@@ -683,7 +683,7 @@ Hello aT157rHV
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
 A package is built by executing the file `deps/build.jl`.
 
-```
+```julia-repl
 julia> print(read("deps/build.log",String))
 I am being built...
 
@@ -697,7 +697,7 @@ I am being built...
 
 If the build step fails, the output of the build step is printed to the console
 
-```
+```julia-repl
 julia> print(read("deps/build.log",String))
 error("Ooops")
 
@@ -722,7 +722,7 @@ error("Ooops")
 
 When a package is tested the file `test/runtests.jl` is executed.
 
-```
+```julia-repl
 julia> print(read("test/runtests.jl",String))
 println("Testing...")
 (HelloWorld) pkg> test
@@ -750,7 +750,7 @@ test = ["Test"]
 
 We can now use `Test` in the test script and we can see that it gets installed on testing:
 
-```
+```julia-repl
 julia> print(read("test/runtests.jl",String))
 using Test
 @test 1 == 1
@@ -841,7 +841,7 @@ Inequalities can also be used to specify version ranges:
 
 The REPL command `precompile` can be used to precompile all the dependencies in the project. You can for example do
 
-```
+```julia-repl
 (HelloWorld) pkg> update; precompile
 ```
 
@@ -852,13 +852,13 @@ to update the dependencies and then precompile them.
 If you just want to see the effects of running a command, but not change your state you can `preview` a command.
 For example:
 
-```
+```julia-repl
 (HelloWorld) pkg> preview add Plots
 ```
 
 or
 
-```
+```julia-repl
 (HelloWorld) pkg> preview up
 ```
 
