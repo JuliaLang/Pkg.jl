@@ -164,7 +164,13 @@ for pkg in [
     "PackageGenerator"
     "Sparrow"
     "KeyedTables"
+    "Arduino"
+    "ControlCore"
+    "DynamicalBilliardsPlotting"
+    "GLUT"
+    "GetC"
 ]
+
     delete!(pkgs, pkg)
 end
 
@@ -174,7 +180,7 @@ const date_cutoff = 1531526400 # July 14, 2018
 const all_vers = julia_versions()
 const old_vers = julia_versions(v -> v < v"0.7")
 const meta_dir = Pkg.Pkg2.dir("METADATA")
-const passing = readlines("bin/passing.txt")
+const passing = readlines(joinpath(@__DIR__, "passing.txt"))
 
 for pkg in passing
     haskey(pkgs, pkg) || continue
@@ -224,12 +230,14 @@ function cap_07_incompatible!(pkg::String, ver::VersionNumber, reqs::Dict{String
     return
 end
 
+#=
 for (pkg, p) in pkgs
     pkg == "julia" && continue
     for (ver, v) in p.versions
         cap_07_incompatible!(pkg, ver, v.requires)
     end
 end
+=#
 
 # prune versions that can't be satisfied
 prune!(pkgs)
