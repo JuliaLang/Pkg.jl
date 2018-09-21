@@ -230,14 +230,12 @@ function cap_07_incompatible!(pkg::String, ver::VersionNumber, reqs::Dict{String
     return
 end
 
-#=
 for (pkg, p) in pkgs
     pkg == "julia" && continue
     for (ver, v) in p.versions
         cap_07_incompatible!(pkg, ver, v.requires)
     end
 end
-=#
 
 # prune versions that can't be satisfied
 prune!(pkgs)
