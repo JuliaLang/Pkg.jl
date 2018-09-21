@@ -208,7 +208,7 @@ let t = 0
     end
 end
 
-function cap_07_incompatible!(pkg::String, ver::VersionNumber, reqs::Dict{String,Require})
+function cap_compat!(pkg::String, ver::VersionNumber, reqs::Dict{String,Require})
     jvers = reqs["julia"].versions
     ivals = jvers.intervals
     isempty(ivals) && return
@@ -216,24 +216,24 @@ function cap_07_incompatible!(pkg::String, ver::VersionNumber, reqs::Dict{String
         (ivals[end].upper < v"∞" || !any(v->v in ivals[end] && v < v"0.7", all_vers))
         # in the "passing list" from pkgeval and maxiumal version => leave alone
         # has final interval with explicit upper bound => leave alone
-        # or interval only containing 0.7+ versions => 0.7 compatible
+        # or interval only containing 0.7+ versions => 1.0 compatible
         return # no change
     elseif pkg != "Compat" && !haskey(reqs, "Compat") && any(v in jvers for v in old_vers)
         # supports an older julia & doesn't use Compat => 0.7 incompatible
         # fall through
     elseif v"0.7" in jvers || v"1.0" in jvers
-        # claims to support 0.7+ & tagged after date cutoff => 0.7 compatible
+        # claims to support 0.7+ & tagged after date cutoff => 1.0 compatible
         get(time_map, (pkg, ver), 0) ≥ date_cutoff && return # no change
     end
-    # cap supported Julia versions at 0.6
-    ivals[end] = VersionInterval(ivals[end].lower, v"0.7-")
+    # cap supported Julia versions at 0.7
+    ivals[end] = VersionInterval(ivals[end].lower, v"0.7+")
     return
 end
 
 for (pkg, p) in pkgs
     pkg == "julia" && continue
     for (ver, v) in p.versions
-        cap_07_incompatible!(pkg, ver, v.requires)
+        cap_compat!(pkg, ver, v.requires)
     end
 end
 
