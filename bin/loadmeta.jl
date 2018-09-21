@@ -231,7 +231,7 @@ function cap_compat!(pkg::String, ver::VersionNumber, reqs::Dict{String,Require}
 end
 
 for (pkg, p) in pkgs
-    pkg == "julia" && continue
+    (pkg == "julia" || pkg == "Example") && continue
     for (ver, v) in p.versions
         cap_compat!(pkg, ver, v.requires)
     end
