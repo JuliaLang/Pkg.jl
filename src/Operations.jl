@@ -452,6 +452,7 @@ function install_archive(
                 run(cmd)
             catch e
                 e isa InterruptException && rethrow(e)
+                @show e
                 url_success = false
             end
             url_success || continue
@@ -464,6 +465,7 @@ function install_archive(
             catch e
                 e isa InterruptException && rethrow(e)
                 @warn "failed to extract archive downloaded from $(archive_url)"
+                @show e
                 url_success = false
             end
             url_success || continue
