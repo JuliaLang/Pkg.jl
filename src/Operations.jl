@@ -449,7 +449,7 @@ function install_archive(
             url_success = true
             cmd = BinaryProvider.gen_download_cmd(archive_url, path);
             try
-                run(cmd, (devnull, devnull, devnull))
+                run(cmd)
             catch e
                 e isa InterruptException && rethrow(e)
                 url_success = false
@@ -460,7 +460,7 @@ function install_archive(
             cmd = BinaryProvider.gen_unpack_cmd(path, dir);
             # Might fail to extract an archive (Pkg#190)
             try
-                run(cmd, (devnull, devnull, devnull))
+                run(cmd)
             catch e
                 e isa InterruptException && rethrow(e)
                 @warn "failed to extract archive downloaded from $(archive_url)"
