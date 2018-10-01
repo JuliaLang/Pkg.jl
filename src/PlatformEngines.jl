@@ -121,7 +121,7 @@ will be printed and the typical searching will be performed.
 
 If `verbose` is `true`, print out the various engines as they are searched.
 """
-function probe_platform_engines!(;verbose::Bool = false)
+function probe_platform_engines!(;verbose::Bool = true)
     global already_probed
     global gen_download_cmd, gen_list_tarball_cmd, gen_package_cmd
     global gen_unpack_cmd, parse_tarball_listing
