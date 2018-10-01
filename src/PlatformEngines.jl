@@ -130,7 +130,7 @@ function probe_platform_engines!(;verbose::Bool = false)
     # The probulator will check each of them by attempting to run `$test_cmd`,
     # and if that works, will set the global download functions appropriately.
     download_engines = [
-        (`curl --help`, (url, path) -> `curl -C - -\# -f -o $path -L $url`),
+        (`curl --help`, (url, path) -> `curl -C - -\# -o $path -L $url`),
         (`wget --help`, (url, path) -> `wget -c -O $path $url`),
         (`fetch --help`, (url, path) -> `fetch -f $path $url`),
         (`busybox wget --help`, (url, path) -> `busybox wget -c -O $path $url`),
