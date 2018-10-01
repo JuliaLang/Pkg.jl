@@ -1,8 +1,9 @@
-desc = "The next-generation Julia package manager."
+desc = "The next-generation Julia package manager: Debugging mode"
 keywords = ["package", "management"]
 license = "MIT"
 name = "Pkg"
-version = "1.0.0"
+uuid = "3e4c069f-8883-4506-90ba-d9dcc9d305b5"
+version = "33.22.11"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
