@@ -889,7 +889,7 @@ end
 # Set up the repl Pkg REPLMode
 function create_mode(repl, main)
     pkg_mode = LineEdit.Prompt(promptf;
-        prompt_prefix = Base.text_colors[:blue],
+        prompt_prefix = repl.options.hascolor ? Base.text_colors[:blue] : "",
         prompt_suffix = "",
         complete = PkgCompletionProvider(),
         sticky = true)
