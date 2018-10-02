@@ -851,6 +851,8 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     end
 
     mktempdir() do tmpdir
+        @info "!!! Using temporary directory $tmpdir; Project and Manifest files will go here"
+
         localctx.env.project_file = joinpath(tmpdir, "Project.toml")
         localctx.env.manifest_file = joinpath(tmpdir, "Manifest.toml")
 
@@ -900,6 +902,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
 
         sep = Sys.iswindows() ? ';' : ':'
         withenv("JULIA_LOAD_PATH" => "@$sep$tmpdir", "JULIA_PROJECT"=>nothing) do
+            @info "!!! JULIA_LOAD_PATH set to @$sep$tmpdir"
             f(localctx)
         end
     end
@@ -1064,7 +1067,9 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             --eval $code
             ```
         run_build = () -> begin
+            @info "!!! Using log file at $log_file"
             ok = open(log_file, "w") do log
+                @info "!!! Running command $cmd"
                 success(pipeline(cmd, stdout=log, stderr=log))
             end
             if !ok
