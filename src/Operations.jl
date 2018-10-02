@@ -491,7 +491,7 @@ function syntax_check(dir::AbstractString)
             syntax_check(path)
         elseif isfile(path) && endswith(path, ".jl")
             println(path)
-            parse("begin $(read(path, String)) end")
+            Meta.parse("begin $(read(path, String)) end")
         end
     end
 end
