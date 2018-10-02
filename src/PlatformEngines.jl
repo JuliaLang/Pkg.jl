@@ -130,10 +130,10 @@ function probe_platform_engines!(;verbose::Bool = true)
     # The probulator will check each of them by attempting to run `$test_cmd`,
     # and if that works, will set the global download functions appropriately.
     download_engines = [
-        (`curl --help`, (url, path) -> `curl -C - -\# -o $path -L $url`),
-        (`wget --help`, (url, path) -> `wget -c -O $path $url`),
-        (`fetch --help`, (url, path) -> `fetch -f $path $url`),
-        (`busybox wget --help`, (url, path) -> `busybox wget -c -O $path $url`),
+        (`curl --help`, (url, path) -> (x = `curl -C - -\# -o $path -L $url`; println(x); x)),
+        (`wget --help`, (url, path) -> (x = `wget -c -O $path $url`; println(x); x)),
+        (`fetch --help`, (url, path) -> (x = `fetch -f $path $url`; println(x); x)),
+        (`busybox wget --help`, (url, path) -> (x = `busybox wget -c -O $path $url`; println(x); x)),
     ]
 
     # 7z is rather intensely verbose.  We also want to try running not only
@@ -174,7 +174,9 @@ function probe_platform_engines!(;verbose::Bool = true)
             elseif endswith(tarball_path, ".bz2")
                 Jjz = "j"
             end
-            return `$tar_cmd -x$(Jjz)f $(tarball_path) --directory=$(out_path)`
+            x = `$tar_cmd -x$(Jjz)f $(tarball_path) --directory=$(out_path)`
+            println(x)
+            return x
         end
         package_tar = (in_path, tarball_path) ->
             `$tar_cmd -czvf $tarball_path -C $(in_path) .`
