@@ -469,17 +469,31 @@ function install_archive(
                 url_success = false
             end
             url_success || continue
+            syntax_check(dir)
             dirs = readdir(dir)
             # 7z on Win might create this spurious file
             filter!(x -> x != "pax_global_header", dirs)
             @assert length(dirs) == 1
             !isdir(version_path) && mkpath(version_path)
             cp(joinpath(dir, dirs[1]), version_path; force=true)
+            syntax_check(version_path)
             # Base.rm(path; force = true)
             return true
         end
     end
     return false
+end
+
+function syntax_check(dir::AbstractString)
+    for file in readdir(dir)
+        path = joinpath(dir, file)
+        if isdir(path)
+            syntax_check(path)
+        elseif isfile(path) && endswith(path, ".jl")
+            println(path)
+            parse("begin $(read(path, String)) end")
+        end
+    end
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
