@@ -306,10 +306,10 @@ function gc(ctx::Context=Context(); kwargs...)
     # Find all reachable packages through manifests recently used
     new_usage = Dict{String, Any}()
     paths_to_keep = String[]
-    printpkgstyle(ctx, :Active, "manifests at:")
+    printpkgstyle(ctx, :Active, "manifests:")
     for (manifestfile, date) in manifest_date
         !isfile(manifestfile) && continue
-        println("        `$manifestfile`")
+        println("        $(Types.pathrepr(manifestfile))")
         manifest = try
             read_manifest(manifestfile)
         catch e
@@ -372,7 +372,7 @@ function gc(ctx::Context=Context(); kwargs...)
                 @warn "Failed to delete $path"
             end
         end
-        printpkgstyle(ctx, :Deleted, "$path:" * " " * pretty_byte_str(sz_pkg))
+        printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" * pretty_byte_str(sz_pkg) * ")")
         sz += sz_pkg
     end
 
@@ -397,8 +397,9 @@ function gc(ctx::Context=Context(); kwargs...)
             TOML.print(io, new_usage, sorted=true)
         end
     end
-    byte_save_str = length(paths_to_delete) == 0 ? "" : (": " * pretty_byte_str(sz))
-    printpkgstyle(ctx, :Deleted, "$(length(paths_to_delete)) package installations $byte_save_str")
+    ndel = length(paths_to_delete)
+    byte_save_str = ndel == 0 ? "" : (" (" * pretty_byte_str(sz) * ")")
+    printpkgstyle(ctx, :Deleted, "$(ndel) package installation$(ndel == 1 ? "" : "s")$byte_save_str")
 
     ctx.preview && preview_info()
     return
