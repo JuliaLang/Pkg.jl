@@ -446,6 +446,7 @@ function install_archive(
         archive_url = get_archive_url_for_version(url, hash)
         if archive_url != nothing
             path = tempname() * randstring(6) * ".tar.gz"
+            @info "!!! Using path $path"
             url_success = true
             cmd = BinaryProvider.gen_download_cmd(archive_url, path);
             try
@@ -480,6 +481,7 @@ function install_archive(
             # Base.rm(path; force = true)
             return true
         end
+        @show archive_url
     end
     return false
 end
