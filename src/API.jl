@@ -356,7 +356,7 @@ function gc(ctx::Context=Context(); kwargs...)
         size = 0
         for (root, dirs, files) in walkdir(path)
             for file in files
-                size += stat(joinpath(root, file)).size
+                size += lstat(joinpath(root, file)).size
             end
         end
         return size
