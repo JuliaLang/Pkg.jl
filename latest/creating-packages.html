@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>5. Creating Packages · Pkg.jl</title><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js" data-main="assets/documenter.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link href="assets/documenter.css" rel="stylesheet" type="text/css"/></head><body><nav class="toc"><h1>Pkg.jl</h1><select id="version-selector" onChange="window.location.href=this.value" style="visibility: hidden"></select><form class="search" id="search-form" action="search.html"><input id="search-query" name="q" type="text" placeholder="Search docs"/></form><ul><li><a class="toctext" href="index.html"><strong>1.</strong> Introduction</a></li><li><a class="toctext" href="getting-started.html"><strong>2.</strong> Getting Started</a></li><li><a class="toctext" href="managing-packages.html"><strong>3.</strong> Managing Packages</a></li><li><a class="toctext" href="environments.html"><strong>4.</strong> Working with Environments</a></li><li class="current"><a class="toctext" href="creating-packages.html"><strong>5.</strong> Creating Packages</a><ul class="internal"></ul></li><li><a class="toctext" href="compatibility.html"><strong>6.</strong> Compatibility</a></li><li><a class="toctext" href="registries.html"><strong>7.</strong> Registries</a></li><li><a class="toctext" href="faq.html"><strong>8.</strong> FAQ</a></li><li><a class="toctext" href="glossary.html"><strong>9.</strong> Glossary</a></li><li><a class="toctext" href="api.html"><strong>10.</strong> API Reference</a></li></ul></nav><article id="docs"><header><nav><ul><li><a href="creating-packages.html"><strong>5.</strong> Creating Packages</a></li></ul><a class="edit-page" href="https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/creating-packages.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>5. Creating Packages</span><a class="fa fa-bars" href="#"></a></div></header><h1><a class="nav-anchor" id="**5.**-Creating-Packages-1" href="#**5.**-Creating-Packages-1"><strong>5.</strong> Creating Packages</a></h1><p>A package is a project with a <code>name</code>, <code>uuid</code> and <code>version</code> entry in the <code>Project.toml</code> file <code>src/PackageName.jl</code> file that defines the module <code>PackageName</code>. This file is executed when the package is loaded.</p><h3><a class="nav-anchor" id="Generating-files-for-a-package-1" href="#Generating-files-for-a-package-1">Generating files for a package</a></h3><p>To generate files for a new package, use <code>pkg&gt; generate</code>.</p><pre><code class="language-none">(v1.0) pkg&gt; generate HelloWorld</code></pre><p>This creates a new project <code>HelloWorld</code> with the following files (visualized with the external <a href="https://linux.die.net/man/1/tree"><code>tree</code> command</a>):</p><pre><code class="language-jl">shell&gt; cd HelloWorld
+
+shell&gt; tree .
+.
+├── Project.toml
+└── src
+    └── HelloWorld.jl
+
+1 directory, 2 files</code></pre><p>The <code>Project.toml</code> file contains the name of the package, its unique UUID, its version, the author and eventual dependencies:</p><pre><code class="language-toml">name = &quot;HelloWorld&quot;
+uuid = &quot;b4cd1eb8-1e24-11e8-3319-93036a3eb9f3&quot;
+version = &quot;0.1.0&quot;
+author = [&quot;Some One &lt;someone@email.com&gt;&quot;]
+
+[deps]</code></pre><p>The content of <code>src/HelloWorld.jl</code> is:</p><pre><code class="language-jl">module HelloWorld
+
+greet() = print(&quot;Hello World!&quot;)
+
+end # module</code></pre><p>We can now activate the project and load the package:</p><pre><code class="language-jl">pkg&gt; activate .
+
+julia&gt; import HelloWorld
+
+julia&gt; HelloWorld.greet()
+Hello World!</code></pre><h3><a class="nav-anchor" id="Adding-dependencies-to-the-project-1" href="#Adding-dependencies-to-the-project-1">Adding dependencies to the project</a></h3><p>Let’s say we want to use the standard library package <code>Random</code> and the registered package <code>JSON</code> in our project. We simply <code>add</code> these packages (note how the prompt now shows the name of the newly generated project, since we are inside the <code>HelloWorld</code> project directory):</p><pre><code class="language-none">(HelloWorld) pkg&gt; add Random JSON
+ Resolving package versions...
+  Updating &quot;~/Documents/HelloWorld/Project.toml&quot;
+ [682c06a0] + JSON v0.17.1
+ [9a3f8284] + Random
+  Updating &quot;~/Documents/HelloWorld/Manifest.toml&quot;
+ [34da2185] + Compat v0.57.0
+ [682c06a0] + JSON v0.17.1
+ [4d1e1d77] + Nullables v0.0.4
+ ...</code></pre><p>Both <code>Random</code> and <code>JSON</code> got added to the project’s <code>Project.toml</code> file, and the resulting dependencies got added to the <code>Manifest.toml</code> file. The resolver has installed each package with the highest possible version, while still respecting the compatibility that each package enforce on its dependencies.</p><p>We can now use both <code>Random</code> and <code>JSON</code> in our project. Changing <code>src/HelloWorld.jl</code> to</p><pre><code class="language-none">module HelloWorld
+
+import Random
+import JSON
+
+greet() = print(&quot;Hello World!&quot;)
+greet_alien() = print(&quot;Hello &quot;, Random.randstring(8))
+
+end # module</code></pre><p>and reloading the package, the new <code>greet_alien</code> function that uses <code>Random</code> can be used:</p><pre><code class="language-none">julia&gt; HelloWorld.greet_alien()
+Hello aT157rHV</code></pre><h3><a class="nav-anchor" id="Adding-a-build-step-to-the-package.-1" href="#Adding-a-build-step-to-the-package.-1">Adding a build step to the package.</a></h3><p>The build step is executed the first time a package is installed or when explicitly invoked with <code>build</code>. A package is built by executing the file <code>deps/build.jl</code>.</p><pre><code class="language-none">shell&gt; cat deps/build.log
+I am being built...
+
+(HelloWorld) pkg&gt; build
+  Building HelloWorld → `deps/build.log`
+ Resolving package versions...
+
+shell&gt; cat deps/build.log
+I am being built...</code></pre><p>If the build step fails, the output of the build step is printed to the console</p><pre><code class="language-none">shell&gt; cat deps/build.jl
+error(&quot;Ooops&quot;)
+
+(HelloWorld) pkg&gt; build
+  Building HelloWorld → `deps/build.log`
+ Resolving package versions...
+┌ Error: Error building `HelloWorld`:
+│ ERROR: LoadError: Ooops
+│ Stacktrace:
+│  [1] error(::String) at ./error.jl:33
+│  [2] top-level scope at none:0
+│  [3] include at ./boot.jl:317 [inlined]
+│  [4] include_relative(::Module, ::String) at ./loading.jl:1071
+│  [5] include(::Module, ::String) at ./sysimg.jl:29
+│  [6] include(::String) at ./client.jl:393
+│  [7] top-level scope at none:0
+│ in expression starting at /Users/kristoffer/.julia/dev/Pkg/HelloWorld/deps/build.jl:1
+└ @ Pkg.Operations Operations.jl:938</code></pre><h3><a class="nav-anchor" id="Adding-tests-to-the-package-1" href="#Adding-tests-to-the-package-1">Adding tests to the package</a></h3><p>When a package is tested the file <code>test/runtests.jl</code> is executed.</p><pre><code class="language-none">shell&gt; cat test/runtests.jl
+println(&quot;Testing...&quot;)
+(HelloWorld) pkg&gt; test
+   Testing HelloWorld
+ Resolving package versions...
+Testing...
+   Testing HelloWorld tests passed</code></pre><h4><a class="nav-anchor" id="Test-specific-dependencies-1" href="#Test-specific-dependencies-1">Test-specific dependencies</a></h4><p>Sometimes one might want to use some packages only at testing time but not enforce a dependency on them when the package is used. This is possible by adding dependencies to <code>[extras]</code> and a <code>test</code> target in <code>[targets]</code> to the Project file. Here we add the <code>Test</code> standard library as a test-only dependency by adding the following to the Project file:</p><pre><code class="language-none">[extras]
+Test = &quot;8dfed614-e22c-5e08-85e1-65c5234f0b40&quot;
+
+[targets]
+test = [&quot;Test&quot;]</code></pre><p>We can now use <code>Test</code> in the test script and we can see that it gets installed on testing:</p><pre><code class="language-none">shell&gt; cat test/runtests.jl
+using Test
+@test 1 == 1
+
+(HelloWorld) pkg&gt; test
+   Testing HelloWorld
+ Resolving package versions...
+  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Project.toml`
+  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]
+  [8dfed614] + Test
+  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Manifest.toml`
+  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]
+   Testing HelloWorld tests passed```</code></pre><footer><hr/><a class="previous" href="environments.html"><span class="direction">Previous</span><span class="title"><strong>4.</strong> Working with Environments</span></a><a class="next" href="compatibility.html"><span class="direction">Next</span><span class="title"><strong>6.</strong> Compatibility</span></a></footer></article></body></html>
