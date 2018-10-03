@@ -155,7 +155,6 @@ for pkg in [
     "CreateMacrosFrom"
     "GSDicts"
     "S3Dicts"
-    "BigArrays"
     "ChainMap"
     "NanoTimes"
     "OnlineMoments"
