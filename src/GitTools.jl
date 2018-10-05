@@ -68,19 +68,30 @@ end
 
 const GITHUB_REGEX =
     r"^(?:git@|git://|https://(?:[\w\.\+\-]+@)?)github.com[:/](([^/].+)/(.+?))(?:\.git)?$"i
+const GITLAB_REGEX =
+    r"^(?:git@|git://|https://(?:[\w\.\+\-]+@)?)gitlab([^:/]+)[:/](([^/].+)/(.+?))(?:\.git)?$"i
 const GIT_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
 
 setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GIT_PROTOCOL[] = proto
 
 # TODO: extend this to more urls
 function normalize_url(url::AbstractString)
-    m = match(GITHUB_REGEX, url)
-    if m === nothing || GIT_PROTOCOL[] === nothing
+    gh = match(GITHUB_REGEX, url)
+    gl = match(GITLAB_REGEX, url)
+    if (gh === nothing && gl === nothing) || GIT_PROTOCOL[] === nothing
         url
     elseif GIT_PROTOCOL[] == "ssh"
-        "ssh://git@github.com/$(m.captures[1]).git"
+        if gh !== nothing
+            "ssh://git@github.com/$(gh.captures[1]).git"
+        elseif gl !== nothing
+            "ssh://git@gitlab$(gl.captures[1])/$(gl.captures[2]).git"
+        end
     else
-        "$(GIT_PROTOCOL[])://github.com/$(m.captures[1]).git"
+        if gh !== nothing
+            "$(GIT_PROTOCOL[])://github.com/$(gh.captures[1]).git"
+        elseif gl !== nothing
+            "$(GIT_PROTOCOL[])://gitlab$(gl.captures[1])/$(gl.captures[2]).git"
+        end
     end
 end
 

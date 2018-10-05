@@ -620,9 +620,10 @@ end
 """
     setprotocol!(proto::Union{Nothing, AbstractString}=nothing)
 
-Set the protocol used to access GitHub-hosted packages when `add`ing a url or `develop`ing a package.
+Set the protocol used to access packages hosted on GitHub or GitLab when `add`ing a url or
+`develop`ing a package.
 Defaults to delegating the choice to the package developer (`proto == nothing`).
-Other choices for `proto` are `"https` or `git`.
+Other choices for `proto` are `"https"` or `"git"`.
 """
 setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GitTools.setprotocol!(proto)
 

@@ -438,8 +438,12 @@ end
 # Package installation #
 ########################
 function get_archive_url_for_version(url::String, ref)
-    if (m = match(r"https://github.com/(.*?)/(.*?).git", url)) != nothing
+    if (m = match(r"https://github.com/(.*?)/(.*?).git", url)) !== nothing
         return "https://api.github.com/repos/$(m.captures[1])/$(m.captures[2])/tarball/$(ref)"
+    elseif (m = match(r"https://gitlab([^/]+)/(.*?)/(.*?).git", url)) !== nothing
+        host, org, proj = m.captures
+        proj = replace(proj, "." => "%2E")
+        return "https://gitlab$(host)/api/v4/projects/$(org)%2F$(proj)/repository/archive?sha=$(ref)"
     end
     return nothing
 end

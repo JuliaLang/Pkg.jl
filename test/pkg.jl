@@ -544,6 +544,16 @@ temp_pkg_dir() do project_path
     end
 end
 
+@testset "Pkg.add tarballs from GitLab" begin
+    glreg = joinpath(first(DEPOT_PATH), "registries", "GitLabExampleRegistry")
+    close(LibGit2.clone("https://gitlab.com/ararslan/GitLabExampleRegistry", glreg))
+    Pkg.update()
+    Pkg.add("GitLabExample", use_only_tarballs_for_downloads=true)
+    @test Pkg.API.__installed()["GitLabExample"] == v"0.1.0"
+    Pkg.rm("GitLabExample")
+    rm(joinpath(glreg), force=true, recursive=true)
+end
+
 include("repl.jl")
 include("api.jl")
 

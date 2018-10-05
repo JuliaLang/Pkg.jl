@@ -331,7 +331,8 @@ const PackageSpec = Types.PackageSpec
 """
     Pkg.setprotocol!(proto::Union{Nothing, AbstractString}=nothing)
 
-Set the protocol used to access GitHub-hosted packages when `add`ing a url or `develop`ing a package.
+Set the protocol used to access packages hosted on GitHub or GitLab when `add`ing a url or
+`develop`ing a package.
 Defaults to 'https', with `proto == nothing` delegating the choice to the package developer.
 """
 const setprotocol! = API.setprotocol!
