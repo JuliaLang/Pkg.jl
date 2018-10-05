@@ -528,6 +528,12 @@ end
     @test Pkg.Types.pathrepr(path) == "`@stdlib/Test`"
 end
 
+@testset "Set download concurrency" begin
+    withenv("JULIA_PKG_CONCURRENCY" => 1) do
+        ctx = Pkg.Types.Context()
+        @test ctx.num_concurrent_downloads == 1
+    end
+end
 
 temp_pkg_dir() do project_path
     @testset "Pkg.add should not mutate" begin
