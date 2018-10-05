@@ -355,7 +355,7 @@ Base.@kwdef mutable struct Context
     preview::Bool = false
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
-    num_concurrent_downloads::Int = 8
+    num_concurrent_downloads::Int = get(ENV, "JULIA_PKG_CONCURRENCY", 8)
     graph_verbose::Bool = false
     stdlibs::Dict{UUID,String} = gather_stdlib_uuids()
     # Remove next field when support for Pkg2 CI scripts is removed
