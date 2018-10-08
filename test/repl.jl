@@ -454,7 +454,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         # Filtered by version
         @test !("REPL" in c)
 
-        mkdir("testdir")
+        mkpath("testdir/foo/bar")
         c, r = test_complete("add ")
         @test Sys.iswindows() ? ("testdir\\\\" in c) : ("testdir/" in c)
         @test "Example" in c
@@ -462,6 +462,12 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test apply_completion("add ./tes") == (Sys.iswindows() ? "add ./testdir\\\\" : "add ./testdir/")
         c, r = test_complete("dev ./")
         @test (Sys.iswindows() ? ("testdir\\\\" in c) : ("testdir/" in c))
+
+        # complete subdirs
+        c, r = test_complete("add testdir/f")
+        @test Sys.iswindows() ? ("foo\\\\" in c) : ("foo/" in c)
+        @test apply_completion("add testdir/f") == (Sys.iswindows() ? "add testdir/foo\\\\" : "add testdir/foo/")
+
         # dont complete files
         touch("README.md")
         c, r = test_complete("add RE")
