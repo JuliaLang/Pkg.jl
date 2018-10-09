@@ -19,7 +19,8 @@ using SHA
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
     PackageSpec, EnvCache, Context, Context!, get_deps,
-    PkgError, pkgerror, has_name, has_uuid, write_env, parse_toml, find_registered!,
+    PkgError, pkgerror, PkgErrorClass, PKG_ERROR_DEFAULT, PKG_ERROR_REPL,
+    has_name, has_uuid, write_env, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
@@ -111,15 +112,18 @@ function Base.showerror(io::IO, pkgerr::ResolverError)
     end
 end
 
-#################
+#############
 # Pkg Error #
-#################
+#############
+@enum(PkgErrorClass, PKG_ERROR_DEFAULT, PKG_ERROR_REPL)
 struct PkgError <: Exception
     msg::String
+    class::PkgErrorClass
+    code::Any
 end
-pkgerror(msg::String...) = throw(PkgError(join(msg)))
+pkgerror(msg::String...; class=PKG_ERROR_DEFAULT, code=nothing) =
+    throw(PkgError(join(msg), class, code))
 Base.show(io::IO, err::PkgError) = print(io, err.msg)
-
 
 ###############
 # PackageSpec #

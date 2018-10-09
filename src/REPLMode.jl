@@ -11,6 +11,22 @@ import REPL: LineEdit, REPLCompletions
 import ..devdir, ..Types.casesensitive_isdir, ..TOML
 using ..Types, ..Display, ..Operations, ..API
 
+##########
+# Errors #
+##########
+@enum(REPLErrorCode, ERROR_DEFAULT, ERROR_INVALID_COMMAND, ERROR_INVALID_SUBCOMMAND,
+      ERROR_INVALID_OPT, ERROR_OPT_ARG, ERROR_OPT_NO_ARG, ERROR_CONFLICTING_KEYS,
+      ERROR_FLOATING_VERSION, ERROR_FLOATING_REVISION, ERROR_NO_VERSION_REV,
+      ERROR_NO_VERSION, ERROR_NO_REV, ERROR_ARG_COUNT, ERROR_QUOTE, ERROR_MALFORMED_OPT,
+      ERROR_MISSING_SUBCOMMAND, ERROR_NO_INPUT)
+
+struct REPLError <: Exception
+    code::REPLErrorCode
+    state::Any
+end
+
+repl_error(code::REPLErrorCode, state=nothing) = throw(REPLError(code, state))
+
 #################
 # Git revisions #
 #################
@@ -75,16 +91,11 @@ Base.show(io::IO, opt::Option) = print(io, "--$(opt.val)", opt.argument == nothi
 
 function parse_option(word::AbstractString)::Option
     m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
-    m == nothing && pkgerror("malformed option: ", repr(word))
+    m == nothing && repl_error(ERROR_MALFORMED_OPT, word)
     option_name = (m.captures[1] != nothing ? m.captures[1] : m.captures[2])
     option_arg = (m.captures[3] == nothing ? nothing : String(m.captures[3]))
     return Option(option_name, option_arg)
 end
-
-meta_option_declarations = OptionDeclaration[
-    ("preview", OPT_SWITCH, :preview => true)
-]
-meta_option_specs = OptionSpecs(meta_option_declarations)
 
 ################
 # Command Spec #
@@ -122,7 +133,6 @@ struct CommandSpec
     description::String
     help::Union{Nothing, Markdown.MD}
 end
-command_specs = Dict{String,CommandSpec}() # TODO remove this ?
 
 function SuperSpecs(foo)::Dict{String,Dict{String,CommandSpec}}
     super_specs = Dict()
@@ -193,10 +203,11 @@ end
 ################
 mutable struct Statement
     command::Union{Nothing,CommandSpec}
-    options::Vector{String}
+    options::Vector{Option}
     arguments::Vector{String}
-    meta_options::Vector{String}
-    Statement() = new(nothing, [], [], [])
+    command_name::Union{Nothing,String}
+    preview::Bool
+    Statement() = new(nothing, [], [], nothing, false)
 end
 
 struct QuotedWord
@@ -204,14 +215,10 @@ struct QuotedWord
     isquoted::Bool
 end
 
-function unwrap_option(option::String)
-    if startswith(option, "--")
-        return length(option) == 2 ? "" : option[3:end]
-    elseif length(option) == 2
-        return option[end]
-    end
-end
+unwrap_option(option::String) =
+    startswith(option, "--") ? option[3:end] : option[end]
 
+wrap_option(option::Option) = wrap_option(option.val)
 wrap_option(option::String) =
     length(option) == 1 ? "-$option" : "--$option"
 
@@ -219,17 +226,6 @@ function _statement(words)
     is_option(word) = first(word) == '-'
 
     word = popfirst!(words)
-    # meta options
-    while is_option(word)
-        if isempty(words)
-            if unwrap_option(word) in keys(meta_option_specs)
-                return :cmd, "", nothing, true
-            else
-                return :meta, word, nothing, true
-            end
-        end
-        word = popfirst!(words)
-    end
     # command
     if word == "preview"
         if isempty(words)
@@ -269,76 +265,128 @@ function _statement(words)
         (:arg, word, command, !manifest)
 end
 
-function parse(cmd::String; for_completions=false)
-    # replace new lines with ; to support multiline commands
-    cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
-    # tokenize accoring to whitespace / quotes
-    qwords = parse_quotes(cmd)
-    # tokenzie unquoted tokens according to pkg REPL syntax
-    words = lex(qwords)
-    # break up words according to ";"(doing this early makes subsequent processing easier)
-    word_groups = group_words(words)
-    # create statements
-    if for_completions
-        return _statement(word_groups[end])
+tokenize(command::AbstractString) =
+    lex(parse_quotes(command))
+
+#TODO this could be a utility?
+function chunk(tokens::Vector{String})
+    chunks = Vector{String}[]
+    chunk = String[]
+    for token in tokens
+        if token == ";"
+            if !isempty(chunk)
+                push!(chunks, chunk)
+                chunk = String[]
+            end
+        else
+            push!(chunk, token)
+        end
     end
-    return map(Statement, word_groups)
+    !isempty(chunk) && push!(chunks, chunk)
+
+    isempty(chunks) && repl_error(ERROR_NO_INPUT)
+    return chunks
 end
 
-# vector of words -> structured statement
-# minimal checking is done in this phase
+preprocess(input::String) =
+    replace(replace(input, "\r\n" => "; "), "\n" => "; ")
+
+function parse(input::String)
+    verbose = nothing
+    try
+        tokens = tokenize(preprocess(input))
+        commands = chunk(tokens)
+        statements = Statement[]
+        for command in commands
+            verbose = " (when parsing `$(join(command, " "))`)"
+            push!(statements, Statement(command))
+        end
+        return statements
+    catch ex
+        ex isa REPLError || rethrow()
+        if ex.code == ERROR_NO_INPUT
+            msg = "No input given."
+        elseif ex.code == ERROR_QUOTE
+            msg = "Ungerminated quote."
+        elseif ex.code == ERROR_MALFORMED_OPT
+            msg = "Malformed option `$(ex.state)`$(verbose)"
+        elseif ex.code == ERROR_INVALID_COMMAND
+            msg = "`$(ex.state)` is not a valid Pkg command$(verbose)"
+            # TODO if state looks like an option, tell the user to place it after the command?
+        elseif ex.code == ERROR_INVALID_SUBCOMMAND
+            msg = "`$(ex.state[2])` is not a subcommand of `$(ex.state[1])`" *
+                "\nHint: Try tab completions after `$(ex.state[1])` to see available subcommands."
+        elseif ex.code == ERROR_MISSING_SUBCOMMAND
+            msg = "No subcommand found$(verbose)" *
+                "\nHint: `$(ex.state)` is a compound command and requires a subcommand." *
+                "\nHint: Try tab completions after `$(ex.state)` to see available subcommands."
+        else
+            @assert false
+        end
+        rethrow(PkgError(msg, PKG_ERROR_REPL, ex.code))
+    end
+end
+
+function completions_parse(input::String)
+    try
+        if isempty(input)
+            return :cmd, "", nothing, true
+        end
+        tokens = tokenize(preprocess(input))
+        last_command = chunk(tokens)[end]
+        return _statement(last_command)
+    catch ex
+        (ex isa PkgError && ex.class == PKG_ERROR_REPL) || rethrow()
+        return nothing
+    end
+end
+
+function read_command!(words::Vector{String}, statement::Statement)
+    word = popfirst!(words)
+    using_default = false
+    # special handling for `preview`
+    if word == "preview"
+        statement.preview = true
+        isempty(words) && pkgerror("preview requires a command")
+        word = popfirst!(words)
+    end
+    #- end special handling
+    if word in keys(super_specs)
+        super_name = word
+        super = super_specs[word]
+        if isempty(words)
+            repl_error(ERROR_MISSING_SUBCOMMAND, super_name)
+        end
+        word = popfirst!(words)
+    else
+        using_default = true
+        super = super_specs["package"]
+    end
+    command = get(super, word, nothing)
+    if command === nothing
+        using_default ?
+            repl_error(ERROR_INVALID_COMMAND, word) :
+            repl_error(ERROR_INVALID_SUBCOMMAND, [super_name, word])
+    end
+    statement.command = command
+    statement.command_name = using_default ? word : join([super_name, word], " ")
+end
+
 function Statement(words)::Statement
     is_option(word) = first(word) == '-'
     statement = Statement()
 
-    word = popfirst!(words)
-    # meta options
-    while is_option(word)
-        push!(statement.meta_options, word)
-        isempty(words) && pkgerror("no command specified")
-        word = popfirst!(words)
-    end
     # command
-    # special handling for `preview`, just convert it to a meta option under the hood
-    if word == "preview"
-        if !("--preview" in statement.meta_options)
-            push!(statement.meta_options, "--preview")
-        end
-        isempty(words) && pkgerror("preview requires a command")
-        word = popfirst!(words)
-    end
-    if word in keys(super_specs)
-        super = super_specs[word]
-        isempty(words) && pkgerror("no subcommand specified")
-        word = popfirst!(words)
-    else
-        super = super_specs["package"]
-    end
-    command = get(super, word, nothing)
-    command !== nothing || pkgerror("expected command. instead got [$word]")
-    statement.command = command
+    read_command!(words, statement)
     # command arguments
     for word in words
-        push!((is_option(word) ? statement.options : statement.arguments), word)
-    end
-    return statement
-end
-
-# break up words according to `;`(doing this early makes subsequent processing easier)
-# the final group does not require a trailing `;`
-function group_words(words)::Vector{Vector{String}}
-    statements = Vector{String}[]
-    x = String[]
-    for word in words
-        if word == ";"
-            isempty(x) ? pkgerror("empty statement") : push!(statements, x)
-            x = String[]
+        if is_option(word)
+            push!(statement.options, parse_option(word))
         else
-            push!(x, word)
+            push!(statement.arguments, word)
         end
     end
-    isempty(x) || push!(statements, x)
-    return statements
+    return statement
 end
 
 const lex_re = r"^[\?\./\+\-](?!\-) | ((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s;]+\s*=\s*[^@\#\s;]+ | \#\s*[^@\#\s;]* | @\s*[^@\#\s;]* | [^@\#\s;]+|;"x
@@ -355,13 +403,13 @@ function lex(qwords::Vector{QuotedWord})::Vector{String}
     return words
 end
 
-function parse_quotes(cmd::String)::Vector{QuotedWord}
+function parse_quotes(cmd::AbstractString)::Vector{QuotedWord}
     in_doublequote = false
     in_singlequote = false
     qwords = QuotedWord[]
     token_in_progress = Char[]
 
-    push_token!(is_quoted) = begin
+    function push_token!(is_quoted)
         push!(qwords, QuotedWord(String(token_in_progress), is_quoted))
         empty!(token_in_progress)
     end
@@ -386,7 +434,7 @@ function parse_quotes(cmd::String)::Vector{QuotedWord}
         end
     end
     if (in_doublequote || in_singlequote)
-        pkgerror("unterminated quote")
+        repl_error(ERROR_QUOTE)
     else
         push_token!(false)
     end
@@ -403,12 +451,12 @@ const ArgToken = Union{VersionRange, Rev}
 const PkgToken = Union{String, VersionRange, Rev}
 const PkgArguments = Union{Vector{String}, Vector{PackageSpec}}
 struct PkgCommand
-    meta_options::Vector{Option}
     spec::CommandSpec
     options::Vector{Option}
     arguments::PkgArguments
-    PkgCommand() = new([], "", [], [])
-    PkgCommand(meta_opts, cmd_name, opts, args) = new(meta_opts, cmd_name, opts, args)
+    preview::Bool
+    PkgCommand() = new("", [], [])
+    PkgCommand(spec, opts, args, preview) = new(spec, opts, args, preview)
 end
 
 const APIOptions = Dict{Symbol, Any}
@@ -418,22 +466,21 @@ APIOptions(command::PkgCommand)::Dict{Symbol, Any} =
 function APIOptions(options::Vector{Option},
                     specs::Dict{String, OptionSpec},
                     )::Dict{Symbol, Any}
-    keyword_vec = map(options) do opt
-        spec = specs[opt.val]
-        # opt is switch
-        spec.is_switch && return spec.api
-        # no opt wrapper -> just use raw argument
-        spec.api.second === nothing && return spec.api.first => opt.argument
-        # given opt wrapper
-        return spec.api.first => spec.api.second(opt.argument)
+    api_options = Dict{Symbol, Any}()
+    for option in options
+        spec = specs[option.val]
+        api_options[spec.api.first] = spec.is_switch ?
+            spec.api.second :
+            spec.api.second(option.argument)
     end
-    return Dict(keyword_vec)
+    return api_options
 end
 
 function enforce_argument_count(spec::Pair, args::PkgArguments)
     count = length(args)
-    spec.first <= count <= spec.second ||
-        pkgerror("Wrong number of arguments")
+    if !(spec.first <= count <= spec.second)
+        repl_error(ERROR_ARG_COUNT, [count, spec])
+    end
 end
 
 # Only for PkgSpec
@@ -452,7 +499,7 @@ function package_args(args::Vector{Token}; add_or_dev=false)::Vector{PackageSpec
                 pkgs[end].repo.rev = arg.rev
             end
         else
-            assert(false)
+            @assert false
         end
     end
     return pkgs
@@ -472,15 +519,14 @@ end
 # Only for PkgSpec
 function enforce_argument_order(args::Vector{Token})
     prev_arg = nothing
-    function check_prev_arg(valid_type::DataType, error_message::AbstractString)
-        prev_arg isa valid_type || pkgerror(error_message)
-    end
+    check_prev_arg(valid_type::DataType, code, objects) =
+        prev_arg isa valid_type || repl_error(code, objects)
 
     for arg in args
         if arg isa VersionRange
-            check_prev_arg(String, "package name/uuid must precede version spec `@$arg`")
+            check_prev_arg(String, ERROR_FLOATING_VERSION, arg)
         elseif arg isa Rev
-            check_prev_arg(String, "package name/uuid must precede rev spec `#$(arg.rev)`")
+            check_prev_arg(String, ERROR_FLOATING_REVISION, arg)
         end
         prev_arg = arg
     end
@@ -490,9 +536,15 @@ function parse_pkg(raw_args::Vector{String}; valid=[], add_or_dev=false)
     args::Vector{PkgToken} = map(word2token, raw_args)
     enforce_argument_order(args)
     # enforce spec
-    push!(valid, String) # always want at least PkgSpec identifiers
-    if !all(x->typeof(x) in valid, args)
-        pkgerror("invalid token")
+    allowed = push!(copy(valid), String) # always want at least PkgSpec identifiers
+    if !all(x->typeof(x) in allowed, args)
+        if valid == [Rev]
+            repl_error(ERROR_NO_VERION)
+        elseif valid == [VersionRange]
+            repl_error(ERROR_NO_REV)
+        elseif isempty(valid)
+            repl_error(ERROR_NO_VERSION_REV)
+        end
     end
     # convert to final arguments
     return package_args(args; add_or_dev=add_or_dev)
@@ -504,64 +556,89 @@ function enforce_argument(raw_args::Vector{String}, spec::ArgSpec)::PkgArguments
     return args
 end
 
-function enforce_option(option::String, specs::Dict{String,OptionSpec})::Option
-    opt = parse_option(option)
-    spec = get(specs, opt.val, nothing)
-    spec !== nothing ||
-        pkgerror("option '$(opt.val)' is not a valid option")
+# checking a single option within the context of a spec
+function enforce_option(option::Option, specs::Dict{String,OptionSpec})
+    spec = get(specs, option.val, nothing)
+    if spec === nothing
+        repl_error(ERROR_INVALID_OPT, option)
+    end
     if spec.is_switch
-        opt.argument === nothing ||
-            pkgerror("option '$(opt.val)' does not take an argument, but '$(opt.argument)' given")
+        if option.argument !== nothing
+            repl_error(ERROR_OPT_ARG, option)
+        end
     else # option takes an argument
-        opt.argument !== nothing ||
-            pkgerror("option '$(opt.val)' expects an argument, but no argument given")
-    end
-    return opt
-end
-
-function enforce_meta_options(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
-    meta_opt_names = keys(specs)
-    return map(options) do opt
-        tok = enforce_option(opt, specs)
-        tok.val in meta_opt_names ||
-            pkgerror("option '$opt' is not a valid meta option.")
-            #TODO hint that maybe they intended to use it as a command option
-        return tok
+        if option.argument === nothing
+            repl_error(ERROR_OPT_NO_ARG, option)
+        end
     end
 end
 
-function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
+# checking relationships between options
+function enforce_option(options::Vector{Option}, specs::Dict{String,OptionSpec})
     unique_keys = Symbol[]
     get_key(opt::Option) = specs[opt.val].api.first
 
-    # final parsing
-    toks = map(x->enforce_option(x,specs),options)
-    # checking
-    for opt in toks
-        # valid option
-        opt.val in keys(specs) ||
-            pkgerror("option '$(opt.val)' is not supported")
-        # conflicting options
-        key = get_key(opt)
+    foreach(x->enforce_option(x,specs), options)
+    # conflicting options
+    for option in options
+        key = get_key(option)
         if key in unique_keys
-            conflicting = filter(opt->get_key(opt) == key, toks)
-            pkgerror("Conflicting options: $conflicting")
-        else
-            push!(unique_keys, key)
+            conflicting = filter(opt->get_key(opt) == key, options)
+            repl_error(ERROR_CONFLICTING_KEYS, conflicting)
         end
+        push!(unique_keys, key)
     end
-    return toks
 end
 
-# this the entry point for the majority of input checks
+# this the entry point for the majority input checks against `PkgSpec`
 function PkgCommand(statement::Statement)::PkgCommand
-    meta_opts = enforce_meta_options(statement.meta_options,
-                                     meta_option_specs)
-    args = enforce_argument(statement.arguments,
-                            statement.command.argument_spec)
-    opts = enforce_opts(statement.options, statement.command.option_specs)
-    return PkgCommand(meta_opts, statement.command, opts, args)
-end
+    cmd(statement::Statement) = "`$(statement.command_name)`"
+    try
+        enforce_option(statement.options, statement.command.option_specs)
+        args = enforce_argument(statement.arguments, statement.command.argument_spec)
+        return PkgCommand(statement.command, statement.options, args, statement.preview)
+    catch ex
+        ex isa REPLError || rethrow()
+        if ex.code == ERROR_CONFLICTING_KEYS
+            opts = join(map(wrap_option, ex.state), ", ")
+            msg = "$opts are conflicting options for command $(cmd(statement))." *
+                  "\nHint: Choose only one option."
+        elseif ex.code == ERROR_OPT_NO_ARG
+            msg = "Option `$(wrap_option(ex.state))` requires an argument, " *
+                  "but no argument given."
+        elseif ex.code == ERROR_OPT_ARG
+            msg = "Option `$(wrap_option(ex.state))` does not take an argument, " *
+                  "but argument '$(ex.state.argument)' given."
+        elseif ex.code == ERROR_INVALID_OPT
+            msg = "Option `$(wrap_option(ex.state))` is not a valid option " *
+                  "for command $(cmd(statement))."
+        elseif ex.code == ERROR_ARG_COUNT
+            msg = "Invalid number of arguments given to $(cmd(statement))." *
+                "\nGiven $(ex.state[1]) arguments, but $(cmd(statement)) accepts " * begin
+                    if ex.state[2].first == ex.state[2].second
+                        "exactly $(ex.state[2].first) arguments."
+                    elseif ex.state[2].second === Inf
+                        "$(ex.state[2].first) or more arguments."
+                    else
+                        "from $(ex.state[2].first) to $(ex.state[2].second) arguments."
+                    end
+                end
+        elseif ex.code == ERROR_FLOATING_VERSION
+            msg = "Version `@$(ex.state)` must be immediately preceded by a package specifier."
+        elseif ex.code == ERROR_FLOATING_REVISION
+            msg = "Revision `#$(ex.state.rev)` must be immediately preceded by a package specifier."
+        elseif ex.code == ERROR_NO_VERSION_REV
+            msg = "$(cmd(statement)) does not accept versions or revisions."
+        elseif ex.code == ERROR_NO_VERSION
+            msg = "$(cmd(statement)) does not accept arguments with versions."
+        elseif ex.code == ERROR_NO_REV
+            msg = "$(cmd(statement)) does not accept arguments with revisions."
+        else
+            @assert false
+        end # error codes
+        rethrow(PkgError(msg, PKG_ERROR_REPL, ex.code))
+    end # try-catch
+end # PkgCommand
 
 Context!(ctx::APIOptions)::Context = Types.Context!(collect(ctx))
 
@@ -588,7 +665,7 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
 end
 
 function do_cmd!(command::PkgCommand, repl)
-    context = APIOptions(command.meta_options, meta_option_specs)
+    context = Dict{Symbol, Any}([:preview => command.preview])
 
     # REPL specific commands
     if command.spec.kind == CMD_HELP
@@ -744,10 +821,9 @@ pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 mutable struct CompletionCache
     commands::Vector{String}
     canonical_names::Vector{String}
-    meta_options::Vector{String}
     options::Dict{CommandKind, Vector{String}}
     subcommands::Dict{String, Vector{String}}
-    CompletionCache() = new([],[],[],Dict(),Dict())
+    CompletionCache() = new([],[],Dict(),Dict())
 end
 
 completion_cache = CompletionCache()
@@ -826,7 +902,7 @@ function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
     if isempty(pre)
         return completion_cache.commands, 0:-1, false
     end
-    x = parse(pre; for_completions=true)
+    x = completions_parse(pre)
     if x === nothing # failed parse (invalid command name)
         return String[], 0:-1, false
     end
@@ -840,7 +916,6 @@ function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
         return complete_argument(to_complete, offset, index, spec.kind, proj)
     end
     possible::Vector{String} =
-        key == :meta ? completion_cache.meta_options :
         key == :cmd ? completion_cache.commands :
         key == :sub ? completion_cache.subcommands[spec] :
         key == :opt ? completion_cache.options[spec.kind] :
@@ -1300,7 +1375,6 @@ is modified.
 
 super_specs = SuperSpecs(command_declarations)
 # cache things you need for completions
-completion_cache.meta_options = sort(map(wrap_option, collect(keys(meta_option_specs))))
 completion_cache.commands = sort(append!(collect(keys(super_specs)),
                                          collect(keys(super_specs["package"]))))
 let names = String[]
@@ -1323,8 +1397,6 @@ for (k, v) in pairs(super_specs)
             sort(map(wrap_option, collect(keys(spec.option_specs))))
     end
 end
-# TODO remove this
-command_specs = super_specs["package"]
 
 const help = md"""
 

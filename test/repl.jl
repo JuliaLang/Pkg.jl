@@ -359,36 +359,28 @@ cd(mktempdir()) do
 end
 
 @testset "parse completions" begin
-    # meta options
-    @test Pkg.REPLMode.parse("--pre"; for_completions=true) == (:meta, "--pre", nothing, true)
-    @test Pkg.REPLMode.parse("--meta --pre"; for_completions=true) == (:meta, "--pre", nothing, true)
-    @test Pkg.REPLMode.parse("--meta -"; for_completions=true) == (:meta, "-", nothing, true)
-    @test Pkg.REPLMode.parse("--meta --"; for_completions=true) == (:meta, "--", nothing, true)
     # commands
-    @test Pkg.REPLMode.parse("--preview"; for_completions=true) == (:cmd, "", nothing, true)
-    @test Pkg.REPLMode.parse("--preview ad"; for_completions=true) == (:cmd, "ad", nothing, true)
-    @test Pkg.REPLMode.parse("--meta --preview r"; for_completions=true) == (:cmd, "r", nothing, true)
-    @test Pkg.REPLMode.parse("--preview reg"; for_completions=true) == (:cmd, "reg", nothing, true)
+    @test Pkg.REPLMode.completions_parse("") == (:cmd, "", nothing, true)
+    @test Pkg.REPLMode.completions_parse("ad") == (:cmd, "ad", nothing, true)
+    @test Pkg.REPLMode.completions_parse("r") == (:cmd, "r", nothing, true)
+    @test Pkg.REPLMode.completions_parse("reg") == (:cmd, "reg", nothing, true)
     # sub commands
-    @test Pkg.REPLMode.parse("--preview package"; for_completions=true) ==
-        (:sub, "", "package", true)
-    @test Pkg.REPLMode.parse("--preview package a"; for_completions=true) ==
-        (:sub, "a", "package", true)
+    @test Pkg.REPLMode.completions_parse("package") == (:sub, "", "package", true)
+    @test Pkg.REPLMode.completions_parse("package a") == (:sub, "a", "package", true)
     # options
-    @test Pkg.REPLMode.parse("add -"; for_completions=true) ==
+    @test Pkg.REPLMode.completions_parse("add -") ==
         (:opt, "-", Pkg.REPLMode.super_specs["package"]["add"], true)
-    @test Pkg.REPLMode.parse("up --m"; for_completions=true) ==
+    @test Pkg.REPLMode.completions_parse("up --m") ==
         (:opt, "--m", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("up --major --pro"; for_completions=true) ==
+    @test Pkg.REPLMode.completions_parse("up --major --pro") ==
         (:opt, "--pro", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("foo --maj"; for_completions=true) ===
-        nothing
+    @test Pkg.REPLMode.completions_parse("foo --maj") === nothing
     # arguments
-    @test Pkg.REPLMode.parse("up --major Ex"; for_completions=true) ==
+    @test Pkg.REPLMode.completions_parse("up --major Ex") ==
         (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("--preview up --major foo Ex"; for_completions=true) ==
+    @test Pkg.REPLMode.completions_parse("up --major foo Ex") ==
         (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("remove --manifest Ex"; for_completions=true) ==
+    @test Pkg.REPLMode.completions_parse("remove --manifest Ex") ==
         (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["remove"], false)
 end
 
@@ -705,59 +697,49 @@ end
 end
 
 @testset "`parse` integration tests" begin
-    @test isempty(Pkg.REPLMode.parse(""))
+    @test_throws PkgError Pkg.REPLMode.parse("")
 
     statement = Pkg.REPLMode.parse("up")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_UP
-    @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test isempty(statement.arguments)
 
     statement = Pkg.REPLMode.parse("dev Example")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example"]
 
     statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "#bar"]
 
     statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "Example", "@v0.0.1"]
 
-    statement = Pkg.REPLMode.parse("--one -t add --first --second arg1")[1]
+    statement = Pkg.REPLMode.parse("add --first -t --second arg1")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_ADD
-    @test statement.meta_options == ["--one", "-t"]
-    @test statement.options == ["--first", "--second"]
+    @test statement.options == map(Pkg.REPLMode.parse_option, ["--first", "-t", "--second"])
     @test statement.arguments == ["arg1"]
 
-    statements = Pkg.REPLMode.parse("--one -t add --first -o arg1; --meta pin -x -a arg0 Example")
+    statements = Pkg.REPLMode.parse("add --first -o arg1;pin -x -a arg0 Example")
     @test statements[1].command.kind == Pkg.REPLMode.CMD_ADD
-    @test statements[1].meta_options == ["--one", "-t"]
-    @test statements[1].options == ["--first", "-o"]
+    @test statements[1].options == map(Pkg.REPLMode.parse_option, ["--first", "-o"])
     @test statements[1].arguments == ["arg1"]
     @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
-    @test statements[2].meta_options == ["--meta"]
-    @test statements[2].options == ["-x", "-a"]
+    @test statements[2].options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
     @test statements[2].arguments == ["arg0", "Example"]
 
-    statements = Pkg.REPLMode.parse("up; --meta -x pin --first; dev")
+    statements = Pkg.REPLMode.parse("up;pin --first; dev")
     @test statements[1].command.kind == Pkg.REPLMode.CMD_UP
-    @test isempty(statements[1].meta_options)
     @test isempty(statements[1].options)
     @test isempty(statements[1].arguments)
     @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
-    @test statements[2].meta_options == ["--meta", "-x"]
-    @test statements[2].options == ["--first"]
+    @test statements[2].options == map(Pkg.REPLMode.parse_option, ["--first"])
     @test isempty(statements[2].arguments)
     @test statements[3].command.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statements[3].meta_options)
     @test isempty(statements[3].options)
     @test isempty(statements[3].arguments)
 end
@@ -793,10 +775,175 @@ end
     end
 end
 
-@testset "conflicting options" begin
+###############
+# REPL ERRORS #
+###############
+@testset "`parse` errors" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up --major --minor")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("rm --project --manifest")
+        try
+            pkg""
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_NO_INPUT
+        end
+        try
+            pkg"add 'Example"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_QUOTE
+        end
+        try
+            pkg"test ---foobar"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_MALFORMED_OPT
+        end
+        try
+            pkg"test -coolbeans"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_MALFORMED_OPT
+        end
+        try
+            pkg"--project --major Arg1"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_INVALID_COMMAND
+        end
+        try
+            pkg"poiuw485 Example"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_INVALID_COMMAND
+        end
+        try
+            pkg"package w00ps"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_INVALID_SUBCOMMAND
+        end
+        try
+            pkg"package"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_MISSING_SUBCOMMAND
+        end
+    end end end
+end
+
+@testset "missused options" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        try
+            pkg"up --major --minor"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_CONFLICTING_KEYS
+        end
+        try
+            pkg"rm --project --manifest Example"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_CONFLICTING_KEYS
+        end
+        try
+            pkg"up --major=5"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_OPT_ARG
+        end
+    end
+    end
+    end
+end
+
+@testset "invalid options" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        try
+            pkg"develop --foo Example"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_INVALID_OPT
+        end
+        try
+            pkg"develop --foo=bar Example"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_INVALID_OPT
+        end
+    end
+    end
+    end
+end
+
+@testset "`PkgCommand errors`" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        try
+            pkg"activate one two"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_ARG_COUNT
+        end
+        try
+            pkg"instantiate foobar"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_ARG_COUNT
+        end
+    end end end
+end
+
+@testset "PackageSpec parser errors" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
+        try
+            pkg"develop Example#foo"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_NO_REV
+        end
+        try
+            pkg"rm Example@0.0.1"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_NO_VERSION_REV
+        end
+        try
+            pkg"add Example#foo#bar"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_FLOATING_REVISION
+        end
+        try
+            pkg"add CoolBeans Example#foo@v2.3.0"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_FLOATING_VERSION
+        end
+        try
+            pkg"add Example@0.19.1@v2.3.0 Example2"
+        catch ex
+            @test ex isa PkgError
+            @test ex.class == Pkg.Types.PKG_ERROR_REPL
+            @test ex.code == Pkg.REPLMode.ERROR_FLOATING_VERSION
+        end
     end
     end
     end
@@ -863,25 +1010,6 @@ end
     end
 end
 
-@testset "unit tests for `group_words`" begin
-    # simple
-    groups = Pkg.REPLMode.group_words(["add", "Example"])
-    @test length(groups) == 1
-    @test groups[1][1] == "add"
-    @test groups[1][2] == "Example"
-    # statement break
-    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b"])
-    @test length(groups) == 2
-    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b", ";", "d"])
-    @test length(groups) == 3
-    # trailing statement break
-    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b", ";"])
-    @test length(groups) == 2
-    # errors
-    @test_throws PkgError Pkg.REPLMode.group_words(["a", "b", ";", ";", "a", "b"])
-    @test_throws PkgError Pkg.REPLMode.group_words([";", "add", "Example"])
-end
-
 @testset "tests for api opts" begin
     specs = Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[
         (["project", "p"], Pkg.REPLMode.OPT_SWITCH, :mode => Pkg.Types.PKGMODE_PROJECT),
@@ -890,7 +1018,7 @@ end
         ("minor", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_MINOR),
         ("patch", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_PATCH),
         ("fixed", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_FIXED),
-        ("rawnum", Pkg.REPLMode.OPT_ARG, :num => nothing),
+        ("rawnum", Pkg.REPLMode.OPT_ARG, :num => identity),
         ("plus", Pkg.REPLMode.OPT_ARG, :num => x->parse(Int,x)+1),
     ])
 
@@ -914,16 +1042,6 @@ end
     @test get(api_opts,:mode,nothing) == Pkg.Types.PKGMODE_PROJECT
     @test get(api_opts,:level,nothing) == Pkg.Types.UPLEVEL_PATCH
     @test get(api_opts,:num,nothing) == 6
-end
-
-@testset "meta option errors" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        # unregistered meta options
-        @test_throws PkgError Pkg.REPLMode.pkgstr("--foo=foo add Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("--bar add Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("-x add Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("--env Example")
-    end end end
 end
 
 @testset "activate" begin
@@ -955,16 +1073,6 @@ end
         pkg"rm Example"
         pkg"preview add Example"
         @test !isinstalled(TEST_PKG)
-        # as a meta option
-        pkg"add Example"
-        pkg"--preview rm Example"
-        @test isinstalled(TEST_PKG)
-        pkg"rm Example"
-        pkg"--preview add Example"
-        @test !isinstalled(TEST_PKG)
-        # both
-        pkg"--preview preview add Example"
-        @test !isinstalled(TEST_PKG)
     end end end
 end
 
@@ -976,8 +1084,8 @@ end
     @test qwords[2].word == " forget to "
     @test qwords[3].isquoted
     @test qwords[3].word == "\"test\""
-    @test_throws PkgError Pkg.REPLMode.parse_quotes("Don't")
-    @test_throws PkgError Pkg.REPLMode.parse_quotes("Unterminated \"quot")
+    @test_throws Pkg.REPLMode.REPLError Pkg.REPLMode.parse_quotes("Don't")
+    @test_throws Pkg.REPLMode.REPLError Pkg.REPLMode.parse_quotes("Unterminated \"quot")
 end
 
 @testset "argument kinds" begin
