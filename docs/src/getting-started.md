@@ -1,20 +1,23 @@
 # **2.** Getting Started
 
-The Pkg REPL-mode is entered from the Julia REPL using the key `]`.
+Pkg comes with its own REPL mode, which can be entered from the Julia REPL
+by pressing `]`. To get back to the Julia REPL press backspace or ^C.
 
 ```
-(v1.0) pkg>
+(v1.1) pkg>
 ```
 
-The part inside the parenthesis of the prompt shows the name of the current project.
-Since we haven't created our own project yet, we are in the default project, located at `~/.julia/environments/v1.0`
-(or whatever version of Julia you happen to run).
+The prompt displays the current active environment, which is the environment
+that Pkg commands will modify. The default environment is based on the current
+Julia version, `(v1.1)` in the example above, and is located in
+`~/.julia/environments/`.
 
-To return to the `julia>` prompt, either press backspace when the input line is empty or press Ctrl+C.
-Help is available by calling `pkg> help`.
-If you are in an environment that does not have access to a REPL you can still use the REPL mode commands using
-the string macro `pkg` available after `using Pkg`. The command `pkg"cmd"` would be equivalent to executing `cmd`
-in the REPL mode.
+!!! note
+    There are other ways of interacting with Pkg:
+    1. The `pkg` string macro, which is available after `using Pkg`. The command
+       `pkg"cmd"` is equivalent to executing `cmd` in the Pkg REPL.
+    2. The API-mode, which is recommended for non-interactive
+       environments. The API mode is documented in full in the API Reference section
+       of the Pkg documentation.
 
-The documentation here describes using Pkg from the REPL mode. Documentation of using
-the Pkg API (by calling `Pkg.` functions) is in progress of being written.
+

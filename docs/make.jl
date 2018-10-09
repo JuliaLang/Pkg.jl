@@ -14,7 +14,7 @@ makedocs(
         "creating-packages.md",
         "compatibility.md",
         "registries.md",
-        "faq.md",
+        # "faq.md",
         "glossary.md",
         "api.md"
     ]
