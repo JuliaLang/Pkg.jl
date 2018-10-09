@@ -24,7 +24,7 @@ branches:
 stages:
   - name: test
     # test only on bors trying and bors staging
-    if: branch IN (trying, staging, master)
+    if: branch IN (trying, staging)
   - name: docs
     # build docs on bors trying, bors staging, master and for tags
     if: branch IN (trying, staging) OR (branch = master AND type = push) OR tag IS present
