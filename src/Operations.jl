@@ -1029,7 +1029,7 @@ function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,In
     return order
 end
 
-function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve=false)
+function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve=false, verbose=false)
     # collect builds for UUIDs with `deps/build.jl` files
     ctx.preview && (printpkgstyle(ctx, :Building, "skipping building in preview mode"); return)
     builds = Tuple{UUID,String,Union{String,SHA1},String, VersionNumber}[]
@@ -1080,7 +1080,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             ```
         run_build = () -> begin
             ok = open(log_file, "w") do log
-                success(pipeline(cmd, stdout=log, stderr=log))
+                success(pipeline(cmd, stdout = verbose ? stdout : log, stderr = verbose ? stderr : log))
             end
             if !ok
                 n_lines = isinteractive() ? 100 : 5000

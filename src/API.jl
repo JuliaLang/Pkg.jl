@@ -425,11 +425,11 @@ function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}
 end
 
 
-build(pkgs...) = build([PackageSpec(pkg) for pkg in pkgs])
-build(pkg::Array{Union{}, 1}) = build(PackageSpec[])
-build(pkg::PackageSpec) = build([pkg])
-build(pkgs::Vector{PackageSpec}) = build(Context(), pkgs)
-function build(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+build(pkgs...; kwargs...) = build([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+build(pkg::Array{Union{}, 1}; kwargs...) = build(PackageSpec[]; kwargs...)
+build(pkg::PackageSpec; kwargs...) = build([pkg]; kwargs...)
+build(pkgs::Vector{PackageSpec}; kwargs...) = build(Context(), pkgs; kwargs...)
+function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -456,7 +456,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     uuids = UUID[]
     _get_deps!(ctx, pkgs, uuids)
     length(uuids) == 0 && (@info("no packages to build"); return)
-    Operations.build_versions(ctx, uuids; might_need_to_resolve=true)
+    Operations.build_versions(ctx, uuids; might_need_to_resolve=true, verbose=verbose)
     ctx.preview && preview_info()
     return
 end
