@@ -81,11 +81,6 @@ function parse_option(word::AbstractString)::Option
     return Option(option_name, option_arg)
 end
 
-meta_option_declarations = OptionDeclaration[
-    ("preview", OPT_SWITCH, :preview => true)
-]
-meta_option_specs = OptionSpecs(meta_option_declarations)
-
 ################
 # Command Spec #
 ################
@@ -195,8 +190,8 @@ mutable struct Statement
     command::Union{Nothing,CommandSpec}
     options::Vector{String}
     arguments::Vector{String}
-    meta_options::Vector{String}
-    Statement() = new(nothing, [], [], [])
+    preview::Bool
+    Statement() = new(nothing, [], [], false)
 end
 
 struct QuotedWord
@@ -218,19 +213,11 @@ wrap_option(option::String) =
 function _statement(words)
     is_option(word) = first(word) == '-'
 
-    word = popfirst!(words)
-    # meta options
-    while is_option(word)
-        if isempty(words)
-            if unwrap_option(word) in keys(meta_option_specs)
-                return :cmd, "", nothing, true
-            else
-                return :meta, word, nothing, true
-            end
-        end
-        word = popfirst!(words)
-    end
     # command
+    if isempty(words)
+        return :cmd, "", nothing, true
+    end
+    word = popfirst!(words)
     if word == "preview"
         if isempty(words)
             return :cmd, "", nothing, true
@@ -291,19 +278,13 @@ function Statement(words)::Statement
     is_option(word) = first(word) == '-'
     statement = Statement()
 
+    isempty(words) && pkgerror("no command specified")
     word = popfirst!(words)
-    # meta options
-    while is_option(word)
-        push!(statement.meta_options, word)
-        isempty(words) && pkgerror("no command specified")
-        word = popfirst!(words)
-    end
+
     # command
-    # special handling for `preview`, just convert it to a meta option under the hood
+    # special handling for `preview`
     if word == "preview"
-        if !("--preview" in statement.meta_options)
-            push!(statement.meta_options, "--preview")
-        end
+        statement.preview = true
         isempty(words) && pkgerror("preview requires a command")
         word = popfirst!(words)
     end
@@ -403,12 +384,12 @@ const ArgToken = Union{VersionRange, Rev}
 const PkgToken = Union{String, VersionRange, Rev}
 const PkgArguments = Union{Vector{String}, Vector{PackageSpec}}
 struct PkgCommand
-    meta_options::Vector{Option}
     spec::CommandSpec
     options::Vector{Option}
     arguments::PkgArguments
-    PkgCommand() = new([], "", [], [])
-    PkgCommand(meta_opts, cmd_name, opts, args) = new(meta_opts, cmd_name, opts, args)
+    preview::Bool
+    PkgCommand() = new([], "", [], [], false)
+    PkgCommand(cmd_name, opts, args, preview) = new(cmd_name, opts, args, preview)
 end
 
 const APIOptions = Dict{Symbol, Any}
@@ -519,17 +500,6 @@ function enforce_option(option::String, specs::Dict{String,OptionSpec})::Option
     return opt
 end
 
-function enforce_meta_options(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
-    meta_opt_names = keys(specs)
-    return map(options) do opt
-        tok = enforce_option(opt, specs)
-        tok.val in meta_opt_names ||
-            pkgerror("option '$opt' is not a valid meta option.")
-            #TODO hint that maybe they intended to use it as a command option
-        return tok
-    end
-end
-
 function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
     unique_keys = Symbol[]
     get_key(opt::Option) = specs[opt.val].api.first
@@ -555,12 +525,10 @@ end
 
 # this the entry point for the majority of input checks
 function PkgCommand(statement::Statement)::PkgCommand
-    meta_opts = enforce_meta_options(statement.meta_options,
-                                     meta_option_specs)
     args = enforce_argument(statement.arguments,
                             statement.command.argument_spec)
     opts = enforce_opts(statement.options, statement.command.option_specs)
-    return PkgCommand(meta_opts, statement.command, opts, args)
+    return PkgCommand(statement.command, opts, args, statement.preview)
 end
 
 Context!(ctx::APIOptions)::Context = Types.Context!(collect(ctx))
@@ -588,7 +556,7 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
 end
 
 function do_cmd!(command::PkgCommand, repl)
-    context = APIOptions(command.meta_options, meta_option_specs)
+    context = Dict{Symbol,Any}(:preview => command.preview)
 
     # REPL specific commands
     if command.spec.kind == CMD_HELP
@@ -744,10 +712,9 @@ pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 mutable struct CompletionCache
     commands::Vector{String}
     canonical_names::Vector{String}
-    meta_options::Vector{String}
     options::Dict{CommandKind, Vector{String}}
     subcommands::Dict{String, Vector{String}}
-    CompletionCache() = new([],[],[],Dict(),Dict())
+    CompletionCache() = new([],[],Dict(),Dict())
 end
 
 completion_cache = CompletionCache()
@@ -840,7 +807,6 @@ function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
         return complete_argument(to_complete, offset, index, spec.kind, proj)
     end
     possible::Vector{String} =
-        key == :meta ? completion_cache.meta_options :
         key == :cmd ? completion_cache.commands :
         key == :sub ? completion_cache.subcommands[spec] :
         key == :opt ? completion_cache.options[spec.kind] :
@@ -1300,7 +1266,6 @@ is modified.
 
 super_specs = SuperSpecs(command_declarations)
 # cache things you need for completions
-completion_cache.meta_options = sort(map(wrap_option, collect(keys(meta_option_specs))))
 completion_cache.commands = sort(append!(collect(keys(super_specs)),
                                          collect(keys(super_specs["package"]))))
 let names = String[]
