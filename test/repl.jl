@@ -879,14 +879,14 @@ end
 
 @testset "tests for api opts" begin
     specs = Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[
-        (["project", "p"], Pkg.REPLMode.OPT_SWITCH, :mode => Pkg.Types.PKGMODE_PROJECT),
-        (["manifest", "m"], Pkg.REPLMode.OPT_SWITCH, :mode => Pkg.Types.PKGMODE_MANIFEST),
-        ("major", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_MAJOR),
-        ("minor", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_MINOR),
-        ("patch", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_PATCH),
-        ("fixed", Pkg.REPLMode.OPT_SWITCH, :level => Pkg.Types.UPLEVEL_FIXED),
-        ("rawnum", Pkg.REPLMode.OPT_ARG, :num => nothing),
-        ("plus", Pkg.REPLMode.OPT_ARG, :num => x->parse(Int,x)+1),
+        [:name => "project", :short_name => "p", :api => :mode => Pkg.Types.PKGMODE_PROJECT],
+        [:name => "manifest", :short_name => "m", :api => :mode => Pkg.Types.PKGMODE_MANIFEST],
+        [:name => "major", :api => :level => Pkg.Types.UPLEVEL_MAJOR],
+        [:name => "minor", :api => :level => Pkg.Types.UPLEVEL_MINOR],
+        [:name => "patch", :api => :level => Pkg.Types.UPLEVEL_PATCH],
+        [:name => "fixed", :api => :level => Pkg.Types.UPLEVEL_FIXED],
+        [:name => "rawnum", :takes_arg => true, :api => :num => identity],
+        [:name => "plus", :takes_arg => true, :api => :num => x->parse(Int,x)+1],
     ])
 
     api_opts = Pkg.REPLMode.APIOptions([
