@@ -429,7 +429,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.build",
     "category": "function",
-    "text": "Pkg.build()\nPkg.build(pkg::Union{String, Vector{String}})\nPkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}})\n\nRun the build script in deps/build.jl for pkg and all of the dependencies in depth-first recursive order. If no argument is given to build, the current project is built, which thus needs to be a package. This function is called automatically one any package that gets installed for the first time.\n\n\n\n\n\n"
+    "text": "Pkg.build(; verbose = false)\nPkg.build(pkg::Union{String, Vector{String}}; verbose = false)\nPkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false)\n\nRun the build script in deps/build.jl for pkg and all of the dependencies in depth-first recursive order. If no argument is given to build, the current project is built, which thus needs to be a package. This function is called automatically one any package that gets installed for the first time. verbose = true prints the build output to stdout/stderr instead of redirecting to the build.log file.\n\n\n\n\n\n"
 },
 
 {
