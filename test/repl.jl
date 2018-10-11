@@ -359,20 +359,15 @@ cd(mktempdir()) do
 end
 
 @testset "parse completions" begin
-    # meta options
-    @test Pkg.REPLMode.parse("--pre"; for_completions=true) == (:meta, "--pre", nothing, true)
-    @test Pkg.REPLMode.parse("--meta --pre"; for_completions=true) == (:meta, "--pre", nothing, true)
-    @test Pkg.REPLMode.parse("--meta -"; for_completions=true) == (:meta, "-", nothing, true)
-    @test Pkg.REPLMode.parse("--meta --"; for_completions=true) == (:meta, "--", nothing, true)
     # commands
-    @test Pkg.REPLMode.parse("--preview"; for_completions=true) == (:cmd, "", nothing, true)
-    @test Pkg.REPLMode.parse("--preview ad"; for_completions=true) == (:cmd, "ad", nothing, true)
-    @test Pkg.REPLMode.parse("--meta --preview r"; for_completions=true) == (:cmd, "r", nothing, true)
-    @test Pkg.REPLMode.parse("--preview reg"; for_completions=true) == (:cmd, "reg", nothing, true)
+    @test Pkg.REPLMode.parse("preview"; for_completions=true) == (:cmd, "", nothing, true)
+    @test Pkg.REPLMode.parse("preview ad"; for_completions=true) == (:cmd, "ad", nothing, true)
+    @test Pkg.REPLMode.parse("preview r"; for_completions=true) == (:cmd, "r", nothing, true)
+    @test Pkg.REPLMode.parse("preview reg"; for_completions=true) == (:cmd, "reg", nothing, true)
     # sub commands
-    @test Pkg.REPLMode.parse("--preview package"; for_completions=true) ==
+    @test Pkg.REPLMode.parse("preview package"; for_completions=true) ==
         (:sub, "", "package", true)
-    @test Pkg.REPLMode.parse("--preview package a"; for_completions=true) ==
+    @test Pkg.REPLMode.parse("preview package a"; for_completions=true) ==
         (:sub, "a", "package", true)
     # options
     @test Pkg.REPLMode.parse("add -"; for_completions=true) ==
@@ -386,7 +381,7 @@ end
     # arguments
     @test Pkg.REPLMode.parse("up --major Ex"; for_completions=true) ==
         (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("--preview up --major foo Ex"; for_completions=true) ==
+    @test Pkg.REPLMode.parse("preview up --major foo Ex"; for_completions=true) ==
         (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["up"], true)
     @test Pkg.REPLMode.parse("remove --manifest Ex"; for_completions=true) ==
         (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["remove"], false)
@@ -709,55 +704,55 @@ end
 
     statement = Pkg.REPLMode.parse("up")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_UP
-    @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test isempty(statement.arguments)
+    @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example"]
+    @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "#bar"]
+    @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.meta_options)
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "Example", "@v0.0.1"]
+    @test statement.preview == false
 
-    statement = Pkg.REPLMode.parse("--one -t add --first --second arg1")[1]
+    statement = Pkg.REPLMode.parse("add --first --second arg1")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_ADD
-    @test statement.meta_options == ["--one", "-t"]
     @test statement.options == ["--first", "--second"]
     @test statement.arguments == ["arg1"]
+    @test statement.preview == false
 
-    statements = Pkg.REPLMode.parse("--one -t add --first -o arg1; --meta pin -x -a arg0 Example")
+    statements = Pkg.REPLMode.parse("preview add --first -o arg1; pin -x -a arg0 Example")
     @test statements[1].command.kind == Pkg.REPLMode.CMD_ADD
-    @test statements[1].meta_options == ["--one", "-t"]
+    @test statements[1].preview == true
     @test statements[1].options == ["--first", "-o"]
     @test statements[1].arguments == ["arg1"]
     @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
-    @test statements[2].meta_options == ["--meta"]
+    @test statements[2].preview == false
     @test statements[2].options == ["-x", "-a"]
     @test statements[2].arguments == ["arg0", "Example"]
 
-    statements = Pkg.REPLMode.parse("up; --meta -x pin --first; dev")
+    statements = Pkg.REPLMode.parse("up; pin --first; dev")
     @test statements[1].command.kind == Pkg.REPLMode.CMD_UP
-    @test isempty(statements[1].meta_options)
+    @test statements[1].preview == false
     @test isempty(statements[1].options)
     @test isempty(statements[1].arguments)
     @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
-    @test statements[2].meta_options == ["--meta", "-x"]
+    @test statements[2].preview == false
     @test statements[2].options == ["--first"]
     @test isempty(statements[2].arguments)
     @test statements[3].command.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statements[3].meta_options)
+    @test statements[3].preview == false
     @test isempty(statements[3].options)
     @test isempty(statements[3].arguments)
 end
@@ -916,16 +911,6 @@ end
     @test get(api_opts,:num,nothing) == 6
 end
 
-@testset "meta option errors" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        # unregistered meta options
-        @test_throws PkgError Pkg.REPLMode.pkgstr("--foo=foo add Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("--bar add Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("-x add Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("--env Example")
-    end end end
-end
-
 @testset "activate" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         mkdir("Foo")
@@ -954,16 +939,6 @@ end
         @test isinstalled(TEST_PKG)
         pkg"rm Example"
         pkg"preview add Example"
-        @test !isinstalled(TEST_PKG)
-        # as a meta option
-        pkg"add Example"
-        pkg"--preview rm Example"
-        @test isinstalled(TEST_PKG)
-        pkg"rm Example"
-        pkg"--preview add Example"
-        @test !isinstalled(TEST_PKG)
-        # both
-        pkg"--preview preview add Example"
         @test !isinstalled(TEST_PKG)
     end end end
 end
