@@ -161,9 +161,9 @@ const gc = API.gc
 
 
 """
-    Pkg.build()
-    Pkg.build(pkg::Union{String, Vector{String}})
-    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.build(; verbose = false)
+    Pkg.build(pkg::Union{String, Vector{String}}; verbose = false)
+    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false)
 
 Run the build script in `deps/build.jl` for `pkg` and all of the dependencies in
 depth-first recursive order.
@@ -171,6 +171,8 @@ If no argument is given to `build`, the current project is built, which thus nee
 to be a package.
 This function is called automatically one any package that gets installed
 for the first time.
+`verbose = true` prints the build output to `stdout`/`stderr` instead of
+redirecting to the `build.log` file.
 """
 const build = API.build
 

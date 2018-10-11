@@ -1153,14 +1153,17 @@ A pinned package has the symbol `⚲` next to its version in the status list.
     ["build"],
     do_build!,
     (0=>Inf, parse_pkg, []),
-    [],
+    [
+        (["verbose", "v"], OPT_SWITCH, :verbose => true),
+    ],
     "run the build script for packages",
     md"""
 
-    build pkg[=uuid] ...
+    build [-v|verbose] pkg[=uuid] ...
 
 Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
 If no packages are given, runs the build scripts for all packages in the manifest.
+The `-v`/`--verbose` option redirects build output to `stdout`/`stderr` instead of the `build.log` file.
 The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
     """,
 ),( CMD_RESOLVE,
