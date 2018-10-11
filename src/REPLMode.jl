@@ -172,6 +172,9 @@ end
 # additionally valid for add/develop are: local path, url
 function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
     if add_or_develop && casesensitive_isdir(expanduser(word))
+        if !occursin(Base.Filesystem.path_separator_re, word)
+            @info "resolving package specifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
+        end
         return PackageSpec(Types.GitRepo(expanduser(word)))
     elseif occursin(uuid_re, word)
         return PackageSpec(UUID(word))
