@@ -182,7 +182,7 @@ end
 ################
 mutable struct Statement
     command::Union{Nothing,CommandSpec}
-    options::Vector{String}
+    options::Vector{Option}
     arguments::Vector{String}
     preview::Bool
     Statement() = new(nothing, [], [], false)
@@ -294,7 +294,11 @@ function Statement(words)::Statement
     statement.command = command
     # command arguments
     for word in words
-        push!((is_option(word) ? statement.options : statement.arguments), word)
+        if is_option(word)
+            push!(statement.options, parse_option(word))
+        else # is argument
+            push!(statement.arguments, word)
+        end
     end
     return statement
 end
@@ -377,22 +381,19 @@ const Token = Union{String, VersionRange, Rev}
 const ArgToken = Union{VersionRange, Rev}
 const PkgToken = Union{String, VersionRange, Rev}
 const PkgArguments = Union{Vector{String}, Vector{PackageSpec}}
+const APIOptions = Dict{Symbol, Any}
 struct PkgCommand
     spec::CommandSpec
-    options::Vector{Option}
+    options::APIOptions
     arguments::PkgArguments
     preview::Bool
     PkgCommand() = new([], "", [], [], false)
     PkgCommand(cmd_name, opts, args, preview) = new(cmd_name, opts, args, preview)
 end
 
-const APIOptions = Dict{Symbol, Any}
-APIOptions(command::PkgCommand)::Dict{Symbol, Any} =
-    APIOptions(command.options, command.spec.option_specs)
-
 function APIOptions(options::Vector{Option},
                     specs::Dict{String, OptionSpec},
-                    )::Dict{Symbol, Any}
+                    )::APIOptions
     api_options = Dict{Symbol, Any}()
     for option in options
         spec = specs[option.val]
@@ -477,50 +478,59 @@ function enforce_argument(raw_args::Vector{String}, spec::ArgSpec)::PkgArguments
     return args
 end
 
-function enforce_option(option::String, specs::Dict{String,OptionSpec})::Option
-    opt = parse_option(option)
-    spec = get(specs, opt.val, nothing)
+function enforce_option(option::Option, specs::Dict{String,OptionSpec})
+    spec = get(specs, option.val, nothing)
     spec !== nothing ||
-        pkgerror("option '$(opt.val)' is not a valid option")
+        pkgerror("option '$(option.val)' is not a valid option")
     if spec.takes_arg
-        opt.argument !== nothing ||
-            pkgerror("option '$(opt.val)' expects an argument, but no argument given")
+        option.argument !== nothing ||
+            pkgerror("option '$(option.val)' expects an argument, but no argument given")
     else # option is a switch
-        opt.argument === nothing ||
-            pkgerror("option '$(opt.val)' does not take an argument, but '$(opt.argument)' given")
+        option.argument === nothing ||
+            pkgerror("option '$(option.val)' does not take an argument, but '$(option.argument)' given")
     end
-    return opt
 end
 
-function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
+"""
+checks:
+- options are understood by the given command
+- options do not conflict (e.g. `rm --project --manifest`)
+- options which take an argument are given arguments
+- options which do not take arguments are not given arguments
+"""
+function enforce_option(options::Vector{Option}, specs::Dict{String,OptionSpec})
     unique_keys = Symbol[]
     get_key(opt::Option) = specs[opt.val].api.first
 
-    # final parsing
-    toks = map(x->enforce_option(x,specs),options)
-    # checking
-    for opt in toks
-        # valid option
-        opt.val in keys(specs) ||
-            pkgerror("option '$(opt.val)' is not supported")
-        # conflicting options
+    # per option checking
+    foreach(x->enforce_option(x,specs), options)
+    # checking for compatible options
+    for opt in options
         key = get_key(opt)
         if key in unique_keys
-            conflicting = filter(opt->get_key(opt) == key, toks)
+            conflicting = filter(opt->get_key(opt) == key, options)
             pkgerror("Conflicting options: $conflicting")
         else
             push!(unique_keys, key)
         end
     end
-    return toks
 end
 
-# this the entry point for the majority of input checks
+"""
+Final parsing (and checking) step.
+This step is distinct from `parse` in that it relies on the command specifications.
+"""
 function PkgCommand(statement::Statement)::PkgCommand
     args = enforce_argument(statement.arguments,
                             statement.command.argument_spec)
-    opts = enforce_opts(statement.options, statement.command.option_specs)
-    return PkgCommand(statement.command, opts, args, statement.preview)
+    # check against spec
+    enforce_option(statement.options, statement.command.option_specs)
+    # final opt parsing
+    options = APIOptions(statement.options, statement.command.option_specs)
+    return PkgCommand(statement.command,
+                      options,
+                      args,
+                      statement.preview)
 end
 
 Context!(ctx::APIOptions)::Context = Types.Context!(collect(ctx))
@@ -557,11 +567,10 @@ function do_cmd!(command::PkgCommand, repl)
 
     # API commands
     # TODO is invokelatest still needed?
-    api_opts = APIOptions(command)
-    if applicable(command.spec.handler, context, command.arguments, api_opts)
-        Base.invokelatest(command.spec.handler, context, command.arguments, api_opts)
+    if applicable(command.spec.handler, context, command.arguments, command.options)
+        Base.invokelatest(command.spec.handler, context, command.arguments, command.options)
     else
-        Base.invokelatest(command.spec.handler, command.arguments, api_opts)
+        Base.invokelatest(command.spec.handler, command.arguments, command.options)
     end
 end
 

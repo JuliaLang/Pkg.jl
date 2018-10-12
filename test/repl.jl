@@ -728,18 +728,18 @@ end
 
     statement = Pkg.REPLMode.parse("add --first --second arg1")[1]
     @test statement.command.kind == Pkg.REPLMode.CMD_ADD
-    @test statement.options == ["--first", "--second"]
+    @test statement.options == map(Pkg.REPLMode.parse_option, ["--first", "--second"])
     @test statement.arguments == ["arg1"]
     @test statement.preview == false
 
     statements = Pkg.REPLMode.parse("preview add --first -o arg1; pin -x -a arg0 Example")
     @test statements[1].command.kind == Pkg.REPLMode.CMD_ADD
     @test statements[1].preview == true
-    @test statements[1].options == ["--first", "-o"]
+    @test statements[1].options == map(Pkg.REPLMode.parse_option, ["--first", "-o"])
     @test statements[1].arguments == ["arg1"]
     @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
     @test statements[2].preview == false
-    @test statements[2].options == ["-x", "-a"]
+    @test statements[2].options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
     @test statements[2].arguments == ["arg0", "Example"]
 
     statements = Pkg.REPLMode.parse("up; pin --first; dev")
@@ -749,7 +749,7 @@ end
     @test isempty(statements[1].arguments)
     @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
     @test statements[2].preview == false
-    @test statements[2].options == ["--first"]
+    @test statements[2].options == map(Pkg.REPLMode.parse_option, ["--first"])
     @test isempty(statements[2].arguments)
     @test statements[3].command.kind == Pkg.REPLMode.CMD_DEVELOP
     @test statements[3].preview == false
