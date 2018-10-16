@@ -595,6 +595,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}; 
                 # Save the path as relative if it is a --local dev,
                 # otherwise put in the absolute path.
                 pkg.path = shared ? dev_pkg_path : relative_project_path(ctx, dev_pkg_path)
+                Base.rm(project_path; force = true, recursive = true)
             end
             @assert pkg.path != nothing
             @assert has_uuid(pkg)
@@ -691,6 +692,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                 mv(project_path, version_path; force=true)
                 push!(new_uuids, pkg.uuid)
             end
+            Base.rm(project_path; force = true, recursive = true)
             @assert has_uuid(pkg)
         end
         return new_uuids
