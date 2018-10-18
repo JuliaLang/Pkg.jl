@@ -155,7 +155,6 @@ for pkg in [
     "CreateMacrosFrom"
     "GSDicts"
     "S3Dicts"
-    "BigArrays"
     "ChainMap"
     "NanoTimes"
     "OnlineMoments"
@@ -176,12 +175,7 @@ end
 
 # cap julia version for probably-0.7-incompatible packages
 
-const date_cutoff = 1531526400 # July 14, 2018
-const all_vers = julia_versions()
-const old_vers = julia_versions(v -> v < v"0.7")
-const meta_dir = Pkg.Pkg2.dir("METADATA")
 const passing = readlines(joinpath(@__DIR__, "passing.txt"))
-
 for pkg in passing
     haskey(pkgs, pkg) || continue
     p = pkgs[pkg]
@@ -194,6 +188,7 @@ for pkg in passing
 end
 sort!(passing, by=lowercase)
 
+const meta_dir = Pkg.Pkg2.dir("METADATA")
 const time_map = Dict{Tuple{String,VersionNumber},Int}()
 let t = 0
     for line in eachline(`git -C $meta_dir log --format=%ct --name-only`)
@@ -208,22 +203,31 @@ let t = 0
     end
 end
 
+const all_vers = julia_versions()
+const old_vers = julia_versions(v -> v < v"0.7")
+const jul_14 = 1531526400 # Jul 14, 2018
+const oct_10 = 1539129600 # Oct 10, 2018
+
 function cap_compat!(pkg::String, ver::VersionNumber, reqs::Dict{String,Require})
     jvers = reqs["julia"].versions
     ivals = jvers.intervals
     isempty(ivals) && return
+    t = get(time_map, (pkg, ver), 0)
     if pkg in passing && ver ≥ maximum(keys(pkgs[pkg].versions)) || !isempty(ivals[end]) &&
         (ivals[end].upper < v"∞" || !any(v->v in ivals[end] && v < v"0.7", all_vers))
         # in the "passing list" from pkgeval and maxiumal version => leave alone
         # has final interval with explicit upper bound => leave alone
         # or interval only containing 0.7+ versions => 1.0 compatible
         return # no change
+    elseif (v"0.7" in jvers || v"1.0" in jvers) && t ≥ oct_10
+        # recently tagged and claims to support 0.7/1.0 => face value
+        return # no change
     elseif pkg != "Compat" && !haskey(reqs, "Compat") && any(v in jvers for v in old_vers)
         # supports an older julia & doesn't use Compat => 0.7 incompatible
         # fall through
-    elseif v"0.7" in jvers || v"1.0" in jvers
+    elseif (v"0.7" in jvers || v"1.0" in jvers) && t ≥ jul_14
         # claims to support 0.7+ & tagged after date cutoff => 1.0 compatible
-        get(time_map, (pkg, ver), 0) ≥ date_cutoff && return # no change
+        return # no change
     end
     # cap supported Julia versions at 0.7
     ivals[end] = VersionInterval(ivals[end].lower, v"0.7+")
