@@ -87,7 +87,6 @@ end
 struct ArgSpec
     count::Pair
     parser::Function
-    parser_keys::Vector{Pair{Symbol, Any}}
 end
 
 const CommandDeclaration = Vector{Pair{Symbol,Any}}
@@ -114,7 +113,6 @@ function SuperSpecs(compound_commands)::Dict{String,Dict{String,CommandSpec}}
     return super_specs
 end
 
-const ArgumentDeclaration = Tuple{Pair, Function, Vector}
 function CommandSpec(;kind::Union{Nothing,CommandKind}=nothing,
                      name::String="",
                      short_name::Union{String,Nothing}=nothing,
@@ -122,12 +120,13 @@ function CommandSpec(;kind::Union{Nothing,CommandKind}=nothing,
                      option_spec::Vector{OptionDeclaration}=OptionDeclaration[],
                      help::Union{Nothing, Markdown.MD}=nothing,
                      description::String="",
-                     arg_spec::ArgumentDeclaration=(0=>0,identity,[]),
+                     arg_count::Pair=(0=>0),
+                     arg_parser::Function=identity,
                      )::CommandSpec
     @assert kind !== nothing "Register and specify a `CommandKind`"
     @assert !isempty(name) "Supply a canonical name"
     @assert !isempty(description) "Supply a description"
-    return CommandSpec(kind, name, short_name, handler, ArgSpec(arg_spec...),
+    return CommandSpec(kind, name, short_name, handler, ArgSpec(arg_count, arg_parser),
                        OptionSpecs(option_spec), description, help)
 end
 
@@ -182,7 +181,7 @@ end
 ################
 mutable struct Statement
     command::Union{Nothing,CommandSpec}
-    options::Vector{String}
+    options::Vector{Option}
     arguments::Vector{String}
     preview::Bool
     Statement() = new(nothing, [], [], false)
@@ -294,7 +293,11 @@ function Statement(words)::Statement
     statement.command = command
     # command arguments
     for word in words
-        push!((is_option(word) ? statement.options : statement.arguments), word)
+        if is_option(word)
+            push!(statement.options, parse_option(word))
+        else # is argument
+            push!(statement.arguments, word)
+        end
     end
     return statement
 end
@@ -373,26 +376,22 @@ end
 ##############
 # PkgCommand #
 ##############
-const Token = Union{String, VersionRange, Rev}
-const ArgToken = Union{VersionRange, Rev}
-const PkgToken = Union{String, VersionRange, Rev}
+const PackageIdentifier = String
+const PackageToken = Union{PackageIdentifier, VersionRange, Rev}
 const PkgArguments = Union{Vector{String}, Vector{PackageSpec}}
+const APIOptions = Dict{Symbol, Any}
 struct PkgCommand
     spec::CommandSpec
-    options::Vector{Option}
+    options::APIOptions
     arguments::PkgArguments
     preview::Bool
     PkgCommand() = new([], "", [], [], false)
     PkgCommand(cmd_name, opts, args, preview) = new(cmd_name, opts, args, preview)
 end
 
-const APIOptions = Dict{Symbol, Any}
-APIOptions(command::PkgCommand)::Dict{Symbol, Any} =
-    APIOptions(command.options, command.spec.option_specs)
-
 function APIOptions(options::Vector{Option},
                     specs::Dict{String, OptionSpec},
-                    )::Dict{Symbol, Any}
+                    )::APIOptions
     api_options = Dict{Symbol, Any}()
     for option in options
         spec = specs[option.val]
@@ -403,124 +402,121 @@ function APIOptions(options::Vector{Option},
     return api_options
 end
 
-function enforce_argument_count(spec::Pair, args::PkgArguments)
-    count = length(args)
-    spec.first <= count <= spec.second ||
-        pkgerror("Wrong number of arguments")
-end
-
 # Only for PkgSpec
-function package_args(args::Vector{Token}; add_or_dev=false)::Vector{PackageSpec}
-    pkgs = PackageSpec[]
-    for arg in args
-        if arg isa String
-            push!(pkgs, parse_package(arg; add_or_develop=add_or_dev))
-        elseif arg isa VersionRange
-            pkgs[end].version = VersionSpec(arg)
-        elseif arg isa Rev
-            pkg = pkgs[end]
-            if pkg.repo == nothing
-                pkg.repo = Types.GitRepo("", arg.rev)
-            else
-                pkgs[end].repo.rev = arg.rev
+function package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
+    # check for and apply PackageSpec modifier (e.g. `#foo` or `@v1.0.2`)
+    function apply_modifier!(pkg::PackageSpec, args::Vector{PackageToken})
+        if !isempty(args) && !(args[1] isa PackageIdentifier)
+            modifier = popfirst!(args)
+            if modifier isa VersionRange
+                pkg.version = VersionSpec(modifier)
+            else # modifier isa Rev
+                if pkg.repo === nothing
+                    pkg.repo = Types.GitRepo("", modifier.rev)
+                else
+                    pkg.repo.rev = modifier.rev
+                end
             end
+        end
+    end
+
+    pkgs = PackageSpec[]
+    while !isempty(args)
+        arg = popfirst!(args)
+        if arg isa PackageIdentifier
+            pkg = parse_package(arg; add_or_develop=add_or_dev)
+            apply_modifier!(pkg, args)
+            push!(pkgs, pkg)
+        # Modifiers without a corresponding package identifier -- this is a user error
+        elseif arg isa VersionRange
+            pkgerror("package name/uuid must precede version spec `@$arg`")
         else
-            assert(false)
+            pkgerror("package name/uuid must precede rev spec `#$(arg.rev)`")
         end
     end
     return pkgs
 end
 
 # Only for PkgSpec
-function word2token(word::AbstractString)::Token
+function word2token(word::AbstractString)::PackageToken
     if first(word) == '@'
         return VersionRange(word[2:end])
     elseif first(word) == '#'
         return Rev(word[2:end])
     else
-        return String(word)
+        return String(word) # PackageIdentifier
     end
 end
 
-# Only for PkgSpec
-function enforce_argument_order(args::Vector{Token})
-    prev_arg = nothing
-    function check_prev_arg(valid_type::DataType, error_message::AbstractString)
-        prev_arg isa valid_type || pkgerror(error_message)
-    end
-
-    for arg in args
-        if arg isa VersionRange
-            check_prev_arg(String, "package name/uuid must precede version spec `@$arg`")
-        elseif arg isa Rev
-            check_prev_arg(String, "package name/uuid must precede rev spec `#$(arg.rev)`")
-        end
-        prev_arg = arg
-    end
-end
-
-function parse_pkg(raw_args::Vector{String}; valid=[], add_or_dev=false)
-    args::Vector{PkgToken} = map(word2token, raw_args)
-    enforce_argument_order(args)
-    # enforce spec
+"""
+Parser for PackageSpec objects.
+"""
+function parse_pkg(raw_args::Vector{String}; valid=[], add_or_dev=false)::Vector{PackageSpec}
+    # conver to tokens
+    args::Vector{PackageToken} = map(word2token, raw_args)
+    # allow only valid tokens
     push!(valid, String) # always want at least PkgSpec identifiers
     if !all(x->typeof(x) in valid, args)
         pkgerror("invalid token")
     end
-    # convert to final arguments
+    # map tokens to PackageSpec objects
     return package_args(args; add_or_dev=add_or_dev)
 end
 
-function enforce_argument(raw_args::Vector{String}, spec::ArgSpec)::PkgArguments
-    args = spec.parser(raw_args; spec.parser_keys...)
-    enforce_argument_count(spec.count, args)
-    return args
-end
-
-function enforce_option(option::String, specs::Dict{String,OptionSpec})::Option
-    opt = parse_option(option)
-    spec = get(specs, opt.val, nothing)
+function enforce_option(option::Option, specs::Dict{String,OptionSpec})
+    spec = get(specs, option.val, nothing)
     spec !== nothing ||
-        pkgerror("option '$(opt.val)' is not a valid option")
+        pkgerror("option '$(option.val)' is not a valid option")
     if spec.takes_arg
-        opt.argument !== nothing ||
-            pkgerror("option '$(opt.val)' expects an argument, but no argument given")
+        option.argument !== nothing ||
+            pkgerror("option '$(option.val)' expects an argument, but no argument given")
     else # option is a switch
-        opt.argument === nothing ||
-            pkgerror("option '$(opt.val)' does not take an argument, but '$(opt.argument)' given")
+        option.argument === nothing ||
+            pkgerror("option '$(option.val)' does not take an argument, but '$(option.argument)' given")
     end
-    return opt
 end
 
-function enforce_opts(options::Vector{String}, specs::Dict{String,OptionSpec})::Vector{Option}
+"""
+checks:
+- options are understood by the given command
+- options do not conflict (e.g. `rm --project --manifest`)
+- options which take an argument are given arguments
+- options which do not take arguments are not given arguments
+"""
+function enforce_option(options::Vector{Option}, specs::Dict{String,OptionSpec})
     unique_keys = Symbol[]
     get_key(opt::Option) = specs[opt.val].api.first
 
-    # final parsing
-    toks = map(x->enforce_option(x,specs),options)
-    # checking
-    for opt in toks
-        # valid option
-        opt.val in keys(specs) ||
-            pkgerror("option '$(opt.val)' is not supported")
-        # conflicting options
+    # per option checking
+    foreach(x->enforce_option(x,specs), options)
+    # checking for compatible options
+    for opt in options
         key = get_key(opt)
         if key in unique_keys
-            conflicting = filter(opt->get_key(opt) == key, toks)
+            conflicting = filter(opt->get_key(opt) == key, options)
             pkgerror("Conflicting options: $conflicting")
         else
             push!(unique_keys, key)
         end
     end
-    return toks
 end
 
-# this the entry point for the majority of input checks
+"""
+Final parsing (and checking) step.
+This step is distinct from `parse` in that it relies on the command specifications.
+"""
 function PkgCommand(statement::Statement)::PkgCommand
-    args = enforce_argument(statement.arguments,
-                            statement.command.argument_spec)
-    opts = enforce_opts(statement.options, statement.command.option_specs)
-    return PkgCommand(statement.command, opts, args, statement.preview)
+    arg_spec = statement.command.argument_spec
+    opt_spec = statement.command.option_specs
+    # arguments
+    arguments = arg_spec.parser(statement.arguments)
+    if !(arg_spec.count.first <= length(arguments) <= arg_spec.count.second)
+        pkgerror("Wrong number of arguments")
+    end
+    # options
+    enforce_option(statement.options, opt_spec)
+    options = APIOptions(statement.options, opt_spec)
+    return PkgCommand(statement.command, options, arguments, statement.preview)
 end
 
 Context!(ctx::APIOptions)::Context = Types.Context!(collect(ctx))
@@ -557,11 +553,10 @@ function do_cmd!(command::PkgCommand, repl)
 
     # API commands
     # TODO is invokelatest still needed?
-    api_opts = APIOptions(command)
-    if applicable(command.spec.handler, context, command.arguments, api_opts)
-        Base.invokelatest(command.spec.handler, context, command.arguments, api_opts)
+    if applicable(command.spec.handler, context, command.arguments, command.options)
+        Base.invokelatest(command.spec.handler, context, command.arguments, command.options)
     else
-        Base.invokelatest(command.spec.handler, command.arguments, api_opts)
+        Base.invokelatest(command.spec.handler, command.arguments, command.options)
     end
 end
 
@@ -937,7 +932,7 @@ command_declarations = [
     :kind => CMD_REGISTRY_ADD,
     :name => "add",
     :handler => do_registry_add!,
-    :arg_spec => (1=>Inf, identity, []),
+    :arg_count => 1 => Inf,
     :description => "Currently just a placeholder for a future command",
 ],
 ], #registry
@@ -946,7 +941,8 @@ command_declarations = [
 [   :kind => CMD_TEST,
     :name => "test",
     :handler => do_test!,
-    :arg_spec => (0=>Inf, parse_pkg, []),
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_pkg,
     :option_spec => OptionDeclaration[
         [:name => "coverage", :api => :coverage => true],
     ],
@@ -965,7 +961,7 @@ julia is started with `--startup-file=yes`.
 ],[ :kind => CMD_HELP,
     :name => "help",
     :short_name => "?",
-    :arg_spec => (0=>Inf, identity, []),
+    :arg_count => 0 => Inf,
     :description => "show this message",
     :help => md"""
 
@@ -999,7 +995,8 @@ If no manifest exists or the `--project` option is given, resolve and download t
     :name => "remove",
     :short_name => "rm",
     :handler => do_rm!,
-    :arg_spec => (1=>Inf, parse_pkg, []),
+    :arg_count => 1 => Inf,
+    :arg_parser => parse_pkg,
     :option_spec => OptionDeclaration[
         [:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
@@ -1028,7 +1025,8 @@ as any no-longer-necessary manifest packages due to project package removals.
 ],[ :kind => CMD_ADD,
     :name => "add",
     :handler => do_add!,
-    :arg_spec => (1=>Inf, parse_pkg, [:add_or_dev => true, :valid => [VersionRange, Rev]]),
+    :arg_count => 1 => Inf,
+    :arg_parser => (x -> parse_pkg(x; add_or_dev=true, valid=[VersionRange, Rev])),
     :description => "add packages to project",
     :help => md"""
 
@@ -1059,7 +1057,8 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
     :name => "develop",
     :short_name => "dev",
     :handler => do_develop!,
-    :arg_spec => (1=>Inf, parse_pkg, [:add_or_dev => true, :valid => [VersionRange]]),
+    :arg_count => 1 => Inf,
+    :arg_parser => (x -> parse_pkg(x; add_or_dev=true, valid=[VersionRange])),
     :option_spec => OptionDeclaration[
         [:name => "local", :api => :shared => false],
         [:name => "shared", :api => :shared => true],
@@ -1086,7 +1085,8 @@ pkg> develop --local Example
 ],[ :kind => CMD_FREE,
     :name => "free",
     :handler => do_free!,
-    :arg_spec => (1=>Inf, parse_pkg, []),
+    :arg_count => 1 => Inf,
+    :arg_parser => parse_pkg,
     :description => "undoes a `pin`, `develop`, or stops tracking a repo",
     :help => md"""
     free pkg[=uuid] ...
@@ -1097,7 +1097,8 @@ makes the package no longer being checked out.
 ],[ :kind => CMD_PIN,
     :name => "pin",
     :handler => do_pin!,
-    :arg_spec => (1=>Inf, parse_pkg, [:valid => [VersionRange]]),
+    :arg_count => 1 => Inf,
+    :arg_parser => (x -> parse_pkg(x; valid=[VersionRange])),
     :description => "pins the version of packages",
     :help => md"""
 
@@ -1109,7 +1110,8 @@ A pinned package has the symbol `⚲` next to its version in the status list.
 ],[ :kind => CMD_BUILD,
     :name => "build",
     :handler => do_build!,
-    :arg_spec => (0=>Inf, parse_pkg, []),
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_pkg,
     :option_spec => OptionDeclaration[
         [:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
@@ -1137,7 +1139,7 @@ packages have changed causing the current Manifest to be out of sync.
 ],[ :kind => CMD_ACTIVATE,
     :name => "activate",
     :handler => do_activate!,
-    :arg_spec => (0=>1, identity, []),
+    :arg_count => 0 => 1,
     :option_spec => OptionDeclaration[
         [:name => "shared", :api => :shared => true],
     ],
@@ -1156,7 +1158,8 @@ it will be placed in the first depot of the stack.
     :name => "update",
     :short_name => "up",
     :handler => do_up!,
-    :arg_spec => (0=>Inf, parse_pkg, [:valid => [VersionRange]]),
+    :arg_count => 0 => Inf,
+    :arg_parser => (x -> parse_pkg(x; valid=[VersionRange])),
     :option_spec => OptionDeclaration[
         [:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
@@ -1185,7 +1188,7 @@ packages will not be upgraded at all.
 ],[ :kind => CMD_GENERATE,
     :name => "generate",
     :handler => do_generate!,
-    :arg_spec => (1=>1, identity, []),
+    :arg_count => 1 => 1,
     :description => "generate files for a new project",
     :help => md"""
 
