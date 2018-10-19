@@ -13,7 +13,9 @@ do
     echo Updating the General registry...
     git -C "$metadata" pull
     git -C "$registry" pull
-    julia bin/update.jl
+    perl -i -ple 's/^uuid =/# uuid =/' Project.toml
+    julia --project bin/update.jl
+    perl -i -ple 's/^# uuid =/uuid =/' Project.toml
     git -C "$registry" add -A .
     git -C "$registry" commit -m 'automatic sync with METADATA'
     git -C "$registry" push origin master
