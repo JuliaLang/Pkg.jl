@@ -61,7 +61,7 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, s
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
         pkgerror("Cannot $mode package with the same name or uuid as the project")
 
-    Operations.add_or_develop(ctx, pkgs; new_git=new_git)
+    Operations.add_or_develop(ctx, pkgs; new_git=new_git, mode=mode)
     ctx.preview && preview_info()
     return
 end
@@ -306,10 +306,10 @@ function gc(ctx::Context=Context(); kwargs...)
     # Find all reachable packages through manifests recently used
     new_usage = Dict{String, Any}()
     paths_to_keep = String[]
-    printpkgstyle(ctx, :Active, "manifests at:")
+    printpkgstyle(ctx, :Active, "manifests:")
     for (manifestfile, date) in manifest_date
         !isfile(manifestfile) && continue
-        println("        `$manifestfile`")
+        println("        $(Types.pathrepr(manifestfile))")
         manifest = try
             read_manifest(manifestfile)
         catch e
@@ -356,7 +356,7 @@ function gc(ctx::Context=Context(); kwargs...)
         size = 0
         for (root, dirs, files) in walkdir(path)
             for file in files
-                size += stat(joinpath(root, file)).size
+                size += lstat(joinpath(root, file)).size
             end
         end
         return size
@@ -372,7 +372,7 @@ function gc(ctx::Context=Context(); kwargs...)
                 @warn "Failed to delete $path"
             end
         end
-        printpkgstyle(ctx, :Deleted, "$path:" * " " * pretty_byte_str(sz_pkg))
+        printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" * pretty_byte_str(sz_pkg) * ")")
         sz += sz_pkg
     end
 
@@ -397,8 +397,9 @@ function gc(ctx::Context=Context(); kwargs...)
             TOML.print(io, new_usage, sorted=true)
         end
     end
-    byte_save_str = length(paths_to_delete) == 0 ? "" : (": " * pretty_byte_str(sz))
-    printpkgstyle(ctx, :Deleted, "$(length(paths_to_delete)) package installations $byte_save_str")
+    ndel = length(paths_to_delete)
+    byte_save_str = ndel == 0 ? "" : (" (" * pretty_byte_str(sz) * ")")
+    printpkgstyle(ctx, :Deleted, "$(ndel) package installation$(ndel == 1 ? "" : "s")$byte_save_str")
 
     ctx.preview && preview_info()
     return
@@ -494,10 +495,9 @@ function precompile(ctx::Context)
     for pkg in pkgids
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
-        if sourcepath == nothing
-            # XXX: this isn't supposed to be fatal
-            pkgerror("couldn't find path to $(pkg.name) when trying to precompile project")
-        end
+        sourcepath == nothing && continue
+        # Heuristic for when precompilation is disabled
+        occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String)) && continue
         stale = true
         for path_to_try in paths::Vector{String}
             staledeps = Base.stale_cachefile(sourcepath, path_to_try)

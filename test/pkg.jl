@@ -126,6 +126,7 @@ temp_pkg_dir() do project_path
         Pkg.add(TEST_PKG.name)
         @test isinstalled(TEST_PKG)
         @eval import $(Symbol(TEST_PKG.name))
+        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
         Pkg.rm(TEST_PKG.name; preview = true)
         @test isinstalled(TEST_PKG)
         Pkg.rm(TEST_PKG.name)
@@ -318,6 +319,8 @@ temp_pkg_dir() do project_path
     @testset "libgit2 downloads" begin
         Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
         @test haskey(Pkg.installed(), TEST_PKG.name)
+        @eval import $(Symbol(TEST_PKG.name))
+        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
         Pkg.rm(TEST_PKG.name)
     end
 
@@ -442,12 +445,10 @@ temp_pkg_dir() do project_path
 end
 
 temp_pkg_dir() do project_path; cd(project_path) do
-    @testset "instantiating updated repo" begin
-        tmp = mktempdir()
-        cd(tmp)
-        depo1 = mktempdir()
-        depo2 = mktempdir()
-
+    tmp = mktempdir()
+    depo1 = mktempdir()
+    depo2 = mktempdir()
+    cd(tmp) do; @testset "instantiating updated repo" begin
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo1)
         LibGit2.close(LibGit2.clone("https://github.com/JuliaLang/Example.jl", "Example.jl"))
@@ -483,7 +484,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
         pushfirst!(DEPOT_PATH, depo2)
         Pkg.activate(".")
         Pkg.instantiate()
-    end
+    end end
+    Base.rm.([tmp, depo1, depo2]; force = true, recursive = true)
 end end
 
 temp_pkg_dir() do project_path

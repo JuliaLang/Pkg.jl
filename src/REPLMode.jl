@@ -764,13 +764,14 @@ end
 
 function complete_local_path(s, i1, i2)
     cmp = REPL.REPLCompletions.complete_path(s, i2)
-    completions = filter!(isdir, [REPL.REPLCompletions.completion_text(p) for p in cmp[1]])
+    completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
+    completions = filter!(x -> isdir(s[1:prevind(s, first(cmp[2])-i1+1)]*x), completions)
     return completions, cmp[2], !isempty(completions)
 end
 
 function complete_installed_package(s, i1, i2, project_opt)
     pkgs = project_opt ? API.__installed(PKGMODE_PROJECT) : API.__installed()
-    pkgs = sort!(collect(keys(filter((p) -> p[2] != nothing, pkgs))))
+    pkgs = sort!(collect(keys(filter(p->p[1] in stdlib_names || p[2] !== nothing, pkgs))))
     cmp = filter(cmd -> startswith(cmd, s), pkgs)
     return cmp, i1:i2, !isempty(cmp)
 end
@@ -802,6 +803,8 @@ function complete_remote_package(s, i1, i2)
     return cmp, i1:i2, !isempty(cmp)
 end
 
+const stdlib_names = filter!(x->isdir(joinpath(Types.stdlib_dir(), x)),
+                             readdir(Types.stdlib_dir()))
 function complete_argument(to_complete, i1, i2, lastcommand, project_opt
                            )::Tuple{Vector{String},UnitRange{Int},Bool}
     if lastcommand == CMD_HELP
@@ -813,9 +816,12 @@ function complete_argument(to_complete, i1, i2, lastcommand, project_opt
         if occursin(Base.Filesystem.path_separator_re, to_complete)
             return complete_local_path(to_complete, i1, i2)
         else
-            rps = complete_remote_package(to_complete, i1, i2)
-            lps = complete_local_path(to_complete, i1, i2)
-            return vcat(rps[1], lps[1]), isempty(rps[1]) ? lps[2] : i1:i2, length(rps[1]) + length(lps[1]) > 0
+            completions = vcat(complete_remote_package(to_complete, i1, i2)[1],
+                               complete_local_path(to_complete, i1, i2)[1])
+            completions = vcat(completions,
+                               filter(x->startswith(x,to_complete) && !(x in completions),
+                                      stdlib_names))
+            return completions, i1:i2, !isempty(completions)
         end
     end
     return String[], 0:-1, false
@@ -890,7 +896,7 @@ end
 # Set up the repl Pkg REPLMode
 function create_mode(repl, main)
     pkg_mode = LineEdit.Prompt(promptf;
-        prompt_prefix = Base.text_colors[:blue],
+        prompt_prefix = repl.options.hascolor ? Base.text_colors[:blue] : "",
         prompt_suffix = "",
         complete = PkgCompletionProvider(),
         sticky = true)

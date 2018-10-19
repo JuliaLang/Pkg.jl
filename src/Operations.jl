@@ -59,6 +59,17 @@ function load_package_data_raw(T::Type, path::String)
     return data
 end
 
+function set_readonly(path)
+    for (root, dirs, files) in walkdir(path)
+        for file in files
+            filepath = joinpath(root, file)
+            fmode = filemode(filepath)
+            chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
+        end
+    end
+    return nothing
+end
+
 #######################################
 # Dependency gathering and resolution #
 #######################################
@@ -474,6 +485,7 @@ function install_archive(
             !isdir(version_path) && mkpath(version_path)
             mv(joinpath(dir, dirs[1]), version_path; force=true)
             Base.rm(path; force = true)
+            Base.rm(dir; force = true)
             return true
         end
     end
@@ -534,12 +546,12 @@ function install_git(
 end
 
 # install & update manifest
-function apply_versions(ctx::Context, pkgs::Vector{PackageSpec})::Vector{UUID}
+function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}; mode=:add)::Vector{UUID}
     hashes, urls = version_data!(ctx, pkgs)
-    apply_versions(ctx, pkgs, hashes, urls)
+    apply_versions(ctx, pkgs, hashes, urls; mode=mode)
 end
 
-function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UUID,SHA1}, urls::Dict{UUID,Vector{String}})
+function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UUID,SHA1}, urls::Dict{UUID,Vector{String}}; mode=:add)
     BinaryProvider.probe_platform_engines!()
     new_versions = UUID[]
 
@@ -582,6 +594,9 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
                 end
                 try
                     success = install_archive(urls[pkg.uuid], hashes[pkg.uuid], path)
+                    if success && mode == :add
+                        set_readonly(path) # In add mode, files should be read-only
+                    end
                     if ctx.use_only_tarballs_for_downloads && !success
                         pkgerror("failed to get tarball from $(urls[pkg.uuid])")
                     end
@@ -613,6 +628,9 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
         uuid = pkg.uuid
         if !ctx.preview
             install_git(ctx, pkg.uuid, pkg.name, hashes[uuid], urls[uuid], pkg.version::VersionNumber, path)
+            if mode == :add
+                set_readonly(path)
+            end
         end
         vstr = pkg.version != nothing ? "v$(pkg.version)" : "[$h]"
         @info "Installed $(rpad(pkg.name * " ", max_name + 2, "─")) $vstr"
@@ -1161,7 +1179,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     write_env(ctx)
 end
 
-function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; new_git = UUID[])
+function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; new_git = UUID[], mode=:add)
     # copy added name/UUIDs into project
     for pkg in pkgs
         ctx.env.project["deps"][pkg.name] = string(pkg.uuid)
@@ -1181,7 +1199,7 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; new_git = UUID[
     end
     # resolve & apply package versions
     resolve_versions!(ctx, pkgs)
-    new_apply = apply_versions(ctx, pkgs)
+    new_apply = apply_versions(ctx, pkgs; mode=mode)
     write_env(ctx) # write env before building
     build_versions(ctx, union(new_apply, new_git))
 end
