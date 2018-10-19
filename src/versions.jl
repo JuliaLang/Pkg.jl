@@ -243,6 +243,48 @@ function Base.print(io::IO, s::VersionSpec)
 end
 Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
 
+#######################
+# Version compression #
+#######################
+
+"""
+    compress_versions(pool::Vector{VersionNumber}, subset::Vector{VersionNumber})
+
+Given `pool` as the pool of available versions (of some package) and `subset` as some
+subset of the pool of available versions, this function computes a `VersionSpec` which
+includes all versions in `subset` and none of the versions in its complement.
+"""
+function compress_versions(pool::Vector{VersionNumber}, subset::Vector{VersionNumber})
+    issorted(subset) || (subset = sort(subset))
+    compl = sort!(setdiff(pool, subset))
+    ranges = VersionRange[]
+    if isempty(compl)
+        lo, hi = first(subset), last(subset)
+        lower = VersionBound(lo.major, lo.minor)
+        upper = VersionBound(hi.major, hi.minor)
+        push!(ranges, VersionRange(lower, upper))
+    else
+        for v in subset
+            b = VersionBound(v.major, v.minor)
+            if any(b ≲ w ≲ b for w in compl)
+                b = VersionBound(v.major, v.minor, v.patch)
+            end
+            if isempty(ranges) || any(ranges[end].lower ≲ w ≲ b for w in compl)
+                # need a new interval
+                push!(ranges, VersionRange(b))
+            else
+                # merge with existing last range
+                ranges[end] = VersionRange(ranges[end].lower, b)
+            end
+        end
+    end
+    @assert all(any(v in r for r in ranges) for v ∈ subset)
+    @assert all(!any(v in r for r in ranges) for v ∈ compl)
+    return VersionSpec(ranges)
+end
+function compress_versions(pool::Vector{VersionNumber}, subset)
+    compress_versions(pool, filter(in(subset), pool))
+end
 
 ###################
 # Semver notation #
