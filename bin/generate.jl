@@ -1,6 +1,9 @@
 #!/usr/bin/env julia
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+import Pkg.Compress
+import Pkg.Types: compress_versions
+
 prefix = joinpath(homedir(), ".julia", "registries", "General")
 
 write_toml(prefix, "Registry") do io
@@ -82,46 +85,36 @@ for (bucket, b_pkgs) in buckets, (pkg, p) in b_pkgs
     end
     versions = sort!(collect(keys(p.versions)))
 
-    function write_versions_data(f::Function, name::String; lt::Function=isless)
-        data = Dict{VersionNumber,Dict{String,String}}()
+    function uncompressed_data(f::Function)
+        data = Dict{VersionNumber,Dict{String,Any}}()
         for (ver, v) in p.versions, (dep, d) in v.requires
             val = f(dep, d)
             val == nothing && continue
-            haskey(data, ver) || (data[ver] = Dict{String,String}())
-            # BinDeps injects a dependency on Libdl
-            if name == "Deps" && (dep == "BinDeps" || dep == "BinaryProvider")
-                data[ver]["Libdl"] = "\"8f399da3-3557-5675-b5ff-fb832c97cbdb\""
-            end
+            haskey(data, ver) || (data[ver] = Dict{String,Any}())
             data[ver][dep] = val
         end
-        compressed = compress_versions_data(data, versions)
-        !isempty(compressed) && write_toml(prefix, bucket, pkg, name) do io
-            vers = unique(getindex.(compressed, 1))
-            keys = sort!(unique(getindex.(compressed, 2)), lt=lt)
-            what = (vers, keys)
-            ord = (1, 2)
-            for (i, x) in enumerate(what[ord[1]])
-                i > 1 && println(io)
-                println(io, "[", toml_key(x), "]")
-                for y in what[ord[2]]
-                    for t in compressed
-                        t[ord[1]] == x && t[ord[2]] == y || continue
-                        println(io, toml_key(y), " = ", t[3])
-                    end
-                end
-            end
-        end
+        return data
     end
 
     # Deps.toml
-    write_versions_data("Deps") do dep, d
-        dep == "julia" ? nothing : repr(string(pkgs[dep].uuid))
+    deps_data = uncompressed_data() do dep, d
+        dep == "julia" ? nothing : string(pkgs[dep].uuid)
     end
+    for (ver, deps) in deps_data
+        if haskey(deps, "BinDeps") || haskey(deps, "BinaryProvider")
+            deps["Libdl"] = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
+        end
+    end
+    !isempty(deps_data) &&
+    Compress.save(joinpath(prefix, bucket, pkg, "Deps.toml"), deps_data, versions)
 
     # Compat.toml
-    write_versions_data("Compat", lt=packagelt) do dep, d
-        dep in STDLIBS ? nothing : versions_repr(compress_versions(
-            d.versions, collect(keys(pkgs[dep].versions))
-        ))
+    compat_data = uncompressed_data() do dep, d
+        dep in STDLIBS && return nothing
+        pool = collect(keys(pkgs[dep].versions))
+        ranges = compress_versions(pool, d.versions).ranges
+        length(ranges) == 1 ? string(ranges[1]) : map(string, ranges)
     end
+    !isempty(compat_data) &&
+    Compress.save(joinpath(prefix, bucket, pkg, "Compat.toml"), compat_data, versions)
 end

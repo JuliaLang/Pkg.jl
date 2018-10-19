@@ -1,7 +1,7 @@
 module Compress
 
-import ..TOML
-import ..Types: VersionSpec, compress_versions
+import Pkg.TOML
+import Pkg.Types: VersionSpec, compress_versions
 
 function load_versions(path::String)
     versions_file = joinpath(dirname(path), "Versions.toml")
@@ -9,8 +9,8 @@ function load_versions(path::String)
     sort!([VersionNumber(v) for v in keys(versions_dict)])
 end
 
-function load(path::String)
-    versions = load_versions(path)
+function load(path::String,
+    versions::Vector{VersionNumber}=load_versions(path))
     compressed = TOML.parsefile(path)
     uncompressed = Dict{VersionNumber,Dict{Any,Any}}()
     for (vers, data) in compressed
@@ -23,8 +23,8 @@ function load(path::String)
     return uncompressed
 end
 
-function compress(path::String, uncompressed::Dict)
-    versions = load_versions(path)
+function compress(path::String, uncompressed::Dict,
+    versions::Vector{VersionNumber}=load_versions(path))
     inverted = Dict()
     for (ver, data) in uncompressed, pair in data
         push!(get!(inverted, pair, VersionNumber[]), ver)
@@ -38,7 +38,8 @@ function compress(path::String, uncompressed::Dict)
     return compressed
 end
 
-function save(path::String, uncompressed::Dict)
+function save(path::String, uncompressed::Dict,
+    versions::Vector{VersionNumber}=load_versions(path))
     compressed = compress(path, uncompressed)
     open(path, write=true) do io
         TOML.print(io, compressed, sorted=true)

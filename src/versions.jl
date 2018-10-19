@@ -282,6 +282,9 @@ function compress_versions(pool::Vector{VersionNumber}, subset::Vector{VersionNu
     @assert all(!any(v in r for r in ranges) for v ∈ compl)
     return VersionSpec(ranges)
 end
+function compress_versions(pool::Vector{VersionNumber}, subset)
+    compress_versions(pool, filter(in(subset), pool))
+end
 
 ###################
 # Semver notation #
