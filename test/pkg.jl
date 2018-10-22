@@ -284,7 +284,8 @@ temp_pkg_dir() do project_path
 
     @testset "check logging" begin
         usage = Pkg.TOML.parse(String(read(joinpath(Pkg.logdir(), "manifest_usage.toml"))))
-        @test any(x -> startswith(x, joinpath(project_path, "Manifest.toml")), keys(usage))
+        manifest = Types.safe_realpath(joinpath(project_path, "Manifest.toml"))
+        @test any(x -> startswith(x, manifest), keys(usage))
     end
 
     @testset "adding nonexisting packages" begin
