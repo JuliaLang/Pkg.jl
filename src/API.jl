@@ -8,7 +8,7 @@ import Random
 import Dates
 import LibGit2
 
-import ..depots, ..logdir, ..devdir
+import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 
@@ -96,7 +96,7 @@ function update_registry(ctx)
     if ctx.preview
         @info("Skipping updating registry in preview mode")
     else
-        for reg in registries()
+        for reg in registries(depots1())
             if isdir(joinpath(reg, ".git"))
                 regpath = pathrepr(reg)
                 printpkgstyle(ctx, :Updating, "registry at " * regpath)
