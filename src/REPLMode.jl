@@ -771,7 +771,7 @@ end
 
 function complete_installed_package(s, i1, i2, project_opt)
     pkgs = project_opt ? API.__installed(PKGMODE_PROJECT) : API.__installed()
-    pkgs = sort!(collect(keys(filter(p->p[1] in stdlib_names || p[2] !== nothing, pkgs))))
+    pkgs = sort!(collect(keys(filter(p->p[1] in stdlib_names() || p[2] !== nothing, pkgs))))
     cmp = filter(cmd -> startswith(cmd, s), pkgs)
     return cmp, i1:i2, !isempty(cmp)
 end
@@ -803,8 +803,15 @@ function complete_remote_package(s, i1, i2)
     return cmp, i1:i2, !isempty(cmp)
 end
 
-const stdlib_names = filter!(x->isdir(joinpath(Types.stdlib_dir(), x)),
-                             readdir(Types.stdlib_dir()))
+const STDLIB_NAMES = Ref{Vector{String}}()
+function stdlib_names()
+    if !isassigned(STDLIB_NAMES)
+        STDLIB_NAMES[] = filter!(x->isdir(joinpath(Types.stdlib_dir(), x)),
+                                 readdir(Types.stdlib_dir()))
+    end
+    return STDLIB_NAMES[]
+end
+
 function complete_argument(to_complete, i1, i2, lastcommand, project_opt
                            )::Tuple{Vector{String},UnitRange{Int},Bool}
     if lastcommand == CMD_HELP
@@ -820,7 +827,7 @@ function complete_argument(to_complete, i1, i2, lastcommand, project_opt
                                complete_local_path(to_complete, i1, i2)[1])
             completions = vcat(completions,
                                filter(x->startswith(x,to_complete) && !(x in completions),
-                                      stdlib_names))
+                                      stdlib_names()))
             return completions, i1:i2, !isempty(completions)
         end
     end

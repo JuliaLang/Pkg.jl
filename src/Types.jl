@@ -256,7 +256,7 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     @assert project_file isa String &&
         (isfile(project_file) || !ispath(project_file) ||
          isdir(project_file) && isempty(readdir(project_file)))
-     return project_file
+    return safe_realpath(project_file)
 end
 
 mutable struct EnvCache
