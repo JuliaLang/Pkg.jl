@@ -22,7 +22,7 @@ for pkg in readdir(Sys.STDLIB)
         stdlib_trees[pkg] = m.captures[1]
     else
         dir = dirname(realpath(joinpath(Sys.STDLIB, pkg)))
-        stdlib_trees[pkg] = split(readchomp(`git -C $dir ls-tree HEAD -- $pkg`))[3]
+        # stdlib_trees[pkg] = split(readchomp(`git -C $dir ls-tree HEAD -- $pkg`))[3]
     end
     stdlib_deps[pkg] = String[]
     haskey(project, "deps") || continue
