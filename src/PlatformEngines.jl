@@ -210,7 +210,7 @@ function probe_platform_engines!(;verbose::Bool = false)
         end
 
         # We want to search both the `PATH`, and the direct path for powershell
-        psh_path = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell"
+        psh_path = joinpath(get(ENV, "SYSTEMROOT", "C:\\Windows"), "System32\\WindowsPowerShell\\v1.0\\powershell.exe")
         prepend!(download_engines, [
             (`$psh_path -Command ""`, psh_download(psh_path))
         ])
