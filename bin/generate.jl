@@ -3,6 +3,7 @@
 
 import Pkg.Compress
 import Pkg.Types: compress_versions
+import Random: randstring
 
 prefix = joinpath(homedir(), ".julia", "registries", "General")
 
@@ -38,7 +39,7 @@ end
 const trees, stdlibs = gitmeta(pkgs)
 
 for pkg in STDLIBS
-    tree = stdlib_trees[pkg]
+    tree = randstring()
     deps = Dict(dep => Require(VersionInterval()) for dep in stdlib_deps[pkg])
     pkgs[pkg] = Package(
         UUID(stdlib_uuids[pkg]),

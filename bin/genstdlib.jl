@@ -28,7 +28,7 @@ for pkg in readdir(stdlibdir)
         m === nothing && error("expected PKG_SHA1 in $version_file")
         stdlib_trees[pkg] = m.captures[1]
     else
-        stdlib_trees[pkg] = split(readchomp(`git -C $juliadir ls-tree HEAD -- stdlib/$pkg`))[3]
+        # stdlib_trees[pkg] = split(readchomp(`git -C $juliadir ls-tree HEAD -- stdlib/$pkg`))[3]
     end
     stdlib_deps[pkg] = String[]
     haskey(project, "deps") || continue
