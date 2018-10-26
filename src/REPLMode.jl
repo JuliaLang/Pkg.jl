@@ -533,7 +533,7 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
         end
     catch err
         if do_rethrow
-            rethrow(err)
+            rethrow()
         end
         if err isa PkgError || err isa ResolverError
             Base.display_error(repl.t.err_stream, ErrorException(sprint(showerror, err)), Ptr{Nothing}[])

@@ -99,7 +99,7 @@ function clone(url, source_path; header=nothing, kwargs...)
         return LibGit2.clone(url, source_path; callbacks=callbacks, kwargs...)
     catch err
         rm(source_path; force=true, recursive=true)
-        err isa LibGit2.GitError || rethrow(err)
+        err isa LibGit2.GitError || rethrow()
         if (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
            (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
             Pkg.Types.pkgerror("Git repository not found at '$(url)'")
@@ -131,7 +131,7 @@ function fetch(repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs.
     try
         return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
     catch err
-        err isa LibGit2.GitError || rethrow(err)
+        err isa LibGit2.GitError || rethrow()
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
             Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)'")
         else

@@ -85,7 +85,7 @@ function gitmeta(pkgs::Dict{String,Package})
             if !updated
                 try LibGit2.GitObject(repo, git_commit_hash)
                 catch err
-                    err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+                    err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
                     @info "Updating $pkg from $(p.url)"
                     LibGit2.fetch(repo, remoteurl=p.url, refspecs=["+refs/*:refs/remotes/cache/*"])
                 end
@@ -94,7 +94,7 @@ function gitmeta(pkgs::Dict{String,Package})
             git_commit = try LibGit2.GitObject(repo, git_commit_hash)
             catch err
                 failed = true
-                err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+                err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
                 @error("$pkg: git object $(v.sha1) could not be found")
             end
             failed && continue

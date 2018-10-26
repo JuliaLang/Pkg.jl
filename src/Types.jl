@@ -476,7 +476,7 @@ end
 function read_manifest(file::String)
     try isfile(file) ? open(read_manifest, file) : read_manifest(devnull)
     catch err
-        err isa ErrorException && startswith(err.msg, "ambiguious dependency") || rethrow(err)
+        err isa ErrorException && startswith(err.msg, "ambiguious dependency") || rethrow()
         err.msg *= "In manifest file: $file"
         rethrow(err)
     end
@@ -755,18 +755,18 @@ function get_object_branch(repo, rev, creds)
         gitobject = LibGit2.GitObject(repo, "remotes/cache/heads/" * rev)
         isbranch = true
     catch err
-        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     if gitobject == nothing
         try
             gitobject = LibGit2.GitObject(repo, rev)
         catch err
-            err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+            err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
             GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
             try
                 gitobject = LibGit2.GitObject(repo, rev)
             catch err
-                err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+                err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
                 pkgerror("git object $(rev) could not be found")
             end
         end
