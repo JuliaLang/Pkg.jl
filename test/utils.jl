@@ -34,12 +34,12 @@ function temp_pkg_dir(fn::Function)
     end
 end
 
-function cd_tempdir(f)
-    mktempdir() do tmp
-        cd(tmp) do
-            f(tmp)
-        end
+function cd_tempdir(f; rm=true)
+    tmp = mktempdir()
+    cd(tmp) do
+        f(tmp)
     end
+    rm && Base.rm(tmp; force = true, recursive = true)
 end
 
 isinstalled(pkg) = Base.locate_package(Base.PkgId(pkg.uuid, pkg.name)) !== nothing
@@ -59,7 +59,7 @@ function with_current_env(f)
     end
 end
 
-function with_temp_env(f, env_name::AbstractString="Dummy")
+function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
@@ -67,7 +67,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy")
         applicable(f, env_path) ? f(env_path) : f()
     finally
         Pkg.activate()
-        Base.rm(env_path; force = true, recursive = true)
+        rm && Base.rm(env_path; force = true, recursive = true)
     end
 end
 
