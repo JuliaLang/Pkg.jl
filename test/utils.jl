@@ -34,11 +34,16 @@ function temp_pkg_dir(fn::Function)
     end
 end
 
-function cd_tempdir(f)
-    mktempdir() do tmp
-        cd(tmp) do
-            f(tmp)
-        end
+function cd_tempdir(f; rm=true)
+    tmp = mktempdir()
+    cd(tmp) do
+        f(tmp)
+    end
+    try
+        rm && Base.rm(tmp; force = true, recursive = true)
+    catch err
+        # Avoid raising an exception here as it will mask the original exception
+        println(STDERR, "Exception in finally: $(sprint(showerror, err))")
     end
 end
 
@@ -59,7 +64,7 @@ function with_current_env(f)
     end
 end
 
-function with_temp_env(f, env_name::AbstractString="Dummy")
+function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
@@ -67,7 +72,12 @@ function with_temp_env(f, env_name::AbstractString="Dummy")
         applicable(f, env_path) ? f(env_path) : f()
     finally
         Pkg.activate()
-        Base.rm(env_path; force = true, recursive = true)
+        try
+            rm && Base.rm(env_path; force = true, recursive = true)
+        catch err
+            # Avoid raising an exception here as it will mask the original exception
+            println(STDERR, "Exception in finally: $(sprint(showerror, err))")
+        end
     end
 end
 
