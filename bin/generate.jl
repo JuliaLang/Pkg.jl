@@ -119,3 +119,8 @@ for (bucket, b_pkgs) in buckets, (pkg, p) in b_pkgs
     !isempty(compat_data) &&
     Compress.save(joinpath(prefix, bucket, pkg, "Compat.toml"), compat_data, versions)
 end
+
+# Temporary workaround to avoid LibGit2 segfault. Should is fixed
+# in Julia 1.0.1 but this won't be backported to Julia 0.7.
+# Ref Julia issue #29121
+GC.gc()
