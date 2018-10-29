@@ -38,7 +38,7 @@ const STDLIBS = sort!(by = lowercase, [
 
 function uses(repo::String, tree::String, lib::String)
     pattern = string(raw"\b(import|using)\s+((\w|\.)+\s*,\s*)*", lib, raw"\b")
-    success(`git -C $repo grep -Eq $pattern $tree`)
+    success(`git -C $repo grep -Eq $pattern $tree -- '*.jl'`)
 end
 
 function gitmeta(pkgs::Dict{String,Package})
