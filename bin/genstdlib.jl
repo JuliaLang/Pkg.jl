@@ -21,7 +21,15 @@ for pkg in readdir(stdlibdir)
     isfile(project_file) || continue
     project = TOML.parsefile(project_file)
     stdlib_uuids[pkg] = project["uuid"]
-    stdlib_trees[pkg] = split(readchomp(`git -C $juliadir ls-tree HEAD -- stdlib/$pkg`))[3]
+    version_file = joinpath(stdlibdir, "$pkg.version")
+    if isfile(version_file)
+        r = Regex("^\\s*$(pkg)_SHA1\\s*=\\s*(\\S+)\\s*\$", "im")
+        m = match(r, read(version_file, String))
+        m === nothing && error("expected PKG_SHA1 in $version_file")
+        stdlib_trees[pkg] = m.captures[1]
+    else
+        stdlib_trees[pkg] = split(readchomp(`git -C $juliadir ls-tree HEAD -- stdlib/$pkg`))[3]
+    end
     stdlib_deps[pkg] = String[]
     haskey(project, "deps") || continue
     append!(stdlib_deps[pkg], sort!(collect(keys(project["deps"]))))
