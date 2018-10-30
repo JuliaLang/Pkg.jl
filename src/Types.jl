@@ -260,29 +260,18 @@ function find_project_file(env::Union{Nothing,String}=nothing)
      return project_file
 end
 
-mutable struct Project
-    raw::Union{Nothing,Dict{String,Any}}
+Base.@kwdef mutable struct Project
+    raw::Union{Nothing,Dict{String,Any}}  = nothing
     # Fields
-    name::Union{String, Nothing}
-    uuid::Union{UUID, Nothing}
-    version::Union{VersionTypes, Nothing}
-    manifest::Union{String, Nothing}
+    name::Union{String, Nothing}          = nothing
+    uuid::Union{UUID, Nothing}            = nothing
+    version::Union{VersionTypes, Nothing} = nothing
+    manifest::Union{String, Nothing}      = nothing
     # Sections
-    deps::Dict{String,UUID}
-    extras::Dict{String,UUID}
-    targets::Dict{String,Vector{String}}
-    compat::Dict{String,String} # TODO Dict{String, VersionSpec}
-    Project() = new(nothing,
-                    nothing,
-                    nothing,
-                    nothing,
-                    nothing,
-                    nothing,
-                    Dict{String,UUID}(),
-                    Dict{String,UUID}(),
-                    Dict{String,Vector{String}}(),
-                    Dict{String,String}(),
-                    )
+    deps::Dict{String,UUID}               = Dict{String,UUID}()
+    extras::Dict{String,UUID}             = Dict{String,UUID}()
+    targets::Dict{String,Vector{String}}  = Dict{String,Vector{String}}()
+    compat::Dict{String,String}           = Dict{String,String}()  # TODO Dict{String, VersionSpec}
 end
 
 mutable struct EnvCache
@@ -1225,7 +1214,7 @@ string(v::VersionNumber) = "$(v.major).$(v.minor).$(v.patch)"
 string(x::Vector{String}) = x
 
 function destructure(project::Project)::Dict
-    entry!(dest::Dict, key::String, src::Dict) = 
+    entry!(dest::Dict, key::String, src::Dict) =
         !isempty(src) && (dest[key] = Dict(string(k) => string(v) for (k,v) in src))
 
     raw = project.raw
