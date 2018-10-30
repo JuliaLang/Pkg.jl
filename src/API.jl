@@ -254,7 +254,7 @@ test(pkg::Union{String, PackageSpec}; kwargs...)  = test([pkg]; kwargs...)
 test(pkgs::Vector{String}; kwargs...)             = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 test(pkgs::Vector{PackageSpec}; kwargs...)        = test(Context(), pkgs; kwargs...)
 
-function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...)
+function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, inline=nothing, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
@@ -270,7 +270,11 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...
     if !ctx.preview && (Operations.any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file))
         Pkg.instantiate(ctx)
     end
-    Operations.test(ctx, pkgs; coverage=coverage)
+    if inline == nothing
+        # by default, allow inline for normal tests, and forbid it for coverage tests
+        inline = !coverage
+    end
+    Operations.test(ctx, pkgs; coverage=coverage, inline=inline)
     return
 end
 

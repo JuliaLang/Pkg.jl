@@ -1280,7 +1280,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
     need_to_resolve && build_versions(ctx, new)
 end
 
-function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
+function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, inline=true)
     # See if we can find the test files for all packages
     missing_runtests = String[]
     testfiles        = String[]
@@ -1333,6 +1333,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             --color=$(Base.have_color ? "yes" : "no")
             --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
             --check-bounds=yes
+            --inline=$(inline ? "yes" : "no")
             --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
             --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
             --eval $code
