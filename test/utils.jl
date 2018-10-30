@@ -36,10 +36,18 @@ end
 
 function cd_tempdir(f; rm=true)
     tmp = mktempdir()
-    cd(tmp) do
-        f(tmp)
+    try
+        cd(tmp) do
+            f(tmp)
+        end
+    finally
+        try
+            rm && Base.rm(tmp; force = true, recursive = true)
+        catch err
+            # Avoid raising an exception here as it will mask the original exception
+            println(STDERR, "Exception in finally: $(sprint(showerror, err))")
+        end
     end
-    rm && Base.rm(tmp; force = true, recursive = true)
 end
 
 isinstalled(pkg) = Base.locate_package(Base.PkgId(pkg.uuid, pkg.name)) !== nothing
@@ -67,7 +75,12 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
         applicable(f, env_path) ? f(env_path) : f()
     finally
         Pkg.activate()
-        rm && Base.rm(env_path; force = true, recursive = true)
+        try
+            rm && Base.rm(env_path; force = true, recursive = true)
+        catch err
+            # Avoid raising an exception here as it will mask the original exception
+            println(STDERR, "Exception in finally: $(sprint(showerror, err))")
+        end
     end
 end
 
