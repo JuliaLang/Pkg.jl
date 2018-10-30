@@ -62,19 +62,19 @@ end
 
 @testset "tokens" begin
     statement = Pkg.REPLMode.parse("?dev")[1]
-    @test statement.command.kind == Pkg.REPLMode.CMD_HELP
+    @test statement.spec.kind == Pkg.REPLMode.CMD_HELP
     @test length(statement.arguments) == 1
     @test statement.arguments[1] == "dev"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git")[1]
-    @test "add" == statement.command.canonical_name
+    @test "add" == statement.spec.canonical_name
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#master")[1]
-    @test "add" == statement.command.canonical_name
+    @test "add" == statement.spec.canonical_name
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "#master"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#c37b675")[1]
-    @test "add" == statement.command.canonical_name
+    @test "add" == statement.spec.canonical_name
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "#c37b675"
@@ -82,7 +82,7 @@ end
     @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
     @test statement.arguments[2] == "@v0.5.0"
     statement = Pkg.REPLMode.parse("add git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git@0.5.0")[1]
-    @test "add" == statement.command.canonical_name
+    @test "add" == statement.spec.canonical_name
     @test length(statement.arguments) == 2
     @test statement.arguments[1] == "git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git"
     @test statement.arguments[2] == "@0.5.0"
@@ -358,36 +358,7 @@ cd_tempdir() do tmp
     @test manifest_info(EnvCache(), uuid)["path"] == joinpath("dev", "Example")
 end
 
-@testset "parse completions" begin
-    # commands
-    @test Pkg.REPLMode.parse("preview"; for_completions=true) == (:cmd, "", nothing, true)
-    @test Pkg.REPLMode.parse("preview ad"; for_completions=true) == (:cmd, "ad", nothing, true)
-    @test Pkg.REPLMode.parse("preview r"; for_completions=true) == (:cmd, "r", nothing, true)
-    @test Pkg.REPLMode.parse("preview reg"; for_completions=true) == (:cmd, "reg", nothing, true)
-    # sub commands
-    @test Pkg.REPLMode.parse("preview package"; for_completions=true) ==
-        (:sub, "", "package", true)
-    @test Pkg.REPLMode.parse("preview package a"; for_completions=true) ==
-        (:sub, "a", "package", true)
-    # options
-    @test Pkg.REPLMode.parse("add -"; for_completions=true) ==
-        (:opt, "-", Pkg.REPLMode.super_specs["package"]["add"], true)
-    @test Pkg.REPLMode.parse("up --m"; for_completions=true) ==
-        (:opt, "--m", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("up --major --pro"; for_completions=true) ==
-        (:opt, "--pro", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("foo --maj"; for_completions=true) ===
-        nothing
-    # arguments
-    @test Pkg.REPLMode.parse("up --major Ex"; for_completions=true) ==
-        (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("preview up --major foo Ex"; for_completions=true) ==
-        (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["up"], true)
-    @test Pkg.REPLMode.parse("remove --manifest Ex"; for_completions=true) ==
-        (:arg, "Ex", Pkg.REPLMode.super_specs["package"]["remove"], false)
-end
-
-test_complete(s) = Pkg.REPLMode.completions(s,lastindex(s))
+test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))
 apply_completion(str) = begin
     c, r, s = test_complete(str)
     str[1:prevind(str, first(r))]*first(c)
@@ -462,6 +433,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("add Chu")
         @test !("Chunks" in c)
 
+        # local paths
         mkpath("testdir/foo/bar")
         c, r = test_complete("add ")
         @test Sys.iswindows() ? ("testdir\\\\" in c) : ("testdir/" in c)
@@ -475,7 +447,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("add testdir/f")
         @test Sys.iswindows() ? ("foo\\\\" in c) : ("foo/" in c)
         @test apply_completion("add testdir/f") == (Sys.iswindows() ? "add testdir/foo\\\\" : "add testdir/foo/")
-
         # dont complete files
         touch("README.md")
         c, r = test_complete("add RE")
@@ -711,55 +682,55 @@ end
     @test isempty(Pkg.REPLMode.parse(""))
 
     statement = Pkg.REPLMode.parse("up")[1]
-    @test statement.command.kind == Pkg.REPLMode.CMD_UP
+    @test statement.spec.kind == Pkg.REPLMode.CMD_UP
     @test isempty(statement.options)
     @test isempty(statement.arguments)
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example")[1]
-    @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
+    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.options)
     @test statement.arguments == ["Example"]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
-    @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
+    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "#bar"]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
-    @test statement.command.kind == Pkg.REPLMode.CMD_DEVELOP
+    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "Example", "@v0.0.1"]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("add --first --second arg1")[1]
-    @test statement.command.kind == Pkg.REPLMode.CMD_ADD
+    @test statement.spec.kind == Pkg.REPLMode.CMD_ADD
     @test statement.options == map(Pkg.REPLMode.parse_option, ["--first", "--second"])
     @test statement.arguments == ["arg1"]
     @test statement.preview == false
 
     statements = Pkg.REPLMode.parse("preview add --first -o arg1; pin -x -a arg0 Example")
-    @test statements[1].command.kind == Pkg.REPLMode.CMD_ADD
+    @test statements[1].spec.kind == Pkg.REPLMode.CMD_ADD
     @test statements[1].preview == true
     @test statements[1].options == map(Pkg.REPLMode.parse_option, ["--first", "-o"])
     @test statements[1].arguments == ["arg1"]
-    @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
+    @test statements[2].spec.kind == Pkg.REPLMode.CMD_PIN
     @test statements[2].preview == false
     @test statements[2].options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
     @test statements[2].arguments == ["arg0", "Example"]
 
     statements = Pkg.REPLMode.parse("up; pin --first; dev")
-    @test statements[1].command.kind == Pkg.REPLMode.CMD_UP
+    @test statements[1].spec.kind == Pkg.REPLMode.CMD_UP
     @test statements[1].preview == false
     @test isempty(statements[1].options)
     @test isempty(statements[1].arguments)
-    @test statements[2].command.kind == Pkg.REPLMode.CMD_PIN
+    @test statements[2].spec.kind == Pkg.REPLMode.CMD_PIN
     @test statements[2].preview == false
     @test statements[2].options == map(Pkg.REPLMode.parse_option, ["--first"])
     @test isempty(statements[2].arguments)
-    @test statements[3].command.kind == Pkg.REPLMode.CMD_DEVELOP
+    @test statements[3].spec.kind == Pkg.REPLMode.CMD_DEVELOP
     @test statements[3].preview == false
     @test isempty(statements[3].options)
     @test isempty(statements[3].arguments)

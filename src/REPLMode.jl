@@ -97,10 +97,10 @@ struct CommandSpec
     handler::Union{Nothing,Function}
     argument_spec::ArgSpec
     option_specs::Dict{String, OptionSpec}
+    completions::Union{Nothing,Function}
     description::String
     help::Union{Nothing, Markdown.MD}
 end
-command_specs = Dict{String,CommandSpec}() # TODO remove this ?
 
 function SuperSpecs(compound_commands)::Dict{String,Dict{String,CommandSpec}}
     super_specs = Dict()
@@ -120,14 +120,16 @@ function CommandSpec(;kind::Union{Nothing,CommandKind}=nothing,
                      option_spec::Vector{OptionDeclaration}=OptionDeclaration[],
                      help::Union{Nothing, Markdown.MD}=nothing,
                      description::String="",
+                     completions::Union{Nothing,Function}=nothing,
                      arg_count::Pair=(0=>0),
                      arg_parser::Function=identity,
                      )::CommandSpec
     @assert kind !== nothing "Register and specify a `CommandKind`"
     @assert !isempty(name) "Supply a canonical name"
     @assert !isempty(description) "Supply a description"
+    # TODO assert isapplicable completions dict, string
     return CommandSpec(kind, name, short_name, handler, ArgSpec(arg_count, arg_parser),
-                       OptionSpecs(option_spec), description, help)
+                       OptionSpecs(option_spec), completions, description, help)
 end
 
 # populate a dictionary: command_name -> command_spec
@@ -180,11 +182,12 @@ end
 # REPL parsing #
 ################
 mutable struct Statement
-    command::Union{Nothing,CommandSpec}
-    options::Vector{Option}
+    super::Union{Nothing, String}
+    spec::Union{Nothing, CommandSpec}
+    options::Union{Vector{Option}, Vector{String}} # TODO clean up this state
     arguments::Vector{String}
     preview::Bool
-    Statement() = new(nothing, [], [], false)
+    Statement() = new(nothing, nothing, String[], [], false)
 end
 
 struct QuotedWord
@@ -192,64 +195,10 @@ struct QuotedWord
     isquoted::Bool
 end
 
-function unwrap_option(option::String)
-    if startswith(option, "--")
-        return length(option) == 2 ? "" : option[3:end]
-    elseif length(option) == 2
-        return option[end]
-    end
-end
-
 wrap_option(option::String) =
     length(option) == 1 ? "-$option" : "--$option"
 
-function _statement(words)
-    is_option(word) = first(word) == '-'
-
-    # command
-    if isempty(words)
-        return :cmd, "", nothing, true
-    end
-    word = popfirst!(words)
-    if word == "preview"
-        if isempty(words)
-            return :cmd, "", nothing, true
-        end
-        word = popfirst!(words)
-    end
-    if word in keys(super_specs) # have a super command
-        super_name = word
-        super = super_specs[word]
-        if isempty(words)
-            return :sub, "", super_name, true
-        end
-        word = popfirst!(words)
-        command = get(super, word, nothing)
-        if command === nothing
-            if isempty(words)
-                return :sub, word, super_name, true
-            else
-                return nothing
-            end
-        end
-    elseif get(super_specs["package"], word, nothing) !== nothing # given a "package" command
-        command = get(super_specs["package"], word, nothing)
-    elseif isempty(words) # try to complete the super command
-        return :cmd, word, nothing, true
-    else
-        return nothing
-    end
-    if isempty(words)
-        return :arg, "", command, true
-    end
-    word = words[end]
-    manifest = any(x->x in ["--manifest", "-m"], filter(is_option, words))
-    return is_option(word) ?
-        (:opt, word, command, true) :
-        (:arg, word, command, !manifest)
-end
-
-function parse(cmd::String; for_completions=false)
+function tokenize(cmd::String)
     # replace new lines with ; to support multiline commands
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ")
     # tokenize accoring to whitespace / quotes
@@ -257,49 +206,69 @@ function parse(cmd::String; for_completions=false)
     # tokenzie unquoted tokens according to pkg REPL syntax
     words = lex(qwords)
     # break up words according to ";"(doing this early makes subsequent processing easier)
-    word_groups = group_words(words)
-    # create statements
-    if for_completions
-        return _statement(word_groups[end])
-    end
-    return map(Statement, word_groups)
+    return group_words(words)
 end
 
-# vector of words -> structured statement
-# minimal checking is done in this phase
-function Statement(words)::Statement
-    is_option(word) = first(word) == '-'
+is_opt(word::AbstractString) = first(word) == '-'
+
+function core_parse(words)
+    # prelude
     statement = Statement()
+    word = nothing
+    function next_word!()
+        isempty(words) && return false
+        word = popfirst!(words)
+        return true
+    end
 
-    isempty(words) && pkgerror("no command specified")
-    word = popfirst!(words)
-
-    # command
-    # special handling for `preview`
+    # begin parsing
+    next_word!() || return statement, word
     if word == "preview"
         statement.preview = true
-        isempty(words) && pkgerror("preview requires a command")
-        word = popfirst!(words)
+        next_word!() || return statement, word
     end
-    if word in keys(super_specs)
-        super = super_specs[word]
-        isempty(words) && pkgerror("no subcommand specified")
-        word = popfirst!(words)
-    else
+
+    super = get(super_specs, word, nothing)
+    if super !== nothing # explicit
+        statement.super = word
+        next_word!() || return statement, word
+        command = get(super, word, nothing)
+        if command === nothing
+            return statement, word
+        end
+    else # try implicit package
         super = super_specs["package"]
-    end
-    command = get(super, word, nothing)
-    command !== nothing || pkgerror("expected command. instead got [$word]")
-    statement.command = command
-    # command arguments
-    for word in words
-        if is_option(word)
-            push!(statement.options, parse_option(word))
-        else # is argument
-            push!(statement.arguments, word)
+        command = get(super, word, nothing)
+        if command === nothing
+            return statement, word
         end
     end
-    return statement
+    statement.spec = command
+
+    next_word!() || return statement, word
+
+    while is_opt(word)
+        push!(statement.options, word)
+        next_word!() || return statement, word
+    end
+
+    pushfirst!(words, word)
+    statement.arguments = words
+    return statement, words[end]
+end
+
+function parse(input::String)
+    word_groups = tokenize(input)
+    statements = Statement[]
+    for words in word_groups
+        statement, _ = core_parse(words)
+        if statement.spec === nothing
+            pkgerror("could not determine command")
+        end
+        statement.options = map(parse_option, statement.options)
+        push!(statements, statement)
+    end
+    return statements
 end
 
 # break up words according to `;`(doing this early makes subsequent processing easier)
@@ -506,8 +475,8 @@ Final parsing (and checking) step.
 This step is distinct from `parse` in that it relies on the command specifications.
 """
 function PkgCommand(statement::Statement)::PkgCommand
-    arg_spec = statement.command.argument_spec
-    opt_spec = statement.command.option_specs
+    arg_spec = statement.spec.argument_spec
+    opt_spec = statement.spec.option_specs
     # arguments
     arguments = arg_spec.parser(statement.arguments)
     if !(arg_spec.count.first <= length(arguments) <= arg_spec.count.second)
@@ -516,7 +485,7 @@ function PkgCommand(statement::Statement)::PkgCommand
     # options
     enforce_option(statement.options, opt_spec)
     options = APIOptions(statement.options, opt_spec)
-    return PkgCommand(statement.command, options, arguments, statement.preview)
+    return PkgCommand(statement.spec, options, arguments, statement.preview)
 end
 
 Context!(ctx::APIOptions)::Context = Types.Context!(collect(ctx))
@@ -606,11 +575,6 @@ function do_test!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
 end
 
 function do_registry_add!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
-    println("This is a dummy function for now")
-    println("My args are:")
-    for arg in args
-        println("- $arg")
-    end
 end
 
 do_precompile!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
@@ -695,17 +659,6 @@ end
 
 pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 
-# handle completions
-mutable struct CompletionCache
-    commands::Vector{String}
-    canonical_names::Vector{String}
-    options::Dict{CommandKind, Vector{String}}
-    subcommands::Dict{String, Vector{String}}
-    CompletionCache() = new([],[],Dict(),Dict())
-end
-
-completion_cache = CompletionCache()
-
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
 function LineEdit.complete_line(c::PkgCompletionProvider, s)
@@ -715,28 +668,24 @@ function LineEdit.complete_line(c::PkgCompletionProvider, s)
     return ret, partial[range], should_complete
 end
 
+#######################
+# COMMAND COMPLETIONS #
+#######################
 function complete_local_path(s, i1, i2)
     cmp = REPL.REPLCompletions.complete_path(s, i2)
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
     completions = filter!(x -> isdir(s[1:prevind(s, first(cmp[2])-i1+1)]*x), completions)
-    return completions, cmp[2], !isempty(completions)
+    return completions, cmp[2]
 end
 
-function complete_installed_package(s, i1, i2, project_opt)
-    pkgs = project_opt ? API.__installed(PKGMODE_PROJECT) : API.__installed()
-    pkgs = sort!(collect(keys(filter(p->p[1] in stdlib_names() || p[2] !== nothing, pkgs))))
-    cmp = filter(cmd -> startswith(cmd, s), pkgs)
-    return cmp, i1:i2, !isempty(cmp)
-end
-
-function complete_remote_package(s, i1, i2)
+function complete_remote_package(partial)
     cmp = String[]
     julia_version = VERSION
     for reg in Types.registries(;clone_default=false)
         data = Types.read_registry(joinpath(reg, "Registry.toml"))
         for (uuid, pkginfo) in data["packages"]
             name = pkginfo["name"]
-            if startswith(name, s)
+            if startswith(name, partial)
                 compat_data = Operations.load_package_data_raw(
                     VersionSpec, joinpath(reg, pkginfo["path"], "Compat.toml"))
                 supported_julia_versions = VersionSpec(VersionRange[])
@@ -753,7 +702,7 @@ function complete_remote_package(s, i1, i2)
             end
         end
     end
-    return cmp, i1:i2, !isempty(cmp)
+    return cmp
 end
 
 const STDLIB_NAMES = Ref{Vector{String}}()
@@ -765,53 +714,127 @@ function stdlib_names()
     return STDLIB_NAMES[]
 end
 
-function complete_argument(to_complete, i1, i2, lastcommand, project_opt
-                           )::Tuple{Vector{String},UnitRange{Int},Bool}
-    if lastcommand == CMD_HELP
-        completions = filter(x->startswith(x,to_complete), completion_cache.canonical_names)
-        return completions, i1:i2, !isempty(completions)
-    elseif lastcommand in [CMD_STATUS, CMD_RM, CMD_UP, CMD_TEST, CMD_BUILD, CMD_FREE, CMD_PIN]
-        return complete_installed_package(to_complete, i1, i2, project_opt)
-    elseif lastcommand in [CMD_ADD, CMD_DEVELOP]
-        if occursin(Base.Filesystem.path_separator_re, to_complete)
-            return complete_local_path(to_complete, i1, i2)
-        else
-            completions = vcat(complete_remote_package(to_complete, i1, i2)[1],
-                               complete_local_path(to_complete, i1, i2)[1])
-            completions = vcat(completions,
-                               filter(x->startswith(x,to_complete) && !(x in completions),
-                                      stdlib_names()))
-            return completions, i1:i2, !isempty(completions)
+function canonical_names()
+    names = String[]
+    for (super, specs) in pairs(super_specs)
+        super == "package" && continue # skip "package"
+        for spec in unique(values(specs))
+            push!(names, join([super, spec.canonical_name], "-"))
         end
     end
-    return String[], 0:-1, false
+    for spec in unique(values(super_specs["package"]))
+        push!(names, spec.canonical_name)
+    end
+    return sort!(names)
+end
+
+function complete_installed_packages(options, partial)
+    mode = get(options, :mode, nothing)
+    pkgs = mode == PKGMODE_MANIFEST ? API.__installed() : API.__installed(PKGMODE_PROJECT)
+    return collect(keys(filter(p->p[1] in stdlib_names() || p[2] !== nothing, pkgs)))
+end
+
+function complete_add_dev(options, partial, i1, i2)
+    comps, idx = complete_local_path(partial, i1, i2)
+    if occursin(Base.Filesystem.path_separator_re, partial)
+        return comps, idx, !isempty(comps)
+    end
+    comps = vcat(comps, complete_remote_package(partial))
+    comps = vcat(comps, filter(x->startswith(x,partial) && !(x in comps),
+                              stdlib_names()))
+    return comps, idx, !isempty(comps)
+end
+
+function default_commands()
+    names = collect(keys(super_specs))
+    append!(names, map(x -> getproperty(x, :canonical_name), values(super_specs["package"])))
+    return sort(unique(names))
+end
+
+########################
+# COMPLETION INTERFACE #
+########################
+function complete_command(statement::Statement, final::Bool, on_sub::Bool)
+    if statement.super !== nothing
+        if (!on_sub && final) || (on_sub && !final)
+            # last thing determined was the super -> complete canonical names of subcommands
+            specs = super_specs[statement.super]
+            names = map(x -> getproperty(x, :canonical_name), values(specs))
+            return sort(unique(names))
+        end
+    end
+    # complete default names
+    return default_commands()
+end
+
+complete_opt(opt_specs) =
+    unique(sort(map(wrap_option,
+                    map(x -> getproperty(x, :name),
+                        collect(values(opt_specs))))))
+
+function complete_argument(spec::CommandSpec,
+                           options::Vector{String},
+                           partial::AbstractString,
+                           offset::Int,
+                           index::Int,
+                           )
+    if spec.completions === nothing
+        return String[]
+    end
+    # finish parsing opts
+    opts = APIOptions(map(parse_option, options), spec.option_specs)
+    if applicable(spec.completions, opts, partial, offset, index)
+        return spec.completions(opts, partial, offset, index)
+    end
+    return spec.completions(opts, partial)
+end
+
+function _completions(input, final, offset, index)
+    words = tokenize(input)[end]
+    word_count = length(words)
+    statement, partial = core_parse(words)
+    final && (partial = "") # last token is finalized -> no partial
+    # number of tokens which specify the command
+    command_size = count([statement.preview, statement.super !== nothing, true])
+    command_is_focused() = !((word_count == command_size && final) || word_count > command_size)
+
+    if statement.spec === nothing # spec not determined -> complete command
+        !command_is_focused() && return String[]
+        x = complete_command(statement, final, word_count == (statement.preview ? 3 : 2))
+    else
+        command_is_focused() && return String[]
+
+        if final # complete arg by default
+            x = complete_argument(statement.spec, statement.options, partial, offset, index)
+        else # complete arg or opt depending on last token
+            x = is_opt(partial) ?
+                complete_opt(statement.spec.option_specs) :
+                complete_argument(statement.spec, statement.options, partial, offset, index)
+        end
+    end
+
+    # In the case where the completion function wants to deal with indices, it will return a fully
+    # computed completion tuple, just return it
+    # Else, the completions function will just deal with strings and will return a Vector{String}
+    if isa(x, Tuple)
+        return x
+    else
+        possible = filter(possible -> startswith(possible, partial), x)
+        return possible, offset:index, !isempty(possible)
+    end
 end
 
 function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
     pre = full[1:index]
+    # empty input -> complete commands
     if isempty(pre)
-        return completion_cache.commands, 0:-1, false
+        return default_commands(), 0:-1, false
     end
-    x = parse(pre; for_completions=true)
-    if x === nothing # failed parse (invalid command name)
-        return String[], 0:-1, false
-    end
-    (key::Symbol, to_complete::String, spec, proj::Bool) = x
+    # parse input
     last = split(pre, ' ', keepempty=true)[end]
     offset = isempty(last) ? index+1 : last.offset+1
-    if last != to_complete # require a space before completing next field
-        return String[], 0:-1, false
-    end
-    if key == :arg
-        return complete_argument(to_complete, offset, index, spec.kind, proj)
-    end
-    possible::Vector{String} =
-        key == :cmd ? completion_cache.commands :
-        key == :sub ? completion_cache.subcommands[spec] :
-        key == :opt ? completion_cache.options[spec.kind] :
-        String[]
-    completions = filter(x->startswith(x,to_complete), possible)
-    return completions, offset:index, !isempty(completions)
+    final = isempty(last) # is the cursor still attached to the final token?
+    return _completions(pre, final, offset, index)
 end
 
 prev_project_file = nothing
@@ -953,6 +976,7 @@ command_declarations = [
     :option_spec => OptionDeclaration[
         [:name => "coverage", :api => :coverage => true],
     ],
+    :completions => complete_installed_packages,
     :description => "run tests for packages",
     :help => md"""
 
@@ -969,6 +993,7 @@ julia is started with `--startup-file=yes`.
     :name => "help",
     :short_name => "?",
     :arg_count => 0 => Inf,
+    :completions => ((opt, partial) -> canonical_names()),
     :description => "show this message",
     :help => md"""
 
@@ -1008,6 +1033,7 @@ If no manifest exists or the `--project` option is given, resolve and download t
         [:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
     ],
+    :completions => complete_installed_packages,
     :description => "remove packages from project or manifest",
     :help => md"""
 
@@ -1034,6 +1060,7 @@ as any no-longer-necessary manifest packages due to project package removals.
     :handler => do_add!,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_pkg(x; add_or_dev=true, valid=[VersionRange, Rev])),
+    :completions => complete_add_dev,
     :description => "add packages to project",
     :help => md"""
 
@@ -1070,6 +1097,7 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
         [:name => "local", :api => :shared => false],
         [:name => "shared", :api => :shared => true],
     ],
+    :completions => complete_add_dev,
     :description => "clone the full package repo locally for development",
     :help => md"""
     develop [--shared|--local] pkg[=uuid] ...
@@ -1094,6 +1122,7 @@ pkg> develop --local Example
     :handler => do_free!,
     :arg_count => 1 => Inf,
     :arg_parser => parse_pkg,
+    :completions => complete_installed_packages,
     :description => "undoes a `pin`, `develop`, or stops tracking a repo",
     :help => md"""
     free pkg[=uuid] ...
@@ -1106,6 +1135,7 @@ makes the package no longer being checked out.
     :handler => do_pin!,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_pkg(x; valid=[VersionRange])),
+    :completions => complete_installed_packages,
     :description => "pins the version of packages",
     :help => md"""
 
@@ -1122,9 +1152,9 @@ A pinned package has the symbol `⚲` next to its version in the status list.
     :option_spec => OptionDeclaration[
         [:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
+    :completions => complete_installed_packages,
     :description => "run the build script for packages",
     :help => md"""
->>>>>>> Refactor command declarations
 
     build [-v|verbose] pkg[=uuid] ...
 
@@ -1175,6 +1205,7 @@ it will be placed in the first depot of the stack.
         [:name => "patch", :api => :level => UPLEVEL_PATCH],
         [:name => "fixed", :api => :level => UPLEVEL_FIXED],
     ],
+    :completions => complete_installed_packages,
     :description => "update packages in manifest",
     :help => md"""
 
@@ -1221,6 +1252,7 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
         [:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
     ],
+    :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
     :help => md"""
 
@@ -1261,31 +1293,6 @@ is modified.
 ] #command_declarations
 
 super_specs = SuperSpecs(command_declarations)
-# cache things you need for completions
-completion_cache.commands = sort(append!(collect(keys(super_specs)),
-                                         collect(keys(super_specs["package"]))))
-let names = String[]
-    for (super, specs) in pairs(super_specs)
-        super == "package" && continue # skip "package"
-        for spec in unique(values(specs))
-            push!(names, join([super, spec.canonical_name], "-"))
-        end
-    end
-    for spec in unique(values(super_specs["package"]))
-        push!(names, spec.canonical_name)
-    end
-    completion_cache.canonical_names = names
-    sort!(completion_cache.canonical_names)
-end
-for (k, v) in pairs(super_specs)
-    completion_cache.subcommands[k] = sort(collect(keys(v)))
-    for spec in values(v)
-        completion_cache.options[spec.kind] =
-            sort(map(wrap_option, collect(keys(spec.option_specs))))
-    end
-end
-# TODO remove this
-command_specs = super_specs["package"]
 
 const help = md"""
 
@@ -1302,7 +1309,7 @@ Multiple commands can be given on the same line by interleaving a `;` between th
 **Commands**
 """
 
-for command in completion_cache.canonical_names
+for command in canonical_names()
     spec = CommandSpec(command)
     push!(help.content, Markdown.parse("`$command`: $(spec.description)"))
 end
