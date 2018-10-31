@@ -451,6 +451,13 @@ temp_pkg_dir() do project_path; cd(project_path) do
         touch("README.md")
         c, r = test_complete("add RE")
         @test !("README.md" in c)
+
+        # activate
+        pkg"activate --shared FooBar"
+        pkg"add Example"
+        pkg"activate ."
+        c, r = test_complete("activate --shared ")
+        @test "FooBar" in c
     end # testset
 end end
 
