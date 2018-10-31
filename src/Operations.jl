@@ -1333,6 +1333,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             --color=$(Base.have_color ? "yes" : "no")
             --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
             --check-bounds=yes
+            --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
             --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
             --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
             --eval $code
