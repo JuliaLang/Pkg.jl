@@ -463,7 +463,12 @@ function install_archive(
         if archive_url != nothing
             path = tempname() * randstring(6) * ".tar.gz"
             url_success = true
-            cmd = BinaryProvider.gen_download_cmd(archive_url, path);
+            cmd = BinaryProvider.gen_download_cmd(archive_url, path)
+            @show cmd
+            # Workaround PowerShell decoding '%2F' (GitLab requires encoded '/')
+            if occursin("powershell", cmd.exec[1])
+                cmd = BinaryProvider.gen_download_cmd(replace(archive_url, "%" => "%25"), path)
+            end
             @show cmd
             try
                 run(cmd, (devnull, devnull, devnull))
