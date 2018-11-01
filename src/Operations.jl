@@ -459,12 +459,15 @@ function install_archive(
 )::Bool
     for url in urls
         archive_url = get_archive_url_for_version(url, hash)
+        @show archive_url
         if archive_url != nothing
             path = tempname() * randstring(6) * ".tar.gz"
             url_success = true
             cmd = BinaryProvider.gen_download_cmd(archive_url, path);
+            @show cmd
             try
                 run(cmd, (devnull, devnull, devnull))
+                println("Downloaded tarball.")
             catch e
                 e isa InterruptException && rethrow(e)
                 url_success = false
@@ -473,9 +476,12 @@ function install_archive(
             dir = joinpath(tempdir(), randstring(12))
             mkpath(dir)
             cmd = BinaryProvider.gen_unpack_cmd(path, dir);
+            @show cmd
+
             # Might fail to extract an archive (Pkg#190)
             try
                 run(cmd, (devnull, devnull, devnull))
+                println("Unpacked tarball.")
             catch e
                 e isa InterruptException && rethrow(e)
                 @warn "failed to extract archive downloaded from $(archive_url)"
@@ -597,6 +603,9 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
                     continue
                 end
                 try
+                    @show urls[pkg.uuid]
+                    @show hashes[pkg.uuid]
+                    @show path
                     success = install_archive(urls[pkg.uuid], hashes[pkg.uuid], path)
                     if success && mode == :add
                         set_readonly(path) # In add mode, files should be read-only
