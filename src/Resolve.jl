@@ -122,7 +122,7 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
         try
             simplify_graph_soft!(graph, Set{Int}([p0]), log_events = false)
         catch err
-            isa(err, ResolverError) || rethrow(err)
+            isa(err, ResolverError) || rethrow()
             @goto done
         end
 
@@ -220,7 +220,7 @@ function greedysolver(graph::Graph)
     try
         simplify_graph_soft!(graph, req_inds, log_events = false)
     catch err
-        err isa ResolverError || rethrow(err)
+        err isa ResolverError || rethrow()
         pop_snapshot!(graph)
         return (false, Int[])
     end

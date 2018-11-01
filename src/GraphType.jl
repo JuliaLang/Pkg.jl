@@ -1079,7 +1079,7 @@ function deep_clean!(graph::Graph)
             try
                 propagate_constraints!(graph, Set{Int}([p0]), log_events = false)
             catch err
-                err isa ResolverError || rethrow(err)
+                err isa ResolverError || rethrow()
                 gconstr_msk[p0][v0] = false
             end
             pop_snapshot!(graph)

@@ -122,14 +122,14 @@ function update_registry(ctx)
                     try
                         GitTools.fetch(repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                     catch e
-                        e isa PkgError || rethrow(e)
+                        e isa PkgError || rethrow()
                         push!(errors, (reg, "failed to fetch from repo"))
                         @goto done
                     end
                     ff_succeeded = try
                         LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
                     catch e
-                        e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow(e)
+                        e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
                         push!(errors, (reg, "branch origin/$branch not found"))
                         @goto done
                     end
@@ -137,7 +137,7 @@ function update_registry(ctx)
                     if !ff_succeeded
                         try LibGit2.rebase!(repo, "origin/$branch")
                         catch e
-                            e isa LibGit2.GitError || rethrow(e)
+                            e isa LibGit2.GitError || rethrow()
                             push!(errors, (reg, "registry failed to rebase on origin/$branch"))
                             @goto done
                         end

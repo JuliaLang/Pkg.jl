@@ -462,7 +462,7 @@ function install_archive(
             try
                 run(cmd, (devnull, devnull, devnull))
             catch e
-                e isa InterruptException && rethrow(e)
+                e isa InterruptException && rethrow()
                 url_success = false
             end
             url_success || continue
@@ -473,7 +473,7 @@ function install_archive(
             try
                 run(cmd, (devnull, devnull, devnull))
             catch e
-                e isa InterruptException && rethrow(e)
+                e isa InterruptException && rethrow()
                 @warn "failed to extract archive downloaded from $(archive_url)"
                 url_success = false
             end
@@ -518,7 +518,7 @@ function install_git(
                     end
                     break # object was found, we can stop
                 catch err
-                    err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+                    err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
                 end
                 GitTools.fetch(repo, url, refspecs=refspecs, credentials=creds)
             end
@@ -527,7 +527,7 @@ function install_git(
         tree = try
             LibGit2.GitObject(repo, git_hash)
         catch err
-            err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow(err)
+            err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
             error("$name: git object $(string(hash)) could not be found")
         end
         tree isa LibGit2.GitTree ||
@@ -667,7 +667,7 @@ function find_stdlib_deps(ctx::Context, path::String)
             endswith(file, ".jl") || continue
             filecontent = try read(joinpath(root, file), String)
                 catch e
-                    e isa SystemError || rethrow(e)
+                    e isa SystemError || rethrow()
                     ""
                 end
             for ((uuid, stdlib), r) in zip(ctx.stdlibs, regexps)

@@ -350,7 +350,7 @@ function try_simplify_graph_soft!(graph, sources)
     try
         simplify_graph_soft!(graph, sources, log_events = false)
     catch err
-        err isa ResolverError || rethrow(err)
+        err isa ResolverError || rethrow()
         return false
     end
     return true
@@ -373,7 +373,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
         try
             maxdiff = iterate!(graph, msgs, perm)
         catch err
-            err isa UnsatError || rethrow(err)
+            err isa UnsatError || rethrow()
             if is_best_sofar
                 p0 = err.p0
                 s0 = findlast(graph.gconstr[p0])
