@@ -469,6 +469,7 @@ function install_archive(
                 run(cmd, (devnull, devnull, devnull))
                 println("Downloaded tarball.")
             catch e
+                @show e
                 e isa InterruptException && rethrow(e)
                 url_success = false
             end
