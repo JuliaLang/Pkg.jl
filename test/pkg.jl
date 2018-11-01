@@ -546,5 +546,6 @@ end
 
 include("repl.jl")
 include("api.jl")
+include("registry.jl")
 
 end # module

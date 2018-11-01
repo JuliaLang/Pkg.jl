@@ -9,7 +9,7 @@ import REPL
 import REPL: LineEdit, REPLCompletions
 
 import ..devdir, ..Types.casesensitive_isdir, ..TOML
-using ..Types, ..Display, ..Operations, ..API
+using ..Types, ..Display, ..Operations, ..API, ..Registry
 
 #################
 # Git revisions #
@@ -81,7 +81,7 @@ end
                    CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
                    CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
                    CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW,
-                   CMD_REGISTRY_ADD,
+                   CMD_REGISTRY_ADD, CMD_REGISTRY_RM, CMD_REGISTRY_UP, CMD_REGISTRY_STATUS,
                    )
 @enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
 struct ArgSpec
@@ -145,9 +145,9 @@ function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,Com
     return specs
 end
 
-###################
-# Package parsing #
-###################
+############################
+# Package/registry parsing #
+############################
 let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(?-i)",
     name = raw"(\w+)(?:\.jl)?"
     global const name_re = Regex("^$name\$")
@@ -177,6 +177,41 @@ function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
         pkgerror("`$word` cannot be parsed as a package")
     end
 end
+
+# Registries can be identified through: uuid, name, or name+uuid
+# when updating/removing. When adding we can accept a local path or url.
+function parse_registry(word::AbstractString; add=false)::RegistrySpec
+    word = replace(word, "~" => homedir())
+    registry = RegistrySpec()
+    if add && Types.isdir_windows_workaround(word) # TODO: Should be casesensitive_isdir
+        if isdir(joinpath(word, ".git")) # add path as url and clone it from there
+            registry.url = abspath(word)
+        else # put the path
+            registry.path = abspath(word)
+        end
+    elseif occursin(uuid_re, word)
+        registry.uuid = UUID(word)
+    elseif occursin(name_re, word)
+        registry.name = String(match(name_re, word).captures[1])
+    elseif occursin(name_uuid_re, word)
+        m = match(name_uuid_re, word)
+        registry.name = String(m.captures[1])
+        registry.uuid = UUID(m.captures[2])
+    elseif add
+        # Guess it is a url then
+        registry.url = String(word)
+    else
+        pkgerror("`$word` cannot be parsed as a registry")
+    end
+    return registry
+end
+
+function parse_registry(raw_args::Vector{String}; add=false)
+    regs = RegistrySpec[]
+    foreach(x -> push!(regs, parse_registry(x; add=add)), raw_args)
+    return regs
+end
+
 
 ################
 # REPL parsing #
@@ -347,7 +382,7 @@ end
 ##############
 const PackageIdentifier = String
 const PackageToken = Union{PackageIdentifier, VersionRange, Rev}
-const PkgArguments = Union{Vector{String}, Vector{PackageSpec}}
+const PkgArguments = Union{Vector{String}, Vector{PackageSpec}, Vector{RegistrySpec}}
 const APIOptions = Dict{Symbol, Any}
 struct PkgCommand
     spec::CommandSpec
@@ -574,9 +609,6 @@ function do_test!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
     API.test(Context!(ctx), args; collect(api_opts)...)
 end
 
-function do_registry_add!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
-end
-
 do_precompile!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
     API.precompile(Context!(ctx))
 
@@ -632,6 +664,27 @@ function do_develop!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
     API.add_or_develop(Context!(ctx), args; collect(api_opts)...)
 end
 
+# registry commands
+function do_registry_add!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
+    Registry.add(Context!(ctx), args)
+end
+
+function do_registry_rm!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
+    Registry.rm(Context!(ctx), args)
+end
+
+function do_registry_up!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
+    if isempty(args)
+        return Registry.update(Context!(ctx))
+    else
+        return Registry.update(Context!(ctx), args)
+    end
+end
+
+function do_registry_status!(#=ctx::APIOptions,=# args::PkgArguments, api_opts::APIOptions)
+    return Registry.status()
+end
+
 ######################
 # REPL mode creation #
 ######################
@@ -681,13 +734,13 @@ end
 function complete_remote_package(partial)
     cmp = String[]
     julia_version = VERSION
-    for reg in Types.registries(;clone_default=false)
-        data = Types.read_registry(joinpath(reg, "Registry.toml"))
+    for reg in Types.collect_registries()
+        data = Types.read_registry(joinpath(reg.path, "Registry.toml"))
         for (uuid, pkginfo) in data["packages"]
             name = pkginfo["name"]
             if startswith(name, partial)
                 compat_data = Operations.load_package_data_raw(
-                    VersionSpec, joinpath(reg, pkginfo["path"], "Compat.toml"))
+                    VersionSpec, joinpath(reg.path, pkginfo["path"], "Compat.toml"))
                 supported_julia_versions = VersionSpec(VersionRange[])
                 for (ver_range, compats) in compat_data
                     for (compat, v) in compats
@@ -956,17 +1009,6 @@ end
 # SPEC #
 ########
 command_declarations = [
-#=
-"registry" => CommandDeclaration[
-[
-    :kind => CMD_REGISTRY_ADD,
-    :name => "add",
-    :handler => do_registry_add!,
-    :arg_count => 1 => Inf,
-    :description => "Currently just a placeholder for a future command",
-],
-], #registry
-=#
 "package" => CommandDeclaration[
 [   :kind => CMD_TEST,
     :name => "test",
@@ -1155,7 +1197,6 @@ A pinned package has the symbol `⚲` next to its version in the status list.
     :completions => complete_installed_packages,
     :description => "run the build script for packages",
     :help => md"""
-
     build [-v|verbose] pkg[=uuid] ...
 
 Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
@@ -1290,6 +1331,42 @@ is modified.
     """,
 ],
 ], #package
+"registry" => CommandDeclaration[
+[   :kind => CMD_REGISTRY_ADD,
+    :name => "add",
+    :handler => do_registry_add!,
+    :arg_count => 1 => Inf,
+    :arg_parser => (x -> parse_registry(x; add = true)),
+    :description => "good docs",
+    :help => md"more docs?",
+],[ :kind => CMD_REGISTRY_RM,
+    :name => "remove",
+    :short_name => "rm",
+    :handler => do_registry_rm!,
+    :arg_count => 1 => Inf,
+    :arg_parser => parse_registry,
+    :description => "good docs",
+    :help => md"more docs?",
+],[
+    :kind => CMD_REGISTRY_UP,
+    :name => "update",
+    :short_name => "up",
+    :handler => do_registry_up!,
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_registry,
+    :description => "good docs",
+    :help => md"more docs?",
+],[
+    :kind => CMD_REGISTRY_STATUS,
+    :name => "status",
+    :short_name => "st",
+    :handler => do_registry_status!,
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_registry,
+    :description => "good docs",
+    :help => md"more docs?",
+]
+], #registry
 ] #command_declarations
 
 super_specs = SuperSpecs(command_declarations)

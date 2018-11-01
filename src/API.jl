@@ -89,77 +89,6 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     return
 end
 
-
-function update_registry(ctx)
-    # Update the registry
-    errors = Tuple{String, String}[]
-    if ctx.preview
-        @info("Skipping updating registry in preview mode")
-    else
-        for reg in registries(depots1())
-            if isdir(joinpath(reg, ".git"))
-                regpath = pathrepr(reg)
-                printpkgstyle(ctx, :Updating, "registry at " * regpath)
-                # Using LibGit2.with here crashes julia when running the
-                # tests for PkgDev wiht "Unreachable reached".
-                # This seems to work around it.
-                local repo
-                try
-                    repo = LibGit2.GitRepo(reg)
-                    if LibGit2.isdirty(repo)
-                        push!(errors, (regpath, "registry dirty"))
-                        @goto done
-                    end
-                    if !LibGit2.isattached(repo)
-                        push!(errors, (regpath, "registry detached"))
-                        @goto done
-                    end
-                    if !("origin" in LibGit2.remotes(repo))
-                        push!(errors, (regpath, "origin not in the list of remotes"))
-                        @goto done
-                    end
-                    branch = LibGit2.headname(repo)
-                    try
-                        GitTools.fetch(repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
-                    catch e
-                        e isa PkgError || rethrow()
-                        push!(errors, (reg, "failed to fetch from repo"))
-                        @goto done
-                    end
-                    ff_succeeded = try
-                        LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
-                    catch e
-                        e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
-                        push!(errors, (reg, "branch origin/$branch not found"))
-                        @goto done
-                    end
-
-                    if !ff_succeeded
-                        try LibGit2.rebase!(repo, "origin/$branch")
-                        catch e
-                            e isa LibGit2.GitError || rethrow()
-                            push!(errors, (reg, "registry failed to rebase on origin/$branch"))
-                            @goto done
-                        end
-                    end
-                    @label done
-                finally
-                    close(repo)
-                end
-            end
-        end
-    end
-    if !isempty(errors)
-        warn_str = "Some registries failed to update:"
-        for (reg, err) in errors
-            warn_str *= "\n    — $reg — $err"
-        end
-        @warn warn_str
-    end
-    UPDATED_REGISTRY_THIS_SESSION[] = true
-    return
-end
-
 up(ctx::Context; kwargs...)                    = up(ctx, PackageSpec[]; kwargs...)
 up(; kwargs...)                                = up(PackageSpec[]; kwargs...)
 up(pkg::Union{String, PackageSpec}; kwargs...) = up([pkg]; kwargs...)
@@ -177,7 +106,10 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
 
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
-    do_update_registry && update_registry(ctx)
+    if do_update_registry
+        Types.clone_default_registries()
+        Types.update_registries(ctx)
+    end
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT
             for (name::String, uuidstr::String) in ctx.env.project["deps"]
@@ -534,7 +466,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("manifest at $(ctx.env.manifest_file) does not exist")
     end
-    update_registry(ctx)
+    Types.update_registries(ctx)
     urls = Dict{}
     hashes = Dict{UUID,SHA1}()
     urls = Dict{UUID,Vector{String}}()

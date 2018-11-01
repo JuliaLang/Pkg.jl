@@ -85,6 +85,7 @@ function normalize_url(url::AbstractString)
 end
 
 function clone(url, source_path; header=nothing, kwargs...)
+    @assert !isdir(source_path) || isempty(readdir(source_path))
     Pkg.Types.printpkgstyle(stdout, :Cloning, header == nothing ? "git-repo `$url`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
