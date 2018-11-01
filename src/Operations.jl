@@ -443,7 +443,7 @@ function get_archive_url_for_version(url::String, ref)
     elseif (m = match(r"https://gitlab([^/]+)/(.*?)/(.*?).git", url)) !== nothing
         host, org, proj = m.captures
         proj = replace(proj, "." => "%2E")
-        return "https://gitlab$(host)/api/v4/projects/$(org)%2F$(proj)/repository/archive?sha=$(ref)"
+        return "https://gitlab$(host)/api/v4/projects/$(org)%2F$(proj)/repository/archive?tree=$(ref)"
     end
     return nothing
 end
