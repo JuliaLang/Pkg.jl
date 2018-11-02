@@ -5,7 +5,6 @@ using Pkg
 
 makedocs(
     modules = [Pkg],
-    format = :html,
     sitename = "Pkg.jl",
     pages = Any[
         "index.md",
@@ -23,8 +22,4 @@ makedocs(
 
 deploydocs(
     repo = "github.com/JuliaLang/Pkg.jl",
-    target = "build",
-    julia = "nightly",
-    deps = nothing,
-    make = nothing,
 )
