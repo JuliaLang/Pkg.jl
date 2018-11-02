@@ -601,7 +601,7 @@ end
 
 # TODO set default Display.status keyword: mode = PKGMODE_COMBINED
 do_status!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
-    Display.status(Context!(ctx), get(api_opts, :mode, PKGMODE_COMBINED))
+    Display.status(Context!(ctx), args, mode=get(api_opts, :mode, PKGMODE_COMBINED))
 
 # TODO , test recursive dependencies as on option.
 function do_test!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
@@ -1305,6 +1305,8 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
     :name => "status",
     :short_name => "st",
     :handler => do_status!,
+    :arg_count => 0 => Inf,
+    :arg_parser => (x -> parse_pkg(x)),
     :option_spec => OptionDeclaration[
         [:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
@@ -1313,16 +1315,17 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
     :description => "summarize contents of and changes to environment",
     :help => md"""
 
-    status
-    status [-p|--project]
-    status [-m|--manifest]
+    status [pkgs...]
+    status [-p|--project] [pkgs...]
+    status [-m|--manifest] [pkgs...]
 
 Show the status of the current environment. By default, the full contents of
 the project file is summarized, showing what version each package is on and
 how it has changed since the last git commit (if in a git repo), as well as
 any changes to manifest packages not already listed. In `--project` mode, the
 status of the project file is summarized. In `--manifest` mode the output also
-includes the dependencies of explicitly added packages.
+includes the dependencies of explicitly added packages. If there are any 
+packages listed as arguments the output will be limited to those packages.
     """,
 ],[ :kind => CMD_GC,
     :name => "gc",

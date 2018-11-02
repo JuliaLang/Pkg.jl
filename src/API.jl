@@ -209,7 +209,7 @@ end
 
 installed() = __installed(PKGMODE_PROJECT)
 function __installed(mode::PackageMode=PKGMODE_MANIFEST)
-    diffs = Display.status(Context(), mode, #=use_as_api=# true)
+    diffs = Display.status(Context(), PackageSpec[], mode=mode, use_as_api=true)
     version_status = Dict{String, Union{VersionNumber,Nothing}}()
     diffs == nothing && return version_status
     for entry in diffs
@@ -500,11 +500,17 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
 end
 
 
-status(mode=PKGMODE_PROJECT) = status(Context(), mode)
-function status(ctx::Context, mode=PKGMODE_PROJECT)
-    Pkg.Display.status(ctx, mode)
-    return
+@deprecate status(mode::PackageMode) status(mode=mode)
+
+status(; mode=PKGMODE_PROJECT) = status(PackageSpec[]; mode=mode)
+status(pkg::Union{String,PackageSpec}; mode=PKGMODE_PROJECT) = status([pkg]; mode=mode)
+status(pkgs::Vector{String}; mode=PKGMODE_PROJECT) = status([check_package_name(pkg) for pkg in pkgs]; mode=mode)
+status(pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT) = status(Context(), pkgs; mode=mode)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT)
+    Pkg.Display.status(ctx, pkgs, mode=mode)
+    return nothing
 end
+
 
 activate() = (Base.ACTIVE_PROJECT[] = nothing)
 function activate(path::String; shared::Bool=false)

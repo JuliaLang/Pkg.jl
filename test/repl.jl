@@ -909,6 +909,21 @@ end
     end end end
 end
 
+@testset "status" begin
+    temp_pkg_dir() do project_path
+        pkg"""
+        add Example Random
+        status
+        status -m
+        status Example
+        status Example=7876af07-990d-54b4-ab0e-23690620f79a
+        status 7876af07-990d-54b4-ab0e-23690620f79a
+        status Example Random
+        status -m Example
+        """
+    end
+end
+
 @testset "subcommands" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do
         Pkg.REPLMode.pkg"package add Example"
