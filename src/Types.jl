@@ -511,14 +511,14 @@ function read_project(filename::String)
     return Project(raw)
 end
 
+_throw_package_err(x, f) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
 function read_package(f::String)
-    _throw_package_err(x) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
-
     project = read_project(f)
-    project.name === nothing && _throw_package_err("name")
-    project.uuid === nothing && _throw_package_err("uuid")
+    project.name === nothing && _throw_package_err("name", f)
+    project.uuid === nothing && _throw_package_err("uuid", f)
     name = project.name
-    if !isfile(joinpath(dirname(f), "src", "$name.jl"))
+    entry = joinpath(dirname(f), "src", "$name.jl")
+    if !isfile(entry)
         pkgerror("expected the file `src/$name.jl` to exist for package $name at $(dirname(f))")
     end
     return project

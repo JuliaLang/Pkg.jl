@@ -148,8 +148,10 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
     (project_file === nothing) && return false
     project = read_package(project_file)
     compat = project.compat
-    if haskey(compat, "julia") && !(VERSION in Types.semver_spec(compat["julia"]))
-        @warn("julia version requirement for package $(pkg.name) not satisfied")
+    if haskey(compat, "julia")
+        if !(VERSION in Types.semver_spec(compat["julia"]))
+            @warn("julia version requirement for package $(pkg.name) not satisfied")
+        end
     end
     for (deppkg_name, uuid) in project.deps
         vspec = haskey(compat, deppkg_name) ? Types.semver_spec(compat[deppkg_name]) : VersionSpec()
@@ -834,7 +836,9 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         need_to_resolve = true
         # Since we will create a temp environment in another place we need to extract the project
         # and put it in the Project as a normal `deps` entry and in the Manifest with a path.
-        foreach(k->setfield!(localctx.env.project, k, nothing), (:name, :uuid, :version))
+        localctx.env.project.name = nothing
+        localctx.env.project.uuid = nothing
+        localctx.env.project.version = nothing
         localctx.env.pkg = nothing
         localctx.env.project.deps[pkg.name] = pkg.uuid
         localctx.env.manifest[pkg.name] = [Dict(
