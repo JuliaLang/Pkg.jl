@@ -5,6 +5,8 @@ New features
 ------------
 
 * Pkg now implements an interface for working with registries ([#588]).
+* `Pkg.status` and `pkg> status` now accept package arguments for
+  filtering of the output ([#881]).
 
 Bug fixes
 ----------
@@ -25,3 +27,4 @@ Deprecated or removed
 [#639]: https://github.com/JuliaLang/Pkg.jl/pull/639
 [#642]: https://github.com/JuliaLang/Pkg.jl/pull/642
 [#588]: https://github.com/JuliaLang/Pkg.jl/pull/588
+[#881]: https://github.com/JuliaLang/Pkg.jl/pull/881

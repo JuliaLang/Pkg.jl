@@ -29,11 +29,22 @@ function git_file_stream(repo::LibGit2.GitRepo, spec::String; fakeit::Bool=false
     return iob
 end
 
-function status(ctx::Context, mode::PackageMode, use_as_api=false)
+function status(ctx::Context, args::Vector{PackageSpec}; mode::PackageMode=PKGMODE_PROJECT, use_as_api=false)
     env = ctx.env
     project₀ = project₁ = env.project
     manifest₀ = manifest₁ = env.manifest
     diff = nothing
+
+    pkgfilter = (diff) -> begin
+        for pkg in args
+            if has_uuid(pkg) ? pkg.uuid == diff.uuid : pkg.name == diff.name
+                return true
+            end
+        end
+        return false
+    end
+    filter_pkgs = length(args) > 0
+
     if !use_as_api
         pkg = ctx.env.pkg
         if pkg !== nothing
@@ -55,6 +66,7 @@ function status(ctx::Context, mode::PackageMode, use_as_api=false)
         m₀ = filter_manifest(in_project(project₀["deps"]), manifest₀)
         m₁ = filter_manifest(in_project(project₁["deps"]), manifest₁)
         diff = manifest_diff(ctx, m₀, m₁)
+        filter_pkgs && filter!(pkgfilter, diff)
         if !use_as_api
             printpkgstyle(ctx, :Status, pathrepr(env.project_file), #=ignore_indent=# true)
             print_diff(ctx, diff, #=status=# true)
@@ -62,6 +74,7 @@ function status(ctx::Context, mode::PackageMode, use_as_api=false)
     end
     if mode == PKGMODE_MANIFEST
         diff = manifest_diff(ctx, manifest₀, manifest₁)
+        filter_pkgs && filter!(pkgfilter, diff)
         if !use_as_api
             printpkgstyle(ctx, :Status, pathrepr(env.manifest_file), #=ignore_indent=# true)
             print_diff(ctx, diff, #=status=# true)
@@ -71,6 +84,7 @@ function status(ctx::Context, mode::PackageMode, use_as_api=false)
         m₀ = filter_manifest(p, manifest₀)
         m₁ = filter_manifest(p, manifest₁)
         c_diff = filter!(x->x.old != x.new, manifest_diff(ctx, m₀, m₁))
+        filter_pkgs && filter!(pkgfilter, c_diff)
         if !isempty(c_diff)
             if !use_as_api
                 printpkgstyle(ctx, :Status, pathrepr(env.manifest_file), #=ignore_indent=# true)

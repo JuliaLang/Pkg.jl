@@ -42,4 +42,19 @@ include("utils.jl")
     end
 end
 
+@testset "Pkg.status" begin
+    temp_pkg_dir() do project_path
+        Pkg.add(["Example", "Random"])
+        Pkg.status()
+        Pkg.status("Example")
+        Pkg.status(["Example", "Random"])
+        Pkg.status(PackageSpec("Example"))
+        Pkg.status(PackageSpec(uuid = "7876af07-990d-54b4-ab0e-23690620f79a"))
+        Pkg.status(PackageSpec.(["Example", "Random"]))
+        Pkg.status(; mode=PKGMODE_MANIFEST)
+        Pkg.status("Example"; mode=PKGMODE_MANIFEST)
+        @test_deprecated Pkg.status(PKGMODE_MANIFEST)
+    end
+end
+
 end # module APITests

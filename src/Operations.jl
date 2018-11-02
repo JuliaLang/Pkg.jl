@@ -1347,7 +1347,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
         end
         with_dependencies_loadable_at_toplevel(ctx, pkg; might_need_to_resolve=true) do localctx
             if !Types.is_project_uuid(ctx.env, pkg.uuid)
-                Display.status(localctx, PKGMODE_MANIFEST)
+                Display.status(localctx, mode=PKGMODE_MANIFEST)
             end
 
             run_test()

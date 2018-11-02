@@ -257,12 +257,13 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status(mode::PackageMode=PKGMODE_PROJECT)
+    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT)
 
 Print out the status of the project/manifest.
 If `mode` is `PKGMODE_PROJECT` prints out status about only those packages
 that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`
-also print for those in the manifest (recursive dependencies).
+also print for those in the manifest (recursive dependencies). If there are
+any packages listed as arguments the output will be limited to those packages.
 """
 const status = API.status
 
