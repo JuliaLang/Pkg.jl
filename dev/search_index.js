@@ -1,7 +1,7 @@
 var documenterSearchIndex = {"docs": [
 
 {
-    "location": "index.html#",
+    "location": "#",
     "page": "1. Introduction",
     "title": "1. Introduction",
     "category": "page",
@@ -9,7 +9,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "index.html#**1.**-Introduction-1",
+    "location": "#**1.**-Introduction-1",
     "page": "1. Introduction",
     "title": "1. Introduction",
     "category": "section",
@@ -17,7 +17,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "getting-started.html#",
+    "location": "getting-started/#",
     "page": "2. Getting Started",
     "title": "2. Getting Started",
     "category": "page",
@@ -25,7 +25,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "getting-started.html#**2.**-Getting-Started-1",
+    "location": "getting-started/#**2.**-Getting-Started-1",
     "page": "2. Getting Started",
     "title": "2. Getting Started",
     "category": "section",
@@ -33,7 +33,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#",
+    "location": "managing-packages/#",
     "page": "3. Managing Packages",
     "title": "3. Managing Packages",
     "category": "page",
@@ -41,7 +41,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#**3.**-Managing-Packages-1",
+    "location": "managing-packages/#**3.**-Managing-Packages-1",
     "page": "3. Managing Packages",
     "title": "3. Managing Packages",
     "category": "section",
@@ -49,7 +49,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Adding-packages-1",
+    "location": "managing-packages/#Adding-packages-1",
     "page": "3. Managing Packages",
     "title": "Adding packages",
     "category": "section",
@@ -57,7 +57,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Adding-registered-packages-1",
+    "location": "managing-packages/#Adding-registered-packages-1",
     "page": "3. Managing Packages",
     "title": "Adding registered packages",
     "category": "section",
@@ -65,7 +65,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Adding-unregistered-packages-1",
+    "location": "managing-packages/#Adding-unregistered-packages-1",
     "page": "3. Managing Packages",
     "title": "Adding unregistered packages",
     "category": "section",
@@ -73,7 +73,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Adding-a-local-package-1",
+    "location": "managing-packages/#Adding-a-local-package-1",
     "page": "3. Managing Packages",
     "title": "Adding a local package",
     "category": "section",
@@ -81,7 +81,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Developing-packages-1",
+    "location": "managing-packages/#Developing-packages-1",
     "page": "3. Managing Packages",
     "title": "Developing packages",
     "category": "section",
@@ -89,7 +89,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Removing-packages-1",
+    "location": "managing-packages/#Removing-packages-1",
     "page": "3. Managing Packages",
     "title": "Removing packages",
     "category": "section",
@@ -97,7 +97,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Updating-packages-1",
+    "location": "managing-packages/#Updating-packages-1",
     "page": "3. Managing Packages",
     "title": "Updating packages",
     "category": "section",
@@ -105,7 +105,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Pinning-a-package-1",
+    "location": "managing-packages/#Pinning-a-package-1",
     "page": "3. Managing Packages",
     "title": "Pinning a package",
     "category": "section",
@@ -113,7 +113,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Testing-packages-1",
+    "location": "managing-packages/#Testing-packages-1",
     "page": "3. Managing Packages",
     "title": "Testing packages",
     "category": "section",
@@ -121,7 +121,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Building-packages-1",
+    "location": "managing-packages/#Building-packages-1",
     "page": "3. Managing Packages",
     "title": "Building packages",
     "category": "section",
@@ -129,7 +129,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Garbage-collecting-old,-unused-packages-1",
+    "location": "managing-packages/#Garbage-collecting-old,-unused-packages-1",
     "page": "3. Managing Packages",
     "title": "Garbage collecting old, unused packages",
     "category": "section",
@@ -137,7 +137,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "managing-packages.html#Preview-mode-1",
+    "location": "managing-packages/#Preview-mode-1",
     "page": "3. Managing Packages",
     "title": "Preview mode",
     "category": "section",
@@ -145,7 +145,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "environments.html#",
+    "location": "environments/#",
     "page": "4. Working with Environments",
     "title": "4. Working with Environments",
     "category": "page",
@@ -153,7 +153,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "environments.html#**4.**-Working-with-Environments-1",
+    "location": "environments/#**4.**-Working-with-Environments-1",
     "page": "4. Working with Environments",
     "title": "4. Working with Environments",
     "category": "section",
@@ -161,7 +161,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "environments.html#Creating-your-own-projects-1",
+    "location": "environments/#Creating-your-own-projects-1",
     "page": "4. Working with Environments",
     "title": "Creating your own projects",
     "category": "section",
@@ -169,7 +169,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "environments.html#Precompiling-a-project-1",
+    "location": "environments/#Precompiling-a-project-1",
     "page": "4. Working with Environments",
     "title": "Precompiling a project",
     "category": "section",
@@ -177,7 +177,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "environments.html#Using-someone-else\'s-project-1",
+    "location": "environments/#Using-someone-else\'s-project-1",
     "page": "4. Working with Environments",
     "title": "Using someone else\'s project",
     "category": "section",
@@ -185,7 +185,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "environments.html#TODO:-1",
+    "location": "environments/#TODO:-1",
     "page": "4. Working with Environments",
     "title": "TODO:",
     "category": "section",
@@ -193,7 +193,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "creating-packages.html#",
+    "location": "creating-packages/#",
     "page": "5. Creating Packages",
     "title": "5. Creating Packages",
     "category": "page",
@@ -201,7 +201,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "creating-packages.html#**5.**-Creating-Packages-1",
+    "location": "creating-packages/#**5.**-Creating-Packages-1",
     "page": "5. Creating Packages",
     "title": "5. Creating Packages",
     "category": "section",
@@ -209,7 +209,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "creating-packages.html#Generating-files-for-a-package-1",
+    "location": "creating-packages/#Generating-files-for-a-package-1",
     "page": "5. Creating Packages",
     "title": "Generating files for a package",
     "category": "section",
@@ -217,7 +217,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "creating-packages.html#Adding-dependencies-to-the-project-1",
+    "location": "creating-packages/#Adding-dependencies-to-the-project-1",
     "page": "5. Creating Packages",
     "title": "Adding dependencies to the project",
     "category": "section",
@@ -225,7 +225,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "creating-packages.html#Adding-a-build-step-to-the-package.-1",
+    "location": "creating-packages/#Adding-a-build-step-to-the-package.-1",
     "page": "5. Creating Packages",
     "title": "Adding a build step to the package.",
     "category": "section",
@@ -233,7 +233,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "creating-packages.html#Adding-tests-to-the-package-1",
+    "location": "creating-packages/#Adding-tests-to-the-package-1",
     "page": "5. Creating Packages",
     "title": "Adding tests to the package",
     "category": "section",
@@ -241,7 +241,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "creating-packages.html#Test-specific-dependencies-1",
+    "location": "creating-packages/#Test-specific-dependencies-1",
     "page": "5. Creating Packages",
     "title": "Test-specific dependencies",
     "category": "section",
@@ -249,7 +249,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "compatibility.html#",
+    "location": "compatibility/#",
     "page": "6. Compatibility",
     "title": "6. Compatibility",
     "category": "page",
@@ -257,7 +257,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "compatibility.html#**6.**-Compatibility-1",
+    "location": "compatibility/#**6.**-Compatibility-1",
     "page": "6. Compatibility",
     "title": "6. Compatibility",
     "category": "section",
@@ -265,7 +265,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "compatibility.html#Version-specifier-format-1",
+    "location": "compatibility/#Version-specifier-format-1",
     "page": "6. Compatibility",
     "title": "Version specifier format",
     "category": "section",
@@ -273,7 +273,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "compatibility.html#Caret-specifiers-1",
+    "location": "compatibility/#Caret-specifiers-1",
     "page": "6. Compatibility",
     "title": "Caret specifiers",
     "category": "section",
@@ -281,7 +281,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "compatibility.html#Tilde-specifiers-1",
+    "location": "compatibility/#Tilde-specifiers-1",
     "page": "6. Compatibility",
     "title": "Tilde specifiers",
     "category": "section",
@@ -289,7 +289,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "compatibility.html#Inequality-specifiers-1",
+    "location": "compatibility/#Inequality-specifiers-1",
     "page": "6. Compatibility",
     "title": "Inequality specifiers",
     "category": "section",
@@ -297,7 +297,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "registries.html#",
+    "location": "registries/#",
     "page": "7. Registries",
     "title": "7. Registries",
     "category": "page",
@@ -305,7 +305,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "registries.html#**7.**-Registries-1",
+    "location": "registries/#**7.**-Registries-1",
     "page": "7. Registries",
     "title": "7. Registries",
     "category": "section",
@@ -313,7 +313,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "faq.html#",
+    "location": "faq/#",
     "page": "8. FAQ",
     "title": "8. FAQ",
     "category": "page",
@@ -321,7 +321,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "faq.html#**8.**-FAQ-1",
+    "location": "faq/#**8.**-FAQ-1",
     "page": "8. FAQ",
     "title": "8. FAQ",
     "category": "section",
@@ -329,7 +329,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "glossary.html#",
+    "location": "glossary/#",
     "page": "9. Glossary",
     "title": "9. Glossary",
     "category": "page",
@@ -337,7 +337,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "glossary.html#**9.**-Glossary-1",
+    "location": "glossary/#**9.**-Glossary-1",
     "page": "9. Glossary",
     "title": "9. Glossary",
     "category": "section",
@@ -345,7 +345,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#",
+    "location": "api/#",
     "page": "10. API Reference",
     "title": "10. API Reference",
     "category": "page",
@@ -353,7 +353,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.PackageSpec",
+    "location": "api/#Pkg.PackageSpec",
     "page": "10. API Reference",
     "title": "Pkg.PackageSpec",
     "category": "type",
@@ -361,7 +361,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.PackageMode",
+    "location": "api/#Pkg.PackageMode",
     "page": "10. API Reference",
     "title": "Pkg.PackageMode",
     "category": "type",
@@ -369,7 +369,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.UpgradeLevel",
+    "location": "api/#Pkg.UpgradeLevel",
     "page": "10. API Reference",
     "title": "Pkg.UpgradeLevel",
     "category": "type",
@@ -377,7 +377,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.add",
+    "location": "api/#Pkg.add",
     "page": "10. API Reference",
     "title": "Pkg.add",
     "category": "function",
@@ -385,7 +385,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.develop",
+    "location": "api/#Pkg.develop",
     "page": "10. API Reference",
     "title": "Pkg.develop",
     "category": "function",
@@ -393,7 +393,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.activate",
+    "location": "api/#Pkg.activate",
     "page": "10. API Reference",
     "title": "Pkg.activate",
     "category": "function",
@@ -401,7 +401,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.rm",
+    "location": "api/#Pkg.rm",
     "page": "10. API Reference",
     "title": "Pkg.rm",
     "category": "function",
@@ -409,7 +409,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.update",
+    "location": "api/#Pkg.update",
     "page": "10. API Reference",
     "title": "Pkg.update",
     "category": "function",
@@ -417,7 +417,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.test",
+    "location": "api/#Pkg.test",
     "page": "10. API Reference",
     "title": "Pkg.test",
     "category": "function",
@@ -425,7 +425,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.build",
+    "location": "api/#Pkg.build",
     "page": "10. API Reference",
     "title": "Pkg.build",
     "category": "function",
@@ -433,7 +433,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.pin",
+    "location": "api/#Pkg.pin",
     "page": "10. API Reference",
     "title": "Pkg.pin",
     "category": "function",
@@ -441,7 +441,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.free",
+    "location": "api/#Pkg.free",
     "page": "10. API Reference",
     "title": "Pkg.free",
     "category": "function",
@@ -449,7 +449,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.instantiate",
+    "location": "api/#Pkg.instantiate",
     "page": "10. API Reference",
     "title": "Pkg.instantiate",
     "category": "function",
@@ -457,7 +457,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.resolve",
+    "location": "api/#Pkg.resolve",
     "page": "10. API Reference",
     "title": "Pkg.resolve",
     "category": "function",
@@ -465,7 +465,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#Pkg.setprotocol!",
+    "location": "api/#Pkg.setprotocol!",
     "page": "10. API Reference",
     "title": "Pkg.setprotocol!",
     "category": "function",
@@ -473,7 +473,7 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api.html#API-Reference-1",
+    "location": "api/#API-Reference-1",
     "page": "10. API Reference",
     "title": "10. API Reference",
     "category": "section",
