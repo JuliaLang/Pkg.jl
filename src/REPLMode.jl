@@ -671,11 +671,26 @@ end
 #######################
 # COMMAND COMPLETIONS #
 #######################
-function complete_local_path(s, i1, i2)
+function complete_activate(options, partial, i1, i2)
+    possible = String[]
+    shared = get(options, :shared, false)
+    if shared
+        for depot in Base.DEPOT_PATH
+            envdir = joinpath(depot, "environments")
+            isdir(envdir) || continue
+            append!(possible, readdir(envdir))
+        end
+        return possible
+    else
+        return complete_local_dir(partial, i1, i2)
+    end
+end
+
+function complete_local_dir(s, i1, i2)
     cmp = REPL.REPLCompletions.complete_path(s, i2)
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
     completions = filter!(x -> isdir(s[1:prevind(s, first(cmp[2])-i1+1)]*x), completions)
-    return completions, cmp[2]
+    return completions, cmp[2], !isempty(completions)
 end
 
 function complete_remote_package(partial)
@@ -735,7 +750,7 @@ function complete_installed_packages(options, partial)
 end
 
 function complete_add_dev(options, partial, i1, i2)
-    comps, idx = complete_local_path(partial, i1, i2)
+    comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)
         return comps, idx, !isempty(comps)
     end
@@ -799,10 +814,10 @@ function _completions(input, final, offset, index)
     command_is_focused() = !((word_count == command_size && final) || word_count > command_size)
 
     if statement.spec === nothing # spec not determined -> complete command
-        !command_is_focused() && return String[]
+        !command_is_focused() && return String[], 0:-1, false
         x = complete_command(statement, final, word_count == (statement.preview ? 3 : 2))
     else
-        command_is_focused() && return String[]
+        command_is_focused() && return String[], 0:-1, false
 
         if final # complete arg by default
             x = complete_argument(statement.spec, statement.options, partial, offset, index)
@@ -1180,6 +1195,7 @@ packages have changed causing the current Manifest to be out of sync.
     :option_spec => OptionDeclaration[
         [:name => "shared", :api => :shared => true],
     ],
+    :completions => complete_activate,
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
     activate
