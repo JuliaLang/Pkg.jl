@@ -926,8 +926,9 @@ function create_mode(repl, main)
     end
 
     repl_keymap = Dict()
+    repl_keymap[']'] = (s, o...) -> isempty(s) || LineEdit.edit_insert(s, ']')
     if shell_mode != nothing
-        repl_keymap[';'] = function (s,o...)
+        repl_keymap[';'] = function (s, o...)
             if isempty(s) || position(LineEdit.buffer(s)) == 0
                 buf = copy(LineEdit.buffer(s))
                 LineEdit.transition(s, shell_mode) do
