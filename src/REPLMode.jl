@@ -836,7 +836,7 @@ function promptf()
                 nothing
             end
             if project !== nothing
-                projname = project.name
+                projname = project["name"]
                 if projname !== nothing
                     name = projname
                 else
