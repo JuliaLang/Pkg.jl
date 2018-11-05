@@ -236,6 +236,16 @@ end
         @test_throws PkgError Registry.add([RegistrySpec(url = Foo2.url)])
 
     end end
+
+    # issue #711
+    temp_pkg_dir() do depot; mktempdir() do depot2
+        insert!(Base.DEPOT_PATH, 2, depot2)
+        Registry.add("General")
+        with_depot2(() -> Registry.add("General"))
+        # This add should not error because depot/Example and depot2/Example have the same uuid
+        Pkg.add("Example")
+        @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
+    end end
 end
 
 end # module
