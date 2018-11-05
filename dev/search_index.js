@@ -309,7 +309,47 @@ var documenterSearchIndex = {"docs": [
     "page": "7. Registries",
     "title": "7. Registries",
     "category": "section",
-    "text": "TODD: Write about stuff"
+    "text": "Registries contain information about packages, such as available releases, dependencies and where it can be downloaded. The General registry (https://github.com/JuliaRegistries/General) is the default one, and is installed automatically."
+},
+
+{
+    "location": "registries/#**7.1.**-Managing-registries-1",
+    "page": "7. Registries",
+    "title": "7.1. Managing registries",
+    "category": "section",
+    "text": "Registries can be added, removed and updated from either the Pkg REPL or by using the functional API. In this section we will describe the REPL interface. The functional registry API is documented in the Registry API Reference section."
+},
+
+{
+    "location": "registries/#Adding-registries-1",
+    "page": "7. Registries",
+    "title": "Adding registries",
+    "category": "section",
+    "text": "A custom registry can be added with the registry add command from the Pkg REPL. Usually this will be done with a URL to the registry. Here we add the General registrypkg> registry add https://github.com/JuliaRegistries/General\n   Cloning registry from \"https://github.com/JuliaRegistries/General\"\n     Added registry `General` to `~/.julia/registries/General`and now all the packages registered in General are available for e.g. adding. To see which registries are currently installed you can use the registry status (or registry st) commandpkg> registry st\nRegistry Status\n [23338594] General (https://github.com/JuliaRegistries/General.git)Registries are always added to the user depot, which is the first entry in DEPOT_PATH."
+},
+
+{
+    "location": "registries/#Removing-registries-1",
+    "page": "7. Registries",
+    "title": "Removing registries",
+    "category": "section",
+    "text": "Registries can be removed with the registry remove (or registry rm) command. Here we remove the General registrypkg> registry rm General\n  Removing registry `General` from ~/.julia/registries/General\n\npkg> registry st\nRegistry Status\n  (no registries found)In case there are multiple registries named General installed you have to disambiguate with the uuid, just as when manipulating packages, e.g.pkg> registry rm General=23338594-aafe-5451-b93e-139f81909106\n  Removing registry `General` from ~/.julia/registries/General"
+},
+
+{
+    "location": "registries/#Updating-registries-1",
+    "page": "7. Registries",
+    "title": "Updating registries",
+    "category": "section",
+    "text": "The registry update (or registry up) command is available to update registries. Here we update the General registry,pkg> registry up General\n  Updating registry at `~/.julia/registries/General`\n  Updating git-repo `https://github.com/JuliaRegistries/General`and to update all installed user registries just dopkg> registry up\n  Updating registry at `~/.julia/registries/General`\n  Updating git-repo `https://github.com/JuliaRegistries/General`"
+},
+
+{
+    "location": "registries/#**7.2.**-Creating-a-registry-1",
+    "page": "7. Registries",
+    "title": "7.2. Creating a registry",
+    "category": "section",
+    "text": "TBW: Describe registry file structure etc."
 },
 
 {
@@ -350,6 +390,14 @@ var documenterSearchIndex = {"docs": [
     "title": "10. API Reference",
     "category": "page",
     "text": ""
+},
+
+{
+    "location": "api/#API-Reference-1",
+    "page": "10. API Reference",
+    "title": "10. API Reference",
+    "category": "section",
+    "text": "This section describes the function interface, or \"API mode\" for interacting with Pkg.jl. The function API is recommended for non-interactive usage, in i.e. scripts."
 },
 
 {
@@ -473,11 +521,59 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "api/#API-Reference-1",
+    "location": "api/#Package-API-Reference-1",
     "page": "10. API Reference",
-    "title": "10. API Reference",
+    "title": "10.1. Package API Reference",
     "category": "section",
-    "text": "This section describes the \"API mode\" of interacting with Pkg.jl which is recommended for non-interactive usage, in i.e. scripts. In the REPL mode packages (with associated version, UUID, URL etc) are parsed from strings, for example, \"Package#master\",\"Package@v0.1\", \"www.mypkg.com/MyPkg#my/feature\". It is possible to use strings as arguments for simple commands in the API mode (like Pkg.add([\"PackageA\", \"PackageB\"]), more complicated commands, that e.g. specify URLs or version range, uses a more structured format over strings. This is done by creating an instance of a PackageSpec which are passed in to functions.PackageSpec\nPackageMode\nUpgradeLevel\nPkg.add\nPkg.develop\nPkg.activate\nPkg.rm\nPkg.update\nPkg.test\nPkg.build\nPkg.pin\nPkg.free\nPkg.instantiate\nPkg.resolve\nPkg.setprotocol!"
+    "text": "In the REPL mode packages (with associated version, UUID, URL etc) are parsed from strings, for example, \"Package#master\",\"Package@v0.1\", \"www.mypkg.com/MyPkg#my/feature\". It is possible to use strings as arguments for simple commands in the API mode (like Pkg.add([\"PackageA\", \"PackageB\"]), more complicated commands, that e.g. specify URLs or version range, uses a more structured format over strings. This is done by creating an instance of a PackageSpec which are passed in to functions.PackageSpec\nPackageMode\nUpgradeLevel\nPkg.add\nPkg.develop\nPkg.activate\nPkg.rm\nPkg.update\nPkg.test\nPkg.build\nPkg.pin\nPkg.free\nPkg.instantiate\nPkg.resolve\nPkg.setprotocol!"
+},
+
+{
+    "location": "api/#Pkg.RegistrySpec",
+    "page": "10. API Reference",
+    "title": "Pkg.RegistrySpec",
+    "category": "type",
+    "text": "RegistrySpec(name::String)\nRegistrySpec(; name, url, path)\n\nA RegistrySpec is a representation of a registry with various metadata, much like PackageSpec.\n\nMost registry functions in Pkg take a Vector of RegistrySpec and do the operation on all the registries in the vector.\n\nBelow is a comparison between the REPL version and the RegistrySpec version:\n\nREPL API\nRegistry RegistrySpec(\"Registry\")\nRegistry=a67d... RegistrySpec(name=\"Registry\", uuid=\"a67d...\"\nlocal/path RegistrySpec(path=\"local/path\")\nwww.myregistry.com RegistrySpec(url=\"www.myregistry.com\")\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#Pkg.Registry.add",
+    "page": "10. API Reference",
+    "title": "Pkg.Registry.add",
+    "category": "function",
+    "text": "Pkg.Registry.add(url::String)\nPkg.Registry.add(registry::RegistrySpec)\n\nAdd new package registries.\n\nExamples\n\nPkg.Registry.add(\"General\")\nPkg.Registry.add(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\nPkg.Registry.add(RegistrySpec(url = \"https://github.com/JuliaRegistries/General.git\"))\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#Pkg.Registry.rm",
+    "page": "10. API Reference",
+    "title": "Pkg.Registry.rm",
+    "category": "function",
+    "text": "Pkg.Registry.rm(registry::String)\nPkg.Registry.rm(registry::RegistrySpec)\n\nRemove registries.\n\nExamples\n\nPkg.Registry.rm(\"General\")\nPkg.Registry.rm(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#Pkg.Registry.update",
+    "page": "10. API Reference",
+    "title": "Pkg.Registry.update",
+    "category": "function",
+    "text": "Pkg.Registry.update()\nPkg.Registry.update(registry::RegistrySpec)\nPkg.Registry.update(registry::Vector{RegistrySpec})\n\nUpdate registries. If no registries are given, update all available registries.\n\nExamples\n\nPkg.Registry.update()\nPkg.Registry.update(\"General\")\nPkg.Registry.update(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#Pkg.Registry.status",
+    "page": "10. API Reference",
+    "title": "Pkg.Registry.status",
+    "category": "function",
+    "text": "Pkg.Registry.status()\n\nDisplay information about available registries.\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#Registry-API-Reference-1",
+    "page": "10. API Reference",
+    "title": "10.2. Registry API Reference",
+    "category": "section",
+    "text": "The function API for registries uses RegistrySpecs, similar to PackageSpec.RegistrySpec\nPkg.Registry.add\nPkg.Registry.rm\nPkg.Registry.update\nPkg.Registry.status"
 },
 
 ]}
