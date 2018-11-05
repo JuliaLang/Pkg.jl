@@ -4,8 +4,22 @@ generate(path::String; kwargs...) = generate(Context(), path; kwargs...)
 function generate(ctx::Context, path::String; kwargs...)
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
+    path = realpath(path)
     dir, pkg = dirname(path), basename(path)
-    isdir(path) && pkgerror("$(abspath(path)) already exists")
+    # isdir(path) && pkgerror("$(abspath(path)) already exists")
+    if isdir(path)
+        if "Project.toml" in readdir(path) || "Manifest.toml" in readdir(path)
+            if isinteractive()
+                menu = RadioMenu(["yes", "no"])
+                choice = request("$(abspath(path)) already exists and contains. Would you like to continue?", menu)
+                if choice == 2
+                    return
+                end
+            else
+                pkgerror("$(abspath(path)) already exists")
+            end
+        end
+    end
     printstyled("Generating"; color=:green, bold=true)
     print(" project $pkg:\n")
     project(pkg, dir; preview=ctx.preview)
