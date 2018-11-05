@@ -1041,6 +1041,7 @@ end
 function registered_uuid(env::EnvCache, name::String)::UUID
     uuids = registered_uuids(env, name)
     length(uuids) == 0 && return UUID(zero(UInt128))
+    length(uuids) == 1 && return uuids[1]
     choices::Vector{String} = []
     choices_cache::Vector{Tuple{UUID,String}} = []
     for uuid in uuids
