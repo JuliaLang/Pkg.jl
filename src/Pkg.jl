@@ -9,6 +9,7 @@ export @pkg_str
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
 export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
+export Registry, RegistrySpec
 
 depots() = Base.DEPOT_PATH
 function depots1()
@@ -35,6 +36,7 @@ include("GraphType.jl")
 include("Resolve.jl")
 include("Operations.jl")
 include("API.jl")
+include("Registry.jl")
 include("REPLMode.jl")
 
 import .REPLMode: @pkg_str
@@ -336,6 +338,26 @@ Defaults to 'https', with `proto == nothing` delegating the choice to the packag
 """
 const setprotocol! = API.setprotocol!
 
+"""
+    RegistrySpec(name::String)
+    RegistrySpec(; name, url, path)
+
+A `RegistrySpec` is a representation of a registry with various metadata, much like
+[`PackageSpec`](@ref).
+
+Most registry functions in Pkg take a `Vector` of `RegistrySpec` and do the operation
+on all the registries in the vector.
+
+Below is a comparison between the REPL version and the `RegistrySpec` version:
+
+| `REPL`               | `API`                                           |
+|:---------------------|:------------------------------------------------|
+| `Registry`           | `RegistrySpec("Registry")`                      |
+| `Registry=a67d...`   | `RegistrySpec(name="Registry", uuid="a67d..."`  |
+| `local/path`         | `RegistrySpec(path="local/path")`               |
+| `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`        |
+"""
+const RegistrySpec = Types.RegistrySpec
 
 
 function __init__()

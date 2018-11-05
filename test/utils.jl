@@ -6,6 +6,7 @@ function temp_pkg_dir(fn::Function)
     local old_depot_path
     local old_home_project
     local old_active_project
+    local old_general_registry_url
     try
         old_load_path = copy(LOAD_PATH)
         old_depot_path = copy(DEPOT_PATH)
@@ -15,11 +16,27 @@ function temp_pkg_dir(fn::Function)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
+        # Clone the registry only once
+        old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
+        generaldir = joinpath(@__DIR__, "registries", "General")
+        if !isdir(generaldir)
+            mkpath(generaldir)
+            Base.shred!(LibGit2.CachedCredentials()) do creds
+                LibGit2.with(Pkg.GitTools.clone("https://github.com/JuliaRegistries/General.git",
+                    generaldir, credentials = creds)) do repo
+                end
+            end
+        end
+        Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
         withenv("JULIA_PROJECT" => nothing, "JULIA_LOAD_PATH" => nothing) do
             mktempdir() do env_dir
                 mktempdir() do depot_dir
                     push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                     push!(DEPOT_PATH, depot_dir)
+                    # copy the general registry to tmp depot
+                    mkpath(joinpath(depot_dir, "registries"#=, "General"=#))
+                    cp(generaldir, joinpath(depot_dir, "registries", "General"#=, "SxLXF"=#))
+                    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
                     fn(env_dir)
                 end
             end
@@ -31,6 +48,7 @@ function temp_pkg_dir(fn::Function)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
+        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
     end
 end
 

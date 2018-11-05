@@ -5,3 +5,5 @@
 docs/build
 /Manifest.toml
 /docs/Manifest.toml
+.DS_Store
+/test/registries/*
