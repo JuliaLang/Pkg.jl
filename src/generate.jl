@@ -4,18 +4,15 @@ generate(path::String; kwargs...) = generate(Context(), path; kwargs...)
 function generate(ctx::Context, path::String; kwargs...)
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
-    path = realpath(path)
+    path = abspath(path)
     dir, pkg = dirname(path), basename(path)
-    # isdir(path) && pkgerror("$(abspath(path)) already exists")
-    if isdir(path)
-        if "Project.toml" in readdir(path) || "Manifest.toml" in readdir(path)
-            pkgerror("$(abspath(path)) already exists and contains a Project.toml and/or Manifest.toml.")
-        end
+    if isdir(path) && "Project.toml" in readdir(path) || "Manifest.toml" in readdir(path)
+        pkgerror("$(path) already exists and contains a Project.toml and/or Manifest.toml.")
     end
     printstyled("Generating"; color=:green, bold=true)
     print(" project $pkg:\n")
     project(pkg, dir; preview=ctx.preview)
-    entrypoint(pkg, dir; preview=ctx.preview)
+    !in("src", readdir(path)) && entrypoint(pkg, dir; preview=ctx.preview)
     ctx.preview && preview_info()
     return
 end
