@@ -7,12 +7,12 @@ function generate(ctx::Context, path::String; kwargs...)
     path = abspath(path)
     dir, pkg = dirname(path), basename(path)
     if isdir(path) && "Project.toml" in readdir(path) || "Manifest.toml" in readdir(path)
-        pkgerror("$(path) already exists and contains a Project.toml and/or Manifest.toml.")
+        pkgerror("$path already exists and contains a Project.toml and/or Manifest.toml.")
     end
     printstyled("Generating"; color=:green, bold=true)
     print(" project $pkg:\n")
     project(pkg, dir; preview=ctx.preview)
-    !isdir(joinpath(path, "src")) && entrypoint(pkg, dir; preview=ctx.preview)
+    !isdir(joinpath(path, "src/$pkg.jl")) && entrypoint(pkg, dir; preview=ctx.preview)
     ctx.preview && preview_info()
     return
 end
