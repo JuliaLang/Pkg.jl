@@ -12,7 +12,7 @@ function generate(ctx::Context, path::String; kwargs...)
     printstyled("Generating"; color=:green, bold=true)
     print(" project $pkg:\n")
     project(pkg, dir; preview=ctx.preview)
-    !in("src", readdir(path)) && entrypoint(pkg, dir; preview=ctx.preview)
+    !isdir(joinpath(path, "src")) && entrypoint(pkg, dir; preview=ctx.preview)
     ctx.preview && preview_info()
     return
 end
