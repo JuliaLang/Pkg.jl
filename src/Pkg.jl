@@ -150,6 +150,8 @@ passing `coverage=true`. The default behavior is not to run coverage.
 
 The tests are executed in a new process with `check-bounds=yes` and by default `startup-file=no`.
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
+Inlining of functions during testing can be disabled (for better coverage accuracy)
+by starting julia with `--inline=no`.
 """
 const test = API.test
 
