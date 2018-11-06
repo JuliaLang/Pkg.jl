@@ -4,7 +4,6 @@ module Pkg
 
 import Random
 import REPL
-import REPL.TerminalMenus: RadioMenu
 
 export @pkg_str
 export PackageSpec
