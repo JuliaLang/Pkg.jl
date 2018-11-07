@@ -147,19 +147,17 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
     fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
     (project_file === nothing) && return false
     project = read_package(project_file)
-    compat = get(project, "compat", Dict())
-    if haskey(compat, "julia")
-        if !(VERSION in Types.semver_spec(compat["julia"]))
-            @warn("julia version requirement for package $(pkg.name) not satisfied")
-        end
+    compat = project.compat
+    if haskey(compat, "julia") && !(VERSION in Types.semver_spec(compat["julia"]))
+        @warn("julia version requirement for package $(pkg.name) not satisfied")
     end
-    for (deppkg_name, uuid) in project["deps"]
+    for (deppkg_name, uuid) in project.deps
         vspec = haskey(compat, deppkg_name) ? Types.semver_spec(compat[deppkg_name]) : VersionSpec()
-        deppkg = PackageSpec(deppkg_name, UUID(uuid), vspec)
+        deppkg = PackageSpec(deppkg_name, uuid, vspec)
         push!(fix_deps_map[pkg.uuid], deppkg)
     end
-    if haskey(project, "version")
-        pkg.version = VersionNumber(project["version"])
+    if project.version !== nothing
+        pkg.version = project.version
     else
         # @warn "project file for $(pkg.name) is missing a `version` entry"
         set_maximum_version_registry!(ctx.env, pkg)
@@ -248,20 +246,19 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
                 @assert proj_file != nothing
                 proj = Types.read_package(proj_file)
 
-                v = haskey(proj, "version") ? (VersionNumber(proj["version"])) : VERSION
+                v = something(proj.version, VERSION)
                 push!(all_versions_u, v)
                 vr = VersionRange(v)
 
                 all_deps_u_vr = get_or_make!(all_deps_u, vr)
-                for (name, _other_uuid) in proj["deps"]
-                    other_uuid = UUID(_other_uuid)
+                for (name, other_uuid) in proj.deps
                     all_deps_u_vr[name] = other_uuid
                     other_uuid in uuids || push!(uuids, other_uuid)
                 end
 
                 # TODO look at compat section for stdlibs?
                 all_compat_u_vr = get_or_make!(all_compat_u, vr)
-                for (name, other_uuid) in proj["deps"]
+                for (name, other_uuid) in proj.deps
                     all_compat_u_vr[name] = VersionSpec()
                 end
             else
@@ -319,8 +316,7 @@ function resolve_versions!(
     uuid_to_name = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
     uuid_to_name[uuid_julia] = "julia"
 
-    for (name::String, uuidstr::String) in get_deps(ctx, target)
-        uuid = UUID(uuidstr)
+    for (name::String, uuid::UUID) in get_deps(ctx, target)
         uuid_to_name[uuid] = name
 
         uuid_idx = findfirst(isequal(uuid), uuids)
@@ -740,7 +736,7 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
         project_file = projectfile_path(path)
         if nothing !== project_file
             project = read_project(project_file)
-            deps = project["deps"]
+            deps = Dict(string(k)=>string(v) for (k,v) in project.deps)
         else
             # Check in REQUIRE file
             # Remove when packages uses Project files properly
@@ -779,7 +775,7 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
 end
 
 function prune_manifest(env::EnvCache)
-    keep = map(UUID, values(env.project["deps"]))
+    keep = collect(values(env.project.deps))
     while !isempty(keep)
         clean = true
         for (name, infos) in env.manifest, info in infos
@@ -827,7 +823,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         info = manifest_info(localctx.env, pkg.uuid)
         info === nothing && return
         need_to_resolve |= haskey(info, "path")
-        localctx.env.project["deps"][pkg.name] = string(pkg.uuid)
+        localctx.env.project.deps[pkg.name] = pkg.uuid
         for (dpkg, duuid) in get(info, "deps", [])
             collect_deps!(seen, PackageSpec(dpkg, UUID(duuid)))
         end
@@ -838,19 +834,19 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         need_to_resolve = true
         # Since we will create a temp environment in another place we need to extract the project
         # and put it in the Project as a normal `deps` entry and in the Manifest with a path.
-        foreach(k->delete!(localctx.env.project, k), ("name", "uuid", "version"))
+        foreach(k->setfield!(localctx.env.project, k, nothing), (:name, :uuid, :version))
         localctx.env.pkg = nothing
-        localctx.env.project["deps"][pkg.name] = string(pkg.uuid)
+        localctx.env.project.deps[pkg.name] = pkg.uuid
         localctx.env.manifest[pkg.name] = [Dict(
-            "deps" => get_deps(mainctx, target),
+            "deps" => Dict(k=>string(v) for (k,v) in get_deps(mainctx, target)),
             "uuid" => string(pkg.uuid),
             "path" => dirname(localctx.env.project_file),
             "version" => string(pkg.version)
         )]
     else
         # Only put `pkg` and its deps (recursively) in the temp project
-        empty!(localctx.env.project["deps"])
-        localctx.env.project["deps"][pkg.name] = string(pkg.uuid)
+        empty!(localctx.env.project.deps)
+        localctx.env.project.deps[pkg.name] = pkg.uuid
         seen_uuids = Set{UUID}()
         # Only put `pkg` and its deps (recursively) in the temp project
         collect_deps!(seen_uuids, pkg)
@@ -952,10 +948,8 @@ function collect_target_deps!(
 
     # Pkg2 compatibiity with test/REQUIRE
     has_project_test_target = false
-    if project !== nothing
-        if haskey(project, "targets")
-            has_project_test_target = true
-        end
+    if project !== nothing && !isempty(project.targets)
+        has_project_test_target = true
     end
     if target == "test" && !has_project_test_target
         pkg2_test_target_compatibility!(ctx, path, pkgs)
@@ -964,10 +958,10 @@ function collect_target_deps!(
 
     # Collect target deps from Project
     if project !== nothing
-        targets = project["targets"]
+        targets = project.targets
         haskey(targets, target) || return
         for pkg in targets[target]
-            uuid = UUID(project["extras"][pkg])
+            uuid = project.extras[pkg]
             push!(pkgs, PackageSpec(pkg, uuid))
         end
     end
@@ -1016,7 +1010,7 @@ function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,In
         haskey(order, uuid) && return
         push!(seen, uuid)
         if Types.is_project_uuid(ctx.env, uuid)
-            deps = values(ctx.env.project["deps"])
+            deps = values(ctx.env.project.deps)
         else
             info = manifest_info(ctx.env, uuid)
             deps = values(get(info, "deps", Dict()))
@@ -1140,8 +1134,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
         pkg.mode == PKGMODE_PROJECT || continue
         found = false
-        for (name::String, uuidstr::String) in ctx.env.project["deps"]
-            uuid = UUID(uuidstr)
+        for (name::String, uuid::UUID) in ctx.env.project.deps
             has_name(pkg) && pkg.name == name ||
             has_uuid(pkg) && pkg.uuid == uuid || continue
             !has_name(pkg) || pkg.name == name ||
@@ -1157,23 +1150,19 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         @warn("`$str` not in project, ignoring")
     end
     # delete drops from project
-    n = length(ctx.env.project["deps"])
-    filter!(ctx.env.project["deps"]) do (_, uuid)
-        UUID(uuid) ∉ drop
+    n = length(ctx.env.project.deps)
+    filter!(ctx.env.project.deps) do (_, uuid)
+        uuid ∉ drop
     end
-    if length(ctx.env.project["deps"]) == n
+    if length(ctx.env.project.deps) == n
         @info "No changes"
         return
     end
-    deps_names = collect(keys(ctx.env.project["deps"]))
-    if haskey(ctx.env.project, "targets")
-        filter!(ctx.env.project["targets"]) do (target, deps)
-            !isempty(filter!(in(deps_names), deps))
-        end
-        if isempty(ctx.env.project["targets"])
-            delete!(ctx.env.project, "targets")
-        end
+    deps_names = collect(keys(ctx.env.project.deps))
+    filter!(ctx.env.project.targets) do (target, deps)
+        !isempty(filter!(in(deps_names), deps))
     end
+    
     # only keep reachable manifest entires
     prune_manifest(ctx.env)
     # update project & manifest
@@ -1183,13 +1172,12 @@ end
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; new_git = UUID[], mode=:add)
     # copy added name/UUIDs into project
     for pkg in pkgs
-        ctx.env.project["deps"][pkg.name] = string(pkg.uuid)
+        ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     # if a package is in the project file and
     # the manifest version in the specified version set
     # then leave the package as is at the installed version
-    for (name::String, uuidstr::String) in ctx.env.project["deps"]
-        uuid = UUID(uuidstr)
+    for (name::String, uuid::UUID) in ctx.env.project.deps
         info = manifest_info(ctx.env, uuid)
         info != nothing && haskey(info, "version") || continue
         version = VersionNumber(info["version"])

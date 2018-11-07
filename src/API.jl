@@ -112,8 +112,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     end
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT
-            for (name::String, uuidstr::String) in ctx.env.project["deps"]
-                uuid = UUID(uuidstr)
+            for (name::String, uuid::UUID) in ctx.env.project.deps
                 push!(pkgs, PackageSpec(name, uuid, level))
             end
         elseif mode == PKGMODE_MANIFEST
@@ -344,7 +343,7 @@ function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}
         pkg.uuid in uuids && continue
         push!(uuids, pkg.uuid)
         if Types.is_project(ctx.env, pkg)
-            pkgs = [PackageSpec(name, UUID(uuid)) for (name, uuid) in ctx.env.project["deps"]]
+            pkgs = [PackageSpec(name, uuid) for (name, uuid) in ctx.env.project.deps]
         else
             info = manifest_info(ctx.env, pkg.uuid)
             if haskey(info, "deps")
@@ -418,7 +417,7 @@ precompile() = precompile(Context())
 function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
 
-    pkgids = [Base.PkgId(UUID(uuid), name) for (name, uuid) in ctx.env.project["deps"] if !(UUID(uuid) in keys(ctx.stdlibs))]
+    pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !(uuid in keys(ctx.stdlibs))]
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
@@ -517,8 +516,8 @@ function activate(path::String; shared::Bool=false)
     if !shared
         devpath = nothing
         env = Base.active_project() === nothing ? nothing : EnvCache()
-        if env !== nothing && haskey(env.project["deps"], path)
-            uuid = UUID(env.project["deps"][path])
+        if env !== nothing && haskey(env.project.deps, path)
+            uuid = env.project.deps[path]
             info = manifest_info(env, uuid)
             devpath = haskey(info, "path") ? joinpath(dirname(env.project_file), info["path"]) : nothing
         end

@@ -64,8 +64,8 @@ function status(ctx::Context, args::Vector{PackageSpec}=PackageSpec[];
     end
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         # TODO: handle project deps missing from manifest
-        m₀ = filter_manifest(in_project(project₀["deps"]), manifest₀)
-        m₁ = filter_manifest(in_project(project₁["deps"]), manifest₁)
+        m₀ = filter_manifest(in_project(project₀.deps), manifest₀)
+        m₁ = filter_manifest(in_project(project₁.deps), manifest₁)
         diff = manifest_diff(ctx, m₀, m₁)
         filter_pkgs && filter!(pkgfilter, diff)
         if !use_as_api
@@ -81,7 +81,7 @@ function status(ctx::Context, args::Vector{PackageSpec}=PackageSpec[];
             print_diff(ctx, diff, #=status=# true)
         end
     elseif mode == PKGMODE_COMBINED
-        p = not_in_project(merge(project₀["deps"], project₁["deps"]))
+        p = not_in_project(merge(project₀.deps, project₁.deps))
         m₀ = filter_manifest(p, manifest₀)
         m₁ = filter_manifest(p, manifest₁)
         c_diff = filter!(x->x.old != x.new, manifest_diff(ctx, m₀, m₁))
@@ -98,8 +98,8 @@ function status(ctx::Context, args::Vector{PackageSpec}=PackageSpec[];
 end
 
 function print_project_diff(ctx::Context, env₀::EnvCache, env₁::EnvCache)
-    pm₀ = filter_manifest(in_project(env₀.project["deps"]), env₀.manifest)
-    pm₁ = filter_manifest(in_project(env₁.project["deps"]), env₁.manifest)
+    pm₀ = filter_manifest(in_project(env₀.project.deps), env₀.manifest)
+    pm₁ = filter_manifest(in_project(env₁.project.deps), env₁.manifest)
     diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm₀, pm₁))
     if isempty(diff)
         printstyled(color = color_dark, " [no changes]\n")
@@ -278,7 +278,7 @@ struct InProject{D <: Dict}
     neg::Bool
 end
 function (ip::InProject)(name::String, info::Dict)
-    v = haskey(ip.deps, name) && haskey(info, "uuid") && ip.deps[name] == info["uuid"]
+    v = haskey(ip.deps, name) && haskey(info, "uuid") && ip.deps[name] == UUID(info["uuid"])
     return ip.neg ? !v : v
 end
 in_project(deps::Dict) = InProject(deps, false)

@@ -14,6 +14,7 @@ include("utils.jl")
 function git_init_package(tmp, path)
     base = basename(path)
     pkgpath = joinpath(tmp, base)
+    println("git initing package at [$pkgpath]")
     cp(path, pkgpath)
     LibGit2.with(LibGit2.init(pkgpath)) do repo
         LibGit2.add!(repo, "*")
@@ -88,7 +89,9 @@ end
     @test statement.arguments[2] == "@0.5.0"
 end
 
-temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
+temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
+    tmp_pkg_path = mktempdir()
+
     pkg"activate ."
     pkg"add Example@0.5"
     @test isinstalled(TEST_PKG)
@@ -171,10 +174,8 @@ temp_pkg_dir() do project_path; cd(project_path) do; mktempdir() do tmp_pkg_path
         end # cd_tempdir
     end # withenv
     end # mktempdir
-end # mktempdir
 end # cd
 end # temp_pkg_dir
-
 
 temp_pkg_dir() do project_path; cd(project_path) do
     mktempdir() do tmp
@@ -367,7 +368,7 @@ end
 # Autocompletions
 temp_pkg_dir() do project_path; cd(project_path) do
     @testset "tab completion" begin
-        Pkg.Types.collect_registries()
+        pkg"registry add General" # instantiate the `General` registry to complete remote package names
         pkg"activate ."
         c, r = test_complete("add Exam")
         @test "Example" in c
