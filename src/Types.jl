@@ -427,8 +427,10 @@ function write_env_usage(manifest_file::AbstractString)
     !isfile(manifest_file) && return
     # Do not rewrite as do syntax (no longer precompilable)
     io = open(usage_file, "a")
-    println(io, "[[\"", escape_string(manifest_file), "\"]]")
-    print(io, "time = ", now()); println(io, 'Z')
+    print(io, """
+    [[$(repr(manifest_file))]]
+    time = $(now())Z
+    """)
     close(io)
 end
 
