@@ -426,11 +426,13 @@ function write_env_usage(manifest_file::AbstractString)
     usage_file = joinpath(logdir(), "manifest_usage.toml")
     touch(usage_file)
     !isfile(manifest_file) && return
-    # Do not rewrite as do syntax (no longer precompilable)
-    io = open(usage_file, "a")
-    println(io, "[[\"", escape_string(manifest_file), "\"]]")
-    print(io, "time = ", now()); println(io, 'Z')
-    close(io)
+    # Want to print this in one go to help with atomicity issues
+    # Not 100% robust but better than nothing
+    data = sprint(print, "[[\"", escape_string(manifest_file), "\"]]\n",
+                  "time = ", now(), 'Z')
+    open(usage_file, "a") do io
+        println(io, data)
+    end
 end
 
 function read_project(io::IO)
