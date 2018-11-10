@@ -1485,6 +1485,7 @@ function write_env(ctx::Context; display_diff=true)
         end
         if !ctx.preview
             open(env.manifest_file, "w") do io
+                print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
                 TOML.print(io, manifest, sorted=true)
             end
         end
