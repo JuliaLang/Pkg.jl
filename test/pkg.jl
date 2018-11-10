@@ -512,15 +512,13 @@ temp_pkg_dir() do project_path
 end
 
 @testset "dependency of test dependency (#567)" begin
-    mktempdir() do tmpdir
-        temp_pkg_dir() do project_path; cd(tmpdir) do; with_temp_env() do
-            for x in ["x1", "x2", "x3"]
-                cp(joinpath(@__DIR__, "test_packages/$x"), joinpath(tmpdir, "$x"))
-                Pkg.develop(Pkg.PackageSpec(url = joinpath(tmpdir, x)))
-            end
-            Pkg.test("x3")
-        end end end
-    end
+    temp_pkg_dir() do project_path; cd_tempdir(;rm=false) do tmpdir; with_temp_env(;rm=false) do
+        for x in ["x1", "x2", "x3"]
+            cp(joinpath(@__DIR__, "test_packages/$x"), joinpath(tmpdir, "$x"))
+            Pkg.develop(Pkg.PackageSpec(url = joinpath(tmpdir, x)))
+        end
+        Pkg.test("x3")
+    end end end
 end
 
 @testset "printing of stdlib paths, issue #605" begin

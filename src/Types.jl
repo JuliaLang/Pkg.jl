@@ -7,6 +7,7 @@ using Random
 using Dates
 import LibGit2
 import REPL
+import Base.string
 using REPL.TerminalMenus
 
 using ..TOML
@@ -260,6 +261,20 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     return safe_realpath(project_file)
 end
 
+Base.@kwdef mutable struct Project
+    raw::Dict{String,Any} = Dict{String,Any}()
+    # Fields
+    name::Union{String, Nothing} = nothing
+    uuid::Union{UUID, Nothing} = nothing
+    version::Union{VersionTypes, Nothing} = nothing
+    manifest::Union{String, Nothing} = nothing
+    # Sections
+    deps::Dict{String,UUID} = Dict{String,UUID}()
+    extras::Dict{String,UUID} = Dict{String,UUID}()
+    targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
+    compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
+end
+
 mutable struct EnvCache
     # environment info:
     env::Union{Nothing,String}
@@ -273,7 +288,7 @@ mutable struct EnvCache
     pkg::Union{PackageSpec, Nothing}
 
     # cache of metadata:
-    project::Dict
+    project::Project
     manifest::Dict
 
     # registered package info:
@@ -286,24 +301,25 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
     project_dir = dirname(project_file)
     git = ispath(joinpath(project_dir, ".git")) ? project_dir : nothing
-
+    # read project file
     project = read_project(project_file)
-    if any(haskey.((project,), ["name", "uuid", "version"]))
+    # initiaze project package
+    if any(x -> x !== nothing, [project.name, project.uuid, project.version])
         project_package = PackageSpec(
-            get(project, "name", ""),
-            UUID(get(project, "uuid", 0)),
-            VersionNumber(get(project, "version", "0.0")),
+            something(project.name, ""),
+            something(project.uuid, UUID(0)),
+            something(project.version, VersionNumber("0.0")),
         )
     else
         project_package = nothing
     end
-    # determine manifest_file name
-    dir = abspath(dirname(project_file))
-    manifest_file = haskey(project, "manifest") ?
-        abspath(project["manifest"]) :
+    # determine manifest file
+    dir = abspath(project_dir)
+    manifest_file = project.manifest !== nothing ?
+        abspath(project.manifest) :
         manifestfile_path(dir)
     # use default name if still not determined
-    (manifest_file === nothing) && (manifest_file = joinpath(dir, "Manifest.toml"))
+    manifest_file = something(manifest_file, joinpath(dir, "Manifest.toml"))
     write_env_usage(manifest_file)
     manifest = read_manifest(manifest_file)
     uuids = Dict{String,Vector{UUID}}()
@@ -384,20 +400,24 @@ end
 # target === "*"     : main + all extras
 # target === "name"  : named target deps
 
-function deps_names(project::Dict, target::Union{Nothing,String}=nothing)::Vector{String}
-    deps = sort!(collect(keys(project["deps"])))
-    target == "*" && return !haskey(project, "extras") ? deps :
-        sort!(union!(deps, collect(keys(project["extras"]))))
-    haskey(project, "targets") || return deps
-    targets = project["targets"]
-    haskey(targets, target) || return deps
-    return sort!(union!(deps, targets[target]))
+function deps_names(project::Project, target::Union{Nothing,String}=nothing)::Vector{String}
+    deps = collect(keys(project.deps))
+    if target === nothing
+        x = String[]
+    elseif target == "*"
+        x = collect(keys(project.extras))
+    else
+        x = haskey(project.targets, target) ?
+            collect(values(project.targets[target])) :
+            String[]
+    end
+    return sort!(union!(deps, x))
 end
 
-function get_deps(project::Dict, target::Union{Nothing,String}=nothing)
+function get_deps(project::Project, target::Union{Nothing,String}=nothing)
     names = deps_names(project, target)
-    deps = filter(((dep, _),) -> dep in names, project["deps"])
-    extras = get(project, "extras", Dict{String,Any}())
+    deps = filter(((dep, _),) -> dep in names, project.deps)
+    extras = project.extras
     for name in names
         haskey(deps, name) && continue
         haskey(extras, name) ||
@@ -412,13 +432,12 @@ get_deps(ctx::Context, target::Union{Nothing,String}=nothing) =
     get_deps(ctx.env, target)
 
 function project_compatibility(ctx::Context, name::String)
-    v = VersionSpec()
-    project = ctx.env.project
-    compat = get(project, "compat", Dict())
-    if haskey(compat, name)
-        v = VersionSpec(semver_spec(compat[name]))
+    compat = get(ctx.env.project.compat, name, nothing)
+    if compat === nothing
+        return VersionSpec()
+    else
+        return VersionSpec(semver_spec(compat))
     end
-    return v
 end
 
 function write_env_usage(manifest_file::AbstractString)
@@ -435,25 +454,74 @@ function write_env_usage(manifest_file::AbstractString)
     close(io)
 end
 
-function read_project(io::IO)
-    project = TOML.parse(io)
-    if !haskey(project, "deps")
-        project["deps"] = Dict{String,Any}()
+function Project(raw::Dict)
+    project = Project()
+    project.raw = raw
+    # Name
+    project.name = get(raw, "name", nothing)
+    # UUID
+    uuid = get(raw, "uuid", nothing)
+    uuid !== nothing && (project.uuid = UUID(uuid))
+    # Version
+    version = get(raw, "version", nothing)
+    version !== nothing && (project.version = VersionNumber(version))
+    # Manifest
+    project.manifest = get(raw, "manifest", nothing)
+    # DEPS
+    deps = get(raw, "deps", nothing)
+    if deps !== nothing
+        for (name, uuid) in deps
+            project.deps[name] = UUID(uuid)
+        end
     end
+    # EXTRAS
+    extras = get(raw, "extras", nothing)
+    if extras !== nothing
+        for (name, uuid) in extras
+            project.extras[name] = UUID(uuid)
+        end
+    end
+    # COMPAT
+    compat = get(raw, "compat", nothing)
+    if compat !== nothing
+        for (name, version) in compat
+            project.compat[name] = version # TODO semver_spec(version)
+        end
+    end
+    # TARGETS
+    targets = get(raw, "targets", nothing)
+    if targets !== nothing
+        for (target, deps) in targets
+            project.targets[target] = deps
+            # TODO make sure names in `project.targets[target]` make sense
+        end
+    end
+    # TODO make sure all targets are listed in extras
+    # TODO any other validation
+    # validate(project)
     return project
 end
-function read_project(file::String)
-    isfile(file) ? open(read_project, file) : read_project(devnull)
+
+function read_project(filename::String)
+    !isfile(filename) && return Project()
+    raw = nothing
+    try
+        raw = TOML.parse(open(filename))
+    catch err
+        err isa TOML.ParserError || rethrow()
+        pkgerror("Could not parse project file at `$filename`: $(err.msg)")
+    end
+    return Project(raw)
 end
 
-_throw_package_err(x, f) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
 function read_package(f::String)
+    _throw_package_err(x) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
+
     project = read_project(f)
-    haskey(project, "name") || _throw_package_err("name", f)
-    haskey(project, "uuid") || _throw_package_err("uuid", f)
-    name = project["name"]
-    entry = joinpath(dirname(f), "src", "$name.jl")
-    if !isfile(entry)
+    project.name === nothing && _throw_package_err("name")
+    project.uuid === nothing && _throw_package_err("uuid")
+    name = project.name
+    if !isfile(joinpath(dirname(f), "src", "$name.jl"))
         pkgerror("expected the file `src/$name.jl` to exist for package $name at $(dirname(f))")
     end
     return project
@@ -692,6 +760,9 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
             if !folder_already_downloaded
                 version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
                 mkpath(version_path)
+                @static if Sys.iswindows()
+                    Base.GC.gc()
+                end
                 mv(project_path, version_path; force=true)
                 push!(new_uuids, pkg.uuid)
             end
@@ -709,8 +780,8 @@ function parse_package!(ctx, pkg, project_path)
     project_file = projectfile_path(project_path)
     if project_file !== nothing
         project_data = read_package(project_file)
-        pkg.uuid = UUID(project_data["uuid"])
-        pkg.name = project_data["name"]
+        pkg.uuid = project_data.uuid
+        pkg.name = project_data.name
     else
         if !isempty(ctx.old_pkg2_clone_name) # remove when legacy CI script support is removed
             pkg.name = ctx.old_pkg2_clone_name
@@ -794,14 +865,14 @@ end
 
 # Disambiguate name/uuid package specifications using project info.
 function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
-    uuids = env.project["deps"]
+    uuids = env.project.deps
     names = Dict(uuid => name for (name, uuid) in uuids)
     length(uuids) < length(names) && # TODO: handle this somehow?
         pkgerror("duplicate UUID found in project file's [deps] section")
     for pkg in pkgs
         pkg.mode == PKGMODE_PROJECT || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
-            pkg.uuid = UUID(uuids[pkg.name])
+            pkg.uuid = uuids[pkg.name]
         end
         if has_uuid(pkg) && !has_name(pkg) && pkg.uuid in keys(names)
             pkg.name = names[pkg.uuid]
@@ -1185,8 +1256,8 @@ function find_registered!(env::EnvCache,
         uuid in uuids || haskey(env.paths, uuid) || push!(uuids, uuid)
 
     # lookup any dependency in the project file
-    for (name, uuid) in env.project["deps"]
-        save(name); save(UUID(uuid))
+    for (name, uuid) in env.project.deps
+        save(name); save(uuid)
     end
     # lookup anything mentioned in the manifest file
     for (name, infos) in env.manifest, info in infos
@@ -1353,13 +1424,37 @@ function project_key_order(key::String)
     return 8
 end
 
+string(x::Vector{String}) = x
+
+function destructure(project::Project)::Dict
+    raw = project.raw
+    function entry!(key::String, src::Dict)
+        if isempty(src)
+            delete!(raw, key)
+        else
+            raw[key] = Dict(string(k) => string(v) for (k,v) in src)
+        end
+    end
+    entry!(key::String, src) = src === nothing ? delete!(raw, key) : (raw[key] = string(src))
+
+    entry!("name", project.name)
+    entry!("uuid", project.uuid)
+    entry!("version", project.version)
+    entry!("manifest", project.manifest)
+    entry!("deps", project.deps)
+    entry!("extras", project.extras)
+    entry!("compat", project.compat)
+    entry!("targets", project.targets)
+    return raw
+end
+
 function write_env(ctx::Context; display_diff=true)
     env = ctx.env
     # load old environment for comparison
     old_env = EnvCache(env.env)
     # update the project file
     project = deepcopy(env.project)
-    isempty(project["deps"]) && delete!(project, "deps")
+    project = destructure(project)
     if !isempty(project) || ispath(env.project_file)
         if display_diff && !(ctx.currently_running_target)
             printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
