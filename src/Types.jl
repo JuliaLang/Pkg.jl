@@ -262,7 +262,7 @@ function find_project_file(env::Union{Nothing,String}=nothing)
 end
 
 Base.@kwdef mutable struct Project
-    raw::Dict{String,Any} = Dict{String,Any}()
+    other::Dict{String,Any} = Dict{String,Any}()
     # Fields
     name::Union{String, Nothing} = nothing
     uuid::Union{UUID, Nothing} = nothing
@@ -273,6 +273,30 @@ Base.@kwdef mutable struct Project
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
+end
+
+Base.@kwdef mutable struct PackageEntry
+    name::Union{String, Nothing} = nothing
+    version::Union{String, Nothing} = nothing
+    path::Union{String, Nothing} = nothing
+    git_tree_sha::Union{SHA1, Nothing} = nothing
+    pinned::Bool = false
+    repo_url::Union{String, Nothing} = nothing
+    repo_rev::Union{String, Nothing} = nothing
+    deps::Dict{String,UUID} = Dict{String,UUID}()
+    other::Union{Dict, Nothing} = nothing
+end
+const Manifest = Dict{UUID,PackageEntry}
+
+function PackageSpec(entry::PackageEntry)
+    pkg = PackageSpec()
+    pkg.name = entry.name
+    pkg.path = entry.path
+    if entry.repo_url !== nothing
+        pkg.repo = GitRepo(entry.repo_url, entry.repo_rev)
+    end
+    entry.version !== nothing && (pkg.version = VersionNumber(entry.version))
+    return pkg
 end
 
 mutable struct EnvCache
@@ -289,7 +313,7 @@ mutable struct EnvCache
 
     # cache of metadata:
     project::Project
-    manifest::Dict
+    manifest::Manifest
 
     # registered package info:
     uuids::Dict{String,Vector{UUID}}
@@ -456,7 +480,7 @@ end
 
 function Project(raw::Dict)
     project = Project()
-    project.raw = raw
+    project.other = raw
     # Name
     project.name = get(raw, "name", nothing)
     # UUID
@@ -470,6 +494,7 @@ function Project(raw::Dict)
     # DEPS
     deps = get(raw, "deps", nothing)
     if deps !== nothing
+        @assert deps isa Dict
         for (name, uuid) in deps
             project.deps[name] = UUID(uuid)
         end
@@ -527,32 +552,59 @@ function read_package(f::String)
     return project
 end
 
-function read_manifest(io::IO)
-    manifest = TOML.parse(io)
-    for (name, infos) in manifest, info in infos
-        haskey(info, "deps") || continue
-        info["deps"] isa AbstractVector || continue
-        for dep in info["deps"]
-            length(manifest[dep]) == 1 ||
-                error("ambiguious dependency for $name: $dep")
+function Manifest(raw::Dict)::Manifest
+    manifest = Dict{UUID,PackageEntry}()
+    # TODO is it easier to check all constraints of the TOML before?
+    for (name, info) in raw
+        info = first(info)
+        if haskey(info, "deps")
+            @assert info["deps"] isa AbstractVector
+            for dep in info["deps"]
+                length(raw[dep]) == 1 ||
+                    error("ambiguious dependency for $name: $dep")
+            end
         end
-        new_dict = Dict()
-        for d in info["deps"]
-            new_dict[d] = manifest[d][1]["uuid"]
+
+        uuid = UUID(info["uuid"]) # TODO check `haskey` first
+        entry = PackageEntry()
+        entry.name     = name
+        entry.version  = get(info, "version",  nothing)
+        entry.path     = get(info, "path",     nothing)
+        entry.repo_url = get(info, "repo-url", nothing)
+        entry.repo_rev = get(info, "repo-rev", nothing)
+        entry.pinned   = parse(Bool, get(info, "pinned", "false"))
+        git_tree_sha   = get(info, "git-tree-sha1", nothing)
+        if git_tree_sha !== nothing
+            entry.git_tree_sha = SHA1(git_tree_sha)
         end
-        info["deps"] = new_dict
+        deps = get(info, "deps", nothing)
+        if deps !== nothing
+            for dep in deps
+                dep_uuid = UUID(raw[dep][1]["uuid"]) # check that it exists first
+                entry.deps[dep] = dep_uuid
+            end
+        end
+        entry.other = info
+        manifest[uuid] = entry # TODO make sure slot is not already taken
     end
     return manifest
 end
-function read_manifest(file::String)
-    try isfile(file) ? open(read_manifest, file) : read_manifest(devnull)
+
+function read_manifest(io::IO)
+    raw = nothing
+    try
+        raw = TOML.parse(io)
     catch err
-        err isa ErrorException && startswith(err.msg, "ambiguious dependency") || rethrow()
-        err.msg *= "In manifest file: $file"
-        rethrow(err)
+        err isa TOML.ParserError || rethrow()
+        pkgerror("Could not parse manifest file at `$filename`: $(err.msg)")
     end
+    return Manifest(raw)
 end
 
+function read_manifest(filename::String)::Manifest
+    !isfile(filename) && return Dict{UUID,PackageEntry}()
+    return open(read_manifest, filename)
+end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
@@ -700,8 +752,8 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                 else
                     GitTools.clone(pkg.repo.url, repo_path, isbare=true, credentials=creds)
                 end
-                info = manifest_info(env, pkg.uuid)
-                pinned = (info != nothing && get(info, "pinned", false))
+                entry = manifest_info(env, pkg.uuid)
+                pinned = (entry !== nothing && entry.pinned)
                 upgrading = upgrade_or_add && !pinned
                 if upgrading
                     GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
@@ -716,8 +768,8 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                     end
                 else
                     # Not upgrading so the rev should be the current git-tree-sha
-                    rev = info["git-tree-sha1"]
-                    pkg.version = VersionNumber(info["version"])
+                    rev = entry.git_tree_sha
+                    pkg.version = VersionNumber(entry.version)
                 end
 
                 gitobject, isbranch = get_object_branch(repo, rev, creds)
@@ -734,8 +786,10 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                         if has_uuid(pkg) && has_name(pkg)
                             version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
                             isdir(version_path) && (folder_already_downloaded = true)
-                            info = manifest_info(env, pkg.uuid)
-                            if info != nothing && get(info, "git-tree-sha1", "") == string(pkg.repo.git_tree_sha1) && folder_already_downloaded
+                            entry = manifest_info(env, pkg.uuid)
+                            if entry !== nothing &&
+                                entry.git_tree_sha == pkg.repo.git_tree_sha1 &&
+                                folder_already_downloaded
                                 # Same tree sha and this version already downloaded, nothing left to do
                                 do_nothing_more = true
                             end
@@ -822,6 +876,9 @@ function set_repo_for_pkg!(env, pkg)
     _, pkg.repo.url = Types.registered_info(env, pkg.uuid, "repo")[1]
 end
 
+get_object_branch(repo, rev::SHA1, creds) =
+    get_object_branch(repo, string(rev), creds)
+
 function get_object_branch(repo, rev, creds)
     gitobject = nothing
     isbranch = false
@@ -883,18 +940,16 @@ end
 
 # Disambiguate name/uuid package specifications using manifest info.
 function manifest_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
-    uuids = Dict{String,Vector{String}}()
-    names = Dict{String,String}()
-    for (name, infos) in env.manifest, info in infos
-        haskey(info, "uuid") || continue
-        uuid = info["uuid"]
-        push!(get!(uuids, name, String[]), uuid)
-        names[uuid] = name # can be duplicate but doesn't matter
+    uuids = Dict{String,Vector{UUID}}()
+    names = Dict{UUID,String}()
+    for (uuid, entry) in env.manifest
+        push!(get!(uuids, entry.name, UUID[]), uuid)
+        names[uuid] = entry.name # can be duplicate but doesn't matter
     end
     for pkg in pkgs
         pkg.mode == PKGMODE_MANIFEST || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
-            length(uuids[pkg.name]) == 1 && (pkg.uuid = UUID(uuids[pkg.name][1]))
+            length(uuids[pkg.name]) == 1 && (pkg.uuid = uuids[pkg.name][1])
         end
         if has_uuid(pkg) && !has_name(pkg) && pkg.uuid in keys(names)
             pkg.name = names[pkg.uuid]
@@ -945,9 +1000,8 @@ function ensure_resolved(env::EnvCache,
     for pkg in pkgs
         has_uuid(pkg) && continue
         uuids = UUID[]
-        for (name, infos) in env.manifest, info in infos
-            name == pkg.name && haskey(info, "uuid") || continue
-            uuid = UUID(info["uuid"])
+        for (uuid, entry) in env.manifest
+            entry.name == pkg.name || continue
             uuid in uuids || push!(uuids, uuid)
         end
         sort!(uuids, by=uuid -> uuid.value)
@@ -1260,12 +1314,12 @@ function find_registered!(env::EnvCache,
         save(name); save(uuid)
     end
     # lookup anything mentioned in the manifest file
-    for (name, infos) in env.manifest, info in infos
-        save(name)
-        haskey(info, "uuid") && save(UUID(info["uuid"]))
-        haskey(info, "deps") || continue
-        for (n, u) in info["deps"]
-            save(n); save(UUID(u))
+    for (uuid, entry) in env.manifest
+        save(uuid)
+        save(entry.name)
+        for (uuid, name) in entry.deps
+            save(uuid)
+            save(name)
         end
     end
     # if there's still nothing to look for, return early
@@ -1382,13 +1436,10 @@ function registered_info(env::EnvCache, uuid::UUID, key::String)
 end
 
 # Find package by UUID in the manifest file
-function manifest_info(env::EnvCache, uuid::UUID)::Union{Dict{String,Any},Nothing}
+# TODO this needs a better name now?
+function manifest_info(env::EnvCache, uuid::UUID)::Union{PackageEntry,Nothing}
     uuid in values(env.uuids) || find_registered!(env, [uuid])
-    for (name, infos) in env.manifest, info in infos
-        haskey(info, "uuid") && uuid == UUID(info["uuid"]) || continue
-        return merge!(Dict{String,Any}("name" => name), info)
-    end
-    return nothing
+    return get(env.manifest, uuid, nothing)
 end
 
 # TODO: redirect to ctx stream
@@ -1427,12 +1478,12 @@ end
 string(x::Vector{String}) = x
 
 function destructure(project::Project)::Dict
-    raw = project.raw
+    raw = project.other
     function entry!(key::String, src::Dict)
         if isempty(src)
             delete!(raw, key)
         else
-            raw[key] = Dict(string(k) => string(v) for (k,v) in src)
+            raw[key] = Dict(string(name) => string(uuid) for (name,uuid) in src)
         end
     end
     entry!(key::String, src) = src === nothing ? delete!(raw, key) : (raw[key] = string(src))
@@ -1448,13 +1499,37 @@ function destructure(project::Project)::Dict
     return raw
 end
 
-function write_env(ctx::Context; display_diff=true)
-    env = ctx.env
-    # load old environment for comparison
-    old_env = EnvCache(env.env)
-    # update the project file
-    project = deepcopy(env.project)
-    project = destructure(project)
+function destructure(manifest::Manifest)::Dict
+    function entry!(entry, key, value, falsy=nothing)
+        if value == falsy
+            delete!(entry, key)
+        else
+            entry[key] = string(value)
+        end
+    end
+
+    raw = Dict{String,Any}()
+    for (uuid, entry) in manifest
+        new_entry = something(entry.other, Dict{String,Any}())
+        new_entry["uuid"] = string(uuid)
+        entry!(new_entry, "version", entry.version, nothing)
+        entry!(new_entry, "git-tree-sha1", entry.git_tree_sha, nothing)
+        entry!(new_entry, "pinned", entry.pinned, false)
+        entry!(new_entry, "path", entry.path, nothing)
+        entry!(new_entry, "repo-url", entry.repo_url, nothing)
+        entry!(new_entry, "repo-rev", entry.repo_rev, nothing)
+        if isempty(entry.deps)
+            delete!(new_entry, "deps")
+        else
+            new_entry["deps"] = sort(collect(keys(entry.deps)))
+        end
+        raw[entry.name] = [new_entry]
+    end
+    return raw
+end
+
+function write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
+    project = destructure(ctx.env.project)
     if !isempty(project) || ispath(env.project_file)
         if display_diff && !(ctx.currently_running_target)
             printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
@@ -1467,29 +1542,31 @@ function write_env(ctx::Context; display_diff=true)
             end
         end
     end
-    # update the manifest file
-    if !isempty(env.manifest) || ispath(env.manifest_file)
-        if display_diff && !(ctx.currently_running_target)
-            printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
-            Pkg.Display.print_manifest_diff(ctx, old_env, env)
-        end
-        manifest = deepcopy(env.manifest)
-        uniques = sort!(collect(keys(manifest)), by=lowercase)
-        filter!(name -> length(manifest[name]) == 1, uniques)
-        uuids = Dict(name => UUID(manifest[name][1]["uuid"]) for name in uniques)
-        for (name, infos) in manifest, info in infos
-            haskey(info, "deps") || continue
-            deps = Dict{String,UUID}(n => UUID(u) for (n, u) in info["deps"])
-            all(d in uniques && uuids[d] == u for (d, u) in deps) || continue
-            info["deps"] = sort!(collect(keys(deps)))
-        end
-        if !ctx.preview
-            open(env.manifest_file, "w") do io
-                print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-                TOML.print(io, manifest, sorted=true)
-            end
+end
+
+function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)
+    if isempty(manifest) && !ispath(env.manifest_file)
+        return
+    end
+
+    if display_diff && !(ctx.currently_running_target)
+        printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
+        Pkg.Display.print_manifest_diff(ctx, old_env, env)
+    end
+    raw = destructure(manifest)
+    if !ctx.preview
+        open(env.manifest_file, "w") do io
+            print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
+            TOML.print(io, raw, sorted=true)
         end
     end
+end
+
+function write_env(ctx::Context; display_diff=true)
+    env = ctx.env
+    old_env = EnvCache(env.env) # load old environment for comparison
+    write_project(env.project, env, old_env, ctx; display_diff=display_diff)
+    write_manifest(env.manifest, env, old_env, ctx; display_diff=display_diff)
 end
 
 end # module

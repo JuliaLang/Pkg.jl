@@ -7,6 +7,8 @@ import LibGit2
 
 using ..Types
 
+const PackageEntry = Types.PackageEntry
+
 const colors = Dict(
     ' ' => :white,
     '+' => :light_green,
@@ -64,8 +66,8 @@ function status(ctx::Context, args::Vector{PackageSpec}=PackageSpec[];
     end
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         # TODO: handle project deps missing from manifest
-        m₀ = filter_manifest(in_project(project₀.deps), manifest₀)
-        m₁ = filter_manifest(in_project(project₁.deps), manifest₁)
+        m₀ = Dict(uuid => entry for (uuid, entry) in manifest₀ if (uuid in values(project₀.deps)))
+        m₁ = Dict(uuid => entry for (uuid, entry) in manifest₁ if (uuid in values(project₁.deps)))
         diff = manifest_diff(ctx, m₀, m₁)
         filter_pkgs && filter!(pkgfilter, diff)
         if !use_as_api
@@ -81,9 +83,9 @@ function status(ctx::Context, args::Vector{PackageSpec}=PackageSpec[];
             print_diff(ctx, diff, #=status=# true)
         end
     elseif mode == PKGMODE_COMBINED
-        p = not_in_project(merge(project₀.deps, project₁.deps))
-        m₀ = filter_manifest(p, manifest₀)
-        m₁ = filter_manifest(p, manifest₁)
+        combined = values(merge(project₀.deps, project₁.deps))
+        m₀ = Dict(uuid => entry for (uuid, entry) in manifest₀ if (uuid in combined))
+        m₁ = Dict(uuid => entry for (uuid, entry) in manifest₁ if (uuid in combined))
         c_diff = filter!(x->x.old != x.new, manifest_diff(ctx, m₀, m₁))
         filter_pkgs && filter!(pkgfilter, c_diff)
         if !isempty(c_diff)
@@ -97,10 +99,10 @@ function status(ctx::Context, args::Vector{PackageSpec}=PackageSpec[];
     return diff
 end
 
-function print_project_diff(ctx::Context, env₀::EnvCache, env₁::EnvCache)
-    pm₀ = filter_manifest(in_project(env₀.project.deps), env₀.manifest)
-    pm₁ = filter_manifest(in_project(env₁.project.deps), env₁.manifest)
-    diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm₀, pm₁))
+function print_project_diff(ctx::Context, env0::EnvCache, env1::EnvCache)
+    pm0 = Dict(uuid => entry for (uuid, entry) in env0.manifest if (uuid in values(env0.project.deps)))
+    pm1 = Dict(uuid => entry for (uuid, entry) in env1.manifest if (uuid in values(env1.project.deps)))
+    diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm0, pm1))
     if isempty(diff)
         printstyled(color = color_dark, " [no changes]\n")
     else
@@ -212,38 +214,22 @@ end
 # TODO: Use the Context stream
 print_diff(ctx::Context, diff::Vector{DiffEntry}, status=false) = print_diff(stdout, ctx, diff, status)
 
-function manifest_by_uuid(manifest::Dict)
-    entries = Dict{UUID,Dict}()
-    for (name, infos) in manifest, info in infos
-        uuid = UUID(info["uuid"])
-        haskey(entries, uuid) && @warn("Duplicate UUID in manifest: $uuid")
-        entries[uuid] = merge(info, Dict("name" => name))
-    end
-    return entries
+function name_ver_info(entry::PackageEntry)
+    entry.name, VerInfo(
+        entry.git_tree_sha,
+        entry.path,
+        entry.version === nothing ? nothing : VersionNumber(entry.version),
+        entry.pinned,
+        entry.repo_url === nothing ? nothing : Types.GitRepo(entry.repo_url, entry.repo_rev),
+        )
 end
 
-function name_ver_info(info::Dict)
-    name = info["name"]
-    hash = haskey(info, "git-tree-sha1") ? SHA1(info["git-tree-sha1"])    : nothing
-    ver  = haskey(info, "version")       ? VersionNumber(info["version"]) : nothing
-    path =  get(info, "path", nothing)
-    pin  =  get(info, "pinned", false)
-    if haskey(info, "repo-url")
-        repo = Types.GitRepo(info["repo-url"], info["repo-rev"])
-    else
-        repo = nothing
-    end
-    name, VerInfo(hash, path, ver, pin, repo)
-end
-
-function manifest_diff(ctx::Context, manifest₀::Dict, manifest₁::Dict)
+function manifest_diff(ctx::Context, manifest0::Dict, manifest1::Dict)
     diff = DiffEntry[]
-    entries₀ = manifest_by_uuid(manifest₀)
-    entries₁ = manifest_by_uuid(manifest₁)
-    for uuid in union(keys(entries₀), keys(entries₁))
+    for uuid in union(keys(manifest0), keys(manifest1))
         name₀ = name₁ = v₀ = v₁ = nothing
-        haskey(entries₀, uuid) && ((name₀, v₀) = name_ver_info(entries₀[uuid]))
-        haskey(entries₁, uuid) && ((name₁, v₁) = name_ver_info(entries₁[uuid]))
+        haskey(manifest0, uuid) && ((name₀, v₀) = name_ver_info(manifest0[uuid]))
+        haskey(manifest1, uuid) && ((name₁, v₁) = name_ver_info(manifest1[uuid]))
         name₀ == nothing && (name₀ = name₁)
         name₁ == nothing && (name₁ = name₀)
         if name₀ == name₁
@@ -255,34 +241,5 @@ function manifest_diff(ctx::Context, manifest₀::Dict, manifest₁::Dict)
     end
     sort!(diff, by=x->(x.uuid in keys(ctx.stdlibs), x.name, x.uuid))
 end
-
-function filter_manifest!(predicate, manifest::Dict)
-    empty = String[]
-    for (name, infos) in manifest
-        filter!(infos) do info
-            predicate(name, info)
-        end
-        isempty(infos) && push!(empty, name)
-    end
-    for name in empty
-        pop!(manifest, name)
-    end
-    return manifest
-end
-filter_manifest(predicate, manifest::Dict) =
-    filter_manifest!(predicate, deepcopy(manifest))
-
-# This is precompilable, an anonymous function is not.
-struct InProject{D <: Dict}
-    deps::D
-    neg::Bool
-end
-function (ip::InProject)(name::String, info::Dict)
-    v = haskey(ip.deps, name) && haskey(info, "uuid") && ip.deps[name] == UUID(info["uuid"])
-    return ip.neg ? !v : v
-end
-in_project(deps::Dict) = InProject(deps, false)
-not_in_project(deps::Dict) = InProject(deps, true)
-
 
 end # module

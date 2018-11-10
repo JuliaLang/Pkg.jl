@@ -169,8 +169,8 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     ensure_resolved(ctx.env, pkgs)
     # Every non pinned package that is freed need to be in a registry
     for pkg in pkgs
-        info = manifest_info(ctx.env, pkg.uuid)
-        if !get(info, "pinned", false) && !(pkg.uuid in uuids_in_registry)
+        entry = manifest_info(ctx.env, pkg.uuid)
+        if !entry.pinned && !(pkg.uuid in uuids_in_registry)
             pkgerror("cannot free an unpinned package that does not exist in a registry")
         end
     end
@@ -346,9 +346,7 @@ function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}
             pkgs = [PackageSpec(name, uuid) for (name, uuid) in ctx.env.project.deps]
         else
             info = manifest_info(ctx.env, pkg.uuid)
-            if haskey(info, "deps")
-                pkgs = [PackageSpec(name, UUID(uuid)) for (name, uuid) in info["deps"]]
-            end
+            pkgs = [PackageSpec(name, uuid) for (name, uuid) in info.deps]
         end
         _get_deps!(ctx, pkgs, uuids)
     end
@@ -369,9 +367,8 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
         if ctx.env.pkg !== nothing
             push!(pkgs, ctx.env.pkg)
         else
-            for (name, infos) in ctx.env.manifest, info in infos
-                uuid = UUID(info["uuid"])
-                push!(pkgs, PackageSpec(name, uuid))
+            for (uuid, entry) in ctx.env.manifest
+                push!(pkgs, PackageSpec(entry.name, uuid))
             end
         end
     end
@@ -445,16 +442,6 @@ function precompile(ctx::Context)
     nothing
 end
 
-
-function read_package_from_manifest!(pkg::PackageSpec, info::Dict)
-    pkg.uuid = UUID(info["uuid"])
-    pkg.path = get(info, "path", nothing)
-    if haskey(info, "repo-url")
-        pkg.repo = Types.GitRepo(info["repo-url"], info["repo-rev"])
-    end
-    haskey(info, "version") && (pkg.version = VersionNumber(info["version"]))
-end
-
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwargs...)
     Context!(ctx; kwargs...)
@@ -470,22 +457,17 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
     hashes = Dict{UUID,SHA1}()
     urls = Dict{UUID,Vector{String}}()
     pkgs = PackageSpec[]
-    for (pkg_name, pkg_info) in ctx.env.manifest
-        for info in pkg_info
-            pkg = PackageSpec(pkg_name)
-            read_package_from_manifest!(pkg, info)
-            push!(pkgs, pkg)
-            pkg.uuid in keys(ctx.stdlibs) && continue
-            pkg.path !== nothing && continue
-            urls[pkg.uuid] = String[]
-            hashes[pkg.uuid] = SHA1(info["git-tree-sha1"])
+    for (uuid, entry) in ctx.env.manifest
+        pkg = PackageSpec(entry)
+        pkg.uuid = uuid
+        push!(pkgs, pkg)
+        pkg.uuid in keys(ctx.stdlibs) && continue
+        pkg.path !== nothing && continue
+        urls[pkg.uuid] = String[]
+        hashes[pkg.uuid] = entry.git_tree_sha
 
-            if haskey(info, "repo-url")
-                pkg.repo = Types.GitRepo(
-                    info["repo-url"],
-                    info["repo-rev"],
-                    SHA1(info["git-tree-sha1"]))
-            end
+        if entry.repo_url !== nothing
+            pkg.repo = Types.GitRepo(entry.repo_url, entry.repo_rev, entry.git_tree_sha)
         end
     end
     _, urls_ref = Operations.version_data!(ctx, pkgs)
@@ -518,8 +500,8 @@ function activate(path::String; shared::Bool=false)
         env = Base.active_project() === nothing ? nothing : EnvCache()
         if env !== nothing && haskey(env.project.deps, path)
             uuid = env.project.deps[path]
-            info = manifest_info(env, uuid)
-            devpath = haskey(info, "path") ? joinpath(dirname(env.project_file), info["path"]) : nothing
+            entry = manifest_info(env, uuid)
+            devpath = entry.path === nothing ? nothing : joinpath(dirname(env.project_file), entry.path)
         end
         # `pkg> activate path`/`Pkg.activate(path)` does the following
         # 1. if path exists, activate that
