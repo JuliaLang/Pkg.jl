@@ -320,16 +320,16 @@ in the vector.
 
 Below is a comparison between the REPL version and the `PackageSpec` version:
 
-| `REPL`               | `API`                                         |
-|:---------------------|:----------------------------------------------|
-| `Package`            | `PackageSpec("Package")`                      |
-| `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`  |
-| `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d..."`  |
-| `Package#master`     | `PackageSpec(name="Package", rev="master")`   |
-| `local/path#feature` | `PackageSpec(path="local/path"; rev="feature)` |
-| `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`              |
-| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`|
-| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR`)|
+| `REPL`               | `API`                                                 |
+|:---------------------|:------------------------------------------------------|
+| `Package`            | `PackageSpec("Package")`                              |
+| `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
+| `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
+| `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
+| `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
+| `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
+| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
+| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
 """
 const PackageSpec = Types.PackageSpec
 
