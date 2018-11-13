@@ -37,6 +37,7 @@ function temp_pkg_dir(fn::Function;rm=true)
                 fn(env_dir)
             finally
                 try
+                    GC.gc()
                     rm && Base.rm(env_dir; force=true, recursive=true)
                     rm && Base.rm(depot_dir; force=true, recursive=true)
                 catch err
@@ -62,6 +63,7 @@ function cd_tempdir(f; rm=true)
         f(tmp)
     end
     try
+        GC.gc()
         rm && Base.rm(tmp; force = true, recursive = true)
     catch err
         # Avoid raising an exception here as it will mask the original exception
