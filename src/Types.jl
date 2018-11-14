@@ -506,7 +506,7 @@ function read_project(filename::String)
     !isfile(filename) && return Project()
     raw = nothing
     try
-        raw = TOML.parse(open(filename))
+        raw = TOML.parsefile(filename)
     catch err
         err isa TOML.ParserError || rethrow()
         pkgerror("Could not parse project file at `$filename`: $(err.msg)")
