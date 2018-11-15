@@ -1002,10 +1002,8 @@ const DEFAULT_REGISTRIES =
                               url = "https://github.com/JuliaRegistries/General.git")]
 
 function clone_default_registries()
-    user_regs = abspath(depots1(), "registries")
-    if !ispath(user_regs) || isempty(readdir(user_regs))
-        mkpath(user_regs)
-        printpkgstyle(stdout, :Cloning, "default registries into $user_regs")
+    if isempty(collect_registries()) # only clone if there are no installed registries
+        printpkgstyle(stdout, :Cloning, "default registries into $(pathrepr(depots1()))")
         clone_or_cp_registries(DEFAULT_REGISTRIES)
     end
 end

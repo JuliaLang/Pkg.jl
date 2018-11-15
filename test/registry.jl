@@ -246,6 +246,18 @@ end
         Pkg.add("Example")
         @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
     end end
+
+    # only clone default registry if there are no registries installed at all
+    temp_pkg_dir() do depot1; mktempdir() do depot2
+        append!(empty!(DEPOT_PATH), [depot1, depot2])
+        @test length(Pkg.Types.collect_registries()) == 0
+        Pkg.add("Example")
+        @test length(Pkg.Types.collect_registries()) == 1
+        Pkg.rm("Example")
+        DEPOT_PATH[1:2] .= DEPOT_PATH[2:-1:1]
+        Pkg.add("Example") # should not trigger a clone of default registries
+        @test length(Pkg.Types.collect_registries()) == 1
+    end end
 end
 
 end # module
