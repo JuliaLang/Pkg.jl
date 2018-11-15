@@ -68,20 +68,35 @@ end
 
 const GITHUB_REGEX =
     r"^(?:git@|git://|https://(?:[\w\.\+\-]+@)?)github.com[:/](([^/].+)/(.+?))(?:\.git)?$"i
+const GITLAB_REGEX =
+    r"^(?:git@|git://|https://(?:[\w\.\+\-]+@)?)gitlab\.([^/:]+)[:/]((?:[^/].+)/(?:.+?))(?:\.git)?$"i
 const GIT_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
 
 setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GIT_PROTOCOL[] = proto
 
 # TODO: extend this to more urls
 function normalize_url(url::AbstractString)
+    GIT_PROTOCOL[] === nothing && return url
+
     m = match(GITHUB_REGEX, url)
-    if m === nothing || GIT_PROTOCOL[] === nothing
-        url
-    elseif GIT_PROTOCOL[] == "ssh"
-        "ssh://git@github.com/$(m.captures[1]).git"
-    else
-        "$(GIT_PROTOCOL[])://github.com/$(m.captures[1]).git"
+    if m !== nothing
+        prefix = GIT_PROTOCOL[] == "ssh" ? "ssh://git@" : "$(GIT_PROTOCOL[])://"
+        return "$(prefix)github.com/$(m.captures[1]).git"
     end
+
+    m = match(GITLAB_REGEX, url)
+    if m !== nothing
+        host = "gitlab.$(m.captures[1])"
+        path = "$(m.captures[2]).git"
+
+        if GIT_PROTOCOL[] == "ssh"
+            return "git@$host:$path"
+        else
+            return "$(GIT_PROTOCOL[])://$host/$path"
+        end
+    end
+
+    url
 end
 
 ensure_clone(target_path, url; kwargs...) =

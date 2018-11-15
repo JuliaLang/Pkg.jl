@@ -276,6 +276,13 @@ temp_pkg_dir() do project_path
                     #       having to deploy a ssh key on github
                     #Pkg.develop("Example")
                     #@test isinstalled(TEST_PKG)
+
+                    https_url = "https://gitlab.example.com/example/Example.jl.git"
+                    ssh_url = "git@gitlab.example.com:example/Example.jl.git"
+                    Pkg.setprotocol!()
+                    @test Pkg.GitTools.normalize_url(https_url) == https_url
+                    Pkg.setprotocol!("ssh")
+                    @test Pkg.GitTools.normalize_url(https_url) == ssh_url
                 finally
                     Pkg.setprotocol!()
                 end
