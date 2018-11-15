@@ -529,11 +529,13 @@ function install_git(
         tree isa LibGit2.GitTree ||
             error("$name: git object $(string(hash)) should be a tree, not $(typeof(tree))")
         mkpath(version_path)
-        opts = LibGit2.CheckoutOptions(
-            checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
-            target_directory = Base.unsafe_convert(Cstring, version_path)
-        )
-        LibGit2.checkout_tree(repo, tree, options=opts)
+        GC.@preserve version_path begin
+            opts = LibGit2.CheckoutOptions(
+                checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
+                target_directory = Base.unsafe_convert(Cstring, version_path)
+            )
+            LibGit2.checkout_tree(repo, tree, options=opts)
+        end
         return
     finally
         repo !== nothing && LibGit2.close(repo)

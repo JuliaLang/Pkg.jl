@@ -753,9 +753,14 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                             project_path = version_path
                         else
                             project_path = mktempdir()
-                            opts = LibGit2.CheckoutOptions(checkout_strategy=LibGit2.Consts.CHECKOUT_FORCE,
-                                target_directory=Base.unsafe_convert(Cstring, project_path))
-                            LibGit2.checkout_tree(repo, git_tree, options=opts)
+                            _project_path = project_path # https://github.com/JuliaLang/julia/issues/30048
+                            GC.@preserve _project_path begin
+                                opts = LibGit2.CheckoutOptions(
+                                    checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
+                                    target_directory = Base.unsafe_convert(Cstring, _project_path),
+                                )
+                                LibGit2.checkout_tree(repo, git_tree, options=opts)
+                            end
                         end
                     end
                 finally
