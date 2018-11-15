@@ -177,6 +177,15 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
 end # cd
 end # temp_pkg_dir
 
+# issue #904: Pkg.status within a git repo
+temp_pkg_dir() do path
+    pkg2 = "UnregisteredWithProject"
+    p2 = git_init_package(path, joinpath(@__DIR__, "test_packages/$pkg2"))
+    Pkg.activate(p2)
+    Pkg.status() # should not throw
+    Pkg.REPLMode.pkgstr("status") # should not throw
+end
+
 temp_pkg_dir() do project_path; cd(project_path) do
     mktempdir() do tmp
         mktempdir() do depot_dir

@@ -502,16 +502,25 @@ function Project(raw::Dict)
     return project
 end
 
-function read_project(filename::String)
-    !isfile(filename) && return Project()
-    raw = nothing
+function _read_project(io::IO)
+    raw, err = nothing, nothing
     try
-        raw = TOML.parse(open(filename))
+        raw = TOML.parse(io)
     catch err
         err isa TOML.ParserError || rethrow()
-        pkgerror("Could not parse project file at `$filename`: $(err.msg)")
     end
-    return Project(raw)
+    return raw, err
+end
+
+function read_project(io::IO)
+    raw, err = _read_project(io)
+    err === nothing ? Project(raw) : pkgerror("Could not parse project file: $(err.msg)")
+end
+
+function read_project(filename::String)
+    !isfile(filename) && return Project()
+    raw, err = open(_read_project, filename)
+    err === nothing ? Project(raw) : pkgerror("Could not parse project file at `$filename`: $(err.msg)")
 end
 
 function read_package(f::String)
@@ -760,9 +769,6 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
             if !folder_already_downloaded
                 version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
                 mkpath(version_path)
-                @static if Sys.iswindows()
-                    Base.GC.gc()
-                end
                 mv(project_path, version_path; force=true)
                 push!(new_uuids, pkg.uuid)
             end
