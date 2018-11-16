@@ -65,48 +65,44 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     return Cint(0)
 end
 
-
-const GITHUB_REGEX =
-    r"^(?:git@|git://|https://(?:[\w\.\+\-]+@)?)github.com[:/](([^/].+)/(.+?))(?:\.git)?$"i
-const GITLAB_REGEX =
-    r"^(?:git@|git://|https://(?:[\w\.\+\-]+@)?)gitlab\.([^/:]+)[:/]((?:[^/].+)/(?:.+?))(?:\.git)?$"i
+const GIT_REGEX =
+    r"^(?:(?:git|ssh|https)(?:://|@))?(?:[\w\.\+\-:]+@)?([^/:]+)[:/](.+?)(?:\.git)?$"i
 const GITHUB_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
 const GITLAB_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
+const FALLBACK_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
 
 function setprotocol!(proto::Union{Nothing, AbstractString}=nothing, site::Symbol=:github)
     if site == :github
         GITHUB_PROTOCOL[] = proto
     elseif site == :gitlab
         GITLAB_PROTOCOL[] = proto
+    else
+        FALLBACK_PROTOCOL[] = proto
     end
 end
 
 # TODO: extend this to more urls
 function normalize_url(url::AbstractString)
-    m = match(GITHUB_REGEX, url)
-    if m !== nothing
-        proto = GITHUB_PROTOCOL[]
+    m = match(GIT_REGEX, url)
+    m === nothing && return url
 
-        if proto !== nothing
-            prefix = proto == "ssh" ? "ssh://git@" : "$proto://"
-            return "$(prefix)github.com/$(m.captures[1]).git"
-        end
+    host = m.captures[1]
+    path = "$(m.captures[2]).git"
+    proto = if occursin("github", host)
+        GITHUB_PROTOCOL[]
+    elseif occursin("gitlab", host)
+        GITLAB_PROTOCOL[]
+    else
+        FALLBACK_PROTOCOL[]
     end
 
-    m = match(GITLAB_REGEX, url)
-    if m !== nothing
-        host = "gitlab.$(m.captures[1])"
-        path = "$(m.captures[2]).git"
-        proto = GITLAB_PROTOCOL[]
-
-        if proto == "ssh"
-            return "git@$host:$path"
-        elseif proto !== nothing
-            return "$proto://$host/$path"
-        end
+    if proto === nothing
+        url
+    elseif proto == "ssh"
+        "ssh://git@$host/$path"
+    else
+        "$proto://$host/$path"
     end
-
-    url
 end
 
 ensure_clone(target_path, url; kwargs...) =

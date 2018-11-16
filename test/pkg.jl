@@ -278,12 +278,20 @@ temp_pkg_dir() do project_path
                     #@test isinstalled(TEST_PKG)
 
                     https_url = "https://gitlab.example.com/example/Example.jl.git"
-                    ssh_url = "git@gitlab.example.com:example/Example.jl.git"
+                    ssh_url = "ssh://git@gitlab.example.com/example/Example.jl.git"
                     Pkg.GitTools.setprotocol!(nothing, :gitlab)
                     @test Pkg.GitTools.normalize_url(https_url) == https_url
                     Pkg.GitTools.setprotocol!("ssh", :gitlab)
                     @test Pkg.GitTools.normalize_url(https_url) == ssh_url
+
+                    https_url = "https://examplesite.com/example/Example.jl.git"
+                    ssh_url = "ssh://git@examplesite.com/example/Example.jl.git"
+                    Pkg.GitTools.setprotocol!(nothing, :fallback)
+                    @test Pkg.GitTools.normalize_url(https_url) == https_url
+                    Pkg.GitTools.setprotocol!("ssh", :fallback)
+                    @test Pkg.GitTools.normalize_url(https_url) == ssh_url
                 finally
+                    Pkg.GitTools.setprotocol!(nothing, :fallback)
                     Pkg.GitTools.setprotocol!(nothing, :gitlab)
                     Pkg.setprotocol!()
                 end
