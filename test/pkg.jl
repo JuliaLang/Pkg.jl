@@ -542,6 +542,37 @@ temp_pkg_dir() do project_path
     end
 end
 
+@testset "manifest read/write unit tests" begin
+    manifestdir = joinpath(@__DIR__, "manifest")
+    temp = joinpath(mktempdir(), "x.toml")
+    for testfile in joinpath.(manifestdir, readdir(manifestdir))
+        a = Types.read_manifest(testfile)
+        Types.write_manifest(a, temp)
+        b = Types.read_manifest(temp)
+        for (uuid, x) in a
+            y = b[uuid]
+            for property in propertynames(x)
+                @test getproperty(x, property) == getproperty(y, property)
+            end
+        end
+    end
+    rm(dirname(temp); recursive = true, force = true)
+end
+
+@testset "project read/write unit tests" begin
+    projectdir = joinpath(@__DIR__, "project")
+    temp = joinpath(mktempdir(), "x.toml")
+    for testfile in joinpath.(projectdir, readdir(projectdir))
+        a = Types.read_project(testfile)
+        Types.write_project(a, temp)
+        b = Types.read_project(temp)
+        for property in propertynames(a)
+            @test getproperty(a, property) == getproperty(b, property)
+        end
+    end
+    rm(dirname(temp); recursive = true, force = true)
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
