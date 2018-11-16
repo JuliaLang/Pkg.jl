@@ -66,35 +66,24 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
 end
 
 const GIT_REGEX =
-    r"^(?:(?:git|ssh|https)(?:://|@))?(?:[\w\.\+\-:]+@)?([^/:]+)[:/](.+?)(?:\.git)?$"i
-const GITHUB_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
-const GITLAB_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
-const FALLBACK_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
+    r"^(?:(?<proto>git|ssh|https)://)?(?:[\w\.\+\-:]+@)?(?<hostname>.+?)(?(<proto>)/|:)(?<path>.+?)(?:\.git)?$"
+const GIT_PROTOCOL = Dict{AbstractString, Union{Nothing, AbstractString}}()
 
-function setprotocol!(proto::Union{Nothing, AbstractString}=nothing, site::Symbol=:github)
-    if site == :github
-        GITHUB_PROTOCOL[] = proto
-    elseif site == :gitlab
-        GITLAB_PROTOCOL[] = proto
-    else
-        FALLBACK_PROTOCOL[] = proto
-    end
+function setprotocol!(
+    proto::Union{Nothing, AbstractString}=nothing,
+    site::AbstractString="github.com"
+)
+    GIT_PROTOCOL[site] = proto
 end
 
-# TODO: extend this to more urls
 function normalize_url(url::AbstractString)
     m = match(GIT_REGEX, url)
     m === nothing && return url
 
-    host = m.captures[1]
-    path = "$(m.captures[2]).git"
-    proto = if occursin("github", host)
-        GITHUB_PROTOCOL[]
-    elseif occursin("gitlab", host)
-        GITLAB_PROTOCOL[]
-    else
-        FALLBACK_PROTOCOL[]
-    end
+    host = m[:hostname]
+    path = "$(m[:path]).git"
+
+    proto = get(GIT_PROTOCOL, host, nothing)
 
     if proto === nothing
         url
