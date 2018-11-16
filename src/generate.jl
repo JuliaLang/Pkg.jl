@@ -8,10 +8,10 @@ function generate(ctx::Context, path::String; kwargs...)
     isdir(path) && pkgerror("$(abspath(path)) already exists")
     printstyled("Generating"; color=:green, bold=true)
     print(" project $pkg:\n")
-    project(pkg, dir; preview=ctx.preview)
+    uuid = project(pkg, dir; preview=ctx.preview)
     entrypoint(pkg, dir; preview=ctx.preview)
     ctx.preview && preview_info()
-    return
+    return uuid
 end
 
 function genfile(f::Function, pkg::String, dir::String, file::String; preview::Bool)
@@ -48,18 +48,20 @@ function project(pkg::String, dir::String; preview::Bool)
 
     authorstr = "[\"$name " * (email == nothing ? "" : "<$email>") * "\"]"
 
+    uuid = UUIDs.uuid1()
     genfile(pkg, dir, "Project.toml"; preview=preview) do io
         print(io,
             """
             authors = $authorstr
             name = "$pkg"
-            uuid = "$(UUIDs.uuid1())"
+            uuid = "$uuid"
             version = "0.1.0"
 
             [deps]
             """
         )
     end
+    return uuid
 end
 
 function entrypoint(pkg::String, dir; preview::Bool)

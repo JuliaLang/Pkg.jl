@@ -95,8 +95,8 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::D
     uuid_to_pkg = Dict{UUID,PackageSpec}()
     for pkg in pkgs
         local path
-        info = manifest_info(ctx.env, pkg.uuid)
-        if pkg.special_action == PKGSPEC_FREED && !haskey(info, "pinned")
+        entry = manifest_info(ctx.env, pkg.uuid)
+        if pkg.special_action == PKGSPEC_FREED && !entry.pinned
             continue
         elseif pkg.special_action == PKGSPEC_DEVELOPED
             @assert pkg.path !== nothing
@@ -104,12 +104,11 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::D
         elseif pkg.special_action == PKGSPEC_REPO_ADDED
             @assert pkg.repo !== nothing && pkg.repo.git_tree_sha1 !== nothing
             path = find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
-        elseif info !== nothing && haskey(info, "path")
-            pkg.path = info["path"]
-            path = pkg.path
-        elseif info !== nothing && haskey(info, "repo-url")
-            path = find_installed(pkg.name, pkg.uuid, SHA1(info["git-tree-sha1"]))
-            pkg.repo = Types.GitRepo(info["repo-url"], info["repo-rev"], SHA1(info["git-tree-sha1"]))
+        elseif entry !== nothing && entry.path !== nothing
+            path = pkg.path = entry.path
+        elseif entry !== nothing && entry.repo_url !== nothing
+            path = find_installed(pkg.name, pkg.uuid, entry.git_tree_sha)
+            pkg.repo = Types.GitRepo(entry.repo_url, entry.repo_rev, entry.git_tree_sha)
         else
             continue
         end
@@ -295,9 +294,9 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
         uuid == uuid_julia && continue
         if !haskey(uuid_to_name, uuid)
             uuid_to_name[uuid] = registered_name(ctx.env, uuid)
-            info = manifest_info(ctx.env, uuid)
-            info ≡ nothing && continue
-            uuid_to_name[UUID(info["uuid"])] = info["name"]
+            entry = manifest_info(ctx.env, uuid)
+            entry ≡ nothing && continue
+            uuid_to_name[uuid] = entry.name
         end
     end
 
@@ -320,15 +319,15 @@ function resolve_versions!(
         uuid_to_name[uuid] = name
 
         uuid_idx = findfirst(isequal(uuid), uuids)
-        info = manifest_info(ctx.env, uuid)
-        if info !== nothing && haskey(info, "version") # stdlibs might not have a version
-            ver = VersionSpec(VersionNumber(info["version"]))
+        entry = manifest_info(ctx.env, uuid)
+        if entry !== nothing && entry.version !== nothing # stdlibs might not have a version
+            ver = VersionSpec(VersionNumber(entry.version))
         else
             ver = VersionSpec()
         end
         if uuid_idx != nothing
             pkg = pkgs[uuid_idx]
-            if info !== nothing && pkg.special_action != PKGSPEC_FREED && get(info, "pinned", false)
+            if entry !== nothing && pkg.special_action != PKGSPEC_FREED && entry.pinned
                 # This is a pinned package, fix its version
                 pkg.version = ver
             end
@@ -685,60 +684,51 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
     env = ctx.env
     uuid, name, version, path, special_action, repo = pkg.uuid, pkg.name, pkg.version, pkg.path, pkg.special_action, pkg.repo
     hash == nothing && @assert (path != nothing || pkg.uuid in keys(ctx.stdlibs) || pkg.repo != nothing)
-    infos = get!(env.manifest, name, Dict{String,Any}[])
-    info = nothing
-    for i in infos
-        UUID(i["uuid"]) == uuid || continue
-        info = i
-        break
-    end
-    if info == nothing
-        info = Dict{String,Any}("uuid" => string(uuid))
-        push!(infos, info)
-    end
+    entry = get!(env.manifest, uuid, Types.PackageEntry())
+    entry.name = name
     is_stdlib = uuid in keys(ctx.stdlibs)
     if !is_stdlib
-        info["version"] = string(version)
-        hash == nothing ? delete!(info, "git-tree-sha1")  : (info["git-tree-sha1"] = string(hash))
-        path == nothing ? delete!(info, "path")           : (info["path"]          = path)
+        entry.version = string(version)
+        entry.git_tree_sha = hash
+        entry.path = path
         if special_action == PKGSPEC_DEVELOPED
-            delete!(info, "pinned")
-            delete!(info, "repo-url")
-            delete!(info, "repo-rev")
+            entry.pinned = false
+            entry.repo_url = nothing
+            entry.repo_rev = nothing
         elseif special_action == PKGSPEC_FREED
-            if get(info, "pinned", false)
-                delete!(info, "pinned")
+            if entry.pinned
+                entry.pinned = false
             else
-                delete!(info, "repo-url")
-                delete!(info, "repo-rev")
+                entry.repo_url = nothing
+                entry.repo_rev = nothing
             end
         elseif special_action == PKGSPEC_PINNED
-            info["pinned"] = true
+            entry.pinned = true
         elseif special_action == PKGSPEC_REPO_ADDED
-            info["repo-url"] = repo.url
-            info["repo-rev"] = repo.rev
+            entry.repo_url = repo.url
+            entry.repo_rev = repo.rev
             path = find_installed(name, uuid, hash)
         end
-        if haskey(info, "repo-url")
+        if entry.repo_url !== nothing
             path = find_installed(name, uuid, hash)
         end
     end
 
-    delete!(info, "deps")
-    if path != nothing || is_stdlib
+    empty!(entry.deps)
+    if path !== nothing || is_stdlib
         if is_stdlib
             path = Types.stdlib_path(name)
         else
             path = joinpath(dirname(ctx.env.project_file), path)
         end
 
-        deps = Dict{String,String}()
+        deps = Dict{String,UUID}()
 
         # Check for deps in project file
         project_file = projectfile_path(path)
         if nothing !== project_file
             project = read_project(project_file)
-            deps = Dict(string(k)=>string(v) for (k,v) in project.deps)
+            deps = project.deps
         else
             # Check in REQUIRE file
             # Remove when packages uses Project files properly
@@ -759,18 +749,17 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
             end
             for dep_pkg in dep_pkgs
                 dep_pkg.name == "julia" && continue
-                deps[dep_pkg.name] = string(dep_pkg.uuid)
+                deps[dep_pkg.name] = dep_pkg.uuid
             end
         end
-        if !isempty(deps)
-            info["deps"] = deps
-        end
+        entry.deps = deps
     else
         for path in registered_paths(env, uuid)
             data = load_package_data(UUID, joinpath(path, "Deps.toml"), version)
-            data == nothing && continue
-            info["deps"] = Dict(string(k) => string(v) for (k,v) in data)
-            break
+            if data !== nothing 
+                entry.deps = data
+                break
+            end
         end
     end
     return
@@ -780,23 +769,17 @@ function prune_manifest(env::EnvCache)
     keep = collect(values(env.project.deps))
     while !isempty(keep)
         clean = true
-        for (name, infos) in env.manifest, info in infos
-            haskey(info, "uuid") && haskey(info, "deps") || continue
-            UUID(info["uuid"]) ∈ keep || continue
-            for dep in map(UUID, values(info["deps"]))
-                dep ∈ keep && continue
+        for (uuid, entry) in env.manifest
+            uuid in keep || continue
+            for dep in values(entry.deps)
+                dep in keep && continue
                 push!(keep, dep)
                 clean = false
             end
         end
         clean && break
     end
-    filter!(env.manifest) do (_, infos)
-        filter!(infos) do info
-            haskey(info, "uuid") && UUID(info["uuid"]) ∈ keep
-        end
-        !isempty(infos)
-    end
+    env.manifest = Dict(uuid => entry for (uuid, entry) in env.manifest if uuid in keep)
 end
 
 # When testing or building a dependency, we want that dependency to be able to load its own dependencies
@@ -822,12 +805,12 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     collect_deps!(seen, pkg) = begin
         pkg.uuid in seen && return
         push!(seen, pkg.uuid)
-        info = manifest_info(localctx.env, pkg.uuid)
-        info === nothing && return
-        need_to_resolve |= haskey(info, "path")
+        entry = manifest_info(localctx.env, pkg.uuid)
+        entry === nothing && return
+        need_to_resolve |= (entry.path !== nothing)
         localctx.env.project.deps[pkg.name] = pkg.uuid
-        for (dpkg, duuid) in get(info, "deps", [])
-            collect_deps!(seen, PackageSpec(dpkg, UUID(duuid)))
+        for (dpkg, uuid) in entry.deps
+            collect_deps!(seen, PackageSpec(dpkg, uuid))
         end
     end
 
@@ -839,12 +822,12 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         foreach(k->setfield!(localctx.env.project, k, nothing), (:name, :uuid, :version))
         localctx.env.pkg = nothing
         localctx.env.project.deps[pkg.name] = pkg.uuid
-        localctx.env.manifest[pkg.name] = [Dict(
-            "deps" => Dict(k=>string(v) for (k,v) in get_deps(mainctx, target)),
-            "uuid" => string(pkg.uuid),
-            "path" => dirname(localctx.env.project_file),
-            "version" => string(pkg.version)
-        )]
+        localctx.env.manifest[pkg.uuid] = Types.PackageEntry(
+            name=pkg.name,
+            deps=get_deps(mainctx, target),
+            path=dirname(localctx.env.project_file),
+            version=string(pkg.version)
+        )
     else
         # Only put `pkg` and its deps (recursively) in the temp project
         empty!(localctx.env.project.deps)
@@ -870,15 +853,12 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
 
         function rewrite_manifests(manifest)
             # Rewrite paths in Manifest since relative paths won't work here due to the temporary environment
-            for (name, infos) in manifest
-                for iinfo in infos
-                    # Is stdlib
-                    if UUID(iinfo["uuid"]) in keys(localctx.stdlibs)
-                        iinfo["path"] = Types.stdlib_path(name)
-                    end
-                    if haskey(iinfo, "path")
-                        iinfo["path"] = project_rel_path(mainctx, iinfo["path"])
-                    end
+            for (uuid, entry) in manifest
+                if uuid in keys(localctx.stdlibs)
+                    entry.path = Types.stdlib_path(entry.name)
+                end
+                if entry.path !== nothing
+                    entry.path = project_rel_path(mainctx, entry.path)
                 end
             end
         end
@@ -890,11 +870,9 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
             target_deps = deepcopy(pkgs)
             add_or_develop(localctx, pkgs)
             need_to_resolve = false # add resolves
-            info = manifest_info(localctx.env, pkg.uuid)
-            !haskey(info, "deps") && (info["deps"] = Dict{String, Any}())
-            deps = info["deps"]
+            entry = manifest_info(localctx.env, pkg.uuid)
             for deppkg in target_deps
-                deps[deppkg.name] = string(deppkg.uuid)
+                entry.deps[deppkg.name] = deppkg.uuid
             end
         end
 
@@ -931,8 +909,10 @@ function collect_target_deps!(
     elseif Types.is_project_uuid(ctx.env, pkg.uuid)
         path = dirname(ctx.env.project_file)
     else
-        info = manifest_info(ctx.env, pkg.uuid)
-        path = haskey(info, "path") ? project_rel_path(ctx, info["path"]) : find_installed(pkg.name, pkg.uuid, SHA1(info["git-tree-sha1"]))
+        entry = manifest_info(ctx.env, pkg.uuid)
+        path = (entry.path !== nothing) ?
+            project_rel_path(ctx, entry.path) :
+            find_installed(pkg.name, pkg.uuid, entry.git_tree_sha)
     end
 
     project_path = nothing
@@ -988,11 +968,9 @@ function pkg2_test_target_compatibility!(ctx, path, pkgs)
 end
 
 function any_package_not_installed(ctx)
-    for (pkg, infos) in ctx.env.manifest
-        for info in infos
-            if Base.locate_package(Base.PkgId(UUID(info["uuid"]), pkg)) === nothing
-                return true
-            end
+    for (uuid, entry) in ctx.env.manifest
+        if Base.locate_package(Base.PkgId(uuid, entry.name)) === nothing
+            return true
         end
     end
     return false
@@ -1014,8 +992,8 @@ function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,In
         if Types.is_project_uuid(ctx.env, uuid)
             deps = values(ctx.env.project.deps)
         else
-            info = manifest_info(ctx.env, uuid)
-            deps = values(get(info, "deps", Dict()))
+            entry = manifest_info(ctx.env, uuid)
+            deps = values(entry.deps)
         end
         foreach(visit, deps)
         pop!(seen)
@@ -1038,13 +1016,13 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             name = ctx.env.pkg.name
             version = ctx.env.pkg.version
         else
-            info = manifest_info(ctx.env, uuid)
-            name = info["name"]
-            if haskey(info, "git-tree-sha1")
-                hash_or_path = SHA1(info["git-tree-sha1"])
+            entry = manifest_info(ctx.env, uuid)
+            name = entry.name
+            if entry.git_tree_sha !== nothing
+                hash_or_path = entry.git_tree_sha
                 path = find_installed(name, uuid, hash_or_path)
-            elseif haskey(info, "path")
-                path = project_rel_path(ctx, info["path"])
+            elseif entry.path !== nothing
+                path = project_rel_path(ctx, entry.path)
                 hash_or_path = path
             else
                 pkgerror("Could not find either `git-tree-sha1` or `path` for package $(pkg.name)")
@@ -1121,11 +1099,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     # drop reverse dependencies
     while !isempty(drop)
         clean = true
-        for (name, infos) in ctx.env.manifest, info in infos
-            haskey(info, "uuid") && haskey(info, "deps") || continue
-            deps = map(UUID, values(info["deps"]))
+        for (uuid, entry) in ctx.env.manifest
+            deps = values(entry.deps)
             isempty(drop ∩ deps) && continue
-            uuid = UUID(info["uuid"])
             uuid ∉ drop || continue
             push!(drop, uuid)
             clean = false
@@ -1180,9 +1156,9 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; new_git = UUID[
     # the manifest version in the specified version set
     # then leave the package as is at the installed version
     for (name::String, uuid::UUID) in ctx.env.project.deps
-        info = manifest_info(ctx.env, uuid)
-        info != nothing && haskey(info, "version") || continue
-        version = VersionNumber(info["version"])
+        entry = manifest_info(ctx.env, uuid)
+        entry !== nothing && entry.version !== nothing || continue
+        version = VersionNumber(entry.version)
         for pkg in pkgs
             pkg.uuid == uuid && version ∈ pkg.version || continue
             pkg.version = version
@@ -1206,18 +1182,18 @@ function up(ctx::Context, pkgs::Vector{PackageSpec})
             end
             pkg.version isa UpgradeLevel || continue
             level = pkg.version
-            info = manifest_info(ctx.env, pkg.uuid)
-            if info !== nothing && haskey(info, "repo-url")
-                pkg.repo = Types.GitRepo(info["repo-url"], info["repo-rev"])
+            entry = manifest_info(ctx.env, pkg.uuid)
+            if entry !== nothing && entry.repo_url !== nothing
+                pkg.repo = Types.GitRepo(entry.repo_url, entry.repo_rev)
                 new = handle_repos_add!(ctx, [pkg]; credentials=creds,
                                         upgrade_or_add = (level == UPLEVEL_MAJOR))
                 append!(new_git, new)
             else
-                if info !== nothing
+                if entry !== nothing
                     pkg.uuid in keys(ctx.stdlibs) && continue
-                    ver = VersionNumber(info["version"])
+                    ver = VersionNumber(entry.version)
                     if level == UPLEVEL_FIXED
-                        pkg.version = VersionNumber(info["version"])
+                        pkg.version = VersionNumber(entry.version)
                     else
                         r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
                             level == UPLEVEL_MINOR ? VersionRange(ver.major) :
@@ -1240,9 +1216,9 @@ end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
-        info = manifest_info(ctx.env, pkg.uuid)
+        entry = manifest_info(ctx.env, pkg.uuid)
         if pkg.version == VersionSpec()
-            pkg.version = VersionNumber(info["version"])
+            pkg.version = VersionNumber(entry.version)
         end
         pkg.special_action = PKGSPEC_PINNED
     end
@@ -1257,11 +1233,11 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
     need_to_resolve = false
     for pkg in pkgs
         pkg.special_action = PKGSPEC_FREED
-        info = manifest_info(ctx.env, pkg.uuid)
-        if haskey(info, "path") || haskey(info, "repo-url")
+        entry = manifest_info(ctx.env, pkg.uuid)
+        if entry.path !== nothing || entry.repo_url !== nothing
             need_to_resolve = true
         else
-            pkg.version = VersionNumber(info["version"])
+            pkg.version = VersionNumber(entry.version)
         end
     end
     need_to_resolve && resolve_versions!(ctx, pkgs)
@@ -1281,11 +1257,11 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             pkg.version = ctx.env.pkg.version
             version_path = dirname(ctx.env.project_file)
         else
-            info = manifest_info(ctx.env, pkg.uuid)
-            if haskey(info, "git-tree-sha1")
-                version_path = find_installed(pkg.name, pkg.uuid, SHA1(info["git-tree-sha1"]))
-            elseif haskey(info, "path")
-                version_path =  project_rel_path(ctx, info["path"])
+            entry = manifest_info(ctx.env, pkg.uuid)
+            if entry.git_tree_sha !== nothing 
+                version_path = find_installed(pkg.name, pkg.uuid, entry.git_tree_sha)
+            elseif entry.path !== nothing
+                version_path =  project_rel_path(ctx, entry.path)
             elseif pkg.uuid in keys(ctx.stdlibs)
                 version_path = Types.stdlib_path(pkg.name)
             else

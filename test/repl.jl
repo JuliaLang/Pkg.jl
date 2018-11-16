@@ -14,7 +14,6 @@ include("utils.jl")
 function git_init_package(tmp, path)
     base = basename(path)
     pkgpath = joinpath(tmp, base)
-    println("git initing package at [$pkgpath]")
     cp(path, pkgpath)
     LibGit2.with(LibGit2.init(pkgpath)) do repo
         LibGit2.add!(repo, "*")
@@ -100,11 +99,11 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"add Example#master"
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)
-    info = Pkg.Types.manifest_info(Pkg.Types.EnvCache(), TEST_PKG.uuid)
-    @test info["repo-rev"] == "master"
+    entry = Pkg.Types.manifest_info(Pkg.Types.EnvCache(), TEST_PKG.uuid)
+    @test entry.repo_rev == "master"
     pkg"up --fixed"
-    info = Pkg.Types.manifest_info(Pkg.Types.EnvCache(), TEST_PKG.uuid)
-    @test info["repo-rev"] == "master"
+    entry = Pkg.Types.manifest_info(Pkg.Types.EnvCache(), TEST_PKG.uuid)
+    @test entry.repo_rev == "master"
 
 
     pkg"test Example"
@@ -224,8 +223,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
             pkg"generate HelloWorld"
             cd("HelloWorld") do
                 with_current_env() do
-                    pkg"generate SubModule1"
-                    pkg"generate SubModule2"
+                    uuid1 = Pkg.generate("SubModule1")
+                    uuid2 = Pkg.generate("SubModule2")
                     pkg"develop SubModule1"
                     mkdir("tests")
                     cd("tests")
@@ -234,8 +233,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     @test Pkg.API.__installed()["SubModule2"] == v"0.1.0"
                     # make sure paths to SubModule1 and SubModule2 are relative
                     manifest = Pkg.Types.Context().env.manifest
-                    @test manifest["SubModule1"][1]["path"] == "SubModule1"
-                    @test manifest["SubModule2"][1]["path"] == "SubModule2"
+                    @test manifest[uuid1].path == "SubModule1"
+                    @test manifest[uuid2].path == "SubModule2"
                 end
             end
             cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
@@ -310,9 +309,9 @@ end
 
 # test relative dev paths (#490)
 cd_tempdir() do tmp
-    pkg"generate HelloWorld"
+    uuid1 = Pkg.generate("HelloWorld")
     cd("HelloWorld")
-    pkg"generate SubModule"
+    uuid2 = Pkg.generate("SubModule")
     cd(mkdir("tests"))
     pkg"activate ."
     pkg"develop .." # HelloWorld
@@ -320,8 +319,8 @@ cd_tempdir() do tmp
     @test Pkg.installed()["HelloWorld"] == v"0.1.0"
     @test Pkg.installed()["SubModule"] == v"0.1.0"
     manifest = Pkg.Types.Context().env.manifest
-    @test manifest["HelloWorld"][1]["path"] == ".."
-    @test manifest["SubModule"][1]["path"] == joinpath("..", "SubModule")
+    @test manifest[uuid1].path == ".."
+    @test manifest[uuid2].path == joinpath("..", "SubModule")
 end
 
 # path should not be relative when devdir() happens to be in project
@@ -332,40 +331,39 @@ temp_pkg_dir() do depot
         pkg"activate ."
         withenv("JULIA_PKG_DEVDIR" => joinpath(pwd(), "dev")) do
             pkg"dev Example"
-            @test manifest_info(EnvCache(), uuid)["path"] == joinpath(pwd(), "dev", "Example")
+            @test manifest_info(EnvCache(), uuid).path == joinpath(pwd(), "dev", "Example")
             pkg"dev --shared Example"
-            @test manifest_info(EnvCache(), uuid)["path"] == joinpath(pwd(), "dev", "Example")
+            @test manifest_info(EnvCache(), uuid).path == joinpath(pwd(), "dev", "Example")
             pkg"dev --local Example"
-            @test manifest_info(EnvCache(), uuid)["path"] == joinpath("dev", "Example")
+            @test manifest_info(EnvCache(), uuid).path == joinpath("dev", "Example")
         end
     end
 end
 
 # test relative dev paths (#490) without existing Project.toml
-temp_pkg_dir() do depot
-    cd_tempdir() do tmp
-        pkg"activate NonExistent"
-        withenv("USER" => "Test User") do
-            pkg"generate Foo"
-        end
-        # this dev should not error even if NonExistent/Project.toml file is non-existent
-        @test !isdir("NonExistent")
-        pkg"dev Foo"
-        manifest = Pkg.Types.Context().env.manifest
-        @test manifest["Foo"][1]["path"] == joinpath("..", "Foo")
+temp_pkg_dir() do depot; cd_tempdir() do tmp
+    pkg"activate NonExistent"
+    uuid= nothing
+    withenv("USER" => "Test User") do
+        uuid = Pkg.generate("Foo")
     end
-end
+    # this dev should not error even if NonExistent/Project.toml file is non-existent
+    @test !isdir("NonExistent")
+    pkg"dev Foo"
+    manifest = Pkg.Types.Context().env.manifest
+    @test manifest[uuid].path == joinpath("..", "Foo")
+end end
 
 # develop with --shared and --local
 cd_tempdir() do tmp
     uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
     pkg"activate ."
     pkg"develop Example" # test default
-    @test manifest_info(EnvCache(), uuid)["path"] == joinpath(Pkg.devdir(), "Example")
+    @test manifest_info(EnvCache(), uuid).path == joinpath(Pkg.devdir(), "Example")
     pkg"develop --shared Example"
-    @test manifest_info(EnvCache(), uuid)["path"] == joinpath(Pkg.devdir(), "Example")
+    @test manifest_info(EnvCache(), uuid).path == joinpath(Pkg.devdir(), "Example")
     pkg"develop --local Example"
-    @test manifest_info(EnvCache(), uuid)["path"] == joinpath("dev", "Example")
+    @test manifest_info(EnvCache(), uuid).path == joinpath("dev", "Example")
 end
 
 test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))
