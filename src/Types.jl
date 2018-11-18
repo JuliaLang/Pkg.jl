@@ -653,101 +653,118 @@ function relative_project_path(ctx::Context, path::String)
                    safe_realpath(dirname(ctx.env.project_file)))
 end
 
-casesensitive_isdir(dir::String) = isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
+casesensitive_isdir(dir::String) =
+    isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
+
+function git_checkout_latest!(repo_path::AbstractString)
+    LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
+        rev = LibGit2.isattached(repo) ?
+            LibGit2.branch(repo) :
+            string(LibGit2.GitHash(LibGit2.head(repo)))
+        gitobject, isbranch = nothing, nothing
+        Base.shred!(LibGit2.CachedCredentials()) do creds
+            gitobject, isbranch = get_object_branch(repo, rev, creds)
+        end
+        try
+            LibGit2.transact(repo) do r
+                if isbranch
+                    LibGit2.branch!(r, rev, track=LibGit2.Consts.REMOTE_ORIGIN)
+                else
+                    LibGit2.checkout!(r, string(LibGit2.GitHash(gitobject)))
+                end
+            end
+        finally
+            close(gitobject)
+        end
+    end
+end
+
+# Developing a local package, just point `pkg.path` to it
+# - Absolute paths should stay absolute
+# - Relative paths are given relative pwd() so we
+#   translate that to be relative the project instead.
+function explicit_dev_path(ctx::Context, pkg::PackageSpec)
+    path = pkg.repo.url
+    pkg.path = isabspath(path) ? path : relative_project_path(ctx, path)
+    parse_package!(ctx, pkg, path)
+end
+
+function canonical_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool; default=nothing)
+    dev_dir = shared ? Pkg.devdir() : joinpath(dirname(ctx.env.project_file), "dev")
+    dev_path = joinpath(dev_dir, pkg.name)
+
+    if isdir(dev_path)
+        if !isfile(joinpath(dev_path, "src", pkg.name * ".jl"))
+            pkgerror("Path `$(dev_path)` exists but it does not contain `src/$(pkg.name).jl")
+        end
+        @info "Path `$(dev_path)` exists and looks like the correct package, using existing path"
+        default !== nothing && rm(default; force=true, recursive=true)
+        pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
+        parse_package!(ctx, pkg, dev_path)
+    elseif default !== nothing
+        mkpath(dev_dir)
+        mv(default, dev_path)
+        # Save the path as relative if it is a --local dev, otherwise put in the absolute path.
+        pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
+    end
+end
+
+function fresh_clone(pkg::PackageSpec)
+    clone_path = joinpath(depots1(), "clones")
+    mkpath(clone_path)
+    repo_path = joinpath(clone_path, string(hash(pkg.repo.url), "_full"))
+    # make sure you have a fresh clone
+    repo = nothing
+    try
+        repo = GitTools.ensure_clone(repo_path, pkg.repo.url)
+        Base.shred!(LibGit2.CachedCredentials()) do creds
+            GitTools.fetch(repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
+        end
+    finally
+        repo isa LibGit2.GitRepo && LibGit2.close(repo)
+    end
+    # Copy the repo to a temporary place and check out the rev
+    temp_repo = mktempdir()
+    cp(repo_path, temp_repo; force=true)
+    git_checkout_latest!(temp_repo)
+    return temp_repo
+end
+
+function remote_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool)
+    # Only update the registry in case of developing a non-local package
+    UPDATED_REGISTRY_THIS_SESSION[] || update_registries(ctx)
+    # We save the repo in case another environement wants to develop from the same repo,
+    # this avoids having to reclone it from scratch.
+    isempty(pkg.repo.url) && set_repo_for_pkg!(ctx.env, pkg)
+    temp_clone = fresh_clone(pkg)
+    # parse repo to determine dev path
+    parse_package!(ctx, pkg, temp_clone)
+    canonical_dev_path!(ctx, pkg, shared; default=temp_clone)
+    return pkg.uuid
+end
 
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}; shared::Bool)
-    Base.shred!(LibGit2.CachedCredentials()) do creds
-        env = ctx.env
-        new_uuids = UUID[]
-        for pkg in pkgs
-            pkg.repo == nothing && continue
-            pkg.special_action = PKGSPEC_DEVELOPED
-            isempty(pkg.repo.url) && set_repo_for_pkg!(env, pkg)
-
-
-            if isdir_windows_workaround(pkg.repo.url)
-                # Developing a local package, just point `pkg.path` to it
-                if isabspath(pkg.repo.url)
-                    # absolute paths should stay absolute
-                    pkg.path = pkg.repo.url
-                else
-                    # Relative paths are given relative pwd() so we
-                    # translate that to be relative the project instead.
-                    pkg.path = relative_project_path(ctx, pkg.repo.url)
-                end
-                folder_already_downloaded = true
-                project_path = pkg.repo.url
-                parse_package!(ctx, pkg, project_path)
-            else
-                # Only update the registry in case of developing a non-local package
-                UPDATED_REGISTRY_THIS_SESSION[] || update_registries(ctx)
-                # We save the repo in case another environement wants to
-                # develop from the same repo, this avoids having to reclone it
-                # from scratch.
-                clone_path = joinpath(depots1(), "clones")
-                mkpath(clone_path)
-                repo_path = joinpath(clone_path, string(hash(pkg.repo.url), "_full"))
-                repo = nothing
-                try
-                    repo, just_cloned = ispath(repo_path) ? (LibGit2.GitRepo(repo_path), false) : begin
-                        r = GitTools.clone(pkg.repo.url, repo_path)
-                        GitTools.fetch(r, pkg.repo.url; refspecs=refspecs, credentials=creds)
-                        r, true
-                    end
-                    if !just_cloned
-                        GitTools.fetch(repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
-                    end
-                finally
-                    repo isa LibGit2.GitRepo && LibGit2.close(repo)
-                end
-
-                # Copy the repo to a temporary place and check out the rev
-                project_path = mktempdir()
-                cp(repo_path, project_path; force=true)
-                LibGit2.with(LibGit2.GitRepo(project_path)) do repo
-                    if LibGit2.isattached(repo)
-                        rev = LibGit2.branch(repo)
-                    else
-                        rev = string(LibGit2.GitHash(LibGit2.head(repo)))
-                    end
-                    gitobject, isbranch = get_object_branch(repo, rev, creds)
-                    try
-                        LibGit2.transact(repo) do r
-                            if isbranch
-                                LibGit2.branch!(r, rev, track=LibGit2.Consts.REMOTE_ORIGIN)
-                            else
-                                LibGit2.checkout!(r, string(LibGit2.GitHash(gitobject)))
-                            end
-                        end
-                    finally
-                        close(gitobject)
-                    end
-                end
-
-                parse_package!(ctx, pkg, project_path)
-                devdir = shared ? Pkg.devdir() : joinpath(dirname(ctx.env.project_file), "dev")
-                dev_pkg_path = joinpath(devdir, pkg.name)
-                if isdir(dev_pkg_path)
-                    if !isfile(joinpath(dev_pkg_path, "src", pkg.name * ".jl"))
-                        pkgerror("Path `$(dev_pkg_path)` exists but it does not contain `src/$(pkg.name).jl")
-                    else
-                        @info "Path `$(dev_pkg_path)` exists and looks like the correct package, using existing path instead of cloning"
-                    end
-                else
-                    mkpath(dev_pkg_path)
-                    mv(project_path, dev_pkg_path; force=true)
-                    push!(new_uuids, pkg.uuid)
-                end
-                # Save the path as relative if it is a --local dev,
-                # otherwise put in the absolute path.
-                pkg.path = shared ? dev_pkg_path : relative_project_path(ctx, dev_pkg_path)
-                Base.rm(project_path; force = true, recursive = true)
-            end
-            @assert pkg.path != nothing
-            @assert has_uuid(pkg)
-        end
-        return new_uuids
+    for pkg in pkgs
+        pkg.repo === nothing && (pkg.repo = Types.GitRepo())
+        !isempty(pkg.repo.rev) && pkgerror("git revision cannot be given to `develop`")
     end
+    
+    new_uuids = UUID[]
+    for pkg in pkgs
+        pkg.special_action = PKGSPEC_DEVELOPED
+        if !isempty(pkg.repo.url) && isdir_windows_workaround(pkg.repo.url)
+            explicit_dev_path(ctx, pkg)
+        elseif !isempty(pkg.name)
+            canonical_dev_path!(ctx, pkg, shared)
+        end
+        if pkg.path === nothing
+            new_uuid = remote_dev_path!(ctx, pkg, shared)
+            push!(new_uuids, new_uuid)
+        end
+        @assert pkg.path !== nothing
+        @assert has_uuid(pkg)
+    end
+    return new_uuids
 end
 
 function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
@@ -770,11 +787,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
             project_path = nothing
             folder_already_downloaded = false
             try
-                repo = if ispath(repo_path)
-                    LibGit2.GitRepo(repo_path)
-                else
-                    GitTools.clone(pkg.repo.url, repo_path, isbare=true, credentials=creds)
-                end
+                repo = GitTools.ensure_clone(repo_path, pkg.repo.url; isbare=true, credentials=creds)
                 entry = manifest_info(env, pkg.uuid)
                 pinned = (entry !== nothing && entry.pinned)
                 upgrading = upgrade_or_add && !pinned

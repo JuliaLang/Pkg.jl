@@ -32,16 +32,6 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, s
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
-    # All developed packages should go through handle_repos_develop so just give them an empty repo
-    for pkg in pkgs
-        if mode == :develop
-            pkg.repo == nothing && (pkg.repo = Types.GitRepo())
-            if !isempty(pkg.repo.rev)
-                pkgerror("git revision cannot be given to `develop`")
-            end
-        end
-    end
-
     # if julia is passed as a package the solver gets tricked;
     # this catches the error early on
     any(pkg->(pkg.name == "julia"), pkgs) &&
