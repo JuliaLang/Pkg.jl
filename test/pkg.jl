@@ -254,13 +254,13 @@ temp_pkg_dir() do project_path
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
                 try
-                    Pkg.setprotocol!("notarealprotocol")
+                    Pkg.setprotocol!("github.com", "notarealprotocol")
                     @test_throws PkgError Pkg.develop("Example")
-                    Pkg.setprotocol!("https")
+                    Pkg.setprotocol!("github.com", "https")
                     Pkg.develop("Example")
                     @test isinstalled(TEST_PKG)
                 finally
-                    Pkg.setprotocol!()
+                    Pkg.setprotocol!("github.com")
                 end
             end
         end
@@ -270,7 +270,7 @@ temp_pkg_dir() do project_path
                     https_url = "https://github.com/JuliaLang/Example.jl.git"
                     ssh_url = "ssh://git@github.com/JuliaLang/Example.jl.git"
                     @test Pkg.GitTools.normalize_url(https_url) == https_url
-                    Pkg.setprotocol!("ssh")
+                    Pkg.setprotocol!("github.com", "ssh")
                     @test Pkg.GitTools.normalize_url(https_url) == ssh_url
                     # TODO: figure out how to test this without
                     #       having to deploy a ssh key on github
@@ -279,14 +279,19 @@ temp_pkg_dir() do project_path
 
                     https_url = "https://gitlab.example.com/example/Example.jl.git"
                     ssh_url = "ssh://git@gitlab.example.com/example/Example.jl.git"
-                    Pkg.GitTools.setprotocol!(nothing, "gitlab.example.com")
+                    Pkg.setprotocol!("gitlab.example.com")
                     @test Pkg.GitTools.normalize_url(https_url) == https_url
-                    Pkg.GitTools.setprotocol!("ssh", "gitlab.example.com")
+                    Pkg.setprotocol!("gitlab.example.com", "ssh")
                     @test Pkg.GitTools.normalize_url(https_url) == ssh_url
 
+                    @test_deprecated Pkg.setprotocol!()
+                    @test_deprecated Pkg.setprotocol!("ssh")
+                    @test_deprecated Pkg.GitTools.setprotocol!()
+                    @test_deprecated Pkg.GitTools.setprotocol!("ssh")
+
                 finally
-                    Pkg.GitTools.setprotocol!()
-                    Pkg.GitTools.setprotocol!(nothing, "gitlab.example.com")
+                    Pkg.setprotocol!("github.com")
+                    Pkg.setprotocol!("gitlab.example.com")
                 end
             end
         end

@@ -67,13 +67,21 @@ end
 
 const GIT_REGEX =
     r"^(?:(?<proto>git|ssh|https)://)?(?:[\w\.\+\-:]+@)?(?<hostname>.+?)(?(<proto>)/|:)(?<path>.+?)(?:\.git)?$"
-const GIT_PROTOCOL = Dict{AbstractString, Union{Nothing, AbstractString}}()
+const GIT_PROTOCOL = Dict{String, Union{Nothing, String}}()
 
-function setprotocol!(
-    proto::Union{Nothing, AbstractString}=nothing,
-    site::AbstractString="github.com"
-)
-    GIT_PROTOCOL[site] = proto
+@deprecate setprotocol!(proto::Nothing=nothing) setprotocol!("github.com", proto) false
+
+function setprotocol!(site::AbstractString, proto::Union{Nothing, AbstractString}=nothing)
+     if site in ("https", "ssh", "git") && proto === nothing
+        Base.depwarn(
+            "`setprotocol!(proto)` is deprecated, use `setprotocol!(\"github.com\", proto)` instead.",
+            :setprotocol!
+        )
+        proto = site
+        site = "github.com"
+    end
+
+    GIT_PROTOCOL[lowercase(site)] = proto
 end
 
 function normalize_url(url::AbstractString)
@@ -83,7 +91,7 @@ function normalize_url(url::AbstractString)
     host = m[:hostname]
     path = "$(m[:path]).git"
 
-    proto = get(GIT_PROTOCOL, host, nothing)
+    proto = get(GIT_PROTOCOL, lowercase(host), nothing)
 
     if proto === nothing
         url

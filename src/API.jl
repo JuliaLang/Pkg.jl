@@ -541,7 +541,20 @@ function activate(path::AbstractString; shared::Bool=false)
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
 end
 
-setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GitTools.setprotocol!(proto)
+function setprotocol!(site::AbstractString, proto::Union{Nothing, AbstractString}=nothing)
+     if site in ("https", "ssh", "git") && proto === nothing
+        Base.depwarn(
+            "`setprotocol!(proto)` is deprecated, use `setprotocol!(\"github.com\", proto)` instead.",
+            :setprotocol!
+        )
+        proto = site
+        site = "github.com"
+    end
+
+    GitTools.setprotocol!(site, proto)
+end
+
+@deprecate setprotocol!(proto::Nothing=nothing) setprotocol!("github.com", proto) false
 
 # API constructor
 function Package(;name::Union{Nothing,AbstractString} = nothing,
