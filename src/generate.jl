@@ -46,20 +46,16 @@ function project(pkg::String, dir::String; preview::Bool)
         end
     end
 
-    authorstr = "[\"$name " * (email == nothing ? "" : "<$email>") * "\"]"
+    authors = ["$name " * (email == nothing ? "" : "<$email>")]
 
     uuid = UUIDs.uuid1()
     genfile(pkg, dir, "Project.toml"; preview=preview) do io
-        print(io,
-            """
-            authors = $authorstr
-            name = "$pkg"
-            uuid = "$uuid"
-            version = "0.1.0"
-
-            [deps]
-            """
-        )
+        toml = Dict("authors" => authors,
+                    "name" => pkg,
+                    "uuid" => string(uuid),
+                    "version" => "0.1.0",
+                    )
+        TOML.print(io, toml, sorted=true, by=key -> (Types.project_key_order(key), key))
     end
     return uuid
 end

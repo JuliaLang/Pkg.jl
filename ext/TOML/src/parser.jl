@@ -585,7 +585,8 @@ function escape(p::Parser, st::Int, multiline::Bool)
                 NONE()
             end
         else
-            error(p, st, position(p), "unknown string escape: `$("\\x"*hex(ch,2))`")
+            escape_str = "\\x"*string(UInt32(ch), base=16, pad=2)
+            error(p, st, position(p), "unknown string escape: `$escape_str`")
             NONE()
         end
     end
