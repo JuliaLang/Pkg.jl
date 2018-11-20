@@ -564,13 +564,17 @@ end
 function Manifest(raw::Dict)::Manifest
     manifest = Dict{UUID,PackageEntry}()
     # TODO is it easier to check all constraints of the TOML before?
-    for (name, info) in raw
-        info = first(info)
-        if haskey(info, "deps")
-            @assert info["deps"] isa AbstractVector
-            for dep in info["deps"]
-                length(raw[dep]) == 1 ||
-                    error("ambiguious dependency for $name: $dep")
+    for (name, infos) in raw, info in infos
+        deps = get(info, "deps", nothing)
+        if deps !== nothing
+            if deps isa AbstractVector
+                for dep in info["deps"]
+                    length(raw[dep]) == 1 ||
+                        error("ambiguious dependency for $name: $dep")
+                end
+            else
+                deps isa Dict ||
+                    pkgerror("Error loading manifest file: Malformed deps entry for `$(name)`")
             end
         end
 
@@ -588,9 +592,16 @@ function Manifest(raw::Dict)::Manifest
         end
         deps = get(info, "deps", nothing)
         if deps !== nothing
-            for dep in deps
-                dep_uuid = UUID(raw[dep][1]["uuid"]) # check that it exists first
-                entry.deps[dep] = dep_uuid
+            if deps isa AbstractVector
+                for dep in deps
+                    dep_uuid = UUID(raw[dep][1]["uuid"]) # check that it exists first
+                    entry.deps[dep] = dep_uuid
+                end
+            else
+                for (name, uuid) in deps
+                    dep_uuid = UUID(uuid)
+                    entry.deps[name]  = dep_uuid
+                end
             end
         end
         entry.other = info
@@ -605,15 +616,13 @@ function read_manifest(io::IO)
         raw = TOML.parse(io)
     catch err
         err isa TOML.ParserError || rethrow()
-        pkgerror("Could not parse manifest file at `$filename`: $(err.msg)")
+        pkgerror("Could not parse manifest: $(err.msg)")
     end
     return Manifest(raw)
 end
 
-function read_manifest(filename::String)::Manifest
-    !isfile(filename) && return Dict{UUID,PackageEntry}()
-    return open(read_manifest, filename)
-end
+read_manifest(filename::String)::Manifest =
+    isfile(filename) ? open(read_manifest, filename) : Dict{UUID,PackageEntry}()
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
@@ -1517,6 +1526,11 @@ function destructure(manifest::Manifest)::Dict
         end
     end
 
+    unique_name = Dict{String,Bool}()
+    for (uuid, entry) in manifest
+        unique_name[entry.name] = !haskey(unique_name, entry.name)
+    end
+
     raw = Dict{String,Any}()
     for (uuid, entry) in manifest
         new_entry = something(entry.other, Dict{String,Any}())
@@ -1530,12 +1544,28 @@ function destructure(manifest::Manifest)::Dict
         if isempty(entry.deps)
             delete!(new_entry, "deps")
         else
-            new_entry["deps"] = sort(collect(keys(entry.deps)))
+            if all(dep -> unique_name[first(dep)], entry.deps)
+                new_entry["deps"] = sort(collect(keys(entry.deps)))
+            else
+                new_entry["deps"] = Dict{String,String}()
+                for (name, uuid) in entry.deps
+                    new_entry["deps"][name] = string(uuid)
+                end
+            end
         end
-        raw[entry.name] = [new_entry]
+        push!(get!(raw, entry.name, Dict{String,Any}[]), new_entry)
     end
     return raw
 end
+
+write_project(project::Project, project_file::AbstractString) =
+    write_project(destructure(project), project_file)
+write_project(project::Project, io::IO) =
+    write_project(destructure(project), io)
+write_project(project::Dict, project_file::AbstractString) =
+    open(io -> write_project(project, io), project_file; truncate=true)
+write_project(project::Dict, io::IO) =
+    TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
 
 function write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
     project = destructure(ctx.env.project)
@@ -1546,29 +1576,28 @@ function write_project(project::Project, env, old_env, ctx::Context; display_dif
         end
         if !ctx.preview
             mkpath(dirname(env.project_file))
-            open(env.project_file, "w") do io
-                TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
-            end
+            write_project(project, env.project_file)
         end
     end
 end
 
+write_manifest(manifest::Manifest, manifest_file::AbstractString) =
+    open(io -> write_manifest(manifest, io), manifest_file; truncate=true)
+
+function write_manifest(manifest::Manifest,io::IO)
+    raw = destructure(manifest)
+    print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
+    TOML.print(io, raw, sorted=true)
+end
+
 function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)
-    if isempty(manifest) && !ispath(env.manifest_file)
-        return
-    end
+    isempty(manifest) && !ispath(env.manifest_file) && return
 
     if display_diff && !(ctx.currently_running_target)
         printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
         Pkg.Display.print_manifest_diff(ctx, old_env, env)
     end
-    raw = destructure(manifest)
-    if !ctx.preview
-        open(env.manifest_file, "w") do io
-            print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-            TOML.print(io, raw, sorted=true)
-        end
-    end
+    !ctx.preview && write_manifest(manifest, env.manifest_file)
 end
 
 function write_env(ctx::Context; display_diff=true)
