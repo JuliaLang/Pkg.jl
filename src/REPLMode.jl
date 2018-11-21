@@ -773,15 +773,6 @@ function complete_remote_package(partial)
     return cmp
 end
 
-const STDLIB_NAMES = Ref{Vector{String}}()
-function stdlib_names()
-    if !isassigned(STDLIB_NAMES)
-        STDLIB_NAMES[] = filter!(x->isdir(joinpath(Types.stdlib_dir(), x)),
-                                 readdir(Types.stdlib_dir()))
-    end
-    return STDLIB_NAMES[]
-end
-
 function canonical_names()
     names = String[]
     for (super, specs) in pairs(super_specs)
@@ -799,7 +790,8 @@ end
 function complete_installed_packages(options, partial)
     mode = get(options, :mode, nothing)
     pkgs = mode == PKGMODE_MANIFEST ? API.__installed() : API.__installed(PKGMODE_PROJECT)
-    return collect(keys(filter(p->p[1] in stdlib_names() || p[2] !== nothing, pkgs)))
+    stdlib_names = collect(values(Types.stdlib()))
+    return collect(keys(filter(p -> p[1] in stdlib_names || p[2] !== nothing, pkgs)))
 end
 
 function complete_add_dev(options, partial, i1, i2)
@@ -809,7 +801,7 @@ function complete_add_dev(options, partial, i1, i2)
     end
     comps = vcat(comps, complete_remote_package(partial))
     comps = vcat(comps, filter(x->startswith(x,partial) && !(x in comps),
-                              stdlib_names()))
+                               collect(values(Types.stdlib()))))
     return comps, idx, !isempty(comps)
 end
 
