@@ -116,9 +116,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
                 push!(pkgs, PackageSpec(name, uuid, level))
             end
         elseif mode == PKGMODE_MANIFEST
-            for (name, infos) in ctx.env.manifest, info in infos
-                uuid = UUID(info["uuid"])
-                push!(pkgs, PackageSpec(name, uuid, level))
+            for (uuid, entry) in ctx.env.manifest
+                push!(pkgs, PackageSpec(entry.name, uuid, level))
             end
         end
     else
@@ -249,12 +248,10 @@ function gc(ctx::Context=Context(); kwargs...)
         end
         manifest == nothing && continue
         new_usage[manifestfile] = [Dict("time" => date)]
-        for (name, infos) in manifest
-            for info in infos
-                if haskey(info, "uuid") && haskey(info, "git-tree-sha1")
-                    push!(paths_to_keep,
-                          Operations.find_installed(name, UUID(info["uuid"]), SHA1(info["git-tree-sha1"])))
-                end
+        for (uuid, entry) in manifest
+            if entry.git_tree_sha !== nothing
+                push!(paths_to_keep,
+                      Operations.find_installed(entry.name, uuid, entry.git_tree_sha))
             end
         end
     end
