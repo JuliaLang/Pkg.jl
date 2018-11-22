@@ -572,7 +572,7 @@ end
     end
     rm(dirname(temp); recursive = true, force = true)
 end
-    
+
 @testset "stdlib_resolve!" begin
     a = Pkg.Types.PackageSpec(name="Markdown")
     b = Pkg.Types.PackageSpec(uuid=UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
@@ -584,6 +584,17 @@ end
     Pkg.Types.stdlib_resolve!(Types.Context(), [x])
     @test x.name == "Markdown"
     @test x.uuid == UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
+end
+
+@testset "issue #913" begin
+    temp_pkg_dir() do project_path
+        Pkg.activate(project_path)
+        Pkg.add(PackageSpec(name="Example", rev = "master"))
+        @test isinstalled(TEST_PKG)
+        rm.(joinpath.(project_path, ["Project.toml","Manifest.toml"]))
+        Pkg.add(PackageSpec(name="Example", rev = "master")) # should not fail
+        @test isinstalled(TEST_PKG)
+    end
 end
 
 include("repl.jl")
