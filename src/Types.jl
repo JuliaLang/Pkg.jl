@@ -844,8 +844,8 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                 mkpath(version_path)
                 mv(project_path, version_path; force=true)
                 push!(new_uuids, pkg.uuid)
+                Base.rm(project_path; force = true, recursive = true)
             end
-            Base.rm(project_path; force = true, recursive = true)
             @assert has_uuid(pkg)
         end
         return new_uuids
