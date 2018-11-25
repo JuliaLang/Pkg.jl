@@ -17,16 +17,17 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 
 include("generate.jl")
 
-function check_package_name(x::String)
+function check_package_name(x::AbstractString)
     if !(occursin(Pkg.REPLMode.name_re, x))
          pkgerror("$x is not a valid packagename")
     end
     return PackageSpec(x)
 end
 
-add_or_develop(pkg::Union{String, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
-add_or_develop(pkgs::Vector{String}; kwargs...)            = add_or_develop([check_package_name(pkg) for pkg in pkgs]; kwargs...)
-add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)       = add_or_develop(Context(), pkgs; kwargs...)
+add_or_develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
+add_or_develop(pkgs::Vector{<:AbstractString}; kwargs...) =
+    add_or_develop([check_package_name(pkg) for pkg in pkgs]; kwargs...)
+add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)      = add_or_develop(Context(), pkgs; kwargs...)
 
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, shared::Bool=true, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
@@ -69,8 +70,8 @@ end
 add(args...; kwargs...) = add_or_develop(args...; mode = :add, kwargs...)
 develop(args...; shared=true, kwargs...) = add_or_develop(args...; mode = :develop, shared = shared, kwargs...)
 
-rm(pkg::Union{String, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
-rm(pkgs::Vector{String}; kwargs...)            = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+rm(pkg::Union{AbstractString, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
+rm(pkgs::Vector{<:AbstractString}; kwargs...)          = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 rm(pkgs::Vector{PackageSpec}; kwargs...)       = rm(Context(), pkgs; kwargs...)
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
@@ -91,8 +92,8 @@ end
 
 up(ctx::Context; kwargs...)                    = up(ctx, PackageSpec[]; kwargs...)
 up(; kwargs...)                                = up(PackageSpec[]; kwargs...)
-up(pkg::Union{String, PackageSpec}; kwargs...) = up([pkg]; kwargs...)
-up(pkgs::Vector{String}; kwargs...)            = up([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+up(pkg::Union{AbstractString, PackageSpec}; kwargs...) = up([pkg]; kwargs...)
+up(pkgs::Vector{<:AbstractString}; kwargs...)          = up([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 up(pkgs::Vector{PackageSpec}; kwargs...)       = up(Context(), pkgs; kwargs...)
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
@@ -133,8 +134,8 @@ end
 resolve(ctx::Context=Context()) =
     up(ctx, level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, do_update_registry=false)
 
-pin(pkg::Union{String, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
-pin(pkgs::Vector{String}; kwargs...)            = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+pin(pkg::Union{AbstractString, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
+pin(pkgs::Vector{<:AbstractString}; kwargs...)          = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 pin(pkgs::Vector{PackageSpec}; kwargs...)       = pin(Context(), pkgs; kwargs...)
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
@@ -148,8 +149,8 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
 end
 
 
-free(pkg::Union{String, PackageSpec}; kwargs...) = free([pkg]; kwargs...)
-free(pkgs::Vector{String}; kwargs...)            = free([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+free(pkg::Union{AbstractString, PackageSpec}; kwargs...) = free([pkg]; kwargs...)
+free(pkgs::Vector{<:AbstractString}; kwargs...)          = free([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 free(pkgs::Vector{PackageSpec}; kwargs...)       = free(Context(), pkgs; kwargs...)
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
@@ -180,8 +181,8 @@ end
 
 
 test(;kwargs...)                                  = test(PackageSpec[]; kwargs...)
-test(pkg::Union{String, PackageSpec}; kwargs...)  = test([pkg]; kwargs...)
-test(pkgs::Vector{String}; kwargs...)             = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+test(pkg::Union{AbstractString, PackageSpec}; kwargs...)  = test([pkg]; kwargs...)
+test(pkgs::Vector{<:AbstractString}; kwargs...)           = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 test(pkgs::Vector{PackageSpec}; kwargs...)        = test(Context(), pkgs; kwargs...)
 
 function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...)
@@ -481,8 +482,9 @@ end
 @deprecate status(mode::PackageMode) status(mode=mode)
 
 status(; mode=PKGMODE_PROJECT) = status(PackageSpec[]; mode=mode)
-status(pkg::Union{String,PackageSpec}; mode=PKGMODE_PROJECT) = status([pkg]; mode=mode)
-status(pkgs::Vector{String}; mode=PKGMODE_PROJECT) = status([check_package_name(pkg) for pkg in pkgs]; mode=mode)
+status(pkg::Union{AbstractString,PackageSpec}; mode=PKGMODE_PROJECT) = status([pkg]; mode=mode)
+status(pkgs::Vector{<:AbstractString}; mode=PKGMODE_PROJECT) =
+    status([check_package_name(pkg) for pkg in pkgs]; mode=mode)
 status(pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT) = status(Context(), pkgs; mode=mode)
 function status(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT)
     Pkg.Display.status(ctx, pkgs, mode=mode)
@@ -491,7 +493,7 @@ end
 
 
 activate() = (Base.ACTIVE_PROJECT[] = nothing)
-function activate(path::String; shared::Bool=false)
+function activate(path::AbstractString; shared::Bool=false)
     if !shared
         devpath = nothing
         env = Base.active_project() === nothing ? nothing : EnvCache()
