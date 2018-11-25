@@ -6,6 +6,15 @@ using Pkg, Test
 
 include("utils.jl")
 
+@testset "API should accept `AbstractString` arguments" begin
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            Pkg.add(strip("  Example  "))
+            Pkg.rm(strip("  Example "))
+        end
+    end
+end
+
 @testset "Pkg.activate" begin
     temp_pkg_dir() do project_path
         cd_tempdir() do tmp
