@@ -80,7 +80,7 @@ end
 @enum(CommandKind, CMD_HELP, CMD_RM, CMD_ADD, CMD_DEVELOP, CMD_UP,
                    CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
                    CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
-                   CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW,
+                   CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW, CMD_GIT,
                    CMD_REGISTRY_ADD, CMD_REGISTRY_RM, CMD_REGISTRY_UP, CMD_REGISTRY_STATUS,
                    )
 @enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
@@ -664,6 +664,20 @@ function do_develop!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
     API.add_or_develop(Context!(ctx), args; collect(api_opts)...)
 end
 
+function do_git!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
+    active_dir = dirname(Base.active_project())
+    if !isdir(active_dir)
+        println("Directory `$active_dir` does not exist. Aborting git command.")
+        return
+    end
+    println("Running `git` on `$(Base.contractuser(active_dir))`\n")
+    cd(active_dir) do
+        try
+            run(`git $args`)
+        catch err end
+    end
+end
+
 # registry commands
 function do_registry_add!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
     Registry.add(Context!(ctx), args)
@@ -1017,7 +1031,18 @@ end
 ########
 command_declarations = [
 "package" => CommandDeclaration[
-[   :kind => CMD_TEST,
+[   :kind => CMD_GIT,
+    :name => "git",
+    :handler => do_git!,
+    :arg_count => 1 => Inf,
+    :description => "run git on active project",
+    :help => md"""
+    git ...
+
+Run `git` commands on the active environment. This functionality requires `git`
+be installed on your system.
+    """
+],[ :kind => CMD_TEST,
     :name => "test",
     :handler => do_test!,
     :arg_count => 0 => Inf,
