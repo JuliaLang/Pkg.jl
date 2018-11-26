@@ -493,26 +493,37 @@ end
 
 
 activate() = (Base.ACTIVE_PROJECT[] = nothing)
+function _activate_dep(dep_name::AbstractString)
+    Base.active_project() === nothing && return
+    env = nothing
+    try
+        env = EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return
+    end
+    uuid = get(env.project.deps, dep_name, nothing)
+    if uuid !== nothing
+        entry = manifest_info(env, uuid)
+        if entry.path !== nothing
+            return joinpath(dirname(env.project_file), entry.path)
+        end
+    end
+end
 function activate(path::AbstractString; shared::Bool=false)
     if !shared
-        devpath = nothing
-        env = Base.active_project() === nothing ? nothing : EnvCache()
-        if env !== nothing && haskey(env.project.deps, path)
-            uuid = env.project.deps[path]
-            entry = manifest_info(env, uuid)
-            devpath = entry.path === nothing ? nothing : joinpath(dirname(env.project_file), entry.path)
-        end
         # `pkg> activate path`/`Pkg.activate(path)` does the following
         # 1. if path exists, activate that
         # 2. if path exists in deps, and the dep is deved, activate that path (`devpath` above)
         # 3. activate the non-existing directory (e.g. as in `pkg> activate .` for initing a new env)
         if Types.isdir_windows_workaround(path)
             fullpath = abspath(path)
-        elseif devpath !== nothing
-            fullpath = abspath(devpath)
         else
-            fullpath = abspath(path)
-            isdir(fullpath) || @info("activating new environment at $(Base.contractuser(fullpath)).")
+            fullpath = _activate_dep(path)
+            if fullpath === nothing
+                fullpath = abspath(path)
+                @info("activating new environment at $(Base.contractuser(fullpath)).")
+            end
         end
     else
         # initialize `fullpath` in case of empty `Pkg.depots()`
