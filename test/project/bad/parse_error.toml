@@ -1,0 +1,10 @@
+uuid = "6997b572\0-c796-11e8-2991-b59c2857380c"
+version = "0.1.0"
+
+[deps]
+\^aereMacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[extras]
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
