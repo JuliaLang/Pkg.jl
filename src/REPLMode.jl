@@ -787,11 +787,20 @@ function canonical_names()
     return sort!(names)
 end
 
+function installed_names(project::Bool)::Vector{String}
+    env = try EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    return project ?
+        collect(keys(env.project.deps)) :
+        unique!([entry.name for (uuid, entry) in env.manifest])
+end
+
 function complete_installed_packages(options, partial)
-    mode = get(options, :mode, nothing)
-    pkgs = mode == PKGMODE_MANIFEST ? API.__installed() : API.__installed(PKGMODE_PROJECT)
-    stdlib_names = collect(values(Types.stdlib()))
-    return collect(keys(filter(p -> p[1] in stdlib_names || p[2] !== nothing, pkgs)))
+    mode = get(options, :mode, PKGMODE_PROJECT)
+    return installed_names(mode == PKGMODE_PROJECT)
 end
 
 function complete_add_dev(options, partial, i1, i2)
