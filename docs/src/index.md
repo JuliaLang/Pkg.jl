@@ -1,6 +1,17 @@
 # **1.** Introduction
 
-Pkg is the standard package manager for Julia 1.0 and newer. Unlike traditional
+Welcome to the documentation for Pkg, Julia's package manager.
+The documentation covers many things, for example managing package
+installations, developing packages, working with package registries and more.
+
+Throughout the manual the REPL interface to Pkg is used in the examples.
+There is also a functional API interface, which is preferred when not working
+interactively. This API is documented in the [API Reference](@ref) section.
+
+## Background and Design
+
+Pkg is a complete rewrite of Julia's old package manager[^1] and was released
+together with Julia v1.0. Unlike traditional
 package managers, which install and manage a single global set of packages, Pkg
 is designed around “environments”: independent sets of packages that can be
 local to an individual project or shared and selected by name. The exact set of
@@ -48,3 +59,6 @@ your developers and ops teams quickly and easily without having to wait for an
 upstream patch to be accepted and published. Once an official fix is published,
 however, you can just upgrade your dependencies and you'll be back on an
 official release again.
+
+[^1]: Often denoted `Pkg2`, now archived as `OldPkg` at
+      [`github.com/JuliaAttic/OldPkg.jl`](https://github.com/JuliaAttic/OldPkg.jl).

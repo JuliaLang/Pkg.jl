@@ -27,6 +27,8 @@ Pkg.pin
 Pkg.free
 Pkg.instantiate
 Pkg.resolve
+Pkg.gc
+Pkg.status
 Pkg.setprotocol!
 ```
 
