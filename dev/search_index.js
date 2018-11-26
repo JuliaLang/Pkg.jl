@@ -13,7 +13,15 @@ var documenterSearchIndex = {"docs": [
     "page": "1. Introduction",
     "title": "1. Introduction",
     "category": "section",
-    "text": "Pkg is the standard package manager for Julia 1.0 and newer. Unlike traditional package managers, which install and manage a single global set of packages, Pkg is designed around “environments”: independent sets of packages that can be local to an individual project or shared and selected by name. The exact set of packages and versions in an environment is captured in a manifest file which can be checked into a project repository and tracked in version control, significantly improving reproducibility of projects. If you’ve ever tried to run code you haven’t used in a while only to find that you can’t get anything to work because you’ve updated or uninstalled some of the packages your project was using, you’ll understand the motivation for this approach. In Pkg, since each project maintains its own independent set of package versions, you’ll never have this problem again. Moreover, if you check out a project on a new system, you can simply materialize the environment described by its manifest file and immediately be up and running with a known-good set of dependencies.Since environments are managed and updated independently from each other, “dependency hell” is significantly alleviated in Pkg. If you want to use the latest and greatest version of some package in a new project but you’re stuck on an older version in a different project, that’s no problem – since they have separate environments they can just use different versions, which are both installed at the same time in different locations on your system. The location of each package version is canonical, so when environments use the same versions of packages, they can share installations, avoiding unnecessary duplication of the package. Old package versions that are no longer used by any environments are periodically “garbage collected” by the package manager.Pkg’s approach to local environments may be familiar to people who have used Python’s virtualenv or Ruby’s bundler. In Julia, instead of hacking the language’s code loading mechanisms to support environments, we have the benefit that Julia natively understands them. In addition, Julia environments are “stackable”: you can overlay one environment with another and thereby have access to additional packages outside of the primary environment. This makes it easy to work on a project, which provides the primary environment, while still having access to all your usual dev tools like profilers, debuggers, and so on, just by having an environment including these dev tools later in the load path.Last but not least, Pkg is designed to support federated package registries. This means that it allows multiple registries managed by different parties to interact seamlessly. In particular, this includes private registries which can live behind corporate firewalls. You can install and update your own packages from a private registry with exactly the same tools and workflows that you use to install and manage official Julia packages. If you urgently need to apply a hotfix for a public package that’s critical to your company’s product, you can tag a private version of it in your company’s internal registry and get a fix to your developers and ops teams quickly and easily without having to wait for an upstream patch to be accepted and published. Once an official fix is published, however, you can just upgrade your dependencies and you\'ll be back on an official release again."
+    "text": "Welcome to the documentation for Pkg, Julia\'s package manager. The documentation covers many things, for example managing package installations, developing packages, working with package registries and more.Throughout the manual the REPL interface to Pkg is used in the examples. There is also a functional API interface, which is preferred when not working interactively. This API is documented in the API Reference section."
+},
+
+{
+    "location": "#Background-and-Design-1",
+    "page": "1. Introduction",
+    "title": "Background and Design",
+    "category": "section",
+    "text": "Pkg is a complete rewrite of Julia\'s old package manager[1] and was released together with Julia v1.0. Unlike traditional package managers, which install and manage a single global set of packages, Pkg is designed around “environments”: independent sets of packages that can be local to an individual project or shared and selected by name. The exact set of packages and versions in an environment is captured in a manifest file which can be checked into a project repository and tracked in version control, significantly improving reproducibility of projects. If you’ve ever tried to run code you haven’t used in a while only to find that you can’t get anything to work because you’ve updated or uninstalled some of the packages your project was using, you’ll understand the motivation for this approach. In Pkg, since each project maintains its own independent set of package versions, you’ll never have this problem again. Moreover, if you check out a project on a new system, you can simply materialize the environment described by its manifest file and immediately be up and running with a known-good set of dependencies.Since environments are managed and updated independently from each other, “dependency hell” is significantly alleviated in Pkg. If you want to use the latest and greatest version of some package in a new project but you’re stuck on an older version in a different project, that’s no problem – since they have separate environments they can just use different versions, which are both installed at the same time in different locations on your system. The location of each package version is canonical, so when environments use the same versions of packages, they can share installations, avoiding unnecessary duplication of the package. Old package versions that are no longer used by any environments are periodically “garbage collected” by the package manager.Pkg’s approach to local environments may be familiar to people who have used Python’s virtualenv or Ruby’s bundler. In Julia, instead of hacking the language’s code loading mechanisms to support environments, we have the benefit that Julia natively understands them. In addition, Julia environments are “stackable”: you can overlay one environment with another and thereby have access to additional packages outside of the primary environment. This makes it easy to work on a project, which provides the primary environment, while still having access to all your usual dev tools like profilers, debuggers, and so on, just by having an environment including these dev tools later in the load path.Last but not least, Pkg is designed to support federated package registries. This means that it allows multiple registries managed by different parties to interact seamlessly. In particular, this includes private registries which can live behind corporate firewalls. You can install and update your own packages from a private registry with exactly the same tools and workflows that you use to install and manage official Julia packages. If you urgently need to apply a hotfix for a public package that’s critical to your company’s product, you can tag a private version of it in your company’s internal registry and get a fix to your developers and ops teams quickly and easily without having to wait for an upstream patch to be accepted and published. Once an official fix is published, however, you can just upgrade your dependencies and you\'ll be back on an official release again.[1]: Often denoted Pkg2, now archived as OldPkg at   github.com/JuliaAttic/OldPkg.jl."
 },
 
 {
@@ -29,7 +37,7 @@ var documenterSearchIndex = {"docs": [
     "page": "2. Getting Started",
     "title": "2. Getting Started",
     "category": "section",
-    "text": "The Pkg REPL-mode is entered from the Julia REPL using the key ].(v1.0) pkg>The part inside the parenthesis of the prompt shows the name of the current project. Since we haven\'t created our own project yet, we are in the default project, located at ~/.julia/environments/v1.0 (or whatever version of Julia you happen to run).To return to the julia> prompt, either press backspace when the input line is empty or press Ctrl+C. Help is available by calling pkg> help. If you are in an environment that does not have access to a REPL you can still use the REPL mode commands using the string macro pkg available after using Pkg. The command pkg\"cmd\" would be equivalent to executing cmd in the REPL mode.The documentation here describes using Pkg from the REPL mode. Documentation of using the Pkg API (by calling Pkg. functions) is in progress of being written."
+    "text": "Pkg comes with its own REPL mode, which can be entered from the Julia REPL by pressing ]. To get back to the Julia REPL press backspace or ^C.(v1.1) pkg>The prompt displays the current active environment, which is the environment that Pkg commands will modify. The default environment is based on the current Julia version, (v1.1) in the example above, and is located in ~/.julia/environments/.note: Note\nThere are other ways of interacting with Pkg:The pkg string macro, which is available after using Pkg. The command pkg\"cmd\" is equivalent to executing cmd in the Pkg REPL.\nThe API-mode, which is recommended for non-interactive environments. The API mode is documented in full in the API Reference section of the Pkg documentation.To add a package, use the add command(v1.1) pkg> add ExampleMultiple packages may be specified:(v1.1) pkg> add Example JSON StaticArraysTo remove a package, use the rm command. rm also accepts multiple packages:(v1.1) pkg> rm JSON StaticArraysSo far, we have specified by names in a registry. If you want to add a package which is not in a registry, you can specify the location directly, for example with an URL:(v1.1) pkg> add https://github.com/JuliaLang/Example.jlTo remove this package, use rm and specify the package by name (not URL!):(v1.1) pkg> rm ExampleThe update command can be used to update a installed package:(v1.1) pkg> update ExampleTo update all installed packages simply use update without any arguments:(v1.1) pkg> updateThis should cover most use cases for simple package management: adding, updating and removing dependencies. But say you are working on a project and you encounter a bug in one of your dependencies! How would you access the source? Pkg can help you out with develop:(v1.1) pkg> develop --local ExampleThe Example package is now cloned to the dev subdirectory of your project directory. You can edit Example\'s source and any changes you make will be visible to your project.Once upstream Example has been patched, you can stop tracking the local clone. Do this with a free command:(v1.1) pkg> free ExampleNow you are back to using the version of Example in the registry.If you are ever stuck, ask Pkg for help:(v1.1) pkg> ?You should see a list of available commands along with short descriptions. You can ask for more thorough help for a specific command:(v1.1) pkg> ?developThis quickstart should get you started with Pkg\'s common use cases, but there is still lots more that Pkg has to offer in terms of powerful package management. Read the full manual to learn more!"
 },
 
 {
@@ -269,7 +277,7 @@ var documenterSearchIndex = {"docs": [
     "page": "6. Compatibility",
     "title": "Version specifier format",
     "category": "section",
-    "text": "Similar to other package managers, the Julia package manager respects semantic versioning (semver). As an example, a version specifier is given as e.g. 1.2.3 is therefore assumed to be compatible with the versions [1.2.3 - 2.0.0) where ) is a non-inclusive upper bound. More specifically, a version specifier is either given as a caret specifier, e.g. ^1.2.3  or a tilde specifier ~1.2.3. Caret specifiers are the default and hence 1.2.3 == ^1.2.3. The difference between a caret and tilde is described in the next section. The union of multiple version specifiers can be formed by comma separating individual version specifiers."
+    "text": "Similar to other package managers, the Julia package manager respects semantic versioning (semver). As an example, a version specifier is given as e.g. 1.2.3 is therefore assumed to be compatible with the versions [1.2.3 - 2.0.0) where ) is a non-inclusive upper bound. More specifically, a version specifier is either given as a caret specifier, e.g. ^1.2.3  or a tilde specifier ~1.2.3. Caret specifiers are the default and hence 1.2.3 == ^1.2.3. The difference between a caret and tilde is described in the next section. The union of multiple version specifiers can be formed by comma separating individual version specifiers, e.g.[compat]\nExample = \"1.2, 2\"will result in [1.2.0, 3.0.0)."
 },
 
 {
@@ -350,22 +358,6 @@ var documenterSearchIndex = {"docs": [
     "title": "7.2. Creating a registry",
     "category": "section",
     "text": "TBW: Describe registry file structure etc."
-},
-
-{
-    "location": "faq/#",
-    "page": "8. FAQ",
-    "title": "8. FAQ",
-    "category": "page",
-    "text": ""
-},
-
-{
-    "location": "faq/#**8.**-FAQ-1",
-    "page": "8. FAQ",
-    "title": "8. FAQ",
-    "category": "section",
-    "text": ""
 },
 
 {
@@ -513,11 +505,27 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
+    "location": "api/#Pkg.gc",
+    "page": "10. API Reference",
+    "title": "Pkg.gc",
+    "category": "function",
+    "text": "Pkg.gc()\n\nGarbage collect packages that are no longer reachable from any project. Only packages that are tracked by version are deleted, so no packages that might contain local changes are touched.\n\n\n\n\n\n"
+},
+
+{
+    "location": "api/#Pkg.status",
+    "page": "10. API Reference",
+    "title": "Pkg.status",
+    "category": "function",
+    "text": "Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT)\n\nPrint out the status of the project/manifest. If mode is PKGMODE_PROJECT prints out status about only those packages that are in the project (explicitly added). If mode is PKGMODE_MANIFEST also print for those in the manifest (recursive dependencies). If there are any packages listed as arguments the output will be limited to those packages.\n\n\n\n\n\n"
+},
+
+{
     "location": "api/#Pkg.setprotocol!",
     "page": "10. API Reference",
     "title": "Pkg.setprotocol!",
     "category": "function",
-    "text": "Pkg.setprotocol!(proto::Union{Nothing, AbstractString}=nothing)\n\nSet the protocol used to access GitHub-hosted packages when adding a url or developing a package. Defaults to \'https\', with proto == nothing delegating the choice to the package developer.\n\n\n\n\n\n"
+    "text": "Pkg.setprotocol!(proto::Union{Nothing, AbstractString}=nothing)\n\nSet the protocol used to access GitHub-hosted packages when adding a url or developing a package. Defaults to delegating the choice to the package developer (proto == nothing). Other choices for proto are \"https\" or \"git\".\n\n\n\n\n\n"
 },
 
 {
@@ -525,7 +533,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "10.1. Package API Reference",
     "category": "section",
-    "text": "In the REPL mode packages (with associated version, UUID, URL etc) are parsed from strings, for example, \"Package#master\",\"Package@v0.1\", \"www.mypkg.com/MyPkg#my/feature\". It is possible to use strings as arguments for simple commands in the API mode (like Pkg.add([\"PackageA\", \"PackageB\"]), more complicated commands, that e.g. specify URLs or version range, uses a more structured format over strings. This is done by creating an instance of a PackageSpec which are passed in to functions.PackageSpec\nPackageMode\nUpgradeLevel\nPkg.add\nPkg.develop\nPkg.activate\nPkg.rm\nPkg.update\nPkg.test\nPkg.build\nPkg.pin\nPkg.free\nPkg.instantiate\nPkg.resolve\nPkg.setprotocol!"
+    "text": "In the REPL mode packages (with associated version, UUID, URL etc) are parsed from strings, for example, \"Package#master\",\"Package@v0.1\", \"www.mypkg.com/MyPkg#my/feature\". It is possible to use strings as arguments for simple commands in the API mode (like Pkg.add([\"PackageA\", \"PackageB\"]), more complicated commands, that e.g. specify URLs or version range, uses a more structured format over strings. This is done by creating an instance of a PackageSpec which are passed in to functions.PackageSpec\nPackageMode\nUpgradeLevel\nPkg.add\nPkg.develop\nPkg.activate\nPkg.rm\nPkg.update\nPkg.test\nPkg.build\nPkg.pin\nPkg.free\nPkg.instantiate\nPkg.resolve\nPkg.gc\nPkg.status\nPkg.setprotocol!"
 },
 
 {
