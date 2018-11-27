@@ -740,6 +740,10 @@ function complete_activate(options, partial, i1, i2)
 end
 
 function complete_local_dir(s, i1, i2)
+    if !isempty(s) && s[1] == '~'
+        return String[expanduser(s)], i1:i2, true
+    end
+
     cmp = REPL.REPLCompletions.complete_path(s, i2)
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
     completions = filter!(x -> isdir(s[1:prevind(s, first(cmp[2])-i1+1)]*x), completions)
