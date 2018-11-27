@@ -84,6 +84,9 @@ function normalize_url(url::AbstractString)
     end
 end
 
+ensure_clone(target_path, url; kwargs...) =
+    ispath(target_path) ? LibGit2.GitRepo(target_path) : GitTools.clone(url, target_path; kwargs...)
+
 function clone(url, source_path; header=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
