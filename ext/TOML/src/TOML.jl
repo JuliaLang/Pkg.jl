@@ -3,6 +3,8 @@
 module TOML
     using Dates
 
+    const TYPE = Union{AbstractDict,AbstractArray,AbstractString,DateTime}
+
     include("parser.jl")
     include("print.jl")
 
