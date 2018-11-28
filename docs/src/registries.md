@@ -5,11 +5,14 @@ available releases, dependencies and where it can be downloaded.
 The `General` registry (https://github.com/JuliaRegistries/General)
 is the default one, and is installed automatically.
 
-## **7.1.** Managing registries
+## Managing registries
+
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
 
 Registries can be added, removed and updated from either the Pkg REPL
-or by using the functional API. In this section we will describe the
-REPL interface. The functional registry API is documented in
+or by using the function based API. In this section we will describe the
+REPL interface. The registry API is documented in
 the [Registry API Reference](@ref) section.
 
 ### Adding registries
@@ -76,8 +79,3 @@ pkg> registry up
   Updating registry at `~/.julia/registries/General`
   Updating git-repo `https://github.com/JuliaRegistries/General`
 ```
-
-
-## **7.2.** Creating a registry
-
-TBW: Describe registry file structure etc.

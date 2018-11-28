@@ -1316,8 +1316,11 @@ the project file is summarized, showing what version each package is on and
 how it has changed since the last git commit (if in a git repo), as well as
 any changes to manifest packages not already listed. In `--project` mode, the
 status of the project file is summarized. In `--manifest` mode the output also
-includes the dependencies of explicitly added packages. If there are any 
+includes the dependencies of explicitly added packages. If there are any
 packages listed as arguments the output will be limited to those packages.
+
+!!! compat "Julia 1.1"
+    `pkg> status` with package arguments requires at least Julia 1.1.
     """,
 ],[ :kind => CMD_GC,
     :name => "gc",

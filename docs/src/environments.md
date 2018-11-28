@@ -79,9 +79,3 @@ Simply clone their project using e.g. `git clone`, `cd` to the project directory
 
 If the project contains a manifest, this will install the packages in the same state that is given by that manifest.
 Otherwise, it will resolve the latest versions of the dependencies compatible with the project.
-
-
-
-## TODO:
-
-Write about activate, --project, JULIA_PROJECT etc etc.
