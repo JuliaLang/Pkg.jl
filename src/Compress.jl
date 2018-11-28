@@ -10,7 +10,7 @@ function load_versions(path::String)
 end
 
 function load(path::String,
-    versions::Vector{VersionNumber}=load_versions(path))
+    versions::Vector{VersionNumber} = load_versions(path))
     compressed = TOML.parsefile(path)
     uncompressed = Dict{VersionNumber,Dict{Any,Any}}()
     for (vers, data) in compressed
@@ -24,10 +24,11 @@ function load(path::String,
 end
 
 function compress(path::String, uncompressed::Dict,
-    versions::Vector{VersionNumber}=load_versions(path))
+    versions::Vector{VersionNumber} = load_versions(path))
     inverted = Dict()
-    for (ver, data) in uncompressed, pair in data
-        push!(get!(inverted, pair, VersionNumber[]), ver)
+    for (ver, data) in uncompressed, (key, val) in data
+        val isa TOML.TYPE || (val = string(val))
+        push!(get!(inverted, key => val, VersionNumber[]), ver)
     end
     compressed = Dict()
     for ((k, v), vers) in inverted
@@ -39,7 +40,7 @@ function compress(path::String, uncompressed::Dict,
 end
 
 function save(path::String, uncompressed::Dict,
-    versions::Vector{VersionNumber}=load_versions(path))
+    versions::Vector{VersionNumber} = load_versions(path))
     compressed = compress(path, uncompressed)
     open(path, write=true) do io
         TOML.print(io, compressed, sorted=true)

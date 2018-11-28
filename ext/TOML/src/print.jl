@@ -18,31 +18,28 @@ function printkey(io::IO, keys::Vector{String})
     end
 end
 
-function printvalue(io::IO, value; sorted=false)
-    if isa(value, AbstractDict)
-        _print(io, value, sorted=sorted)
-    elseif isa(value, Array)
-        Base.print(io, "[")
-        for (i, x) in enumerate(value)
-            i != 1 && Base.print(io, ", ")
-            if isa(x, AbstractDict)
-                _print(io, x, sorted=sorted)
-            else
-                printvalue(io, x, sorted=sorted)
-            end
+function printvalue(io::IO, value::AbstractArray; sorted=false)
+    Base.print(io, "[")
+    for (i, x) in enumerate(value)
+        i != 1 && Base.print(io, ", ")
+        if isa(x, AbstractDict)
+            _print(io, x, sorted=sorted)
+        else
+            printvalue(io, x, sorted=sorted)
         end
-        Base.print(io, "]")
-    elseif isa(value, AbstractString)
-        Base.print(io, "\"$(escape_string(value))\"")
-    elseif isa(value, DateTime)
-        Base.print(io, Dates.format(value, "YYYY-mm-ddTHH:MM:SS.sssZ"))
-    else
-        Base.print(io, value)
     end
+    Base.print(io, "]")
 end
+printvalue(io::IO, value::AbstractDict; sorted=false) =
+    _print(io, value, sorted=sorted)
+printvalue(io::IO, value::DateTime; sorted=false) =
+    Base.print(io, Dates.format(value, "YYYY-mm-ddTHH:MM:SS.sssZ"))
+printvalue(io::IO, value; sorted=false) =
+    Base.print(io, "\"$(escape_string(string(value)))\"")
 
 is_table(value)           = isa(value, AbstractDict)
-is_array_of_tables(value) = isa(value, Array) && length(value) > 0 && isa(value[1], AbstractDict)
+is_array_of_tables(value) = isa(value, AbstractArray) &&
+                            length(value) > 0 && isa(value[1], AbstractDict)
 is_tabular(value)         = is_table(value) || is_array_of_tables(value)
 
 function _print(io::IO, a::AbstractDict,
