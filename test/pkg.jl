@@ -543,7 +543,7 @@ temp_pkg_dir() do project_path
 end
 
 @testset "manifest read/write unit tests" begin
-    manifestdir = joinpath(@__DIR__, "manifest")
+    manifestdir = joinpath(@__DIR__, "manifest", "good")
     temp = joinpath(mktempdir(), "x.toml")
     for testfile in joinpath.(manifestdir, readdir(manifestdir))
         a = Types.read_manifest(testfile)
@@ -557,10 +557,12 @@ end
         end
     end
     rm(dirname(temp); recursive = true, force = true)
+    @test_throws PkgError Types.read_manifest(
+        joinpath(@__DIR__, "manifest", "bad", "parse_error.toml"))
 end
 
 @testset "project read/write unit tests" begin
-    projectdir = joinpath(@__DIR__, "project")
+    projectdir = joinpath(@__DIR__, "project", "good")
     temp = joinpath(mktempdir(), "x.toml")
     for testfile in joinpath.(projectdir, readdir(projectdir))
         a = Types.read_project(testfile)
@@ -571,6 +573,8 @@ end
         end
     end
     rm(dirname(temp); recursive = true, force = true)
+    @test_throws PkgError Types.read_project(
+        joinpath(@__DIR__, "project", "bad", "parse_error.toml"))
 end
 
 @testset "stdlib_resolve!" begin

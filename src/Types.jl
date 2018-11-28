@@ -532,26 +532,24 @@ function Project(raw::Dict)
     return project
 end
 
-function _read_project(io::IO)
-    raw, err = nothing, nothing
+function read_project(io::IO; path=nothing)
+    raw = nothing
     try
         raw = TOML.parse(io)
     catch err
-        err isa TOML.ParserError || rethrow()
+        if err isa TOML.ParserError
+            pkgerror("Could not parse project $(something(path,"")): $(err.msg)")
+        elseif all(x -> x isa TOML.ParserError, err)
+            pkgerror("Could not parse project $(something(path,"")): $err")
+        else
+            rethrow()
+        end
     end
-    return raw, err
+    return Project(raw)
 end
 
-function read_project(io::IO)
-    raw, err = _read_project(io)
-    err === nothing ? Project(raw) : pkgerror("Could not parse project file: $(err.msg)")
-end
-
-function read_project(filename::String)
-    !isfile(filename) && return Project()
-    raw, err = open(_read_project, filename)
-    err === nothing ? Project(raw) : pkgerror("Could not parse project file at `$filename`: $(err.msg)")
-end
+read_project(path::String) =
+    isfile(path) ? open(io->read_project(io;path=path), path) : Project()
 
 function read_package(f::String)
     _throw_package_err(x) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
@@ -615,19 +613,24 @@ function Manifest(raw::Dict)::Manifest
     return manifest
 end
 
-function read_manifest(io::IO)
+function read_manifest(io::IO; path=nothing)
     raw = nothing
     try
         raw = TOML.parse(io)
     catch err
-        err isa TOML.ParserError || rethrow()
-        pkgerror("Could not parse manifest: $(err.msg)")
+        if err isa TOML.ParserError
+            pkgerror("Could not parse manifest $(something(path,"")): $(err.msg)")
+        elseif all(x -> x isa TOML.ParserError, err)
+            pkgerror("Could not parse manifest $(something(path,"")): $err")
+        else
+            rethrow()
+        end
     end
     return Manifest(raw)
 end
 
-read_manifest(filename::String)::Manifest =
-    isfile(filename) ? open(read_manifest, filename) : Dict{UUID,PackageEntry}()
+read_manifest(path::String)::Manifest =
+    isfile(path) ? open(io->read_manifest(io;path=path), path) : Dict{UUID,PackageEntry}()
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
