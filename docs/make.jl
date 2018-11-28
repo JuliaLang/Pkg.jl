@@ -18,7 +18,8 @@ makedocs(
         "glossary.md",
         "api.md"
     ],
-    versions = ["v#.#", "dev" => "dev"]
+    versions = ["v#.#", "dev" => "dev"],
+    assets = ["assets/custom.css"],
 )
 
 deploydocs(
