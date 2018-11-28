@@ -1351,16 +1351,43 @@ is modified.
     :handler => do_registry_add!,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_registry(x; add = true)),
-    :description => "good docs",
-    :help => md"more docs?",
+    :description => "add package registries",
+    :help => md"""
+
+    registry add reg...
+
+Adds package registries `reg...` to the user depot.
+
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
+
+**Examples**
+```
+pkg> registry add General
+pkg> registry add https://www.my-custom-registry.com
+```
+    """,
 ],[ :kind => CMD_REGISTRY_RM,
     :name => "remove",
     :short_name => "rm",
     :handler => do_registry_rm!,
     :arg_count => 1 => Inf,
     :arg_parser => parse_registry,
-    :description => "good docs",
-    :help => md"more docs?",
+    :description => "remove package registries",
+    :help => md"""
+
+    registry rm reg...
+
+Remove package registres `reg...`.
+
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
+
+**Examples**
+```
+pkg> registry rm General
+```
+    """,
 ],[
     :kind => CMD_REGISTRY_UP,
     :name => "update",
@@ -1368,8 +1395,24 @@ is modified.
     :handler => do_registry_up!,
     :arg_count => 0 => Inf,
     :arg_parser => parse_registry,
-    :description => "good docs",
-    :help => md"more docs?",
+    :description => "update package registries",
+    :help => md"""
+
+    registry up
+    registry up reg...
+
+Update package registries `reg...`. If no registries are specified
+all user registries will be updated.
+
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
+
+**Examples**
+```
+pkg> registry up
+pkg> registry up General
+```
+    """,
 ],[
     :kind => CMD_REGISTRY_STATUS,
     :name => "status",
@@ -1377,8 +1420,21 @@ is modified.
     :handler => do_registry_status!,
     :arg_count => 0 => Inf,
     :arg_parser => parse_registry,
-    :description => "good docs",
-    :help => md"more docs?",
+    :description => "information about installed registries",
+    :help => md"""
+
+    registry status
+
+Display information about installed registries.
+
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
+
+**Examples**
+```
+pkg> registry status
+```
+    """,
 ]
 ], #registry
 ] #command_declarations
