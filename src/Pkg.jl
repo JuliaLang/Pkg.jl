@@ -337,11 +337,21 @@ Below is a comparison between the REPL version and the `PackageSpec` version:
 const PackageSpec = API.Package
 
 """
-    Pkg.setprotocol!(site::AbstractString, proto::Union{Nothing, AbstractString}=nothing)
+    setprotocol!(;
+        domain::AbstractString = "github.com",
+        protocol::Union{Nothing, AbstractString}=nothing
+    )
 
-Set the protocol used to access GitHub-hosted packages when `add`ing a url or `develop`ing a package.
+Set the protocol used to access hosted packages when `add`ing a url or `develop`ing a package.
 Defaults to delegating the choice to the package developer (`proto == nothing`).
 Other choices for `proto` are `"https"` or `"git"`.
+
+# Examples
+```julia-repl
+julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
+
+julia> Pkg.setprotocol!(domain = "gitlab.mycompany.com")
+```
 """
 const setprotocol! = API.setprotocol!
 
