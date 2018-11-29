@@ -365,7 +365,7 @@ Below is a comparison between the REPL version and the `RegistrySpec` version:
 | `REPL`               | `API`                                           |
 |:---------------------|:------------------------------------------------|
 | `Registry`           | `RegistrySpec("Registry")`                      |
-| `Registry=a67d...`   | `RegistrySpec(name="Registry", uuid="a67d..."`  |
+| `Registry=a67d...`   | `RegistrySpec(name="Registry", uuid="a67d...")` |
 | `local/path`         | `RegistrySpec(path="local/path")`               |
 | `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`        |
 """
