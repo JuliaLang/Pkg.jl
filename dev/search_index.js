@@ -193,14 +193,6 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "environments/#TODO:-1",
-    "page": "4. Working with Environments",
-    "title": "TODO:",
-    "category": "section",
-    "text": "Write about activate, –project, JULIA_PROJECT etc etc."
-},
-
-{
     "location": "creating-packages/#",
     "page": "5. Creating Packages",
     "title": "5. Creating Packages",
@@ -321,11 +313,11 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "registries/#**7.1.**-Managing-registries-1",
+    "location": "registries/#Managing-registries-1",
     "page": "7. Registries",
-    "title": "7.1. Managing registries",
+    "title": "Managing registries",
     "category": "section",
-    "text": "Registries can be added, removed and updated from either the Pkg REPL or by using the functional API. In this section we will describe the REPL interface. The functional registry API is documented in the Registry API Reference section."
+    "text": "compat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.Registries can be added, removed and updated from either the Pkg REPL or by using the function based API. In this section we will describe the REPL interface. The registry API is documented in the Registry API Reference section."
 },
 
 {
@@ -350,14 +342,6 @@ var documenterSearchIndex = {"docs": [
     "title": "Updating registries",
     "category": "section",
     "text": "The registry update (or registry up) command is available to update registries. Here we update the General registry,pkg> registry up General\n  Updating registry at `~/.julia/registries/General`\n  Updating git-repo `https://github.com/JuliaRegistries/General`and to update all installed user registries just dopkg> registry up\n  Updating registry at `~/.julia/registries/General`\n  Updating git-repo `https://github.com/JuliaRegistries/General`"
-},
-
-{
-    "location": "registries/#**7.2.**-Creating-a-registry-1",
-    "page": "7. Registries",
-    "title": "7.2. Creating a registry",
-    "category": "section",
-    "text": "TBW: Describe registry file structure etc."
 },
 
 {
@@ -517,7 +501,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.status",
     "category": "function",
-    "text": "Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT)\n\nPrint out the status of the project/manifest. If mode is PKGMODE_PROJECT prints out status about only those packages that are in the project (explicitly added). If mode is PKGMODE_MANIFEST also print for those in the manifest (recursive dependencies). If there are any packages listed as arguments the output will be limited to those packages.\n\n\n\n\n\n"
+    "text": "Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT)\n\nPrint out the status of the project/manifest. If mode is PKGMODE_PROJECT prints out status about only those packages that are in the project (explicitly added). If mode is PKGMODE_MANIFEST also print for those in the manifest (recursive dependencies). If there are any packages listed as arguments the output will be limited to those packages.\n\ncompat: Julia 1.1\nPkg.status with package arguments requires at least Julia 1.1.\n\n\n\n\n\n"
 },
 
 {
@@ -531,7 +515,7 @@ var documenterSearchIndex = {"docs": [
 {
     "location": "api/#Package-API-Reference-1",
     "page": "10. API Reference",
-    "title": "10.1. Package API Reference",
+    "title": "Package API Reference",
     "category": "section",
     "text": "In the REPL mode packages (with associated version, UUID, URL etc) are parsed from strings, for example, \"Package#master\",\"Package@v0.1\", \"www.mypkg.com/MyPkg#my/feature\". It is possible to use strings as arguments for simple commands in the API mode (like Pkg.add([\"PackageA\", \"PackageB\"]), more complicated commands, that e.g. specify URLs or version range, uses a more structured format over strings. This is done by creating an instance of a PackageSpec which are passed in to functions.PackageSpec\nPackageMode\nUpgradeLevel\nPkg.add\nPkg.develop\nPkg.activate\nPkg.rm\nPkg.update\nPkg.test\nPkg.build\nPkg.pin\nPkg.free\nPkg.instantiate\nPkg.resolve\nPkg.gc\nPkg.status\nPkg.setprotocol!"
 },
@@ -541,7 +525,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.RegistrySpec",
     "category": "type",
-    "text": "RegistrySpec(name::String)\nRegistrySpec(; name, url, path)\n\nA RegistrySpec is a representation of a registry with various metadata, much like PackageSpec.\n\nMost registry functions in Pkg take a Vector of RegistrySpec and do the operation on all the registries in the vector.\n\nBelow is a comparison between the REPL version and the RegistrySpec version:\n\nREPL API\nRegistry RegistrySpec(\"Registry\")\nRegistry=a67d... RegistrySpec(name=\"Registry\", uuid=\"a67d...\"\nlocal/path RegistrySpec(path=\"local/path\")\nwww.myregistry.com RegistrySpec(url=\"www.myregistry.com\")\n\n\n\n\n\n"
+    "text": "RegistrySpec(name::String)\nRegistrySpec(; name, url, path)\n\nA RegistrySpec is a representation of a registry with various metadata, much like PackageSpec.\n\nMost registry functions in Pkg take a Vector of RegistrySpec and do the operation on all the registries in the vector.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nBelow is a comparison between the REPL version and the RegistrySpec version:\n\nREPL API\nRegistry RegistrySpec(\"Registry\")\nRegistry=a67d... RegistrySpec(name=\"Registry\", uuid=\"a67d...\"\nlocal/path RegistrySpec(path=\"local/path\")\nwww.myregistry.com RegistrySpec(url=\"www.myregistry.com\")\n\n\n\n\n\n"
 },
 
 {
@@ -549,7 +533,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.Registry.add",
     "category": "function",
-    "text": "Pkg.Registry.add(url::String)\nPkg.Registry.add(registry::RegistrySpec)\n\nAdd new package registries.\n\nExamples\n\nPkg.Registry.add(\"General\")\nPkg.Registry.add(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\nPkg.Registry.add(RegistrySpec(url = \"https://github.com/JuliaRegistries/General.git\"))\n\n\n\n\n\n"
+    "text": "Pkg.Registry.add(url::String)\nPkg.Registry.add(registry::RegistrySpec)\n\nAdd new package registries.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nPkg.Registry.add(\"General\")\nPkg.Registry.add(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\nPkg.Registry.add(RegistrySpec(url = \"https://github.com/JuliaRegistries/General.git\"))\n\n\n\n\n\n"
 },
 
 {
@@ -557,7 +541,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.Registry.rm",
     "category": "function",
-    "text": "Pkg.Registry.rm(registry::String)\nPkg.Registry.rm(registry::RegistrySpec)\n\nRemove registries.\n\nExamples\n\nPkg.Registry.rm(\"General\")\nPkg.Registry.rm(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\n\n\n\n\n\n"
+    "text": "Pkg.Registry.rm(registry::String)\nPkg.Registry.rm(registry::RegistrySpec)\n\nRemove registries.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nPkg.Registry.rm(\"General\")\nPkg.Registry.rm(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\n\n\n\n\n\n"
 },
 
 {
@@ -565,7 +549,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.Registry.update",
     "category": "function",
-    "text": "Pkg.Registry.update()\nPkg.Registry.update(registry::RegistrySpec)\nPkg.Registry.update(registry::Vector{RegistrySpec})\n\nUpdate registries. If no registries are given, update all available registries.\n\nExamples\n\nPkg.Registry.update()\nPkg.Registry.update(\"General\")\nPkg.Registry.update(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\n\n\n\n\n\n"
+    "text": "Pkg.Registry.update()\nPkg.Registry.update(registry::RegistrySpec)\nPkg.Registry.update(registry::Vector{RegistrySpec})\n\nUpdate registries. If no registries are given, update all available registries.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nPkg.Registry.update()\nPkg.Registry.update(\"General\")\nPkg.Registry.update(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\n\n\n\n\n\n"
 },
 
 {
@@ -573,15 +557,15 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.Registry.status",
     "category": "function",
-    "text": "Pkg.Registry.status()\n\nDisplay information about available registries.\n\n\n\n\n\n"
+    "text": "Pkg.Registry.status()\n\nDisplay information about available registries.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nPkg.Registry.status()\n\n\n\n\n\n"
 },
 
 {
     "location": "api/#Registry-API-Reference-1",
     "page": "10. API Reference",
-    "title": "10.2. Registry API Reference",
+    "title": "Registry API Reference",
     "category": "section",
-    "text": "The function API for registries uses RegistrySpecs, similar to PackageSpec.RegistrySpec\nPkg.Registry.add\nPkg.Registry.rm\nPkg.Registry.update\nPkg.Registry.status"
+    "text": "compat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.The function API for registries uses RegistrySpecs, similar to PackageSpec.RegistrySpec\nPkg.Registry.add\nPkg.Registry.rm\nPkg.Registry.update\nPkg.Registry.status"
 },
 
 ]}
