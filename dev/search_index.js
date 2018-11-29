@@ -525,7 +525,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.RegistrySpec",
     "category": "type",
-    "text": "RegistrySpec(name::String)\nRegistrySpec(; name, url, path)\n\nA RegistrySpec is a representation of a registry with various metadata, much like PackageSpec.\n\nMost registry functions in Pkg take a Vector of RegistrySpec and do the operation on all the registries in the vector.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nBelow is a comparison between the REPL version and the RegistrySpec version:\n\nREPL API\nRegistry RegistrySpec(\"Registry\")\nRegistry=a67d... RegistrySpec(name=\"Registry\", uuid=\"a67d...\"\nlocal/path RegistrySpec(path=\"local/path\")\nwww.myregistry.com RegistrySpec(url=\"www.myregistry.com\")\n\n\n\n\n\n"
+    "text": "RegistrySpec(name::String)\nRegistrySpec(; name, url, path)\n\nA RegistrySpec is a representation of a registry with various metadata, much like PackageSpec.\n\nMost registry functions in Pkg take a Vector of RegistrySpec and do the operation on all the registries in the vector.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nBelow is a comparison between the REPL version and the RegistrySpec version:\n\nREPL API\nRegistry RegistrySpec(\"Registry\")\nRegistry=a67d... RegistrySpec(name=\"Registry\", uuid=\"a67d...\")\nlocal/path RegistrySpec(path=\"local/path\")\nwww.myregistry.com RegistrySpec(url=\"www.myregistry.com\")\n\n\n\n\n\n"
 },
 
 {
