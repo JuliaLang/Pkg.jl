@@ -751,7 +751,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}; 
         pkg.repo === nothing && (pkg.repo = Types.GitRepo())
         !isempty(pkg.repo.rev) && pkgerror("git revision cannot be given to `develop`")
     end
-    
+
     new_uuids = UUID[]
     for pkg in pkgs
         pkg.special_action = PKGSPEC_DEVELOPED
@@ -1363,7 +1363,7 @@ function find_registered!(env::EnvCache,
         end
     end
     # if there's still nothing to look for, return early
-    isempty(names) && isempty(uuids) && return
+    !force && isempty(names) && isempty(uuids) && return
     # initialize env entries for names and uuids
     for name in names; env.uuids[name] = UUID[]; end
     for uuid in uuids; env.paths[uuid] = String[]; end
@@ -1478,7 +1478,7 @@ end
 # Find package by UUID in the manifest file
 # TODO this needs a better name now?
 function manifest_info(env::EnvCache, uuid::UUID)::Union{PackageEntry,Nothing}
-    uuid in values(env.uuids) || find_registered!(env, [uuid])
+    any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
     return get(env.manifest, uuid, nothing)
 end
 
