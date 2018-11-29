@@ -274,6 +274,35 @@ mutable struct EnvCache
     names::Dict{UUID,Vector{String}}
 end
 
+# ENV variables to set some of these defaults?
+Base.@kwdef mutable struct Context
+    env::EnvCache = EnvCache()
+    preview::Bool = false
+    use_libgit2_for_all_downloads::Bool = false
+    use_only_tarballs_for_downloads::Bool = false
+    # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
+    # the future. It currently stands as an unofficial workaround for issue #795.
+    num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
+    graph_verbose::Bool = false
+    stdlibs::Dict{UUID,String} = stdlib()
+    # Remove next field when support for Pkg2 CI scripts is removed
+    currently_running_target::Bool = false
+    old_pkg2_clone_name::String = ""
+end
+
+include("project.jl")
+
+function PackageSpec(entry::PackageEntry)
+    pkg = PackageSpec()
+    pkg.name = entry.name
+    pkg.path = entry.path
+    if entry.repo_url !== nothing
+        pkg.repo = GitRepo(entry.repo_url, entry.repo_rev)
+    end
+    entry.version !== nothing && (pkg.version = VersionNumber(entry.version))
+    return pkg
+end
+
 function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
     project_dir = dirname(project_file)
@@ -349,22 +378,6 @@ function stdlib()
     return deepcopy(STDLIB[])
 end
 
-# ENV variables to set some of these defaults?
-Base.@kwdef mutable struct Context
-    env::EnvCache = EnvCache()
-    preview::Bool = false
-    use_libgit2_for_all_downloads::Bool = false
-    use_only_tarballs_for_downloads::Bool = false
-    # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
-    # the future. It currently stands as an unofficial workaround for issue #795.
-    num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
-    graph_verbose::Bool = false
-    stdlibs::Dict{UUID,String} = stdlib()
-    # Remove next field when support for Pkg2 CI scripts is removed
-    currently_running_target::Bool = false
-    old_pkg2_clone_name::String = ""
-end
-
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
 function Context!(ctx::Context; kwargs...)
@@ -426,74 +439,6 @@ function write_env_usage(manifest_file::AbstractString)
     """)
     close(io)
 end
-
-function Project(raw::Dict)
-    project = Project()
-    project.other = raw
-    # Name
-    project.name = get(raw, "name", nothing)
-    # UUID
-    uuid = get(raw, "uuid", nothing)
-    uuid !== nothing && (project.uuid = UUID(uuid))
-    # Version
-    version = get(raw, "version", nothing)
-    version !== nothing && (project.version = VersionNumber(version))
-    # Manifest
-    project.manifest = get(raw, "manifest", nothing)
-    # DEPS
-    deps = get(raw, "deps", nothing)
-    if deps !== nothing
-        @assert deps isa Dict
-        for (name, uuid) in deps
-            project.deps[name] = UUID(uuid)
-        end
-    end
-    # EXTRAS
-    extras = get(raw, "extras", nothing)
-    if extras !== nothing
-        for (name, uuid) in extras
-            project.extras[name] = UUID(uuid)
-        end
-    end
-    # COMPAT
-    compat = get(raw, "compat", nothing)
-    if compat !== nothing
-        for (name, version) in compat
-            project.compat[name] = version # TODO semver_spec(version)
-        end
-    end
-    # TARGETS
-    targets = get(raw, "targets", nothing)
-    if targets !== nothing
-        for (target, deps) in targets
-            project.targets[target] = deps
-            # TODO make sure names in `project.targets[target]` make sense
-        end
-    end
-    # TODO make sure all targets are listed in extras
-    # TODO any other validation
-    # validate(project)
-    return project
-end
-
-function read_project(io::IO; path=nothing)
-    raw = nothing
-    try
-        raw = TOML.parse(io)
-    catch err
-        if err isa TOML.ParserError
-            pkgerror("Could not parse project $(something(path,"")): $(err.msg)")
-        elseif all(x -> x isa TOML.ParserError, err)
-            pkgerror("Could not parse project $(something(path,"")): $err")
-        else
-            rethrow()
-        end
-    end
-    return Project(raw)
-end
-
-read_project(path::String) =
-    isfile(path) ? open(io->read_project(io;path=path), path) : Project()
 
 function read_package(f::String)
     _throw_package_err(x) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
@@ -1439,41 +1384,6 @@ function pathrepr(path::String)
     return "`" * Base.contractuser(path) * "`"
 end
 
-function project_key_order(key::String)
-    key == "name"     && return 1
-    key == "uuid"     && return 2
-    key == "keywords" && return 3
-    key == "license"  && return 4
-    key == "desc"     && return 5
-    key == "deps"     && return 6
-    key == "compat"   && return 7
-    return 8
-end
-
-string(x::Vector{String}) = x
-
-function destructure(project::Project)::Dict
-    raw = project.other
-    function entry!(key::String, src::Dict)
-        if isempty(src)
-            delete!(raw, key)
-        else
-            raw[key] = Dict(string(name) => string(uuid) for (name,uuid) in src)
-        end
-    end
-    entry!(key::String, src) = src === nothing ? delete!(raw, key) : (raw[key] = string(src))
-
-    entry!("name", project.name)
-    entry!("uuid", project.uuid)
-    entry!("version", project.version)
-    entry!("manifest", project.manifest)
-    entry!("deps", project.deps)
-    entry!("extras", project.extras)
-    entry!("compat", project.compat)
-    entry!("targets", project.targets)
-    return raw
-end
-
 function destructure(manifest::Manifest)::Dict
     function entry!(entry, key, value, default=nothing)
         if value == default
@@ -1513,29 +1423,6 @@ function destructure(manifest::Manifest)::Dict
         push!(get!(raw, entry.name, Dict{String,Any}[]), new_entry)
     end
     return raw
-end
-
-write_project(project::Project, project_file::AbstractString) =
-    write_project(destructure(project), project_file)
-write_project(project::Project, io::IO) =
-    write_project(destructure(project), io)
-write_project(project::Dict, project_file::AbstractString) =
-    open(io -> write_project(project, io), project_file; truncate=true)
-write_project(project::Dict, io::IO) =
-    TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
-
-function write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
-    project = destructure(ctx.env.project)
-    if !isempty(project) || ispath(env.project_file)
-        if display_diff && !(ctx.currently_running_target)
-            printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
-            Pkg.Display.print_project_diff(ctx, old_env, env)
-        end
-        if !ctx.preview
-            mkpath(dirname(env.project_file))
-            write_project(project, env.project_file)
-        end
-    end
 end
 
 write_manifest(manifest::Manifest, manifest_file::AbstractString) =

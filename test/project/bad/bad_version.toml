@@ -1,0 +1,6 @@
+authors = ["Some Person <some.person@some.com>"]
+name = "Foo"
+uuid = "ba83d126-f38c-11e8-0c30-2b360a1390be"
+version = "foo"
+
+[deps]

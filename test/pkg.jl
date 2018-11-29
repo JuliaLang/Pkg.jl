@@ -612,6 +612,13 @@ end
     end
 end
 
+@testset "reading corrupted project files" begin
+    dir = joinpath(@__DIR__, "project", "bad")
+    for bad_project in joinpath.(dir, readdir(dir))
+        @test_throws PkgError Pkg.Types.read_project(bad_project)
+    end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
