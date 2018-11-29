@@ -11,6 +11,9 @@ using ..Types: RegistrySpec, Context
 
 Add new package registries.
 
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
+
 # Examples
 ```julia
 Pkg.Registry.add("General")
@@ -30,6 +33,9 @@ add(ctx::Context, regs::Vector{RegistrySpec}) =
     Pkg.Registry.rm(registry::RegistrySpec)
 
 Remove registries.
+
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
 
 # Examples
 ```julia
@@ -51,6 +57,9 @@ rm(ctx::Context, regs::Vector{RegistrySpec}) = Types.remove_registries(ctx, regs
 Update registries. If no registries are given, update
 all available registries.
 
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
+
 # Examples
 ```julia
 Pkg.Registry.update()
@@ -70,6 +79,14 @@ update(ctx::Context, regs::Vector{RegistrySpec} = Types.collect_registries(depot
     Pkg.Registry.status()
 
 Display information about available registries.
+
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
+
+# Examples
+```julia
+Pkg.Registry.status()
+```
 """
 function status()
     regs = Types.collect_registries()

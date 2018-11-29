@@ -266,6 +266,9 @@ If `mode` is `PKGMODE_PROJECT` prints out status about only those packages
 that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`
 also print for those in the manifest (recursive dependencies). If there are
 any packages listed as arguments the output will be limited to those packages.
+
+!!! compat "Julia 1.1"
+    `Pkg.status` with package arguments requires at least Julia 1.1.
 """
 const status = API.status
 
@@ -351,6 +354,11 @@ A `RegistrySpec` is a representation of a registry with various metadata, much l
 
 Most registry functions in Pkg take a `Vector` of `RegistrySpec` and do the operation
 on all the registries in the vector.
+
+!!! compat "Julia 1.1"
+    Pkg's registry handling requires at least Julia 1.1.
+
+# Examples
 
 Below is a comparison between the REPL version and the `RegistrySpec` version:
 
