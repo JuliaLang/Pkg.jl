@@ -82,6 +82,7 @@ end
                    CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
                    CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW,
                    CMD_REGISTRY_ADD, CMD_REGISTRY_RM, CMD_REGISTRY_UP, CMD_REGISTRY_STATUS,
+                   CMD_ENV_LIST, CMD_ENV_RM
                    )
 @enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
 struct ArgSpec
@@ -684,6 +685,9 @@ end
 function do_registry_status!(#=ctx::APIOptions,=# args::PkgArguments, api_opts::APIOptions)
     return Registry.status()
 end
+
+# env commands
+include("env.jl")
 
 ######################
 # REPL mode creation #
@@ -1442,6 +1446,48 @@ pkg> registry status
     """,
 ]
 ], #registry
+"env" => CommandDeclaration[
+[   :kind => CMD_ENV_LIST,
+    :name => "list",
+    :short_name => "ls",
+    :handler => do_env_list!,
+    :description => "list tracked environments",
+    :help => md"""
+
+    env list
+
+List all environments that are tracked by Pkg.
+
+!!! compat "Julia 1.2"
+    The `env list` command requires at least Julia 1.2.
+
+**Examples**
+```
+pkg> env list
+```
+    """,
+],
+[   :kind => CMD_ENV_RM,
+    :name => "remove",
+    :short_name => "rm",
+    :handler => do_env_rm!,
+    :description => "remove tracked environments",
+    :help => md"""
+
+    env remove
+
+Remove selected environments that are tracked by Pkg.
+
+!!! compat "Julia 1.2"
+    The `env remove` command requires at least Julia 1.2.
+
+**Examples**
+```
+pkg> env remove
+```
+    """,
+]
+], #env
 ] #command_declarations
 
 super_specs = SuperSpecs(command_declarations)
