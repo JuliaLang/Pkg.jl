@@ -291,17 +291,7 @@ Base.@kwdef mutable struct Context
 end
 
 include("project.jl")
-
-function PackageSpec(entry::PackageEntry)
-    pkg = PackageSpec()
-    pkg.name = entry.name
-    pkg.path = entry.path
-    if entry.repo_url !== nothing
-        pkg.repo = GitRepo(entry.repo_url, entry.repo_rev)
-    end
-    entry.version !== nothing && (pkg.version = VersionNumber(entry.version))
-    return pkg
-end
+include("manifest.jl")
 
 function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
@@ -452,72 +442,6 @@ function read_package(f::String)
     end
     return project
 end
-
-function Manifest(raw::Dict)::Manifest
-    manifest = Dict{UUID,PackageEntry}()
-    # TODO is it easier to check all constraints of the TOML before?
-    for (name, infos) in raw, info in infos
-        deps = get(info, "deps", nothing)
-        if deps !== nothing
-            if deps isa AbstractVector
-                for dep in info["deps"]
-                    length(raw[dep]) == 1 ||
-                        error("ambiguious dependency for $name: $dep")
-                end
-            else
-                deps isa Dict ||
-                    pkgerror("Error loading manifest file: Malformed deps entry for `$(name)`")
-            end
-        end
-
-        uuid = UUID(info["uuid"]) # TODO check `haskey` first
-        entry = PackageEntry()
-        entry.name     = name
-        entry.version  = get(info, "version",  nothing)
-        entry.path     = get(info, "path",     nothing)
-        entry.pinned   = get(info, "pinned", false)
-        entry.repo.url = get(info, "repo-url", nothing)
-        entry.repo.rev = get(info, "repo-rev", nothing)
-        sha = get(info, "git-tree-sha1", nothing)
-        sha !== nothing && (entry.repo.tree_sha = SHA1(sha))
-        deps = get(info, "deps", nothing)
-        if deps !== nothing
-            if deps isa AbstractVector
-                for dep in deps
-                    dep_uuid = UUID(raw[dep][1]["uuid"]) # check that it exists first
-                    entry.deps[dep] = dep_uuid
-                end
-            else
-                for (name, uuid) in deps
-                    dep_uuid = UUID(uuid)
-                    entry.deps[name]  = dep_uuid
-                end
-            end
-        end
-        entry.other = info
-        manifest[uuid] = entry # TODO make sure slot is not already taken
-    end
-    return manifest
-end
-
-function read_manifest(io::IO; path=nothing)
-    raw = nothing
-    try
-        raw = TOML.parse(io)
-    catch err
-        if err isa TOML.ParserError
-            pkgerror("Could not parse manifest $(something(path,"")): $(err.msg)")
-        elseif all(x -> x isa TOML.ParserError, err)
-            pkgerror("Could not parse manifest $(something(path,"")): $err")
-        else
-            rethrow()
-        end
-    end
-    return Manifest(raw)
-end
-
-read_manifest(path::String)::Manifest =
-    isfile(path) ? open(io->read_manifest(io;path=path), path) : Dict{UUID,PackageEntry}()
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
@@ -1382,66 +1306,6 @@ function pathrepr(path::String)
         path = "@stdlib/" * basename(path)
     end
     return "`" * Base.contractuser(path) * "`"
-end
-
-function destructure(manifest::Manifest)::Dict
-    function entry!(entry, key, value, default=nothing)
-        if value == default
-            delete!(entry, key)
-        else
-            entry[key] = value isa TOML.TYPE ? value : string(value)
-        end
-    end
-
-    unique_name = Dict{String,Bool}()
-    for (uuid, entry) in manifest
-        unique_name[entry.name] = !haskey(unique_name, entry.name)
-    end
-
-    raw = Dict{String,Any}()
-    for (uuid, entry) in manifest
-        new_entry = something(entry.other, Dict{String,Any}())
-        new_entry["uuid"] = string(uuid)
-        entry!(new_entry, "version", entry.version)
-        entry!(new_entry, "git-tree-sha1", entry.repo.tree_sha)
-        entry!(new_entry, "pinned", entry.pinned, false)
-        entry!(new_entry, "path", entry.path)
-        entry!(new_entry, "repo-url", entry.repo.url)
-        entry!(new_entry, "repo-rev", entry.repo.rev)
-        if isempty(entry.deps)
-            delete!(new_entry, "deps")
-        else
-            if all(dep -> unique_name[first(dep)], entry.deps)
-                new_entry["deps"] = sort(collect(keys(entry.deps)))
-            else
-                new_entry["deps"] = Dict{String,String}()
-                for (name, uuid) in entry.deps
-                    new_entry["deps"][name] = string(uuid)
-                end
-            end
-        end
-        push!(get!(raw, entry.name, Dict{String,Any}[]), new_entry)
-    end
-    return raw
-end
-
-write_manifest(manifest::Manifest, manifest_file::AbstractString) =
-    open(io -> write_manifest(manifest, io), manifest_file; truncate=true)
-
-function write_manifest(manifest::Manifest,io::IO)
-    raw = destructure(manifest)
-    print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-    TOML.print(io, raw, sorted=true)
-end
-
-function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)
-    isempty(manifest) && !ispath(env.manifest_file) && return
-
-    if display_diff && !(ctx.currently_running_target)
-        printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
-        Pkg.Display.print_manifest_diff(ctx, old_env, env)
-    end
-    !ctx.preview && write_manifest(manifest, env.manifest_file)
 end
 
 function write_env(ctx::Context; display_diff=true)

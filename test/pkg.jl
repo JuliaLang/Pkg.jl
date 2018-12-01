@@ -553,6 +553,9 @@ end
         for (uuid, x) in a
             y = b[uuid]
             for property in propertynames(x)
+                # `other` caches the *whole* input dictionary. its ok to mutate the fields of
+                # the input dictionary if that field will eventually be overwriten on `write_manifest`
+                property == :other && continue
                 @test getproperty(x, property) == getproperty(y, property)
             end
         end
@@ -616,6 +619,13 @@ end
     dir = joinpath(@__DIR__, "project", "bad")
     for bad_project in joinpath.(dir, readdir(dir))
         @test_throws PkgError Pkg.Types.read_project(bad_project)
+    end
+end
+
+@testset "reading corrupted manifest files" begin
+    dir = joinpath(@__DIR__, "manifest", "bad")
+    for bad_manifest in joinpath.(dir, readdir(dir))
+        @test_throws PkgError Pkg.Types.read_manifest(bad_manifest)
     end
 end
 
