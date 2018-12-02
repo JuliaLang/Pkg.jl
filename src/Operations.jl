@@ -1017,6 +1017,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             version = ctx.env.pkg.version
         else
             entry = manifest_info(ctx.env, uuid)
+            @show uuid
             name = entry.name
             if entry.git_tree_sha !== nothing
                 hash_or_path = entry.git_tree_sha
