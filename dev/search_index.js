@@ -249,6 +249,14 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
+    "location": "creating-packages/#Package-naming-guidelines-1",
+    "page": "5. Creating Packages",
+    "title": "Package naming guidelines",
+    "category": "section",
+    "text": "Package names should be sensible to most Julia users, even to those who are not domain experts. The following guidelines applies to the General registry, but may be useful for other package registries as well.Since the General registry belongs to the entire community people may have opinions about your package name when you publish it, especially if it\'s ambiguous or can be confused with something other than what it is. Usually you will then get suggestions for a new name that may fit your package better.Avoid jargon. In particular, avoid acronyms unless there is minimal possibility of confusion.\nIt\'s ok to say USA if you\'re talking about the USA.\nIt\'s not ok to say PMA, even if you\'re talking about positive mental attitude.\nAvoid using Julia in your package name.\nIt is usually clear from context and to your users that the package is a Julia package.\nHaving Julia in the name can imply that the package is connected to, or endorsed by, contributors to the Julia language itself.\nPackages that provide most of their functionality in association with a new type should have pluralized names.\nDataFrames provides the DataFrame type.\nBloomFilters provides the BloomFilter type.\nIn contrast, JuliaParser provides no new type, but instead new functionality in the JuliaParser.parse() function.\nErr on the side of clarity, even if clarity seems long-winded to you.\nRandomMatrices is a less ambiguous name than RndMat or RMT, even though the latter are shorter.\nA less systematic name may suit a package that implements one of several possible approaches to its domain.\nJulia does not have a single comprehensive plotting package. Instead, Gadfly, PyPlot, Winston and other packages each implement a unique approach based on a particular design philosophy.\nIn contrast, SortingAlgorithms provides a consistent interface to use many well-established sorting algorithms.\nPackages that wrap external libraries or programs should be named after those libraries or programs.\nCPLEX.jl wraps the CPLEX library, which can be identified easily in a web search.\nMATLAB.jl provides an interface to call the MATLAB engine from within Julia."
+},
+
+{
     "location": "compatibility/#",
     "page": "6. Compatibility",
     "title": "6. Compatibility",
