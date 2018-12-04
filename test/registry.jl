@@ -3,7 +3,7 @@ module RegistryTests
 using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
-using Pkg.Types: PkgError
+using Pkg.Types: PkgError, EnvCache, manifest_info
 
 include("utils.jl")
 
@@ -258,6 +258,63 @@ end
         Pkg.add("Example") # should not trigger a clone of default registries
         @test length(Pkg.Types.collect_registries()) == 1
     end end
+
+    @testset "yanking" begin
+        uuid = Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
+        # Tests that Example@0.5.1 does not get installed
+        temp_pkg_dir() do env
+            Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/Test"))
+            Pkg.add("Example")
+            @test manifest_info(EnvCache(), uuid).version == "0.5.0"
+            Pkg.update() # should not update Example
+            @test manifest_info(EnvCache(), uuid).version == "0.5.0"
+            @test_throws Pkg.Types.ResolverError Pkg.add(PackageSpec(name="Example", version="0.5.1"))
+            Pkg.rm("Example")
+            Pkg.add("JSON") # depends on Example
+            @test manifest_info(EnvCache(), uuid).version == "0.5.0"
+            Pkg.update()
+            @test manifest_info(EnvCache(), uuid).version == "0.5.0"
+        end
+        # Test that Example@0.5.1 can be obtained from an existing manifest
+        temp_pkg_dir() do env
+            Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/Test"))
+            write(joinpath(env, "Project.toml"),"""
+                [deps]
+                Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+                """)
+            write(joinpath(env, "Manifest.toml"),"""
+                [[Example]]
+                git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
+                uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+                version = "0.5.1"
+                """)
+            Pkg.activate(env)
+            Pkg.instantiate()
+            @test manifest_info(EnvCache(), uuid).version == "0.5.1"
+        end
+        temp_pkg_dir() do env
+            Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/Test"))
+            write(joinpath(env, "Project.toml"),"""
+                [deps]
+                JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+                """)
+            write(joinpath(env, "Manifest.toml"),"""
+                [[Example]]
+                git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
+                uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+                version = "0.5.1"
+
+                [[JSON]]
+                deps = ["Example"]
+                git-tree-sha1 = "1f7a25b53ec67f5e9422f1f551ee216503f4a0fa"
+                uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+                version = "0.20.0"
+                """)
+            Pkg.activate(env)
+            Pkg.instantiate()
+            @test manifest_info(EnvCache(), uuid).version == "0.5.1"
+        end
+    end
 end
 
 end # module

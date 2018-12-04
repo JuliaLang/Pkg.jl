@@ -23,9 +23,12 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
     return abspath(depots1(), "packages", name, slug_default)
 end
 
-function load_versions(path::String)
+function load_versions(path::String; include_yanked = false)
     toml = parse_toml(path, "Versions.toml")
-    return Dict{VersionNumber, SHA1}(VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml)
+    d = Dict{VersionNumber, SHA1}(
+            VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml
+                if !get(info, "yanked", false) || include_yanked)
+    return d
 end
 
 function load_package_data(f::Base.Callable, path::String, versions)
@@ -77,7 +80,7 @@ end
 function set_maximum_version_registry!(env::EnvCache, pkg::PackageSpec)
     pkgversions = Set{VersionNumber}()
     for path in registered_paths(env, pkg.uuid)
-        pathvers = keys(load_versions(path))
+        pathvers = keys(load_versions(path; include_yanked = false))
         union!(pkgversions, pathvers)
     end
     if length(pkgversions) == 0
@@ -262,7 +265,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
                 end
             else
                 for path in registered_paths(ctx.env, uuid)
-                    version_info = load_versions(path)
+                    version_info = load_versions(path; include_yanked = false)
                     versions = sort!(collect(keys(version_info)))
                     deps_data = load_package_data_raw(UUID, joinpath(path, "Deps.toml"))
                     compat_data = load_package_data_raw(VersionSpec, joinpath(path, "Compat.toml"))
@@ -409,7 +412,7 @@ function version_data!(ctx::Context, pkgs::Vector{PackageSpec})
             end
             repo = info["repo"]
             repo in clones[uuid] || push!(clones[uuid], repo)
-            vers = load_versions(path)
+            vers = load_versions(path; include_yanked = true)
             if haskey(vers, ver)
                 h = vers[ver]
                 if haskey(hashes, uuid)
@@ -756,7 +759,7 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
     else
         for path in registered_paths(env, uuid)
             data = load_package_data(UUID, joinpath(path, "Deps.toml"), version)
-            if data !== nothing 
+            if data !== nothing
                 entry.deps = data
                 break
             end
@@ -1140,7 +1143,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     filter!(ctx.env.project.targets) do (target, deps)
         !isempty(filter!(in(deps_names), deps))
     end
-    
+
     # only keep reachable manifest entires
     prune_manifest(ctx.env)
     # update project & manifest
@@ -1258,7 +1261,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             version_path = dirname(ctx.env.project_file)
         else
             entry = manifest_info(ctx.env, pkg.uuid)
-            if entry.git_tree_sha !== nothing 
+            if entry.git_tree_sha !== nothing
                 version_path = find_installed(pkg.name, pkg.uuid, entry.git_tree_sha)
             elseif entry.path !== nothing
                 version_path =  project_rel_path(ctx, entry.path)
