@@ -751,7 +751,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}; 
         pkg.repo === nothing && (pkg.repo = Types.GitRepo())
         !isempty(pkg.repo.rev) && pkgerror("git revision cannot be given to `develop`")
     end
-    
+
     new_uuids = UUID[]
     for pkg in pkgs
         pkg.special_action = PKGSPEC_DEVELOPED
@@ -1335,13 +1335,12 @@ end
 # Lookup package names & uuids in a single pass through registries
 function find_registered!(env::EnvCache,
     names::Vector{String},
-    uuids::Vector{UUID}=UUID[];
-    force::Bool=false,
+    uuids::Vector{UUID}=UUID[]
 )::Nothing
-    # only look if there's something new to see (or force == true)
+    # only look if there's something new to see
     names = filter(name -> !haskey(env.uuids, name), names)
     uuids = filter(uuid -> !haskey(env.paths, uuid), uuids)
-    !force && isempty(names) && isempty(uuids) && return
+    isempty(names) && isempty(uuids) && return
 
     # since we're looking anyway, look for everything
     save(name::String) =
@@ -1390,11 +1389,7 @@ function find_registered!(env::EnvCache,
 end
 
 find_registered!(env::EnvCache, uuids::Vector{UUID}; force::Bool=false)::Nothing =
-    find_registered!(env, String[], uuids, force=force)
-
-# Lookup all packages in project & manifest files
-find_registered!(env::EnvCache)::Nothing =
-    find_registered!(env, String[], UUID[], force=true)
+    find_registered!(env, String[], uuids)
 
 # Get registered uuids associated with a package name
 function registered_uuids(env::EnvCache, name::String)::Vector{UUID}
@@ -1478,7 +1473,7 @@ end
 # Find package by UUID in the manifest file
 # TODO this needs a better name now?
 function manifest_info(env::EnvCache, uuid::UUID)::Union{PackageEntry,Nothing}
-    uuid in values(env.uuids) || find_registered!(env, [uuid])
+    any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
     return get(env.manifest, uuid, nothing)
 end
 
