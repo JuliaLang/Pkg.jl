@@ -64,6 +64,7 @@ end
 
 for (bucket, b_pkgs) in buckets, (pkg, p) in b_pkgs
     haskey(stdlibs, pkg) && continue
+    pkg == "julia" && continue
     url = p.url
     uuid = string(p.uuid)
     startswith(url, "git://github.com") && (url = "https"*url[4:end])
