@@ -30,7 +30,7 @@ end
 
 Require(versions::VersionSet) = Require(versions, Symbol[])
 Require(version::VersionInterval) = Require(VersionSet([version]), Symbol[])
-Version(sha1::String) = Version(sha1, Dict{String,Require}())
+Version(sha1::AbstractString) = Version(String(sha1), Dict{String,Require}())
 
 function load_requires(path::String)
     requires = Dict{String,Require}()
