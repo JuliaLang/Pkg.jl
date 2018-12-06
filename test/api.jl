@@ -149,4 +149,36 @@ end
     end end
 end
 
+@testset "Pkg.add" begin
+    # Add by URL should not override pin
+    temp_pkg_dir() do project_path; with_temp_env() do env_path
+        Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
+        Pkg.pin(Pkg.PackageSpec(;name="Example"))
+        a = deepcopy(Pkg.Types.EnvCache().manifest)
+        Pkg.add(Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl"))
+        b = Pkg.Types.EnvCache().manifest
+        for (uuid, x) in a
+            y = b[uuid]
+            for property in propertynames(x)
+                @test getproperty(x, property) == getproperty(y, property)
+            end
+        end
+    end end
+    # Add by URL should not overwrite files
+    temp_pkg_dir() do project_path; with_temp_env() do env_path
+        Pkg.add(Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl"))
+        t1, t2 = nothing, nothing
+        for (uuid, entry) in Pkg.Types.EnvCache().manifest
+            entry.name == "Example" || continue
+            t1 = mtime(Pkg.Operations.find_installed(entry.name, uuid, entry.repo.tree_sha))
+        end
+        Pkg.add(Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl"))
+        for (uuid, entry) in Pkg.Types.EnvCache().manifest
+            entry.name == "Example" || continue
+            t2 = mtime(Pkg.Operations.find_installed(entry.name, uuid, entry.repo.tree_sha))
+        end
+        @test t1 == t2
+    end end
+end
+
 end # module APITests

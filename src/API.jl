@@ -41,7 +41,7 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, s
     ctx.preview && preview_info()
     new_git = mode == :develop ?
         handle_repos_develop!(ctx, pkgs, shared) :
-        handle_repos_add!(ctx, pkgs; upgrade_or_add=true)
+        handle_repos_add!(ctx, pkgs)
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.env, pkgs)
@@ -463,7 +463,11 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
         append!(urls[uuid], url)
         urls[uuid] = unique(urls[uuid])
     end
-    new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=false)
+    new_git = UUID[]
+    for pkg in pkgs
+        pkg.repo !== nothing || continue
+        instantiate_pkg_repo!(pkg) && push!(new_git, pkg.uuid)
+    end
     new_apply = Operations.apply_versions(ctx, pkgs, hashes, urls)
     Operations.build_versions(ctx, union(new_apply, new_git))
 end

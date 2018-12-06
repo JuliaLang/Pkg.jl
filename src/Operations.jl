@@ -1028,7 +1028,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
                 path = project_rel_path(ctx, entry.path)
                 hash_or_path = path
             else
-                pkgerror("Could not find either `git-tree-sha1` or `path` for package $(pkg.name)")
+                pkgerror("Could not find either `git-tree-sha1` or `path` for package $name")
             end
             version = v"0.0"
         end
@@ -1188,9 +1188,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec})
             entry = manifest_info(ctx.env, pkg.uuid)
             if entry !== nothing && entry.repo.url !== nothing
                 pkg.repo = entry.repo
-                new = handle_repos_add!(ctx, [pkg]; credentials=creds,
-                                        upgrade_or_add = (level == UPLEVEL_MAJOR))
-                append!(new_git, new)
+                pkg.version = VersionNumber(entry.version)
+                new = instantiate_pkg_repo!(pkg) && push!(new_git, pkg.uuid)
             else
                 if entry !== nothing
                     pkg.uuid in keys(ctx.stdlibs) && continue
