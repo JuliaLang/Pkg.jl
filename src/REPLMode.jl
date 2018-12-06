@@ -162,9 +162,9 @@ function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
         if !occursin(Base.Filesystem.path_separator_re, word)
             @info "resolving package specifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
         end
-        return PackageSpec(Types.GitRepo(expanduser(word)))
+        return PackageSpec(repo=Types.GitRepo(url=expanduser(word)))
     elseif occursin(uuid_re, word)
-        return PackageSpec(UUID(word))
+        return PackageSpec(uuid=UUID(word))
     elseif occursin(name_re, word)
         return PackageSpec(String(match(name_re, word).captures[1]))
     elseif occursin(name_uuid_re, word)
@@ -172,7 +172,7 @@ function parse_package(word::AbstractString; add_or_develop=false)::PackageSpec
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
     elseif add_or_develop
         # Guess it is a url then
-        return PackageSpec(Types.GitRepo(word))
+        return PackageSpec(repo=Types.GitRepo(url=word))
     else
         pkgerror("`$word` cannot be parsed as a package")
     end
@@ -219,7 +219,7 @@ end
 mutable struct Statement
     super::Union{Nothing, String}
     spec::Union{Nothing, CommandSpec}
-    options::Union{Vector{Option}, Vector{String}} # TODO clean up this state
+    options::Union{Vector{Option}, Vector{String}}
     arguments::Vector{String}
     preview::Bool
     Statement() = new(nothing, nothing, String[], [], false)
@@ -416,7 +416,7 @@ function package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{Pack
                 pkg.version = VersionSpec(modifier)
             else # modifier isa Rev
                 if pkg.repo === nothing
-                    pkg.repo = Types.GitRepo("", modifier.rev)
+                    pkg.repo = Types.GitRepo(rev=modifier.rev)
                 else
                     pkg.repo.rev = modifier.rev
                 end

@@ -334,7 +334,7 @@ Below is a comparison between the REPL version and the `PackageSpec` version:
 | `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
 | `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
 """
-const PackageSpec = Types.PackageSpec
+const PackageSpec = API.Package
 
 """
     Pkg.setprotocol!(proto::Union{Nothing, AbstractString}=nothing)

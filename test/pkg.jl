@@ -16,6 +16,7 @@ import LibGit2
 include("utils.jl")
 
 const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+const PackageSpec = Pkg.Types.PackageSpec
 
 import Pkg.Types: semver_spec, VersionSpec
 @testset "semver notation" begin
@@ -193,7 +194,7 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
-                @test_throws PkgError Pkg.develop(PackageSpec(url="bleh", rev="blurg"))
+                @test_throws PkgError Pkg.develop(Pkg.PackageSpec(url="bleh", rev="blurg"))
                 Pkg.develop(TEST_PKG.name)
                 @test isinstalled(TEST_PKG)
                 @test Pkg.API.__installed()[TEST_PKG.name] > old_v
@@ -437,7 +438,7 @@ temp_pkg_dir() do project_path
         @testset "inconsistent repo state" begin
             package_path = joinpath(project_path, "Example")
             LibGit2.with(LibGit2.clone("https://github.com/JuliaLang/Example.jl", package_path)) do repo
-                Pkg.add(PackageSpec(path=package_path))
+                Pkg.add(Pkg.PackageSpec(path=package_path))
             end
             rm(joinpath(package_path, ".git"); force=true, recursive=true)
             @test_throws PkgError Pkg.update()
@@ -456,7 +457,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         mkdir("machine1")
         cd("machine1")
         Pkg.activate(".")
-        Pkg.add(PackageSpec(path="../Example.jl"))
+        Pkg.add(Pkg.PackageSpec(path="../Example.jl"))
         cd("..")
         cp("machine1", "machine2")
         empty!(DEPOT_PATH)
@@ -593,10 +594,10 @@ end
 @testset "issue #913" begin
     temp_pkg_dir() do project_path
         Pkg.activate(project_path)
-        Pkg.add(PackageSpec(name="Example", rev = "master"))
+        Pkg.add(Pkg.PackageSpec(name="Example", rev = "master"))
         @test isinstalled(TEST_PKG)
         rm.(joinpath.(project_path, ["Project.toml","Manifest.toml"]))
-        Pkg.add(PackageSpec(name="Example", rev = "master")) # should not fail
+        Pkg.add(Pkg.PackageSpec(name="Example", rev = "master")) # should not fail
         @test isinstalled(TEST_PKG)
     end
 end

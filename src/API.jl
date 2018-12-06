@@ -11,6 +11,7 @@ import LibGit2
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
+using Pkg.Types: VersionTypes
 
 
 preview_info() = printstyled("───── Preview mode ─────\n"; color=Base.info_color(), bold=true)
@@ -32,18 +33,16 @@ add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)      = add_or_develop(Conte
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, shared::Bool=true, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
-
     # if julia is passed as a package the solver gets tricked;
     # this catches the error early on
-    any(pkg->(pkg.name == "julia"), pkgs) &&
+    any(pkg -> (pkg.name == "julia"), pkgs) &&
         pkgerror("Trying to $mode julia as a package")
 
     ctx.preview && preview_info()
-    if mode == :develop
-        new_git = handle_repos_develop!(ctx, pkgs, shared = shared)
-    else
-        new_git = handle_repos_add!(ctx, pkgs; upgrade_or_add=true)
-    end
+    new_git = mode == :develop ?
+        handle_repos_develop!(ctx, pkgs, shared) :
+        handle_repos_add!(ctx, pkgs; upgrade_or_add=true)
+
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.env, pkgs)
     stdlib_resolve!(ctx, pkgs)
@@ -104,11 +103,11 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT
             for (name::String, uuid::UUID) in ctx.env.project.deps
-                push!(pkgs, PackageSpec(name, uuid, level))
+                push!(pkgs, PackageSpec(name=name, uuid=uuid, version=level))
             end
         elseif mode == PKGMODE_MANIFEST
             for (uuid, entry) in ctx.env.manifest
-                push!(pkgs, PackageSpec(entry.name, uuid, level))
+                push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, version=level))
             end
         end
     else
@@ -449,17 +448,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
     urls = Dict{UUID,Vector{String}}()
     pkgs = PackageSpec[]
     for (uuid, entry) in ctx.env.manifest
-        pkg = PackageSpec(entry)
-        pkg.uuid = uuid
+        pkg = PackageSpec(name=entry.name, uuid=uuid, path=entry.path,
+                          version = entry.version !== nothing ? VersionNumber(entry.version) : VersionSpec())
         push!(pkgs, pkg)
         pkg.uuid in keys(ctx.stdlibs) && continue
         pkg.path !== nothing && continue
         urls[pkg.uuid] = String[]
-        hashes[pkg.uuid] = entry.git_tree_sha
-
-        if entry.repo_url !== nothing
-            pkg.repo = Types.GitRepo(entry.repo_url, entry.repo_rev, entry.git_tree_sha)
-        end
+        hashes[pkg.uuid] = entry.repo.tree_sha
+        entry.repo.url !== nothing && (pkg.repo = entry.repo)
     end
     _, urls_ref = Operations.version_data!(ctx, pkgs)
     for (uuid, url) in urls_ref
@@ -540,5 +536,25 @@ function activate(path::AbstractString; shared::Bool=false)
 end
 
 setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GitTools.setprotocol!(proto)
+
+# API constructor
+function Package(;name::Union{Nothing,AbstractString} = nothing,
+                 uuid::Union{Nothing,String,UUID} = nothing,
+                 version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
+                 url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT)
+    path !== nothing && url !== nothing &&
+        pkgerror("cannot specify both a path and url")
+    url !== nothing && version !== nothing &&
+        pkgerror("`version` can not be given with `url`, use `rev` instead")
+    repo = (url === nothing && path === nothing && rev === nothing) ?
+        nothing :
+        Types.GitRepo(rev = rev, url = url !== nothing ? url : path)
+    version = version === nothing ? VersionSpec() : VersionSpec(version)
+    uuid isa String && (uuid = UUID(uuid))
+    PackageSpec(name, uuid, version, mode, nothing, PKGSPEC_NOTHING, repo)
+end
+Package(name::AbstractString) = PackageSpec(name)
+Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
+Package(name::AbstractString, uuid::UUID, version::VersionTypes) = PackageSpec(name, uuid, version)
 
 end # module

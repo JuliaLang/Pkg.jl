@@ -25,7 +25,7 @@ end
             cd(mkdir("modules")) do
                 Pkg.generate("Foo")
             end
-            Pkg.develop(Pkg.Types.PackageSpec(path="modules/Foo")) # to avoid issue #542
+            Pkg.develop(Pkg.PackageSpec(path="modules/Foo")) # to avoid issue #542
             Pkg.activate("Foo") # activate path Foo over deps Foo
             @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
             Pkg.activate(".")
