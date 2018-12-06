@@ -9,12 +9,12 @@ stdlib_uuids = Dict{String,String}()
 stdlib_trees = Dict{String,String}()
 stdlib_deps = Dict{String,Vector{String}}()
 
-for pkg in readdir(stdlibdir)
-    project_file = joinpath(stdlibdir, pkg, "Project.toml")
+for pkg in readdir(Sys.STDLIB)
+    project_file = joinpath(Sys.STDLIB, pkg, "Project.toml")
     isfile(project_file) || continue
     project = TOML.parsefile(project_file)
     stdlib_uuids[pkg] = project["uuid"]
-    version_file = joinpath(stdlibdir, "$pkg.version")
+    version_file = joinpath(Sys.STDLIB, "$pkg.version")
     if isfile(version_file)
         r = Regex("^\\s*$(pkg)_SHA1\\s*=\\s*(\\S+)\\s*\$", "im")
         m = match(r, read(version_file, String))
