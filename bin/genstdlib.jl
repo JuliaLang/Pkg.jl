@@ -5,13 +5,6 @@ import Pkg: TOML
 
 prefix = joinpath(homedir(), ".julia", "registries", "Stdlib")
 
-# TODO: use Sys.STDLIBDIR instead once implemented
-let vers = "v$(VERSION.major).$(VERSION.minor)"
-global stdlibdir = realpath(abspath(Sys.BINDIR, "..", "share", "julia", "stdlib", vers))
-isdir(stdlibdir) || error("stdlib directory does not exist: $stdlibdir")
-end
-juliadir = dirname(stdlibdir)
-
 stdlib_uuids = Dict{String,String}()
 stdlib_trees = Dict{String,String}()
 stdlib_deps = Dict{String,Vector{String}}()
