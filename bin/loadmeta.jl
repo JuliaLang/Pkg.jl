@@ -71,7 +71,9 @@ for line in eachline(`git -C $juliadir ls-remote --tags origin`)
     ver = VersionNumber(tag)
     JULIA_VERSIONS[ver] = Version(sha)
 end
-JULIA_VERSIONS[v"1.1.0"] = Version("6ef1d76c50a39c0ce68b4e42948a1499c1551415") # dummy commit, not actual 1.1
+if !haskey(JULIA_VERSIONS, v"1.1.0") # Keep this up to date with the most recent dev version
+    JULIA_VERSIONS[v"1.1.0"] = Version("6ef1d76c50a39c0ce68b4e42948a1499c1551415") # dummy commit, not actual 1.1
+end
 
 function load_packages(dir::String)
     pkgs = Dict{String,Package}()
