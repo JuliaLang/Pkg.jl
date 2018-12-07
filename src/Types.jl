@@ -55,8 +55,7 @@ const uuid_julia = uuid5(uuid_package, "julia")
 
 ## user-friendly representation of package IDs ##
 function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
-    name = get(uuid_to_name, p, "")
-    isempty(name) && (name = "(unknown)")
+    name = get(uuid_to_name, p, "(unknown)")
     uuid_short = string(p)[1:8]
     return "$name [$uuid_short]"
 end
@@ -133,72 +132,40 @@ Base.show(io::IO, err::PkgError) = print(io, err.msg)
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
 
 # The url field can also be a local path, rename?
-mutable struct GitRepo
-    url::String
-    rev::String
-    git_tree_sha1::Union{Nothing,SHA1}
+Base.@kwdef mutable struct GitRepo
+    url::Union{Nothing,String} = nothing
+    rev::Union{Nothing,String} = nothing
+    tree_sha::Union{Nothing,SHA1} = nothing # git tree sha1
 end
 
-GitRepo(url::String, revspec) = GitRepo(url, revspec, nothing)
-GitRepo(url::String) = GitRepo(url, "", nothing)
-GitRepo(;url::Union{String, Nothing}=nothing, rev::Union{String, Nothing} =nothing) =
-    GitRepo(url == nothing ? "" : url, rev == nothing ? "" : rev, nothing)
-Base.:(==)(repo1::GitRepo, repo2::GitRepo) = (repo1.url == repo2.url && repo1.rev == repo2.rev && repo1.git_tree_sha1 == repo2.git_tree_sha1)
+Base.:(==)(r1::GitRepo, r2::GitRepo) =
+    r1.url == r2.url && r1.rev == r2.rev && r1.tree_sha == r2.tree_sha
 
-mutable struct PackageSpec
-    name::String
-    uuid::UUID
-    version::VersionTypes
-    mode::PackageMode
-    path::Union{Nothing,String}
-    special_action::PackageSpecialAction # If the package is currently being pinned, freed etc
-    repo::Union{Nothing,GitRepo}
+Base.@kwdef mutable struct PackageSpec
+    name::Union{Nothing,String} = nothing
+    uuid::Union{Nothing,UUID} = nothing
+    version::VersionTypes = VersionSpec()
+    mode::PackageMode = PKGMODE_PROJECT
+    path::Union{Nothing,String} = nothing
+    special_action::PackageSpecialAction = PKGSPEC_NOTHING # If the package is currently being pinned, freed etc
+    repo::Union{Nothing,GitRepo} = nothing
 end
-PackageSpec(name::AbstractString, uuid::UUID, version::VersionTypes,
-            mode::PackageMode=PKGMODE_PROJECT, path=nothing, special_action=PKGSPEC_NOTHING,
-            repo=nothing) = PackageSpec(String(name), uuid, version, mode, path, special_action, repo)
-PackageSpec(name::AbstractString, uuid::UUID) =
-    PackageSpec(name, uuid, VersionSpec())
-PackageSpec(name::AbstractString, version::VersionTypes=VersionSpec()) =
-    PackageSpec(name, UUID(zero(UInt128)), version)
-PackageSpec(uuid::UUID, version::VersionTypes=VersionSpec()) =
-    PackageSpec("", uuid, version)
-function PackageSpec(repo::GitRepo)
-    pkg = PackageSpec()
-    pkg.repo = repo
-    return pkg
-end
+PackageSpec(name::AbstractString) = PackageSpec(;name=name)
+PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
+PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
+PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
 
-# kwarg constructor
-function PackageSpec(;name::AbstractString="", uuid::Union{String, UUID}=UUID(0),
-                     version::Union{VersionNumber, String, VersionSpec} = VersionSpec(),
-                     url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT)
-    if url !== nothing || path !== nothing || rev !== nothing
-        if path !== nothing || url !== nothing
-            path !== nothing && url !== nothing && pkgerror("cannot specify both path and url")
-            url = url == nothing ? path : url
-        end
-        repo = GitRepo(url=url, rev=rev)
-    else
-        repo = nothing
-    end
-
-    version = VersionSpec(version)
-    uuid isa String && (uuid = UUID(uuid))
-    PackageSpec(name, uuid, version, mode, nothing, PKGSPEC_NOTHING, repo)
-end
-
-has_name(pkg::PackageSpec) = !isempty(pkg.name)
-has_uuid(pkg::PackageSpec) = pkg.uuid != UUID(zero(UInt128))
+has_name(pkg::PackageSpec) = pkg.name !== nothing
+has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
     f = ["name" => pkg.name, "uuid" => has_uuid(pkg) ? pkg.uuid : "", "v" => (vstr == "VersionSpec(\"*\")" ? "" : vstr)]
     if pkg.repo !== nothing
-        if !isempty(pkg.repo.url)
+        if pkg.repo.url !== nothing
             push!(f, "url/path" => string("\"", pkg.repo.url, "\""))
         end
-        if !isempty(pkg.repo.rev)
+        if pkg.repo.rev !== nothing
             push!(f, "rev" => pkg.repo.rev)
         end
     end
@@ -275,28 +242,15 @@ Base.@kwdef mutable struct Project
 end
 
 Base.@kwdef mutable struct PackageEntry
-    name::Union{String, Nothing} = nothing
-    version::Union{String, Nothing} = nothing
-    path::Union{String, Nothing} = nothing
-    git_tree_sha::Union{SHA1, Nothing} = nothing
+    name::Union{String,Nothing} = nothing
+    version::Union{String,Nothing} = nothing
+    path::Union{String,Nothing} = nothing
     pinned::Bool = false
-    repo_url::Union{String, Nothing} = nothing
-    repo_rev::Union{String, Nothing} = nothing
+    repo::GitRepo = GitRepo()
     deps::Dict{String,UUID} = Dict{String,UUID}()
-    other::Union{Dict, Nothing} = nothing
+    other::Union{Dict,Nothing} = nothing
 end
 const Manifest = Dict{UUID,PackageEntry}
-
-function PackageSpec(entry::PackageEntry)
-    pkg = PackageSpec()
-    pkg.name = entry.name
-    pkg.path = entry.path
-    if entry.repo_url !== nothing
-        pkg.repo = GitRepo(entry.repo_url, entry.repo_rev)
-    end
-    entry.version !== nothing && (pkg.version = VersionNumber(entry.version))
-    return pkg
-end
 
 mutable struct EnvCache
     # environment info:
@@ -329,9 +283,9 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     # initiaze project package
     if any(x -> x !== nothing, [project.name, project.uuid, project.version])
         project_package = PackageSpec(
-            something(project.name, ""),
-            something(project.uuid, UUID(0)),
-            something(project.version, VersionNumber("0.0")),
+            name = project.name,
+            uuid = project.uuid,
+            version = something(project.version, VersionNumber("0.0")),
         )
     else
         project_package = nothing
@@ -411,24 +365,18 @@ Base.@kwdef mutable struct Context
     old_pkg2_clone_name::String = ""
 end
 
-function Context!(kw_context::Vector{Pair{Symbol,Any}})::Context
-    ctx = Context()
-    for (k, v) in kw_context
+Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
+    Context!(Context(); kw_context...)
+function Context!(ctx::Context; kwargs...)
+    for (k, v) in kwargs
         setfield!(ctx, k, v)
     end
     return ctx
 end
 
-function Context!(ctx::Context; kwargs...)
-    for (k, v) in kwargs
-        setfield!(ctx, k, v)
-    end
-end
-
 # target === nothing : main dependencies
 # target === "*"     : main + all extras
 # target === "name"  : named target deps
-
 function deps_names(project::Project, target::Union{Nothing,String}=nothing)::Vector{String}
     deps = collect(keys(project.deps))
     if target === nothing
@@ -462,11 +410,7 @@ get_deps(ctx::Context, target::Union{Nothing,String}=nothing) =
 
 function project_compatibility(ctx::Context, name::String)
     compat = get(ctx.env.project.compat, name, nothing)
-    if compat === nothing
-        return VersionSpec()
-    else
-        return VersionSpec(semver_spec(compat))
-    end
+    return compat === nothing ? VersionSpec() : VersionSpec(semver_spec(compat))
 end
 
 function write_env_usage(manifest_file::AbstractString)
@@ -586,13 +530,11 @@ function Manifest(raw::Dict)::Manifest
         entry.name     = name
         entry.version  = get(info, "version",  nothing)
         entry.path     = get(info, "path",     nothing)
-        entry.repo_url = get(info, "repo-url", nothing)
-        entry.repo_rev = get(info, "repo-rev", nothing)
         entry.pinned   = parse(Bool, get(info, "pinned", "false"))
-        git_tree_sha   = get(info, "git-tree-sha1", nothing)
-        if git_tree_sha !== nothing
-            entry.git_tree_sha = SHA1(git_tree_sha)
-        end
+        entry.repo.url = get(info, "repo-url", nothing)
+        entry.repo.rev = get(info, "repo-rev", nothing)
+        sha = get(info, "git-tree-sha1", nothing)
+        sha !== nothing && (entry.repo.tree_sha = SHA1(sha))
         deps = get(info, "deps", nothing)
         if deps !== nothing
             if deps isa AbstractVector
@@ -738,7 +680,7 @@ function remote_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool)
     UPDATED_REGISTRY_THIS_SESSION[] || update_registries(ctx)
     # We save the repo in case another environement wants to develop from the same repo,
     # this avoids having to reclone it from scratch.
-    isempty(pkg.repo.url) && set_repo_for_pkg!(ctx.env, pkg)
+    pkg.repo.url === nothing && set_repo_for_pkg!(ctx.env, pkg)
     temp_clone = fresh_clone(pkg)
     # parse repo to determine dev path
     parse_package!(ctx, pkg, temp_clone)
@@ -746,18 +688,18 @@ function remote_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool)
     return pkg.uuid
 end
 
-function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}; shared::Bool)
+function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, shared::Bool)
     for pkg in pkgs
         pkg.repo === nothing && (pkg.repo = Types.GitRepo())
-        !isempty(pkg.repo.rev) && pkgerror("git revision cannot be given to `develop`")
+        pkg.repo.rev === nothing || pkgerror("git revision cannot be given to `develop`")
     end
 
     new_uuids = UUID[]
     for pkg in pkgs
         pkg.special_action = PKGSPEC_DEVELOPED
-        if !isempty(pkg.repo.url) && isdir_windows_workaround(pkg.repo.url)
+        if pkg.repo.url !== nothing && isdir_windows_workaround(pkg.repo.url)
             explicit_dev_path(ctx, pkg)
-        elseif !isempty(pkg.name)
+        elseif pkg.name !== nothing
             canonical_dev_path!(ctx, pkg, shared)
         end
         if pkg.path === nothing
@@ -781,7 +723,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
         for pkg in pkgs
             pkg.repo == nothing && continue
             pkg.special_action = PKGSPEC_REPO_ADDED
-            isempty(pkg.repo.url) && set_repo_for_pkg!(env, pkg)
+            pkg.repo.url === nothing && set_repo_for_pkg!(env, pkg)
             clones_dir = joinpath(depots1(), "clones")
             mkpath(clones_dir)
             repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
@@ -798,16 +740,14 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                     GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
                     rev = pkg.repo.rev
                     # see if we can get rev as a branch
-                    if isempty(rev)
-                        if LibGit2.isattached(repo)
-                            rev = LibGit2.branch(repo)
-                        else
-                            rev = string(LibGit2.GitHash(LibGit2.head(repo)))
-                        end
+                    if rev === nothing
+                        rev = LibGit2.isattached(repo) ?
+                            LibGit2.branch(repo) :
+                            string(LibGit2.GitHash(LibGit2.head(repo)))
                     end
                 else
                     # Not upgrading so the rev should be the current git-tree-sha
-                    rev = entry.git_tree_sha
+                    rev = entry.repo.tree_sha
                     pkg.version = VersionNumber(entry.version)
                 end
 
@@ -819,16 +759,15 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                     end
                     LibGit2.with(LibGit2.peel(LibGit2.GitTree, gitobject)) do git_tree
                         @assert git_tree isa LibGit2.GitTree
-                        pkg.repo.git_tree_sha1 = SHA1(string(LibGit2.GitHash(git_tree)))
+                        pkg.repo.tree_sha = SHA1(string(LibGit2.GitHash(git_tree)))
                             version_path = nothing
                             folder_already_downloaded = false
                         if has_uuid(pkg) && has_name(pkg)
-                            version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
+                            version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.tree_sha)
                             isdir(version_path) && (folder_already_downloaded = true)
                             entry = manifest_info(env, pkg.uuid)
                             if entry !== nothing &&
-                                entry.git_tree_sha == pkg.repo.git_tree_sha1 &&
-                                folder_already_downloaded
+                                entry.repo.tree_sha == pkg.repo.tree_sha && folder_already_downloaded
                                 # Same tree sha and this version already downloaded, nothing left to do
                                 do_nothing_more = true
                             end
@@ -856,7 +795,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
             do_nothing_more && continue
             parse_package!(ctx, pkg, project_path)
             if !folder_already_downloaded
-                version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
+                version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.tree_sha)
                 mkpath(version_path)
                 mv(project_path, version_path; force=true)
                 push!(new_uuids, pkg.uuid)
@@ -965,6 +904,7 @@ end
 function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     uuids = env.project.deps
     names = Dict(uuid => name for (name, uuid) in uuids)
+    # TODO: move this to `Project`
     length(uuids) < length(names) && # TODO: handle this somehow?
         pkgerror("duplicate UUID found in project file's [deps] section")
     for pkg in pkgs
@@ -1004,8 +944,8 @@ function registry_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
     # collect all names and uuids since we're looking anyway
-    names = [pkg.name for pkg in pkgs if has_name(pkg)]
-    uuids = [pkg.uuid for pkg in pkgs if has_uuid(pkg)]
+    names = String[pkg.name for pkg in pkgs if has_name(pkg)]
+    uuids = UUID[pkg.uuid for pkg in pkgs if has_uuid(pkg)]
     find_registered!(env, names, uuids)
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
@@ -1410,9 +1350,9 @@ function registered_names(env::EnvCache, uuid::UUID)::Vector{String}
 end
 
 # Determine a single UUID for a given name, prompting if needed
-function registered_uuid(env::EnvCache, name::String)::UUID
+function registered_uuid(env::EnvCache, name::String)::Union{Nothing,UUID}
     uuids = registered_uuids(env, name)
-    length(uuids) == 0 && return UUID(zero(UInt128))
+    length(uuids) == 0 && return nothing
     length(uuids) == 1 && return uuids[1]
     choices::Vector{String} = []
     choices_cache::Vector{Tuple{UUID,String}} = []
@@ -1435,7 +1375,7 @@ function registered_uuid(env::EnvCache, name::String)::UUID
         # prompt for which UUID was intended:
         menu = RadioMenu(choices)
         choice = request("There are multiple registered `$name` packages, choose one:", menu)
-        choice == -1 && return UUID(zero(UInt128))
+        choice == -1 && return nothing
         env.paths[choices_cache[choice][1]] = [choices_cache[choice][2]]
         return choices_cache[choice][1]
     else
@@ -1471,7 +1411,7 @@ function registered_info(env::EnvCache, uuid::UUID, key::String)
 end
 
 # Find package by UUID in the manifest file
-# TODO this needs a better name now?
+manifest_info(env::EnvCache, uuid::Nothing) = nothing
 function manifest_info(env::EnvCache, uuid::UUID)::Union{PackageEntry,Nothing}
     any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
     return get(env.manifest, uuid, nothing)
@@ -1553,11 +1493,11 @@ function destructure(manifest::Manifest)::Dict
         new_entry = something(entry.other, Dict{String,Any}())
         new_entry["uuid"] = string(uuid)
         entry!(new_entry, "version", entry.version, nothing)
-        entry!(new_entry, "git-tree-sha1", entry.git_tree_sha, nothing)
+        entry!(new_entry, "git-tree-sha1", entry.repo.tree_sha, nothing)
         entry!(new_entry, "pinned", entry.pinned, false)
         entry!(new_entry, "path", entry.path, nothing)
-        entry!(new_entry, "repo-url", entry.repo_url, nothing)
-        entry!(new_entry, "repo-rev", entry.repo_rev, nothing)
+        entry!(new_entry, "repo-url", entry.repo.url, nothing)
+        entry!(new_entry, "repo-rev", entry.repo.rev, nothing)
         if isempty(entry.deps)
             delete!(new_entry, "deps")
         else

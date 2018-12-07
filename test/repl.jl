@@ -100,11 +100,10 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)
     entry = Pkg.Types.manifest_info(Pkg.Types.EnvCache(), TEST_PKG.uuid)
-    @test entry.repo_rev == "master"
+    @test entry.repo.rev == "master"
     pkg"up --fixed"
     entry = Pkg.Types.manifest_info(Pkg.Types.EnvCache(), TEST_PKG.uuid)
-    @test entry.repo_rev == "master"
-
+    @test entry.repo.rev == "master"
 
     pkg"test Example"
     @test isinstalled(TEST_PKG)
@@ -354,16 +353,17 @@ temp_pkg_dir() do depot; cd_tempdir() do tmp
     @test manifest[uuid].path == joinpath("..", "Foo")
 end end
 
-# develop with --shared and --local
-cd_tempdir() do tmp
-    uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
-    pkg"activate ."
-    pkg"develop Example" # test default
-    @test manifest_info(EnvCache(), uuid).path == joinpath(Pkg.devdir(), "Example")
-    pkg"develop --shared Example"
-    @test manifest_info(EnvCache(), uuid).path == joinpath(Pkg.devdir(), "Example")
-    pkg"develop --local Example"
-    @test manifest_info(EnvCache(), uuid).path == joinpath("dev", "Example")
+@testset "develop with `--shared` and `--local" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmp
+        uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
+        pkg"activate ."
+        pkg"develop Example" # test default
+        @test manifest_info(EnvCache(), uuid).path == joinpath(Pkg.devdir(), "Example")
+        pkg"develop --shared Example"
+        @test manifest_info(EnvCache(), uuid).path == joinpath(Pkg.devdir(), "Example")
+        pkg"develop --local Example"
+        @test manifest_info(EnvCache(), uuid).path == joinpath("dev", "Example")
+    end end
 end
 
 test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))

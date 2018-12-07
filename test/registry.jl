@@ -3,7 +3,7 @@ module RegistryTests
 using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
-using Pkg.Types: PkgError, EnvCache, manifest_info
+using Pkg.Types: PkgError, EnvCache, manifest_info, PackageSpec
 
 include("utils.jl")
 
@@ -86,9 +86,9 @@ end
             url = joinpath(regdir, "RegistryFoo2"))
 
         # Packages in registries
-        Example  = PackageSpec(name = "Example",  uuid = "7876af07-990d-54b4-ab0e-23690620f79a")
-        Example1 = PackageSpec(name = "Example1", uuid = "c5f1542f-b8aa-45da-ab42-05303d706c66")
-        Example2 = PackageSpec(name = "Example2", uuid = "d7897d3a-8e65-4b65-bdc8-28ce4e859565")
+        Example  = PackageSpec(name = "Example",  uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+        Example1 = PackageSpec(name = "Example1", uuid = UUID("c5f1542f-b8aa-45da-ab42-05303d706c66"))
+        Example2 = PackageSpec(name = "Example2", uuid = UUID("d7897d3a-8e65-4b65-bdc8-28ce4e859565"))
 
 
         # Add General registry
@@ -268,7 +268,7 @@ end
             @test manifest_info(EnvCache(), uuid).version == "0.5.0"
             Pkg.update() # should not update Example
             @test manifest_info(EnvCache(), uuid).version == "0.5.0"
-            @test_throws Pkg.Types.ResolverError Pkg.add(PackageSpec(name="Example", version="0.5.1"))
+            @test_throws Pkg.Types.ResolverError Pkg.add(PackageSpec(name="Example", version=v"0.5.1"))
             Pkg.rm("Example")
             Pkg.add("JSON") # depends on Example
             @test manifest_info(EnvCache(), uuid).version == "0.5.0"

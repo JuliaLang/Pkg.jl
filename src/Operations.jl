@@ -105,13 +105,13 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::D
             @assert pkg.path !== nothing
             path = pkg.path
         elseif pkg.special_action == PKGSPEC_REPO_ADDED
-            @assert pkg.repo !== nothing && pkg.repo.git_tree_sha1 !== nothing
-            path = find_installed(pkg.name, pkg.uuid, pkg.repo.git_tree_sha1)
+            @assert pkg.repo !== nothing && pkg.repo.tree_sha !== nothing
+            path = find_installed(pkg.name, pkg.uuid, pkg.repo.tree_sha)
         elseif entry !== nothing && entry.path !== nothing
             path = pkg.path = entry.path
-        elseif entry !== nothing && entry.repo_url !== nothing
-            path = find_installed(pkg.name, pkg.uuid, entry.git_tree_sha)
-            pkg.repo = Types.GitRepo(entry.repo_url, entry.repo_rev, entry.git_tree_sha)
+        elseif entry !== nothing && entry.repo.url !== nothing
+            path = find_installed(pkg.name, pkg.uuid, entry.repo.tree_sha)
+            pkg.repo = entry.repo
         else
             continue
         end
@@ -197,8 +197,8 @@ function collect_require!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
 
     # And collect the stdlibs
     stdlibs = find_stdlib_deps(ctx, path)
-    for (uuid, stdlib) in stdlibs
-        deppkg = PackageSpec(stdlib, uuid, VersionSpec())
+    for (uuid, name) in stdlibs
+        deppkg = PackageSpec(name, uuid)
         push!(fix_deps_map[pkg.uuid], deppkg)
         push!(fix_deps, deppkg)
     end
@@ -645,7 +645,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
         if pkg.path !== nothing || uuid in keys(ctx.stdlibs)
             hash = nothing
         elseif pkg.repo != nothing
-            hash = pkg.repo.git_tree_sha1
+            hash = pkg.repo.tree_sha
         else
             hash = hashes[uuid]
         end
@@ -692,27 +692,27 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
     is_stdlib = uuid in keys(ctx.stdlibs)
     if !is_stdlib
         entry.version = string(version)
-        entry.git_tree_sha = hash
+        entry.repo.tree_sha = hash
         entry.path = path
         if special_action == PKGSPEC_DEVELOPED
             entry.pinned = false
-            entry.repo_url = nothing
-            entry.repo_rev = nothing
+            entry.repo.url = nothing
+            entry.repo.rev = nothing
         elseif special_action == PKGSPEC_FREED
             if entry.pinned
                 entry.pinned = false
             else
-                entry.repo_url = nothing
-                entry.repo_rev = nothing
+                entry.repo.url = nothing
+                entry.repo.rev = nothing
             end
         elseif special_action == PKGSPEC_PINNED
             entry.pinned = true
         elseif special_action == PKGSPEC_REPO_ADDED
-            entry.repo_url = repo.url
-            entry.repo_rev = repo.rev
+            entry.repo.url = repo.url
+            entry.repo.rev = repo.rev
             path = find_installed(name, uuid, hash)
         end
-        if entry.repo_url !== nothing
+        if entry.repo.url !== nothing
             path = find_installed(name, uuid, hash)
         end
     end
@@ -737,14 +737,14 @@ function update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothi
             # Remove when packages uses Project files properly
             dep_pkgs = PackageSpec[]
             stdlib_deps = find_stdlib_deps(ctx, path)
-            for (stdlib_uuid, stdlib) in stdlib_deps
-                push!(dep_pkgs, PackageSpec(stdlib, stdlib_uuid))
+            for (uuid, name) in stdlib_deps
+                push!(dep_pkgs, PackageSpec(name, uuid))
             end
             reqfile = joinpath(path, "REQUIRE")
             if isfile(reqfile)
                 for r in Pkg2.Reqs.read(reqfile)
                     r isa Pkg2.Reqs.Requirement || continue
-                    push!(dep_pkgs, PackageSpec(r.package))
+                    push!(dep_pkgs, PackageSpec(name=r.package))
                 end
                 registry_resolve!(env, dep_pkgs)
                 project_deps_resolve!(ctx.env, dep_pkgs)
@@ -812,8 +812,8 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         entry === nothing && return
         need_to_resolve |= (entry.path !== nothing)
         localctx.env.project.deps[pkg.name] = pkg.uuid
-        for (dpkg, uuid) in entry.deps
-            collect_deps!(seen, PackageSpec(dpkg, uuid))
+        for (name, uuid) in entry.deps
+            collect_deps!(seen, PackageSpec(name, uuid))
         end
     end
 
@@ -915,7 +915,7 @@ function collect_target_deps!(
         entry = manifest_info(ctx.env, pkg.uuid)
         path = (entry.path !== nothing) ?
             project_rel_path(ctx, entry.path) :
-            find_installed(pkg.name, pkg.uuid, entry.git_tree_sha)
+            find_installed(pkg.name, pkg.uuid, entry.repo.tree_sha)
     end
 
     project_path = nothing
@@ -1021,8 +1021,8 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
         else
             entry = manifest_info(ctx.env, uuid)
             name = entry.name
-            if entry.git_tree_sha !== nothing
-                hash_or_path = entry.git_tree_sha
+            if entry.repo.tree_sha !== nothing
+                hash_or_path = entry.repo.tree_sha
                 path = find_installed(name, uuid, hash_or_path)
             elseif entry.path !== nothing
                 path = project_rel_path(ctx, entry.path)
@@ -1186,8 +1186,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec})
             pkg.version isa UpgradeLevel || continue
             level = pkg.version
             entry = manifest_info(ctx.env, pkg.uuid)
-            if entry !== nothing && entry.repo_url !== nothing
-                pkg.repo = Types.GitRepo(entry.repo_url, entry.repo_rev)
+            if entry !== nothing && entry.repo.url !== nothing
+                pkg.repo = entry.repo
                 new = handle_repos_add!(ctx, [pkg]; credentials=creds,
                                         upgrade_or_add = (level == UPLEVEL_MAJOR))
                 append!(new_git, new)
@@ -1237,7 +1237,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
         pkg.special_action = PKGSPEC_FREED
         entry = manifest_info(ctx.env, pkg.uuid)
-        if entry.path !== nothing || entry.repo_url !== nothing
+        if entry.path !== nothing || entry.repo.url !== nothing
             need_to_resolve = true
         else
             pkg.version = VersionNumber(entry.version)
@@ -1261,8 +1261,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             version_path = dirname(ctx.env.project_file)
         else
             entry = manifest_info(ctx.env, pkg.uuid)
-            if entry.git_tree_sha !== nothing
-                version_path = find_installed(pkg.name, pkg.uuid, entry.git_tree_sha)
+            if entry.repo.tree_sha !== nothing
+                version_path = find_installed(pkg.name, pkg.uuid, entry.repo.tree_sha)
             elseif entry.path !== nothing
                 version_path =  project_rel_path(ctx, entry.path)
             elseif pkg.uuid in keys(ctx.stdlibs)

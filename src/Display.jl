@@ -216,11 +216,11 @@ print_diff(ctx::Context, diff::Vector{DiffEntry}, status=false) = print_diff(std
 
 function name_ver_info(entry::PackageEntry)
     entry.name, VerInfo(
-        entry.git_tree_sha,
+        entry.repo.tree_sha,
         entry.path,
         entry.version === nothing ? nothing : VersionNumber(entry.version),
         entry.pinned,
-        entry.repo_url === nothing ? nothing : Types.GitRepo(entry.repo_url, entry.repo_rev),
+        entry.repo.url === nothing ? nothing : entry.repo,
         )
 end
 
