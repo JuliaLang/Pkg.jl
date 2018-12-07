@@ -388,7 +388,7 @@ var documenterSearchIndex = {"docs": [
     "location": "api/#Pkg.PackageSpec",
     "page": "10. API Reference",
     "title": "Pkg.PackageSpec",
-    "category": "type",
+    "category": "function",
     "text": "PackageSpec(name::String, [uuid::UUID, version::VersionNumber])\nPackageSpec(; name, url, path, rev, version, mode, level)\n\nA PackageSpec is a representation of a package with various metadata. This includes:\n\nThe name of the package.\nThe package unique uuid.\nA version (for example when adding a package. When upgrading, can also be an instance of\n\nthe enum UpgradeLevel\n\nA url and an optional git revision. rev could be a branch name or a git commit SHA.\nA local path path. This is equivalent to using the url argument but can be more descriptive.\nA mode, which is an instance of the enum PackageMode which can be either PKGMODE_PROJECT or\n\nPKGMODE_MANIFEST, defaults to PKGMODE_PROJECT. Used in e.g. Pkg.rm.\n\nMost functions in Pkg take a Vector of PackageSpec and do the operation on all the packages in the vector.\n\nBelow is a comparison between the REPL version and the PackageSpec version:\n\nREPL API\nPackage PackageSpec(\"Package\")\nPackage@0.2 PackageSpec(name=\"Package\", version=\"0.2\")\nPackage=a67d... PackageSpec(name=\"Package\", uuid=\"a67d...\")\nPackage#master PackageSpec(name=\"Package\", rev=\"master\")\nlocal/path#feature PackageSpec(path=\"local/path\"; rev=\"feature\")\nwww.mypkg.com PackageSpec(url=\"www.mypkg.com\")\n--manifest Package PackageSpec(name=\"Package\", mode=PKGSPEC_MANIFEST)\n--major Package PackageSpec(name=\"Package\", version=PKGLEVEL_MAJOR)\n\n\n\n\n\n"
 },
 
