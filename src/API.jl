@@ -440,6 +440,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("manifest at $(ctx.env.manifest_file) does not exist")
     end
+    Operations.prune_manifest(ctx.env)
     Types.update_registries(ctx)
     urls = Dict{}
     hashes = Dict{UUID,SHA1}()
