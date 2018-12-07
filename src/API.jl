@@ -476,6 +476,10 @@ status(pkgs::Vector{<:AbstractString}; mode=PKGMODE_PROJECT) =
     status([check_package_name(pkg) for pkg in pkgs]; mode=mode)
 status(pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT) = status(Context(), pkgs; mode=mode)
 function status(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT)
+    project_resolve!(ctx.env, pkgs)
+    project_deps_resolve!(ctx.env, pkgs)
+    manifest_resolve!(ctx.env, pkgs)
+    ensure_resolved(ctx.env, pkgs)
     Pkg.Display.status(ctx, pkgs, mode=mode)
     return nothing
 end

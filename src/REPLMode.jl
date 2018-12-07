@@ -601,7 +601,7 @@ end
 
 # TODO set default Display.status keyword: mode = PKGMODE_COMBINED
 do_status!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions) =
-    Display.status(Context!(ctx), args, mode=get(api_opts, :mode, PKGMODE_COMBINED))
+    API.status(Context!(ctx), args, mode=get(api_opts, :mode, PKGMODE_COMBINED))
 
 # TODO , test recursive dependencies as on option.
 function do_test!(ctx::APIOptions, args::PkgArguments, api_opts::APIOptions)
