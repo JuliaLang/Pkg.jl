@@ -31,7 +31,7 @@ function git_file_stream(repo::LibGit2.GitRepo, spec::String; fakeit::Bool=false
     return iob
 end
 
-function status(ctx::Context, args::Vector{PackageSpec}=PackageSpec[];
+function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
                 mode::PackageMode=PKGMODE_PROJECT, use_as_api=false)
     env = ctx.env
     project₀ = project₁ = env.project
@@ -39,14 +39,23 @@ function status(ctx::Context, args::Vector{PackageSpec}=PackageSpec[];
     diff = nothing
 
     pkgfilter = (diff) -> begin
-        for pkg in args
-            if has_uuid(pkg) ? pkg.uuid == diff.uuid : pkg.name == diff.name
+        for pkg in pkgs
+            if pkg.uuid == diff.uuid
                 return true
+            end
+            if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
+                # also look for pkg's deps
+                info = manifest_info(ctx.env, pkg.uuid)
+                for uuid in values(info.deps)
+                    if uuid == diff.uuid
+                        return true
+                    end
+                end
             end
         end
         return false
     end
-    filter_pkgs = length(args) > 0
+    filter_pkgs = length(pkgs) > 0
 
     if !use_as_api
         pkg = ctx.env.pkg
