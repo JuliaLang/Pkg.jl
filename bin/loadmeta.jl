@@ -62,6 +62,8 @@ function load_versions(dir::String)
 end
 
 const JULIA_VERSIONS = Dict{VersionNumber,Version}()
+# Note: This is a dummy commit that will get overwritten by the loop below once 1.1 is released
+JULIA_VERSIONS[v"1.1.0"] = Version("6ef1d76c50a39c0ce68b4e42948a1499c1551415")
 for line in eachline(`git -C $juliadir ls-remote --tags origin`)
     global JULIA_VERSIONS
     # Lines are in the form 'COMMITSHA\trefs/tags/TAG'
@@ -70,9 +72,6 @@ for line in eachline(`git -C $juliadir ls-remote --tags origin`)
     occursin(Base.VERSION_REGEX, tag) || continue
     ver = VersionNumber(tag)
     JULIA_VERSIONS[ver] = Version(sha)
-end
-if !haskey(JULIA_VERSIONS, v"1.1.0") # Keep this up to date with the most recent dev version
-    JULIA_VERSIONS[v"1.1.0"] = Version("6ef1d76c50a39c0ce68b4e42948a1499c1551415") # dummy commit, not actual 1.1
 end
 
 function load_packages(dir::String)
