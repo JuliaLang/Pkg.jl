@@ -425,8 +425,10 @@ function write_env_usage(manifest_file::AbstractString)
     !isfile(manifest_file) && return
     # Do not rewrite as do syntax (no longer precompilable)
     io = open(usage_file, "a")
-    println(io, "[[\"", escape_string(manifest_file), "\"]]")
-    print(io, "time = ", now()); println(io, 'Z')
+    print(io, """
+    [[$(repr(manifest_file))]]
+    time = $(now())Z
+    """)
     close(io)
 end
 
@@ -689,8 +691,8 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
                 mkpath(version_path)
                 mv(project_path, version_path; force=true)
                 push!(new_uuids, pkg.uuid)
+                Base.rm(project_path; force = true, recursive = true)
             end
-            Base.rm(project_path; force = true, recursive = true)
             @assert has_uuid(pkg)
         end
         return new_uuids
@@ -1041,6 +1043,7 @@ end
 function registered_uuid(env::EnvCache, name::String)::UUID
     uuids = registered_uuids(env, name)
     length(uuids) == 0 && return UUID(zero(UInt128))
+    length(uuids) == 1 && return uuids[1]
     choices::Vector{String} = []
     choices_cache::Vector{Tuple{UUID,String}} = []
     for uuid in uuids

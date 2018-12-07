@@ -538,6 +538,17 @@ temp_pkg_dir() do project_path
     end
 end
 
+@testset "issue #913" begin
+    temp_pkg_dir() do project_path
+        Pkg.activate(project_path)
+        Pkg.add(PackageSpec(name="Example", rev = "master"))
+        @test isinstalled(TEST_PKG)
+        rm.(joinpath.(project_path, ["Project.toml","Manifest.toml"]))
+        Pkg.add(PackageSpec(name="Example", rev = "master")) # should not fail
+        @test isinstalled(TEST_PKG)
+    end
+end
+
 include("repl.jl")
 include("api.jl")
 

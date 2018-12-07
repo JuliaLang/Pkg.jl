@@ -415,6 +415,9 @@ function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}
             pkgs = [PackageSpec(name, UUID(uuid)) for (name, uuid) in ctx.env.project["deps"]]
         else
             info = manifest_info(ctx.env, pkg.uuid)
+            if info === nothing
+                pkgerror("could not find manifest info for package with uuid: $(pkg.uuid)")
+            end
             if haskey(info, "deps")
                 pkgs = [PackageSpec(name, UUID(uuid)) for (name, uuid) in info["deps"]]
             end

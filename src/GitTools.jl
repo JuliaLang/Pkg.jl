@@ -85,6 +85,7 @@ function normalize_url(url::AbstractString)
 end
 
 function clone(url, source_path; header=nothing, kwargs...)
+    url = normalize_url(url)
     Pkg.Types.printpkgstyle(stdout, :Cloning, header == nothing ? "git-repo `$url`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
@@ -93,7 +94,6 @@ function clone(url, source_path; header=nothing, kwargs...)
             transfer_payload,
         )
     )
-    url = normalize_url(url)
     print(stdout, "\e[?25l") # disable cursor
     try
         return LibGit2.clone(url, source_path; callbacks=callbacks, kwargs...)
