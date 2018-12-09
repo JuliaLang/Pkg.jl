@@ -3,9 +3,6 @@
 
 pushfirst!(LOAD_PATH, joinpath(@__DIR__, "..", "ext"))
 
-# Used by both loadmeta and genstdlib, assumed to be a git repo
-juliadir = dirname(Sys.STDLIB)
-
 include("loadmeta.jl")
 include("utils.jl")
 include("gitmeta.jl")

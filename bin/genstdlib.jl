@@ -14,14 +14,15 @@ for pkg in readdir(Sys.STDLIB)
     isfile(project_file) || continue
     project = TOML.parsefile(project_file)
     stdlib_uuids[pkg] = project["uuid"]
-    version_file = joinpath(Sys.STDLIB, "$pkg.version")
+    version_file = joinpath(Sys.STDLIB, "..", "..", "..", "..", "..", "stdlib", "$pkg.version")
     if isfile(version_file)
         r = Regex("^\\s*$(pkg)_SHA1\\s*=\\s*(\\S+)\\s*\$", "im")
         m = match(r, read(version_file, String))
         m === nothing && error("expected PKG_SHA1 in $version_file")
         stdlib_trees[pkg] = m.captures[1]
     else
-        stdlib_trees[pkg] = split(readchomp(`git -C $juliadir ls-tree HEAD -- stdlib/$pkg`))[3]
+        dir = dirname(realpath(joinpath(Sys.STDLIB, pkg)))
+        stdlib_trees[pkg] = split(readchomp(`git -C $dir ls-tree HEAD -- $pkg`))[3]
     end
     stdlib_deps[pkg] = String[]
     haskey(project, "deps") || continue
