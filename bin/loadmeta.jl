@@ -30,7 +30,7 @@ end
 
 Require(versions::VersionSet) = Require(versions, Symbol[])
 Require(version::VersionInterval) = Require(VersionSet([version]), Symbol[])
-Version(sha1::String) = Version(sha1, Dict{String,Require}())
+Version(sha1::AbstractString) = Version(String(sha1), Dict{String,Require}())
 
 function load_requires(path::String)
     requires = Dict{String,Require}()
@@ -95,6 +95,8 @@ const JULIA_VERSIONS = Dict(
     v"0.6.2"  => Version("d386e40c17d43b79fc89d3e579fc04547241787c"),
     v"0.7.0"  => Version("a4cb80f3edcf8cea00bd9660e3b65f544f41462f"),
     v"1.0.0"  => Version("5d4eaca0c9fa3d555c79dbacdccb9169fdf64b65"),
+    v"1.0.1"  => Version("0d713926f85dfa3e4e0962215b909b8e47e94f48"),
+    v"1.0.2"  => Version("d789231e9985537686052db9b2314c0d51656308"),
     v"1.1.0"  => Version("6ef1d76c50a39c0ce68b4e42948a1499c1551415"), # dummy commit, not actual 1.1
 )
 

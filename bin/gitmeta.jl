@@ -72,7 +72,7 @@ function gitmeta(pkgs::Dict{String,Package})
         for (ver, v) in sort!(collect(p.versions), by=first, rev=true)
             haskey(d[uuid], v.sha1) &&
             ((v"0.7" ∉ v.requires["julia"].versions &&
-             v"1.0" ∉ v.requires["julia"].versions) ||
+              v"1.0" ∉ v.requires["julia"].versions) ||
             haskey(s[uuid], v.sha1)) && continue
             if repo == nothing
                 repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
