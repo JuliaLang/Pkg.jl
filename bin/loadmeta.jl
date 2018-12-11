@@ -98,6 +98,7 @@ const JULIA_VERSIONS = Dict(
     v"1.0.1"  => Version("0d713926f85dfa3e4e0962215b909b8e47e94f48"),
     v"1.0.2"  => Version("d789231e9985537686052db9b2314c0d51656308"),
     v"1.1.0"  => Version("6ef1d76c50a39c0ce68b4e42948a1499c1551415"), # dummy commit, not actual 1.1
+    v"1.2.0"  => Version("217d330296debe0567bb07addabf66b00602e325"), # dummy commit, not actual 1.2
 )
 
 function load_packages(dir::String)
