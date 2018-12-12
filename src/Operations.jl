@@ -20,6 +20,7 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
             ispath(path) && return path
         end
     end
+    println("returning default")
     return abspath(depots1(), "packages", name, slug_default)
 end
 
@@ -97,26 +98,39 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::D
     fix_deps_map = Dict{UUID,Vector{PackageSpec}}()
     uuid_to_pkg = Dict{UUID,PackageSpec}()
     for pkg in pkgs
+        @show pkg
+        @show pkg.special_action
         local path
         entry = manifest_info(ctx.env, pkg.uuid)
         if pkg.special_action == PKGSPEC_FREED && !entry.pinned
+            println("path-1")
             continue
         elseif pkg.special_action == PKGSPEC_DEVELOPED
+            println("path-2")
             @assert pkg.path !== nothing
             path = pkg.path
+            @show path
         elseif pkg.special_action == PKGSPEC_REPO_ADDED
+            println("path-3")
             @assert pkg.repo !== nothing && pkg.repo.tree_sha !== nothing
             path = find_installed(pkg.name, pkg.uuid, pkg.repo.tree_sha)
+            @show path
         elseif entry !== nothing && entry.path !== nothing
+            println("path-4")
             path = pkg.path = entry.path
+            @show path
         elseif entry !== nothing && entry.repo.url !== nothing
+            println("path-5")
             path = find_installed(pkg.name, pkg.uuid, entry.repo.tree_sha)
             pkg.repo = entry.repo
+            @show path
         else
+            println("path-6")
             continue
         end
 
         path = project_rel_path(ctx, path)
+        @show path
         if !isdir(path)
             pkgerror("path $(path) for package $(pkg.name) no longer exists. Remove the package or `develop` it at a new path")
         end
@@ -483,7 +497,7 @@ function install_archive(
             !isdir(version_path) && mkpath(version_path)
             mv(joinpath(dir, dirs[1]), version_path; force=true)
             Base.rm(path; force = true)
-            Base.rm(dir; force = true)
+            # Base.rm(dir; force = true)
             return true
         end
     end
