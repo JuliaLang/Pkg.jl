@@ -28,7 +28,9 @@ function temp_pkg_dir(fn::Function;rm=true)
             end
         end
         Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
-        withenv("JULIA_PROJECT" => nothing, "JULIA_LOAD_PATH" => nothing) do
+        withenv("JULIA_PROJECT" => nothing,
+                "JULIA_LOAD_PATH" => nothing,
+                "JULIA_PKG_DEVDIR" => nothing) do
             env_dir = mktempdir()
             depot_dir = mktempdir()
             try
