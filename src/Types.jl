@@ -530,7 +530,7 @@ function Manifest(raw::Dict)::Manifest
         entry.name     = name
         entry.version  = get(info, "version",  nothing)
         entry.path     = get(info, "path",     nothing)
-        entry.pinned   = parse(Bool, get(info, "pinned", "false"))
+        entry.pinned   = get(info, "pinned", false)
         entry.repo.url = get(info, "repo-url", nothing)
         entry.repo.rev = get(info, "repo-rev", nothing)
         sha = get(info, "git-tree-sha1", nothing)
@@ -1475,11 +1475,11 @@ function destructure(project::Project)::Dict
 end
 
 function destructure(manifest::Manifest)::Dict
-    function entry!(entry, key, value, falsy=nothing)
-        if value == falsy
+    function entry!(entry, key, value, default=nothing)
+        if value == default
             delete!(entry, key)
         else
-            entry[key] = string(value)
+            entry[key] = value isa TOML.TYPE ? value : string(value)
         end
     end
 
@@ -1492,12 +1492,12 @@ function destructure(manifest::Manifest)::Dict
     for (uuid, entry) in manifest
         new_entry = something(entry.other, Dict{String,Any}())
         new_entry["uuid"] = string(uuid)
-        entry!(new_entry, "version", entry.version, nothing)
-        entry!(new_entry, "git-tree-sha1", entry.repo.tree_sha, nothing)
+        entry!(new_entry, "version", entry.version)
+        entry!(new_entry, "git-tree-sha1", entry.repo.tree_sha)
         entry!(new_entry, "pinned", entry.pinned, false)
-        entry!(new_entry, "path", entry.path, nothing)
-        entry!(new_entry, "repo-url", entry.repo.url, nothing)
-        entry!(new_entry, "repo-rev", entry.repo.rev, nothing)
+        entry!(new_entry, "path", entry.path)
+        entry!(new_entry, "repo-url", entry.repo.url)
+        entry!(new_entry, "repo-rev", entry.repo.rev)
         if isempty(entry.deps)
             delete!(new_entry, "deps")
         else
