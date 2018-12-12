@@ -1,5 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+const TYPE = Union{AbstractDict,AbstractArray,AbstractString,DateTime,Bool}
+
 "Identify if character in subset of bare key symbols"
 isbare(c::AbstractChar) = 'A' <= c <= 'Z' || 'a' <= c <= 'z' || isdigit(c) || c == '-' || c == '_'
 
@@ -34,6 +36,8 @@ printvalue(io::IO, value::AbstractDict; sorted=false) =
     _print(io, value, sorted=sorted)
 printvalue(io::IO, value::DateTime; sorted=false) =
     Base.print(io, Dates.format(value, "YYYY-mm-ddTHH:MM:SS.sssZ"))
+printvalue(io::IO, value::Bool; sorted=false) =
+    Base.print(io, value ? "true" : "false")
 printvalue(io::IO, value; sorted=false) =
     Base.print(io, "\"$(escape_string(string(value)))\"")
 
