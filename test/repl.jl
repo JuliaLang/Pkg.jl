@@ -11,17 +11,6 @@ import LibGit2
 
 include("utils.jl")
 
-function git_init_package(tmp, path)
-    base = basename(path)
-    pkgpath = joinpath(tmp, base)
-    cp(path, pkgpath)
-    LibGit2.with(LibGit2.init(pkgpath)) do repo
-        LibGit2.add!(repo, "*")
-        LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-    end
-    return pkgpath
-end
-
 @testset "generate args" begin
     @test_throws PkgError pkg"generate"
 end
