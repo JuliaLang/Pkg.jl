@@ -239,9 +239,9 @@ function gc(ctx::Context=Context(); kwargs...)
         manifest == nothing && continue
         new_usage[manifestfile] = [Dict("time" => date)]
         for (uuid, entry) in manifest
-            if entry.git_tree_sha !== nothing
+            if entry.repo.tree_sha !== nothing
                 push!(paths_to_keep,
-                      Operations.find_installed(entry.name, uuid, entry.git_tree_sha))
+                      Operations.find_installed(entry.name, uuid, entry.repo.tree_sha))
             end
         end
     end

@@ -602,6 +602,16 @@ end
     end
 end
 
+#issue #975
+@testset "Pkg.gc" begin
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            Pkg.add("Example")
+            Pkg.gc()
+        end
+    end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
