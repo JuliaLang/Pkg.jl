@@ -145,6 +145,7 @@ Base.@kwdef mutable struct PackageSpec
     name::Union{Nothing,String} = nothing
     uuid::Union{Nothing,UUID} = nothing
     version::VersionTypes = VersionSpec()
+    features::Vector{String} = String[]
     mode::PackageMode = PKGMODE_PROJECT
     path::Union{Nothing,String} = nothing
     special_action::PackageSpecialAction = PKGSPEC_NOTHING # If the package is currently being pinned, freed etc
@@ -160,7 +161,9 @@ has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
-    f = ["name" => pkg.name, "uuid" => has_uuid(pkg) ? pkg.uuid : "", "v" => (vstr == "VersionSpec(\"*\")" ? "" : vstr)]
+    f = ["name" => pkg.name, "uuid" => has_uuid(pkg) ? pkg.uuid : "",
+        "v" => (vstr == "VersionSpec(\"*\")" ? "" : vstr),
+        "features" => pkg.features]
     if pkg.repo !== nothing
         if pkg.repo.url !== nothing
             push!(f, "url/path" => string("\"", pkg.repo.url, "\""))

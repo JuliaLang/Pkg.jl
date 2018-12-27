@@ -546,6 +546,7 @@ setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GitTools.setprotoc
 function Package(;name::Union{Nothing,AbstractString} = nothing,
                  uuid::Union{Nothing,String,UUID} = nothing,
                  version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
+                 features::Union{Nothing, String, Vector{String}} = String[],
                  url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT)
     path !== nothing && url !== nothing &&
         pkgerror("cannot specify both a path and url")
@@ -555,8 +556,13 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
         nothing :
         Types.GitRepo(rev = rev, url = url !== nothing ? url : path)
     version = version === nothing ? VersionSpec() : VersionSpec(version)
+
+    features = features === nothing ? String[] :
+               features isa String  ? [features] :
+               features
+
     uuid isa String && (uuid = UUID(uuid))
-    PackageSpec(name, uuid, version, mode, nothing, PKGSPEC_NOTHING, repo)
+    PackageSpec(name, uuid, version, features, mode, nothing, PKGSPEC_NOTHING, repo)
 end
 Package(name::AbstractString) = PackageSpec(name)
 Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
