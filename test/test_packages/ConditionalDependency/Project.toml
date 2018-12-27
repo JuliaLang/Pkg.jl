@@ -1,0 +1,18 @@
+authors = ["Roger-luo <hiroger@qq.com>"]
+name = "ConditionalDependency"
+uuid = "09c64820-0a14-11e9-376f-03eff1a9e926"
+version = "0.1.0"
+
+[extras]
+x2 = "52baf49e-96b1-11e8-23dd-2d073a3a6758"
+
+[extras.CUDA]
+uuid = "11d27378-0a18-11e9-0a59-4ba122bf6828"
+features = ["cuda"]
+version = "0.2.0"
+
+[features]
+cuda = ["CUDA"]
+
+[targets]
+test = ["x2"]

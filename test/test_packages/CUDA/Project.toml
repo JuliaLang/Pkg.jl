@@ -1,0 +1,6 @@
+authors = ["Roger-luo <hiroger@qq.com>"]
+name = "CUDA"
+uuid = "11d27378-0a18-11e9-0a59-4ba122bf6828"
+version = "0.1.0"
+
+[deps]
