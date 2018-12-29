@@ -380,7 +380,7 @@ function resolve_versions!(
     for (uuid, ver) in vers
         uuid in uuids && continue
         name = registered_name(ctx.env, uuid)
-        push!(pkgs, PackageSpec(name, uuid, ver))
+        push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
     end
     return vers
 end
