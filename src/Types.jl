@@ -1384,9 +1384,9 @@ function registered_uuid(env::EnvCache, name::String)::Union{Nothing,UUID}
 end
 
 # Determine current name for a given package UUID
-function registered_name(env::EnvCache, uuid::UUID)::String
+function registered_name(env::EnvCache, uuid::UUID)::Union{Nothing,String}
     names = registered_names(env, uuid)
-    length(names) == 0 && return ""
+    length(names) == 0 && return nothing
     length(names) == 1 && return names[1]
     values = registered_info(env, uuid, "name")
     name = nothing
