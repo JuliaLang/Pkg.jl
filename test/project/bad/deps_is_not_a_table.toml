@@ -1,0 +1,13 @@
+desc = "The next-generation Julia package manager."
+keywords = ["package", "management"]
+license = "MIT"
+name = "Pkg"
+version = "1.0.0"
+
+deps = ["ade2ca70-3891-5945-98fb-dc099432e06a", "76f85450-5226-5b5a-8eaa-529ad045b433"]
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

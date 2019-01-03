@@ -1,0 +1,6 @@
+authors = ["Someone"]
+name = "Foo"
+uuid = "ba"
+version = "0.1.0"
+
+[deps]
