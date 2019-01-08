@@ -21,7 +21,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
     PackageSpec, EnvCache, Context, Context!, get_deps,
     PkgError, pkgerror, has_name, has_uuid, write_env, parse_toml, find_registered!,
-    project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
+    project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
@@ -560,7 +560,7 @@ end
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, shared::Bool)
     for pkg in pkgs
         pkg.repo === nothing && (pkg.repo = Types.GitRepo())
-        pkg.repo.rev === nothing || pkgerror("git revision cannot be given to `develop`")
+        pkg.repo.rev !== nothing && pkgerror("git revision cannot be given to `develop`")
     end
 
     new_uuids = UUID[]
@@ -581,101 +581,131 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
     return new_uuids
 end
 
-function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec};
-                           upgrade_or_add::Bool=true, credentials=nothing)
+clone_path(url) = joinpath(depots1(), "clones", string(hash(url)))
+function clone_path!(url)
+    clone = clone_path(url)
+    mkpath(dirname(clone))
+    Base.shred!(LibGit2.CachedCredentials()) do creds
+        LibGit2.with(GitTools.ensure_clone(clone, url; isbare=true, credentials=creds)) do repo
+            GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
+        end
+    end
+    return clone
+end
+
+function guess_rev(repo_path)::String
+    rev = nothing
+    LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
+        rev = LibGit2.isattached(repo) ?
+            LibGit2.branch(repo) :
+            string(LibGit2.GitHash(LibGit2.head(repo)))
+        gitobject, isbranch = nothing, nothing
+        Base.shred!(LibGit2.CachedCredentials()) do creds
+            gitobject, isbranch = get_object_branch(repo, rev, creds)
+        end
+        LibGit2.with(gitobject) do object
+            rev = isbranch ? rev : string(LibGit2.GitHash(gitobject))
+        end
+    end
+    return rev
+end
+
+function with_git_tree(fn, repo_path::String, rev::String)
+    gitobject = nothing
+    Base.shred!(LibGit2.CachedCredentials()) do creds
+        LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
+            gitobject, isbranch = get_object_branch(repo, rev, creds)
+            LibGit2.with(LibGit2.peel(LibGit2.GitTree, gitobject)) do git_tree
+                @assert git_tree isa LibGit2.GitTree
+                return applicable(fn, repo, git_tree) ?
+                    fn(repo, git_tree) :
+                    fn(git_tree)
+            end
+        end
+    end
+end
+
+function repo_checkout(repo_path, rev)
+    project_path = mktempdir()
+    with_git_tree(repo_path, rev) do repo, git_tree
+        _project_path = project_path # https://github.com/JuliaLang/julia/issues/30048
+        GC.@preserve _project_path begin
+            opts = LibGit2.CheckoutOptions(
+                checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
+                target_directory = Base.unsafe_convert(Cstring, _project_path),
+            )
+            LibGit2.checkout_tree(repo, git_tree, options=opts)
+        end
+    end
+    return project_path
+end
+
+function tree_hash(repo_path, rev)
+    with_git_tree(repo_path, rev) do git_tree
+        return SHA1(string(LibGit2.GitHash(git_tree)))
+    end
+end
+
+function instantiate_pkg_repo!(pkg::PackageSpec, repo_cache::Union{Nothing,String}=nothing)
+    pkg.special_action = PKGSPEC_REPO_ADDED
+    clone = clone_path!(pkg.repo.url)
+    pkg.repo.tree_sha = tree_hash(clone, pkg.repo.rev)
+    version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.tree_sha)
+    if repo_cache === nothing
+        repo_cache = repo_checkout(clone, string(pkg.repo.tree_sha))
+    end
+    isdir(version_path) && return false
+    mkpath(version_path)
+    mv(repo_cache, version_path; force=true)
+    return true
+end
+
+# partial PackageSpec -> PackageSpec with all the relevant fields filled out
+function resolve_repo_add!(ctx::Context, pkg::PackageSpec)
+    repo_cache = nothing
+    if pkg.repo.url !== nothing
+        clone_path = clone_path!(pkg.repo.url)
+        pkg.repo.rev = something(pkg.repo.rev, guess_rev(clone_path))
+        repo_cache = repo_checkout(clone_path, pkg.repo.rev)
+        package = parse_package!(ctx, pkg, repo_cache)
+    elseif pkg.name !== nothing || pkg.uuid !== nothing
+        registry_resolve!(ctx.env, [pkg])
+        ensure_resolved(ctx.env, [pkg]; registry=true)
+        _, pkg.repo.url = Types.registered_info(ctx.env, pkg.uuid, "repo")[1]
+        pkg.repo.rev === nothing && pkgerror("Rev must be specified")
+    else
+        pkgerror("Package must be specified by name, URL, or UUID")
+    end
+    return repo_cache
+end
+
+function handle_repo_add!(ctx::Context, pkg::PackageSpec)
+    pkg.repo === nothing && return
+    repo_cache = resolve_repo_add!(ctx, pkg)
+    # if pinned, return early
+    entry = manifest_info(ctx.env, pkg.uuid)
+    if (entry !== nothing && entry.pinned)
+        repo_cache !== nothing && rm(repo_cache; recursive=true, force=true)
+        pkg.repo.tree_sha = entry.repo.tree_sha
+        return false
+    end
+    # instantiate repo
+    return instantiate_pkg_repo!(pkg, repo_cache)
+end
+
+"""
+Ensure repo specified by `repo` exists at version path for package
+Set tree_sha
+"""
+function handle_repos_add!(ctx::Context, in_pkgs::AbstractVector{PackageSpec})
+    pkgs = filter(pkg -> pkg.repo !== nothing, in_pkgs)
     # Always update the registry when adding
     UPDATED_REGISTRY_THIS_SESSION[] || update_registries(ctx)
-    creds = credentials !== nothing ? credentials : LibGit2.CachedCredentials()
-    try
-        env = ctx.env
-        new_uuids = UUID[]
-        for pkg in pkgs
-            pkg.repo == nothing && continue
-            pkg.special_action = PKGSPEC_REPO_ADDED
-            pkg.repo.url === nothing && set_repo_for_pkg!(env, pkg)
-            clones_dir = joinpath(depots1(), "clones")
-            mkpath(clones_dir)
-            repo_path = joinpath(clones_dir, string(hash(pkg.repo.url)))
-            repo = nothing
-            do_nothing_more = false
-            project_path = nothing
-            folder_already_downloaded = false
-            try
-                repo = GitTools.ensure_clone(repo_path, pkg.repo.url; isbare=true, credentials=creds)
-                entry = manifest_info(env, pkg.uuid)
-                pinned = (entry !== nothing && entry.pinned)
-                upgrading = upgrade_or_add && !pinned
-                if upgrading
-                    GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
-                    rev = pkg.repo.rev
-                    # see if we can get rev as a branch
-                    if rev === nothing
-                        rev = LibGit2.isattached(repo) ?
-                            LibGit2.branch(repo) :
-                            string(LibGit2.GitHash(LibGit2.head(repo)))
-                    end
-                else
-                    # Not upgrading so the rev should be the current git-tree-sha
-                    rev = entry.repo.tree_sha
-                    pkg.version = VersionNumber(entry.version)
-                end
-
-                gitobject, isbranch = get_object_branch(repo, rev, creds)
-                # If the user gave a shortened commit SHA, might as well update it to the full one
-                try
-                    if upgrading
-                        pkg.repo.rev = isbranch ? rev : string(LibGit2.GitHash(gitobject))
-                    end
-                    LibGit2.with(LibGit2.peel(LibGit2.GitTree, gitobject)) do git_tree
-                        @assert git_tree isa LibGit2.GitTree
-                        pkg.repo.tree_sha = SHA1(string(LibGit2.GitHash(git_tree)))
-                            version_path = nothing
-                            folder_already_downloaded = false
-                        if has_uuid(pkg) && has_name(pkg)
-                            version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.tree_sha)
-                            isdir(version_path) && (folder_already_downloaded = true)
-                            entry = manifest_info(env, pkg.uuid)
-                            if entry !== nothing &&
-                                entry.repo.tree_sha == pkg.repo.tree_sha && folder_already_downloaded
-                                # Same tree sha and this version already downloaded, nothing left to do
-                                do_nothing_more = true
-                            end
-                        end
-                        if folder_already_downloaded
-                            project_path = version_path
-                        else
-                            project_path = mktempdir()
-                            _project_path = project_path # https://github.com/JuliaLang/julia/issues/30048
-                            GC.@preserve _project_path begin
-                                opts = LibGit2.CheckoutOptions(
-                                    checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
-                                    target_directory = Base.unsafe_convert(Cstring, _project_path),
-                                )
-                                LibGit2.checkout_tree(repo, git_tree, options=opts)
-                            end
-                        end
-                    end
-                finally
-                    close(gitobject)
-                end
-            finally
-                repo isa LibGit2.GitRepo && close(repo)
-            end
-            do_nothing_more && continue
-            parse_package!(ctx, pkg, project_path)
-            if !folder_already_downloaded
-                version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.repo.tree_sha)
-                mkpath(version_path)
-                mv(project_path, version_path; force=true)
-                push!(new_uuids, pkg.uuid)
-                Base.rm(project_path; force = true, recursive = true)
-            end
-            @assert has_uuid(pkg)
-        end
-        return new_uuids
-    finally
-        creds !== credentials && Base.shred!(creds)
+    new_uuids = UUID[]
+    for pkg in pkgs
+        handle_repo_add!(ctx, pkg) && push!(new_uuids, pkg.uuid)
     end
+    return new_uuids
 end
 
 function parse_package!(ctx, pkg, project_path)
