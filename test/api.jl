@@ -181,4 +181,21 @@ end
     end end
 end
 
+@testset "Pkg.free" begin
+    temp_pkg_dir() do project_path
+        # Assumes that `TOML` is a registered package name
+        # Can not free an un-`dev`ed un-`pin`ed package
+        with_temp_env() do; mktempdir() do tempdir;
+            p = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "TOML"))
+            Pkg.add(Pkg.PackageSpec(;path=p))
+            @test_throws PkgError Pkg.free("TOML")
+        end end
+        # Can not free an unregistered package
+        with_temp_env() do;
+            Pkg.develop(Pkg.PackageSpec(;url="https://github.com/00vareladavid/Unregistered.jl"))
+            @test_throws PkgError Pkg.free("Unregistered")
+        end
+    end
+end
+
 end # module APITests

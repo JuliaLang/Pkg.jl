@@ -146,21 +146,18 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
-    registry_resolve!(ctx.env, pkgs)
-    uuids_in_registry = UUID[]
-    for pkg in pkgs
-        pkg.mode = PKGMODE_MANIFEST
-    end
-    for pkg in pkgs
-        has_uuid(pkg) && push!(uuids_in_registry, pkg.uuid)
-    end
+    foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
     manifest_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
-    # Every non pinned package that is freed need to be in a registry
+    find_registered!(ctx.env, UUID[pkg.uuid for pkg in pkgs])
     for pkg in pkgs
         entry = manifest_info(ctx.env, pkg.uuid)
-        if !entry.pinned && !(pkg.uuid in uuids_in_registry)
-            pkgerror("cannot free an unpinned package that does not exist in a registry")
+        entry.pinned && continue
+        if entry.path !== nothing
+            isempty(registered_paths(ctx.env, pkg.uuid)) &&
+                pkgerror("cannot free an unpinned package that does not exist in a registry")
+        else
+            pkgerror("`free` is only a valid operation for `pin`ed or `dev`ed packages")
         end
     end
     Operations.free(ctx, pkgs)
