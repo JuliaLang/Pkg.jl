@@ -1166,6 +1166,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     end
     deps_names = collect(keys(ctx.env.project["deps"]))
     if haskey(ctx.env.project, "targets")
+        append!(deps_names, keys(ctx.env.project["extras"]))
         filter!(ctx.env.project["targets"]) do (target, deps)
             !isempty(filter!(in(deps_names), deps))
         end
