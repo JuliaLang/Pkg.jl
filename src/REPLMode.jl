@@ -1474,4 +1474,13 @@ function create_help()
 end
 const help = Ref(create_help())
 
+## functionality to add Pkg REPL commands from outside of Pkg ##
+function add_repl_command!(cmd)
+    push!(command_declarations, cmd)
+    # regenerate some cached things that depend on defined commands
+    super_specs[] = SuperSpecs(command_declarations)
+    help[] = create_help()
+    return nothing
+end
+
 end #module
