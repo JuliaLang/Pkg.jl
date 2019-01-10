@@ -263,7 +263,7 @@ function core_parse(words)
         next_word!() || return statement, word
     end
 
-    super = get(super_specs, word, nothing)
+    super = get(super_specs[], word, nothing)
     if super !== nothing # explicit
         statement.super = word
         next_word!() || return statement, word
@@ -272,7 +272,7 @@ function core_parse(words)
             return statement, word
         end
     else # try implicit package
-        super = super_specs["package"]
+        super = super_specs[]["package"]
         command = get(super, word, nothing)
         if command === nothing
             return statement, word
@@ -566,14 +566,14 @@ end
 
 function CommandSpec(command_name::String)::Union{Nothing,CommandSpec}
     # maybe a "package" command
-    spec = get(super_specs["package"], command_name, nothing)
+    spec = get(super_specs[]["package"], command_name, nothing)
     if spec !== nothing
         return spec
     end
     # maybe a "compound command"
     m = match(r"(\w+)-(\w+)", command_name)
     m !== nothing || (return nothing)
-    super = get(super_specs, m.captures[1], nothing)
+    super = get(super_specs[], m.captures[1], nothing)
     super !== nothing || (return nothing)
     return get(super, m.captures[2], nothing)
 end
@@ -780,10 +780,10 @@ end
 function canonical_names()
     names = String[]
     # add "package" commands
-    packagecmds = [spec.canonical_name for spec in unique(values(super_specs["package"]))]
+    packagecmds = [spec.canonical_name for spec in unique(values(super_specs[]["package"]))]
     append!(names, sort!(packagecmds))
     # add other super commands, e.g. "registry"
-    for (super, specs) in pairs(super_specs)
+    for (super, specs) in pairs(super_specs[])
         super == "package" && continue # skip "package"
         supercmds = [join([super, spec.canonical_name], "-") for spec in unique(values(specs))]
         append!(names, sort!(supercmds))
@@ -815,8 +815,8 @@ function complete_add_dev(options, partial, i1, i2)
 end
 
 function default_commands()
-    names = collect(keys(super_specs))
-    append!(names, map(x -> getproperty(x, :canonical_name), values(super_specs["package"])))
+    names = collect(keys(super_specs[]))
+    append!(names, map(x -> getproperty(x, :canonical_name), values(super_specs[]["package"])))
     return sort(unique(names))
 end
 
@@ -827,7 +827,7 @@ function complete_command(statement::Statement, final::Bool, on_sub::Bool)
     if statement.super !== nothing
         if (!on_sub && final) || (on_sub && !final)
             # last thing determined was the super -> complete canonical names of subcommands
-            specs = super_specs[statement.super]
+            specs = super_specs[][statement.super]
             names = map(x -> getproperty(x, :canonical_name), values(specs))
             return sort(unique(names))
         end
@@ -1024,7 +1024,7 @@ end
 ########
 # SPEC #
 ########
-command_declarations = [
+const command_declarations = [
 "package" => CommandDeclaration[
 [   :kind => CMD_TEST,
     :name => "test",
@@ -1448,7 +1448,7 @@ pkg> registry status
 ], #registry
 ] #command_declarations
 
-super_specs = SuperSpecs(command_declarations)
+const super_specs = Ref(SuperSpecs(command_declarations))
 
 const help = md"""
 
