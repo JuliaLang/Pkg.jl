@@ -581,7 +581,7 @@ end
 function do_help!(command::PkgCommand, repl::REPL.AbstractREPL)
     disp = REPL.REPLDisplay(repl)
     if isempty(command.arguments)
-        Base.display(disp, help)
+        Base.display(disp, help[])
         return
     end
     help_md = md""
@@ -1450,24 +1450,28 @@ pkg> registry status
 
 const super_specs = Ref(SuperSpecs(command_declarations))
 
-const help = md"""
+function create_help()
+    help = md"""
 
-**Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
-backspace when the input line is empty or press Ctrl+C.
+    **Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
+    backspace when the input line is empty or press Ctrl+C.
 
 
-**Synopsis**
+    **Synopsis**
 
-    pkg> cmd [opts] [args]
+        pkg> cmd [opts] [args]
 
-Multiple commands can be given on the same line by interleaving a `;` between the commands.
+    Multiple commands can be given on the same line by interleaving a `;` between the commands.
 
-**Commands**
-"""
+    **Commands**
+    """
 
-for command in canonical_names()
-    spec = CommandSpec(command)
-    push!(help.content, Markdown.parse("`$command`: $(spec.description)"))
+    for command in canonical_names()
+        spec = CommandSpec(command)
+        push!(help.content, Markdown.parse("`$command`: $(spec.description)"))
+    end
+    return help
 end
+const help = Ref(create_help())
 
 end #module
