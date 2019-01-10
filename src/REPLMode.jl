@@ -91,7 +91,7 @@ end
 
 const CommandDeclaration = Vector{Pair{Symbol,Any}}
 struct CommandSpec
-    kind::CommandKind
+    kind::Enum
     canonical_name::String
     short_name::Union{Nothing,String}
     handler::Union{Nothing,Function}
@@ -113,7 +113,7 @@ function SuperSpecs(compound_commands)::Dict{String,Dict{String,CommandSpec}}
     return super_specs
 end
 
-function CommandSpec(;kind::Union{Nothing,CommandKind}=nothing,
+function CommandSpec(;kind::Union{Nothing,Enum}=nothing,
                      name::String="",
                      short_name::Union{String,Nothing}=nothing,
                      handler::Union{Nothing,Function}=nothing,
