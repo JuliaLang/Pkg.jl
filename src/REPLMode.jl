@@ -779,16 +779,16 @@ end
 
 function canonical_names()
     names = String[]
+    # add "package" commands
+    packagecmds = [spec.canonical_name for spec in unique(values(super_specs["package"]))]
+    append!(names, sort!(packagecmds))
+    # add other super commands, e.g. "registry"
     for (super, specs) in pairs(super_specs)
         super == "package" && continue # skip "package"
-        for spec in unique(values(specs))
-            push!(names, join([super, spec.canonical_name], "-"))
-        end
+        supercmds = [join([super, spec.canonical_name], "-") for spec in unique(values(specs))]
+        append!(names, sort!(supercmds))
     end
-    for spec in unique(values(super_specs["package"]))
-        push!(names, spec.canonical_name)
-    end
-    return sort!(names)
+    return names
 end
 
 function complete_installed_packages(options, partial)
