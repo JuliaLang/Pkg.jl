@@ -229,7 +229,7 @@ Pkg.develop("Example")
 Pkg.develop(PackageSpec(url="https://github.com/JuliaLang/Compat.jl"))
 
 # By path
-Pkg.develop(PackageSpec(path="MyJuliaPackages/Package.jl")
+Pkg.develop(PackageSpec(path="MyJuliaPackages/Package.jl"))
 ```
 
 See also [`PackageSpec`](@ref)
