@@ -354,39 +354,39 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "glossary/#",
-    "page": "9. Glossary",
-    "title": "9. Glossary",
+    "page": "8. Glossary",
+    "title": "8. Glossary",
     "category": "page",
     "text": ""
 },
 
 {
-    "location": "glossary/#**9.**-Glossary-1",
-    "page": "9. Glossary",
-    "title": "9. Glossary",
+    "location": "glossary/#**8.**-Glossary-1",
+    "page": "8. Glossary",
+    "title": "8. Glossary",
     "category": "section",
     "text": "Project: a source tree with a standard layout, including a src directory for the main body of Julia code, a test directory for testing the project, docs for documentation files, and optionally a deps directory for a build script and its outputs. A project will typically also have a project file and may optionally have a manifest file:Project file: a file in the root directory of a project, named Project.toml (or JuliaProject.toml) describing metadata about the project, including its name, UUID (for packages), authors, license, and the names and UUIDs of packages and libraries that it depends on.\nManifest file: a file in the root directory of a project, named Manifest.toml (or JuliaManifest.toml) describing a complete dependency graph and exact versions of each package and library used by a project.Package: a project which provides reusable functionality that can be used by other Julia projects via import X or using X. A package should have a project file with a uuid entry giving its package UUID. This UUID is used to identify the package in projects that depend on it.note: Note\nFor legacy reasons it is possible to load a package without a project file or UUID from the REPL or the top-level of a script. It is not possible, however, to load a package without a project file or UUID from a project with them. Once you\'ve loaded from a project file, everything needs a project file and UUID.Application: a project which provides standalone functionality not intended to be reused by other Julia projects. For example a web application or a commmand-line utility, or simulation/analytics code accompanying a scientific paper. An application may have a UUID but does not need one. An application may also provide global configuration options for packages it depends on. Packages, on the other hand, may not provide global configuration since that could conflict with the configuration of the main application.note: Note\nProjects vs. Packages vs. Applications:Project is an umbrella term: packages and applications are kinds of projects.\nPackages should have UUIDs, applications can have a UUIDs but don\'t need them.\nApplications can provide global configuration, whereas packages cannot.Library (future work): a compiled binary dependency (not written in Julia) packaged to be used by a Julia project. These are currently typically built in- place by a deps/build.jl script in a project’s source tree, but in the future we plan to make libraries first-class entities directly installed and upgraded by the package manager.Environment: the combination of the top-level name map provided by a project file combined with the dependency graph and map from packages to their entry points provided by a manifest file. For more detail see the manual section on code loading.Explicit environment: an environment in the form of an explicit project file and an optional corresponding manifest file together in a directory. If the manifest file is absent then the implied dependency graph and location maps are empty.\nImplicit environment: an environment provided as a directory (without a project file or manifest file) containing packages with entry points of the form X.jl, X.jl/src/X.jl or X/src/X.jl. The top-level name map is implied by these entry points. The dependency graph is implied by the existence of project files inside of these package directories, e.g. X.jl/Project.toml or X/Project.toml. The dependencies of the X package are the dependencies in the corresponding project file if there is one. The location map is implied by the entry points themselves.Registry: a source tree with a standard layout recording metadata about a registered set of packages, the tagged versions of them which are available, and which versions of packages are compatible or incompatible with each other. A registry is indexed by package name and UUID, and has a directory for each registered package providing the following metadata about it:name – e.g. DataFrames\nUUID – e.g. a93c6f00-e57d-5684-b7b6-d8193f3e46c0\nauthors – e.g. Jane Q. Developer <jane@example.com>\nlicense – e.g. MIT, BSD3, or GPLv2\nrepository – e.g. https://github.com/JuliaData/DataFrames.jl.git\ndescription – a block of text summarizing the functionality of a package\nkeywords – e.g. data, tabular, analysis, statistics\nversions – a list of all registered version tagsFor each registered version of a package, the following information is provided:its semantic version number – e.g. v1.2.3\nits git tree SHA-1 hash – e.g. 7ffb18ea3245ef98e368b02b81e8a86543a11103\na map from names to UUIDs of dependencies\nwhich versions of other packages it is compatible/incompatible withDependencies and compatibility are stored in a compressed but human-readable format using ranges of package versions.Depot: a directory on a system where various package-related resources live, including:environments: shared named environments (e.g. v1.0, devtools)\nclones: bare clones of package repositories\ncompiled: cached compiled package images (.ji files)\nconfig: global configuration files (e.g. startup.jl)\ndev: default directory for package development\nlogs: log files (e.g. manifest_usage.toml, repl_history.jl)\npackages: installed package versions\nregistries: clones of registries (e.g. General)Load path: a stack of environments where package identities, their dependencies, and entry-points are searched for. The load path is controlled in Julia by the LOAD_PATH global variable which is populated at startup based on the value of the JULIA_LOAD_PATH environment variable. The first entry is your primary environment, often the current project, while later entries provide additional packages one may want to use from the REPL or top-level scripts.Depot path: a stack of depot locations where the package manager, as well as Julia\'s code loading mechanisms, look for registries, installed packages, named environments, repo clones, cached compiled package images, and configuration files. The depot path is controlled by the Julia DEPOT_PATH global variable which is populated at startup based on the value of the JULIA_DEPOT_PATH environment variable. The first entry is the “user depot” and should be writable by and owned by the current user. The user depot is where: registries are cloned, new package versions are installed, named environments are created and updated, package repos are cloned, newly compiled package image files are saved, log files are written, development packages are checked out by default, and global configuration data is saved. Later entries in the depot path are treated as read-only and are appropriate for registries, packages, etc. installed and managed by system administrators."
 },
 
 {
     "location": "api/#",
-    "page": "10. API Reference",
-    "title": "10. API Reference",
+    "page": "9. API Reference",
+    "title": "9. API Reference",
     "category": "page",
     "text": ""
 },
 
 {
     "location": "api/#API-Reference-1",
-    "page": "10. API Reference",
-    "title": "10. API Reference",
+    "page": "9. API Reference",
+    "title": "9. API Reference",
     "category": "section",
     "text": "This section describes the function interface, or \"API mode\" for interacting with Pkg.jl. The function API is recommended for non-interactive usage, in i.e. scripts."
 },
 
 {
     "location": "api/#Pkg.PackageSpec",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.PackageSpec",
     "category": "function",
     "text": "PackageSpec(name::String, [uuid::UUID, version::VersionNumber])\nPackageSpec(; name, url, path, rev, version, mode, level)\n\nA PackageSpec is a representation of a package with various metadata. This includes:\n\nThe name of the package.\nThe package unique uuid.\nA version (for example when adding a package. When upgrading, can also be an instance of\n\nthe enum UpgradeLevel\n\nA url and an optional git revision. rev could be a branch name or a git commit SHA.\nA local path path. This is equivalent to using the url argument but can be more descriptive.\nA mode, which is an instance of the enum PackageMode which can be either PKGMODE_PROJECT or\n\nPKGMODE_MANIFEST, defaults to PKGMODE_PROJECT. Used in e.g. Pkg.rm.\n\nMost functions in Pkg take a Vector of PackageSpec and do the operation on all the packages in the vector.\n\nBelow is a comparison between the REPL version and the PackageSpec version:\n\nREPL API\nPackage PackageSpec(\"Package\")\nPackage@0.2 PackageSpec(name=\"Package\", version=\"0.2\")\nPackage=a67d... PackageSpec(name=\"Package\", uuid=\"a67d...\")\nPackage#master PackageSpec(name=\"Package\", rev=\"master\")\nlocal/path#feature PackageSpec(path=\"local/path\"; rev=\"feature\")\nwww.mypkg.com PackageSpec(url=\"www.mypkg.com\")\n--manifest Package PackageSpec(name=\"Package\", mode=PKGSPEC_MANIFEST)\n--major Package PackageSpec(name=\"Package\", version=PKGLEVEL_MAJOR)\n\n\n\n\n\n"
@@ -394,7 +394,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.PackageMode",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.PackageMode",
     "category": "type",
     "text": "PackageMode\n\nAn enum with the instances\n\nPKGMODE_MANIFEST\nPKGMODE_PROJECT\n\nDetermines if operations should be made on a project or manifest level. Used as an argument to  PackageSpec or as an argument to Pkg.rm.\n\n\n\n\n\n"
@@ -402,7 +402,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.UpgradeLevel",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.UpgradeLevel",
     "category": "type",
     "text": "UpgradeLevel\n\nAn enum with the instances\n\nUPLEVEL_FIXED\nUPLEVEL_PATCH\nUPLEVEL_MINOR\nUPLEVEL_MAJOR\n\nDetermines how much a package is allowed to be updated. Used as an argument to  PackageSpec or as an argument to Pkg.update.\n\n\n\n\n\n"
@@ -410,7 +410,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.add",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.add",
     "category": "function",
     "text": "Pkg.add(pkg::Union{String, Vector{String}})\nPkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}})\n\nAdd a package to the current project. This package will be available using the import and using keywords in the Julia REPL and if the current project is a package, also inside that package.\n\nExamples\n\nPkg.add(\"Example\") # Add a package from registry\nPkg.add(PackageSpec(name=\"Example\", version=\"0.3\")) # Specify version\nPkg.add(PackageSpec(url=\"https://github.com/JuliaLang/Example.jl\", rev=\"master\")) # From url\nPkg.add(PackageSpec(url=\"/remote/mycompany/juliapackages/OurPackage\"))` # From path (has to be a gitrepo)\n\nSee also PackageSpec.\n\n\n\n\n\n"
@@ -418,7 +418,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.develop",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.develop",
     "category": "function",
     "text": "Pkg.develop(pkg::Union{String, Vector{String}})\nPkg.develop(pkgs::Union{Packagespec, Vector{Packagespec}})\n\nMake a package available for development by tracking it by path. If pkg is given with only a name or by a URL the packages will be downloaded to the location by the environment variable JULIA_PKG_DEVDIR with .julia/dev as the default.\n\nIf pkg is given as a local path, the package at that path will be tracked.\n\nExamples\n\n# By name\nPkg.develop(\"Example\")\n\n# By url\nPkg.develop(PackageSpec(url=\"https://github.com/JuliaLang/Compat.jl\"))\n\n# By path\nPkg.develop(PackageSpec(path=\"MyJuliaPackages/Package.jl\"))\n\nSee also PackageSpec\n\n\n\n\n\n"
@@ -426,7 +426,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.activate",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.activate",
     "category": "function",
     "text": "Pkg.activate([s::String]; shared::Bool=false)\n\nActivate the environment at s. The active environment is the environment that is modified by executing package commands. The logic for what path is activated is as follows:\n\nIf shared is true, the first existing environment named s from the depots in the depot stack will be activated. If no such environment exists, create and activate that environment in the first depot.\nIf s is an existing path, then activate the environment at that path.\nIf s is a package in the current project and s is tracking a path, then activate the environment at the tracked path.\nElse, s is interpreted as a non-existing path, activate that path.\n\nIf no argument is given to activate, then activate the home project. The home project is specified by either the --project command line option to the julia executable, or the JULIA_PROJECT environment variable.\n\nExamples\n\nPkg.activate()\nPkg.activate(\"local/path\")\nPkg.activate(\"MyDependency\")\n\n\n\n\n\n"
@@ -434,7 +434,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.rm",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.rm",
     "category": "function",
     "text": "Pkg.rm(pkg::Union{String, Vector{String}})\nPkg.rm(pkg::Union{PackageSpec, Vector{PackageSpec}})\n\nRemove a package from the current project. If the mode of pkg is PKGMODE_MANIFEST also remove it from the manifest including all recursive dependencies of pkg.\n\nSee also PackageSpec, PackageMode.\n\n\n\n\n\n"
@@ -442,7 +442,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.update",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.update",
     "category": "function",
     "text": "Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT)\nPkg.update(pkg::Union{String, Vector{String}})\nPkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})\n\nUpdate a package pkg. If no posistional argument is given, update all packages in the manifest if mode is PKGMODE_MANIFEST and packages in both manifest and project if mode is PKGMODE_PROJECT. If no positional argument is given level can be used to control what how much packages are allowed to be upgraded (major, minor, patch, fixed).\n\nSee also PackageSpec, PackageMode, UpgradeLevel.\n\n\n\n\n\n"
@@ -450,7 +450,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.test",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.test",
     "category": "function",
     "text": "Pkg.test(; coverage::Bool=true)\nPkg.test(pkg::Union{String, Vector{String}; coverage::Bool=true)\nPkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; coverage::Bool=true)\n\nRun the tests for package pkg or if no positional argument is given to test, the current project is tested (which thus needs to be a package). A package is tested by running its test/runtests.jl file.\n\nThe tests are run by generating a temporary environment with only pkg and its (recursive) dependencies (recursively) in it. If a manifest exist, the versions in that manifest is used, otherwise a feasible set of package are resolved and installed.\n\nDuring the test, test-specific dependencies are active, which are given in the project file as e.g.\n\n[extras]\nTest = \"8dfed614-e22c-5e08-85e1-65c5234f0b40\"\n\n[targets]\ntest = [\"Test\"]\n\nCoverage statistics for the packages may be generated by passing coverage=true. The default behavior is not to run coverage.\n\nThe tests are executed in a new process with check-bounds=yes and by default startup-file=no. If using the startup file (~/.julia/config/startup.jl) is desired, start julia with --startup-file=yes. Inlining of functions during testing can be disabled (for better coverage accuracy) by starting julia with --inline=no.\n\n\n\n\n\n"
@@ -458,7 +458,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.build",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.build",
     "category": "function",
     "text": "Pkg.build(; verbose = false)\nPkg.build(pkg::Union{String, Vector{String}}; verbose = false)\nPkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false)\n\nRun the build script in deps/build.jl for pkg and all of the dependencies in depth-first recursive order. If no argument is given to build, the current project is built, which thus needs to be a package. This function is called automatically one any package that gets installed for the first time. verbose = true prints the build output to stdout/stderr instead of redirecting to the build.log file.\n\n\n\n\n\n"
@@ -466,7 +466,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.pin",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.pin",
     "category": "function",
     "text": "Pkg.pin(pkg::Union{String, Vector{String}})\nPkg.pin(pkgs::Union{Packagespec, Vector{Packagespec}})\n\nPin a package to the current version (or the one given in the packagespec or a certain git revision. A pinned package is never updated.\n\n\n\n\n\n"
@@ -474,7 +474,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.free",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.free",
     "category": "function",
     "text": "Pkg.free(pkg::Union{String, Vector{String}})\nPkg.free(pkgs::Union{Packagespec, Vector{Packagespec}})\n\nFree a package which removes a pin if it exists, or if the package is tracking a path, e.g. after Pkg.develop, go back to tracking registered versions.\n\nExamples\n\nPkg.free(\"Package\")\nPkg.free(PackageSpec(\"Package\"))\n\n\n\n\n\n"
@@ -482,7 +482,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.instantiate",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.instantiate",
     "category": "function",
     "text": "Pkg.instantiate()\n\nIf a Manifest.toml file exist in the current project, download all the packages declared in that manifest. Else, resolve a set of feasible packages from the Project.toml files and install them.\n\n\n\n\n\n"
@@ -490,7 +490,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.resolve",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.resolve",
     "category": "function",
     "text": "Pkg.resolve()\n\nUpdate the current manifest with eventual changes to the dependency graph from packages that are tracking a path.\n\n\n\n\n\n"
@@ -498,7 +498,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.gc",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.gc",
     "category": "function",
     "text": "Pkg.gc()\n\nGarbage collect packages that are no longer reachable from any project. Only packages that are tracked by version are deleted, so no packages that might contain local changes are touched.\n\n\n\n\n\n"
@@ -506,7 +506,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.status",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.status",
     "category": "function",
     "text": "Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT)\n\nPrint out the status of the project/manifest. If mode is PKGMODE_PROJECT prints out status about only those packages that are in the project (explicitly added). If mode is PKGMODE_MANIFEST also print for those in the manifest (recursive dependencies). If there are any packages listed as arguments the output will be limited to those packages.\n\ncompat: Julia 1.1\nPkg.status with package arguments requires at least Julia 1.1.\n\n\n\n\n\n"
@@ -514,7 +514,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.setprotocol!",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.setprotocol!",
     "category": "function",
     "text": "Pkg.setprotocol!(proto::Union{Nothing, AbstractString}=nothing)\n\nSet the protocol used to access GitHub-hosted packages when adding a url or developing a package. Defaults to delegating the choice to the package developer (proto == nothing). Other choices for proto are \"https\" or \"git\".\n\n\n\n\n\n"
@@ -522,7 +522,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Package-API-Reference-1",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Package API Reference",
     "category": "section",
     "text": "In the REPL mode packages (with associated version, UUID, URL etc) are parsed from strings, for example, \"Package#master\",\"Package@v0.1\", \"www.mypkg.com/MyPkg#my/feature\". It is possible to use strings as arguments for simple commands in the API mode (like Pkg.add([\"PackageA\", \"PackageB\"]), more complicated commands, that e.g. specify URLs or version range, uses a more structured format over strings. This is done by creating an instance of a PackageSpec which are passed in to functions.PackageSpec\nPackageMode\nUpgradeLevel\nPkg.add\nPkg.develop\nPkg.activate\nPkg.rm\nPkg.update\nPkg.test\nPkg.build\nPkg.pin\nPkg.free\nPkg.instantiate\nPkg.resolve\nPkg.gc\nPkg.status\nPkg.setprotocol!"
@@ -530,7 +530,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.RegistrySpec",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.RegistrySpec",
     "category": "type",
     "text": "RegistrySpec(name::String)\nRegistrySpec(; name, url, path)\n\nA RegistrySpec is a representation of a registry with various metadata, much like PackageSpec.\n\nMost registry functions in Pkg take a Vector of RegistrySpec and do the operation on all the registries in the vector.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nBelow is a comparison between the REPL version and the RegistrySpec version:\n\nREPL API\nRegistry RegistrySpec(\"Registry\")\nRegistry=a67d... RegistrySpec(name=\"Registry\", uuid=\"a67d...\")\nlocal/path RegistrySpec(path=\"local/path\")\nwww.myregistry.com RegistrySpec(url=\"www.myregistry.com\")\n\n\n\n\n\n"
@@ -538,7 +538,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.Registry.add",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.Registry.add",
     "category": "function",
     "text": "Pkg.Registry.add(url::String)\nPkg.Registry.add(registry::RegistrySpec)\n\nAdd new package registries.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nPkg.Registry.add(\"General\")\nPkg.Registry.add(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\nPkg.Registry.add(RegistrySpec(url = \"https://github.com/JuliaRegistries/General.git\"))\n\n\n\n\n\n"
@@ -546,7 +546,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.Registry.rm",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.Registry.rm",
     "category": "function",
     "text": "Pkg.Registry.rm(registry::String)\nPkg.Registry.rm(registry::RegistrySpec)\n\nRemove registries.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nPkg.Registry.rm(\"General\")\nPkg.Registry.rm(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\n\n\n\n\n\n"
@@ -554,7 +554,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.Registry.update",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.Registry.update",
     "category": "function",
     "text": "Pkg.Registry.update()\nPkg.Registry.update(registry::RegistrySpec)\nPkg.Registry.update(registry::Vector{RegistrySpec})\n\nUpdate registries. If no registries are given, update all available registries.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nPkg.Registry.update()\nPkg.Registry.update(\"General\")\nPkg.Registry.update(RegistrySpec(uuid = \"23338594-aafe-5451-b93e-139f81909106\"))\n\n\n\n\n\n"
@@ -562,7 +562,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Pkg.Registry.status",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Pkg.Registry.status",
     "category": "function",
     "text": "Pkg.Registry.status()\n\nDisplay information about available registries.\n\ncompat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.\n\nExamples\n\nPkg.Registry.status()\n\n\n\n\n\n"
@@ -570,7 +570,7 @@ var documenterSearchIndex = {"docs": [
 
 {
     "location": "api/#Registry-API-Reference-1",
-    "page": "10. API Reference",
+    "page": "9. API Reference",
     "title": "Registry API Reference",
     "category": "section",
     "text": "compat: Julia 1.1\nPkg\'s registry handling requires at least Julia 1.1.The function API for registries uses RegistrySpecs, similar to PackageSpec.RegistrySpec\nPkg.Registry.add\nPkg.Registry.rm\nPkg.Registry.update\nPkg.Registry.status"
