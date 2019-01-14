@@ -77,12 +77,6 @@ end
 ################
 # Command Spec #
 ################
-@enum(CommandKind, CMD_HELP, CMD_RM, CMD_ADD, CMD_DEVELOP, CMD_UP,
-                   CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
-                   CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
-                   CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW,
-                   CMD_REGISTRY_ADD, CMD_REGISTRY_RM, CMD_REGISTRY_UP, CMD_REGISTRY_STATUS,
-                   )
 @enum(ArgClass, ARG_RAW, ARG_PKG, ARG_VERSION, ARG_REV, ARG_ALL)
 struct ArgSpec
     count::Pair
@@ -91,7 +85,6 @@ end
 
 const CommandDeclaration = Vector{Pair{Symbol,Any}}
 struct CommandSpec
-    kind::Enum
     canonical_name::String
     short_name::Union{Nothing,String}
     handler::Union{Nothing,Function}
@@ -113,8 +106,7 @@ function SuperSpecs(compound_commands)::Dict{String,Dict{String,CommandSpec}}
     return super_specs
 end
 
-function CommandSpec(;kind::Union{Nothing,Enum}=nothing,
-                     name::String="",
+function CommandSpec(;name::String="",
                      short_name::Union{String,Nothing}=nothing,
                      handler::Union{Nothing,Function}=nothing,
                      option_spec::Vector{OptionDeclaration}=OptionDeclaration[],
@@ -124,11 +116,10 @@ function CommandSpec(;kind::Union{Nothing,Enum}=nothing,
                      arg_count::Pair=(0=>0),
                      arg_parser::Function=identity,
                      )::CommandSpec
-    @assert kind !== nothing "Register and specify a `CommandKind`"
     @assert !isempty(name) "Supply a canonical name"
     @assert !isempty(description) "Supply a description"
     # TODO assert isapplicable completions dict, string
-    return CommandSpec(kind, name, short_name, handler, ArgSpec(arg_count, arg_parser),
+    return CommandSpec(name, short_name, handler, ArgSpec(arg_count, arg_parser),
                        OptionSpecs(option_spec), completions, description, help)
 end
 
@@ -551,7 +542,7 @@ function do_cmd!(command::PkgCommand, repl)
     context = Dict{Symbol,Any}(:preview => command.preview)
 
     # REPL specific commands
-    if command.spec.kind == CMD_HELP
+    if command.spec.canonical_name == "help"
         return Base.invokelatest(do_help!, command, repl)
     end
 
@@ -1026,8 +1017,7 @@ end
 ########
 const command_declarations = [
 "package" => CommandDeclaration[
-[   :kind => CMD_TEST,
-    :name => "test",
+[   :name => "test",
     :handler => do_test!,
     :arg_count => 0 => Inf,
     :arg_parser => parse_pkg,
@@ -1047,8 +1037,7 @@ in the package directory. The option `--coverage` can be used to run the tests w
 coverage enabled. The `startup.jl` file is disabled during testing unless
 julia is started with `--startup-file=yes`.
     """,
-],[ :kind => CMD_HELP,
-    :name => "help",
+],[ :name => "help",
     :short_name => "?",
     :arg_count => 0 => Inf,
     :completions => ((opt, partial) -> canonical_names()),
@@ -1065,8 +1054,7 @@ Display usage information for commands listed.
 
 Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
     """,
-],[ :kind => CMD_INSTANTIATE,
-    :name => "instantiate",
+],[ :name => "instantiate",
     :handler => do_instantiate!,
     :option_spec => OptionDeclaration[
         [:name => "project", :short_name => "p", :api => :manifest => false],
@@ -1081,8 +1069,7 @@ Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
     """,
-],[ :kind => CMD_RM,
-    :name => "remove",
+],[ :name => "remove",
     :short_name => "rm",
     :handler => do_rm!,
     :arg_count => 1 => Inf,
@@ -1113,8 +1100,7 @@ multiple packages in the manifest, `uuid` disambiguates it. Removing a package
 from the manifest forces the removal of all packages that depend on it, as well
 as any no-longer-necessary manifest packages due to project package removals.
     """,
-],[ :kind => CMD_ADD,
-    :name => "add",
+],[ :name => "add",
     :handler => do_add!,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_pkg(x; add_or_dev=true, valid=[VersionRange, Rev])),
@@ -1145,8 +1131,7 @@ pkg> add git@github.com:JuliaLang/Example.jl.git
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
     """,
-],[ :kind => CMD_DEVELOP,
-    :name => "develop",
+],[ :name => "develop",
     :short_name => "dev",
     :handler => do_develop!,
     :arg_count => 1 => Inf,
@@ -1175,8 +1160,7 @@ pkg> develop ~/mypackages/Example
 pkg> develop --local Example
 ```
     """,
-],[ :kind => CMD_FREE,
-    :name => "free",
+],[ :name => "free",
     :handler => do_free!,
     :arg_count => 1 => Inf,
     :arg_parser => parse_pkg,
@@ -1188,8 +1172,7 @@ pkg> develop --local Example
 Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
 makes the package no longer being checked out.
     """,
-],[ :kind => CMD_PIN,
-    :name => "pin",
+],[ :name => "pin",
     :handler => do_pin!,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_pkg(x; valid=[VersionRange])),
@@ -1202,8 +1185,7 @@ makes the package no longer being checked out.
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
 A pinned package has the symbol `⚲` next to its version in the status list.
     """,
-],[ :kind => CMD_BUILD,
-    :name => "build",
+],[ :name => "build",
     :handler => do_build!,
     :arg_count => 0 => Inf,
     :arg_parser => parse_pkg,
@@ -1220,8 +1202,7 @@ If no packages are given, runs the build scripts for all packages in the manifes
 The `-v`/`--verbose` option redirects build output to `stdout`/`stderr` instead of the `build.log` file.
 The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
     """,
-],[ :kind => CMD_RESOLVE,
-    :name => "resolve",
+],[ :name => "resolve",
     :handler => do_resolve!,
     :description => "resolves to update the manifest from changes in dependencies of developed packages",
     :help => md"""
@@ -1230,8 +1211,7 @@ The `startup.jl` file is disabled during building unless julia is started with `
 Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
 packages have changed causing the current Manifest to be out of sync.
     """,
-],[ :kind => CMD_ACTIVATE,
-    :name => "activate",
+],[ :name => "activate",
     :handler => do_activate!,
     :arg_count => 0 => 1,
     :option_spec => OptionDeclaration[
@@ -1249,8 +1229,7 @@ When the option `--shared` is given, `path` will be assumed to be a directory na
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
 it will be placed in the first depot of the stack.
     """ ,
-],[ :kind => CMD_UP,
-    :name => "update",
+],[ :name => "update",
     :short_name => "up",
     :handler => do_up!,
     :arg_count => 0 => Inf,
@@ -1281,8 +1260,7 @@ the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
     """,
-],[ :kind => CMD_GENERATE,
-    :name => "generate",
+],[ :name => "generate",
     :handler => do_generate!,
     :arg_count => 1 => 1,
     :description => "generate files for a new project",
@@ -1292,8 +1270,7 @@ packages will not be upgraded at all.
 
 Create a project called `pkgname` in the current folder.
     """,
-],[ :kind => CMD_PRECOMPILE,
-    :name => "precompile",
+],[ :name => "precompile",
     :handler => do_precompile!,
     :description => "precompile all the project dependencies",
     :help => md"""
@@ -1302,8 +1279,7 @@ Create a project called `pkgname` in the current folder.
 Precompile all the dependencies of the project by running `import` on all of them in a new process.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
     """,
-],[ :kind => CMD_STATUS,
-    :name => "status",
+],[ :name => "status",
     :short_name => "st",
     :handler => do_status!,
     :arg_count => 0 => Inf,
@@ -1331,8 +1307,7 @@ packages listed as arguments the output will be limited to those packages.
 !!! compat "Julia 1.1"
     `pkg> status` with package arguments requires at least Julia 1.1.
     """,
-],[ :kind => CMD_GC,
-    :name => "gc",
+],[ :name => "gc",
     :handler => do_gc!,
     :description => "garbage collect packages not used for a significant time",
     :help => md"""
@@ -1341,7 +1316,6 @@ Deletes packages that cannot be reached from any existing environment.
     """,
 ],[ # preview is not a regular command.
     # this is here so that preview appears as a registered command to users
-    :kind => CMD_PREVIEW,
     :name => "preview",
     :description => "previews a subsequent command without affecting the current state",
     :help => md"""
@@ -1355,8 +1329,7 @@ is modified.
 ],
 ], #package
 "registry" => CommandDeclaration[
-[   :kind => CMD_REGISTRY_ADD,
-    :name => "add",
+[   :name => "add",
     :handler => do_registry_add!,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_registry(x; add = true)),
@@ -1376,8 +1349,7 @@ pkg> registry add General
 pkg> registry add https://www.my-custom-registry.com
 ```
     """,
-],[ :kind => CMD_REGISTRY_RM,
-    :name => "remove",
+],[ :name => "remove",
     :short_name => "rm",
     :handler => do_registry_rm!,
     :arg_count => 1 => Inf,
@@ -1398,7 +1370,6 @@ pkg> registry rm General
 ```
     """,
 ],[
-    :kind => CMD_REGISTRY_UP,
     :name => "update",
     :short_name => "up",
     :handler => do_registry_up!,
@@ -1423,7 +1394,6 @@ pkg> registry up General
 ```
     """,
 ],[
-    :kind => CMD_REGISTRY_STATUS,
     :name => "status",
     :short_name => "st",
     :handler => do_registry_status!,

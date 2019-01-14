@@ -51,7 +51,7 @@ end
 
 @testset "tokens" begin
     statement = Pkg.REPLMode.parse("?dev")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_HELP
+    @test statement.spec.canonical_name == "help"
     @test length(statement.arguments) == 1
     @test statement.arguments[1] == "dev"
     statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git")[1]
@@ -686,55 +686,55 @@ end
     @test isempty(Pkg.REPLMode.parse(""))
 
     statement = Pkg.REPLMode.parse("up")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_UP
+    @test statement.spec.canonical_name == "update"
     @test isempty(statement.options)
     @test isempty(statement.arguments)
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
+    @test statement.spec.canonical_name == "develop"
     @test isempty(statement.options)
     @test statement.arguments == ["Example"]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
+    @test statement.spec.canonical_name == "develop"
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "#bar"]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
+    @test statement.spec.canonical_name == "develop"
     @test isempty(statement.options)
     @test statement.arguments == ["Example", "#foo", "Example", "@v0.0.1"]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("add --first --second arg1")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_ADD
+    @test statement.spec.canonical_name == "add"
     @test statement.options == map(Pkg.REPLMode.parse_option, ["--first", "--second"])
     @test statement.arguments == ["arg1"]
     @test statement.preview == false
 
     statements = Pkg.REPLMode.parse("preview add --first -o arg1; pin -x -a arg0 Example")
-    @test statements[1].spec.kind == Pkg.REPLMode.CMD_ADD
+    @test statements[1].spec.canonical_name == "add"
     @test statements[1].preview == true
     @test statements[1].options == map(Pkg.REPLMode.parse_option, ["--first", "-o"])
     @test statements[1].arguments == ["arg1"]
-    @test statements[2].spec.kind == Pkg.REPLMode.CMD_PIN
+    @test statements[2].spec.canonical_name == "pin"
     @test statements[2].preview == false
     @test statements[2].options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
     @test statements[2].arguments == ["arg0", "Example"]
 
     statements = Pkg.REPLMode.parse("up; pin --first; dev")
-    @test statements[1].spec.kind == Pkg.REPLMode.CMD_UP
+    @test statements[1].spec.canonical_name == "update"
     @test statements[1].preview == false
     @test isempty(statements[1].options)
     @test isempty(statements[1].arguments)
-    @test statements[2].spec.kind == Pkg.REPLMode.CMD_PIN
+    @test statements[2].spec.canonical_name == "pin"
     @test statements[2].preview == false
     @test statements[2].options == map(Pkg.REPLMode.parse_option, ["--first"])
     @test isempty(statements[2].arguments)
-    @test statements[3].spec.kind == Pkg.REPLMode.CMD_DEVELOP
+    @test statements[3].spec.canonical_name == "develop"
     @test statements[3].preview == false
     @test isempty(statements[3].options)
     @test isempty(statements[3].arguments)
