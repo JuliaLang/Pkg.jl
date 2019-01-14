@@ -1,6 +1,19 @@
 # **3.** Managing Packages
 
+## Summary of common operations
+ 
+ - **add Example**: Add a project as a dependency
+ - **dev**
+     - **dev Example:** clone Example to `~/.julia/dev`, then continue as per `dev /local/path/Example`
+     - **dev --local Example** clone Example to `dev` directory within current enviroment directory, then continue as per `dev /local/path/Example`
+     - **dev /local/path/Example** adds the local path to current Project and Manifest, effectively pin
+ - **rm**
+ - **free**
+ - **up**
+ - **pin**
+
 ## Adding packages
+
 
 There are two ways of adding packages, either using the `add` command or the `dev` command.
 The most frequently used one is `add` and its usage is described first.
