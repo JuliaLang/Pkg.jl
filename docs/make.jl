@@ -16,7 +16,8 @@ makedocs(
         "registries.md",
         # "faq.md",
         "glossary.md",
-        "api.md"
+        "api.md",
+        "experimental-features.md",
     ],
     versions = ["v#.#", "dev" => "dev"],
     assets = ["assets/custom.css"],

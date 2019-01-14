@@ -1445,6 +1445,15 @@ end
 const help = Ref(create_help())
 
 ## functionality to add Pkg REPL commands from outside of Pkg ##
+"""
+    Pkg.REPLMode.add_repl_command!(command)
+
+Extend the Pkg REPL with new commands.
+
+!!! warning
+    This is an experimental feature and may be subject to
+    change at any time.
+"""
 function add_repl_command!(cmd)
     push!(command_declarations, cmd)
     # regenerate some cached things that depend on defined commands
