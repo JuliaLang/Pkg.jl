@@ -18,10 +18,10 @@ makedocs(
         "glossary.md",
         "api.md"
     ],
-    versions = ["v#.#", "dev" => "dev"],
     assets = ["assets/custom.css"],
 )
 
 deploydocs(
     repo = "github.com/JuliaLang/Pkg.jl",
+    versions = ["v#.#", "dev" => "dev"],
 )
