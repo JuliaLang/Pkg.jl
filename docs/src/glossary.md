@@ -1,4 +1,4 @@
-# **9.** Glossary
+# **8.** Glossary
 
 **Project:** a source tree with a standard layout, including a `src` directory
 for the main body of Julia code, a `test` directory for testing the project,
