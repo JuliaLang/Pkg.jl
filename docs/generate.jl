@@ -8,7 +8,7 @@ function generate(io, command)
     <section class="docstring">
     <div class="docstring-header">
         <a class="docstring-binding" id="repl-$(command)" href="#repl-$(command)">
-            <code>$(command)</code>
+            <code>$(replace(command, "-" => " "))</code>
         </a>
         —
         <span class="docstring-category">REPL command</span>
