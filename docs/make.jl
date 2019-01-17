@@ -3,6 +3,8 @@
 using Documenter
 using Pkg
 
+include("generate.jl")
+
 makedocs(
     modules = [Pkg],
     sitename = "Pkg.jl",
@@ -16,6 +18,7 @@ makedocs(
         "registries.md",
         # "faq.md",
         "glossary.md",
+        "repl.md",
         "api.md"
     ],
     assets = ["assets/custom.css"],
