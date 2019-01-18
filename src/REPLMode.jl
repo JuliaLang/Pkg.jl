@@ -1467,7 +1467,7 @@ Multiple commands can be given on the same line by interleaving a `;` between th
 
 for command in canonical_names()
     spec = CommandSpec(command)
-    push!(help.content, Markdown.parse("`$command`: $(spec.description)"))
+    push!(help.content, Markdown.parse("`$(replace(command, "-" => " "))`: $(spec.description)"))
 end
 
 end #module
