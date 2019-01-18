@@ -88,7 +88,7 @@ up [-m|manifest] [opts] pkg[=uuid] [@version] ...
 opts: --major | --minor | --patch | --fixed</code></pre><p>Update the indicated package within the constraints of the indicated version specifications. Versions may be specified by <code>@1</code>, <code>@1.2</code>, <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. In <code>--project</code> mode, package specifications only match project packages, while in <code>manifest</code> mode they match any manifest package. Bound level options force the following packages to be upgraded only within the current major, minor, patch version; if the <code>--fixed</code> upgrade level is given, then the following packages will not be upgraded at all.</p></div></section><h2><a class="nav-anchor" id="registry-commands-1" href="#registry-commands-1"><code>registry</code> commands</a></h2><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-add" href="#repl-registry-add">
-        <code>registry-add</code>
+        <code>registry add</code>
     </a>
     —
     <span class="docstring-category">REPL command</span>
@@ -97,7 +97,7 @@ opts: --major | --minor | --patch | --fixed</code></pre><p>Update the indicated 
 pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-remove" href="#repl-registry-remove">
-        <code>registry-remove</code>
+        <code>registry remove</code>
     </a>
     —
     <span class="docstring-category">REPL command</span>
@@ -105,7 +105,7 @@ pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div
 </div><div><pre><code class="language-none">registry rm reg...</code></pre><p>Remove package registres <code>reg...</code>.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry rm General</code></pre><p></p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-status" href="#repl-registry-status">
-        <code>registry-status</code>
+        <code>registry status</code>
     </a>
     —
     <span class="docstring-category">REPL command</span>
@@ -113,7 +113,7 @@ pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div
 </div><div><pre><code class="language-none">registry status</code></pre><p>Display information about installed registries.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry status</code></pre><p></p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-update" href="#repl-registry-update">
-        <code>registry-update</code>
+        <code>registry update</code>
     </a>
     —
     <span class="docstring-category">REPL command</span>
