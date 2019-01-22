@@ -65,22 +65,39 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     return Cint(0)
 end
 
+const GIT_REGEX =
+    r"^(?:(?<proto>git|ssh|https)://)?(?:[\w\.\+\-:]+@)?(?<hostname>.+?)(?(<proto>)/|:)(?<path>.+?)(?:\.git)?$"
+const GIT_PROTOCOLS = Dict{String, Union{Nothing, String}}()
+const GIT_USERS = Dict{String, Union{Nothing, String}}()
 
-const GITHUB_REGEX =
-    r"^(?:git@|git://|https://(?:[\w\.\+\-]+@)?)github.com[:/](([^/].+)/(.+?))(?:\.git)?$"i
-const GIT_PROTOCOL = Ref{Union{String, Nothing}}(nothing)
+@deprecate setprotocol!(proto::Union{Nothing, AbstractString}) setprotocol!(protocol = proto) false
 
-setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GIT_PROTOCOL[] = proto
+function setprotocol!(;
+    domain::AbstractString="github.com",
+    protocol::Union{Nothing, AbstractString}=nothing,
+    user::Union{Nothing, AbstractString}=(protocol == "ssh" ? "git" : nothing)
+)
+    domain = lowercase(domain)
+    GIT_PROTOCOLS[domain] = protocol
+    GIT_USERS[domain] = user
+end
 
-# TODO: extend this to more urls
 function normalize_url(url::AbstractString)
-    m = match(GITHUB_REGEX, url)
-    if m === nothing || GIT_PROTOCOL[] === nothing
+    m = match(GIT_REGEX, url)
+    m === nothing && return url
+
+    host = m[:hostname]
+    path = "$(m[:path]).git"
+
+    proto = get(GIT_PROTOCOLS, lowercase(host), nothing)
+
+    if proto === nothing
         url
-    elseif GIT_PROTOCOL[] == "ssh"
-        "ssh://git@github.com/$(m.captures[1]).git"
     else
-        "$(GIT_PROTOCOL[])://github.com/$(m.captures[1]).git"
+        user = get(GIT_USERS, lowercase(host), nothing)
+        user = user === nothing ? "" : "$user@"
+
+        "$proto://$user$host/$path"
     end
 end
 

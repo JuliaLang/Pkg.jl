@@ -254,13 +254,13 @@ temp_pkg_dir() do project_path
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
                 try
-                    Pkg.setprotocol!("notarealprotocol")
+                    Pkg.setprotocol!(domain = "github.com", protocol = "notarealprotocol")
                     @test_throws PkgError Pkg.develop("Example")
-                    Pkg.setprotocol!("https")
+                    Pkg.setprotocol!(domain = "github.com", protocol = "https")
                     Pkg.develop("Example")
                     @test isinstalled(TEST_PKG)
                 finally
-                    Pkg.setprotocol!()
+                    Pkg.setprotocol!(domain = "github.com")
                 end
             end
         end
@@ -270,14 +270,26 @@ temp_pkg_dir() do project_path
                     https_url = "https://github.com/JuliaLang/Example.jl.git"
                     ssh_url = "ssh://git@github.com/JuliaLang/Example.jl.git"
                     @test Pkg.GitTools.normalize_url(https_url) == https_url
-                    Pkg.setprotocol!("ssh")
+                    Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
                     @test Pkg.GitTools.normalize_url(https_url) == ssh_url
                     # TODO: figure out how to test this without
                     #       having to deploy a ssh key on github
                     #Pkg.develop("Example")
                     #@test isinstalled(TEST_PKG)
+
+                    https_url = "https://gitlab.example.com/example/Example.jl.git"
+                    ssh_url = "ssh://git@gitlab.example.com/example/Example.jl.git"
+
+                    @test Pkg.GitTools.normalize_url(https_url) == https_url
+                    Pkg.setprotocol!(domain = "gitlab.example.com", protocol = "ssh")
+                    @test Pkg.GitTools.normalize_url(https_url) == ssh_url
+
+                    @test_deprecated Pkg.setprotocol!("ssh")
+                    @test_deprecated Pkg.GitTools.setprotocol!("ssh")
+
                 finally
-                    Pkg.setprotocol!()
+                    Pkg.setprotocol!(domain = "github.com")
+                    Pkg.setprotocol!(domain = "gitlab.example.com")
                 end
             end
         end

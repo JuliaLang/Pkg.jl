@@ -541,7 +541,15 @@ function activate(path::AbstractString; shared::Bool=false)
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
 end
 
-setprotocol!(proto::Union{Nothing, AbstractString}=nothing) = GitTools.setprotocol!(proto)
+function setprotocol!(;
+    domain::AbstractString="github.com",
+    protocol::Union{Nothing, AbstractString}=nothing
+)
+    GitTools.setprotocol!(domain=domain, protocol=protocol)
+    return nothing
+end
+
+@deprecate setprotocol!(proto::Union{Nothing, AbstractString}) setprotocol!(protocol = proto) false
 
 # API constructor
 function Package(;name::Union{Nothing,AbstractString} = nothing,
