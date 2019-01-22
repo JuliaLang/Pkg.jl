@@ -557,7 +557,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.setprotocol!",
     "category": "function",
-    "text": "Pkg.setprotocol!(proto::Union{Nothing, AbstractString}=nothing)\n\nSet the protocol used to access GitHub-hosted packages when adding a url or developing a package. Defaults to delegating the choice to the package developer (proto == nothing). Other choices for proto are \"https\" or \"git\".\n\n\n\n\n\n"
+    "text": "setprotocol!(;\n    domain::AbstractString = \"github.com\",\n    protocol::Union{Nothing, AbstractString}=nothing\n)\n\nSet the protocol used to access hosted packages when adding a url or developing a package. Defaults to delegating the choice to the package developer (proto == nothing). Other choices for proto are \"https\" or \"git\".\n\nExamples\n\njulia> Pkg.setprotocol!(domain = \"github.com\", protocol = \"ssh\")\n\njulia> Pkg.setprotocol!(domain = \"gitlab.mycompany.com\")\n\n\n\n\n\n"
 },
 
 {
