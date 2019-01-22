@@ -35,7 +35,7 @@ end
 printvalue(io::IO, value::AbstractDict; sorted=false) =
     _print(io, value, sorted=sorted)
 printvalue(io::IO, value::DateTime; sorted=false) =
-    Base.print(io, Dates.format(value, "YYYY-mm-ddTHH:MM:SS.sssZ"))
+    Base.print(io, Dates.format(value, dateformat"YYYY-mm-dd\THH:MM:SS.sss\Z"))
 printvalue(io::IO, value::Bool; sorted=false) =
     Base.print(io, value ? "true" : "false")
 printvalue(io::IO, value; sorted=false) =
