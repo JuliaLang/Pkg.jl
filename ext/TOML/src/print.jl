@@ -38,6 +38,10 @@ printvalue(io::IO, value::DateTime; sorted=false) =
     Base.print(io, Dates.format(value, dateformat"YYYY-mm-dd\THH:MM:SS.sss\Z"))
 printvalue(io::IO, value::Bool; sorted=false) =
     Base.print(io, value ? "true" : "false")
+printvalue(io::IO, value::Integer; sorted=false) =
+    Base.print(io, Int(value))  # TOML specifies 64-bit signed long range for integer
+printvalue(io::IO, value::AbstractFloat; sorted=false) =
+    Base.print(io, Float64(value))  # TOML specifies IEEE 754 binary64 for float
 printvalue(io::IO, value; sorted=false) =
     Base.print(io, "\"$(escape_string(string(value)))\"")
 
