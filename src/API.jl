@@ -487,7 +487,12 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT)
 end
 
 
-activate() = (Base.ACTIVE_PROJECT[] = nothing)
+function activate()
+    Base.ACTIVE_PROJECT[] = nothing
+    p = Base.active_project()
+    p === nothing || @info("activating environment at $(pathrepr(p)).")
+    return nothing
+end
 function _activate_dep(dep_name::AbstractString)
     Base.active_project() === nothing && return
     env = nothing
@@ -517,7 +522,6 @@ function activate(path::AbstractString; shared::Bool=false)
             fullpath = _activate_dep(path)
             if fullpath === nothing
                 fullpath = abspath(path)
-                @info("activating new environment at $(Base.contractuser(fullpath)).")
             end
         end
     else
@@ -535,10 +539,12 @@ function activate(path::AbstractString; shared::Bool=false)
         # unless the shared environment already exists, place it in the first depots
         if !isdir(fullpath)
             fullpath = joinpath(Pkg.envdir(Pkg.depots1()), path)
-            @info("activating new environment at $(Base.contractuser(fullpath)).")
         end
     end
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
+    p = Base.active_project()
+    p === nothing || @info("activating$(ispath(p) ? "" : " new") environment at $(pathrepr(p)).")
+    return nothing
 end
 
 function setprotocol!(;
