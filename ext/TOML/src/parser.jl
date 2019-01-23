@@ -388,11 +388,11 @@ function numdatetime(p::Parser, st::Int)
         input = if isnull(decimal) && isnull(exponent) #!isfloat
             prefix
         elseif !isnull(decimal) && isnull(exponent)
-            "$(prefix)."*get(decimal,"")
+            "$(prefix)."*get(decimal)
         elseif isnull(decimal) && !isnull(exponent)
-            "$(prefix)E"*get(exponent,"")
+            "$(prefix)E"*get(exponent)
         elseif !isnull(decimal) && !isnull(exponent)
-            "$(prefix)."*get(decimal,"")*"E"*get(exponent,"")
+            "$(prefix)."*get(decimal)*"E"*get(exponent)
         end
         input = lstrip(input, '+')
         try
