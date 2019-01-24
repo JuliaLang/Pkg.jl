@@ -205,7 +205,7 @@ var documenterSearchIndex = {"docs": [
     "page": "5. Creating Packages",
     "title": "5. Creating Packages",
     "category": "section",
-    "text": "A package is a project with a name, uuid and version entry in the Project.toml file src/PackageName.jl file that defines the module PackageName. This file is executed when the package is loaded."
+    "text": "A package is a project with a name, uuid and version entry in the Project.toml file, and a src/PackageName.jl file that defines the module PackageName. This file is executed when the package is loaded."
 },
 
 {
