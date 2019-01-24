@@ -76,7 +76,7 @@ function linecol(p::Parser, offset::Int)
     seekstart(p.input)
     line = 0
     cur = 1
-    for (i,l) in enumerate(eachline(p.input, chomp=false))
+    for (i,l) in enumerate(eachline(p.input, keep=true))
         if cur + length(l) > offset
             return (i, offset - cur + 1)
         end
@@ -388,11 +388,11 @@ function numdatetime(p::Parser, st::Int)
         input = if isnull(decimal) && isnull(exponent) #!isfloat
             prefix
         elseif !isnull(decimal) && isnull(exponent)
-            "$(prefix)."*get(decimal,"")
+            "$(prefix)."*get(decimal)
         elseif isnull(decimal) && !isnull(exponent)
-            "$(prefix)E"*get(exponent,"")
+            "$(prefix)E"*get(exponent)
         elseif !isnull(decimal) && !isnull(exponent)
-            "$(prefix)."*get(decimal,"")*"E"*get(exponent,"")
+            "$(prefix)."*get(decimal)*"E"*get(exponent)
         end
         input = lstrip(input, '+')
         try

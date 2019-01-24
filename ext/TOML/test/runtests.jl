@@ -4,10 +4,11 @@ using TOML
 import TOML: linecol, whitespace, comment, newline, expect, lookup, Parser, parse
 
 using Test
+using Dates
 
 macro testval(s, v)
     f = "foo = $s"
-    :( @test get(parse(Parser($f)))["foo"] == $v )
+    :( @test TOML.get(parse(Parser($f)))["foo"] == $v )
 end
 
 macro fail(s...)
@@ -40,9 +41,9 @@ macro fail(s...)
                     println(e)
                 end
             end
-            if !isnull($ppvar)
+            if !TOML.isnull($ppvar)
                 println("RESULT:")
-                println(get($ppvar))
+                println(TOML.get($ppvar))
             end
         end
     else
@@ -64,7 +65,7 @@ macro fail(s...)
         local $ppvar = parse($pvar)
         $dbgexp
         $errtsts
-        @test isnull($ppvar)
+        @test TOML.isnull($ppvar)
     end
 end
 
@@ -89,9 +90,9 @@ macro success(s...)
                     println(e)
                 end
             end
-            if !isnull($ppvar)
+            if !TOML.isnull($ppvar)
                 println("RESULT:")
-                println(get($ppvar))
+                println(TOML.get($ppvar))
             end
         end
     else
@@ -102,11 +103,12 @@ macro success(s...)
         local $pvar = Parser($teststr)
         local $ppvar = parse($pvar)
         $dbgexp
-        @test !isnull($ppvar)
+        @test !TOML.isnull($ppvar)
     end
 end
 
-@testset "TOML parser" begin
+@testset "TOML" begin
+@testset "Parser" begin
 
     @testset "Parser internal functions" begin
         test = """
@@ -129,15 +131,15 @@ end
 
     @testset "Lookups" begin
         p = Parser("""hello."world\\t".a.0.'escaped'.value""")
-        @testset for (p, s) in zip(get(lookup(p)), ["hello"; "world\t"; "a"; "0"; "escaped"; "value"])
+        @testset for (p, s) in zip(TOML.get(lookup(p)), ["hello"; "world\t"; "a"; "0"; "escaped"; "value"])
             @test p == s
         end
 
         p = Parser("")
-        @test get(lookup(p)) == String[]
+        @test TOML.get(lookup(p)) == String[]
 
         p = Parser("value")
-        @test get(lookup(p)) == String["value"]
+        @test TOML.get(lookup(p)) == String["value"]
 
         p = Parser("\"\"")
         #TODO: @test get(lookup(p)) == String[""]
@@ -189,7 +191,7 @@ bbb = \"aaa\"\r
             foo = \"\"\"\\\r\n\"\"\"
             bar = \"\"\"\\\r\n   \r\n   \r\n   a\"\"\"
         ")
-        res = get(parse(p))
+        res = TOML.get(parse(p))
         @test res["foo"] == ""
         @test res["bar"] == "a"
 
@@ -265,7 +267,7 @@ trimmed in raw strings.
     is preserved.
 '''
 """)
-        res = get(parse(p))
+        res = TOML.get(parse(p))
 
         @test res["bar"]  == "\0"
         @test res["key1"] == "One\nTwo"
@@ -389,7 +391,7 @@ trimmed in raw strings.
             \"character encoding\" = \"value\"
             'ʎǝʞ' = \"value\"
         ")
-        res = get(parse(p))
+        res = TOML.get(parse(p))
 
         @test haskey(res, "foo")
         @test haskey(res, "-")
@@ -439,7 +441,7 @@ trimmed in raw strings.
             ['a.a']
             ['\"\"']
         ")
-        res = get(parse(p))
+        res = TOML.get(parse(p))
         @test haskey(res, "a.a")
         @test haskey(res, "f f")
         @test haskey(res, "f.f")
@@ -448,7 +450,7 @@ trimmed in raw strings.
         @test haskey(res["a"], "b")
 
 
-        @test haskey(get(parse(Parser("[foo]"))), "foo")
+        @test haskey(TOML.get(parse(Parser("[foo]"))), "foo")
 
 
         @testset "Inline Tables" begin
@@ -546,7 +548,7 @@ trimmed in raw strings.
   [foo.bar]
     #...
 """)
-        res = get(parse(p))
+        res = TOML.get(parse(p))
         @test haskey(res, "foo")
         arr = res["foo"]
         @test length(arr) == 2
@@ -569,7 +571,7 @@ trimmed in raw strings.
   [[fruit.variety]]
     name = "plantain"
 """)
-        res = get(parse(p))
+        res = TOML.get(parse(p))
         @test haskey(res, "fruit")
         fruit = res["fruit"]
         @test length(fruit) == 2
@@ -623,7 +625,7 @@ color = "gray"
 
 end
 
-@testset "TOML printer" begin
+@testset "Printer" begin
     res1 = TOML.parse("""
 title = "TOML Example"
 [owner]
@@ -666,4 +668,5 @@ data = [ ["gamma", "delta"], [1, 2] ] # just an update to make sure parsers supp
     res2 = TOML.parse(io)
     @test res1 == res2
 
+end
 end

@@ -1,0 +1,12 @@
+name = "TOML"
+uuid = "037cace4-c66a-5006-a6b7-c26ba1b2f83e"
+desc = "The TOML parser for Julia's package manager"
+
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
