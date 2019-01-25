@@ -24,7 +24,7 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
 end
 
 function load_versions(path::String)
-    toml = parse_toml(path, "Versions.toml")
+    toml = parse_toml(path, "Versions.toml"; fakeit=true)
     return Dict{VersionNumber, SHA1}(VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml)
 end
 
