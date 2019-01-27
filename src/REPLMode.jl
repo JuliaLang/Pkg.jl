@@ -246,7 +246,7 @@ end
 
 is_opt(word::AbstractString) = first(word) == '-'
 
-function core_parse(words)
+function core_parse(words; only_cmd=false)
     # prelude
     statement = Statement()
     word = nothing
@@ -279,6 +279,8 @@ function core_parse(words)
         end
     end
     statement.spec = command
+
+    only_cmd && return statement, word # hack to hook in `help` command
 
     next_word!() || return statement, word
 
@@ -578,6 +580,14 @@ function CommandSpec(command_name::String)::Union{Nothing,CommandSpec}
     return get(super, m.captures[2], nothing)
 end
 
+function parse_command(words::Vector{String})
+    statement, word = core_parse(words; only_cmd=true)
+    if statement.super === nothing && statement.spec === nothing
+        pkgerror("invalid input: `$word` is not a command")
+    end
+    return statement.spec === nothing ?  statement.super : statement.spec
+end
+
 function do_help!(command::PkgCommand, repl::REPL.AbstractREPL)
     disp = REPL.REPLDisplay(repl)
     if isempty(command.arguments)
@@ -585,17 +595,20 @@ function do_help!(command::PkgCommand, repl::REPL.AbstractREPL)
         return
     end
     help_md = md""
-    for arg in command.arguments
-        spec = CommandSpec(arg)
-        if spec === nothing
-            pkgerror("'$arg' does not name a command")
+
+    cmd = parse_command(command.arguments)
+    if cmd isa String
+        # gather all helps for super spec `cmd`
+        all_specs = sort!(unique(values(super_specs[cmd]));
+                          by=(spec->spec.canonical_name))
+        for spec in all_specs
+            isempty(help_md.content) || push!(help_md.content, md"---")
+            push!(help_md.content, spec.help)
         end
-        spec.help === nothing &&
-            pkgerror("Sorry, I don't have any help for the `$arg` command.")
-        isempty(help_md.content) ||
-            push!(help_md.content, md"---")
-        push!(help_md.content, spec.help)
+    elseif cmd isa CommandSpec
+        push!(help_md.content, cmd.help)
     end
+    !isempty(command.arguments) && @warn "More than one command specified, only rendering help for first"
     Base.display(disp, help_md)
 end
 
@@ -789,6 +802,14 @@ function canonical_names()
         push!(names, spec.canonical_name)
     end
     return sort!(names)
+end
+
+function complete_help(options, partial)
+    names = String[]
+    for cmds in values(super_specs)
+         append!(names, [spec.canonical_name for spec in values(cmds)])
+    end
+    return sort!(unique!(append!(names, collect(keys(super_specs)))))
 end
 
 function complete_installed_packages(options, partial)
@@ -1051,19 +1072,18 @@ julia is started with `--startup-file=yes`.
     :name => "help",
     :short_name => "?",
     :arg_count => 0 => Inf,
-    :completions => ((opt, partial) -> canonical_names()),
+    :completions => complete_help,
     :description => "show this message",
     :help => md"""
 
     help
 
-Display this message.
+List available commands along with short descriptions.
 
-    help cmd ...
+    help cmd
 
-Display usage information for commands listed.
-
-Available commands: `help`, `status`, `add`, `rm`, `up`, `preview`, `gc`, `test`, `build`, `free`, `pin`, `develop`.
+If `cmd` is a partial command, display help for all subcommands.
+If `cmd` is a full command, display help for `cmd`.
     """,
 ],[ :kind => CMD_INSTANTIATE,
     :name => "instantiate",
