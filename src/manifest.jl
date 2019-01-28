@@ -49,6 +49,14 @@ function safe_version(version::String)::VersionNumber
     return version
 end
 
+# turn /-paths into \-paths on Windows
+function safe_path(path::String)
+    if Sys.iswindows() && !isabspath(path)
+        path = joinpath(split(path, "/")...)
+    end
+    return path
+end
+
 read_deps(::Nothing) = Dict{String, UUID}()
 read_deps(deps) = pkgerror("Expected `deps` field to be either a list or a table")
 function read_deps(deps::AbstractVector)
@@ -114,7 +122,7 @@ function Manifest(raw::Dict)::Manifest
         entry.pinned   = read_pinned(get(info, "pinned", nothing))
         uuid           = read_field("uuid",          nothing, info, safe_uuid)
         entry.version  = read_field("version",       nothing, info, safe_version)
-        entry.path     = read_field("path",          nothing, info, identity)
+        entry.path     = read_field("path",          nothing, info, safe_path)
         entry.repo.url = read_field("repo-url",      nothing, info, identity)
         entry.repo.rev = read_field("repo-rev",      nothing, info, identity)
         entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
@@ -170,7 +178,11 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "version", entry.version)
         entry!(new_entry, "git-tree-sha1", entry.tree_hash)
         entry!(new_entry, "pinned", entry.pinned; default=false)
-        entry!(new_entry, "path", entry.path)
+        path = entry.path
+        if path !== nothing && Sys.iswindows() && !isabspath(path)
+            path = join(splitpath(path), "/")
+        end
+        entry!(new_entry, "path", path)
         entry!(new_entry, "repo-url", entry.repo.url)
         entry!(new_entry, "repo-rev", entry.repo.rev)
         if isempty(entry.deps)
