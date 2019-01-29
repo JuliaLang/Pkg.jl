@@ -85,8 +85,8 @@ a package, also inside that package.
 ```julia
 Pkg.add("Example") # Add a package from registry
 Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version
-Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url
-Pkg.add(PackageSpec(url="/remote/mycompany/juliapackages/OurPackage"))` # From path (has to be a gitrepo)
+Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url to remote gitrepo
+Pkg.add(PackageSpec(url="/remote/mycompany/juliapackages/OurPackage"))` # From path to local gitrepo
 ```
 
 See also [`PackageSpec`](@ref).
