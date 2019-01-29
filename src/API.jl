@@ -18,16 +18,21 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 
 include("generate.jl")
 
-function check_package_name(x::AbstractString)
+function check_package_name(x::AbstractString, mode=nothing)
     if !(occursin(Pkg.REPLMode.name_re, x))
-         pkgerror("$x is not a valid packagename")
+        message = "$x is not a valid packagename."
+        if mode !== nothing && any(occursin.(['\\','/'], x)) # maybe a url or a path
+            message *= "\nThe argument appears to be a URL or path, perhaps you meant " *
+                "`Pkg.$mode(PackageSpec(url=\"...\"))` or `Pkg.$mode(PackageSpec(path=\"...\"))`."
+        end
+        pkgerror(message)
     end
     return PackageSpec(x)
 end
 
 add_or_develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
-add_or_develop(pkgs::Vector{<:AbstractString}; kwargs...) =
-    add_or_develop([check_package_name(pkg) for pkg in pkgs]; kwargs...)
+add_or_develop(pkgs::Vector{<:AbstractString}; mode::Symbol, kwargs...) =
+    add_or_develop([check_package_name(pkg, mode) for pkg in pkgs]; mode = mode, kwargs...)
 add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)      = add_or_develop(Context(), pkgs; kwargs...)
 
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, shared::Bool=true, kwargs...)
