@@ -160,7 +160,7 @@ has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
-    f = ["name" => pkg.name, "uuid" => has_uuid(pkg) ? pkg.uuid : "", "v" => (vstr == "VersionSpec(\"*\")" ? "" : vstr)]
+    f = ["name" => has_name(pkg) ? pkg.name  : "", "uuid" => has_uuid(pkg) ? pkg.uuid : "", "v" => (vstr == "VersionSpec(\"*\")" ? "" : vstr)]
     if pkg.repo !== nothing
         if pkg.repo.url !== nothing
             push!(f, "url/path" => string("\"", pkg.repo.url, "\""))
