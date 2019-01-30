@@ -18,16 +18,21 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 
 include("generate.jl")
 
-function check_package_name(x::AbstractString)
+function check_package_name(x::AbstractString, mode=nothing)
     if !(occursin(Pkg.REPLMode.name_re, x))
-         pkgerror("$x is not a valid packagename")
+        message = "$x is not a valid packagename."
+        if mode !== nothing && any(occursin.(['\\','/'], x)) # maybe a url or a path
+            message *= "\nThe argument appears to be a URL or path, perhaps you meant " *
+                "`Pkg.$mode(PackageSpec(url=\"...\"))` or `Pkg.$mode(PackageSpec(path=\"...\"))`."
+        end
+        pkgerror(message)
     end
     return PackageSpec(x)
 end
 
 add_or_develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
-add_or_develop(pkgs::Vector{<:AbstractString}; kwargs...) =
-    add_or_develop([check_package_name(pkg) for pkg in pkgs]; kwargs...)
+add_or_develop(pkgs::Vector{<:AbstractString}; mode::Symbol, kwargs...) =
+    add_or_develop([check_package_name(pkg, mode) for pkg in pkgs]; mode = mode, kwargs...)
 add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)      = add_or_develop(Context(), pkgs; kwargs...)
 
 function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, shared::Bool=true, kwargs...)
@@ -487,7 +492,12 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT)
 end
 
 
-activate() = (Base.ACTIVE_PROJECT[] = nothing)
+function activate()
+    Base.ACTIVE_PROJECT[] = nothing
+    p = Base.active_project()
+    p === nothing || @info("activating environment at $(pathrepr(p)).")
+    return nothing
+end
 function _activate_dep(dep_name::AbstractString)
     Base.active_project() === nothing && return
     env = nothing
@@ -517,7 +527,6 @@ function activate(path::AbstractString; shared::Bool=false)
             fullpath = _activate_dep(path)
             if fullpath === nothing
                 fullpath = abspath(path)
-                @info("activating new environment at $(Base.contractuser(fullpath)).")
             end
         end
     else
@@ -535,10 +544,12 @@ function activate(path::AbstractString; shared::Bool=false)
         # unless the shared environment already exists, place it in the first depots
         if !isdir(fullpath)
             fullpath = joinpath(Pkg.envdir(Pkg.depots1()), path)
-            @info("activating new environment at $(Base.contractuser(fullpath)).")
         end
     end
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
+    p = Base.active_project()
+    p === nothing || @info("activating$(ispath(p) ? "" : " new") environment at $(pathrepr(p)).")
+    return nothing
 end
 
 function setprotocol!(;
