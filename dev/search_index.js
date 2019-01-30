@@ -453,7 +453,7 @@ var documenterSearchIndex = {"docs": [
     "page": "10. API Reference",
     "title": "Pkg.add",
     "category": "function",
-    "text": "Pkg.add(pkg::Union{String, Vector{String}})\nPkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}})\n\nAdd a package to the current project. This package will be available using the import and using keywords in the Julia REPL and if the current project is a package, also inside that package.\n\nExamples\n\nPkg.add(\"Example\") # Add a package from registry\nPkg.add(PackageSpec(name=\"Example\", version=\"0.3\")) # Specify version\nPkg.add(PackageSpec(url=\"https://github.com/JuliaLang/Example.jl\", rev=\"master\")) # From url\nPkg.add(PackageSpec(url=\"/remote/mycompany/juliapackages/OurPackage\"))` # From path (has to be a gitrepo)\n\nSee also PackageSpec.\n\n\n\n\n\n"
+    "text": "Pkg.add(pkg::Union{String, Vector{String}})\nPkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}})\n\nAdd a package to the current project. This package will be available using the import and using keywords in the Julia REPL and if the current project is a package, also inside that package.\n\nExamples\n\nPkg.add(\"Example\") # Add a package from registry\nPkg.add(PackageSpec(name=\"Example\", version=\"0.3\")) # Specify version\nPkg.add(PackageSpec(url=\"https://github.com/JuliaLang/Example.jl\", rev=\"master\")) # From url to remote gitrepo\nPkg.add(PackageSpec(url=\"/remote/mycompany/juliapackages/OurPackage\"))` # From path to local gitrepo\n\nSee also PackageSpec.\n\n\n\n\n\n"
 },
 
 {
