@@ -40,8 +40,8 @@ function safe_bool(bool::String)
 end
 
 # note: returns raw version *not* parsed version
-function safe_version(version::String)
-    try VersionNumber(version)
+function safe_version(version::String)::VersionNumber
+    try version = VersionNumber(version)
     catch err
         err isa ArgumentError || rethrow()
         pkgerror("Could not parse `version` as a `VersionNumber`")
@@ -110,14 +110,14 @@ function Manifest(raw::Dict)::Manifest
     for (name, infos) in raw, info in infos
         # TODO is name guaranteed to be a string?
         entry = PackageEntry()
-        entry.name          = name
-        entry.pinned        = read_pinned(get(info, "pinned", nothing))
-        uuid                = read_field("uuid",          nothing, info, safe_uuid)
-        entry.version       = read_field("version",       nothing, info, safe_version)
-        entry.path          = read_field("path",          nothing, info, identity)
-        entry.repo.url      = read_field("repo-url",      nothing, info, identity)
-        entry.repo.rev      = read_field("repo-rev",      nothing, info, identity)
-        entry.repo.tree_sha = read_field("git-tree-sha1", nothing, info, safe_SHA1)
+        entry.name     = name
+        entry.pinned   = read_pinned(get(info, "pinned", nothing))
+        uuid           = read_field("uuid",          nothing, info, safe_uuid)
+        entry.version  = read_field("version",       nothing, info, safe_version)
+        entry.path     = read_field("path",          nothing, info, identity)
+        entry.repo.url = read_field("repo-url",      nothing, info, identity)
+        entry.repo.rev = read_field("repo-rev",      nothing, info, identity)
+        entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
         deps = read_deps(get(info, "deps", nothing))
         entry.other = info
         stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps))
@@ -168,7 +168,7 @@ function destructure(manifest::Manifest)::Dict
         new_entry = something(entry.other, Dict{String,Any}())
         new_entry["uuid"] = string(uuid)
         entry!(new_entry, "version", entry.version)
-        entry!(new_entry, "git-tree-sha1", entry.repo.tree_sha)
+        entry!(new_entry, "git-tree-sha1", entry.tree_hash)
         entry!(new_entry, "pinned", entry.pinned; default=false)
         entry!(new_entry, "path", entry.path)
         entry!(new_entry, "repo-url", entry.repo.url)
