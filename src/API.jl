@@ -30,23 +30,62 @@ function check_package_name(x::AbstractString, mode=nothing)
     return PackageSpec(x)
 end
 
-add_or_develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add_or_develop([pkg]; kwargs...)
-add_or_develop(pkgs::Vector{<:AbstractString}; mode::Symbol, kwargs...) =
-    add_or_develop([check_package_name(pkg, mode) for pkg in pkgs]; mode = mode, kwargs...)
-add_or_develop(pkgs::Vector{PackageSpec}; kwargs...)      = add_or_develop(Context(), pkgs; kwargs...)
-
-function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, shared::Bool=true, kwargs...)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
+develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = develop([pkg]; kwargs...)
+develop(pkgs::Vector{<:AbstractString}; kwargs...) =
+    develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
+develop(pkgs::Vector{PackageSpec}; kwargs...)      = develop(Context(), pkgs; kwargs...)
+function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true, kwargs...)
+    pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
-    # if julia is passed as a package the solver gets tricked;
-    # this catches the error early on
-    any(pkg -> (pkg.name == "julia"), pkgs) &&
-        pkgerror("Trying to $mode julia as a package")
+
+    for pkg in pkgs
+        # if julia is passed as a package the solver gets tricked
+        pkg.name != "julia" || pkgerror("Trying to develop julia as a package")
+        pkg.repo.rev === nothing || pkgerror("git revision can not be given to `develop`")
+        pkg.name !== nothing || pkg.uuid !== nothing || pkg.repo.url !== nothing ||
+            pkgerror("A package must be specified by `name`, `uuid`, `url`, or `path`.")
+        pkg.version == VersionSpec() ||
+            pkgerror("Can not specify version when tracking a repo.")
+    end
 
     ctx.preview && preview_info()
-    new_git = mode == :develop ?
-        handle_repos_develop!(ctx, pkgs, shared) :
-        handle_repos_add!(ctx, pkgs)
+
+    new_git = handle_repos_develop!(ctx, pkgs, shared)
+    foreach(pkg -> pkg.repo = Types.GitRepo(), pkgs) # TODO move to handle_repos
+
+    any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
+        pkgerror("Cannot $mode package with the same name or uuid as the project")
+
+    Operations.develop(ctx, pkgs, new_git)
+    ctx.preview && preview_info()
+    return
+end
+
+add(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add([pkg]; kwargs...)
+add(pkgs::Vector{<:AbstractString}; kwargs...) =
+    add([check_package_name(pkg, :add) for pkg in pkgs]; kwargs...)
+add(pkgs::Vector{PackageSpec}; kwargs...)      = add(Context(), pkgs; kwargs...)
+function add(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
+    Context!(ctx; kwargs...)
+
+    for pkg in pkgs
+        # if julia is passed as a package the solver gets tricked; this catches the error early on
+        pkg.name == "julia" && pkgerror("Trying to add julia as a package")
+        pkg.name !== nothing || pkg.uuid !== nothing || pkg.repo.url !== nothing ||
+            pkgerror("A package must be specified by `name`, `uuid`, `url`, or `path`.")
+        if (pkg.repo.url !== nothing || pkg.repo.rev !== nothing)
+            pkg.version == VersionSpec() ||
+                pkgerror("Can not specify version when tracking a repo.")
+        end
+    end
+
+    ctx.preview && preview_info()
+
+    repo_pkgs = [pkg for pkg in pkgs if (pkg.repo.url !== nothing || pkg.repo.rev !== nothing)]
+    new_git = handle_repos_add!(ctx, repo_pkgs)
+    # repo + unpinned -> name, uuid, repo.rev, repo.url, tree_hash
+    # repo + pinned -> name, uuid, tree_hash
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.env, pkgs)
@@ -56,48 +95,53 @@ function add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; mode::Symbol, s
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
         pkgerror("Cannot $mode package with the same name or uuid as the project")
 
-    Operations.add_or_develop(ctx, pkgs; new_git=new_git, mode=mode)
+    uuids = Dict(pkg.name => pkg.uuid for pkg in pkgs)
+    Operations.add(ctx, pkgs, new_git)
     ctx.preview && preview_info()
-    return
+    return uuids
 end
-
-add(args...; kwargs...) = add_or_develop(args...; mode = :add, kwargs...)
-develop(args...; shared=true, kwargs...) = add_or_develop(args...; mode = :develop, shared = shared, kwargs...)
 
 rm(pkg::Union{AbstractString, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
 rm(pkgs::Vector{<:AbstractString}; kwargs...)          = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-rm(pkgs::Vector{PackageSpec}; kwargs...)       = rm(Context(), pkgs; kwargs...)
+rm(pkgs::Vector{PackageSpec}; kwargs...)               = rm(Context(), pkgs; kwargs...)
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
+    foreach(pkg -> pkg.mode = mode, pkgs)
+
     for pkg in pkgs
-        # TODO only overwrite pkg.mode if default value ?
-        pkg.mode = mode
+        pkg.name !== nothing || pkg.uuid !== nothing ||
+            pkgerror("Must specify package by either `name` or `uuid`.")
+        if !(pkg.version == VersionSpec() && pkg.pinned == false &&
+             pkg.tree_hash === nothing && pkg.repo.url === nothing &&
+             pkg.repo.rev === nothing && pkg.path === nothing)
+            pkgerror("Package may only be specified by either `name` or `uuid`")
+        end
     end
 
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
+
     project_deps_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env, pkgs)
+    ensure_resolved(ctx.env, pkgs)
+
     Operations.rm(ctx, pkgs)
     ctx.preview && preview_info()
     return
 end
 
-up(ctx::Context; kwargs...)                    = up(ctx, PackageSpec[]; kwargs...)
-up(; kwargs...)                                = up(PackageSpec[]; kwargs...)
+up(ctx::Context; kwargs...)                            = up(ctx, PackageSpec[]; kwargs...)
+up(; kwargs...)                                        = up(PackageSpec[]; kwargs...)
 up(pkg::Union{AbstractString, PackageSpec}; kwargs...) = up([pkg]; kwargs...)
 up(pkgs::Vector{<:AbstractString}; kwargs...)          = up([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-up(pkgs::Vector{PackageSpec}; kwargs...)       = up(Context(), pkgs; kwargs...)
+up(pkgs::Vector{PackageSpec}; kwargs...)               = up(Context(), pkgs; kwargs...)
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
-            level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT, do_update_registry=true, kwargs...)
+            level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
+            do_update_registry=true, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-    for pkg in pkgs
-        # TODO only override if they are not already set
-        pkg.mode = mode
-        pkg.version = level
-    end
+    foreach(pkg -> pkg.mode = mode, pkgs)
 
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
@@ -108,11 +152,11 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT
             for (name::String, uuid::UUID) in ctx.env.project.deps
-                push!(pkgs, PackageSpec(name=name, uuid=uuid, version=level))
+                push!(pkgs, PackageSpec(name=name, uuid=uuid))
             end
         elseif mode == PKGMODE_MANIFEST
             for (uuid, entry) in ctx.env.manifest
-                push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, version=level))
+                push!(pkgs, PackageSpec(name=entry.name, uuid=uuid))
             end
         end
     else
@@ -120,7 +164,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env, pkgs)
         ensure_resolved(ctx.env, pkgs)
     end
-    Operations.up(ctx, pkgs)
+    Operations.up(ctx, pkgs, level)
     ctx.preview && preview_info()
     return
 end
@@ -130,12 +174,21 @@ resolve(ctx::Context=Context()) =
 
 pin(pkg::Union{AbstractString, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
 pin(pkgs::Vector{<:AbstractString}; kwargs...)          = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-pin(pkgs::Vector{PackageSpec}; kwargs...)       = pin(Context(), pkgs; kwargs...)
+pin(pkgs::Vector{PackageSpec}; kwargs...)               = pin(Context(), pkgs; kwargs...)
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
+
+    for pkg in pkgs
+        pkg.name !== nothing || pkg.uuid !== nothing ||
+            pkgerror("Must specify package by either `name` or `uuid`.")
+        pkg.repo.url === nothing || pkgerror("Can not specify `repo` url")
+        pkg.repo.rev === nothing || pkgerror("Can not specify `repo` rev")
+    end
+
+    foreach(pkg -> pkg.mode = PKGMODE_PROJECT, pkgs)
     project_deps_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
     Operations.pin(ctx, pkgs)
@@ -151,25 +204,25 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
+
+    for pkg in pkgs
+        pkg.name !== nothing || pkg.uuid !== nothing ||
+            pkgerror("Must specify package by either `name` or `uuid`.")
+        if !(pkg.version == VersionSpec() && pkg.pinned == false &&
+             pkg.tree_hash === nothing && pkg.repo.url === nothing &&
+             pkg.repo.rev === nothing && pkg.path === nothing)
+            pkgerror("Package may only be specified by either `name` or `uuid`")
+        end
+    end
+
     foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
     manifest_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
+
     find_registered!(ctx.env, UUID[pkg.uuid for pkg in pkgs])
-    for pkg in pkgs
-        entry = manifest_info(ctx.env, pkg.uuid)
-        entry.pinned && continue
-        if entry.path !== nothing
-            isempty(registered_paths(ctx.env, pkg.uuid)) &&
-                pkgerror("cannot free an unpinned package that does not exist in a registry")
-        else
-            pkgerror("`free` is only a valid operation for `pin`ed or `dev`ed packages")
-        end
-    end
     Operations.free(ctx, pkgs)
     return
 end
-
-
 
 test(;kwargs...)                                  = test(PackageSpec[]; kwargs...)
 test(pkg::Union{AbstractString, PackageSpec}; kwargs...)  = test([pkg]; kwargs...)
@@ -184,14 +237,14 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...
         # TODO: Allow this?
         ctx.env.pkg == nothing && pkgerror("trying to test unnamed project")
         push!(pkgs, ctx.env.pkg)
+    else
+        project_resolve!(ctx.env, pkgs)
+        project_deps_resolve!(ctx.env, pkgs)
+        manifest_resolve!(ctx.env, pkgs)
+        ensure_resolved(ctx.env, pkgs)
     end
-    project_resolve!(ctx.env, pkgs)
-    project_deps_resolve!(ctx.env, pkgs)
-    manifest_resolve!(ctx.env, pkgs)
-    ensure_resolved(ctx.env, pkgs)
-    if !ctx.preview && (Operations.any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file))
-        Pkg.instantiate(ctx)
-    end
+    #if !ctx.preview && (Operations.any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file))
+    ctx.preview || Pkg.instantiate(ctx)
     Operations.test(ctx, pkgs; coverage=coverage)
     return
 end
@@ -241,9 +294,9 @@ function gc(ctx::Context=Context(); kwargs...)
         manifest == nothing && continue
         new_usage[manifestfile] = [Dict("time" => date)]
         for (uuid, entry) in manifest
-            if entry.repo.tree_sha !== nothing
+            if entry.tree_hash !== nothing
                 push!(paths_to_keep,
-                      Operations.find_installed(entry.name, uuid, entry.repo.tree_sha))
+                      Operations.find_installed(entry.name, uuid, entry.tree_hash))
             end
         end
     end
@@ -325,27 +378,6 @@ function gc(ctx::Context=Context(); kwargs...)
     return
 end
 
-
-function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID})
-    for pkg in pkgs
-        pkg.uuid in keys(ctx.stdlibs) && continue
-        pkg.uuid in uuids && continue
-        push!(uuids, pkg.uuid)
-        if Types.is_project(ctx.env, pkg)
-            pkgs = [PackageSpec(name, uuid) for (name, uuid) in ctx.env.project.deps]
-        else
-            info = manifest_info(ctx.env, pkg.uuid)
-            if info === nothing
-                pkgerror("could not find manifest info for package with uuid: $(pkg.uuid)")
-            end
-            pkgs = [PackageSpec(name, uuid) for (name, uuid) in info.deps]
-        end
-        _get_deps!(ctx, pkgs, uuids)
-    end
-    return
-end
-
-
 build(pkgs...; kwargs...) = build([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 build(pkg::Array{Union{}, 1}; kwargs...) = build(PackageSpec[]; kwargs...)
 build(pkg::PackageSpec; kwargs...) = build([pkg]; kwargs...)
@@ -364,21 +396,11 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
             end
         end
     end
-    for pkg in pkgs
-        pkg.mode = PKGMODE_MANIFEST
-    end
     project_resolve!(ctx.env, pkgs)
+    foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
     manifest_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
-    if !ctx.preview && (Operations.any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file))
-        Pkg.instantiate(ctx)
-    end
-    uuids = UUID[]
-    _get_deps!(ctx, pkgs, uuids)
-    length(uuids) == 0 && (@info("no packages to build"); return)
-    Operations.build_versions(ctx, uuids; might_need_to_resolve=true, verbose=verbose)
-    ctx.preview && preview_info()
-    return
+    Operations.build(ctx, pkgs, verbose)
 end
 
 #####################################
@@ -446,31 +468,18 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
     end
     Operations.prune_manifest(ctx.env)
     Types.update_registries(ctx)
-    urls = Dict{}
-    hashes = Dict{UUID,SHA1}()
-    urls = Dict{UUID,Vector{String}}()
     pkgs = PackageSpec[]
     for (uuid, entry) in ctx.env.manifest
-        pkg = PackageSpec(name=entry.name, uuid=uuid, path=entry.path,
-                          version = entry.version !== nothing ? VersionNumber(entry.version) : VersionSpec())
-        push!(pkgs, pkg)
-        pkg.uuid in keys(ctx.stdlibs) && continue
-        pkg.path !== nothing && continue
-        urls[pkg.uuid] = String[]
-        hashes[pkg.uuid] = entry.repo.tree_sha
-        entry.repo.url !== nothing && (pkg.repo = entry.repo)
-    end
-    _, urls_ref = Operations.version_data!(ctx, pkgs)
-    for (uuid, url) in urls_ref
-        append!(urls[uuid], url)
-        urls[uuid] = unique(urls[uuid])
+        push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, path=entry.path,
+                                version = something(entry.version, VersionSpec()),
+                                repo=entry.repo, tree_hash=entry.tree_hash))
     end
     new_git = UUID[]
     for pkg in pkgs
-        pkg.repo !== nothing || continue
+        pkg.repo.url !== nothing || continue
         instantiate_pkg_repo!(pkg) && push!(new_git, pkg.uuid)
     end
-    new_apply = Operations.apply_versions(ctx, pkgs, hashes, urls)
+    new_apply = Operations.download_source(ctx, pkgs)
     Operations.build_versions(ctx, union(new_apply, new_git))
 end
 
@@ -571,12 +580,11 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
         pkgerror("cannot specify both a path and url")
     url !== nothing && version !== nothing &&
         pkgerror("`version` can not be given with `url`, use `rev` instead")
-    repo = (url === nothing && path === nothing && rev === nothing) ?
-        nothing :
-        Types.GitRepo(rev = rev, url = url !== nothing ? url : path)
+    repo = Types.GitRepo(rev = rev, url = url !== nothing ? url : path)
     version = version === nothing ? VersionSpec() : VersionSpec(version)
     uuid isa String && (uuid = UUID(uuid))
-    PackageSpec(name, uuid, version, mode, nothing, PKGSPEC_NOTHING, repo)
+    PackageSpec(;name=name, uuid=uuid, version=version, mode=mode, path=nothing,
+                special_action=PKGSPEC_NOTHING, repo=repo, tree_hash=nothing)
 end
 Package(name::AbstractString) = PackageSpec(name)
 Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)

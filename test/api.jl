@@ -73,10 +73,10 @@ end
         # explicit relative path
         with_temp_env() do env_path
             cd(env_path) do
-                foo_uuid = Pkg.generate("Foo")
+                uuids = Pkg.generate("Foo")
                 Pkg.develop(PackageSpec(;path="Foo"))
                 manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
-                entry = manifest[foo_uuid]
+                entry = manifest[uuids["Foo"]]
             end
             @test entry.path == "Foo"
             @test entry.name == "Foo"
@@ -85,11 +85,11 @@ end
         # explicit absolute path
         with_temp_env() do env_path
             cd_tempdir() do temp_dir
-                foo_uuid = Pkg.generate("Foo")
+                uuids = Pkg.generate("Foo")
                 absolute_path = abspath(joinpath(temp_dir, "Foo"))
                 Pkg.develop(PackageSpec(;path=absolute_path))
                 manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
-                entry = manifest[foo_uuid]
+                entry = manifest[uuids["Foo"]]
                 @test entry.name == "Foo"
                 @test entry.path == absolute_path
                 @test isdir(entry.path)
@@ -150,6 +150,25 @@ end
 end
 
 @testset "Pkg.add" begin
+    # Add by version should override add by repo
+    temp_pkg_dir() do project_path; with_temp_env() do env_path
+        Pkg.add(Pkg.PackageSpec(;name="Example", rev="master"))
+        uuids = Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
+        @test Pkg.Types.Context().env.manifest[uuids["Example"]].version == v"0.3.0"
+        @test Pkg.Types.Context().env.manifest[uuids["Example"]].repo == Pkg.Types.GitRepo()
+    end end
+    # Add by version should override add by repo, even for indirect dependencies
+    temp_pkg_dir() do project_path; mktempdir() do tempdir; with_temp_env() do
+        path = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "DependsOnExample"))
+        Pkg.add(Pkg.PackageSpec(;path=path))
+        Pkg.add(Pkg.PackageSpec(;name="Example", rev="master"))
+        Pkg.rm("Example")
+        # Now `Example` should be tracking a repo and it is in the dep graph
+        # But `Example` is *not* a direct dependency
+        uuids = Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
+        @test Pkg.Types.Context().env.manifest[uuids["Example"]].version == v"0.3.0"
+        @test Pkg.Types.Context().env.manifest[uuids["Example"]].repo == Pkg.Types.GitRepo()
+    end end end
     # Add by URL should not override pin
     temp_pkg_dir() do project_path; with_temp_env() do env_path
         Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
@@ -170,12 +189,12 @@ end
         t1, t2 = nothing, nothing
         for (uuid, entry) in Pkg.Types.EnvCache().manifest
             entry.name == "Example" || continue
-            t1 = mtime(Pkg.Operations.find_installed(entry.name, uuid, entry.repo.tree_sha))
+            t1 = mtime(Pkg.Operations.find_installed(entry.name, uuid, entry.tree_hash))
         end
         Pkg.add(Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl"))
         for (uuid, entry) in Pkg.Types.EnvCache().manifest
             entry.name == "Example" || continue
-            t2 = mtime(Pkg.Operations.find_installed(entry.name, uuid, entry.repo.tree_sha))
+            t2 = mtime(Pkg.Operations.find_installed(entry.name, uuid, entry.tree_hash))
         end
         @test t1 == t2
     end end
@@ -197,5 +216,15 @@ end
         end
     end
 end
+
+@testset "Pkg.free" begin
+    # `pin` should not override previous `pin`
+    temp_pkg_dir() do project_path; with_temp_env() do env_path
+        Pkg.add(Pkg.PackageSpec(;name="Example"))
+        Pkg.pin(Pkg.PackageSpec(;name="Example", version="0.3.0"))
+        @test_throws PkgError Pkg.pin(Pkg.PackageSpec(;name="Example", version="0.4.0"))
+    end end
+end
+
 
 end # module APITests
