@@ -28,8 +28,10 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
     return abspath(depots1(), "packages", name, slug_default)
 end
 
-has_registered_source(pkg) =
-    is_stdlib(pkg.uuid) || pkg.path !== nothing || pkg.repo.url !== nothing
+# more accurate name is `should_be_tracking_registered_version`
+# the only way to know for sure is to key into the registries
+tracking_registered_version(pkg) =
+    !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.url === nothing
 
 function source_path(pkg::PackageSpec)
     return is_stdlib(pkg.uuid)    ? Types.stdlib_path(pkg.name) :
@@ -141,7 +143,7 @@ end
 
 function load_tree_hashes!(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
-        has_registered_source(pkg) && continue
+        tracking_registered_version(pkg) || continue
         pkg.tree_hash = load_tree_hash(ctx, pkg)
     end
 end
@@ -166,7 +168,13 @@ function set_maximum_version_registry!(env::EnvCache, pkg::PackageSpec)
 end
 
 function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
-    if has_registered_source(pkg)
+    if tracking_registered_version(pkg)
+        for path in registered_paths(ctx.env, pkg.uuid)
+            data = load_package_data(UUID, joinpath(path, "Deps.toml"), pkg.version)
+            data !== nothing && return data
+        end
+        return Dict{String,UUID}()
+    else
         path = source_path(pkg)
         project_file = projectfile_path(path; strict=true)
         if project_file !== nothing
@@ -197,12 +205,6 @@ function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
             end
         end
         return deps
-    else
-        for path in registered_paths(ctx.env, pkg.uuid)
-            data = load_package_data(UUID, joinpath(path, "Deps.toml"), pkg.version)
-            data !== nothing && return data
-        end
-        return Dict{String,UUID}()
     end
 end
 
@@ -263,6 +265,7 @@ end
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
+# all versioned packges should have a `tree_hash`
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     printpkgstyle(ctx, :Resolving, "package versions...")
     # compatibility
@@ -319,6 +322,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
+    load_tree_hashes!(ctx, pkgs)
 end
 
 include("require.jl")
@@ -547,7 +551,7 @@ end
 
 # install & update manifest
 function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
-    pkgs = filter(!has_registered_source, pkgs)
+    pkgs = filter(tracking_registered_version, pkgs)
     urls = load_urls(ctx, pkgs)
     return download_source(ctx, pkgs, urls; readonly=readonly)
 end
@@ -898,6 +902,15 @@ function update_package_add(pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     return pkg
 end
 
+function check_registered(ctx::Context, pkgs::Vector{PackageSpec})
+    pkgs = filter(tracking_registered_version, pkgs)
+    find_registered!(ctx.env, UUID[pkg.uuid for pkg in pkgs])
+    for pkg in pkgs
+        isempty(registered_paths(ctx.env, pkg.uuid)) || continue
+        pkgerror("Package $(pkg.name) [$(pkg.uuid)] not found in a registry.")
+    end
+end
+
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[])
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -905,13 +918,13 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[])
         pkgs[i] = update_package_add(pkg, entry, is_dep(ctx.env, pkg))
     end
     load_other_deps!(ctx, pkgs)
+    check_registered(ctx, pkgs)
 
     # update set of deps
     empty!(ctx.env.project.deps)
     foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs)
 
     resolve_versions!(ctx, pkgs)
-    load_tree_hashes!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     # TODO is it still necessary to prune? I don't think so..
 
@@ -927,10 +940,10 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID})
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     load_other_deps!(ctx, pkgs)
+    check_registered(ctx, pkgs)
 
     # resolve & apply package versions
     resolve_versions!(ctx, pkgs)
-    load_tree_hashes!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=false)
     write_env(ctx) # write env before building
@@ -998,8 +1011,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     for pkg in pkgs
         up_load_manifest_info!(pkg, manifest_info(ctx.env, pkg.uuid))
     end
+    check_registered(ctx, pkgs)
     resolve_versions!(ctx, pkgs)
-    load_tree_hashes!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
     write_env(ctx) # write env before building
@@ -1026,10 +1039,10 @@ end
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_pin!(pkg, manifest_info(ctx.env, pkg.uuid)), pkgs)
     load_other_deps!(ctx, pkgs)
+    check_registered(ctx, pkgs)
     
     # TODO check that versions exist ? -> I guess resolve_versions should check ?
     resolve_versions!(ctx, pkgs)
-    load_tree_hashes!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
 
     new = download_source(ctx, pkgs)
@@ -1066,8 +1079,8 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
                 pkgerror("cannot free an `dev`ed package that does not exist in a registry")
         end
         load_other_deps!(ctx, pkgs)
+        check_registered(ctx, pkgs)
         resolve_versions!(ctx, pkgs)
-        load_tree_hashes!(ctx, pkgs)
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
         write_env(ctx) # write env before building
