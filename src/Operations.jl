@@ -889,7 +889,8 @@ function update_package_add(pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.path !== nothing || entry.repo.url !== nothing || pkg.repo.url !== nothing
         return pkg # overwrite everything, nothing to copy over
     end
-    if is_dep && entry.version ∈ pkg.version
+    if is_dep && ((isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
+                 (!isa(pkg.version, VersionNumber) && entry.version ∈ pkg.version))
         # leave the package as is at the installed version
         return PackageSpec(; uuid=pkg.uuid, name=pkg.name, version=entry.version,
                            tree_hash=entry.tree_hash)

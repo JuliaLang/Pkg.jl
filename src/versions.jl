@@ -138,7 +138,6 @@ end
 Base.show(io::IO, r::VersionRange) = print(io, "VersionRange(\"", r, "\")")
 
 Base.in(v::VersionNumber, r::VersionRange) = r.lower ≲ v ≲ r.upper
-Base.in(v::VersionNumber, r::VersionNumber) = v == r
 
 Base.intersect(a::VersionRange, b::VersionRange) = VersionRange(stricterlower(a.lower, b.lower), stricterupper(a.upper, b.upper))
 
