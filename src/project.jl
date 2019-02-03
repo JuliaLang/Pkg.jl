@@ -145,26 +145,21 @@ read_project(path::String) =
 ###########
 # WRITING #
 ###########
-string(x::Vector{String}) = x
 function destructure(project::Project)::Dict
-    raw = project.other
-    function entry!(key::String, src::Dict)
-        if isempty(src)
-            delete!(raw, key)
-        else
-            raw[key] = Dict(string(name) => string(uuid) for (name,uuid) in src)
-        end
-    end
-    entry!(key::String, src) = src === nothing ? delete!(raw, key) : (raw[key] = string(src))
+    raw = deepcopy(project.other)
 
-    entry!("name", project.name)
-    entry!("uuid", project.uuid)
-    entry!("version", project.version)
+    should_delete(x::Dict) = isempty(x)
+    should_delete(x)       = x === nothing
+    entry!(key::String, src) = should_delete(src) ? delete!(raw, key) : (raw[key] = src)
+
+    entry!("name",     project.name)
+    entry!("uuid",     project.uuid)
+    entry!("version",  project.version)
     entry!("manifest", project.manifest)
-    entry!("deps", project.deps)
-    entry!("extras", project.extras)
-    entry!("compat", project.compat)
-    entry!("targets", project.targets)
+    entry!("deps",     project.deps)
+    entry!("extras",   project.extras)
+    entry!("compat",   project.compat)
+    entry!("targets",  project.targets)
     return raw
 end
 
