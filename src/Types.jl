@@ -35,7 +35,9 @@ include("versions.jl")
 
 ## ordering of UUIDs ##
 
-Base.isless(a::UUID, b::UUID) = a.value < b.value
+if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
+    Base.isless(a::UUID, b::UUID) = a.value < b.value
+end
 
 ## Computing UUID5 values from (namespace, key) pairs ##
 function uuid5(namespace::UUID, key::String)
