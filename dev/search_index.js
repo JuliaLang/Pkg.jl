@@ -141,7 +141,7 @@ var documenterSearchIndex = {"docs": [
     "page": "3. Managing Packages",
     "title": "Updating packages",
     "category": "section",
-    "text": "When new versions of packages the project is using are released, it is a good idea to update. Simply calling up will try to update all the dependencies of the project to the latest compatible version. Sometimes this is not what you want. You can specify a subset of the dependencies to upgrade by giving them as arguments to up, e.g:(v1.0) pkg> up ExampleThe version of all other packages direct dependencies will stay the same. If you only want to update the minor version of packages, to reduce the risk that your project breaks, you can give the --minor flag, e.g:(v1.0) pkg> up --minor ExamplePackages that track a repository are not updated when a minor upgrade is done. Packages that track a path are never touched by the package manager."
+    "text": "When new versions of packages the project is using are released, it is a good idea to update. Simply calling up will try to update all the dependencies of the project to the latest compatible version. Sometimes this is not what you want. You can specify a subset of the dependencies to upgrade by giving them as arguments to up, e.g:(v1.0) pkg> up ExampleIf Example has a dependency which is also a dependency for another explicitly added package, that dependency will not be updated. If you only want to update the minor version of packages, to reduce the risk that your project breaks, you can give the --minor flag, e.g:(v1.0) pkg> up --minor ExamplePackages that track a repository are not updated when a minor upgrade is done. Packages that track a path are never touched by the package manager."
 },
 
 {
