@@ -141,7 +141,7 @@ temp_pkg_dir() do project_path
     end
 
     @testset "package with wrong UUID" begin
-        @test_throws ResolverError Pkg.add(PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
+        @test_throws PkgError Pkg.add(PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
     end
 
     @testset "adding and upgrading different versions" begin
@@ -651,6 +651,14 @@ end
     for bad_manifest in joinpath.(dir, readdir(dir))
         @test_throws PkgError Pkg.Types.read_manifest(bad_manifest)
     end
+end
+
+@testset "Unregistered UUID in manifest" begin
+    temp_pkg_dir() do project_path; with_temp_env() do; cd_tempdir() do tmpdir
+        cp(joinpath(@__DIR__, "test_packages", "UnregisteredUUID"), "UnregisteredUUID")
+        Pkg.activate("UnregisteredUUID")
+        @test_throws PkgError Pkg.update()
+    end end end
 end
 
 @testset "Basic sandbox" begin

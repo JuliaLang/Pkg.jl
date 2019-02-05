@@ -477,6 +477,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
                                 version = something(entry.version, VersionSpec()),
                                 repo=entry.repo, tree_hash=entry.tree_hash))
     end
+    Operations.check_registered(ctx, pkgs)
     new_git = UUID[]
     for pkg in pkgs
         pkg.repo.url !== nothing || continue
