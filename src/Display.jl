@@ -148,12 +148,14 @@ vstring(ctx::Context, a::VerInfo) =
            )
 
 Base.:(==)(a::VerInfo, b::VerInfo) =
-    a.hash == b.hash && a.ver == b.ver && a.pinned == b.pinned && a.repo == b.repo
+    a.hash == b.hash && a.ver == b.ver && a.pinned == b.pinned && a.repo == b.repo &&
+    a.path == b.path
 
 ≈(a::VerInfo, b::VerInfo) = a.hash == b.hash &&
     (a.ver == nothing || b.ver == nothing || a.ver == b.ver) &&
     (a.pinned == b.pinned) &&
-    (a.repo == nothing || b.repo == nothing || a.repo == b.repo)
+    (a.repo == nothing || b.repo == nothing || a.repo == b.repo) &&
+    (a.path == b.path)
 
 struct DiffEntry
     uuid::UUID
@@ -171,22 +173,25 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry}, status=false)
                              Base.locate_package(pkgid) !== nothing
         # Package download detection doesnt work properly when runn running targets
         ctx.currently_running_target && (package_downloaded = true)
-        if x.old != nothing && x.new != nothing
+        if x.old !== nothing && x.new !== nothing
             if x.old ≈ x.new
                 verb = ' '
                 vstr = vstring(ctx, x.new)
             else
-                if x.old.hash != x.new.hash && x.old.ver != x.new.ver
+                if (x.old.hash === nothing || x.new.hash === nothing || x.old.hash != x.new.hash) &&
+                    x.old.ver != x.new.ver
                     verb = x.old.ver == nothing || x.new.ver == nothing ||
                            x.old.ver == x.new.ver ? '~' :
                            x.old.ver < x.new.ver  ? '↑' : '↓'
                 elseif x.old.ver == x.new.ver && x.old.pinned != x.new.pinned ||
-                        x.old.repo != nothing || x.new.repo != nothing
+                    x.old.path != x.new.path ||
+                    x.old.repo != nothing || x.new.repo != nothing
                     verb = '~'
                 else
                     verb = '?'
                 end
-                vstr = (x.old.ver == x.new.ver && x.old.pinned == x.new.pinned && x.old.repo == x.new.repo) ?
+                vstr = (x.old.ver == x.new.ver && x.old.pinned == x.new.pinned &&
+                        x.old.repo == x.new.repo && x.old.path == x.new.path) ?
                       vstring(ctx, x.new) :
                       vstring(ctx, x.old) * " ⇒ " * vstring(ctx, x.new)
             end
@@ -239,8 +244,8 @@ function manifest_diff(ctx::Context, manifest0::Dict, manifest1::Dict)
         name₀ = name₁ = v₀ = v₁ = nothing
         haskey(manifest0, uuid) && ((name₀, v₀) = name_ver_info(manifest0[uuid]))
         haskey(manifest1, uuid) && ((name₁, v₁) = name_ver_info(manifest1[uuid]))
-        name₀ == nothing && (name₀ = name₁)
-        name₁ == nothing && (name₁ = name₀)
+        name₀ === nothing && (name₀ = name₁)
+        name₁ === nothing && (name₁ = name₀)
         if name₀ == name₁
             push!(diff, DiffEntry(uuid, name₀, v₀, v₁))
         else
