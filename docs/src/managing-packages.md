@@ -196,7 +196,7 @@ to the latest compatible version. Sometimes this is not what you want. You can s
 (v1.0) pkg> up Example
 ```
 
-The version of all other packages direct dependencies will stay the same. If you only want to update the minor version of packages, to reduce the risk that your project breaks, you can give the `--minor` flag, e.g:
+If `Example` has a dependency which is also a dependency for another explicitly added package, that dependency will not be updated. If you only want to update the minor version of packages, to reduce the risk that your project breaks, you can give the `--minor` flag, e.g:
 
 ```
 (v1.0) pkg> up --minor Example
