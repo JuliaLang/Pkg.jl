@@ -450,7 +450,10 @@ function precompile(ctx::Context)
         end
         if stale
             printpkgstyle(ctx, :Precompiling, pkg.name)
-            Base.compilecache(pkg, sourcepath)
+            try
+                Base.compilecache(pkg, sourcepath)
+            catch
+            end
         end
     end
     nothing
