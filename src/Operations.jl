@@ -754,6 +754,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             version = ctx.env.pkg.version
         else
             entry = manifest_info(ctx.env, uuid)
+            entry === nothing && pkgerror("could not find uuid $uuid in manifest")
             name = entry.name
             if entry.tree_hash !== nothing
                 path = find_installed(name, uuid, entry.tree_hash)
