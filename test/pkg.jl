@@ -671,6 +671,23 @@ end
     end end end
 end
 
+@testset "canonicalized relative paths in manifest" begin
+    mktempdir() do tmp; cd(tmp) do
+        write("Manifest.toml",
+            """
+            [[Foo]]
+            path = "bar/Foo"
+            uuid = "824dc81a-29a7-11e9-3958-fba342a32644"
+            version = "0.1.0"
+            """)
+        manifest = Pkg.Types.read_manifest("Manifest.toml")
+        package = manifest[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
+        @test package.path == (Sys.iswindows() ? "bar\\Foo" : "bar/Foo")
+        Pkg.Types.write_manifest(manifest, "Manifest.toml")
+        @test occursin("path = \"bar/Foo\"", read("Manifest.toml", String))
+    end end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
