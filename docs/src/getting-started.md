@@ -126,7 +126,7 @@ We can see `tutorial` now contains `Example` as a dependency.
 
 Say we are working on `Example` and feel it needs new functionality.
 How can we modify the source code?
-We can use `develop` to set up a git clone of the `Example` package.
+We can use `develop` to set up a copy of the `Example` package.
 
 ```
 (tutorial) pkg> develop --local Example
@@ -150,7 +150,7 @@ tutorial
 ```
 
 Instead of loading a registered version of `Example`,
-Julia will load the source code contained in `tutorial/dev/Example`.
+Julia will directly load the source code in `tutorial/dev/Example`.
 
 Lets try it out.
 First we modify the file at `tutorial/dev/Example/src/Example.jl` and add a simple function:
