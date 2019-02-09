@@ -1192,9 +1192,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             continue
         end
         sandbox(source_path, testdir(source_path)) do
-            if !Types.is_project_uuid(ctx.env, pkg.uuid)
-                Display.status(ctx, mode=PKGMODE_MANIFEST)
-            end
+            Display.status(Context(), mode=PKGMODE_MANIFEST)
             try
                 run(gen_test_code(testfile(source_path); coverage=coverage))
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
