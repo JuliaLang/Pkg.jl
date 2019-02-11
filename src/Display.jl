@@ -45,7 +45,7 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
             end
             if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
                 # also look for pkg's deps
-                info = manifest_info(ctx.env, pkg.uuid)
+                info = manifest_info(ctx, pkg.uuid)
                 for uuid in values(info.deps)
                     if uuid == entry.uuid
                         return true
@@ -60,8 +60,8 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
     if !use_as_api
         pkg = ctx.env.pkg
         if pkg !== nothing
-           printstyled("Project "; color=Base.info_color(), bold=true)
-           println(pkg.name, " v", pkg.version)
+           printstyled(ctx.io, "Project "; color=Base.info_color(), bold=true)
+           println(ctx.io, pkg.name, " v", pkg.version)
         end
     end
     if diff
@@ -121,7 +121,7 @@ function print_project_diff(ctx::Context, env0::EnvCache, env1::EnvCache)
     pm1 = Dict(uuid => entry for (uuid, entry) in env1.manifest if (uuid in values(env1.project.deps)))
     diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm0, pm1))
     if isempty(diff)
-        printstyled(color = color_dark, " [no changes]\n")
+        printstyled(ctx.io, color = color_dark, " [no changes]\n")
     else
         print_diff(ctx, diff)
     end
@@ -131,7 +131,7 @@ function print_manifest_diff(ctx::Context, env₀::EnvCache, env₁::EnvCache)
     diff = manifest_diff(ctx, env₀.manifest, env₁.manifest)
     diff = filter!(x->x.old != x.new, diff)
     if isempty(diff)
-        printstyled(color = color_dark, " [no changes]\n")
+        printstyled(ctx.io, color = color_dark, " [no changes]\n")
     else
         print_diff(ctx, diff)
     end
@@ -227,14 +227,13 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry}, status=false)
     end
     if isempty(diff)
         str = ctx.env.git === nothing ? "  (empty environment)\n" : "  (no changes since last commit)\n"
-        printstyled(str, color = color_dark)
+        printstyled(io, str, color = color_dark)
     end
     if status && some_packages_not_downloaded
         @warn "Some packages (indicated with a red arrow) are not downloaded, use `instantiate` to instantiate the current environment"
     end
 end
-# TODO: Use the Context stream
-print_diff(ctx::Context, diff::Vector{DiffEntry}, status=false) = print_diff(stdout, ctx, diff, status)
+print_diff(ctx::Context, diff::Vector{DiffEntry}, status=false) = print_diff(ctx.io, ctx, diff, status)
 
 function name_ver_info(entry::PackageEntry)
     entry.name, VerInfo(

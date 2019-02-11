@@ -309,6 +309,7 @@ end
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
+    io::IO = stdout
     preview::Bool = false
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
@@ -363,13 +364,13 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         names,)
 end
 
-project_uuid(env::EnvCache) = env.pkg === nothing ? nothing : env.pkg.uuid
-collides_with_project(env::EnvCache, pkg::PackageSpec) =
-    is_project_name(env, pkg.name) || is_project_uuid(env, pkg.uuid)
-is_project(env::EnvCache, pkg::PackageSpec) = is_project_uuid(env, pkg.uuid)
-is_project_name(env::EnvCache, name::String) =
-    env.pkg !== nothing && env.pkg.name == name
-is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
+project_uuid(ctx::Context) = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid
+collides_with_project(ctx::Context, pkg::PackageSpec) =
+    is_project_name(ctx, pkg.name) || is_project_uuid(ctx, pkg.uuid)
+is_project(ctx::Context, pkg::PackageSpec) = is_project_uuid(ctx, pkg.uuid)
+is_project_name(ctx::Context, name::String) =
+    ctx.env.pkg !== nothing && ctx.env.pkg.name == name
+is_project_uuid(ctx::Context, uuid::UUID) = project_uuid(ctx) == uuid
 
 ###########
 # Context #
@@ -509,14 +510,14 @@ end
 casesensitive_isdir(dir::String) =
     isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
 
-function git_checkout_latest!(repo_path::AbstractString)
+function git_checkout_latest!(ctx::Context, repo_path::AbstractString)
     LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
         rev = LibGit2.isattached(repo) ?
             LibGit2.branch(repo) :
             string(LibGit2.GitHash(LibGit2.head(repo)))
         gitobject, isbranch = nothing, nothing
         Base.shred!(LibGit2.CachedCredentials()) do creds
-            gitobject, isbranch = get_object_branch(repo, rev, creds)
+            gitobject, isbranch = get_object_branch(ctx, repo, rev, creds)
         end
         try
             LibGit2.transact(repo) do r
@@ -550,7 +551,8 @@ function canonical_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool; defau
         if !isfile(joinpath(dev_path, "src", pkg.name * ".jl"))
             pkgerror("Path `$(dev_path)` exists but it does not contain `src/$(pkg.name).jl")
         end
-        @info "Path `$(dev_path)` exists and looks like the correct package, using existing path"
+        println(ctx.io,
+                "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
         default !== nothing && rm(default; force=true, recursive=true)
         pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
         parse_package!(ctx, pkg, dev_path)
@@ -562,16 +564,16 @@ function canonical_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool; defau
     end
 end
 
-function fresh_clone(pkg::PackageSpec)
+function fresh_clone(ctx::Context, pkg::PackageSpec)
     clone_path = joinpath(depots1(), "clones")
     mkpath(clone_path)
     repo_path = joinpath(clone_path, string(hash(pkg.repo.url), "_full"))
     # make sure you have a fresh clone
     repo = nothing
     try
-        repo = GitTools.ensure_clone(repo_path, pkg.repo.url)
+        repo = GitTools.ensure_clone(ctx, repo_path, pkg.repo.url)
         Base.shred!(LibGit2.CachedCredentials()) do creds
-            GitTools.fetch(repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
+            GitTools.fetch(ctx, repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
         end
     finally
         repo isa LibGit2.GitRepo && LibGit2.close(repo)
@@ -579,7 +581,7 @@ function fresh_clone(pkg::PackageSpec)
     # Copy the repo to a temporary place and check out the rev
     temp_repo = mktempdir()
     cp(repo_path, temp_repo; force=true)
-    git_checkout_latest!(temp_repo)
+    git_checkout_latest!(ctx, temp_repo)
     return temp_repo
 end
 
@@ -590,12 +592,12 @@ function remote_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool)
     # this avoids having to reclone it from scratch.
     if pkg.repo.url === nothing # specified by name or uuid
         if !has_uuid(pkg)
-            registry_resolve!(ctx.env, pkg)
-            ensure_resolved(ctx.env, [pkg]; registry=true)
+            registry_resolve!(ctx, pkg)
+            ensure_resolved(ctx, [pkg]; registry=true)
         end
-        _, pkg.repo.url = Types.registered_info(ctx.env, pkg.uuid, "repo")[1] #TODO look into [1]
+        _, pkg.repo.url = Types.registered_info(ctx, pkg.uuid, "repo")[1] #TODO look into [1]
     end
-    temp_clone = fresh_clone(pkg)
+    temp_clone = fresh_clone(ctx, pkg)
     # parse repo to determine dev path
     parse_package!(ctx, pkg, temp_clone)
     canonical_dev_path!(ctx, pkg, shared; default=temp_clone)
@@ -623,18 +625,18 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
 end
 
 clone_path(url) = joinpath(depots1(), "clones", string(hash(url)))
-function clone_path!(url)
+function clone_path!(ctx::Context, url)
     clone = clone_path(url)
     mkpath(dirname(clone))
     Base.shred!(LibGit2.CachedCredentials()) do creds
-        LibGit2.with(GitTools.ensure_clone(clone, url; isbare=true, credentials=creds)) do repo
-            GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
+        LibGit2.with(GitTools.ensure_clone(ctx, clone, url; isbare=true, credentials=creds)) do repo
+            GitTools.fetch(ctx, repo; refspecs=refspecs, credentials=creds)
         end
     end
     return clone
 end
 
-function guess_rev(repo_path)::String
+function guess_rev(ctx::Context, repo_path)::String
     rev = nothing
     LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
         rev = LibGit2.isattached(repo) ?
@@ -642,7 +644,7 @@ function guess_rev(repo_path)::String
             string(LibGit2.GitHash(LibGit2.head(repo)))
         gitobject, isbranch = nothing, nothing
         Base.shred!(LibGit2.CachedCredentials()) do creds
-            gitobject, isbranch = get_object_branch(repo, rev, creds)
+            gitobject, isbranch = get_object_branch(ctx, repo, rev, creds)
         end
         LibGit2.with(gitobject) do object
             rev = isbranch ? rev : string(LibGit2.GitHash(gitobject))
@@ -651,11 +653,11 @@ function guess_rev(repo_path)::String
     return rev
 end
 
-function with_git_tree(fn, repo_path::String, rev::String)
+function with_git_tree(fn, ctx::Context, repo_path::String, rev::String)
     gitobject = nothing
     Base.shred!(LibGit2.CachedCredentials()) do creds
         LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
-            gitobject, isbranch = get_object_branch(repo, rev, creds)
+            gitobject, isbranch = get_object_branch(ctx, repo, rev, creds)
             LibGit2.with(LibGit2.peel(LibGit2.GitTree, gitobject)) do git_tree
                 @assert git_tree isa LibGit2.GitTree
                 return applicable(fn, repo, git_tree) ?
@@ -666,9 +668,9 @@ function with_git_tree(fn, repo_path::String, rev::String)
     end
 end
 
-function repo_checkout(repo_path, rev)
+function repo_checkout(ctx::Context, repo_path, rev)
     project_path = mktempdir()
-    with_git_tree(repo_path, rev) do repo, git_tree
+    with_git_tree(ctx, repo_path, rev) do repo, git_tree
         _project_path = project_path # https://github.com/JuliaLang/julia/issues/30048
         GC.@preserve _project_path begin
             opts = LibGit2.CheckoutOptions(
@@ -681,19 +683,19 @@ function repo_checkout(repo_path, rev)
     return project_path
 end
 
-function tree_hash(repo_path, rev)
-    with_git_tree(repo_path, rev) do git_tree
+function tree_hash(ctx::Context, repo_path, rev)
+    with_git_tree(ctx, repo_path, rev) do git_tree
         return SHA1(string(LibGit2.GitHash(git_tree))) # TODO can it be just SHA1?
     end
 end
 
-function instantiate_pkg_repo!(pkg::PackageSpec, cached_repo::Union{Nothing,String}=nothing)
+function instantiate_pkg_repo!(ctx::Context, pkg::PackageSpec, cached_repo::Union{Nothing,String}=nothing)
     pkg.special_action = PKGSPEC_REPO_ADDED
-    clone = clone_path!(pkg.repo.url)
-    pkg.tree_hash = tree_hash(clone, pkg.repo.rev)
+    clone = clone_path!(ctx, pkg.repo.url)
+    pkg.tree_hash = tree_hash(ctx, clone, pkg.repo.rev)
     version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.tree_hash)
     if cached_repo === nothing
-        cached_repo = repo_checkout(clone, string(pkg.tree_hash))
+        cached_repo = repo_checkout(ctx, clone, string(pkg.tree_hash))
     end
     isdir(version_path) && return false
     mkpath(version_path)
@@ -705,15 +707,15 @@ end
 function resolve_repo_add!(ctx::Context, pkg::PackageSpec)
     cached_repo = nothing
     if pkg.repo.url !== nothing
-        clone_path = clone_path!(pkg.repo.url)
-        pkg.repo.rev = something(pkg.repo.rev, guess_rev(clone_path))
-        cached_repo = repo_checkout(clone_path, pkg.repo.rev)
+        clone_path = clone_path!(ctx, pkg.repo.url)
+        pkg.repo.rev = something(pkg.repo.rev, guess_rev(ctx, clone_path))
+        cached_repo = repo_checkout(ctx, clone_path, pkg.repo.rev)
         package = parse_package!(ctx, pkg, cached_repo)
     elseif pkg.name !== nothing || pkg.uuid !== nothing
         pkg.repo.rev === nothing && pkgerror("Rev must be specified")
-        registry_resolve!(ctx.env, pkg)
-        ensure_resolved(ctx.env, [pkg]; registry=true)
-        _, pkg.repo.url = Types.registered_info(ctx.env, pkg.uuid, "repo")[1]
+        registry_resolve!(ctx, pkg)
+        ensure_resolved(ctx, [pkg]; registry=true)
+        _, pkg.repo.url = Types.registered_info(ctx, pkg.uuid, "repo")[1]
     else
         @assert false "Package should be specified by name, URL, or UUID" # TODO
     end
@@ -723,14 +725,14 @@ end
 function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     cached_repo = resolve_repo_add!(ctx, pkg)
     # if pinned, return early
-    entry = manifest_info(ctx.env, pkg.uuid)
+    entry = manifest_info(ctx, pkg.uuid)
     if (entry !== nothing && entry.pinned)
         cached_repo !== nothing && rm(cached_repo; recursive=true, force=true)
         pkg.tree_hash = entry.tree_hash
         return false
     end
     # instantiate repo
-    return instantiate_pkg_repo!(pkg, cached_repo)
+    return instantiate_pkg_repo!(ctx, pkg, cached_repo)
 end
 
 """
@@ -767,14 +769,14 @@ function parse_package!(ctx, pkg, project_path)
                 pkg.name = m.captures[1]
             end
         end
-        reg_uuids = registered_uuids(env, pkg.name)
+        reg_uuids = registered_uuids(ctx, pkg.name)
         is_registered = !isempty(reg_uuids)
         if !is_registered
             # This is an unregistered old style package, give it a UUID and a version
             if !has_uuid(pkg)
                 uuid_unreg_pkg = UUID(0xa9a2672e746f11e833ef119c5b888869)
                 pkg.uuid = uuid5(uuid_unreg_pkg, pkg.name)
-                @info "Assigning UUID $(pkg.uuid) to $(pkg.name)"
+                println(ctx.io, "Assigning UUID $(pkg.uuid) to $(pkg.name)")
             end
         else
             @assert length(reg_uuids) == 1
@@ -783,10 +785,10 @@ function parse_package!(ctx, pkg, project_path)
     end
 end
 
-get_object_branch(repo, rev::SHA1, creds) =
-    get_object_branch(repo, string(rev), creds)
+get_object_branch(ctx::Context, repo, rev::SHA1, creds) =
+    get_object_branch(ctx, repo, string(rev), creds)
 
-function get_object_branch(repo, rev, creds)
+function get_object_branch(ctx::Context, repo, rev, creds)
     gitobject = nothing
     isbranch = false
     try
@@ -800,7 +802,7 @@ function get_object_branch(repo, rev, creds)
             gitobject = LibGit2.GitObject(repo, rev)
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
-            GitTools.fetch(repo; refspecs=refspecs, credentials=creds)
+            GitTools.fetch(ctx, repo; refspecs=refspecs, credentials=creds)
             try
                 gitobject = LibGit2.GitObject(repo, rev)
             catch err
@@ -816,20 +818,20 @@ end
 # Resolving packages from name or uuid #
 ########################################
 
-function project_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
+function project_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
-        if has_uuid(pkg) && !has_name(pkg) && Types.is_project_uuid(env, pkg.uuid)
-            pkg.name = env.pkg.name
+        if has_uuid(pkg) && !has_name(pkg) && Types.is_project_uuid(ctx, pkg.uuid)
+            pkg.name = ctx.env.pkg.name
         end
-        if has_name(pkg) && !has_uuid(pkg) && Types.is_project_name(env, pkg.name)
-            pkg.uuid = env.pkg.uuid
+        if has_name(pkg) && !has_uuid(pkg) && Types.is_project_name(ctx, pkg.name)
+            pkg.uuid = ctx.env.pkg.uuid
         end
     end
 end
 
 # Disambiguate name/uuid package specifications using project info.
-function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
-    uuids = env.project.deps
+function project_deps_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
+    uuids = ctx.env.project.deps
     names = Dict(uuid => name for (name, uuid) in uuids)
     for pkg in pkgs
         pkg.mode == PKGMODE_PROJECT || continue
@@ -843,10 +845,10 @@ function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
 end
 
 # Disambiguate name/uuid package specifications using manifest info.
-function manifest_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
+function manifest_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     uuids = Dict{String,Vector{UUID}}()
     names = Dict{UUID,String}()
-    for (uuid, entry) in env.manifest
+    for (uuid, entry) in ctx.env.manifest
         push!(get!(uuids, entry.name, UUID[]), uuid)
         names[uuid] = entry.name # can be duplicate but doesn't matter
     end
@@ -862,21 +864,21 @@ function manifest_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
 end
 
 # Disambiguate name/uuid package specifications using registry info.
-registry_resolve!(env::EnvCache, pkg::PackageSpec) = registry_resolve!(env, [pkg])
-function registry_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
+registry_resolve!(ctx::Context, pkg::PackageSpec) = registry_resolve!(ctx, [pkg])
+function registry_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
     # collect all names and uuids since we're looking anyway
     names = String[pkg.name for pkg in pkgs if has_name(pkg)]
     uuids = UUID[pkg.uuid for pkg in pkgs if has_uuid(pkg)]
-    find_registered!(env, names, uuids)
+    find_registered!(ctx, names, uuids)
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            pkg.uuid = registered_uuid(env, pkg.name)
+            pkg.uuid = registered_uuid(ctx, pkg.name)
         end
         if has_uuid(pkg) && !has_name(pkg)
-            pkg.name = registered_name(env, pkg.uuid)
+            pkg.name = registered_name(ctx, pkg.uuid)
         end
     end
     return pkgs
@@ -898,12 +900,12 @@ function stdlib_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
 end
 
 # Ensure that all packages are fully resolved
-function ensure_resolved(env::EnvCache,
+function ensure_resolved(ctx::Context,
     pkgs::AbstractVector{PackageSpec};
     registry::Bool=false,)::Nothing
     unresolved = Dict{String,Vector{UUID}}()
     for name in [pkg.name for pkg in pkgs if !has_uuid(pkg)]
-        uuids = [uuid for (uuid, entry) in env.manifest if entry.name == name]
+        uuids = [uuid for (uuid, entry) in ctx.env.manifest if entry.name == name]
         sort!(uuids, by=uuid -> uuid.value)
         unresolved[name] = uuids
     end
@@ -949,9 +951,9 @@ const DEFAULT_REGISTRIES =
                               uuid = UUID("23338594-aafe-5451-b93e-139f81909106"),
                               url = "https://github.com/JuliaRegistries/General.git")]
 
-function clone_default_registries()
+function clone_default_registries(ctx::Context)
     if isempty(collect_registries()) # only clone if there are no installed registries
-        printpkgstyle(stdout, :Cloning, "default registries into $(pathrepr(depots1()))")
+        printpkgstyle(ctx, :Cloning, "default registries into $(pathrepr(depots1()))")
         clone_or_cp_registries(DEFAULT_REGISTRIES)
     end
 end
@@ -1005,7 +1007,10 @@ end
 clone_or_cp_registries(regs::Vector{RegistrySpec}, depot::String=depots1()) =
     clone_or_cp_registries(Context(), regs, depot)
 function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot::String=depots1())
-    ctx.preview && (@info("Skipping adding registries in preview mode"); return nothing)
+    if ctx.preview
+        println(ctx.io, "Skipping adding registries in preview mode")
+        return nothing
+    end
     populate_known_registries_with_urls!(regs)
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
@@ -1014,11 +1019,11 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
         # clone to tmpdir first
         tmp = mktempdir()
         if reg.path !== nothing # copy from local source
-            printpkgstyle(stdout, :Copying, "registry from `$(Base.contractuser(reg.path))`")
+            printpkgstyle(ctx, :Copying, "registry from `$(Base.contractuser(reg.path))`")
             cp(reg.path, tmp; force=true)
         elseif reg.url !== nothing # clone from url
             Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(GitTools.clone(reg.url, tmp; header = "registry from $(repr(reg.url))",
+                LibGit2.with(GitTools.clone(ctx, reg.url, tmp; header = "registry from $(repr(reg.url))",
                     credentials = creds)) do repo
                 end
             end
@@ -1038,7 +1043,8 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
         if isdir_windows_workaround(regpath)
             existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
             if registry["uuid"] == existing_registry["uuid"]
-                @info("registry `$(registry["name"])` already exist in `$(Base.contractuser(regpath))`.")
+                println(ctx.io,
+                        "registry `$(registry["name"])` already exist in `$(Base.contractuser(regpath))`.")
             else
                 throw(PkgError("registry `$(registry["name"])=\"$(registry["uuid"])\"` conflicts with " *
                     "existing registry `$(existing_registry["name"])=\"$(existing_registry["uuid"])\"`. " *
@@ -1047,7 +1053,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             end
         else
             cp(tmp, regpath)
-            printpkgstyle(stdout, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
+            printpkgstyle(ctx, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
         end
         # Clean up
         Base.rm(tmp; recursive=true, force=true)
@@ -1079,7 +1085,8 @@ function verify_registry(registry::Dict{String, Any})
 end
 
 # Search for the input registries among installed ones
-function find_installed_registries(needles::Vector{RegistrySpec},
+function find_installed_registries(ctx::Context,
+                                   needles::Vector{RegistrySpec},
                                    haystack::Vector{RegistrySpec}=collect_registries())
     output = RegistrySpec[]
     for needle in needles
@@ -1105,9 +1112,9 @@ function find_installed_registries(needles::Vector{RegistrySpec},
             end
         end
         if !found
-            @info("registry `$(needle.name === nothing ? needle.uuid :
-                               needle.uuid === nothing ? needle.name :
-                               "$(needle.name)=$(needle.uuid)")` not found.")
+            println(ctx.io, "registry `$(needle.name === nothing ? needle.uuid :
+                                         needle.uuid === nothing ? needle.name :
+                                         "$(needle.name)=$(needle.uuid)")` not found.")
         end
     end
     return output
@@ -1115,9 +1122,12 @@ end
 
 # entry point for `registry rm`
 function remove_registries(ctx::Context, regs::Vector{RegistrySpec})
-    ctx.preview && (@info("skipping removing registries in preview mode"); return nothing)
-    for registry in find_installed_registries(regs)
-        printpkgstyle(stdout, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
+    if ctx.preview
+        println(ctx.io, "skipping removing registries in preview mode")
+        return nothing
+    end
+    for registry in find_installed_registries(ctx, regs)
+        printpkgstyle(ctx, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         rm(registry.path; force=true, recursive=true)
     end
     return nothing
@@ -1128,8 +1138,11 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                            force::Bool=false)
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
-    ctx.preview && (@info("skipping updating registries in preview mode"); return nothing)
-    for reg in unique(r -> r.uuid, find_installed_registries(regs))
+    if ctx.preview
+        println(ctx.io, "skipping updating registries in preview mode")
+        return nothing
+    end
+    for reg in unique(r -> r.uuid, find_installed_registries(ctx, regs))
         if isdir(joinpath(reg.path, ".git"))
             regpath = pathrepr(reg.path)
             printpkgstyle(ctx, :Updating, "registry at " * regpath)
@@ -1153,7 +1166,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                 end
                 branch = LibGit2.headname(repo)
                 try
-                    GitTools.fetch(repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
+                    GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                 catch e
                     e isa PkgError || rethrow()
                     push!(errors, (reg.path, "failed to fetch from repo"))
@@ -1194,30 +1207,30 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
     return
 end
 
-find_registered!(env::EnvCache, uuids::Vector{UUID}) =
-    find_registered!(env, String[], uuids)
+find_registered!(ctx::Context, uuids::Vector{UUID}) =
+    find_registered!(ctx, String[], uuids)
 # Lookup package names & uuids in a single pass through registries
-function find_registered!(env::EnvCache,
+function find_registered!(ctx::Context,
     names::Vector{String},
     uuids::Vector{UUID}=UUID[]
 )::Nothing
     # only look if there's something new to see
-    names = filter(name -> !haskey(env.uuids, name), names)
-    uuids = filter(uuid -> !haskey(env.paths, uuid), uuids)
+    names = filter(name -> !haskey(ctx.env.uuids, name), names)
+    uuids = filter(uuid -> !haskey(ctx.env.paths, uuid), uuids)
     isempty(names) && isempty(uuids) && return
 
     # since we're looking anyway, look for everything
     save(name::String) =
-        name in names || haskey(env.uuids, name) || push!(names, name)
+        name in names || haskey(ctx.env.uuids, name) || push!(names, name)
     save(uuid::UUID) =
-        uuid in uuids || haskey(env.paths, uuid) || push!(uuids, uuid)
+        uuid in uuids || haskey(ctx.env.paths, uuid) || push!(uuids, uuid)
 
     # lookup any dependency in the project file
-    for (name, uuid) in env.project.deps
+    for (name, uuid) in ctx.env.project.deps
         save(name); save(uuid)
     end
     # lookup anything mentioned in the manifest file
-    for (uuid, entry) in env.manifest
+    for (uuid, entry) in ctx.env.manifest
         save(uuid)
         save(entry.name)
         for (uuid, name) in entry.deps
@@ -1228,24 +1241,24 @@ function find_registered!(env::EnvCache,
     # if there's still nothing to look for, return early
     isempty(names) && isempty(uuids) && return
     # initialize env entries for names and uuids
-    for name in names; env.uuids[name] = UUID[]; end
-    for uuid in uuids; env.paths[uuid] = String[]; end
-    for uuid in uuids; env.names[uuid] = String[]; end
+    for name in names; ctx.env.uuids[name] = UUID[]; end
+    for uuid in uuids; ctx.env.paths[uuid] = String[]; end
+    for uuid in uuids; ctx.env.names[uuid] = String[]; end
 
     # note: empty vectors will be left for names & uuids that aren't found
-    clone_default_registries()
+    clone_default_registries(ctx)
     for registry in collect_registries()
         data = read_registry(joinpath(registry.path, "Registry.toml"))
         for (_uuid, pkgdata) in data["packages"]
               uuid = UUID(_uuid)
               name = pkgdata["name"]
               path = abspath(registry.path, pkgdata["path"])
-              push!(get!(env.uuids, name, UUID[]), uuid)
-              push!(get!(env.paths, uuid, String[]), path)
-              push!(get!(env.names, uuid, String[]), name)
+              push!(get!(ctx.env.uuids, name, UUID[]), uuid)
+              push!(get!(ctx.env.paths, uuid, String[]), path)
+              push!(get!(ctx.env.names, uuid, String[]), name)
         end
     end
-    for d in (env.uuids, env.paths, env.names)
+    for d in (ctx.env.uuids, ctx.env.paths, ctx.env.names)
         for (k, v) in d
             unique!(v)
         end
@@ -1253,32 +1266,32 @@ function find_registered!(env::EnvCache,
 end
 
 # Get registered uuids associated with a package name
-function registered_uuids(env::EnvCache, name::String)::Vector{UUID}
-    find_registered!(env, [name], UUID[])
-    return unique(env.uuids[name])
+function registered_uuids(ctx::Context, name::String)::Vector{UUID}
+    find_registered!(ctx, [name], UUID[])
+    return unique(ctx.env.uuids[name])
 end
 
 # Get registered paths associated with a package uuid
-function registered_paths(env::EnvCache, uuid::UUID)::Vector{String}
-    find_registered!(env, String[], [uuid])
-    return env.paths[uuid]
+function registered_paths(ctx::Context, uuid::UUID)::Vector{String}
+    find_registered!(ctx, String[], [uuid])
+    return ctx.env.paths[uuid]
 end
 
 #Get registered names associated with a package uuid
-function registered_names(env::EnvCache, uuid::UUID)::Vector{String}
-    find_registered!(env, String[], [uuid])
-    return env.names[uuid]
+function registered_names(ctx::Context, uuid::UUID)::Vector{String}
+    find_registered!(ctx, String[], [uuid])
+    return ctx.env.names[uuid]
 end
 
 # Determine a single UUID for a given name, prompting if needed
-function registered_uuid(env::EnvCache, name::String)::Union{Nothing,UUID}
-    uuids = registered_uuids(env, name)
+function registered_uuid(ctx::Context, name::String)::Union{Nothing,UUID}
+    uuids = registered_uuids(ctx, name)
     length(uuids) == 0 && return nothing
     length(uuids) == 1 && return uuids[1]
     choices::Vector{String} = []
     choices_cache::Vector{Tuple{UUID,String}} = []
     for uuid in uuids
-        values = registered_info(env, uuid, "repo")
+        values = registered_info(ctx, uuid, "repo")
         for value in values
             depot = "(unknown)"
             for d in depots()
@@ -1297,7 +1310,7 @@ function registered_uuid(env::EnvCache, name::String)::Union{Nothing,UUID}
         menu = RadioMenu(choices)
         choice = request("There are multiple registered `$name` packages, choose one:", menu)
         choice == -1 && return nothing
-        env.paths[choices_cache[choice][1]] = [choices_cache[choice][2]]
+        ctx.env.paths[choices_cache[choice][1]] = [choices_cache[choice][2]]
         return choices_cache[choice][1]
     else
         pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
@@ -1305,11 +1318,11 @@ function registered_uuid(env::EnvCache, name::String)::Union{Nothing,UUID}
 end
 
 # Determine current name for a given package UUID
-function registered_name(env::EnvCache, uuid::UUID)::Union{Nothing,String}
-    names = registered_names(env, uuid)
+function registered_name(ctx::Context, uuid::UUID)::Union{Nothing,String}
+    names = registered_names(ctx, uuid)
     length(names) == 0 && return nothing
     length(names) == 1 && return names[1]
-    values = registered_info(env, uuid, "name")
+    values = registered_info(ctx, uuid, "name")
     name = nothing
     for value in values
         name  == nothing && (name = value[2])
@@ -1319,9 +1332,9 @@ function registered_name(env::EnvCache, uuid::UUID)::Union{Nothing,String}
 end
 
 # Return most current package info for a registered UUID
-function registered_info(env::EnvCache, uuid::UUID, key::String)
-    haskey(env.paths, uuid) || find_registered!(env, [uuid])
-    paths = env.paths[uuid]
+function registered_info(ctx::Context, uuid::UUID, key::String)
+    haskey(ctx.env.paths, uuid) || find_registered!(ctx, [uuid])
+    paths = ctx.env.paths[uuid]
     isempty(paths) && pkgerror("`$uuid` is not registered")
     values = []
     for path in paths
@@ -1333,10 +1346,10 @@ function registered_info(env::EnvCache, uuid::UUID, key::String)
 end
 
 # Find package by UUID in the manifest file
-manifest_info(env::EnvCache, uuid::Nothing) = nothing
-function manifest_info(env::EnvCache, uuid::UUID)::Union{PackageEntry,Nothing}
+manifest_info(ctx::Context, uuid::Nothing) = nothing
+function manifest_info(ctx::Context, uuid::UUID)::Union{PackageEntry,Nothing}
     #any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
-    return get(env.manifest, uuid, nothing)
+    return get(ctx.env.manifest, uuid, nothing)
 end
 
 # TODO: redirect to ctx stream
@@ -1349,7 +1362,7 @@ end
 
 # TODO: use ctx specific context
 function printpkgstyle(ctx::Context, cmd::Symbol, text::String, ignore_indent::Bool=false)
-    printpkgstyle(stdout, cmd, text)
+    printpkgstyle(ctx.io, cmd, text)
 end
 
 

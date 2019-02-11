@@ -2,7 +2,7 @@ module Registry
 
 import ..Pkg, ..Types, ..API
 using ..Pkg: depots1
-using ..Types: RegistrySpec, Context
+using ..Types: RegistrySpec, Context, Context!
 
 
 """
@@ -21,12 +21,13 @@ Pkg.Registry.add(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.git"))
 ```
 """
-function add end
-add(reg::Union{String,RegistrySpec}) = add([reg])
-add(regs::Vector{String}) = add([RegistrySpec(name = name) for name in regs])
-add(regs::Vector{RegistrySpec}) = add(Context(), regs)
-add(ctx::Context, regs::Vector{RegistrySpec}) =
+add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
+add(regs::Vector{String}; kwargs...) = add([RegistrySpec(name = name) for name in regs]; kwargs...)
+add(regs::Vector{RegistrySpec}; kwargs...) = add(Context(), regs; kwargs...)
+function add(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
+    Context!(ctx; kwargs...)
     Types.clone_or_cp_registries(ctx, regs)
+end
 
 """
     Pkg.Registry.rm(registry::String)
@@ -43,11 +44,13 @@ Pkg.Registry.rm("General")
 Pkg.Registry.rm(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 ```
 """
-function rm end
-rm(reg::Union{String,RegistrySpec}) = rm([reg])
-rm(regs::Vector{String}) = rm([RegistrySpec(name = name) for name in regs])
-rm(regs::Vector{RegistrySpec}) = rm(Context(), regs)
-rm(ctx::Context, regs::Vector{RegistrySpec}) = Types.remove_registries(ctx, regs)
+rm(reg::Union{String,RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
+rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
+rm(regs::Vector{RegistrySpec}; kwargs...) = rm(Context(), regs; kwargs...)
+function rm(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
+    Context!(ctx; kwargs...)
+    Types.remove_registries(ctx, regs)
+end
 
 """
     Pkg.Registry.update()
@@ -67,13 +70,16 @@ Pkg.Registry.update("General")
 Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 ```
 """
-function update end
-update(reg::Union{String,RegistrySpec}) = update([reg])
-update(regs::Vector{String}) = update([RegistrySpec(name = name) for name in regs])
-update(regs::Vector{RegistrySpec} = Types.collect_registries(depots1())) =
-    update(Context(), regs)
-update(ctx::Context, regs::Vector{RegistrySpec} = Types.collect_registries(depots1())) =
+update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
+update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
+update(regs::Vector{RegistrySpec} = Types.collect_registries(depots1()); kwargs...) =
+    update(Context(), regs; kwargs...)
+function update(ctx::Context,
+                regs::Vector{RegistrySpec} = Types.collect_registries(depots1());
+                kwargs...)
+    Context!(ctx; kwargs...)
     Types.update_registries(ctx, regs; force=true)
+end
 
 """
     Pkg.Registry.status()
@@ -88,18 +94,20 @@ Display information about available registries.
 Pkg.Registry.status()
 ```
 """
-function status()
+status(; kwargs...) = status(Context(); kwargs...)
+function status(ctx::Context; kwargs...)
+    Context!(ctx; kwargs...)
     regs = Types.collect_registries()
     regs = unique(r -> r.uuid, regs) # Maybe not?
-    Types.printpkgstyle(stdout, Symbol("Registry Status"), "")
+    Types.printpkgstyle(ctx, Symbol("Registry Status"), "")
     if isempty(regs)
-        println("  (no registries found)")
+        println(ctx.io, "  (no registries found)")
     else
         for reg in regs
-            printstyled(" [$(string(reg.uuid)[1:8])]"; color = :light_black)
-            print(" $(reg.name)")
-            reg.url === nothing || print(" ($(reg.url))")
-            println()
+            printstyled(ctx.io, " [$(string(reg.uuid)[1:8])]"; color = :light_black)
+            print(ctx.io, " $(reg.name)")
+            reg.url === nothing || print(ctx.io, " ($(reg.url))")
+            println(ctx.io)
         end
     end
 end

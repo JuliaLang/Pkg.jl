@@ -9,6 +9,19 @@ function temp_pkg_dir(fn::Function;rm=true)
     local old_active_project
     local old_general_registry_url
     try
+        # Clone the registry only once
+        old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
+        generaldir = joinpath(@__DIR__, "registries", "General")
+        if !isdir(generaldir)
+            mkpath(generaldir)
+            Base.shred!(LibGit2.CachedCredentials()) do creds
+                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
+                                                "https://github.com/JuliaRegistries/General.git",
+                    generaldir, credentials = creds)) do repo
+                end
+            end
+        end
+
         old_load_path = copy(LOAD_PATH)
         old_depot_path = copy(DEPOT_PATH)
         old_home_project = Base.HOME_PROJECT[]
@@ -17,17 +30,6 @@ function temp_pkg_dir(fn::Function;rm=true)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        # Clone the registry only once
-        old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
-        generaldir = joinpath(@__DIR__, "registries", "General")
-        if !isdir(generaldir)
-            mkpath(generaldir)
-            Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(Pkg.GitTools.clone("https://github.com/JuliaRegistries/General.git",
-                    generaldir, credentials = creds)) do repo
-                end
-            end
-        end
         Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,

@@ -55,7 +55,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 
     new_git = handle_repos_develop!(ctx, pkgs, shared)
 
-    any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
+    any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
         pkgerror("Cannot `develop` package with the same name or uuid as the project")
 
     Operations.develop(ctx, pkgs, new_git; strict=strict, platform=platform)
@@ -91,12 +91,12 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
     # repo + unpinned -> name, uuid, repo.rev, repo.url, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    project_deps_resolve!(ctx.env, pkgs)
-    registry_resolve!(ctx.env, pkgs)
+    project_deps_resolve!(ctx, pkgs)
+    registry_resolve!(ctx, pkgs)
     stdlib_resolve!(ctx, pkgs)
-    ensure_resolved(ctx.env, pkgs, registry=true)
+    ensure_resolved(ctx, pkgs, registry=true)
 
-    any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
+    any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
         pkgerror("Cannot add package with the same name or uuid as the project")
 
     Operations.add(ctx, pkgs, new_git; strict=strict, platform=platform)
@@ -125,9 +125,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
 
-    project_deps_resolve!(ctx.env, pkgs)
-    manifest_resolve!(ctx.env, pkgs)
-    ensure_resolved(ctx.env, pkgs)
+    project_deps_resolve!(ctx, pkgs)
+    manifest_resolve!(ctx, pkgs)
+    ensure_resolved(ctx, pkgs)
 
     Operations.rm(ctx, pkgs)
     ctx.preview && preview_info()
@@ -149,7 +149,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     if update_registry
-        Types.clone_default_registries()
+        Types.clone_default_registries(ctx)
         Types.update_registries(ctx; force=true)
     end
     if isempty(pkgs)
@@ -163,9 +163,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             end
         end
     else
-        project_deps_resolve!(ctx.env, pkgs)
-        manifest_resolve!(ctx.env, pkgs)
-        ensure_resolved(ctx.env, pkgs)
+        project_deps_resolve!(ctx, pkgs)
+        manifest_resolve!(ctx, pkgs)
+        ensure_resolved(ctx, pkgs)
     end
     Operations.up(ctx, pkgs, level)
     ctx.preview && preview_info()
@@ -192,8 +192,8 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     end
 
     foreach(pkg -> pkg.mode = PKGMODE_PROJECT, pkgs)
-    project_deps_resolve!(ctx.env, pkgs)
-    ensure_resolved(ctx.env, pkgs)
+    project_deps_resolve!(ctx, pkgs)
+    ensure_resolved(ctx, pkgs)
     Operations.pin(ctx, pkgs)
     return
 end
@@ -201,7 +201,7 @@ end
 
 free(pkg::Union{AbstractString, PackageSpec}; kwargs...) = free([pkg]; kwargs...)
 free(pkgs::Vector{<:AbstractString}; kwargs...)          = free([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-free(pkgs::Vector{PackageSpec}; kwargs...)       = free(Context(), pkgs; kwargs...)
+free(pkgs::Vector{PackageSpec}; kwargs...)               = free(Context(), pkgs; kwargs...)
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
@@ -219,10 +219,10 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     end
 
     foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
-    manifest_resolve!(ctx.env, pkgs)
-    ensure_resolved(ctx.env, pkgs)
+    manifest_resolve!(ctx, pkgs)
+    ensure_resolved(ctx, pkgs)
 
-    find_registered!(ctx.env, UUID[pkg.uuid for pkg in pkgs])
+    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     Operations.free(ctx, pkgs)
     return
 end
@@ -245,10 +245,10 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         ctx.env.pkg === nothing && pkgerror("trying to test unnamed project") #TODO Allow this?
         push!(pkgs, ctx.env.pkg)
     else
-        project_resolve!(ctx.env, pkgs)
-        project_deps_resolve!(ctx.env, pkgs)
-        manifest_resolve!(ctx.env, pkgs)
-        ensure_resolved(ctx.env, pkgs)
+        project_resolve!(ctx, pkgs)
+        project_deps_resolve!(ctx, pkgs)
+        manifest_resolve!(ctx, pkgs)
+        ensure_resolved(ctx, pkgs)
     end
     Operations.test(ctx, pkgs; coverage=coverage, test_fn=test_fn, julia_args=julia_args, test_args=test_args)
     return
@@ -650,10 +650,10 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
             end
         end
     end
-    project_resolve!(ctx.env, pkgs)
+    project_resolve!(ctx, pkgs)
     foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
-    manifest_resolve!(ctx.env, pkgs)
-    ensure_resolved(ctx.env, pkgs)
+    manifest_resolve!(ctx, pkgs)
+    ensure_resolved(ctx, pkgs)
     Operations.build(ctx, pkgs, verbose)
 end
 
@@ -724,7 +724,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("manifest at $(ctx.env.manifest_file) does not exist")
     end
-    Operations.prune_manifest(ctx.env)
+    Operations.prune_manifest(ctx)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
         pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
@@ -744,8 +744,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         isdir(sourcepath) && continue
         # download repo at tree hash
         push!(new_git, pkg.uuid)
-        clonepath = Types.clone_path!(pkg.repo.url)
-        tmp_source = Types.repo_checkout(clonepath, string(pkg.tree_hash))
+        clonepath = Types.clone_path!(ctx, pkg.repo.url)
+        tmp_source = Types.repo_checkout(ctx, clonepath, string(pkg.tree_hash))
         mkpath(sourcepath)
         mv(tmp_source, sourcepath; force=true)
     end
@@ -761,14 +761,16 @@ status(pkg::Union{AbstractString,PackageSpec}; kwargs...) = status([pkg]; kwargs
 status(pkgs::Vector{<:AbstractString}; kwargs...) =
     status([check_package_name(pkg) for pkg in pkgs]; kwargs...)
 status(pkgs::Vector{PackageSpec}; kwargs...) = status(Context(), pkgs; kwargs...)
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT)
-    project_resolve!(ctx.env, pkgs)
-    project_deps_resolve!(ctx.env, pkgs)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
+                kwargs...)
+    Context!(ctx; kwargs...)
+    project_resolve!(ctx, pkgs)
+    project_deps_resolve!(ctx, pkgs)
     if mode === PKGMODE_MANIFEST
         foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
     end
-    manifest_resolve!(ctx.env, pkgs)
-    ensure_resolved(ctx.env, pkgs)
+    manifest_resolve!(ctx, pkgs)
+    ensure_resolved(ctx, pkgs)
     Pkg.Display.status(ctx, pkgs, diff=diff, mode=mode)
     return nothing
 end
@@ -782,18 +784,18 @@ function activate()
 end
 function _activate_dep(dep_name::AbstractString)
     Base.active_project() === nothing && return
-    env = nothing
+    ctx = nothing
     try
-        env = EnvCache()
+        ctx = Context()
     catch err
         err isa PkgError || rethrow()
         return
     end
-    uuid = get(env.project.deps, dep_name, nothing)
+    uuid = get(ctx.env.project.deps, dep_name, nothing)
     if uuid !== nothing
-        entry = manifest_info(env, uuid)
+        entry = manifest_info(ctx, uuid)
         if entry.path !== nothing
-            return joinpath(dirname(env.project_file), entry.path)
+            return joinpath(dirname(ctx.env.project_file), entry.path)
         end
     end
 end
