@@ -35,7 +35,7 @@ function printvalue(io::IO, value; sorted=false)
     elseif isa(value, AbstractString)
         Base.print(io, "\"$(escape_string(value))\"")
     elseif isa(value, DateTime)
-        Base.print(io, Dates.format(value, "YYYY-mm-ddTHH:MM:SS.sssZ"))
+        Base.print(io, Dates.format(value, dateformat"YYYY-mm-dd\THH:MM:SS.sss\Z"))
     else
         Base.print(io, value)
     end
