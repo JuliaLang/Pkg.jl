@@ -1135,7 +1135,17 @@ function sandbox(fn::Function, env_path::String, target_path::String)
 
         # Set up env
         isfile(target_project)  && cp(target_project, tmp_test_project)
-        isfile(target_manifest) && cp(target_manifest, tmp_test_manifest)
+        if isfile(target_manifest)
+            cp(target_manifest, tmp_test_manifest)
+            # Rewrite relative paths since the manifest is moved
+            manifest = Types.read_manifest(tmp_test_manifest)
+            for pkg in values(manifest)
+                if pkg.path !== nothing
+                    pkg.path = normpath(joinpath(target_path, pkg.path))
+                end
+            end
+            Types.write_manifest(manifest, tmp_test_manifest)
+        end
         with_temp_env(tmp) do
             Pkg.API.instantiate()
             Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=env_path)))
