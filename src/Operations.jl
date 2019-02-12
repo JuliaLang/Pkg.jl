@@ -175,7 +175,7 @@ function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
         end
         return Dict{String,UUID}()
     else
-        path = source_path(pkg)
+        path = project_rel_path(ctx, source_path(pkg))
         project_file = projectfile_path(path; strict=true)
         if project_file !== nothing
             project = read_project(project_file)
