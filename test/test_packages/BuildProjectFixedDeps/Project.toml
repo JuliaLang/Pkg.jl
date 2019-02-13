@@ -1,0 +1,7 @@
+name = "BuildProjectFixedDeps"
+uuid = "a9d53770-2f9b-11e9-234d-75f2cd7ebf28"
+version = "0.1.0"
+
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
