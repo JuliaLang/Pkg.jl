@@ -549,6 +549,24 @@ end
     end
 end
 
+@testset "fix deps when building project" begin
+    temp_pkg_dir() do project_path
+        Pkg.activate(project_path)
+        Pkg.add(PackageSpec(name="Example", rev = "master"))
+        @test isinstalled(TEST_PKG)
+        rm.(joinpath.(project_path, ["Project.toml","Manifest.toml"]))
+        Pkg.add(PackageSpec(name="Example", rev = "master")) # should not fail
+        @test isinstalled(TEST_PKG)
+    end
+end
+
+temp_pkg_dir() do project_path
+    dep_pkg = joinpath(@__DIR__, "test_packages", "BuildProjectFixedDeps")
+    Pkg.activate(dep_pkg)
+    Pkg.build()
+    @test isfile(joinpath(dep_pkg, build, "artifact"))
+end
+
 include("repl.jl")
 include("api.jl")
 
