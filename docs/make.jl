@@ -6,6 +6,7 @@ using Pkg
 include("generate.jl")
 
 makedocs(
+    format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == "true"),
     modules = [Pkg],
     sitename = "Pkg.jl",
     pages = Any[
