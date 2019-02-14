@@ -150,12 +150,13 @@ end
 end
 
 @testset "Pkg.add" begin
+    exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID of Example.jl
     # Add by version should override add by repo
     temp_pkg_dir() do project_path; with_temp_env() do env_path
         Pkg.add(Pkg.PackageSpec(;name="Example", rev="master"))
-        uuids = Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
-        @test Pkg.Types.Context().env.manifest[uuids["Example"]].version == v"0.3.0"
-        @test Pkg.Types.Context().env.manifest[uuids["Example"]].repo == Pkg.Types.GitRepo()
+        Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
+        @test Pkg.Types.Context().env.manifest[exuuid].version == v"0.3.0"
+        @test Pkg.Types.Context().env.manifest[exuuid].repo == Pkg.Types.GitRepo()
     end end
     # Add by version should override add by repo, even for indirect dependencies
     temp_pkg_dir() do project_path; mktempdir() do tempdir; with_temp_env() do
@@ -165,9 +166,9 @@ end
         Pkg.rm("Example")
         # Now `Example` should be tracking a repo and it is in the dep graph
         # But `Example` is *not* a direct dependency
-        uuids = Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
-        @test Pkg.Types.Context().env.manifest[uuids["Example"]].version == v"0.3.0"
-        @test Pkg.Types.Context().env.manifest[uuids["Example"]].repo == Pkg.Types.GitRepo()
+        Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
+        @test Pkg.Types.Context().env.manifest[exuuid].version == v"0.3.0"
+        @test Pkg.Types.Context().env.manifest[exuuid].repo == Pkg.Types.GitRepo()
     end end end
     # Add by URL should not override pin
     temp_pkg_dir() do project_path; with_temp_env() do env_path

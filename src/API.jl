@@ -95,10 +95,9 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
         pkgerror("Cannot $mode package with the same name or uuid as the project")
 
-    uuids = Dict(pkg.name => pkg.uuid for pkg in pkgs)
     Operations.add(ctx, pkgs, new_git)
     ctx.preview && preview_info()
-    return uuids
+    return
 end
 
 rm(pkg::Union{AbstractString, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
