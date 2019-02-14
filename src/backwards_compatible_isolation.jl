@@ -484,9 +484,10 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         empty!(localctx.env.project.deps)
         localctx.env.project.deps[pkg.name] = pkg.uuid
         seen_uuids = Set{UUID}()
-        # Only put `pkg` and its deps (recursively) in the temp project
-        collect_deps!(seen_uuids, pkg)
     end
+    # Only put `pkg` and its deps (recursively) in the temp project
+    seen_uuids = Set{UUID}()
+    collect_deps!(seen_uuids, pkg)
 
     pkgs = PackageSpec[]
     if target !== nothing

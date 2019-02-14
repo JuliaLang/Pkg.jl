@@ -688,6 +688,15 @@ end
     end end
 end
 
+@testset "building project should fix version of deps" begin
+    temp_pkg_dir() do project_path
+        dep_pkg = joinpath(@__DIR__, "test_packages", "BuildProjectFixedDeps")
+        Pkg.activate(dep_pkg)
+        Pkg.build()
+        @test isfile(joinpath(dep_pkg, "deps", "artifact"))
+    end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
