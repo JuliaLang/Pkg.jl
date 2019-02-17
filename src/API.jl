@@ -61,12 +61,32 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true, kwa
     return
 end
 
-add(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add([pkg]; kwargs...)
+function add(pkg::AbstractString; kwargs...)
+    if pkg[1] == '@'
+        r,p = split(pkg[2:end],'/')
+        add(Context(),[PackageSpec(String(p))],[RegistrySpec(String(r))]; kwargs...)
+    else
+        add([pkg]; kwargs...)
+    end
+    return
+end
+add(pkg::PackageSpec; kwargs...) = add([pkg]; kwargs...)
 add(pkgs::Vector{<:AbstractString}; kwargs...) =
     add([check_package_name(pkg, :add) for pkg in pkgs]; kwargs...)
 add(pkgs::Vector{PackageSpec}; kwargs...)      = add(Context(), pkgs; kwargs...)
 function add(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+    Context!(ctx,kwargs...)
+    println("add(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)")
+    clone_default_registries()
+    add(ctx,pkgs,collect_registries(); kwargs...)
+    return
+end
+function add(
+    ctx::Context, 
+    pkgs::Vector{PackageSpec}, 
+    regs::Vector{RegistrySpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
+    regs = deepcopy(regs)  # deepcopy for avoid mutating RegistrySpec members
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
@@ -88,7 +108,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     # repo + pinned -> name, uuid, tree_hash
 
     project_deps_resolve!(ctx.env, pkgs)
-    registry_resolve!(ctx.env, pkgs)
+    registry_resolve!(ctx.env, pkgs, regs)
     stdlib_resolve!(ctx, pkgs)
     ensure_resolved(ctx.env, pkgs, registry=true)
 
