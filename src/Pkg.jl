@@ -87,7 +87,8 @@ a package, also inside that package.
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
-Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version
+Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version; latest release in the 0.3 series
+Pkg.add(PackageSpec(name="Example", version="0.3.1")) # Specify version; exact release
 Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url to remote gitrepo
 Pkg.add(PackageSpec(url="/remote/mycompany/juliapackages/OurPackage"))` # From path to local gitrepo
 ```
@@ -186,16 +187,22 @@ const installed = API.installed
 
 """
     Pkg.pin(pkg::Union{String, Vector{String}})
-    Pkg.pin(pkgs::Union{Packagespec, Vector{Packagespec}})
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}})
 
-Pin a package to the current version (or the one given in the `packagespec` or a certain
+Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
 git revision. A pinned package is never updated.
+
+# Examples
+```julia
+Pkg.pin("Example")
+Pkg.pin(PackageSpec(name="Example", version="0.3.1"))
+```
 """
 const pin = API.pin
 
 """
     Pkg.free(pkg::Union{String, Vector{String}})
-    Pkg.free(pkgs::Union{Packagespec, Vector{Packagespec}})
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}})
 
 Free a package which removes a `pin` if it exists, or if the package is tracking a path,
 e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
