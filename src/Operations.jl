@@ -433,10 +433,12 @@ function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
         for path in registered_paths(ctx.env, uuid)
             info = parse_toml(path, "Package.toml")
             repo = info["repo"]
-            repo in urls[uuid] || push!(urls[uuid], repo)
+            repo isa String && (repo = [repo]) # repo entry can be String or Vector{String}
+            for r in repo
+                r in urls[uuid] || push!(urls[uuid], r)
+            end
         end
     end
-    foreach(sort!, values(urls))
     return urls
 end
 
