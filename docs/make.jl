@@ -19,6 +19,7 @@ makedocs(
         "registries.md",
         # "faq.md",
         "glossary.md",
+        "toml-files.md",
         "repl.md",
         "api.md"
     ],

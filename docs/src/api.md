@@ -1,4 +1,4 @@
-# [**10.** API Reference](@id API-Reference)
+# [**11.** API Reference](@id API-Reference)
 
 This section describes the function interface, or "API mode"
 for interacting with Pkg.jl. The function API is recommended

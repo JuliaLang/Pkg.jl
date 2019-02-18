@@ -1,4 +1,4 @@
-# **6.** Compatibility
+# [**6.** Compatibility](@id Compatibility)
 
 Compatibility refers to the ability to restrict what version of the dependencies that your project is compatible with.
 If the compatibility for a dependency is not given, the project is assumed to be compatible with all versions of that dependency.
