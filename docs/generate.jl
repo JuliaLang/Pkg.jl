@@ -27,7 +27,7 @@ end
 function generate()
     io = IOBuffer()
     println(io, """
-        # [**9.** REPL Mode Reference](@id REPL-Mode-Reference)
+        # [**10.** REPL Mode Reference](@id REPL-Mode-Reference)
 
         This section describes available commands in the Pkg REPL.
         The REPL mode is mostly meant for interactive use,
