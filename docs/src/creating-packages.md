@@ -154,23 +154,41 @@ Testing...
    Testing HelloWorld tests passed
 ```
 
-#### Test-specific dependencies
+Tests are run in a new Julia process, where the package itself, and any
+test-specific dependencies available, see below.
 
-Sometimes one might want to use some packages only at testing time but not
-enforce a dependency on them when the package is used. This is possible by
-adding dependencies to `[extras]` and a `test` target in `[targets]` to the Project file.
-Here we add the `Test` standard library as a test-only dependency by adding the
-following to the Project file:
+#### Test-specific dependencies in Julia 1.2 and above
+
+!!! compat "Julia 1.2"
+    This section only applies to Julia 1.2 and above. For specifying test dependencies
+    on previous Julia versions, see [Test-specific dependencies in Julia 1.0 and 1.1](@ref).
+
+In Julia 1.2 and later the test environment is given by `test/Project.toml`. Thus, when running
+tests this will be the active project, and only dependencies to the `test/Project.toml` project
+can be used. Note that Pkg will add the tested package itself implictly.
+
+!!! note
+    If no `test/Project.toml` exists Pkg will use the old style test-setup, as
+    described in [Test-specific dependencies in Julia 1.0 and 1.1](@ref).
+
+To add a test-specific dependency, i.e. a dependency that is available only when testing,
+it is thus enough to add this dependency to the `test/Project.toml` project. This can be
+done from the Pkg REPL by activating this environment, and then use `add` as one normally
+does. Lets add the `Test` standard library as a test dependency:
 
 ```
-[extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+(HelloWorld) pkg> activate ./test
+[ Info: activating environment at `~/HelloWorld/test/Project.toml`.
 
-[targets]
-test = ["Test"]
+(test) pkg> add Test
+ Resolving package versions...
+  Updating `~/HelloWorld/test/Project.toml`
+  [8dfed614] + Test
+  Updating `~/HelloWorld/test/Manifest.toml`
+  [...]
 ```
 
-We can now use `Test` in the test script and we can see that it gets installed on testing:
+We can now use `Test` in the test script and we can see that it gets installed when testing:
 
 ```
 shell> cat test/runtests.jl
@@ -186,6 +204,20 @@ using Test
   Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Manifest.toml`
   [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]
    Testing HelloWorld tests passed```
+```
+
+#### Test-specific dependencies in Julia 1.0 and 1.1
+
+In Julia 1.0 and Julia 1.1 test-specific dependencies are added to the main
+`Project.toml`. To add `Markdown` and `Test` as test-dependencies, add the following:
+
+```
+[extras]
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Markdown", "Test"]
 ```
 
 ### Package naming guidelines
