@@ -146,6 +146,17 @@ end
         with_temp_env() do env_path
             @test_throws PkgError Pkg.develop(PackageSpec(;name="Example",rev="Foobar"))
         end
+        # direct dep already exists
+        cd_tempdir() do temp_dir
+            Pkg.activate(".")
+            Pkg.generate("B")
+            mkdir("packages")
+            cd("packages") do
+                Pkg.generate("B")
+            end
+            Pkg.develop(Pkg.PackageSpec(path = abspath(joinpath("packages", "B"))))
+            @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("B")))
+        end
     end end
 end
 

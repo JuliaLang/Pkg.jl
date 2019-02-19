@@ -938,6 +938,8 @@ end
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID})
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
+        get(ctx.env.project.deps, pkg.name, pkg.uuid) == pkg.uuid ||
+            pkgerror("`$(pkg.name)` already exists as a direct dependency with UUID `$(pkg.uuid)`.")
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     load_other_deps!(ctx, pkgs)
