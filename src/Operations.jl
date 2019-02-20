@@ -900,8 +900,10 @@ function update_package_add(pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.path !== nothing || entry.repo.url !== nothing || pkg.repo.url !== nothing
         return pkg # overwrite everything, nothing to copy over
     end
-    if is_dep && ((isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
-                 (!isa(pkg.version, VersionNumber) && entry.version ∈ pkg.version))
+    if is_stdlib(pkg.uuid)
+        return pkg # stdlibs are not versioned like other packages
+    elseif is_dep && ((isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
+                      (!isa(pkg.version, VersionNumber) && entry.version ∈ pkg.version))
         # leave the package as is at the installed version
         return PackageSpec(; uuid=pkg.uuid, name=pkg.name, version=entry.version,
                            tree_hash=entry.tree_hash)
@@ -1033,10 +1035,12 @@ function update_package_pin!(pkg::PackageSpec, ::Nothing)
     if pkg.version == VersionSpec() # no version to pin
         pkgerror("Can not `pin` a package which does not exist in the manifest")
     end
+    is_stdlib(pkg.uuid) && pkgerror("cannot `pin` stdlibs.")
     pkg.pinned = true
 end
 
 function update_package_pin!(pkg::PackageSpec, entry::PackageEntry)
+    is_stdlib(pkg.uuid) && pkgerror("cannot `pin` stdlibs.")
     !entry.pinned || pkgerror("`$(entry.name)` already pinned, use `free` first.")
     entry.path === nothing || pkgerror("Can not `pin` `dev`ed package")
     pkg.pinned = true
@@ -1182,6 +1186,7 @@ function sandbox(fn::Function, ctx::Context, pkg::PackageSpec,
 end
 
 function update_package_test!(pkg::PackageSpec, entry::PackageEntry)
+    is_stdlib(pkg.uuid) && return
     pkg.version = entry.version
     pkg.tree_hash = entry.tree_hash
     pkg.repo = entry.repo
