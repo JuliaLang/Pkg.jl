@@ -49,34 +49,6 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "tokens" begin
-    statement = Pkg.REPLMode.parse("?dev")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_HELP
-    @test length(statement.arguments) == 1
-    @test statement.arguments[1] == "dev"
-    statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git")[1]
-    @test "add" == statement.spec.canonical_name
-    @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
-    statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#master")[1]
-    @test "add" == statement.spec.canonical_name
-    @test length(statement.arguments) == 2
-    @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
-    @test statement.arguments[2] == "#master"
-    statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git#c37b675")[1]
-    @test "add" == statement.spec.canonical_name
-    @test length(statement.arguments) == 2
-    @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
-    @test statement.arguments[2] == "#c37b675"
-    statement = Pkg.REPLMode.parse("add git@github.com:JuliaLang/Example.jl.git@v0.5.0")[1]
-    @test statement.arguments[1] == "git@github.com:JuliaLang/Example.jl.git"
-    @test statement.arguments[2] == "@v0.5.0"
-    statement = Pkg.REPLMode.parse("add git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git@0.5.0")[1]
-    @test "add" == statement.spec.canonical_name
-    @test length(statement.arguments) == 2
-    @test statement.arguments[1] == "git@gitlab-fsl.jsc.näsan.guvv:drats/URGA2010.jl.git"
-    @test statement.arguments[2] == "@0.5.0"
-end
-
 temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     tmp_pkg_path = mktempdir()
 
@@ -585,37 +557,42 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "unit test `parse_package`" begin; cd(mktempdir()) do
+@testset "unit test `parse_package_identifier`" begin; cd(mktempdir()) do
     name = "FooBar"
     uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
     url = "https://github.com/JuliaLang/Example.jl"
     path = "./Foobar"; mkdir("Foobar")
     # valid input
-    pkg = Pkg.REPLMode.parse_package(name)
+    pkg = Pkg.REPLMode.parse_package_identifier(name)
     @test pkg.name == name
-    pkg = Pkg.REPLMode.parse_package(uuid)
+    pkg = Pkg.REPLMode.parse_package_identifier(uuid)
     @test pkg.uuid == UUID(uuid)
-    pkg = Pkg.REPLMode.parse_package("$name=$uuid")
+    pkg = Pkg.REPLMode.parse_package_identifier("$name=$uuid")
     @test (pkg.name == name) && (pkg.uuid == UUID(uuid))
-    pkg = Pkg.REPLMode.parse_package(url; add_or_develop=true)
+    pkg = Pkg.REPLMode.parse_package_identifier(url; add_or_develop=true)
     @test pkg.repo.url == url
-    pkg = Pkg.REPLMode.parse_package(path; add_or_develop=true)
+    pkg = Pkg.REPLMode.parse_package_identifier(path; add_or_develop=true)
     @test pkg.repo.url == path
     # expansion of ~
     if !Sys.iswindows()
         tildepath = "~/Foobaz"
         try
             mkdir(expanduser(tildepath))
-            pkg = Pkg.REPLMode.parse_package(tildepath; add_or_develop=true)
+            pkg = Pkg.REPLMode.parse_package_identifier(tildepath; add_or_develop=true)
             @test pkg.repo.url == expanduser(tildepath)
         finally
             rm(expanduser(tildepath); force = true)
         end
     end
     # errors
-    @test_throws PkgError Pkg.REPLMode.parse_package(url)
-    @test_throws PkgError Pkg.REPLMode.parse_package(path)
+    @test_throws PkgError Pkg.REPLMode.parse_package_identifier(url)
+    @test_throws PkgError Pkg.REPLMode.parse_package_identifier(path)
 end end
+
+@testset "parse package url win" begin
+    @test typeof(Pkg.REPLMode.parse_package_identifier("https://github.com/abc/ABC.jl";
+                                                       add_or_develop=true)) == Pkg.Types.PackageSpec
+end
 
 @testset "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
@@ -683,6 +660,7 @@ end
 end
 
 @testset "`parse` integration tests" begin
+    QString = Pkg.REPLMode.QString
     @test isempty(Pkg.REPLMode.parse(""))
 
     statement = Pkg.REPLMode.parse("up")[1]
@@ -694,36 +672,38 @@ end
     statement = Pkg.REPLMode.parse("dev Example")[1]
     @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.options)
-    @test statement.arguments == ["Example"]
+    @test statement.arguments == [QString("Example", false)]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
     @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.options)
-    @test statement.arguments == ["Example", "#foo", "#bar"]
+    @test statement.arguments == [QString("Example#foo", false),
+                                  QString("#bar", false)]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
     @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
     @test isempty(statement.options)
-    @test statement.arguments == ["Example", "#foo", "Example", "@v0.0.1"]
+    @test statement.arguments == [QString("Example#foo", false),
+                                  QString("Example@v0.0.1", false)]
     @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("add --first --second arg1")[1]
     @test statement.spec.kind == Pkg.REPLMode.CMD_ADD
     @test statement.options == map(Pkg.REPLMode.parse_option, ["--first", "--second"])
-    @test statement.arguments == ["arg1"]
+    @test statement.arguments == [QString("arg1", false)]
     @test statement.preview == false
 
     statements = Pkg.REPLMode.parse("preview add --first -o arg1; pin -x -a arg0 Example")
     @test statements[1].spec.kind == Pkg.REPLMode.CMD_ADD
     @test statements[1].preview == true
     @test statements[1].options == map(Pkg.REPLMode.parse_option, ["--first", "-o"])
-    @test statements[1].arguments == ["arg1"]
+    @test statements[1].arguments == [QString("arg1", false)]
     @test statements[2].spec.kind == Pkg.REPLMode.CMD_PIN
     @test statements[2].preview == false
     @test statements[2].options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
-    @test statements[2].arguments == ["arg0", "Example"]
+    @test statements[2].arguments == [QString("arg0", false), QString("Example", false)]
 
     statements = Pkg.REPLMode.parse("up; pin --first; dev")
     @test statements[1].spec.kind == Pkg.REPLMode.CMD_UP
@@ -841,25 +821,6 @@ end
     end
 end
 
-@testset "unit tests for `group_words`" begin
-    # simple
-    groups = Pkg.REPLMode.group_words(["add", "Example"])
-    @test length(groups) == 1
-    @test groups[1][1] == "add"
-    @test groups[1][2] == "Example"
-    # statement break
-    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b"])
-    @test length(groups) == 2
-    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b", ";", "d"])
-    @test length(groups) == 3
-    # trailing statement break
-    groups = Pkg.REPLMode.group_words(["a", "b", "c", ";", "a", "b", ";"])
-    @test length(groups) == 2
-    # errors
-    @test_throws PkgError Pkg.REPLMode.group_words(["a", "b", ";", ";", "a", "b"])
-    @test_throws PkgError Pkg.REPLMode.group_words([";", "add", "Example"])
-end
-
 @testset "tests for api opts" begin
     specs = Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[
         [:name => "project", :short_name => "p", :api => :mode => Pkg.Types.PKGMODE_PROJECT],
@@ -941,16 +902,18 @@ end
     end end end
 end
 
-@testset "`parse_quotes` unit tests" begin
-    qwords = Pkg.REPLMode.parse_quotes("\"Don't\" forget to '\"test\"'")
-    @test qwords[1].isquoted
-    @test qwords[1].word == "Don't"
+@testset "`lex` unit tests" begin
+    qwords = Pkg.REPLMode.lex("\"Don't\" forget to '\"test\"'")
+    @test  qwords[1].isquoted
+    @test  qwords[1].raw == "Don't"
     @test !qwords[2].isquoted
-    @test qwords[2].word == " forget to "
-    @test qwords[3].isquoted
-    @test qwords[3].word == "\"test\""
-    @test_throws PkgError Pkg.REPLMode.parse_quotes("Don't")
-    @test_throws PkgError Pkg.REPLMode.parse_quotes("Unterminated \"quot")
+    @test  qwords[2].raw == "forget"
+    @test !qwords[3].isquoted
+    @test  qwords[3].raw == "to"
+    @test  qwords[4].isquoted
+    @test  qwords[4].raw == "\"test\""
+    @test_throws PkgError Pkg.REPLMode.lex("Don't")
+    @test_throws PkgError Pkg.REPLMode.lex("Unterminated \"quot")
 end
 
 @testset "argument kinds" begin
