@@ -103,6 +103,7 @@ function validate(project::Project)
     end
     # compat
     for (name, version) in project.compat
+        name == "julia" && continue
         name in listed ||
             pkgerror("Compat `$name` not listed in `deps` or `extras` section.")
     end

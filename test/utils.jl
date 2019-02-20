@@ -133,3 +133,6 @@ function git_init_package(tmp, path)
     end
     return pkgpath
 end
+
+copy_test_package(tmpdir::String, name::String) =
+    cp(joinpath(@__DIR__, "test_packages", name), joinpath(tmpdir, name))

@@ -3,6 +3,7 @@
 module PkgTests
 
 include("pkg.jl")
+include("sandbox.jl")
 include("resolve.jl")
 
 # clean up locally cached registry
