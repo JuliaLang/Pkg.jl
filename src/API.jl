@@ -408,7 +408,7 @@ function clone(url::String, name::String = "")
     if !isempty(name)
         ctx.old_pkg2_clone_name = name
     end
-    develop(ctx, [Pkg.REPLMode.parse_package(url; add_or_develop=true)])
+    develop(ctx, [Pkg.REPLMode.parse_package_identifier(url; add_or_develop=true)])
 end
 
 function dir(pkg::String, paths::AbstractString...)

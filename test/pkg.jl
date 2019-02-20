@@ -364,10 +364,6 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "parse package url win" begin
-    @test typeof(Pkg.REPLMode.parse_package("https://github.com/abc/ABC.jl"; add_or_develop=true)) == PackageSpec
-end
-
 @testset "preview generate" begin
     mktempdir() do tmp
         cd(tmp) do
