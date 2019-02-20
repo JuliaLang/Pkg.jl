@@ -354,7 +354,7 @@ function inequality_interval(m::RegexMatch)
     minor = (n_significant < 2) ? 0 : parse(Int, _minor)
     patch = (n_significant < 3) ? 0 : parse(Int, _patch)
     if n_significant == 3 && major == 0 && minor == 0 && patch == 0
-        error("invalid version: $s")
+        error("invalid version: 0.0.0")
     end
     v = VersionBound(major, minor, patch)
     if typ == "<"
