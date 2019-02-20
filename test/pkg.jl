@@ -683,6 +683,12 @@ end
     end
 end
 
+@testset "PkgError printing" begin
+    err = PkgError("foobar")
+    @test occursin("PkgError(\"foobar\")", sprint(show, err))
+    @test sprint(showerror, err) == "foobar"
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
