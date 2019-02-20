@@ -269,15 +269,23 @@ var documenterSearchIndex = {"docs": [
     "page": "5. Creating Packages",
     "title": "Adding tests to the package",
     "category": "section",
-    "text": "When a package is tested the file test/runtests.jl is executed.shell> cat test/runtests.jl\nprintln(\"Testing...\")\n(HelloWorld) pkg> test\n   Testing HelloWorld\n Resolving package versions...\nTesting...\n   Testing HelloWorld tests passed"
+    "text": "When a package is tested the file test/runtests.jl is executed.shell> cat test/runtests.jl\nprintln(\"Testing...\")\n(HelloWorld) pkg> test\n   Testing HelloWorld\n Resolving package versions...\nTesting...\n   Testing HelloWorld tests passedTests are run in a new Julia process, where the package itself, and any test-specific dependencies available, see below."
 },
 
 {
-    "location": "creating-packages/#Test-specific-dependencies-1",
+    "location": "creating-packages/#Test-specific-dependencies-in-Julia-1.2-and-above-1",
     "page": "5. Creating Packages",
-    "title": "Test-specific dependencies",
+    "title": "Test-specific dependencies in Julia 1.2 and above",
     "category": "section",
-    "text": "Sometimes one might want to use some packages only at testing time but not enforce a dependency on them when the package is used. This is possible by adding dependencies to [extras] and a test target in [targets] to the Project file. Here we add the Test standard library as a test-only dependency by adding the following to the Project file:[extras]\nTest = \"8dfed614-e22c-5e08-85e1-65c5234f0b40\"\n\n[targets]\ntest = [\"Test\"]We can now use Test in the test script and we can see that it gets installed on testing:shell> cat test/runtests.jl\nusing Test\n@test 1 == 1\n\n(HelloWorld) pkg> test\n   Testing HelloWorld\n Resolving package versions...\n  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Project.toml`\n  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]\n  [8dfed614] + Test\n  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Manifest.toml`\n  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]\n   Testing HelloWorld tests passed```"
+    "text": "compat: Julia 1.2\nThis section only applies to Julia 1.2 and above. For specifying test dependencies on previous Julia versions, see Test-specific dependencies in Julia 1.0 and 1.1.In Julia 1.2 and later the test environment is given by test/Project.toml. Thus, when running tests this will be the active project, and only dependencies to the test/Project.toml project can be used. Note that Pkg will add the tested package itself implictly.note: Note\nIf no test/Project.toml exists Pkg will use the old style test-setup, as described in Test-specific dependencies in Julia 1.0 and 1.1.To add a test-specific dependency, i.e. a dependency that is available only when testing, it is thus enough to add this dependency to the test/Project.toml project. This can be done from the Pkg REPL by activating this environment, and then use add as one normally does. Lets add the Test standard library as a test dependency:(HelloWorld) pkg> activate ./test\n[ Info: activating environment at `~/HelloWorld/test/Project.toml`.\n\n(test) pkg> add Test\n Resolving package versions...\n  Updating `~/HelloWorld/test/Project.toml`\n  [8dfed614] + Test\n  Updating `~/HelloWorld/test/Manifest.toml`\n  [...]We can now use Test in the test script and we can see that it gets installed when testing:shell> cat test/runtests.jl\nusing Test\n@test 1 == 1\n\n(HelloWorld) pkg> test\n   Testing HelloWorld\n Resolving package versions...\n  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Project.toml`\n  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]\n  [8dfed614] + Test\n  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Manifest.toml`\n  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]\n   Testing HelloWorld tests passed```"
+},
+
+{
+    "location": "creating-packages/#Test-specific-dependencies-in-Julia-1.0-and-1.1-1",
+    "page": "5. Creating Packages",
+    "title": "Test-specific dependencies in Julia 1.0 and 1.1",
+    "category": "section",
+    "text": "In Julia 1.0 and Julia 1.1 test-specific dependencies are added to the main Project.toml. To add Markdown and Test as test-dependencies, add the following:[extras]\nMarkdown = \"d6f4376e-aef5-505a-96c1-9c027394607a\"\nTest = \"8dfed614-e22c-5e08-85e1-65c5234f0b40\"\n\n[targets]\ntest = [\"Markdown\", \"Test\"]"
 },
 
 {
