@@ -11,6 +11,11 @@ import REPL: LineEdit, REPLCompletions
 import ..Types.casesensitive_isdir
 using ..Types, ..Display, ..Operations, ..API, ..Registry
 
+###########
+# Globals #
+###########
+const PREVIOUS_ACTIVE_PROJECT = Ref{Union{String,Nothing}}(nothing)
+
 #########################
 # Specification Structs #
 #########################
@@ -435,11 +440,26 @@ function do_help!(command::Command, repl::REPL.AbstractREPL)
 end
 
 function do_activate!(args::Vector, api_opts::APIOptions)
+    global PREVIOUS_ACTIVE_PROJECT
+    temp = Base.ACTIVE_PROJECT[]
     if isempty(args)
-        return API.activate()
+        API.activate()
     else
-        return API.activate(expanduser(args[1]); collect(api_opts)...)
+        x = args[1]
+        if x == "-"
+            Base.ACTIVE_PROJECT[] = PREVIOUS_ACTIVE_PROJECT[]
+            API._activate_info()
+        elseif x[1] == '+'
+            API.activate(joinpath(dirname(Types.find_project_file()), x[2:end]);
+                         collect(api_opts)...)
+        elseif x[1] == '@'
+            api_opts[:shared] = true
+            API.activate(x[2:end]; collect(api_opts)...)
+        else
+            API.activate(expanduser(x); collect(api_opts)...)
+        end
     end
+    PREVIOUS_ACTIVE_PROJECT[] = temp
 end
 
 # TODO set default Display.status keyword: mode = PKGMODE_COMBINED
