@@ -661,16 +661,6 @@ end
     end end end
 end
 
-@testset "Basic sandbox" begin
-    temp_pkg_dir() do project_path; with_temp_env() do; mktempdir() do tmp
-        cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"),
-           joinpath(tmp, "BasicSandbox"))
-        Pkg.activate(joinpath(tmp, "BasicSandbox"))
-        Pkg.test()
-        Pkg.build()
-    end end end
-end
-
 @testset "canonicalized relative paths in manifest" begin
     mktempdir() do tmp; cd(tmp) do
         write("Manifest.toml",

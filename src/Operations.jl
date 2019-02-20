@@ -44,24 +44,31 @@ end
 is_dep(env::EnvCache, pkg::PackageSpec) =
     any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in env.project.deps])
 
-function load_other_deps!(ctx::Context, pkgs::Vector{PackageSpec})
+function load_direct_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Bool=true)
     # load rest of deps normally
     for (name::String, uuid::UUID) in ctx.env.project.deps
         pkgs[uuid] === nothing || continue # dont duplicate packages
         entry = manifest_info(ctx.env, uuid)
-        if entry === nothing
-            push!(pkgs, PackageSpec(;uuid=uuid, name=name))
-        else
-            push!(pkgs, PackageSpec(;
-                name      = name,
+        push!(pkgs, entry === nothing ?
+              PackageSpec(;uuid=uuid, name=name) :
+              PackageSpec(;
                 uuid      = uuid,
+                name      = name,
                 path      = entry.path,
                 repo      = entry.repo,
                 tree_hash = entry.tree_hash,
                 pinned    = entry.pinned,
-                version   = entry.version === nothing ? VersionSpec() : VersionSpec(entry.version)))
-        end
+                version   = version ? something(entry.version, VersionSpec()) : VersionSpec()))
     end
+end
+
+function load_all_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Bool=true)
+    for (uuid, entry) in ctx.env.manifest
+        push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, path=entry.path,
+                                version = version ? something(entry.version, VersionSpec()) : VersionSpec(),
+                                repo=entry.repo, tree_hash=entry.tree_hash))
+    end
+    load_direct_deps!(ctx, pkgs; version=version)
 end
 
 function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
@@ -790,7 +797,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
         printpkgstyle(ctx, :Building,
                       rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
 
-        sandbox(source_path, testdir(source_path)) do
+        sandbox(ctx, pkg, source_path, builddir(source_path)) do
             ok = open(log_file, "w") do log
                 success(pipeline(gen_build_code(buildfile(source_path)),
                                  stdout = verbose ? stdout : log,
@@ -918,7 +925,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[])
         entry = manifest_info(ctx.env, pkg.uuid)
         pkgs[i] = update_package_add(pkg, entry, is_dep(ctx.env, pkg))
     end
-    load_other_deps!(ctx, pkgs)
+    load_direct_deps!(ctx, pkgs)
     check_registered(ctx, pkgs)
 
     # update set of deps
@@ -935,12 +942,13 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[])
 end
 
 # Input: name, uuid, and path
-function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID})
+function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
+                 keep_manifest::Bool=false)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
-    load_other_deps!(ctx, pkgs)
+    keep_manifest ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs)
     check_registered(ctx, pkgs)
 
     # resolve & apply package versions
@@ -1039,7 +1047,7 @@ end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_pin!(pkg, manifest_info(ctx.env, pkg.uuid)), pkgs)
-    load_other_deps!(ctx, pkgs)
+    load_direct_deps!(ctx, pkgs)
     check_registered(ctx, pkgs)
 
     # TODO check that versions exist ? -> I guess resolve_versions should check ?
@@ -1079,7 +1087,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
             isempty(registered_paths(ctx.env, pkg.uuid)) &&
                 pkgerror("cannot free an `dev`ed package that does not exist in a registry")
         end
-        load_other_deps!(ctx, pkgs)
+        load_direct_deps!(ctx, pkgs)
         check_registered(ctx, pkgs)
         resolve_versions!(ctx, pkgs)
         update_manifest!(ctx, pkgs)
@@ -1124,24 +1132,52 @@ function with_temp_env(fn::Function, temp_env::String)
     end
 end
 
-function sandbox(fn::Function, env_path::String, target_path::String)
-    package_project = projectfile_path(env_path)
-    target_project  = projectfile_path(target_path)
-    target_manifest = manifestfile_path(target_path)
+function take_subgraph(ctx::Context, pkg::PackageSpec)
+    env = deepcopy(ctx.env)
+    if !Types.is_project(ctx.env, pkg)
+        env.project.deps = Dict(pkg.name => pkg.uuid)
+        prune_manifest(env)
+    end
+    return env.manifest
+end
+
+function abspath!(ctx, manifest::Dict{UUID,PackageEntry})
+    for (uuid, entry) in manifest
+        entry.path !== nothing || continue
+        entry.path = project_rel_path(ctx, entry.path)
+    end
+    return manifest
+end
+
+# ctx + pkg used to compute parent dep graph
+function sandbox(fn::Function, ctx::Context, pkg::PackageSpec,
+                 parent_path::String, sandbox_path::String)
+    parent_manifest = manifestfile_path(parent_path)
+    sandbox_project = projectfile_path(sandbox_path)
 
     mktempdir() do tmp
-        tmp_test_project  = projectfile_path(tmp)
-        tmp_test_manifest = manifestfile_path(tmp)
+        tmp_project  = projectfile_path(tmp)
+        tmp_manifest = manifestfile_path(tmp)
 
-        # Set up env
-        isfile(target_project)  && cp(target_project, tmp_test_project)
-        isfile(target_manifest) && cp(target_manifest, tmp_test_manifest)
-        with_temp_env(tmp) do
-            Pkg.API.instantiate()
-            Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=env_path)))
+        # Copy env info over to temp env
+        isfile(sandbox_project) && cp(sandbox_project, tmp_project)
+        if isfile(parent_manifest)
+            # copy over subgraph
+            # abspath! to maintain location of all deved nodes
+            Types.write_manifest(abspath!(ctx, take_subgraph(ctx, pkg)), tmp_manifest)
         end
-        # Run sandboxed code
-        withenv(fn, "JULIA_LOAD_PATH" => tmp)
+        with_temp_env(tmp) do
+            try
+                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=parent_path)); keep_manifest=true)
+                @debug "Using _parent_ dep graph"
+            catch # TODO
+                Base.rm(tmp_manifest) # retry with a clean dependency graph
+                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=parent_path)))
+                @debug "Using _clean_ dep graph"
+            end
+            # Run sandboxed code
+            withenv(fn, "JULIA_LOAD_PATH" => tmp)
+        end
     end
 end
 
@@ -1155,7 +1191,9 @@ end
 
 testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
-function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
+function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, test_fn=nothing)
+    ctx.preview || Pkg.instantiate(ctx)
+
     # load manifest data
     for pkg in pkgs
         if Types.is_project_uuid(ctx.env, pkg.uuid)
@@ -1181,6 +1219,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
                 " did not provide a `test/runtests.jl` file")
     end
 
+    # sandbox
     pkgs_errored = String[]
     for (pkg, source_path) in zip(pkgs, source_paths)
         if !isfile(projectfile_path(testdir(source_path)))
@@ -1194,8 +1233,10 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
             @info("In preview mode, skipping tests for $(pkg.name)")
             continue
         end
-        sandbox(source_path, testdir(source_path)) do
-            Display.status(Context(), mode=PKGMODE_MANIFEST)
+        sandbox(ctx, pkg, source_path, testdir(source_path)) do
+            @info "Running Sandbox"
+            test_fn !== nothing && test_fn()
+            Display.status(Context(), mode=PKGMODE_PROJECT)
             try
                 run(gen_test_code(testfile(source_path); coverage=coverage))
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
@@ -1205,6 +1246,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false)
         end
     end
 
+    # report errors
     if !isempty(pkgs_errored)
         pkgerror(length(pkgs_errored) == 1 ? "Package " : "Packages ",
                  join(pkgs_errored, ", "),

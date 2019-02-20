@@ -252,6 +252,22 @@ Base.@kwdef mutable struct PackageEntry
 end
 const Manifest = Dict{UUID,PackageEntry}
 
+function Base.show(io::IO, pkg::PackageEntry)
+    f = []
+    pkg.name      !== nothing && push!(f, "name"      => pkg.name)
+    pkg.version   !== nothing && push!(f, "version"   => pkg.version)
+    pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
+    pkg.path      !== nothing && push!(f, "dev/path"  => pkg.path)
+    pkg.pinned                && push!(f, "pinned"    => pkg.pinned)
+    pkg.repo.url  !== nothing && push!(f, "url/path"  => "`$(pkg.repo.url)`")
+    pkg.repo.rev  !== nothing && push!(f, "rev"       => pkg.repo.rev)
+    print(io, "PackageEntry(\n")
+    for (field, value) in f
+        print(io, "  ", field, " = ", value, "\n")
+    end
+    print(io, ")")
+end
+
 
 mutable struct EnvCache
     # environment info:
@@ -551,7 +567,7 @@ end
 
 function remote_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool)
     # Only update the registry in case of developing a non-local package
-    UPDATED_REGISTRY_THIS_SESSION[] || update_registries(ctx)
+    update_registries(ctx)
     # We save the repo in case another environement wants to develop from the same repo,
     # this avoids having to reclone it from scratch.
     if pkg.repo.url === nothing # specified by name or uuid
@@ -583,6 +599,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
         end
         @assert pkg.path !== nothing
         @assert has_uuid(pkg)
+        pkg.repo = GitRepo() # clear repo field, no longer needed
     end
     return new_uuids
 end
@@ -703,8 +720,6 @@ Ensure repo specified by `repo` exists at version path for package
 Set tree_hash
 """
 function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
-    # Always update the registry when adding
-    UPDATED_REGISTRY_THIS_SESSION[] || update_registries(ctx)
     new_uuids = UUID[]
     for pkg in pkgs
         handle_repo_add!(ctx, pkg) && push!(new_uuids, pkg.uuid)
@@ -1091,7 +1106,9 @@ function remove_registries(ctx::Context, regs::Vector{RegistrySpec})
 end
 
 # entry point for `registry up`
-function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_registries(depots1()))
+function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_registries(depots1());
+                           force::Bool=false)
+    !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
     ctx.preview && (@info("skipping updating registries in preview mode"); return nothing)
     for reg in unique(r -> r.uuid, find_installed_registries(regs))

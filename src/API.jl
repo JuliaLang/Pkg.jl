@@ -34,7 +34,8 @@ develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = develop([pkg]; kwa
 develop(pkgs::Vector{<:AbstractString}; kwargs...) =
     develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
 develop(pkgs::Vector{PackageSpec}; kwargs...)      = develop(Context(), pkgs; kwargs...)
-function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true, kwargs...)
+function develop(ctx::Context, pkgs::Vector{PackageSpec};
+                 shared::Bool=true, keep_manifest::Bool=false, kwargs...)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -51,12 +52,11 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true, kwa
     ctx.preview && preview_info()
 
     new_git = handle_repos_develop!(ctx, pkgs, shared)
-    foreach(pkg -> pkg.repo = Types.GitRepo(), pkgs) # TODO move to handle_repos
 
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
-        pkgerror("Cannot $mode package with the same name or uuid as the project")
+        pkgerror("Cannot `develop` package with the same name or uuid as the project")
 
-    Operations.develop(ctx, pkgs, new_git)
+    Operations.develop(ctx, pkgs, new_git; keep_manifest=keep_manifest)
     ctx.preview && preview_info()
     return
 end
@@ -81,6 +81,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     end
 
     ctx.preview && preview_info()
+    Types.update_registries(ctx)
 
     repo_pkgs = [pkg for pkg in pkgs if (pkg.repo.url !== nothing || pkg.repo.rev !== nothing)]
     new_git = handle_repos_add!(ctx, repo_pkgs)
@@ -138,15 +139,15 @@ up(pkgs::Vector{PackageSpec}; kwargs...)               = up(Context(), pkgs; kwa
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
-            do_update_registry=true, kwargs...)
+            update_registry::Bool=true, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     foreach(pkg -> pkg.mode = mode, pkgs)
 
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
-    if do_update_registry
+    if update_registry
         Types.clone_default_registries()
-        Types.update_registries(ctx)
+        Types.update_registries(ctx; force=true)
     end
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT
@@ -169,7 +170,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
 end
 
 resolve(ctx::Context=Context()) =
-    up(ctx, level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, do_update_registry=false)
+    up(ctx, level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false)
 
 pin(pkg::Union{AbstractString, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
 pin(pkgs::Vector{<:AbstractString}; kwargs...)          = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
@@ -223,18 +224,17 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     return
 end
 
-test(;kwargs...)                                  = test(PackageSpec[]; kwargs...)
-test(pkg::Union{AbstractString, PackageSpec}; kwargs...)  = test([pkg]; kwargs...)
-test(pkgs::Vector{<:AbstractString}; kwargs...)           = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-test(pkgs::Vector{PackageSpec}; kwargs...)        = test(Context(), pkgs; kwargs...)
-
-function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
+test(;kwargs...)                                         = test(PackageSpec[]; kwargs...)
+test(pkg::Union{AbstractString, PackageSpec}; kwargs...) = test([pkg]; kwargs...)
+test(pkgs::Vector{<:AbstractString}; kwargs...)          = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+test(pkgs::Vector{PackageSpec}; kwargs...)               = test(Context(), pkgs; kwargs...)
+function test(ctx::Context, pkgs::Vector{PackageSpec};
+              coverage=false, test_fn=nothing, kwargs...)
+    pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     if isempty(pkgs)
-        # TODO: Allow this?
-        ctx.env.pkg == nothing && pkgerror("trying to test unnamed project")
+        ctx.env.pkg === nothing && pkgerror("trying to test unnamed project") #TODO Allow this?
         push!(pkgs, ctx.env.pkg)
     else
         project_resolve!(ctx.env, pkgs)
@@ -242,12 +242,9 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, kwargs...
         manifest_resolve!(ctx.env, pkgs)
         ensure_resolved(ctx.env, pkgs)
     end
-    #if !ctx.preview && (Operations.any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file))
-    ctx.preview || Pkg.instantiate(ctx)
-    Operations.test(ctx, pkgs; coverage=coverage)
+    Operations.test(ctx, pkgs; coverage=coverage, test_fn=test_fn)
     return
 end
-
 
 installed() = __installed(PKGMODE_PROJECT)
 function __installed(mode::PackageMode=PKGMODE_MANIFEST)
@@ -459,10 +456,11 @@ function precompile(ctx::Context)
 end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
-function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwargs...)
+function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
+                     update_registry::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
     if (!isfile(ctx.env.manifest_file) && manifest == nothing) || manifest == false
-        up(ctx)
+        up(ctx; update_registry=update_registry)
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
@@ -471,11 +469,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing, kwarg
     Operations.prune_manifest(ctx.env)
     Types.update_registries(ctx)
     pkgs = PackageSpec[]
-    for (uuid, entry) in ctx.env.manifest
-        push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, path=entry.path,
-                                version = something(entry.version, VersionSpec()),
-                                repo=entry.repo, tree_hash=entry.tree_hash))
-    end
+    Operations.load_all_deps!(ctx, pkgs)
     Operations.check_registered(ctx, pkgs)
     new_git = UUID[]
     for pkg in pkgs

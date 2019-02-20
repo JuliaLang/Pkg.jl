@@ -73,7 +73,7 @@ update(regs::Vector{String}) = update([RegistrySpec(name = name) for name in reg
 update(regs::Vector{RegistrySpec} = Types.collect_registries(depots1())) =
     update(Context(), regs)
 update(ctx::Context, regs::Vector{RegistrySpec} = Types.collect_registries(depots1())) =
-    Types.update_registries(ctx, regs)
+    Types.update_registries(ctx, regs; force=true)
 
 """
     Pkg.Registry.status()
