@@ -613,6 +613,16 @@ end
     end
 end
 
+@testset "issue #1077" begin
+    temp_pkg_dir() do project_path
+        Pkg.add("UUIDs")
+        # the following should not error
+        Pkg.add("UUIDs")
+        Pkg.test("UUIDs")
+        @test_throws PkgError("cannot `pin` stdlibs.") Pkg.pin("UUIDs")
+    end
+end
+
 #issue #975
 @testset "Pkg.gc" begin
     temp_pkg_dir() do project_path
