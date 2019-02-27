@@ -37,6 +37,16 @@ test_test(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
             @test json.version == v"0.20.0"
         end
     end end
+    # test dependencies should be preserved, when possible
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "Sandbox_PreserveTestDeps")
+        Pkg.activate(joinpath(tmp, "Sandbox_PreserveTestDeps"))
+        test_test("Foo") do
+            x = get(Pkg.Types.Context().env.manifest, UUID("7876af07-990d-54b4-ab0e-23690620f79a"), nothing)
+            @test x !== nothing
+            @test x.version == v"0.4.0"
+        end
+    end end
 end
 
 @testset "Basic `build` sandbox" begin
