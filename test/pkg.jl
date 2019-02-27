@@ -699,6 +699,35 @@ end
     @test sprint(showerror, err) == "foobar"
 end
 
+@testset "issue #1066: package with colliding name/uuid exists in project" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
+        Pkg.activate(".")
+        Pkg.generate("A")
+        cd(mkdir("packages")) do
+            Pkg.generate("A")
+            LibGit2.with(LibGit2.init("A")) do repo
+                LibGit2.add!(repo, "*")
+                LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+            end
+        end
+        Pkg.generate("B")
+        project = Pkg.Types.read_project("A/Project.toml")
+        project.name = "B"
+        Pkg.Types.write_project(project, "B/Project.toml")
+        LibGit2.with(LibGit2.init("B")) do repo
+            LibGit2.add!(repo, "*")
+            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+        end
+        Pkg.develop(Pkg.PackageSpec(path = abspath("A")))
+        # package with same name but different uuid exist in project
+        @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("packages", "A")))
+        @test_throws PkgError Pkg.add(Pkg.PackageSpec(path = abspath("packages", "A")))
+        # package with same uuid but different name exist in project
+        @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("B")))
+        @test_throws PkgError Pkg.add(Pkg.PackageSpec(path = abspath("B")))
+    end end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
