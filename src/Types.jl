@@ -160,7 +160,7 @@ has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
-    f = ["name" => pkg.name, "uuid" => has_uuid(pkg) ? pkg.uuid : "", "v" => (vstr == "VersionSpec(\"*\")" ? "" : vstr)]
+    f = ["name" => has_name(pkg) ? pkg.name  : "", "uuid" => has_uuid(pkg) ? pkg.uuid : "", "v" => (vstr == "VersionSpec(\"*\")" ? "" : vstr)]
     if pkg.repo !== nothing
         if pkg.repo.url !== nothing
             push!(f, "url/path" => string("\"", pkg.repo.url, "\""))
@@ -1384,9 +1384,9 @@ function registered_uuid(env::EnvCache, name::String)::Union{Nothing,UUID}
 end
 
 # Determine current name for a given package UUID
-function registered_name(env::EnvCache, uuid::UUID)::String
+function registered_name(env::EnvCache, uuid::UUID)::Union{Nothing,String}
     names = registered_names(env, uuid)
-    length(names) == 0 && return ""
+    length(names) == 0 && return nothing
     length(names) == 1 && return names[1]
     values = registered_info(env, uuid, "name")
     name = nothing
@@ -1450,27 +1450,21 @@ function project_key_order(key::String)
     return 8
 end
 
-string(x::Vector{String}) = x
-
 function destructure(project::Project)::Dict
-    raw = project.other
-    function entry!(key::String, src::Dict)
-        if isempty(src)
-            delete!(raw, key)
-        else
-            raw[key] = Dict(string(name) => string(uuid) for (name,uuid) in src)
-        end
-    end
-    entry!(key::String, src) = src === nothing ? delete!(raw, key) : (raw[key] = string(src))
+    raw = deepcopy(project.other)
 
-    entry!("name", project.name)
-    entry!("uuid", project.uuid)
-    entry!("version", project.version)
+    should_delete(x::Dict) = isempty(x)
+    should_delete(x)       = x === nothing
+    entry!(key::String, src) = should_delete(src) ? delete!(raw, key) : (raw[key] = src)
+
+    entry!("name",     project.name)
+    entry!("uuid",     project.uuid)
+    entry!("version",  project.version)
     entry!("manifest", project.manifest)
-    entry!("deps", project.deps)
-    entry!("extras", project.extras)
-    entry!("compat", project.compat)
-    entry!("targets", project.targets)
+    entry!("deps",     project.deps)
+    entry!("extras",   project.extras)
+    entry!("compat",   project.compat)
+    entry!("targets",  project.targets)
     return raw
 end
 

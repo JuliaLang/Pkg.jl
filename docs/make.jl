@@ -3,6 +3,8 @@
 using Documenter
 using Pkg
 
+include("generate.jl")
+
 makedocs(
     modules = [Pkg],
     sitename = "Pkg.jl",
@@ -16,12 +18,13 @@ makedocs(
         "registries.md",
         # "faq.md",
         "glossary.md",
+        "repl.md",
         "api.md"
     ],
-    versions = ["v#.#", "dev" => "dev"],
     assets = ["assets/custom.css"],
 )
 
 deploydocs(
     repo = "github.com/JuliaLang/Pkg.jl",
+    versions = ["v#.#", "dev" => "dev"],
 )

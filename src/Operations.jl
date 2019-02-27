@@ -24,7 +24,7 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
 end
 
 function load_versions(path::String; include_yanked = false)
-    toml = parse_toml(path, "Versions.toml")
+    toml = parse_toml(path, "Versions.toml"; fakeit=true)
     d = Dict{VersionNumber, SHA1}(
             VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml
                 if !get(info, "yanked", false) || include_yanked)
@@ -380,7 +380,7 @@ function resolve_versions!(
     for (uuid, ver) in vers
         uuid in uuids && continue
         name = registered_name(ctx.env, uuid)
-        push!(pkgs, PackageSpec(name, uuid, ver))
+        push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
     end
     return vers
 end
@@ -835,10 +835,10 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         # Only put `pkg` and its deps (recursively) in the temp project
         empty!(localctx.env.project.deps)
         localctx.env.project.deps[pkg.name] = pkg.uuid
-        seen_uuids = Set{UUID}()
-        # Only put `pkg` and its deps (recursively) in the temp project
-        collect_deps!(seen_uuids, pkg)
     end
+    # Only put `pkg` and its deps (recursively) in the temp project
+    seen_uuids = Set{UUID}()
+    collect_deps!(seen_uuids, pkg)
 
     pkgs = PackageSpec[]
     if target !== nothing
@@ -1139,7 +1139,8 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         @info "No changes"
         return
     end
-    deps_names = collect(keys(ctx.env.project.deps))
+    deps_names = append!(collect(keys(ctx.env.project.deps)),
+                         collect(keys(ctx.env.project.extras)))
     filter!(ctx.env.project.targets) do (target, deps)
         !isempty(filter!(in(deps_names), deps))
     end

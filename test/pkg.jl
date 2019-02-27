@@ -612,6 +612,27 @@ end
     end
 end
 
+#issue #876
+@testset "targets should survive add/rm" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
+        cp(joinpath(@__DIR__, "project", "good", "pkg.toml"), "Project.toml")
+        targets = deepcopy(Pkg.Types.read_project("Project.toml").targets)
+        Pkg.activate(".")
+        Pkg.add("Example")
+        Pkg.rm("Example")
+        @test targets == Pkg.Types.read_project("Project.toml").targets
+    end end
+end
+
+@testset "building project should fix version of deps" begin
+    temp_pkg_dir() do project_path
+        dep_pkg = joinpath(@__DIR__, "test_packages", "BuildProjectFixedDeps")
+        Pkg.activate(dep_pkg)
+        Pkg.build()
+        @test isfile(joinpath(dep_pkg, "deps", "artifact"))
+    end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
