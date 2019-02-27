@@ -921,7 +921,31 @@ function check_registered(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
+# Check if the package can be added without colliding/overwriting things
+function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
+    for pkg in pkgs
+        @assert pkg.name !== nothing && pkg.uuid !== nothing
+        # package with the same name exist in the project: assert that they have the same uuid
+        get(ctx.env.project.deps, pkg.name, pkg.uuid) == pkg.uuid ||
+            pkgerror("cannot add package `$(pkg.name) = \"$(pkg.uuid)\"` ",
+                     "since package `$(pkg.name) = \"$(get(ctx.env.project.deps, pkg.name, pkg.uuid))\"` ",
+                     "already exists as a direct dependency.")
+        # package with the same uuid exist in the project: assert they have the same name
+        name = findfirst(==(pkg.uuid), ctx.env.project.deps)
+        (name === nothing || name == pkg.name) ||
+            pkgerror("cannot add package `$(pkg.name) = \"$(pkg.uuid)\"` ",
+                     "since package `$(pkg.name) = \"$(ctx.env.project.deps[name])\"` ",
+                     "already exists as a direct dependency.")
+        # package with the same uuid exist in the manifest: assert they have the same name
+        haskey(ctx.env.manifest, pkg.uuid) && (ctx.env.manifest[pkg.uuid].name != pkg.name) &&
+            pkgerror("cannot add package `$(pkg.name) = \"$(pkg.uuid)\"` ",
+                     "since package `$(ctx.env.manifest[pkg.uuid].name) = \"$(pkg.uuid)\"` ",
+                     "already exists in the manifest.")
+    end
+end
+
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[])
+    assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
         entry = manifest_info(ctx.env, pkg.uuid)
@@ -946,6 +970,7 @@ end
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
                  keep_manifest::Bool=false)
+    assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
         ctx.env.project.deps[pkg.name] = pkg.uuid
