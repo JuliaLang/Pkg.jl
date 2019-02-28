@@ -655,9 +655,13 @@ project_rel_path(ctx::Context, path::String) =
 
 function prune_manifest(env::EnvCache)
     keep = collect(values(env.project.deps))
+    env.manifest = prune_manifest!(env.manifest, keep)
+end
+
+function prune_manifest!(manifest::Dict, keep::Vector{UUID})
     while !isempty(keep)
         clean = true
-        for (uuid, entry) in env.manifest
+        for (uuid, entry) in manifest
             uuid in keep || continue
             for dep in values(entry.deps)
                 dep in keep && continue
@@ -667,7 +671,7 @@ function prune_manifest(env::EnvCache)
         end
         clean && break
     end
-    env.manifest = Dict(uuid => entry for (uuid, entry) in env.manifest if uuid in keep)
+    return Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
 end
 
 function any_package_not_installed(ctx)
@@ -1161,13 +1165,17 @@ function with_temp_env(fn::Function, temp_env::String)
     end
 end
 
-function take_subgraph(ctx::Context, pkg::PackageSpec)
+# pick out a set of subgraphs and preserve their versions
+function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::String)
     env = deepcopy(ctx.env)
-    if !Types.is_project(ctx.env, pkg)
-        env.project.deps = Dict(pkg.name => pkg.uuid)
-        prune_manifest(env)
-    end
-    return env.manifest
+    # load target deps
+    keep = Types.is_project(ctx.env, target) ? collect(values(env.project.deps)) : [target.uuid]
+    # preserve test deps
+    project = read_project(test_project)
+    project !== nothing && append!(keep, collect(values(project.deps)))
+    # prune and return
+    graph = prune_manifest!(env.manifest, keep)
+    return graph
 end
 
 function abspath!(ctx, manifest::Dict{UUID,PackageEntry})
@@ -1179,9 +1187,9 @@ function abspath!(ctx, manifest::Dict{UUID,PackageEntry})
 end
 
 # ctx + pkg used to compute parent dep graph
-function sandbox(fn::Function, ctx::Context, pkg::PackageSpec,
-                 parent_path::String, sandbox_path::String)
-    parent_manifest = manifestfile_path(parent_path)
+function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
+                 sandbox_path::String)
+    active_manifest = manifestfile_path(dirname(ctx.env.project_file))
     sandbox_project = projectfile_path(sandbox_path)
 
     mktempdir() do tmp
@@ -1190,18 +1198,20 @@ function sandbox(fn::Function, ctx::Context, pkg::PackageSpec,
 
         # Copy env info over to temp env
         isfile(sandbox_project) && cp(sandbox_project, tmp_project)
-        if isfile(parent_manifest)
-            # copy over subgraph
+        if isfile(active_manifest)
+            @debug "Active Manifest detected"
+            # copy over preserved subgraph
             # abspath! to maintain location of all deved nodes
-            Types.write_manifest(abspath!(ctx, take_subgraph(ctx, pkg)), tmp_manifest)
+            Types.write_manifest(abspath!(ctx, sandbox_preserve(ctx, target, tmp_project)),
+                                 tmp_manifest)
         end
         with_temp_env(tmp) do
             try
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=parent_path)); keep_manifest=true)
+                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=target_path)); keep_manifest=true)
                 @debug "Using _parent_ dep graph"
             catch # TODO
                 Base.rm(tmp_manifest) # retry with a clean dependency graph
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=parent_path)))
+                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=target_path)))
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code
