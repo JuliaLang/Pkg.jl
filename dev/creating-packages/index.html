@@ -39,8 +39,8 @@ greet() = print(&quot;Hello World!&quot;)
 greet_alien() = print(&quot;Hello &quot;, Random.randstring(8))
 
 end # module</code></pre><p>and reloading the package, the new <code>greet_alien</code> function that uses <code>Random</code> can be used:</p><pre><code class="language-none">julia&gt; HelloWorld.greet_alien()
-Hello aT157rHV</code></pre><h3><a class="nav-anchor" id="Adding-a-build-step-to-the-package.-1" href="#Adding-a-build-step-to-the-package.-1">Adding a build step to the package.</a></h3><p>The build step is executed the first time a package is installed or when explicitly invoked with <code>build</code>. A package is built by executing the file <code>deps/build.jl</code>.</p><pre><code class="language-none">shell&gt; cat deps/build.log
-I am being built...
+Hello aT157rHV</code></pre><h3><a class="nav-anchor" id="Adding-a-build-step-to-the-package.-1" href="#Adding-a-build-step-to-the-package.-1">Adding a build step to the package.</a></h3><p>The build step is executed the first time a package is installed or when explicitly invoked with <code>build</code>. A package is built by executing the file <code>deps/build.jl</code>.</p><pre><code class="language-none">shell&gt; cat deps/build.jl
+println(&quot;I am being built...&quot;)
 
 (HelloWorld) pkg&gt; build
   Building HelloWorld → `deps/build.log`
