@@ -3,12 +3,13 @@
 ## generate repl-docs ##
 
 function generate(io, command)
+    cmd_nospace = replace(command, " " => "-")
     println(io, """
     ```@raw html
     <section class="docstring">
     <div class="docstring-header">
-        <a class="docstring-binding" id="repl-$(command)" href="#repl-$(command)">
-            <code>$(replace(command, "-" => " "))</code>
+        <a class="docstring-binding" id="repl-$(cmd_nospace)" href="#repl-$(cmd_nospace)">
+            <code>$(command)</code>
         </a>
         —
         <span class="docstring-category">REPL command</span>
@@ -17,7 +18,7 @@ function generate(io, command)
     ```
     ```@eval
     using Pkg
-    Pkg.REPLMode.CommandSpec("$(command)").help
+    Dict(Pkg.REPLMode.canonical_names())["$(command)"].help
     ```
     ```@raw html
     </section>
@@ -38,7 +39,7 @@ function generate()
     println(io, "## `package` commands")
     foreach(command -> generate(io, command), ["add", "build", "develop", "free", "generate", "pin", "remove", "test", "update"])
     println(io, "## `registry` commands")
-    foreach(command -> generate(io, command), ["registry-add", "registry-remove", "registry-status", "registry-update"])
+    foreach(command -> generate(io, command), ["registry add", "registry remove", "registry status", "registry update"])
     println(io, "## Other commands")
     foreach(command -> generate(io, command), ["activate", "gc", "help", "instantiate", "precompile", "resolve", "status"])
     # write to file

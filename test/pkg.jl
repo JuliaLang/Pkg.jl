@@ -728,6 +728,15 @@ end
     end end
 end
 
+import Markdown
+@testset "REPL command doc generation" begin
+    # test that the way doc building extracts
+    # docstrings for Pkg REPL commands work
+    d = Dict(Pkg.REPLMode.canonical_names())
+    @test d["add"].help isa Markdown.MD
+    @test d["registry add"].help isa Markdown.MD
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
