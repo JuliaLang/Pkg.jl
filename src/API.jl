@@ -474,7 +474,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     new_git = UUID[]
     for pkg in pkgs
         pkg.repo.url !== nothing || continue
-        instantiate_pkg_repo!(pkg) && push!(new_git, pkg.uuid)
+        sourcepath = Operations.source_path(pkg)
+        isdir(sourcepath) && continue
+        # download repo at tree hash
+        push!(new_git, pkg.uuid)
+        clonepath = Types.clone_path!(pkg.repo.url)
+        tmp_source = Types.repo_checkout(clonepath, string(pkg.tree_hash))
+        mkpath(sourcepath)
+        mv(tmp_source, sourcepath; force=true)
     end
     new_apply = Operations.download_source(ctx, pkgs)
     Operations.build_versions(ctx, union(new_apply, new_git))

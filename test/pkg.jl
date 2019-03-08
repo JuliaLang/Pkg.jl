@@ -737,6 +737,16 @@ import Markdown
     @test d["registry add"].help isa Markdown.MD
 end
 
+@testset "instantiate should respect tree hash" begin
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "NotUpdated")
+        Pkg.activate(joinpath(tmp, "NotUpdated"))
+        hash = Pkg.Types.Context().env.manifest[TEST_PKG.uuid].tree_hash
+        Pkg.instantiate()
+        @test hash == Pkg.Types.Context().env.manifest[TEST_PKG.uuid].tree_hash
+    end end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
