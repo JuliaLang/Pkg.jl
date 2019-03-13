@@ -22,6 +22,7 @@ makedocs(
         "api.md"
     ],
     assets = ["assets/custom.css"],
+    html_canonical = "https://julialang.github.io/Pkg.jl/v1/",
 )
 
 deploydocs(
