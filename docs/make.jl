@@ -6,7 +6,10 @@ using Pkg
 include("generate.jl")
 
 makedocs(
-    format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == "true"),
+    format = Documenter.HTML(
+        prettyurls = get(ENV, "CI", nothing) == "true",
+        canonical = "https://julialang.github.io/Pkg.jl/v1/"
+    ),
     modules = [Pkg],
     sitename = "Pkg.jl",
     pages = Any[
