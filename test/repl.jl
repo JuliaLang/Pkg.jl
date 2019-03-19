@@ -11,6 +11,16 @@ import LibGit2
 
 include("utils.jl")
 
+@testset "help" begin
+    pkg"?"
+    pkg"?  "
+    pkg"?add"
+    pkg"? add"
+    pkg"?    add"
+    pkg"help add"
+    @test_throws PkgError pkg"helpadd"
+end
+
 @testset "generate args" begin
     @test_throws PkgError pkg"generate"
 end
