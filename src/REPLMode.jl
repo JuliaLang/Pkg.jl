@@ -245,9 +245,13 @@ function core_parse(words::Vector{QString}; only_cmd=false)
         statement.preview = true
         next_word!() || return statement, word.raw
     end
-    word.raw[1]=='?' && !word.isquoted &&
-        (pushfirst!(words,QString(word.raw[2:end],false));(word=QString("?",false)))
-
+    # handle `?` alias for help
+    # It is special in that it requires no space between command and args
+    if word.raw[1]=='?' && !word.isquoted
+        length(word.raw) > 1 && pushfirst!(words, QString(word.raw[2:end],false))
+        word = QString("?", false)
+    end
+    # determine command
     super = get(super_specs, word.raw, nothing)
     if super !== nothing # explicit
         statement.super = word.raw
