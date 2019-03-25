@@ -215,7 +215,6 @@ packages have changed causing the current Manifest to be out of sync.
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
     activate
-    activate -
     activate [--shared] path
 
 Activate the environment at the given `path`, or the home project environment if no `path` is specified.
@@ -223,7 +222,6 @@ The active environment is the environment that is modified by executing package 
 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
 it will be placed in the first depot of the stack.
-Use the special argument `-` to jump back to the previous active environment.
     """ ,
 ],[ :kind => CMD_UP,
     :name => "update",
