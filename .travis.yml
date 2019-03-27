@@ -42,7 +42,7 @@ jobs:
       script:
         - julia -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"))'
         - julia --project -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
-        - julia --project=docs --color=yes docs/make.jl
+        - julia --project=docs --color=yes docs/make.jl pdf
       after_success: skip
     - name: TOML (Julia 1.0)
       stage: test
