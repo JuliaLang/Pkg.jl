@@ -29,7 +29,8 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED, PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED,
     printpkgstyle,
     projectfile_path, manifestfile_path,
-    RegistrySpec
+    RegistrySpec,
+    clone_default_registries, collect_registries
 
 include("versions.jl")
 
@@ -112,6 +113,21 @@ end
 pkgerror(msg::String...) = throw(PkgError(join(msg)))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 
+###############
+# RgistrySpec #
+###############
+
+mutable struct RegistrySpec
+    name::Union{String,Nothing}
+    uuid::Union{UUID,Nothing}
+    url::Union{String,Nothing}
+    # the path field can be a local source when adding a registry
+    # otherwise it is the path where the registry is installed
+    path::Union{String,Nothing}
+    RegistrySpec(name::String) = RegistrySpec(name = name)
+    RegistrySpec(;name=nothing, uuid=nothing, url=nothing, path=nothing) =
+        new(name, isa(uuid, String) ? UUID(uuid) : uuid, url, path)
+end
 
 ###############
 # PackageSpec #
@@ -846,6 +862,13 @@ end
 # Disambiguate name/uuid package specifications using registry info.
 registry_resolve!(env::EnvCache, pkg::PackageSpec) = registry_resolve!(env, [pkg])
 function registry_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
+    clone_default_registries()
+    registry_resolve!(env,pkgs,collect_registries())
+end
+function registry_resolve!(
+    env::EnvCache, 
+    pkgs::AbstractVector{PackageSpec},
+    regs::AbstractVector{RegistrySpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
     # collect all names and uuids since we're looking anyway
@@ -913,18 +936,6 @@ end
 ##############
 # Registries #
 ##############
-
-mutable struct RegistrySpec
-    name::Union{String,Nothing}
-    uuid::Union{UUID,Nothing}
-    url::Union{String,Nothing}
-    # the path field can be a local source when adding a registry
-    # otherwise it is the path where the registry is installed
-    path::Union{String,Nothing}
-    RegistrySpec(name::String) = RegistrySpec(name = name)
-    RegistrySpec(;name=nothing, uuid=nothing, url=nothing, path=nothing) =
-        new(name, isa(uuid, String) ? UUID(uuid) : uuid, url, path)
-end
 
 const DEFAULT_REGISTRIES =
     RegistrySpec[RegistrySpec(name = "General",
@@ -1174,13 +1185,25 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
     return
 end
 
+find_registered!(env::EnvCache, names::Vector{String}) =
+    find_registered!(env, names, UUID[])
 find_registered!(env::EnvCache, uuids::Vector{UUID}) =
     find_registered!(env, String[], uuids)
-# Lookup package names & uuids in a single pass through registries
-function find_registered!(env::EnvCache,
+function find_registered!(
+    env::EnvCache,
     names::Vector{String},
-    uuids::Vector{UUID}=UUID[]
-)::Nothing
+    uuids::Vector{UUID})
+    clone_default_registries()
+    find_registered!(env,names,uuids,collect_registries())
+    return
+end
+# Lookup package names & uuids in a single pass through registries
+function find_registered!(
+    env::EnvCache,
+    names::Vector{String},
+    uuids::Vector{UUID},
+    regs::AbstractVector{RegistrySpec})
+
     # only look if there's something new to see
     names = filter(name -> !haskey(env.uuids, name), names)
     uuids = filter(uuid -> !haskey(env.paths, uuid), uuids)
@@ -1213,8 +1236,7 @@ function find_registered!(env::EnvCache,
     for uuid in uuids; env.names[uuid] = String[]; end
 
     # note: empty vectors will be left for names & uuids that aren't found
-    clone_default_registries()
-    for registry in collect_registries()
+    for registry in regs
         data = read_registry(joinpath(registry.path, "Registry.toml"))
         for (_uuid, pkgdata) in data["packages"]
               uuid = UUID(_uuid)
@@ -1230,6 +1252,7 @@ function find_registered!(env::EnvCache,
             unique!(v)
         end
     end
+    return
 end
 
 # Get registered uuids associated with a package name
