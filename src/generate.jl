@@ -12,7 +12,7 @@ function generate(ctx::Context, path::String; kwargs...)
     uuid = project(pkg, dir; preview=ctx.preview)
     entrypoint(pkg, dir; preview=ctx.preview)
     ctx.preview && preview_info()
-    return Dict(pkg => uuid)
+    return uuid
 end
 
 function genfile(f::Function, pkg::String, dir::String, file::String; preview::Bool)

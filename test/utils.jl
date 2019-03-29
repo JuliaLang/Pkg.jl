@@ -127,11 +127,15 @@ function git_init_package(tmp, path)
     base = basename(path)
     pkgpath = joinpath(tmp, base)
     cp(path, pkgpath)
-    LibGit2.with(LibGit2.init(pkgpath)) do repo
+    git_init_package(pkgpath)
+    return pkgpath
+end
+
+function git_init_package(path)
+    LibGit2.with(LibGit2.init(path)) do repo
         LibGit2.add!(repo, "*")
         LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
     end
-    return pkgpath
 end
 
 copy_test_package(tmpdir::String, name::String) =

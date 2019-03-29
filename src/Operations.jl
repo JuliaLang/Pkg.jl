@@ -224,9 +224,9 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
     if haskey(compat, "julia") && !(VERSION in Types.semver_spec(compat["julia"]))
         @warn("julia version requirement for package $(pkg.name) not satisfied")
     end
-    for (deppkg_name, uuid) in project.deps
-        vspec = haskey(compat, deppkg_name) ? Types.semver_spec(compat[deppkg_name]) : VersionSpec()
-        deppkg = PackageSpec(deppkg_name, uuid, vspec)
+    for (name, uuid) in project.deps
+        vspec = haskey(compat, name) ? Types.semver_spec(compat[name]) : VersionSpec()
+        deppkg = PackageSpec(name, uuid, vspec)
         push!(fix_deps_map[pkg.uuid], deppkg)
     end
     if project.version !== nothing
@@ -238,20 +238,43 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
     return true
 end
 
-is_fixed(pkg::PackageSpec) = pkg.path !== nothing || pkg.repo.url !== nothing
+function collect_unregistered(ctx::Context, pkg::PackageSpec, unregistered::Vector{PackageSpec})
+    path         = project_rel_path(ctx, source_path(pkg))
+    isdir(path) ||
+        pkgerror("`$(pkg.name) = $(pkg.uuid)` does not exist at `$path`")
+    manifest_file = manifestfile_path(path; strict=true)
+    # no manifest -> stop looking early
+    manifest_file !== nothing || return
+    manifest = read_manifest(manifest_file)
+    for (uuid, entry) in manifest
+        entry.path !== nothing || entry.repo.url !== nothing || continue
+        unreg_pkg = PackageSpec(;uuid=uuid, name=entry.name,
+                                path=entry.path, repo=entry.repo, tree_hash=entry.tree_hash)
+        # TODO does this need a version? (I don't think so)
+        push!(unregistered, unreg_pkg)
+        collect_unregistered(ctx, unreg_pkg, unregistered)
+    end
+end
+
+function collect_unregistered(ctx::Context, pkgs::Vector{PackageSpec})
+    unregistered = PackageSpec[]
+    foreach(pkg -> collect_unregistered(ctx, pkg, unregistered),
+            filter(is_unregistered, pkgs))
+    return unregistered
+end
 
 function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     fix_deps_map = Dict{UUID,Vector{PackageSpec}}()
-    for pkg in pkgs
+    # collect developed indirect deps
+    append!(pkgs, collect_unregistered(ctx, pkgs))
+    for pkg in filter(is_unregistered, pkgs)
         path = project_rel_path(ctx, source_path(pkg))
         if !isdir(path)
             pkgerror("path $(path) for package $(pkg.name) no longer exists. Remove the package or `develop` it at a new path")
         end
 
-        found_project = collect_project!(ctx, pkg, path, fix_deps_map)
-        if !found_project
+        collect_project!(ctx, pkg, path, fix_deps_map) ||
             collect_require!(ctx, pkg, path, fix_deps_map)
-        end
     end
 
     fixed = Dict{UUID,Fixed}()
@@ -288,7 +311,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
 
     # construct data structures for resolver and call it
     # this also sets pkg.version for fixed packages
-    fixed = collect_fixed!(ctx, filter(is_fixed, pkgs), names)
+    fixed = collect_fixed!(ctx, pkgs, names)
 
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo

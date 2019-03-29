@@ -73,10 +73,10 @@ end
         # explicit relative path
         with_temp_env() do env_path
             cd(env_path) do
-                uuids = Pkg.generate("Foo")
+                foo_uuid = Pkg.generate("Foo")
                 Pkg.develop(PackageSpec(;path="Foo"))
                 manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
-                entry = manifest[uuids["Foo"]]
+                entry = manifest[foo_uuid]
             end
             @test entry.path == "Foo"
             @test entry.name == "Foo"
@@ -85,11 +85,11 @@ end
         # explicit absolute path
         with_temp_env() do env_path
             cd_tempdir() do temp_dir
-                uuids = Pkg.generate("Foo")
+                foo_uuid = Pkg.generate("Foo")
                 absolute_path = abspath(joinpath(temp_dir, "Foo"))
                 Pkg.develop(PackageSpec(;path=absolute_path))
                 manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
-                entry = manifest[uuids["Foo"]]
+                entry = manifest[foo_uuid]
                 @test entry.name == "Foo"
                 @test entry.path == absolute_path
                 @test isdir(entry.path)

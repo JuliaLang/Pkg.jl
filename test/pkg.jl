@@ -747,6 +747,31 @@ end
     end end
 end
 
+@testset "Pkg automatically detects unregistered packages" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tempdir
+        # Target dependency graph:  A --> B -->C
+        #                           +---> D -->E
+        uuids = Dict(map(projname -> (projname => Pkg.generate(projname)),
+                         ["A", "B", "C", "D", "E"]))
+        git_init_package("E")
+        Pkg.activate("B")
+        Pkg.develop(Pkg.PackageSpec(path=joinpath(tempdir, "C")))
+        Pkg.activate("D")
+        Pkg.add(Pkg.PackageSpec(path=joinpath(tempdir, "E"), rev="master"))
+        Pkg.activate("A")
+        Pkg.develop(Pkg.PackageSpec(path="B"))
+        Pkg.develop(Pkg.PackageSpec(path="D"))
+        manifest = Pkg.Types.Context().env.manifest
+        c = get(manifest, uuids["C"], nothing)
+        @test c !== nothing
+        @test c.path == joinpath(tempdir, "C")
+        e = get(manifest, uuids["E"], nothing)
+        @test e !== nothing
+        @test e.repo.url == joinpath(tempdir, "E")
+        @test e.repo.rev == "master"
+    end end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")

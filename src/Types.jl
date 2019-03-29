@@ -29,6 +29,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED, PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED,
     printpkgstyle,
     projectfile_path, manifestfile_path,
+    is_unregistered,
     RegistrySpec
 
 include("versions.jl")
@@ -251,6 +252,7 @@ Base.@kwdef mutable struct PackageEntry
     other::Union{Dict,Nothing} = nothing
 end
 const Manifest = Dict{UUID,PackageEntry}
+is_unregistered(pkg) = pkg.path !== nothing || pkg.repo.url !== nothing
 
 function Base.show(io::IO, pkg::PackageEntry)
     f = []

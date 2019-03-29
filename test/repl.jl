@@ -194,8 +194,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
             pkg"generate HelloWorld"
             cd("HelloWorld") do
                 with_current_env() do
-                    uuid1 = Pkg.generate("SubModule1")["SubModule1"]
-                    uuid2 = Pkg.generate("SubModule2")["SubModule2"]
+                    uuid1 = Pkg.generate("SubModule1")
+                    uuid2 = Pkg.generate("SubModule2")
                     pkg"develop SubModule1"
                     mkdir("tests")
                     cd("tests")
@@ -280,9 +280,9 @@ end
 
 # test relative dev paths (#490)
 cd_tempdir() do tmp
-    uuid1 = Pkg.generate("HelloWorld")["HelloWorld"]
+    uuid1 = Pkg.generate("HelloWorld")
     cd("HelloWorld")
-    uuid2 = Pkg.generate("SubModule")["SubModule"]
+    uuid2 = Pkg.generate("SubModule")
     cd(mkdir("tests"))
     pkg"activate ."
     pkg"develop .." # HelloWorld
@@ -314,9 +314,9 @@ end
 # test relative dev paths (#490) without existing Project.toml
 temp_pkg_dir() do depot; cd_tempdir() do tmp
     pkg"activate NonExistent"
-    uuid= nothing
+    uuid = nothing
     withenv("USER" => "Test User") do
-        uuid = Pkg.generate("Foo")["Foo"]
+        uuid = Pkg.generate("Foo")
     end
     # this dev should not error even if NonExistent/Project.toml file is non-existent
     @test !isdir("NonExistent")
