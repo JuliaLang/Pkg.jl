@@ -325,7 +325,7 @@ var documenterSearchIndex = {"docs": [
     "page": "6. Compatibility",
     "title": "Caret specifiers",
     "category": "section",
-    "text": "A caret specifier allows upgrade that would be compatible according to semver. An updated dependency is considered compatible if the new version does not modify the left-most non zero digit in the version specifier.Some examples are shown below.^1.2.3 = [1.2.3, 2.0.0)\n^1.2 = [1.2.0, 2.0.0)\n^1 =  [1.0.0, 2.0.0)\n^0.2.3 = [0.2.3, 0.3.0)\n^0.0.3 = [0.0.3, 0.0.4)\n^0.0 = [0.0.0, 0.1.0)\n^0 = [0.0.0, 1.0.0)While the semver specification says that all versions with a major version of 0 are incompatible with each other, we have made that choice that a version given as 0.a.b is considered compatible with 0.a.c if a != 0 and  c >= b."
+    "text": "A caret specifier allows upgrade that would be compatible according to semver. An updated dependency is considered compatible if the new version does not modify the left-most non zero digit in the version specifier.Some examples are shown below.[compat]\nPkgA = \"^1.2.3\" # [1.2.3, 2.0.0)\nPkgB = \"^1.2\"   # [1.2.0, 2.0.0)\nPkgC = \"^1\"     # [1.0.0, 2.0.0)\nPkgD = \"^0.2.3\" # [0.2.3, 0.3.0)\nPkgE = \"^0.0.3\" # [0.0.3, 0.0.4)\nPkgF = \"^0.0\"   # [0.0.0, 0.1.0)\nPkgG = \"^0\"     # [0.0.0, 1.0.0)While the semver specification says that all versions with a major version of 0 are incompatible with each other, we have made that choice that a version given as 0.a.b is considered compatible with 0.a.c if a != 0 and  c >= b."
 },
 
 {
@@ -333,7 +333,7 @@ var documenterSearchIndex = {"docs": [
     "page": "6. Compatibility",
     "title": "Tilde specifiers",
     "category": "section",
-    "text": "A tilde specifier provides more limited upgrade possibilities. When specifying major, minor and patch version, or when specifying major and minor version, only patch version is allowed to change. If you only specify a major version, then both minor and patch versions are allowed to be upgraded (~1 is thus equivalent to ^1). This gives the following example.~1.2.3 = [1.2.3, 1.3.0)\n~1.2 = [1.2.0, 1.3.0)\n~1 = [1.0.0, 2.0.0)"
+    "text": "A tilde specifier provides more limited upgrade possibilities. When specifying major, minor and patch version, or when specifying major and minor version, only patch version is allowed to change. If you only specify a major version, then both minor and patch versions are allowed to be upgraded (~1 is thus equivalent to ^1). This gives the following example.[compat]\nPkgA = \"~1.2.3\" # [1.2.3, 1.3.0)\nPkgB = \"~1.2\"   # [1.2.0, 1.3.0)\nPkgC = \"~1\"     # [1.0.0, 2.0.0)"
 },
 
 {
@@ -341,7 +341,7 @@ var documenterSearchIndex = {"docs": [
     "page": "6. Compatibility",
     "title": "Inequality specifiers",
     "category": "section",
-    "text": "Inequalities can also be used to specify version ranges:>= 1.2.3 = [1.2.3,  ∞)\n≥ 1.2.3 = [1.2.3,  ∞)\n= 1.2.3 = [1.2.3, 1.2.3]\n< 1.2.3 = [0.0.0, 1.2.2]"
+    "text": "Inequalities can also be used to specify version ranges:[compat]\nPkgA = \">= 1.2.3\" # [1.2.3,  ∞)\nPkgB = \"≥ 1.2.3\"  # [1.2.3,  ∞)\nPkgC = \"= 1.2.3\"  # [1.2.3, 1.2.3]\nPkgD = \"< 1.2.3\"  # [0.0.0, 1.2.2]"
 },
 
 {
