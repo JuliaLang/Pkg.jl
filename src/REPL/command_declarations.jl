@@ -92,6 +92,9 @@ as any no-longer-necessary manifest packages due to project package removals.
     :handler => do_add!,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_package(x; add_or_dev=true, valid=[VersionRange, Rev])),
+    :option_spec => OptionDeclaration[
+        [:name => "strict", :api => :strict => true],
+    ],
     :completions => complete_add_dev,
     :description => "add packages to project",
     :help => md"""
@@ -126,6 +129,7 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_package(x; add_or_dev=true, valid=[VersionRange])),
     :option_spec => OptionDeclaration[
+        [:name => "strict", :api => :strict => true],
         [:name => "local", :api => :shared => false],
         [:name => "shared", :api => :shared => true],
     ],

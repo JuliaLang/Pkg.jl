@@ -948,24 +948,20 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[])
+function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bool=false)
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
         entry = manifest_info(ctx.env, pkg.uuid)
         pkgs[i] = update_package_add(pkg, entry, is_dep(ctx.env, pkg))
     end
-    load_direct_deps!(ctx, pkgs)
+    foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
+    # load dep graph
+    strict ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs)
     check_registered(ctx, pkgs)
-
-    # update set of deps
-    empty!(ctx.env.project.deps)
-    foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs)
-
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     # TODO is it still necessary to prune? I don't think so..
-
     new_apply = download_source(ctx, pkgs)
     write_env(ctx) # write env before building
     build_versions(ctx, union(new_apply, new_git))
@@ -973,13 +969,13 @@ end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
-                 keep_manifest::Bool=false)
+                 strict::Bool=false)
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
-    keep_manifest ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs)
+    strict ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs)
     check_registered(ctx, pkgs)
 
     # resolve & apply package versions
@@ -1207,7 +1203,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         end
         with_temp_env(tmp) do
             try
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=target_path)); keep_manifest=true)
+                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=target_path)); strict=true)
                 @debug "Using _parent_ dep graph"
             catch # TODO
                 Base.rm(tmp_manifest) # retry with a clean dependency graph
