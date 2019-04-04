@@ -39,13 +39,14 @@ An updated dependency is considered compatible if the new version does not modif
 Some examples are shown below.
 
 ```
-^1.2.3 = [1.2.3, 2.0.0)
-^1.2 = [1.2.0, 2.0.0)
-^1 =  [1.0.0, 2.0.0)
-^0.2.3 = [0.2.3, 0.3.0)
-^0.0.3 = [0.0.3, 0.0.4)
-^0.0 = [0.0.0, 0.1.0)
-^0 = [0.0.0, 1.0.0)
+[compat]
+PkgA = "^1.2.3" # [1.2.3, 2.0.0)
+PkgB = "^1.2"   # [1.2.0, 2.0.0)
+PkgC = "^1"     # [1.0.0, 2.0.0)
+PkgD = "^0.2.3" # [0.2.3, 0.3.0)
+PkgE = "^0.0.3" # [0.0.3, 0.0.4)
+PkgF = "^0.0"   # [0.0.0, 0.1.0)
+PkgG = "^0"     # [0.0.0, 1.0.0)
 ```
 
 While the semver specification says that all versions with a major version of 0 are incompatible with each other, we have made that choice that
@@ -60,9 +61,10 @@ are allowed to be upgraded (`~1` is thus equivalent to `^1`).
 This gives the following example.
 
 ```
-~1.2.3 = [1.2.3, 1.3.0)
-~1.2 = [1.2.0, 1.3.0)
-~1 = [1.0.0, 2.0.0)
+[compat]
+PkgA = "~1.2.3" # [1.2.3, 1.3.0)
+PkgB = "~1.2"   # [1.2.0, 1.3.0)
+PkgC = "~1"     # [1.0.0, 2.0.0)
 ```
 
 ### Inequality specifiers
@@ -70,8 +72,9 @@ This gives the following example.
 Inequalities can also be used to specify version ranges:
 
 ```
->= 1.2.3 = [1.2.3,  ∞)
-≥ 1.2.3 = [1.2.3,  ∞)
-= 1.2.3 = [1.2.3, 1.2.3]
-< 1.2.3 = [0.0.0, 1.2.2]
+[compat]
+PkgA = ">= 1.2.3" # [1.2.3,  ∞)
+PkgB = "≥ 1.2.3"  # [1.2.3,  ∞)
+PkgC = "= 1.2.3"  # [1.2.3, 1.2.3]
+PkgD = "< 1.2.3"  # [0.0.0, 1.2.2]
 ```
