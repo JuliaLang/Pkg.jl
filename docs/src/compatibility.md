@@ -38,7 +38,7 @@ An updated dependency is considered compatible if the new version does not modif
 
 Some examples are shown below.
 
-```
+```toml
 [compat]
 PkgA = "^1.2.3" # [1.2.3, 2.0.0)
 PkgB = "^1.2"   # [1.2.0, 2.0.0)
@@ -60,7 +60,7 @@ allowed to change. If you only specify a major version, then both minor and patc
 are allowed to be upgraded (`~1` is thus equivalent to `^1`).
 This gives the following example.
 
-```
+```toml
 [compat]
 PkgA = "~1.2.3" # [1.2.3, 1.3.0)
 PkgB = "~1.2"   # [1.2.0, 1.3.0)
@@ -71,7 +71,7 @@ PkgC = "~1"     # [1.0.0, 2.0.0)
 
 Inequalities can also be used to specify version ranges:
 
-```
+```toml
 [compat]
 PkgA = ">= 1.2.3" # [1.2.3,  ∞)
 PkgB = "≥ 1.2.3"  # [1.2.3,  ∞)
