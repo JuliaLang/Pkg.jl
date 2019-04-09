@@ -114,24 +114,36 @@ for arg in ARGS
         "uuid" => uuid(name),
         "deps" => Dict{String,String}(),
         "compat" => Dict{String,String}(),
+        "extras" => Dict{String,String}(),
     )
 
-    reqs = Pkg.Pkg2.Reqs.read(require_file)
-    for req in reqs
-        req isa Pkg.Pkg2.Reqs.Requirement || continue
-        dep = String(req.package)
-        if dep != "julia"
-            project["deps"][dep] = uuid(dep)
+    test_require_file = joinpath(dir, "test", "REQUIRE")
+
+    for (file, section) in ((require_file, "deps"),
+                            (test_require_file, "extras"))
+        isfile(file) || continue
+        reqs = Pkg.Pkg2.Reqs.read(file)
+        for req in reqs
+            req isa Pkg.Pkg2.Reqs.Requirement || continue
+            dep = String(req.package)
+            if dep != "julia"
+                project[section][dep] = uuid(dep)
+            end
+            if req.versions != Pkg.Pkg2.Pkg2Types.VersionSet()
+                project["compat"][dep] = semver(req.versions.intervals)
+            end
         end
-        if req.versions != Pkg.Pkg2.Pkg2Types.VersionSet()
-            project["compat"][dep] = semver(req.versions.intervals)
+
+        for stdlib in STDLIBS
+            if uses(dirname(file), stdlib)
+                project[section][stdlib] = uuid(stdlib)
+            end
         end
     end
 
-    for stdlib in STDLIBS
-        if uses(dir, stdlib)
-            project["deps"][stdlib] = uuid(stdlib)
-        end
+    if !isempty(project["extras"])
+        project["targets"] = Dict("test" => collect(keys(project["extras"])))
+        haskey(project["deps"], "Test") && delete!(project["deps"], "Test")
     end
 
     println(stderr, "Generating project file for $name: $project_file")
