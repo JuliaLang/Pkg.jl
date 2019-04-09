@@ -124,12 +124,14 @@ for arg in ARGS
         isfile(file) || continue
         reqs = Pkg.Pkg2.Reqs.read(file)
         for req in reqs
-            dep = String(req.package)
-            if dep != "julia"
-                project[section][dep] = uuid(dep)
-            end
-            if req.versions != Pkg.Pkg2.Pkg2Types.VersionSet()
-                project["compat"][dep] = semver(req.versions.intervals)
+            if typeof(req) == Pkg.Pkg2.Reqs.Requirement
+                dep = String(req.package)
+                if dep != "julia"
+                    project[section][dep] = uuid(dep)
+                end
+                if req.versions != Pkg.Pkg2.Pkg2Types.VersionSet()
+                    project["compat"][dep] = semver(req.versions.intervals)
+                end
             end
         end
 
