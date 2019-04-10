@@ -118,6 +118,7 @@ for arg in ARGS
 
     reqs = Pkg.Pkg2.Reqs.read(require_file)
     for req in reqs
+        req isa Pkg.Pkg2.Reqs.Requirement || continue
         dep = String(req.package)
         if dep != "julia"
             project["deps"][dep] = uuid(dep)
