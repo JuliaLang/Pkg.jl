@@ -37,7 +37,13 @@ const STDLIBS = [
 ]
 
 function uuid(name::AbstractString)
-    string(Pkg.METADATA_compatible_uuid(String(name)))
+    if name == "Pkg"
+        return "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+    elseif name == "Statistics"
+        return "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+    else
+        string(Pkg.METADATA_compatible_uuid(String(name)))
+    end
 end
 
 function uses(repo::AbstractString, lib::AbstractString)
