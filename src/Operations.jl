@@ -1088,9 +1088,9 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     build_versions(ctx, new)
 end
 
-update_package_free!(pkg::PackageSpec, ::Nothing) =
+update_package_free!(ctx::Context, pkg::PackageSpec, ::Nothing) =
     pkgerror("Trying to free a package which does not exist in the manifest")
-function update_package_free!(pkg::PackageSpec, entry::PackageEntry)
+function update_package_free!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
     # TODO check that `pin` and `path` do not occur in same node when reading manifest
     if entry.pinned
         pkg.pinned = false
@@ -1099,16 +1099,23 @@ function update_package_free!(pkg::PackageSpec, entry::PackageEntry)
         pkg.tree_hash = entry.tree_hash
         return
     end
-    if entry.path !== nothing
+    if entry.path !== nothing # deved
         return # -> name, uuid
     end
-    pkgerror("`free` is only a valid operation for `pin`ed or `dev`ed packages")
+    if entry.repo !== nothing # tracking a repo
+        # make sure the package is registered so we have something to free to
+        if isempty(registered_paths(ctx.env, pkg.uuid))
+            pkgerror("cannot free package $(something(pkg.name, "")) since it is not found in a registry")
+        end
+        return
+    end
+    pkgerror("`free` is only a valid operation for packages that are `pin`ed, `dev`ed or tracking a repo.")
 end
 
 # TODO: this is two techinically different operations with the same name
 # split into two subfunctions ...
 function free(ctx::Context, pkgs::Vector{PackageSpec})
-    foreach(pkg -> update_package_free!(pkg, manifest_info(ctx.env, pkg.uuid)), pkgs)
+    foreach(pkg -> update_package_free!(ctx, pkg, manifest_info(ctx.env, pkg.uuid)), pkgs)
 
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
         # TODO what happens if I remove this?
