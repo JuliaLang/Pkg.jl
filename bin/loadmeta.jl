@@ -171,6 +171,8 @@ for pkg in [
     "DynamicalBilliardsPlotting"
     "GLUT"
     "GetC"
+    "PhasedArrayTracking"
+    "SimilarReferences"
 ]
 
     delete!(pkgs, pkg)
