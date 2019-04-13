@@ -24,6 +24,7 @@ makedocs(
         "getting-started.md",
         "managing-packages.md",
         "environments.md",
+        "making-changes.md",
         "creating-packages.md",
         "compatibility.md",
         "registries.md",
