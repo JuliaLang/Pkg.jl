@@ -1121,7 +1121,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         # TODO what happens if I remove this?
         for pkg in filter(pkg -> pkg.version == VersionSpec(), pkgs)
             isempty(registered_paths(ctx.env, pkg.uuid)) &&
-                pkgerror("cannot free an `dev`ed package that does not exist in a registry")
+                pkgerror("cannot free a `dev`ed package that does not exist in a registry")
         end
         load_direct_deps!(ctx, pkgs)
         check_registered(ctx, pkgs)
