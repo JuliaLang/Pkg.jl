@@ -73,7 +73,8 @@ function gitmeta(pkgs::Dict{String,Package})
             haskey(d[uuid], v.sha1) &&
             ((v"0.7" ∉ v.requires["julia"].versions &&
               v"1.0" ∉ v.requires["julia"].versions &&
-              v"1.1" ∉ v.requires["julia"].versions) ||
+              v"1.1" ∉ v.requires["julia"].versions &&
+              v"1.2" ∉ v.requires["julia"].versions) ||
             haskey(s[uuid], v.sha1)) && continue
             if repo == nothing
                 repo = ispath(repo_path) ? LibGit2.GitRepo(repo_path) : begin
@@ -108,7 +109,8 @@ function gitmeta(pkgs::Dict{String,Package})
             # scan for stdlib dependencies
             v"0.7" in v.requires["julia"].versions ||
             v"1.0" in v.requires["julia"].versions ||
-            v"1.1" in v.requires["julia"].versions || continue
+            v"1.1" in v.requires["julia"].versions ||
+            v"1.2" in v.requires["julia"].versions || continue
             haskey(s[uuid], v.sha1) && continue
             libs = [uses(repo_path, git_tree_hash, lib) for lib in STDLIBS]
             s[uuid][v.sha1] = sum(d*2^(i-1) for (i,d) in enumerate(libs))
