@@ -119,9 +119,9 @@ const update = API.up
 
 
 """
-    Pkg.test(; coverage::Bool=true)
-    Pkg.test(pkg::Union{String, Vector{String}; coverage::Bool=true)
-    Pkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; coverage::Bool=true)
+    Pkg.test(; coverage::Bool=false)
+    Pkg.test(pkg::Union{String, Vector{String}; coverage::Bool=false)
+    Pkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; coverage::Bool=false)
 
 Run the tests for package `pkg` or if no positional argument is given to `test`,
 the current project is tested (which thus needs to be a package).
