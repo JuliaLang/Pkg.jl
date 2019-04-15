@@ -139,7 +139,7 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
     develop [--shared|--local] pkg[=uuid] ...
 
 Make a package available for development. If `pkg` is an existing local path that path will be recorded in
-the manifest and used. Otherwise, a full git clone of `pkg` at rev `rev` is made. The location of the clone is
+the manifest and used. Otherwise, a full git clone of `pkg` is made. The location of the clone is
 controlled by the `--shared` (default) and `--local` arguments. The `--shared` location defaults to
 `~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable. When `--local` is given,
 the clone is placed in a `dev` folder in the current project.
