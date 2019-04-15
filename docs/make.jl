@@ -8,7 +8,8 @@ include("generate.jl")
 const formats = Any[
     Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
-        canonical = "https://julialang.github.io/Pkg.jl/v1/"
+        canonical = "https://julialang.github.io/Pkg.jl/v1/",
+        assets = ["assets/custom.css"],
     ),
 ]
 if "pdf" in ARGS
@@ -33,7 +34,6 @@ makedocs(
         "repl.md",
         "api.md"
     ],
-    assets = ["assets/custom.css"],
 )
 
 mktempdir() do tmp
