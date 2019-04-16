@@ -287,7 +287,9 @@ mutable struct Graph
             end
             # The remaining dependencies do not have compatibility constraints
             for uuid in values(n2u)
-                get!(req, pdict[uuid]) do; VersionSpec() end
+                p1 = pdict[uuid]
+                p1 == p0 && continue
+                get!(req, p1) do; VersionSpec() end
             end
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
