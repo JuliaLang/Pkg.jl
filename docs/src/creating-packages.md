@@ -11,12 +11,12 @@ To generate files for a new package, use `pkg> generate`.
 (v1.0) pkg> generate HelloWorld
 ```
 
-This creates a new project `HelloWorld` with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
+This creates a new project `HelloWorld` with the following files (visualized with the [PrintFileTree.jl package](https://github.com/NHDaly/PrintFileTree.jl)):
 
 ```jl
-shell> cd HelloWorld
+julia> cd("HelloWorld")
 
-shell> tree .
+julia> printfiletree(".")
 .
 ├── Project.toml
 └── src
