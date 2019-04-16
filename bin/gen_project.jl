@@ -87,13 +87,14 @@ function semver(intervals)
     return join(spec, ", ")
 end
 
+isempty(ARGS) && (push!(ARGS, pwd()))
+
 if ARGS[1] == "-f"
     const force = true
     popfirst!(ARGS)
 else
     const force = false
 end
-isempty(ARGS) && (push!(ARGS, pwd()))
 
 for arg in ARGS
     dir = abspath(expanduser(arg))
