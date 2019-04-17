@@ -109,7 +109,7 @@ for arg in ARGS
 
     project_file = joinpath(dir, "Project.toml")
     !force && isfile(project_file) &&
-        @error "$arg already has a project file"
+        @error "$arg already has a project file" && exit(1)
 
     require_file = joinpath(dir, "REQUIRE")
     isfile(require_file) ||
