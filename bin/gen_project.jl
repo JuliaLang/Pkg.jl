@@ -87,7 +87,7 @@ function semver(intervals)
     return join(spec, ", ")
 end
 
-if ARGS[1] == "-f"
+if !isempty(ARGS) && ARGS[1] == "-f"
     const force = true
     popfirst!(ARGS)
 else
