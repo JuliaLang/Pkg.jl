@@ -668,5 +668,11 @@ data = [ ["gamma", "delta"], [1, 2] ] # just an update to make sure parsers supp
     res2 = TOML.parse(io)
     @test res1 == res2
 
+    # sorting with non-Function by
+    io = IOBuffer()
+    d = Dict("1.10" => 10, "1.1" => 1)
+    TOML.print(io, d; sorted=true, by = VersionNumber)
+    @test String(take!(io)) == "\"1.1\" = 1\n\"1.10\" = 10\n"
+
 end
 end
