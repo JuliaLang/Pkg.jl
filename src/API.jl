@@ -508,7 +508,7 @@ end
 function activate()
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || @info("activating environment at $(pathrepr(p)).")
+    p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
     return nothing
 end
 function _activate_dep(dep_name::AbstractString)
@@ -561,7 +561,10 @@ function activate(path::AbstractString; shared::Bool=false)
     end
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
     p = Base.active_project()
-    p === nothing || @info("activating$(ispath(p) ? "" : " new") environment at $(pathrepr(p)).")
+    if p !== nothing
+        n = ispath(p) ? "" : "new "
+        printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
+    end
     return nothing
 end
 
