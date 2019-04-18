@@ -641,7 +641,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
             readonly && set_readonly(path)
         end
         vstr = pkg.version != nothing ? "v$(pkg.version)" : "[$h]"
-        @info "Installed $(rpad(pkg.name * " ", max_name + 2, "─")) $vstr"
+        printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
 
     return new_versions
