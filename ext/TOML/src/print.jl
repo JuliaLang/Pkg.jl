@@ -55,7 +55,7 @@ function _print(io::IO, a::AbstractDict,
     indent::Int = 0,
     first_block::Bool = true,
     sorted::Bool = false,
-    by::Function = identity,
+    by = identity,
 )
     akeys = keys(a)
     if sorted
