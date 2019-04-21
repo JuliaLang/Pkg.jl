@@ -1,5 +1,5 @@
 name = "Pkg"
-uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+uuid = "64cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 keywords = ["package", "management"]
 license = "MIT"
 desc = "The next-generation Julia package manager."
@@ -8,6 +8,7 @@ version = "1.2.0"
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
+Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
@@ -17,6 +18,3 @@ UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Test"]
