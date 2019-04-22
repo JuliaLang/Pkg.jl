@@ -1,4 +1,4 @@
-# **5.** Creating Packages
+# **6.** Creating Packages
 
 A package is a project with a `name`, `uuid` and `version` entry in the `Project.toml` file, and a `src/PackageName.jl` file that defines the module `PackageName`.
 This file is executed when the package is loaded.
