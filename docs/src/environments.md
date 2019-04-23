@@ -2,9 +2,9 @@
 
 ## Creating your own projects
 
-So far we have added packages to the default project at `~/.julia/environments/v1.0`, it is, however, easy to create other, independent, projects.
-It should be pointed out if two projects uses the same package at the same version, the content of this package is not duplicated.
-In order to create a new project, create a directory for it and then activate that directory to make it the "active project" which package operations manipulate:
+So far we have added packages to the default project at `~/.julia/environments/v1.0`. It is however easy to create other, independent, projects.
+It should be pointed out that when two projects use the same package at the same version, the content of this package is not duplicated.
+In order to create a new project, create a directory for it and then activate that directory to make it the "active project", which package operations manipulate:
 
 ```
 shell> mkdir MyProject
@@ -18,7 +18,7 @@ shell> cd MyProject
     Status `Project.toml`
 ```
 
-Note that the REPL prompt changed when the new project is activated. Since this is a newly created project, the status command show it contains no packages, and in fact, it has no project or manifest file until we add a package to it:
+Note that the REPL prompt changed when the new project is activated. Since this is a newly created project, the status command shows that it contains no packages, and in fact, it has no project or manifest file until we add a package to it:
 
 ```
 shell> ls -l
