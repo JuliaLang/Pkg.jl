@@ -266,10 +266,10 @@ function compress_versions(pool::Vector{VersionNumber}, subset::Vector{VersionNu
     isempty(subset) && return VersionSpec(ranges)
     a = first(subset)
     for b in reverse(subset)
-        is_breaking(a, b) && continue
-        for m = 1+leading_zeros(a):3
+        a.major == b.major || continue
+        for m = 1:3
             lo = VersionBound((a.major, a.minor, a.patch)[1:m]...)
-            for n = 1+leading_zeros(b):3
+            for n = 1:3
                 hi = VersionBound((b.major, b.minor, b.patch)[1:n]...)
                 r = VersionRange(lo, hi)
                 if !any(v in r for v in complement)
@@ -284,15 +284,6 @@ end
 function compress_versions(pool::Vector{VersionNumber}, subset)
     compress_versions(pool, filter(in(subset), pool))
 end
-
-is_breaking(a::VersionNumber, b::VersionNumber) =
-    a.major != b.major ||
-        a.major == b.major == 0 &&
-            (a.minor != b.minor ||
-                a.minor == b.minor == 0 && a.patch != b.patch)
-
-leading_zeros(v::VersionNumber) =
-    (v.major == 0) + (v.major == 0 && v.minor == 0)
 
 ###################
 # Semver notation #
