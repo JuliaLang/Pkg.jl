@@ -22,8 +22,7 @@ are described below.
 
 ### The `name` field
 
-The name of the package/project is determined by the `name` field.
-Example:
+The name of the package/project is determined by the `name` field, for example:
 ```toml
 name = "Example"
 ```
@@ -36,8 +35,7 @@ for packages.
 ### The `uuid` field
 
 `uuid` is a string with a [universally unique identifier]
-(https://en.wikipedia.org/wiki/Universally_unique_identifier) for the package/project.
-Example:
+(https://en.wikipedia.org/wiki/Universally_unique_identifier) for the package/project, for example:
 ```toml
 uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 ```
@@ -47,8 +45,7 @@ The `uuid` field is mandatory for packages.
 ### The `version` field
 
 `version` is a string with the version number for the package/project. It should consist of
-three numbers, major version, minor version and patch number, separated with a `.`.
-Example:
+three numbers, major version, minor version and patch number, separated with a `.`, for example:
 ```toml
 version = "1.2.5"
 ```
@@ -138,7 +135,7 @@ dependency section includes a combination of the following entries:
 #### Added package
 
 When a package is added from a package registry, for example by invoking `pkg> add Example`
-or with a specific version `pkg> add Example@1.2` the resulting `Manifest.toml` entry looks
+or with a specific version `pkg> add Example@1.2`, the resulting `Manifest.toml` entry looks
 like:
 
 ```toml
@@ -155,7 +152,7 @@ the registry where this package were found.
 #### Added package by branch
 
 The resulting dependency section when adding a package specified by a branch, e.g.
-`pkg> add Example#master` or `pkg> add https://github.com/JuliaLang/Example.jl.git`
+`pkg> add Example#master` or `pkg> add https://github.com/JuliaLang/Example.jl.git`,
 looks like:
 
 ```toml
@@ -174,7 +171,7 @@ Note that both the branch we are tracking (`master`) and the remote repository u
 #### Added package by commit
 
 The resulting dependency section when adding a package specified by a commit, e.g.
-`pkg> add Example#cf6ba6cc0be0bb5f56840188563579d67048be34` looks like
+`pkg> add Example#cf6ba6cc0be0bb5f56840188563579d67048be34`, looks like:
 
 ```toml
 [[Example]]
@@ -191,7 +188,7 @@ The only difference from tracking a branch is the content of `repo-rev`.
 #### Developed package
 
 The resulting dependency section when adding a package with `develop`,
-e.g. `pkg> develop Example` or `pkg> develop /path/to/local/folder/Example`
+e.g. `pkg> develop Example` or `pkg> develop /path/to/local/folder/Example`,
 looks like:
 
 ```toml

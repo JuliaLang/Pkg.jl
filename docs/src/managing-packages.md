@@ -7,7 +7,7 @@ The most frequently used one is `add` and its usage is described first.
 
 ### Adding registered packages
 
-In the Pkg REPL packages can be added with the `add` command followed by the name of the package, for example:
+In the Pkg REPL, packages can be added with the `add` command followed by the name of the package, for example:
 
 ```
 (v1.0) pkg> add Example
@@ -36,7 +36,7 @@ you have added yourself, in this case, `Example`:
   [7876af07] Example v0.5.1
 ```
 
-The manifest status, in addition, includes the dependencies of explicitly added packages.
+The manifest status shows all the packages in the environment, including recursive dependencies:
 
 ```
 (v1.0) pkg> st --manifest
@@ -67,8 +67,8 @@ A specific version can be installed by appending a version after a `@` symbol, e
   [7876af07] + Example v0.4.1
 ```
 
-If the master branch (or a certain commit SHA) of `Example` has a hotfix that has not yet included in a registered version,
-we can explicitly track a branch (or commit) by appending `#branch` (or `#commit`) to the package name:
+If a branch (or a certain commit) of `Example` has a hotfix that is not yet included in a registered version,
+we can explicitly track that branch (or commit) by appending `#branchname` (or `#commitSHA1`) to the package name:
 
 ```
 (v1.0) pkg> add Example#master
@@ -97,7 +97,7 @@ To go back to tracking the registry version of `Example`, the command `free` is 
 
 ### Adding unregistered packages
 
-If a package is not in a registry, it can still be added by instead of the package name giving the URL to the repository to `add`.
+If a package is not in a registry, it can still be added by instead of the package name giving the URL to the repository to `add`:
 
 ```
 (v1.0) pkg> add https://github.com/fredrikekre/ImportMacros.jl
@@ -112,7 +112,7 @@ Downloaded MacroTools ─ v0.4.1
 ```
 
 The dependencies of the unregistered package (here `MacroTools`) got installed.
-For unregistered packages we could have given a branch (or commit SHA) to track using `#`, just like for registered packages.
+For unregistered packages we could have given a branch name (or commit SHA1) to track using `#`, just like for registered packages.
 
 
 ### Adding a local package
@@ -161,7 +161,7 @@ never touch files that are tracking a path.
 If `dev` is used on a local path, that path to that package is recorded and used when loading that package.
 The path will be recorded relative to the project file, unless it is given as an absolute path.
 
-To stop tracking a path and use the registered version again, use `free`
+To stop tracking a path and use the registered version again, use `free`:
 
 ```
 (v1.0) pkg> free Example
@@ -178,18 +178,18 @@ knowing the exact content of all the packages that are tracking a path.
 
 Note that if you add a dependency to a package that tracks a local path, the Manifest (which contains the whole dependency graph) will become
 out of sync with the actual dependency graph. This means that the package will not be able to load that dependency since it is not recorded
-in the Manifest. To update sync the Manifest, use the REPL command `resolve`.
+in the Manifest. To synchronize the Manifest, use the REPL command `resolve`.
 
 ## Removing packages
 
 Packages can be removed from the current project by using `pkg> rm Package`.
-This will only remove packages that exist in the project, to remove a package that only
+This will only remove packages that exist in the project; to remove a package that only
 exists as a dependency use `pkg> rm --manifest DepPackage`.
-Note that this will remove all packages that depends on `DepPackage`.
+Note that this will remove all packages that depend on `DepPackage`.
 
 ## Updating packages
 
-When new versions of packages the project is using are released, it is a good idea to update. Simply calling `up` will try to update *all* the dependencies of the project
+When new versions of packages that the project is using are released, it is a good idea to update. Simply calling `up` will try to update *all* the dependencies of the project
 to the latest compatible version. Sometimes this is not what you want. You can specify a subset of the dependencies to upgrade by giving them as arguments to `up`, e.g:
 
 ```
@@ -202,12 +202,12 @@ If `Example` has a dependency which is also a dependency for another explicitly 
 (v1.0) pkg> up --minor Example
 ```
 
-Packages that track a repository are not updated when a minor upgrade is done.
+Packages that track a local repository are not updated when a minor upgrade is done.
 Packages that track a path are never touched by the package manager.
 
 ## Pinning a package
 
-A pinned package will never be updated. A package can be pinned using `pin` as for example
+A pinned package will never be updated. A package can be pinned using `pin`, for example:
 
 ```
 (v1.0) pkg> pin Example
@@ -242,7 +242,7 @@ The tests for a package can be run using `test`command:
 
 The build step of a package is automatically run when a package is first installed.
 The output of the build process is directed to a file.
-To explicitly run the build step for a package the `build` command is used:
+To explicitly run the build step for a package, the `build` command is used:
 
 ```
 (v1.0) pkg> build MbedTLS
@@ -294,5 +294,5 @@ or
 (HelloWorld) pkg> preview up
 ```
 
-will show you the effects of adding `Plots`, or doing a full upgrade, respectively, would have on your project.
-However, nothing would be installed and your `Project.toml` and `Manifest.toml` are untouched.
+will show you the effects that `add Plots`, or `up`, respectively, would have on your project.
+However, nothing will be installed and your `Project.toml` and `Manifest.toml` files will remain untouched.

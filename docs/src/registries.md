@@ -1,7 +1,7 @@
 # **7.** Registries
 
 Registries contain information about packages, such as
-available releases, dependencies and where it can be downloaded.
+available releases and dependencies, and where they can be downloaded.
 The `General` registry (https://github.com/JuliaRegistries/General)
 is the default one, and is installed automatically.
 
@@ -19,7 +19,7 @@ the [Registry API Reference](@ref) section.
 
 A custom registry can be added with the `registry add` command
 from the Pkg REPL. Usually this will be done with a URL to the
-registry. Here we add the `General` registry
+registry. Here we add the `General` registry:
 
 ```
 pkg> registry add https://github.com/JuliaRegistries/General
@@ -37,7 +37,7 @@ Registry Status
  [23338594] General (https://github.com/JuliaRegistries/General.git)
 ```
 
-Registries are always added to the user depot, which is the first entry in `DEPOT_PATH`.
+Registries are always added to the user depot, which is the first entry in `DEPOT_PATH` (cf. the [Glossary](@ref) section).
 
 ### Removing registries
 
@@ -64,7 +64,7 @@ pkg> registry rm General=23338594-aafe-5451-b93e-139f81909106
 ### Updating registries
 
 The `registry update` (or `registry up`) command is available to update registries.
-Here we update the `General` registry,
+Here we update the `General` registry:
 
 ```
 pkg> registry up General
@@ -72,7 +72,7 @@ pkg> registry up General
   Updating git-repo `https://github.com/JuliaRegistries/General`
 ```
 
-and to update all installed user registries just do
+and to update all installed registries just do:
 
 ```
 pkg> registry up
