@@ -17,11 +17,14 @@ end
 
 for (_, info) in packages
     path = joinpath(registry_path, info["path"])
+    # load and normalize Deps.toml
     deps_file = joinpath(path, "Deps.toml")
     isfile(deps_file) || continue
+    deps = Compress.load(deps_file)
+    Compress.save(deps_file, deps)
+    # load and normalize Compat.toml
     compat_file = joinpath(path, "Compat.toml")
     isfile(compat_file) || continue
-    deps = Compress.load(deps_file)
     compat = Compress.load(compat_file)
     for (ver, data) in compat
         for (dep, spec) in data
