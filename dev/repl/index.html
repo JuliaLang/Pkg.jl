@@ -7,7 +7,7 @@
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">add pkg[=uuid] [@version] [#rev] ...</code></pre><p>Add package <code>pkg</code> to the current project file. If <code>pkg</code> could refer to multiple different packages, specifying <code>uuid</code> allows you to disambiguate. <code>@version</code> optionally allows specifying which versions of packages. Versions may be specified by <code>@1</code>, <code>@1.2</code>, <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. A git-revision can be specified by <code>#branch</code> or <code>#commit</code>.</p><p>If a local path is used as an argument to <code>add</code>, the path needs to be a git repository. The project will then track that git repository just like if it is was tracking a remote repository online.</p><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; add Example
+</div><div><pre><code class="language-none">add pkg[=uuid] [@version] [#rev] ...</code></pre><p>Add package <code>pkg</code> to the current project file. If <code>pkg</code> could refer to multiple different packages, specifying <code>uuid</code> allows you to disambiguate. <code>@version</code> optionally allows specifying which versions of packages to add. Version specifications are of the form <code>@1</code>, <code>@1.2</code> or <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. A git revision can be specified by <code>#branch</code> or <code>#commit</code>.</p><p>If a local path is used as an argument to <code>add</code>, the path needs to be a git repository. The project will then track that git repository just like it would track a remote repository online.</p><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; add Example
 pkg&gt; add Example@0.5
 pkg&gt; add Example#master
 pkg&gt; add Example#c37b675
@@ -21,7 +21,7 @@ pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre><p></p></di
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">build [-v|verbose] pkg[=uuid] ...</code></pre><p>Run the build script in <code>deps/build.jl</code> for each package in <code>pkg</code> and all of their dependencies in depth-first recursive order. If no packages are given, runs the build scripts for all packages in the manifest. The <code>-v</code>/<code>--verbose</code> option redirects build output to <code>stdout</code>/<code>stderr</code> instead of the <code>build.log</code> file. The <code>startup.jl</code> file is disabled during building unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">build [-v|verbose] pkg[=uuid] ...</code></pre><p>Run the build script in <code>deps/build.jl</code> for <code>pkg</code> and all of its dependencies in depth-first recursive order. If no packages are given, run the build scripts for all packages in the manifest. The <code>-v</code>/<code>--verbose</code> option redirects build output to <code>stdout</code>/<code>stderr</code> instead of the <code>build.log</code> file. The <code>startup.jl</code> file is disabled during building unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-develop" href="#repl-develop">
         <code>develop</code>
@@ -29,7 +29,7 @@ pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre><p></p></di
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">develop [--shared|--local] pkg[=uuid] ...</code></pre><p>Make a package available for development. If <code>pkg</code> is an existing local path that path will be recorded in the manifest and used. Otherwise, a full git clone of <code>pkg</code> is made. The location of the clone is controlled by the <code>--shared</code> (default) and <code>--local</code> arguments. The <code>--shared</code> location defaults to <code>~/.julia/dev</code>, but can be controlled with the <code>JULIA_PKG_DEVDIR</code> environment variable. When <code>--local</code> is given, the clone is placed in a <code>dev</code> folder in the current project. This operation is undone by <code>free</code>.</p><p><em>Example</em></p><pre><code class="language-jl">pkg&gt; develop Example
+</div><div><pre><code class="language-none">develop [--shared|--local] pkg[=uuid] ...</code></pre><p>Make a package available for development. If <code>pkg</code> is an existing local path, that path will be recorded in the manifest and used. Otherwise, a full git clone of <code>pkg</code> is made. The location of the clone is controlled by the <code>--shared</code> (default) and <code>--local</code> arguments. The <code>--shared</code> location defaults to <code>~/.julia/dev</code>, but can be controlled with the <code>JULIA_PKG_DEVDIR</code> environment variable. When <code>--local</code> is given, the clone is placed in a <code>dev</code> folder in the current project. This operation is undone by <code>free</code>.</p><p><strong>Examples</strong></p><pre><code class="language-jl">pkg&gt; develop Example
 pkg&gt; develop https://github.com/JuliaLang/Example.jl
 pkg&gt; develop ~/mypackages/Example
 pkg&gt; develop --local Example</code></pre><p></p></div></section><section class="docstring">
@@ -56,7 +56,9 @@ pkg&gt; develop --local Example</code></pre><p></p></div></section><section clas
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">pin pkg[=uuid] ...</code></pre><p>Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded. A pinned package has the symbol <code>⚲</code> next to its version in the status list.</p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">pin pkg[=uuid] ...</code></pre><p>Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded. A pinned package has the symbol <code>⚲</code> next to its version in the status list.</p><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; pin Example
+pkg&gt; pin Example@0.5.0
+pkg&gt; pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0</code></pre><p></p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-remove" href="#repl-remove">
         <code>remove</code>
@@ -64,7 +66,7 @@ pkg&gt; develop --local Example</code></pre><p></p></div></section><section clas
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">rm [-p|--project] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the project file. Since the name <code>pkg</code> can only refer to one package in a project this is unambiguous, but you can specify a <code>uuid</code> anyway, and the command is ignored, with a warning if package name and UUID do not mactch. When a package is removed from the project file, it may still remain in the manifest if it is required by some other package in the project. Project mode operation is the default, so passing <code>-p</code> or <code>--project</code> is optional unless it is preceded by the <code>-m</code> or <code>--manifest</code> options at some earlier point.</p><pre><code class="language-none">rm [-m|--manifest] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the manifest file. If the name <code>pkg</code> refers to multiple packages in the manifest, <code>uuid</code> disambiguates it. Removing a package from the manifest forces the removal of all packages that depend on it, as well as any no-longer-necessary manifest packages due to project package removals.</p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">rm [-p|--project] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the project file. Since the name <code>pkg</code> can only refer to one package in a project this is unambiguous, but you can specify a <code>uuid</code> anyway, and the command is ignored, with a warning, if package name and UUID do not mactch. When a package is removed from the project file, it may still remain in the manifest if it is required by some other package in the project. Project mode operation is the default, so passing <code>-p</code> or <code>--project</code> is optional unless it is preceded by the <code>-m</code> or <code>--manifest</code> options at some earlier point.</p><pre><code class="language-none">rm [-m|--manifest] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the manifest file. If the name <code>pkg</code> refers to multiple packages in the manifest, <code>uuid</code> disambiguates it. Removing a package from the manifest forces the removal of all packages that depend on it, as well as any no-longer-necessary manifest packages due to project package removals.</p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-test" href="#repl-test">
         <code>test</code>
@@ -72,9 +74,7 @@ pkg&gt; develop --local Example</code></pre><p></p></div></section><section clas
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">test [opts] pkg[=uuid] ...
-
-opts: --coverage</code></pre><p>Run the tests for package <code>pkg</code>. This is done by running the file <code>test/runtests.jl</code> in the package directory. The option <code>--coverage</code> can be used to run the tests with coverage enabled. The <code>startup.jl</code> file is disabled during testing unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">test [--coverage] pkg[=uuid] ...</code></pre><p>Run the tests for package <code>pkg</code>. This is done by running the file <code>test/runtests.jl</code> in the package directory. The option <code>--coverage</code> can be used to run the tests with coverage enabled. The <code>startup.jl</code> file is disabled during testing unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-update" href="#repl-update">
         <code>update</code>
@@ -82,10 +82,10 @@ opts: --coverage</code></pre><p>Run the tests for package <code>pkg</code>. This
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">up [-p|project]  [opts] pkg[=uuid] [@version] ...
-up [-m|manifest] [opts] pkg[=uuid] [@version] ...
+</div><div><pre><code class="language-none">up [-p|--project]  [opts] pkg[=uuid] [@version] ...
+up [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
-opts: --major | --minor | --patch | --fixed</code></pre><p>Update the indicated package within the constraints of the indicated version specifications. Versions may be specified by <code>@1</code>, <code>@1.2</code>, <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. In <code>--project</code> mode, package specifications only match project packages, while in <code>manifest</code> mode they match any manifest package. Bound level options force the following packages to be upgraded only within the current major, minor, patch version; if the <code>--fixed</code> upgrade level is given, then the following packages will not be upgraded at all.</p></div></section><h2><a class="nav-anchor" id="registry-commands-1" href="#registry-commands-1"><code>registry</code> commands</a></h2><section class="docstring">
+opts: --major | --minor | --patch | --fixed</code></pre><p>Update <code>pkg</code> within the constraints of the indicated version specifications. These specifications are of the form <code>@1</code>, <code>@1.2</code> or <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. In <code>--project</code> mode, package specifications only match project packages, while in <code>manifest</code> mode they match any manifest package. Bound level options force the following packages to be upgraded only within the current major, minor, patch version; if the <code>--fixed</code> upgrade level is given, then the following packages will not be upgraded at all.</p></div></section><h2><a class="nav-anchor" id="registry-commands-1" href="#registry-commands-1"><code>registry</code> commands</a></h2><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-add" href="#repl-registry-add">
         <code>registry add</code>
@@ -93,7 +93,7 @@ opts: --major | --minor | --patch | --fixed</code></pre><p>Update the indicated 
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">registry add reg...</code></pre><p>Adds package registries <code>reg...</code> to the user depot.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry add General
+</div><div><pre><code class="language-none">registry add reg...</code></pre><p>Add package registries <code>reg...</code> to the user depot.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry add General
 pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-remove" href="#repl-registry-remove">
@@ -102,7 +102,7 @@ pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">registry rm reg...</code></pre><p>Remove package registres <code>reg...</code>.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry rm General</code></pre><p></p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">registry rm reg...</code></pre><p>Remove package registries <code>reg...</code>.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry rm General</code></pre><p></p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-status" href="#repl-registry-status">
         <code>registry status</code>
@@ -119,7 +119,7 @@ pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">registry up
-registry up reg...</code></pre><p>Update package registries <code>reg...</code>. If no registries are specified all user registries will be updated.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry up
+registry up reg...</code></pre><p>Update package registries <code>reg...</code>. If no registries are specified all registries will be updated.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry up
 pkg&gt; registry up General</code></pre><p></p></div></section><h2><a class="nav-anchor" id="Other-commands-1" href="#Other-commands-1">Other commands</a></h2><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-activate" href="#repl-activate">
@@ -181,4 +181,4 @@ instantiate [-p|--project]</code></pre><p>Download all the dependencies for the 
 .
 </div><div><pre><code class="language-none">status [pkgs...]
 status [-p|--project] [pkgs...]
-status [-m|--manifest] [pkgs...]</code></pre><p>Show the status of the current environment. By default, the full contents of the project file is summarized, showing what version each package is on and how it has changed since the last git commit (if in a git repo), as well as any changes to manifest packages not already listed. In <code>--project</code> mode, the status of the project file is summarized. In <code>--manifest</code> mode the output also includes the dependencies of explicitly added packages. If there are any packages listed as arguments the output will be limited to those packages.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p><code>pkg&gt; status</code> with package arguments requires at least Julia 1.1.</p></div></div></div></section><footer><hr/><a class="previous" href="../toml-files/"><span class="direction">Previous</span><span class="title"><strong>9.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></span></a><a class="next" href="../api/"><span class="direction">Next</span><span class="title"><strong>11.</strong> API Reference</span></a></footer></article></body></html>
+status [-m|--manifest] [pkgs...]</code></pre><p>Show the status of the current environment. By default, the full contents of the project file is summarized, showing what version each package is on and how it has changed since the last git commit (if in a git repository), as well as any changes to manifest packages not already listed. In <code>--project</code> mode, the status of the project file is summarized. In <code>--manifest</code> mode the output also includes the recursive dependencies of added packages. If there are any packages listed as arguments the output will be limited to those packages.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p><code>pkg&gt; status</code> with package arguments requires at least Julia 1.1.</p></div></div></div></section><footer><hr/><a class="previous" href="../toml-files/"><span class="direction">Previous</span><span class="title"><strong>9.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></span></a><a class="next" href="../api/"><span class="direction">Next</span><span class="title"><strong>11.</strong> API Reference</span></a></footer></article></body></html>
