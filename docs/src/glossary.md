@@ -1,18 +1,18 @@
-# **8.** Glossary
+# [**8.** Glossary](@id Glossary)
 
 **Project:** a source tree with a standard layout, including a `src` directory
 for the main body of Julia code, a `test` directory for testing the project,
-`docs` for documentation files, and optionally a `deps` directory for a build
+a `docs` directory for documentation files, and optionally a `deps` directory for a build
 script and its outputs. A project will typically also have a project file and
 may optionally have a manifest file:
 
 - **Project file:** a file in the root directory of a project, named
-  `Project.toml` (or `JuliaProject.toml`) describing metadata about the project,
+  `Project.toml` (or `JuliaProject.toml`), describing metadata about the project,
   including its name, UUID (for packages), authors, license, and the names and
   UUIDs of packages and libraries that it depends on.
 
 - **Manifest file:** a file in the root directory of a project, named
-  `Manifest.toml` (or `JuliaManifest.toml`) describing a complete dependency graph
+  `Manifest.toml` (or `JuliaManifest.toml`), describing a complete dependency graph
   and exact versions of each package and library used by a project.
 
 **Package:** a project which provides reusable functionality that can be used by

@@ -97,10 +97,15 @@ struct VersionRange
     lower::VersionBound
     upper::VersionBound
     # NOTE: ranges are allowed to be empty; they are ignored by VersionSpec anyway
+    function VersionRange(lo::VersionBound, hi::VersionBound)
+        lo.n < hi.n && lo.t == hi.t && (lo = hi)
+        return new(lo, hi)
+    end
 end
 VersionRange(b::VersionBound=VersionBound()) = VersionRange(b, b)
 VersionRange(t::Integer...)                  = VersionRange(VersionBound(t...))
 VersionRange(v::VersionNumber)               = VersionRange(VersionBound(v))
+
 function VersionRange(s::AbstractString)
     m = match(r"^\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*)(?:\s*-\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*))?\s*$", s)
     m == nothing && throw(ArgumentError("invalid version range: $(repr(s))"))
@@ -254,32 +259,27 @@ subset of the pool of available versions, this function computes a `VersionSpec`
 includes all versions in `subset` and none of the versions in its complement.
 """
 function compress_versions(pool::Vector{VersionNumber}, subset::Vector{VersionNumber})
-    issorted(subset) || (subset = sort(subset))
-    compl = sort!(setdiff(pool, subset))
+    subset = sort(subset) # must copy, we mutate this
+    complement = sort!(setdiff(pool, subset))
     ranges = VersionRange[]
-    if isempty(compl)
-        lo, hi = first(subset), last(subset)
-        lower = VersionBound(lo.major, lo.minor)
-        upper = VersionBound(hi.major, hi.minor)
-        push!(ranges, VersionRange(lower, upper))
-    else
-        for v in subset
-            b = VersionBound(v.major, v.minor)
-            if any(b ≲ w ≲ b for w in compl)
-                b = VersionBound(v.major, v.minor, v.patch)
-            end
-            if isempty(ranges) || any(ranges[end].lower ≲ w ≲ b for w in compl)
-                # need a new interval
-                push!(ranges, VersionRange(b))
-            else
-                # merge with existing last range
-                ranges[end] = VersionRange(ranges[end].lower, b)
+    @label again
+    isempty(subset) && return VersionSpec(ranges)
+    a = first(subset)
+    for b in reverse(subset)
+        a.major == b.major || continue
+        for m = 1:3
+            lo = VersionBound((a.major, a.minor, a.patch)[1:m]...)
+            for n = 1:3
+                hi = VersionBound((b.major, b.minor, b.patch)[1:n]...)
+                r = VersionRange(lo, hi)
+                if !any(v in r for v in complement)
+                    filter!(!in(r), subset)
+                    push!(ranges, r)
+                    @goto again
+                end
             end
         end
     end
-    @assert all(any(v in r for r in ranges) for v ∈ subset)
-    @assert all(!any(v in r for r in ranges) for v ∈ compl)
-    return VersionSpec(ranges)
 end
 function compress_versions(pool::Vector{VersionNumber}, subset)
     compress_versions(pool, filter(in(subset), pool))

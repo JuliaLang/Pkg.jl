@@ -80,7 +80,7 @@ You may have noticed the `(v1.1)` in the REPL prompt.
 This lets us know `v1.1` is the **active environment**.
 The active environment is the environment that will be modified by Pkg commands such as `add`, `rm` and `update`.
 
-Lets set up a new environment so we may experiment.
+Let's set up a new environment so we may experiment.
 To set the active environment, use `activate`:
 
 ```
@@ -152,7 +152,7 @@ tutorial
 Instead of loading a registered version of `Example`,
 Julia will load the source code contained in `tutorial/dev/Example`.
 
-Lets try it out.
+Let's try it out.
 First we modify the file at `tutorial/dev/Example/src/Example.jl` and add a simple function:
 
 ```jl
@@ -171,8 +171,8 @@ julia> import Example
     have to restart Julia and rerun `activate tutorial` in the Pkg REPL.
     [Revise.jl](https://github.com/timholy/Revise.jl/) can make this process
     significantly more pleasant, but setting it up is beyond the scope of this guide.
-	
-Julia should load our new code. Lets test it:
+
+Julia should load our new code. Let's test it:
 
 ```jl
 julia> Example.plusone(1)

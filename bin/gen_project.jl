@@ -98,7 +98,7 @@ isempty(ARGS) && (push!(ARGS, pwd()))
 for arg in ARGS
     dir = abspath(expanduser(arg))
     isdir(dir) ||
-        @error "$arg does not appear to be a package (not a directory)"
+        error("$arg does not appear to be a package (not a directory)")
 
     name = basename(dir)
     if isempty(name)
@@ -109,11 +109,11 @@ for arg in ARGS
 
     project_file = joinpath(dir, "Project.toml")
     !force && isfile(project_file) &&
-        @error "$arg already has a project file"
+        error("$arg already has a project file")
 
     require_file = joinpath(dir, "REQUIRE")
     isfile(require_file) ||
-        @error "$arg does not appear to be a package (no REQUIRE file)"
+        error("$arg does not appear to be a package (no REQUIRE file)")
 
     project = Dict(
         "name" => name,

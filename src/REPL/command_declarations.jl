@@ -12,9 +12,7 @@ command_declarations = [
     :description => "run tests for packages",
     :help => md"""
 
-    test [opts] pkg[=uuid] ...
-
-    opts: --coverage
+    test [--coverage] pkg[=uuid] ...
 
 Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
 in the package directory. The option `--coverage` can be used to run the tests with
@@ -73,7 +71,7 @@ If no manifest exists or the `--project` option is given, resolve and download t
 
 Remove package `pkg` from the project file. Since the name `pkg` can only
 refer to one package in a project this is unambiguous, but you can specify
-a `uuid` anyway, and the command is ignored, with a warning if package name
+a `uuid` anyway, and the command is ignored, with a warning, if package name
 and UUID do not mactch. When a package is removed from the project file, it
 may still remain in the manifest if it is required by some other package in
 the project. Project mode operation is the default, so passing `-p` or
@@ -103,13 +101,13 @@ as any no-longer-necessary manifest packages due to project package removals.
 
 Add package `pkg` to the current project file. If `pkg` could refer to
 multiple different packages, specifying `uuid` allows you to disambiguate.
-`@version` optionally allows specifying which versions of packages. Versions
-may be specified by `@1`, `@1.2`, `@1.2.3`, allowing any version with a prefix
-that matches, or ranges thereof, such as `@1.2-3.4.5`. A git-revision can be
+`@version` optionally allows specifying which versions of packages to add. Version specifications
+are of the form `@1`, `@1.2` or `@1.2.3`, allowing any version with a prefix
+that matches, or ranges thereof, such as `@1.2-3.4.5`. A git revision can be
 specified by `#branch` or `#commit`.
 
 If a local path is used as an argument to `add`, the path needs to be a git repository.
-The project will then track that git repository just like if it is was tracking a remote repository online.
+The project will then track that git repository just like it would track a remote repository online.
 
 **Examples**
 ```
@@ -138,14 +136,14 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
     :help => md"""
     develop [--shared|--local] pkg[=uuid] ...
 
-Make a package available for development. If `pkg` is an existing local path that path will be recorded in
+Make a package available for development. If `pkg` is an existing local path, that path will be recorded in
 the manifest and used. Otherwise, a full git clone of `pkg` is made. The location of the clone is
 controlled by the `--shared` (default) and `--local` arguments. The `--shared` location defaults to
 `~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable. When `--local` is given,
 the clone is placed in a `dev` folder in the current project.
 This operation is undone by `free`.
 
-*Example*
+**Examples**
 ```jl
 pkg> develop Example
 pkg> develop https://github.com/JuliaLang/Example.jl
@@ -179,6 +177,13 @@ makes the package no longer being checked out.
 
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
 A pinned package has the symbol `⚲` next to its version in the status list.
+
+**Examples**
+```
+pkg> pin Example
+pkg> pin Example@0.5.0
+pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
+```
     """,
 ],[ :kind => CMD_BUILD,
     :name => "build",
@@ -193,8 +198,8 @@ A pinned package has the symbol `⚲` next to its version in the status list.
     :help => md"""
     build [-v|verbose] pkg[=uuid] ...
 
-Run the build script in `deps/build.jl` for each package in `pkg` and all of their dependencies in depth-first recursive order.
-If no packages are given, runs the build scripts for all packages in the manifest.
+Run the build script in `deps/build.jl` for `pkg` and all of its dependencies in depth-first recursive order.
+If no packages are given, run the build scripts for all packages in the manifest.
 The `-v`/`--verbose` option redirects build output to `stdout`/`stderr` instead of the `build.log` file.
 The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
     """,
@@ -245,13 +250,13 @@ it will be placed in the first depot of the stack.
     :description => "update packages in manifest",
     :help => md"""
 
-    up [-p|project]  [opts] pkg[=uuid] [@version] ...
-    up [-m|manifest] [opts] pkg[=uuid] [@version] ...
+    up [-p|--project]  [opts] pkg[=uuid] [@version] ...
+    up [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
     opts: --major | --minor | --patch | --fixed
 
-Update the indicated package within the constraints of the indicated version
-specifications. Versions may be specified by `@1`, `@1.2`, `@1.2.3`, allowing
+Update `pkg` within the constraints of the indicated version
+specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
 any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
 In `--project` mode, package specifications only match project packages, while
 in `manifest` mode they match any manifest package. Bound level options force
@@ -300,10 +305,10 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
 
 Show the status of the current environment. By default, the full contents of
 the project file is summarized, showing what version each package is on and
-how it has changed since the last git commit (if in a git repo), as well as
+how it has changed since the last git commit (if in a git repository), as well as
 any changes to manifest packages not already listed. In `--project` mode, the
 status of the project file is summarized. In `--manifest` mode the output also
-includes the dependencies of explicitly added packages. If there are any
+includes the recursive dependencies of added packages. If there are any
 packages listed as arguments the output will be limited to those packages.
 
 !!! compat "Julia 1.1"
@@ -343,7 +348,7 @@ is modified.
 
     registry add reg...
 
-Adds package registries `reg...` to the user depot.
+Add package registries `reg...` to the user depot.
 
 !!! compat "Julia 1.1"
     Pkg's registry handling requires at least Julia 1.1.
@@ -365,7 +370,7 @@ pkg> registry add https://www.my-custom-registry.com
 
     registry rm reg...
 
-Remove package registres `reg...`.
+Remove package registries `reg...`.
 
 !!! compat "Julia 1.1"
     Pkg's registry handling requires at least Julia 1.1.
@@ -389,7 +394,7 @@ pkg> registry rm General
     registry up reg...
 
 Update package registries `reg...`. If no registries are specified
-all user registries will be updated.
+all registries will be updated.
 
 !!! compat "Julia 1.1"
     Pkg's registry handling requires at least Julia 1.1.

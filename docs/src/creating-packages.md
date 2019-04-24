@@ -25,7 +25,7 @@ shell> tree .
 1 directory, 2 files
 ```
 
-The `Project.toml` file contains the name of the package, its unique UUID, its version, the author and eventual dependencies:
+The `Project.toml` file contains the name of the package, its unique UUID, its version, the author and potential dependencies:
 
 ```toml
 name = "HelloWorld"
@@ -61,7 +61,7 @@ Hello World!
 
 Let’s say we want to use the standard library package `Random` and the registered package `JSON` in our project.
 We simply `add` these packages (note how the prompt now shows the name of the newly generated project,
-since we are inside the `HelloWorld` project directory):
+since we `activate`d it):
 
 ```
 (HelloWorld) pkg> add Random JSON
@@ -77,7 +77,7 @@ since we are inside the `HelloWorld` project directory):
 ```
 
 Both `Random` and `JSON` got added to the project’s `Project.toml` file, and the resulting dependencies got added to the `Manifest.toml` file.
-The resolver has installed each package with the highest possible version, while still respecting the compatibility that each package enforce on its dependencies.
+The resolver has installed each package with the highest possible version, while still respecting the compatibility that each package enforces on its dependencies.
 
 We can now use both `Random` and `JSON` in our project. Changing `src/HelloWorld.jl` to
 
@@ -93,14 +93,14 @@ greet_alien() = print("Hello ", Random.randstring(8))
 end # module
 ```
 
-and reloading the package, the new `greet_alien` function that uses `Random` can be used:
+and reloading the package, the new `greet_alien` function that uses `Random` can be called:
 
 ```
 julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
 
-### Adding a build step to the package.
+### Adding a build step to the package
 
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
 A package is built by executing the file `deps/build.jl`.
@@ -142,11 +142,12 @@ error("Ooops")
 
 ### Adding tests to the package
 
-When a package is tested the file `test/runtests.jl` is executed.
+When a package is tested the file `test/runtests.jl` is executed:
 
 ```
 shell> cat test/runtests.jl
 println("Testing...")
+
 (HelloWorld) pkg> test
    Testing HelloWorld
  Resolving package versions...
@@ -155,7 +156,7 @@ Testing...
 ```
 
 Tests are run in a new Julia process, where the package itself, and any
-test-specific dependencies available, see below.
+test-specific dependencies, are available, see below.
 
 #### Test-specific dependencies in Julia 1.2 and above
 
@@ -164,7 +165,7 @@ test-specific dependencies available, see below.
     on previous Julia versions, see [Test-specific dependencies in Julia 1.0 and 1.1](@ref).
 
 In Julia 1.2 and later the test environment is given by `test/Project.toml`. Thus, when running
-tests this will be the active project, and only dependencies to the `test/Project.toml` project
+tests, this will be the active project, and only dependencies to the `test/Project.toml` project
 can be used. Note that Pkg will add the tested package itself implictly.
 
 !!! note
@@ -226,7 +227,7 @@ Package names should be sensible to most Julia users, *even to those who are not
 The following guidelines applies to the `General` registry, but may be useful for other package
 registries as well.
 
-Since the `General` registry belongs to the entire community people may have opinions about
+Since the `General` registry belongs to the entire community, people may have opinions about
 your package name when you publish it, especially if it's ambiguous or can be confused with
 something other than what it is. Usually you will then get suggestions for a new name that
 may fit your package better.
