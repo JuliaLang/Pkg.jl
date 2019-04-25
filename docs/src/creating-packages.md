@@ -262,3 +262,9 @@ may fit your package better.
 
      * `CPLEX.jl` wraps the `CPLEX` library, which can be identified easily in a web search.
      * `MATLAB.jl` provides an interface to call the MATLAB engine from within Julia.
+
+### Registering packages
+
+Once a package is ready it can be registered with the [General Registry](https://github.com/JuliaRegistries/General).
+Currently packages are submitted via [`Registrator`](https://juliaregistrator.github.io/).
+In addition to `Registrator`, [`TagBot`](https://github.com/apps/julia-tagbot) helps manage the process of tagging releases.
