@@ -98,7 +98,10 @@ struct VersionRange
     upper::VersionBound
     # NOTE: ranges are allowed to be empty; they are ignored by VersionSpec anyway
     function VersionRange(lo::VersionBound, hi::VersionBound)
-        lo.n < hi.n && lo.t == hi.t && (lo = hi)
+        # lo.t == hi.t implies that digits past min(lo.n, hi.n) are zero
+        # lo.n < hi.n example: 1.2-1.2.0 => 1.2.0
+        # lo.n > hi.n example: 1.2.0-1.2 => 1.2
+        lo.t == hi.t && (lo = hi)
         return new(lo, hi)
     end
 end
