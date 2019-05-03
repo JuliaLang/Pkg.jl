@@ -29,10 +29,9 @@ for (_, info) in packages
     for (ver, data) in compat
         for (dep, spec) in data
             uuid = dep == "julia" ? julia_uuid : deps[ver][dep]
-            pool = version_map[uuid]
-            ranges = compress_versions(pool, VersionSpec(spec)).ranges
-            spec = length(ranges) == 1 ? string(ranges[1]) : map(string, ranges)
-            compat[ver][dep] = spec
+            ranges = VersionSpec(spec).ranges
+            compat[ver][dep] =
+                length(ranges) == 1 ? string(ranges[1]) : map(string, ranges)
         end
     end
     Compress.save(compat_file, compat)
