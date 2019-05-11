@@ -787,6 +787,7 @@ end
         @test_throws PkgError Pkg.REPLMode.pkgstr("precompile --project")
         @test_throws PkgError Pkg.REPLMode.pkgstr("precompile Example")
         Pkg.REPLMode.pkgstr("precompile")
+        Pkg.precompile()
     end
     end
     end
