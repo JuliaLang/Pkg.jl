@@ -139,9 +139,11 @@ for arg in ARGS
                 project["compat"][dep] = semver(req.versions.intervals)
             end
         end
+    end
 
+    for (srcdir, section) in (("src" => "deps"), ("test", "extras"))
         for stdlib in STDLIBS
-            if uses(dirname(file), stdlib)
+            if uses(joinpath(dir, srcdir), stdlib)
                 project[section][stdlib] = uuid(stdlib)
             end
         end
