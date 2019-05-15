@@ -210,7 +210,7 @@ function lex(cmd::String)::Vector{QString}
                 push!(qstrings, QString(";", false))
             end
         elseif c == ','
-            if in_doublequote || in_singlequote || !replace_comma# raw char
+            if in_doublequote || in_singlequote || !replace_comma # raw char
                 # don't replace ',' in quotes
                 push!(token_in_progress, c)
             else
