@@ -30,6 +30,7 @@ Pkg.instantiate
 Pkg.resolve
 Pkg.gc
 Pkg.status
+Pkg.precompile
 Pkg.setprotocol!
 ```
 

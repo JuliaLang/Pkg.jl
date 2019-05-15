@@ -98,6 +98,22 @@ See also [`PackageSpec`](@ref).
 const add = API.add
 
 """
+    Pkg.precompile()
+
+Precompile all the dependencies of the project.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3. On earlier versions
+    you can use `Pkg.API.precompile()` or the `precompile` Pkg REPL command.
+
+# Examples
+```julia
+Pkg.precompile()
+```
+"""
+const precompile = API.precompile
+
+"""
     Pkg.rm(pkg::Union{String, Vector{String}})
     Pkg.rm(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
