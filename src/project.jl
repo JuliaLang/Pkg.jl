@@ -131,7 +131,7 @@ function read_project(io::IO; path=nothing)
     catch err
         if err isa TOML.ParserError
             pkgerror("Could not parse project $(something(path,"")): $(err.msg)")
-        elseif all(x -> x isa TOML.ParserError, err)
+        elseif err isa CompositeException && all(x -> x isa TOML.ParserError, err)
             pkgerror("Could not parse project $(something(path,"")): $err")
         else
             rethrow()
