@@ -747,6 +747,21 @@ end
     end end
 end
 
+@testset "up should prune manifest" begin
+    example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+    unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "Unpruned")
+        Pkg.activate(joinpath(tmp, "Unpruned"))
+        Pkg.update()
+        manifest = Pkg.Types.Context().env.manifest
+        package_example = get(manifest, example_uuid, nothing)
+        @test package_example !== nothing
+        @test package_example.version > v"0.4.0"
+        @test get(manifest, unicode_uuid, nothing) === nothing
+    end end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")

@@ -1049,6 +1049,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     end
     check_registered(ctx, pkgs)
     resolve_versions!(ctx, pkgs)
+    prune_manifest(ctx.env)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
     write_env(ctx) # write env before building
