@@ -11,14 +11,13 @@ command_declarations = [
     :completions => complete_installed_packages,
     :description => "run tests for packages",
     :help => md"""
-
     test [--coverage] pkg[=uuid] ...
 
 Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
 in the package directory. The option `--coverage` can be used to run the tests with
 coverage enabled. The `startup.jl` file is disabled during testing unless
 julia is started with `--startup-file=yes`.
-    """,
+""",
 ],[ :kind => CMD_HELP,
     :name => "help",
     :short_name => "?",
@@ -27,7 +26,6 @@ julia is started with `--startup-file=yes`.
     :completions => complete_help,
     :description => "show this message",
     :help => md"""
-
     help
 
 List available commands along with short descriptions.
@@ -36,7 +34,7 @@ List available commands along with short descriptions.
 
 If `cmd` is a partial command, display help for all subcommands.
 If `cmd` is a full command, display help for `cmd`.
-    """,
+""",
 ],[ :kind => CMD_INSTANTIATE,
     :name => "instantiate",
     :handler => do_instantiate!,
@@ -52,7 +50,7 @@ If `cmd` is a full command, display help for `cmd`.
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
-    """,
+""",
 ],[ :kind => CMD_RM,
     :name => "remove",
     :short_name => "rm",
@@ -66,13 +64,12 @@ If no manifest exists or the `--project` option is given, resolve and download t
     :completions => complete_installed_packages,
     :description => "remove packages from project or manifest",
     :help => md"""
-
     rm [-p|--project] pkg[=uuid] ...
 
 Remove package `pkg` from the project file. Since the name `pkg` can only
 refer to one package in a project this is unambiguous, but you can specify
 a `uuid` anyway, and the command is ignored, with a warning, if package name
-and UUID do not mactch. When a package is removed from the project file, it
+and UUID do not match. When a package is removed from the project file, it
 may still remain in the manifest if it is required by some other package in
 the project. Project mode operation is the default, so passing `-p` or
 `--project` is optional unless it is preceded by the `-m` or `--manifest`
@@ -84,7 +81,7 @@ Remove package `pkg` from the manifest file. If the name `pkg` refers to
 multiple packages in the manifest, `uuid` disambiguates it. Removing a package
 from the manifest forces the removal of all packages that depend on it, as well
 as any no-longer-necessary manifest packages due to project package removals.
-    """,
+""",
 ],[ :kind => CMD_ADD,
     :name => "add",
     :handler => do_add!,
@@ -96,7 +93,6 @@ as any no-longer-necessary manifest packages due to project package removals.
     :completions => complete_add_dev,
     :description => "add packages to project",
     :help => md"""
-
     add pkg[=uuid] [@version] [#rev] ...
 
 Add package `pkg` to the current project file. If `pkg` could refer to
@@ -119,7 +115,7 @@ pkg> add https://github.com/JuliaLang/Example.jl#master
 pkg> add git@github.com:JuliaLang/Example.jl.git
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
-    """,
+""",
 ],[ :kind => CMD_DEVELOP,
     :name => "develop",
     :short_name => "dev",
@@ -150,7 +146,7 @@ pkg> develop https://github.com/JuliaLang/Example.jl
 pkg> develop ~/mypackages/Example
 pkg> develop --local Example
 ```
-    """,
+""",
 ],[ :kind => CMD_FREE,
     :name => "free",
     :handler => do_free!,
@@ -163,7 +159,7 @@ pkg> develop --local Example
 
 Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
 makes the package no longer being checked out.
-    """,
+""",
 ],[ :kind => CMD_PIN,
     :name => "pin",
     :handler => do_pin!,
@@ -172,7 +168,6 @@ makes the package no longer being checked out.
     :completions => complete_installed_packages,
     :description => "pins the version of packages",
     :help => md"""
-
     pin pkg[=uuid] ...
 
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
@@ -184,7 +179,7 @@ pkg> pin Example
 pkg> pin Example@0.5.0
 pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
 ```
-    """,
+""",
 ],[ :kind => CMD_BUILD,
     :name => "build",
     :handler => do_build!,
@@ -202,7 +197,7 @@ Run the build script in `deps/build.jl` for `pkg` and all of its dependencies in
 If no packages are given, run the build scripts for all packages in the manifest.
 The `-v`/`--verbose` option redirects build output to `stdout`/`stderr` instead of the `build.log` file.
 The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
-    """,
+""",
 ],[ :kind => CMD_RESOLVE,
     :name => "resolve",
     :handler => do_resolve!,
@@ -212,7 +207,7 @@ The `startup.jl` file is disabled during building unless julia is started with `
 
 Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
 packages have changed causing the current Manifest to be out of sync.
-    """,
+""",
 ],[ :kind => CMD_ACTIVATE,
     :name => "activate",
     :handler => do_activate!,
@@ -231,7 +226,7 @@ The active environment is the environment that is modified by executing package 
 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
 it will be placed in the first depot of the stack.
-    """ ,
+""" ,
 ],[ :kind => CMD_UP,
     :name => "update",
     :short_name => "up",
@@ -249,7 +244,6 @@ it will be placed in the first depot of the stack.
     :completions => complete_installed_packages,
     :description => "update packages in manifest",
     :help => md"""
-
     up [-p|--project]  [opts] pkg[=uuid] [@version] ...
     up [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
@@ -263,18 +257,17 @@ in `manifest` mode they match any manifest package. Bound level options force
 the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
-    """,
+""",
 ],[ :kind => CMD_GENERATE,
     :name => "generate",
     :handler => do_generate!,
     :arg_count => 1 => 1,
     :description => "generate files for a new project",
     :help => md"""
-
     generate pkgname
 
 Create a project called `pkgname` in the current folder.
-    """,
+""",
 ],[ :kind => CMD_PRECOMPILE,
     :name => "precompile",
     :handler => do_precompile!,
@@ -284,7 +277,7 @@ Create a project called `pkgname` in the current folder.
 
 Precompile all the dependencies of the project by running `import` on all of them in a new process.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
-    """,
+""",
 ],[ :kind => CMD_STATUS,
     :name => "status",
     :short_name => "st",
@@ -298,7 +291,6 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
     :help => md"""
-
     status [pkgs...]
     status [-p|--project] [pkgs...]
     status [-m|--manifest] [pkgs...]
@@ -313,28 +305,28 @@ packages listed as arguments the output will be limited to those packages.
 
 !!! compat "Julia 1.1"
     `pkg> status` with package arguments requires at least Julia 1.1.
-    """,
+""",
 ],[ :kind => CMD_GC,
     :name => "gc",
     :handler => do_gc!,
     :description => "garbage collect packages not used for a significant time",
     :help => md"""
+    gc
 
 Deletes packages that cannot be reached from any existing environment.
-    """,
+""",
 ],[ # preview is not a regular command.
     # this is here so that preview appears as a registered command to users
     :kind => CMD_PREVIEW,
     :name => "preview",
     :description => "previews a subsequent command without affecting the current state",
     :help => md"""
-
     preview cmd
 
 Runs the command `cmd` in preview mode. This is defined such that no side effects
 will take place i.e. no packages are downloaded and neither the project nor manifest
 is modified.
-    """,
+""",
 ],
 ], #package
 "registry" => CommandDeclaration[
@@ -345,7 +337,6 @@ is modified.
     :arg_parser => (x -> parse_registry(x; add = true)),
     :description => "add package registries",
     :help => md"""
-
     registry add reg...
 
 Add package registries `reg...` to the user depot.
@@ -358,7 +349,7 @@ Add package registries `reg...` to the user depot.
 pkg> registry add General
 pkg> registry add https://www.my-custom-registry.com
 ```
-    """,
+""",
 ],[ :kind => CMD_REGISTRY_RM,
     :name => "remove",
     :short_name => "rm",
@@ -367,7 +358,6 @@ pkg> registry add https://www.my-custom-registry.com
     :arg_parser => parse_registry,
     :description => "remove package registries",
     :help => md"""
-
     registry rm reg...
 
 Remove package registries `reg...`.
@@ -379,7 +369,7 @@ Remove package registries `reg...`.
 ```
 pkg> registry rm General
 ```
-    """,
+""",
 ],[
     :kind => CMD_REGISTRY_UP,
     :name => "update",
@@ -389,7 +379,6 @@ pkg> registry rm General
     :arg_parser => parse_registry,
     :description => "update package registries",
     :help => md"""
-
     registry up
     registry up reg...
 
@@ -404,7 +393,7 @@ all registries will be updated.
 pkg> registry up
 pkg> registry up General
 ```
-    """,
+""",
 ],[
     :kind => CMD_REGISTRY_STATUS,
     :name => "status",
@@ -414,7 +403,6 @@ pkg> registry up General
     :arg_parser => parse_registry,
     :description => "information about installed registries",
     :help => md"""
-
     registry status
 
 Display information about installed registries.
@@ -426,7 +414,7 @@ Display information about installed registries.
 ```
 pkg> registry status
 ```
-    """,
+""",
 ]
 ], #registry
 ] #command_declarations
