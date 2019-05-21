@@ -13,7 +13,7 @@ pkg&gt; add Example#master
 pkg&gt; add Example#c37b675
 pkg&gt; add https://github.com/JuliaLang/Example.jl#master
 pkg&gt; add git@github.com:JuliaLang/Example.jl.git
-pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre><p></p></div></section><section class="docstring">
+pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-build" href="#repl-build">
         <code>build</code>
@@ -32,7 +32,7 @@ pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre><p></p></di
 </div><div><pre><code class="language-none">develop [--shared|--local] pkg[=uuid] ...</code></pre><p>Make a package available for development. If <code>pkg</code> is an existing local path, that path will be recorded in the manifest and used. Otherwise, a full git clone of <code>pkg</code> is made. The location of the clone is controlled by the <code>--shared</code> (default) and <code>--local</code> arguments. The <code>--shared</code> location defaults to <code>~/.julia/dev</code>, but can be controlled with the <code>JULIA_PKG_DEVDIR</code> environment variable. When <code>--local</code> is given, the clone is placed in a <code>dev</code> folder in the current project. This operation is undone by <code>free</code>.</p><p><strong>Examples</strong></p><pre><code class="language-jl">pkg&gt; develop Example
 pkg&gt; develop https://github.com/JuliaLang/Example.jl
 pkg&gt; develop ~/mypackages/Example
-pkg&gt; develop --local Example</code></pre><p></p></div></section><section class="docstring">
+pkg&gt; develop --local Example</code></pre></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-free" href="#repl-free">
         <code>free</code>
@@ -58,7 +58,7 @@ pkg&gt; develop --local Example</code></pre><p></p></div></section><section clas
 .
 </div><div><pre><code class="language-none">pin pkg[=uuid] ...</code></pre><p>Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded. A pinned package has the symbol <code>⚲</code> next to its version in the status list.</p><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; pin Example
 pkg&gt; pin Example@0.5.0
-pkg&gt; pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0</code></pre><p></p></div></section><section class="docstring">
+pkg&gt; pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0</code></pre></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-remove" href="#repl-remove">
         <code>remove</code>
@@ -66,7 +66,7 @@ pkg&gt; pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0</code></pre><p></
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">rm [-p|--project] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the project file. Since the name <code>pkg</code> can only refer to one package in a project this is unambiguous, but you can specify a <code>uuid</code> anyway, and the command is ignored, with a warning, if package name and UUID do not mactch. When a package is removed from the project file, it may still remain in the manifest if it is required by some other package in the project. Project mode operation is the default, so passing <code>-p</code> or <code>--project</code> is optional unless it is preceded by the <code>-m</code> or <code>--manifest</code> options at some earlier point.</p><pre><code class="language-none">rm [-m|--manifest] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the manifest file. If the name <code>pkg</code> refers to multiple packages in the manifest, <code>uuid</code> disambiguates it. Removing a package from the manifest forces the removal of all packages that depend on it, as well as any no-longer-necessary manifest packages due to project package removals.</p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">rm [-p|--project] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the project file. Since the name <code>pkg</code> can only refer to one package in a project this is unambiguous, but you can specify a <code>uuid</code> anyway, and the command is ignored, with a warning, if package name and UUID do not match. When a package is removed from the project file, it may still remain in the manifest if it is required by some other package in the project. Project mode operation is the default, so passing <code>-p</code> or <code>--project</code> is optional unless it is preceded by the <code>-m</code> or <code>--manifest</code> options at some earlier point.</p><pre><code class="language-none">rm [-m|--manifest] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the manifest file. If the name <code>pkg</code> refers to multiple packages in the manifest, <code>uuid</code> disambiguates it. Removing a package from the manifest forces the removal of all packages that depend on it, as well as any no-longer-necessary manifest packages due to project package removals.</p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-test" href="#repl-test">
         <code>test</code>
@@ -94,7 +94,7 @@ opts: --major | --minor | --patch | --fixed</code></pre><p>Update <code>pkg</cod
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">registry add reg...</code></pre><p>Add package registries <code>reg...</code> to the user depot.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry add General
-pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div></section><section class="docstring">
+pkg&gt; registry add https://www.my-custom-registry.com</code></pre></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-remove" href="#repl-registry-remove">
         <code>registry remove</code>
@@ -102,7 +102,7 @@ pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">registry rm reg...</code></pre><p>Remove package registries <code>reg...</code>.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry rm General</code></pre><p></p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">registry rm reg...</code></pre><p>Remove package registries <code>reg...</code>.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry rm General</code></pre></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-status" href="#repl-registry-status">
         <code>registry status</code>
@@ -110,7 +110,7 @@ pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">registry status</code></pre><p>Display information about installed registries.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry status</code></pre><p></p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">registry status</code></pre><p>Display information about installed registries.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry status</code></pre></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-registry-update" href="#repl-registry-update">
         <code>registry update</code>
@@ -120,7 +120,7 @@ pkg&gt; registry add https://www.my-custom-registry.com</code></pre><p></p></div
 .
 </div><div><pre><code class="language-none">registry up
 registry up reg...</code></pre><p>Update package registries <code>reg...</code>. If no registries are specified all registries will be updated.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry up
-pkg&gt; registry up General</code></pre><p></p></div></section><h2><a class="nav-anchor" id="Other-commands-1" href="#Other-commands-1">Other commands</a></h2><section class="docstring">
+pkg&gt; registry up General</code></pre></div></section><h2><a class="nav-anchor" id="Other-commands-1" href="#Other-commands-1">Other commands</a></h2><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-activate" href="#repl-activate">
         <code>activate</code>
@@ -137,7 +137,7 @@ activate [--shared] path</code></pre><p>Activate the environment at the given <c
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><p>Deletes packages that cannot be reached from any existing environment.</p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">gc</code></pre><p>Deletes packages that cannot be reached from any existing environment.</p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-help" href="#repl-help">
         <code>help</code>
