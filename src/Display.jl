@@ -64,13 +64,17 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
            println(pkg.name, " v", pkg.version)
         end
     end
-    if env.git != nothing
-        LibGit2.with(LibGit2.GitRepo(env.git)) do repo
-            git_path = LibGit2.path(repo)
-            project_path = relpath(env.project_file, git_path)
-            manifest_path = relpath(env.manifest_file, git_path)
-            project₀ = read_project(git_file_stream(repo, "HEAD:$project_path", fakeit=true))
-            manifest₀ = read_manifest(git_file_stream(repo, "HEAD:$manifest_path", fakeit=true))
+    if env.git !== nothing
+        try
+            LibGit2.with(LibGit2.GitRepo(env.git)) do repo
+                git_path = LibGit2.path(repo)
+                project_path = relpath(env.project_file, git_path)
+                manifest_path = relpath(env.manifest_file, git_path)
+                project₀ = read_project(git_file_stream(repo, "HEAD:$project_path", fakeit=true))
+                manifest₀ = read_manifest(git_file_stream(repo, "HEAD:$manifest_path", fakeit=true))
+            end
+        catch
+            @warn "Could not read project from HEAD, displaying absolute status instead."
         end
     end
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
