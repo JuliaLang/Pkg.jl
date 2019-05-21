@@ -747,13 +747,6 @@ end
     end end
 end
 
-@testset "smoke test instantiate(verbose=true)" begin
-    temp_pkg_dir() do project_path
-        Pkg.activate(project_path)
-        Pkg.instantiate(verbose=true)
-    end
-end
-
 include("repl.jl")
 include("api.jl")
 include("registry.jl")

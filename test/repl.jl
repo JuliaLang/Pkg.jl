@@ -936,4 +936,11 @@ end
     end end end
 end
 
+@testset "smoke test `instantiate --verbose`" begin
+    temp_pkg_dir() do project_path
+        Pkg.activate(project_path)
+        pkg"instantiate --verbose"
+    end
+end
+
 end # module
