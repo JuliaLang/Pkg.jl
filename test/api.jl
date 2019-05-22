@@ -64,6 +64,10 @@ end
         Pkg.status(; mode=PKGMODE_MANIFEST)
         Pkg.status("Example"; mode=PKGMODE_MANIFEST)
         @test_deprecated Pkg.status(PKGMODE_MANIFEST)
+        # issue #1183: Test exist in manifest but not in project
+        Pkg.status("Test"; mode=PKGMODE_MANIFEST)
+        @test_throws PkgError Pkg.status("Test"; mode=Pkg.Types.PKGMODE_COMBINED)
+        @test_throws PkgError Pkg.status("Test"; mode=PKGMODE_PROJECT)
     end
 end
 
