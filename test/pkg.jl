@@ -728,6 +728,19 @@ end
     end end
 end
 
+@testset "issue #1180: broken toml-files in HEAD" begin
+    temp_pkg_dir() do dir; cd(dir) do
+        write("Project.toml", "[deps]\nExample = \n")
+        LibGit2.with(LibGit2.init(dir)) do repo
+            LibGit2.add!(repo, "*")
+            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+        end
+        write("Project.toml", "[deps]\nExample = \"7876af07-990d-54b4-ab0e-23690620f79a\"\n")
+        Pkg.activate(dir)
+        @test_logs (:warn, r"Could not read project from HEAD") Pkg.status()
+    end end
+end
+
 import Markdown
 @testset "REPL command doc generation" begin
     # test that the way doc building extracts
