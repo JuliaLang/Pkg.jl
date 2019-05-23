@@ -39,10 +39,7 @@ function setup_test_registries(dir = pwd())
             ["0.5"]
             julia = "0.6-1.0"
             """)
-        LibGit2.with(LibGit2.init(regpath)) do repo
-            LibGit2.add!(repo, "*")
-            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-        end
+        git_init_and_commit(regpath)
     end
 end
 

@@ -497,10 +497,7 @@ temp_pkg_dir() do project_path
                         Pkg.generate(pkg_name)
                     end
                     cd(pkg_name) do
-                        LibGit2.with(LibGit2.init(joinpath(project_path, parent_dir, pkg_name))) do repo
-                            LibGit2.add!(repo, "*")
-                            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-                        end
+                        git_init_and_commit(joinpath(project_path, parent_dir, pkg_name))
                     end #cd pkg_name
                 end # cd parent_dir
             end
