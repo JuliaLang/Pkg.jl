@@ -202,13 +202,12 @@ function destructure(manifest::Manifest)::Dict
     return raw
 end
 
-write_manifest(manifest::Manifest, manifest_file::AbstractString) =
-    open(io -> write_manifest(manifest, io), manifest_file; truncate=true)
-
-function write_manifest(manifest::Manifest,io::IO)
+function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     raw = destructure(manifest)
+    io = IOBuffer()
     print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
     TOML.print(io, raw, sorted=true)
+    open(f -> write(f, seekstart(io)), manifest_file; truncate=true)
 end
 
 function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)

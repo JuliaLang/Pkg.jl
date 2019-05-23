@@ -170,12 +170,11 @@ project_key_order(key::String) =
 
 write_project(project::Project, project_file::AbstractString) =
     write_project(destructure(project), project_file)
-write_project(project::Project, io::IO) =
-    write_project(destructure(project), io)
-write_project(project::Dict, project_file::AbstractString) =
-    open(io -> write_project(project, io), project_file; truncate=true)
-write_project(project::Dict, io::IO) =
+function write_project(project::Dict, project_file::AbstractString)
+    io = IOBuffer()
     TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
+    open(f -> write(f, seekstart(io)), project_file; truncate=true)
+end
 function write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
     project = destructure(ctx.env.project)
     if !isempty(project) || ispath(env.project_file)
