@@ -737,7 +737,7 @@ end
         end
         write("Project.toml", "[deps]\nExample = \"7876af07-990d-54b4-ab0e-23690620f79a\"\n")
         Pkg.activate(dir)
-        @test_logs (:warn, r"Could not read project from HEAD") Pkg.status()
+        @test_logs (:warn, r"could not read project from HEAD") Pkg.status(diff=true)
     end end
 end
 

@@ -287,24 +287,28 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
     :option_spec => OptionDeclaration[
         [:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
+        [:name => "diff", :short_name => "d", :api => :diff => true],
     ],
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    status [pkgs...]
-    status [-p|--project] [pkgs...]
-    status [-m|--manifest] [pkgs...]
+    status [-d|--diff] [pkgs...]
+    status [-d|--diff] [-p|--project] [pkgs...]
+    status [-d|--diff] [-m|--manifest] [pkgs...]
 
-Show the status of the current environment. By default, the full contents of
-the project file is summarized, showing what version each package is on and
-how it has changed since the last git commit (if in a git repository), as well as
-any changes to manifest packages not already listed. In `--project` mode, the
+Show the status of the current environment. In `--project` mode (default), the
 status of the project file is summarized. In `--manifest` mode the output also
-includes the recursive dependencies of added packages. If there are any
-packages listed as arguments the output will be limited to those packages.
+includes the recursive dependencies of added packages given in the manifest.
+If there are any packages listed as arguments the output will be limited to those packages.
+The `--diff` option will, if the environment is in a git repository, limit
+the output to the difference as compared to the last git commit.
 
 !!! compat "Julia 1.1"
     `pkg> status` with package arguments requires at least Julia 1.1.
+
+!!! compat "Julia 1.3"
+    The `--diff` option requires Julia 1.3. In earlier versions `--diff`
+    is the default for environments in git repositories.
 """,
 ],[ :kind => CMD_GC,
     :name => "gc",

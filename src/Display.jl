@@ -32,22 +32,22 @@ function git_file_stream(repo::LibGit2.GitRepo, spec::String; fakeit::Bool=false
 end
 
 function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
-                mode::PackageMode=PKGMODE_PROJECT, use_as_api=false)
+                diff::Bool=false, mode::PackageMode=PKGMODE_PROJECT, use_as_api=false)
     env = ctx.env
     project₀ = project₁ = env.project
     manifest₀ = manifest₁ = env.manifest
-    diff = nothing
+    mdiff = nothing
 
-    pkgfilter = (diff) -> begin
+    pkgfilter = (entry) -> begin
         for pkg in pkgs
-            if pkg.uuid == diff.uuid
+            if pkg.uuid == entry.uuid
                 return true
             end
             if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
                 # also look for pkg's deps
                 info = manifest_info(ctx.env, pkg.uuid)
                 for uuid in values(info.deps)
-                    if uuid == diff.uuid
+                    if uuid == entry.uuid
                         return true
                     end
                 end
@@ -64,36 +64,40 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
            println(pkg.name, " v", pkg.version)
         end
     end
-    if env.git !== nothing
-        try
-            LibGit2.with(LibGit2.GitRepo(env.git)) do repo
-                git_path = LibGit2.path(repo)
-                project_path = relpath(env.project_file, git_path)
-                manifest_path = relpath(env.manifest_file, git_path)
-                project₀ = read_project(git_file_stream(repo, "HEAD:$project_path", fakeit=true))
-                manifest₀ = read_manifest(git_file_stream(repo, "HEAD:$manifest_path", fakeit=true))
+    if diff
+        if env.git === nothing
+            @warn "diff option only available for environments in git repositories, ignoring."
+        else # env.git !== nothing
+            try
+                LibGit2.with(LibGit2.GitRepo(env.git)) do repo
+                    git_path = LibGit2.path(repo)
+                    project_path = relpath(env.project_file, git_path)
+                    manifest_path = relpath(env.manifest_file, git_path)
+                    project₀ = read_project(git_file_stream(repo, "HEAD:$project_path", fakeit=true))
+                    manifest₀ = read_manifest(git_file_stream(repo, "HEAD:$manifest_path", fakeit=true))
+                end
+            catch
+                @warn "could not read project from HEAD, displaying absolute status instead."
             end
-        catch
-            @warn "Could not read project from HEAD, displaying absolute status instead."
         end
     end
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         # TODO: handle project deps missing from manifest
         m₀ = Dict(uuid => entry for (uuid, entry) in manifest₀ if (uuid in values(project₀.deps)))
         m₁ = Dict(uuid => entry for (uuid, entry) in manifest₁ if (uuid in values(project₁.deps)))
-        diff = manifest_diff(ctx, m₀, m₁)
-        filter_pkgs && filter!(pkgfilter, diff)
+        mdiff = manifest_diff(ctx, m₀, m₁)
+        filter_pkgs && filter!(pkgfilter, mdiff)
         if !use_as_api
             printpkgstyle(ctx, :Status, pathrepr(env.project_file), #=ignore_indent=# true)
-            print_diff(ctx, diff, #=status=# true)
+            print_diff(ctx, mdiff, #=status=# true)
         end
     end
     if mode == PKGMODE_MANIFEST
-        diff = manifest_diff(ctx, manifest₀, manifest₁)
-        filter_pkgs && filter!(pkgfilter, diff)
+        mdiff = manifest_diff(ctx, manifest₀, manifest₁)
+        filter_pkgs && filter!(pkgfilter, mdiff)
         if !use_as_api
             printpkgstyle(ctx, :Status, pathrepr(env.manifest_file), #=ignore_indent=# true)
-            print_diff(ctx, diff, #=status=# true)
+            print_diff(ctx, mdiff, #=status=# true)
         end
     elseif mode == PKGMODE_COMBINED
         combined = values(merge(project₀.deps, project₁.deps))
@@ -106,10 +110,10 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
                 printpkgstyle(ctx, :Status, pathrepr(env.manifest_file), #=ignore_indent=# true)
                 print_diff(ctx, c_diff, #=status=# true)
             end
-            diff = Base.vcat(c_diff, diff)
+            mdiff = Base.vcat(c_diff, mdiff)
         end
     end
-    return diff
+    return mdiff
 end
 
 function print_project_diff(ctx::Context, env0::EnvCache, env1::EnvCache)

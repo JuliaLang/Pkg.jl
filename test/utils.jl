@@ -123,14 +123,18 @@ using UUIDs
 const TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
 const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
 
+function git_init_and_commit(path; msg = "initial commit")
+    LibGit2.with(LibGit2.init(path)) do repo
+        LibGit2.add!(repo, "*")
+        LibGit2.commit(repo, msg; author=TEST_SIG, committer=TEST_SIG)
+    end
+end
+
 function git_init_package(tmp, path)
     base = basename(path)
     pkgpath = joinpath(tmp, base)
     cp(path, pkgpath)
-    LibGit2.with(LibGit2.init(pkgpath)) do repo
-        LibGit2.add!(repo, "*")
-        LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-    end
+    git_init_and_commit(pkgpath)
     return pkgpath
 end
 

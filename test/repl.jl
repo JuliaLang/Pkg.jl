@@ -891,6 +891,12 @@ end
         status Example Random
         status -m Example
         """
+        # --diff option
+        @test_logs (:warn, r"diff option only available") pkg"status --diff"
+        @test_logs (:warn, r"diff option only available") pkg"status -d"
+        git_init_and_commit(project_path)
+        @test_logs () pkg"status --diff"
+        @test_logs () pkg"status -d"
     end
 end
 

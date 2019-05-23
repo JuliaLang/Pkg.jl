@@ -68,6 +68,10 @@ end
         Pkg.status("Test"; mode=PKGMODE_MANIFEST)
         @test_throws PkgError Pkg.status("Test"; mode=Pkg.Types.PKGMODE_COMBINED)
         @test_throws PkgError Pkg.status("Test"; mode=PKGMODE_PROJECT)
+        # diff option
+        @test_logs (:warn, r"diff option only available") Pkg.status(diff=true)
+        git_init_and_commit(project_path)
+        @test_logs () Pkg.status(diff=true)
     end
 end
 
