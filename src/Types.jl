@@ -1300,6 +1300,7 @@ end
 
 # Return most current package info for a registered UUID
 function registered_info(env::EnvCache, uuid::UUID, key::String)
+    haskey(env.paths, uuid) || find_registered!(env, [uuid])
     paths = env.paths[uuid]
     isempty(paths) && pkgerror("`$uuid` is not registered")
     values = []
