@@ -940,6 +940,7 @@ end
     temp_pkg_dir() do project_path
         Pkg.activate(project_path)
         pkg"instantiate --verbose"
+        pkg"instantiate -v"
     end
 end
 
