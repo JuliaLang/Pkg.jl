@@ -939,6 +939,7 @@ end
 @testset "smoke test `instantiate --verbose`" begin
     temp_pkg_dir() do project_path
         Pkg.activate(project_path)
+        Pkg.instantiate(verbose=true)
         pkg"instantiate --verbose"
         pkg"instantiate -v"
     end
