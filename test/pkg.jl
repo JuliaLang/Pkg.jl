@@ -760,6 +760,14 @@ end
     end end
 end
 
+@testset "Issue 1124 code path" begin
+    temp_pkg_dir() do project_path; with_temp_env() do
+        pkg"add Example#master"
+        pkg"add Unicode"
+        pkg"up Unicode"
+    end end
+end
+
 @testset "up should prune manifest" begin
     example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
