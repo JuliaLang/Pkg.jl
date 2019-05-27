@@ -467,6 +467,13 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         pkgerror("manifest at $(ctx.env.manifest_file) does not exist")
     end
     Operations.prune_manifest(ctx.env)
+    for (name, uuid) in ctx.env.project.deps
+        get(ctx.env.manifest, uuid, nothing) === nothing || continue
+        pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
+                 " If you intend `$name` to be a direct dependency, run `Pkg.resolve()` to populate the manifest.",
+                 " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
+                 " Finally, run `Pkg.instantiate()` again.")
+    end
     Types.update_registries(ctx)
     pkgs = PackageSpec[]
     Operations.load_all_deps!(ctx, pkgs)

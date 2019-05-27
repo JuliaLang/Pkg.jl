@@ -768,6 +768,14 @@ end
     end end
 end
 
+@testset "instantiate checks for consistent dependency graph" begin
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "ExtraDirectDep")
+        Pkg.activate(joinpath(tmp, "ExtraDirectDep"))
+        @test_throws PkgError Pkg.instantiate()
+    end end
+end
+
 @testset "up should prune manifest" begin
     example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
