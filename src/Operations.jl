@@ -1024,7 +1024,7 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     pkg.repo = entry.repo # TODO check that repo is same
     pkg.path = entry.path
     pkg.pinned = entry.pinned
-    # dont set version or tree_hash -> they should be recomputed
+    # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
@@ -1035,18 +1035,11 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
         new = up_load_versions!(pkg, manifest_info(ctx.env, pkg.uuid), level)
         new && push!(new_git, pkg.uuid) #TODO put download + push! in utility function
     end
-    # make sure to include at least direct deps
-    for (name, uuid) in ctx.env.project.deps
-        pkgs[uuid] === nothing || continue # don't duplicate
-        entry = manifest_info(ctx.env, uuid)
-        version = (entry !== nothing && entry.version !== nothing) ?
-            entry.version : VersionSpec()
-        push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=version)) # should these other ones be fixed?
-    end
     # load rest of manifest data (except for version info)
     for pkg in pkgs
         up_load_manifest_info!(pkg, manifest_info(ctx.env, pkg.uuid))
     end
+    load_direct_deps!(ctx, pkgs) # make sure to include at least direct deps
     check_registered(ctx, pkgs)
     resolve_versions!(ctx, pkgs)
     prune_manifest(ctx.env)
