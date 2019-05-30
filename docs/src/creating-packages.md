@@ -19,10 +19,16 @@ shell> cd HelloWorld
 shell> tree .
 .
 ├── Project.toml
-└── src
-    └── HelloWorld.jl
+├── docs
+│   └── src
+│       └── index.md
+├── src
+│   └── HelloWorld.jl
+└── test
+    ├── Project.toml
+    └── runtests.jl
 
-1 directory, 2 files
+4 directories, 5 files
 ```
 
 The `Project.toml` file contains the name of the package, its unique UUID, its version, the author and potential dependencies:
@@ -44,6 +50,27 @@ module HelloWorld
 greet() = print("Hello World!")
 
 end # module
+```
+
+The content of `test/Project.toml` is:
+```toml
+[deps]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+```
+
+The content of `test/runtests.jl` is:
+```jl
+using HelloWorld
+using Test
+
+@test 1 == 1
+```
+
+The content of `docs/src/index.md` is:
+```markdown
+# Introduction
+
+Welcome to the documentation for HelloWorld.jl.
 ```
 
 We can now activate the project and load the package:

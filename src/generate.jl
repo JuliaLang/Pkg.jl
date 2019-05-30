@@ -11,6 +11,9 @@ function generate(ctx::Context, path::String; kwargs...)
     print(" project $pkg:\n")
     uuid = project(pkg, dir; preview=ctx.preview)
     entrypoint(pkg, dir; preview=ctx.preview)
+    gentestproject(pkg, dir; preview=ctx.preview)
+    genruntests(pkg, dir; preview=ctx.preview)
+    gendocsindex(pkg, dir; preview=ctx.preview)
     ctx.preview && preview_info()
     return Dict(pkg => uuid)
 end
@@ -70,6 +73,40 @@ function entrypoint(pkg::String, dir; preview::Bool)
             greet() = print("Hello World!")
 
             end # module
+            """
+        )
+    end
+end
+
+function gentestproject(pkg::String, dir; preview::Bool)
+    genfile(pkg, dir, "test/Project.toml"; preview=preview) do io
+        toml = Dict(
+            "deps" => Dict("Test" => "8dfed614-e22c-5e08-85e1-65c5234f0b40")
+            )
+        TOML.print(io, toml, sorted=true, by=key -> (Types.project_key_order(key), key))
+    end
+end
+
+function genruntests(pkg::String, dir; preview::Bool)
+    genfile(pkg, dir, "test/runtests.jl"; preview=preview) do io
+        print(io,
+           """
+            using $pkg
+            using Test
+
+            @test 1 == 1
+            """
+        )
+    end
+end
+
+function gendocsindex(pkg::String, dir; preview::Bool)
+    genfile(pkg, dir, "docs/src/index.md"; preview=preview) do io
+        print(io,
+           """
+            # Introduction
+
+            Welcome to the documentation for $pkg.jl.
             """
         )
     end
