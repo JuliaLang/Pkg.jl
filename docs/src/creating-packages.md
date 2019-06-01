@@ -60,7 +60,9 @@ The content of `test/runtests.jl` is:
 using HelloWorld
 using Test
 
-@test 1 == 1
+@testset "HelloWorld.jl" begin
+    @test 1 == 2
+end
 ```
 
 We can now activate the project and load the package:

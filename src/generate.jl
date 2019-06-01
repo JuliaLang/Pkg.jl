@@ -93,7 +93,9 @@ function genruntests(pkg::String, dir; preview::Bool)
             using $pkg
             using Test
 
-            @test 1 == 1
+            @testset "$pkg.jl" begin
+                @test 1 == 2
+            end
             """
         )
     end
