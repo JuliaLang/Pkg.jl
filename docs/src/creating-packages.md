@@ -19,16 +19,13 @@ shell> cd HelloWorld
 shell> tree .
 .
 ├── Project.toml
-├── docs
-│   └── src
-│       └── index.md
 ├── src
 │   └── HelloWorld.jl
 └── test
     ├── Project.toml
     └── runtests.jl
 
-4 directories, 5 files
+2 directories, 4 files
 ```
 
 The `Project.toml` file contains the name of the package, its unique UUID, its version, the author and potential dependencies:
@@ -64,13 +61,6 @@ using HelloWorld
 using Test
 
 @test 1 == 1
-```
-
-The content of `docs/src/index.md` is:
-```markdown
-# Introduction
-
-Welcome to the documentation for HelloWorld.jl.
 ```
 
 We can now activate the project and load the package:

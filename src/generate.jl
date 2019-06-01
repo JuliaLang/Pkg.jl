@@ -13,7 +13,6 @@ function generate(ctx::Context, path::String; kwargs...)
     entrypoint(pkg, dir; preview=ctx.preview)
     gentestproject(pkg, dir; preview=ctx.preview)
     genruntests(pkg, dir; preview=ctx.preview)
-    gendocsindex(pkg, dir; preview=ctx.preview)
     ctx.preview && preview_info()
     return Dict(pkg => uuid)
 end
@@ -100,14 +99,3 @@ function genruntests(pkg::String, dir; preview::Bool)
     end
 end
 
-function gendocsindex(pkg::String, dir; preview::Bool)
-    genfile(pkg, dir, "docs/src/index.md"; preview=preview) do io
-        print(io,
-           """
-            # Introduction
-
-            Welcome to the documentation for $pkg.jl.
-            """
-        )
-    end
-end
