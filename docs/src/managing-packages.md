@@ -123,6 +123,8 @@ from that local repo are pulled when packages are updated.
 Note that changes to files in the local package repository will not immediately be reflected when loading that package.
 The changes would have to be committed and the packages updated in order to pull in the changes.
 
+In addition, the local path given could also be relative with respect to the `Manifest.toml` file.
+
 ### Developing packages
 
 By only using `add` your Manifest will always have a "reproducible state", in other words, as long as the repositories and registries used are still accessible
@@ -179,6 +181,8 @@ knowing the exact content of all the packages that are tracking a path.
 Note that if you add a dependency to a package that tracks a local path, the Manifest (which contains the whole dependency graph) will become
 out of sync with the actual dependency graph. This means that the package will not be able to load that dependency since it is not recorded
 in the Manifest. To synchronize the Manifest, use the REPL command `resolve`.
+
+Similarly with `add`, `dev` can be given a path relative to the `Manifest.toml` file.
 
 ## Removing packages
 
