@@ -182,7 +182,16 @@ Note that if you add a dependency to a package that tracks a local path, the Man
 out of sync with the actual dependency graph. This means that the package will not be able to load that dependency since it is not recorded
 in the Manifest. To synchronize the Manifest, use the REPL command `resolve`.
 
-Similarly with `add`, `dev` can be given a path relative to the `Manifest.toml` file.
+Similarly with `add`, `dev` can be given a path relative to the `Manifest.toml` file. Notice that to use add a relative path
+your working directory should be the same as the `Manifest.toml` file's directory. For example:
+```
+julia> cd("path/to/manifest");
+
+(v1.0) pkg> activate .
+
+(SomeProject) pkg> dev ./src/PackageA 
+```
+
 
 ## Removing packages
 
