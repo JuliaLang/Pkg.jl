@@ -1,0 +1,7 @@
+name = "ExtraDirectDep"
+uuid = "3df6871a-8032-11e9-14c7-ef1c42524041"
+version = "0.1.0"
+
+[deps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+Unicode = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
