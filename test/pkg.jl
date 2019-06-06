@@ -791,6 +791,23 @@ end
     end end
 end
 
+if !Sys.iswindows()
+    @testset "resolve ~/ in repo-url" begin
+        temp_pkg_dir() do env_path; with_pkg_env(env_path) do; mktempdir() do tmp; withenv("HOME" => tmp) do
+            pkgname = "DependsOnExample"
+            repo_url = "~/mypackage/$pkgname"
+            repo_parent = dirname(expanduser(repo_url))
+            mkpath(repo_parent)
+            git_init_package(repo_parent, joinpath(@__DIR__, "test_packages", pkgname))
+            Pkg.add(Pkg.PackageSpec(path=repo_url))
+            manifest = read(joinpath(env_path, "Manifest.toml"), String)
+            @test occursin(repo_url, manifest)
+            Pkg.update(pkgname)
+            @test occursin(repo_url, manifest)
+        end end end end
+    end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")

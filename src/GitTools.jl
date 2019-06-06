@@ -83,6 +83,9 @@ function setprotocol!(;
 end
 
 function normalize_url(url::AbstractString)
+    if !Sys.iswindows() && startswith(url, "~/")
+        url = expanduser(url)
+    end
     m = match(GIT_REGEX, url)
     m === nothing && return url
 
