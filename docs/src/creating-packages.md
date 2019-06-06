@@ -100,6 +100,8 @@ julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
 
+If you have an *existing* package from an older version of Julia (using a `REQUIRE` file rather than `Project.toml`), then you can generate a `Project.toml` file by running the [`gen_project.jl`](https://github.com/JuliaLang/Pkg.jl/blob/master/bin/gen_project.jl) script with `julia gen_project.jl` in the development directory of your package.  This has to be done (once) before a new release can be registered for an older package.  (Delete `REQUIRE` and commit the resulting `Project.toml` after checking it for correctness and adding a `version = "..."` line.)
+
 ### Adding a build step to the package
 
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
