@@ -1,24 +1,26 @@
 language: julia
 
-julia:
-  - 1.0
-  - 1.1
-  - 1.2
-  - nightly
+# julia:
+#   - 1.0
+#   - 1.1
+#   - 1.2
+#   - nightly
 
-os:
-  - linux
-  - osx
+# os:
+#   - linux
+#   - osx
 
 # Exclude some julia versions on osx since its so slow.
 matrix:
-  exclude:
+  include:
+  - os: linux
+    julia:
+      - 1.0
+      - 1.1
+      - 1.2
+      - nightly
   - os: osx
-    julia: 1.0
-  - os: osx
-    julia: 1.1
-  - os: osx
-    julia: 1.2
+    julia: nightly
 
 notifications:
   email: false
