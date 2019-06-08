@@ -452,8 +452,24 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         target = "test"
     end
 
+    # In order to fix dependencies at their current versions we need to
+    # add them as explicit dependencies to the project, but we need to
+    # remove them after the resolve to make them not-loadable.
+    # See issue https://github.com/JuliaLang/Pkg.jl/issues/1144
+    should_be_in_project = Set{UUID}()
+    should_be_in_manifest = Set{UUID}()
+
     # Only put `pkg` and its deps + target deps (recursively) in the temp project
-    collect_deps!(seen, pkg) = begin
+    collect_deps!(seen, pkg; depth) = begin
+        # See issue https://github.com/JuliaLang/Pkg.jl/issues/1144
+        # depth = 0 - the package itself (should be in project)
+        # depth = 1 - direct dependencies/and or target dependencies (should be in project)
+        # depth > 1 - indirect dependencies that should only be in the manifest in the end
+        if depth <= 1
+            push!(should_be_in_project, pkg.uuid)
+        else
+            push!(should_be_in_manifest, pkg.uuid)
+        end
         pkg.uuid in seen && return
         push!(seen, pkg.uuid)
         entry = manifest_info(localctx.env, pkg.uuid)
@@ -461,7 +477,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         need_to_resolve |= (entry.path !== nothing)
         localctx.env.project.deps[pkg.name] = pkg.uuid
         for (name, uuid) in entry.deps
-            collect_deps!(seen, PackageSpec(name, uuid))
+            collect_deps!(seen, PackageSpec(name, uuid); depth=depth+1)
         end
     end
 
@@ -483,19 +499,17 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         # Only put `pkg` and its deps (recursively) in the temp project
         empty!(localctx.env.project.deps)
         localctx.env.project.deps[pkg.name] = pkg.uuid
-        seen_uuids = Set{UUID}()
     end
     # Only put `pkg` and its deps (recursively) in the temp project
     seen_uuids = Set{UUID}()
-    collect_deps!(seen_uuids, pkg)
+    collect_deps!(seen_uuids, pkg; depth=0)
 
     pkgs = PackageSpec[]
     if target !== nothing
         collect_target_deps!(localctx, pkgs, pkg, target)
-        seen_uuids = Set{UUID}()
         for dpkg in pkgs
             # Also put eventual deps of target deps in new manifest
-            collect_deps!(seen_uuids, dpkg)
+            collect_deps!(seen_uuids, dpkg; depth=1)
         end
     end
 
@@ -539,6 +553,13 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         else
             prune_manifest(localctx.env)
         end
+        # Remove deps that we added to the project just to keep their versions fixed,
+        # since we know all of the packages should be in the manifest this should be
+        # a trivial modification of the project file only.
+        # See issue https://github.com/JuliaLang/Pkg.jl/issues/1144
+        not_loadable = setdiff(should_be_in_manifest, should_be_in_project)
+        Operations.rm(localctx, [PackageSpec(uuid = uuid) for uuid in not_loadable])
+
         write_env(localctx, display_diff = false)
         will_resolve && build_versions(localctx, new)
 
