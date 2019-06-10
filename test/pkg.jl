@@ -728,6 +728,19 @@ end
     end end
 end
 
+@testset "issue #1180: broken toml-files in HEAD" begin
+    temp_pkg_dir() do dir; cd(dir) do
+        write("Project.toml", "[deps]\nExample = \n")
+        LibGit2.with(LibGit2.init(dir)) do repo
+            LibGit2.add!(repo, "*")
+            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
+        end
+        write("Project.toml", "[deps]\nExample = \"7876af07-990d-54b4-ab0e-23690620f79a\"\n")
+        Pkg.activate(dir)
+        @test_logs (:warn, r"Could not read project from HEAD") Pkg.status()
+    end end
+end
+
 import Markdown
 @testset "REPL command doc generation" begin
     # test that the way doc building extracts
@@ -744,6 +757,37 @@ end
         hash = Pkg.Types.Context().env.manifest[TEST_PKG.uuid].tree_hash
         Pkg.instantiate()
         @test hash == Pkg.Types.Context().env.manifest[TEST_PKG.uuid].tree_hash
+    end end
+end
+
+@testset "Issue 1124 code path" begin
+    temp_pkg_dir() do project_path; with_temp_env() do
+        pkg"add Example#master"
+        pkg"add Unicode"
+        pkg"up Unicode"
+    end end
+end
+
+@testset "instantiate checks for consistent dependency graph" begin
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "ExtraDirectDep")
+        Pkg.activate(joinpath(tmp, "ExtraDirectDep"))
+        @test_throws PkgError Pkg.instantiate()
+    end end
+end
+
+@testset "up should prune manifest" begin
+    example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+    unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "Unpruned")
+        Pkg.activate(joinpath(tmp, "Unpruned"))
+        Pkg.update()
+        manifest = Pkg.Types.Context().env.manifest
+        package_example = get(manifest, example_uuid, nothing)
+        @test package_example !== nothing
+        @test package_example.version > v"0.4.0"
+        @test get(manifest, unicode_uuid, nothing) === nothing
     end end
 end
 

@@ -467,6 +467,13 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         pkgerror("manifest at $(ctx.env.manifest_file) does not exist")
     end
     Operations.prune_manifest(ctx.env)
+    for (name, uuid) in ctx.env.project.deps
+        get(ctx.env.manifest, uuid, nothing) === nothing || continue
+        pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
+                 " If you intend `$name` to be a direct dependency, run `Pkg.resolve()` to populate the manifest.",
+                 " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
+                 " Finally, run `Pkg.instantiate()` again.")
+    end
     Types.update_registries(ctx)
     pkgs = PackageSpec[]
     Operations.load_all_deps!(ctx, pkgs)
@@ -498,6 +505,9 @@ status(pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT) = status(Context(), pkgs
 function status(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT)
     project_resolve!(ctx.env, pkgs)
     project_deps_resolve!(ctx.env, pkgs)
+    if mode === PKGMODE_MANIFEST
+        foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
+    end
     manifest_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
     Pkg.Display.status(ctx, pkgs, mode=mode)
@@ -508,7 +518,7 @@ end
 function activate()
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || @info("activating environment at $(pathrepr(p)).")
+    p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
     return nothing
 end
 function _activate_dep(dep_name::AbstractString)
@@ -561,7 +571,10 @@ function activate(path::AbstractString; shared::Bool=false)
     end
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
     p = Base.active_project()
-    p === nothing || @info("activating$(ispath(p) ? "" : " new") environment at $(pathrepr(p)).")
+    if p !== nothing
+        n = ispath(p) ? "" : "new "
+        printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
+    end
     return nothing
 end
 

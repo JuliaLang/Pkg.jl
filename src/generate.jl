@@ -49,7 +49,7 @@ function project(pkg::String, dir::String; preview::Bool)
 
     authors = ["$name " * (email == nothing ? "" : "<$email>")]
 
-    uuid = UUIDs.uuid1()
+    uuid = UUIDs.uuid4()
     genfile(pkg, dir, "Project.toml"; preview=preview) do io
         toml = Dict("authors" => authors,
                     "name" => pkg,
