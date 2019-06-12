@@ -229,7 +229,11 @@ test(pkg::Union{AbstractString, PackageSpec}; kwargs...) = test([pkg]; kwargs...
 test(pkgs::Vector{<:AbstractString}; kwargs...)          = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 test(pkgs::Vector{PackageSpec}; kwargs...)               = test(Context(), pkgs; kwargs...)
 function test(ctx::Context, pkgs::Vector{PackageSpec};
-              coverage=false, test_fn=nothing, kwargs...)
+              coverage=false, test_fn=nothing,
+              julia_args::AbstractVector{<:Base.AbstractCmd}=Cmd[],
+              test_args::AbstractVector{<:AbstractString}=String[], kwargs...)
+    julia_args = convert(Vector{Cmd}, julia_args)
+    test_args = convert(Vector{String}, test_args)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
@@ -242,7 +246,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env, pkgs)
         ensure_resolved(ctx.env, pkgs)
     end
-    Operations.test(ctx, pkgs; coverage=coverage, test_fn=test_fn)
+    Operations.test(ctx, pkgs; coverage=coverage, test_fn=test_fn, julia_args=julia_args, test_args=test_args)
     return
 end
 
