@@ -299,11 +299,19 @@ function semver_spec(s::String)
     for ver in split(s, ',')
         range = nothing
         found_match = false
-        for (ver_reg, f) in ver_regs
-            if occursin(ver_reg, ver)
-                range = f(match(ver_reg, ver))
-                found_match = true
-                break
+        try
+            range = VersionRange(ver)
+            found_match = true
+        catch err
+            (err isa ArgumentError) || rethrow()
+        end
+        if !found_match
+            for (ver_reg, f) in ver_regs
+                if occursin(ver_reg, ver)
+                    range = f(match(ver_reg, ver))
+                    found_match = true
+                    break
+                end
             end
         end
         found_match || error("invalid version specifier: $s")

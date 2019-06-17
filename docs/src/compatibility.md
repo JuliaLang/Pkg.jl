@@ -78,3 +78,12 @@ PkgB = "≥ 1.2.3"  # [1.2.3,  ∞)
 PkgC = "= 1.2.3"  # [1.2.3, 1.2.3]
 PkgD = "< 1.2.3"  # [0.0.0, 1.2.2]
 ```
+
+### Range specifiers
+
+Ranges can also be used to specify version ranges:
+
+```toml
+[compat]
+PkgA = "0.1 - 0.2.3" # [0.1.0,  0.2.3)
+```
