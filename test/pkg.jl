@@ -132,11 +132,8 @@ temp_pkg_dir() do project_path
         @test isinstalled(TEST_PKG)
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
-        # https://github.com/JuliaLang/Pkg.jl/issues/601
         pkgdir = joinpath(Pkg.depots1(), "packages")
-        touch(joinpath(pkgdir, ".DS_Store"))
         Pkg.gc()
-        rm(joinpath(pkgdir, ".DS_Store"))
         @test isempty(readdir(pkgdir))
     end
 
@@ -628,6 +625,10 @@ end
     temp_pkg_dir() do project_path
         with_temp_env() do
             Pkg.add("Example")
+            Pkg.gc()
+            # issue #601 and #1228
+            touch(joinpath(Pkg.depots1(), "packages", ".DS_Store"))
+            touch(joinpath(Pkg.depots1(), "packages", "Example", ".DS_Store"))
             Pkg.gc()
         end
     end
