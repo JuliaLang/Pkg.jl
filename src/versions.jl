@@ -109,11 +109,13 @@ VersionRange(b::VersionBound=VersionBound()) = VersionRange(b, b)
 VersionRange(t::Integer...)                  = VersionRange(VersionBound(t...))
 VersionRange(v::VersionNumber)               = VersionRange(VersionBound(v))
 
-function VersionRange(s::AbstractString)
+function VersionRange(s::AbstractString; force_range=false)
     m = match(r"^\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*)(?:\s*-\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*))?\s*$", s)
     m == nothing && throw(ArgumentError("invalid version range: $(repr(s))"))
     lower = VersionBound(m.captures[1])
-    upper = m.captures[2] != nothing ? VersionBound(m.captures[2]) : lower
+    has_upper = m.captures[2] != nothing
+    force_range && !has_upper && throw(ArgumentError("degenerate version range: $(repr(s))"))
+    upper = has_upper ? VersionBound(m.captures[2]) : lower
     return VersionRange(lower, upper)
 end
 
@@ -300,7 +302,9 @@ function semver_spec(s::String)
         range = nothing
         found_match = false
         try
-            range = VersionRange(ver)
+            # "1.2.3" parses as a VersionRange with one version, unless force_range=true.
+            # It should be instead parsed as a VersionSpec("1.2.3-1") above.
+            range = VersionRange(ver; force_range=true)
             found_match = true
         catch err
             (err isa ArgumentError) || rethrow()

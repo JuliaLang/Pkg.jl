@@ -89,6 +89,9 @@ import Pkg.Types: semver_spec, VersionSpec
     @test semver_spec("0.1.0 - 0.2.2") == VersionSpec("0.1.0 - 0.2.2")
     @test semver_spec("0.1.0 - 0.2.2, 1.2") == VersionSpec(["0.1.0 - 0.2.2", "1.2.0-1"])
     @test semver_spec("0.1.0 - 0.2.2, >=1.2") == VersionSpec(["0.1.0 - 0.2.2", "1.2.0-*"])
+    @test !(v"0.3" in semver_spec("0.1 - 0.2"))
+    @test v"0.2.99" in semver_spec("0.1 - 0.2")
+    @test v"0.3" in semver_spec("0.1 - 0")
 
     @test_throws ErrorException semver_spec("^^0.2.3")
     @test_throws ErrorException semver_spec("^^0.2.3.4")

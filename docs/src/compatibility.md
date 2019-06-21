@@ -85,5 +85,5 @@ Ranges can also be used to specify version ranges:
 
 ```toml
 [compat]
-PkgA = "0.1 - 0.2.3" # [0.1.0,  0.2.3)
+PkgA = "0.1 - 0.2.3"   # [0.1.0,  0.2.3]
 ```
