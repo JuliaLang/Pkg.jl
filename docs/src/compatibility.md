@@ -65,7 +65,13 @@ For example:
 PkgA = "~1.2.3" # [1.2.3, 1.3.0)
 PkgB = "~1.2"   # [1.2.0, 1.3.0)
 PkgC = "~1"     # [1.0.0, 2.0.0)
+PkgD = "~0.2.3" # [0.2.3, 0.3.0)
+PkgE = "~0.0.3" # [0.0.3, 0.0.4)
+PkgF = "~0.0"   # [0.0.0, 0.1.0)
+PkgG = "~0"     # [0.0.0, 1.0.0)
 ```
+
+For all versions with a major version of 0 the tilde and caret specifiers are equivalent.
 
 ### Inequality specifiers
 
