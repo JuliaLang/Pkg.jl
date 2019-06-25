@@ -706,19 +706,13 @@ end
         Pkg.generate("A")
         cd(mkdir("packages")) do
             Pkg.generate("A")
-            LibGit2.with(LibGit2.init("A")) do repo
-                LibGit2.add!(repo, "*")
-                LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-            end
+            git_init_and_commit("A")
         end
         Pkg.generate("B")
         project = Pkg.Types.read_project("A/Project.toml")
         project.name = "B"
         Pkg.Types.write_project(project, "B/Project.toml")
-        LibGit2.with(LibGit2.init("B")) do repo
-            LibGit2.add!(repo, "*")
-            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-        end
+        git_init_and_commit("B")
         Pkg.develop(Pkg.PackageSpec(path = abspath("A")))
         # package with same name but different uuid exist in project
         @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("packages", "A")))
@@ -732,13 +726,10 @@ end
 @testset "issue #1180: broken toml-files in HEAD" begin
     temp_pkg_dir() do dir; cd(dir) do
         write("Project.toml", "[deps]\nExample = \n")
-        LibGit2.with(LibGit2.init(dir)) do repo
-            LibGit2.add!(repo, "*")
-            LibGit2.commit(repo, "initial commit"; author=TEST_SIG, committer=TEST_SIG)
-        end
+        git_init_and_commit(dir)
         write("Project.toml", "[deps]\nExample = \"7876af07-990d-54b4-ab0e-23690620f79a\"\n")
         Pkg.activate(dir)
-        @test_logs (:warn, r"Could not read project from HEAD") Pkg.status()
+        @test_logs (:warn, r"could not read project from HEAD") Pkg.status(diff=true)
     end end
 end
 

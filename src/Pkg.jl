@@ -283,16 +283,22 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT)
+    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false)
 
 Print out the status of the project/manifest.
 If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
 that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`,
 print status also about those in the manifest (recursive dependencies). If there are
 any packages listed as arguments, the output will be limited to those packages.
+Setting `diff=true` will, if the environment is in a git repository, limit
+the output to the difference as compared to the last git commit.
 
 !!! compat "Julia 1.1"
     `Pkg.status` with package arguments requires at least Julia 1.1.
+
+!!! compat "Julia 1.3"
+    The `diff` keyword argument requires Julia 1.3. In earlier versions `diff=true`
+    is the default for environments in git repositories.
 """
 const status = API.status
 

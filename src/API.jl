@@ -497,12 +497,12 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-status(; mode=PKGMODE_PROJECT) = status(PackageSpec[]; mode=mode)
-status(pkg::Union{AbstractString,PackageSpec}; mode=PKGMODE_PROJECT) = status([pkg]; mode=mode)
-status(pkgs::Vector{<:AbstractString}; mode=PKGMODE_PROJECT) =
-    status([check_package_name(pkg) for pkg in pkgs]; mode=mode)
-status(pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT) = status(Context(), pkgs; mode=mode)
-function status(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT)
+status(; kwargs...) = status(PackageSpec[]; kwargs...)
+status(pkg::Union{AbstractString,PackageSpec}; kwargs...) = status([pkg]; kwargs...)
+status(pkgs::Vector{<:AbstractString}; kwargs...) =
+    status([check_package_name(pkg) for pkg in pkgs]; kwargs...)
+status(pkgs::Vector{PackageSpec}; kwargs...) = status(Context(), pkgs; kwargs...)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT)
     project_resolve!(ctx.env, pkgs)
     project_deps_resolve!(ctx.env, pkgs)
     if mode === PKGMODE_MANIFEST
@@ -510,7 +510,7 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT)
     end
     manifest_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env, pkgs)
-    Pkg.Display.status(ctx, pkgs, mode=mode)
+    Pkg.Display.status(ctx, pkgs, diff=diff, mode=mode)
     return nothing
 end
 
