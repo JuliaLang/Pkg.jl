@@ -12,7 +12,11 @@ PkgF = &quot;^0.0&quot;   # [0.0.0, 0.1.0)
 PkgG = &quot;^0&quot;     # [0.0.0, 1.0.0)</code></pre><p>While the semver specification says that all versions with a major version of 0 are incompatible with each other, we have made that choice that a version given as <code>0.a.b</code> is considered compatible with <code>0.a.c</code> if <code>a != 0</code> and  <code>c &gt;= b</code>.</p><h3><a class="nav-anchor" id="Tilde-specifiers-1" href="#Tilde-specifiers-1">Tilde specifiers</a></h3><p>A tilde specifier provides more limited upgrade possibilities. When specifying major, minor and patch versions, or when specifying major and minor versions, only the patch version is allowed to change. If you only specify a major version, then both minor and patch versions are allowed to be upgraded (<code>~1</code> is thus equivalent to <code>^1</code>). For example:</p><pre><code class="language-toml">[compat]
 PkgA = &quot;~1.2.3&quot; # [1.2.3, 1.3.0)
 PkgB = &quot;~1.2&quot;   # [1.2.0, 1.3.0)
-PkgC = &quot;~1&quot;     # [1.0.0, 2.0.0)</code></pre><h3><a class="nav-anchor" id="Inequality-specifiers-1" href="#Inequality-specifiers-1">Inequality specifiers</a></h3><p>Inequalities can also be used to specify version ranges:</p><pre><code class="language-toml">[compat]
+PkgC = &quot;~1&quot;     # [1.0.0, 2.0.0)
+PkgD = &quot;~0.2.3&quot; # [0.2.3, 0.3.0)
+PkgE = &quot;~0.0.3&quot; # [0.0.3, 0.0.4)
+PkgF = &quot;~0.0&quot;   # [0.0.0, 0.1.0)
+PkgG = &quot;~0&quot;     # [0.0.0, 1.0.0)</code></pre><p>For all versions with a major version of 0 the tilde and caret specifiers are equivalent.</p><h3><a class="nav-anchor" id="Inequality-specifiers-1" href="#Inequality-specifiers-1">Inequality specifiers</a></h3><p>Inequalities can also be used to specify version ranges:</p><pre><code class="language-toml">[compat]
 PkgA = &quot;&gt;= 1.2.3&quot; # [1.2.3,  ∞)
 PkgB = &quot;≥ 1.2.3&quot;  # [1.2.3,  ∞)
 PkgC = &quot;= 1.2.3&quot;  # [1.2.3, 1.2.3]
