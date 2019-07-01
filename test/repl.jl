@@ -68,6 +68,10 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     @test isinstalled(TEST_PKG)
     v = Pkg.API.__installed()[TEST_PKG.name]
     pkg"rm Example"
+    pkg"add Example, Random"
+    pkg"rm Example Random"
+    pkg"add Example,Random"
+    pkg"rm Example,Random"
     pkg"add Example#master"
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)

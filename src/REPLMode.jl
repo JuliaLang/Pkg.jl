@@ -170,6 +170,7 @@ Base.@kwdef mutable struct Statement
 end
 
 function lex(cmd::String)::Vector{QString}
+    replace_comma = (nothing!=match(r"^(add|rm|remove)+\s", cmd))
     in_doublequote = false
     in_singlequote = false
     qstrings = QString[]
@@ -207,6 +208,14 @@ function lex(cmd::String)::Vector{QString}
             else # special delimiter
                 push_token!(false)
                 push!(qstrings, QString(";", false))
+            end
+        elseif c == ','
+            if in_doublequote || in_singlequote || !replace_comma # raw char
+                # don't replace ',' in quotes
+                push!(token_in_progress, c)
+            else
+                push_token!(false)
+                push!(qstrings, QString("", false))
             end
         else
             push!(token_in_progress, c)
