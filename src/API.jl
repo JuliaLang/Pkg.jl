@@ -306,7 +306,7 @@ function gc(ctx::Context=Context(); kwargs...)
                 if isdir(joinpath(packagedir, name))
                     for slug in readdir(joinpath(packagedir, name))
                         versiondir = joinpath(packagedir, name, slug)
-                        if !(versiondir in paths_to_keep)
+                        if !(versiondir in paths_to_keep) && isdir(versiondir)
                             push!(paths_to_delete, versiondir)
                         end
                     end
