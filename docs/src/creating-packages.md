@@ -173,6 +173,12 @@ test-specific dependencies, are available, see below.
     This section only applies to Julia 1.2 and above. For specifying test dependencies
     on previous Julia versions, see [Test-specific dependencies in Julia 1.0 and 1.1](@ref).
 
+!!! note
+    The exact interaction between `Project.toml`, `test/Project.toml` and their corresponding
+    `Manifest.toml`s are not fully worked out, and may be subject to change in future versions.
+    The old method of adding test-specific dependencies, described in the next section, will
+    therefore be supported throughout all Julia 1.X releases.
+
 In Julia 1.2 and later the test environment is given by `test/Project.toml`. Thus, when running
 tests, this will be the active project, and only dependencies to the `test/Project.toml` project
 can be used. Note that Pkg will add the tested package itself implictly.
@@ -217,6 +223,12 @@ using Test
 ```
 
 #### Test-specific dependencies in Julia 1.0 and 1.1
+
+!!! note
+    The method of adding test-specific dependencies described in this section will
+    be replaced by the method from the previous section in future Julia versions.
+    The method in this section will, however, be supported throughout all Julia 1.X
+    releases.
 
 In Julia 1.0 and Julia 1.1 test-specific dependencies are added to the main
 `Project.toml`. To add `Markdown` and `Test` as test-dependencies, add the following:
