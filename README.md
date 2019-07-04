@@ -2,7 +2,7 @@
 
 | **Documentation**                                                 | **Build Status**                                                                                |
 |:-----------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
-| [![][docs-v1-img]][docs-v1-url] [![][docs-dev-img]][docs-dev-url] | [![][travis-img]][travis-url] [![][appveyor-img]][appveyor-url] [![][codecov-img]][codecov-url] |
+| [![][docs-v1-img]][docs-v1-url] [![][docs-dev-img]][docs-dev-url] | [![Bors enabled][bors-img]][bors-url] [![][travis-img]][travis-url] [![][appveyor-img]][appveyor-url] [![][codecov-img]][codecov-url] |
 
 Development repository for Julia's package manager,
 shipped with Julia v1.0 and above.
@@ -23,6 +23,9 @@ If you want to develop this package do the following steps:
 
 [docs-v1-img]: https://img.shields.io/badge/docs-v1-blue.svg
 [docs-v1-url]: https://julialang.github.io/Pkg.jl/v1/
+
+[bors-img]: https://bors.tech/images/badge_small.svg
+[bors-url]: https://app.bors.tech/repositories/2953
 
 [travis-img]: https://travis-ci.org/JuliaLang/Pkg.jl.svg?branch=master
 [travis-url]: https://travis-ci.org/JuliaLang/Pkg.jl
