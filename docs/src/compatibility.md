@@ -29,7 +29,7 @@ The union of multiple version specifiers can be formed by comma separating indiv
 [compat]
 Example = "1.2, 2"
 ```
-will result in `[1.2.0, 3.0.0)`.
+will result in `[1.2.0, 2.0.0)`.
 
 ### Caret specifiers
 
