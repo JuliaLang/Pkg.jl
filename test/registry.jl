@@ -242,6 +242,17 @@ end
         # This add should not error because depot/Example and depot2/Example have the same uuid
         Pkg.add("Example")
         @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
+        Pkg.rm("Example")
+        @test !isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
+        # test filtering if the same package uuid is found in different registries
+        registry2 = joinpath(Base.DEPOT_PATH[2], "registries", "General", "Registry.toml")
+        str = read(registry2, String)
+        str = replace(str, "name = \"General\"" => "name = \"General2\"", count = 1)
+        str = replace(str, "uuid = \"23338594-aafe-5451-b93e-139f81909106\"" =>
+                           "uuid = \"2759d7ed-3a0f-4efa-9123-a918602b9842\"", count = 1)
+        write(registry2, str)
+        Pkg.add("Example")
+        @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
     end end
 
     # only clone default registry if there are no registries installed at all

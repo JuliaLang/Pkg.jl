@@ -938,7 +938,7 @@ function clone_default_registries()
     end
 end
 
-# Return `RegistrySpec`s of each registry in a depot
+# Return `RegistrySpec`s of each unique registry in a depot, sorted by name
 function collect_registries(depot::String)
     d = joinpath(depot, "registries")
     regs = RegistrySpec[]
@@ -955,12 +955,17 @@ function collect_registries(depot::String)
             push!(regs, spec)
         end
     end
+    # filter out only unique registries
+    sort!(regs; by = r -> r.name)
+    regs = unique(r -> r.uuid, regs)
     return regs
 end
-# Return `RegistrySpec`s of all registries in all depots
+# Return `RegistrySpec`s of all unique registries in all depots
 function collect_registries()
     isempty(depots()) && return RegistrySpec[]
-    return RegistrySpec[r for d in depots() for r in collect_registries(d)]
+    regs = RegistrySpec[r for d in depots() for r in collect_registries(d)]
+    regs = unique(r -> r.uuid, regs)
+    return regs
 end
 
 # Hacky way to make e.g. `registry add General` work.

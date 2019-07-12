@@ -90,13 +90,12 @@ Pkg.Registry.status()
 """
 function status()
     regs = Types.collect_registries()
-    regs = unique(r -> r.uuid, regs) # Maybe not?
     Types.printpkgstyle(stdout, Symbol("Registry Status"), "")
     if isempty(regs)
         println("  (no registries found)")
     else
         for reg in regs
-            printstyled(" [$(string(reg.uuid)[1:8])]"; color = :light_black)
+            printstyled("  [$(string(reg.uuid)[1:8])]"; color = :light_black)
             print(" $(reg.name)")
             reg.url === nothing || print(" ($(reg.url))")
             println()
