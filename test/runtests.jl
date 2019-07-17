@@ -2,6 +2,7 @@
 
 module PkgTests
 
+include("utils.jl")
 include("pkg.jl")
 include("sandbox.jl")
 include("resolve.jl")

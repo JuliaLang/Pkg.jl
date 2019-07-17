@@ -133,7 +133,13 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
         pkgdir = joinpath(Pkg.depots1(), "packages")
-        Pkg.gc()
+
+        # Test to ensure that with a long enough collect_delay, nothing gets reaped
+        Pkg.gc(;collect_delay=1000)
+        @test !isempty(readdir(pkgdir))
+
+        # Setting collect_delay to zero causes it to be reaped immediately, howeveage
+        Pkg.gc(;collect_delay=0)
         @test isempty(readdir(pkgdir))
     end
 
@@ -786,5 +792,6 @@ end
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
+include("artifacts.jl")
 
 end # module

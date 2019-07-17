@@ -1,4 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
+import Pkg
 
 function temp_pkg_dir(fn::Function;rm=true)
     local env_dir
@@ -140,3 +141,11 @@ end
 
 copy_test_package(tmpdir::String, name::String) =
     cp(joinpath(@__DIR__, "test_packages", name), joinpath(tmpdir, name))
+function add_test_package(name::String, uuid::UUID)
+    spec = Pkg.Types.PackageSpec(
+        name=name,
+        uuid=uuid,
+        path=joinpath(@__DIR__, "test_packages", name)
+    )
+    Pkg.add(spec)
+end

@@ -5,13 +5,15 @@ module API
 using UUIDs
 using Printf
 import Random
-import Dates
+using Dates
 import LibGit2
 
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 using Pkg.Types: VersionTypes
+using ..BinaryPlatforms
+using ..Artifacts: artifact_paths
 
 
 preview_info() = printstyled("───── Preview mode ─────\n"; color=Base.info_color(), bold=true)
@@ -34,8 +36,8 @@ develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = develop([pkg]; kwa
 develop(pkgs::Vector{<:AbstractString}; kwargs...) =
     develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
 develop(pkgs::Vector{PackageSpec}; kwargs...)      = develop(Context(), pkgs; kwargs...)
-function develop(ctx::Context, pkgs::Vector{PackageSpec};
-                 shared::Bool=true, strict::Bool=false, kwargs...)
+function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
+                 strict::Bool=false, platform::Platform=platform_key_abi(), kwargs...)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -56,7 +58,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec};
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
         pkgerror("Cannot `develop` package with the same name or uuid as the project")
 
-    Operations.develop(ctx, pkgs, new_git; strict=strict)
+    Operations.develop(ctx, pkgs, new_git; strict=strict, platform=platform)
     ctx.preview && preview_info()
     return
 end
@@ -65,7 +67,8 @@ add(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add([pkg]; kwargs...)
 add(pkgs::Vector{<:AbstractString}; kwargs...) =
     add([check_package_name(pkg, :add) for pkg in pkgs]; kwargs...)
 add(pkgs::Vector{PackageSpec}; kwargs...)      = add(Context(), pkgs; kwargs...)
-function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false, kwargs...)
+function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
+             platform::Platform=platform_key_abi(), kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -96,7 +99,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false, kwargs
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
         pkgerror("Cannot add package with the same name or uuid as the project")
 
-    Operations.add(ctx, pkgs, new_git; strict=strict)
+    Operations.add(ctx, pkgs, new_git; strict=strict, platform=platform)
     ctx.preview && preview_info()
     return
 end
@@ -259,83 +262,317 @@ function __installed(mode::PackageMode=PKGMODE_MANIFEST)
     return version_status
 end
 
-function gc(ctx::Context=Context(); kwargs...)
+"""
+    gc(ctx::Context=Context(); kwargs...)
+
+Garbage-collect package and artifact installations by sweeping over all known
+`Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
+finding artifacts and packages that are thereafter not used by any other projects.  This
+method will only remove package versions and artifacts that have been continually un-used
+for a period of `collect_delay`; which defaults to thirty days.
+"""
+function gc(ctx::Context=Context(); collect_delay=60*60*24*30, kwargs...)
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     env = ctx.env
 
-    # If the manifest was not used
-    usage_file = joinpath(logdir(), "manifest_usage.toml")
+    # Convert to a DateTime immediately, offering millisecond resolution
+    collect_delay = Millisecond(round(Int64,1000*collect_delay))
 
-    # Collect only the manifest that is least recently used
-    manifest_date = Dict{String, Dates.DateTime}()
-    for (manifest_file, infos) in TOML.parse(String(read(usage_file)))
-        for info in infos
-            date = info["time"]
-            manifest_date[manifest_file] = haskey(manifest_date, date) ? max(manifest_date[date], date) : date
-        end
-    end
+    # First, we load in our `manifest_usage.toml` files which will tell us when our
+    # "index files" (`Manifest.toml`, `Artifacts.toml`) were last used.  We will combine
+    # this knowledge across depots, condensing it all down to a single entry per extant
+    # index file, to manage index file growth with would otherwise continue unbounded. We
+    # keep the lists of index files separated by depot so that we can write back condensed
+    # versions that are only ever subsets of what we read out of them in the first place.
 
-    # Find all reachable packages through manifests recently used
-    new_usage = Dict{String, Any}()
-    paths_to_keep = String[]
-    printpkgstyle(ctx, :Active, "manifests:")
-    for (manifestfile, date) in manifest_date
-        !isfile(manifestfile) && continue
-        println("        $(Types.pathrepr(manifestfile))")
-        manifest = try
-            read_manifest(manifestfile)
-        catch e
-            @warn "Reading manifest file at $manifestfile failed with error" exception = e
-            nothing
-        end
-        manifest == nothing && continue
-        new_usage[manifestfile] = [Dict("time" => date)]
-        for (uuid, entry) in manifest
-            if entry.tree_hash !== nothing
-                push!(paths_to_keep,
-                      Operations.find_installed(entry.name, uuid, entry.tree_hash))
-            end
-        end
-    end
+    # Collect last known usage dates of manifest and artifacts toml files, split by depot
+    manifest_usage_by_depot = Dict{String, Dict{String, DateTime}}()
+    artifact_usage_by_depot = Dict{String, Dict{String, DateTime}}()
 
-    # Collect the paths to delete (everything that is not reachable)
-    paths_to_delete = String[]
+    # Load manifest files from all depots
     for depot in depots()
-        packagedir = abspath(depot, "packages")
-        if isdir(packagedir)
-            for name in readdir(packagedir)
-                if isdir(joinpath(packagedir, name))
-                    for slug in readdir(joinpath(packagedir, name))
-                        versiondir = joinpath(packagedir, name, slug)
-                        if !(versiondir in paths_to_keep) && isdir(versiondir)
-                            push!(paths_to_delete, versiondir)
-                        end
+        # When a manifest/artifact.toml is installed/used, we log it within the
+        # `manifest_usage.toml` files within `write_env_usage()` and `bind_artifact!()`
+        function collect_usage!(usage_data::Dict, usage_filepath)
+            if !isfile(usage_filepath)
+                return usage_data
+            end
+
+            for (filename, infos) in TOML.parse(String(read(usage_filepath)))
+                # If this file was already listed in this index, update it with the later
+                # information
+                for info in infos
+                    usage_data[filename] = max(
+                        get(usage_data, filename, DateTime(0)),
+                        DateTime(info["time"]),
+                    )
+                end
+            end
+            return usage_data
+        end
+
+        # Extract usage data from this depot, (taking only the latest state for each
+        # tracked manifest/artifact.toml), then merge the usage values from each file
+        # into the overall list across depots to create a single, coherent view across
+        # all depots.
+        manifest_usage_by_depot[depot] = Dict{String, DateTime}()
+        artifact_usage_by_depot[depot] = Dict{String, DateTime}()
+        collect_usage!(
+            manifest_usage_by_depot[depot],
+            joinpath(logdir(depot), "manifest_usage.toml"),
+        )
+        collect_usage!(
+            artifact_usage_by_depot[depot],
+            joinpath(logdir(depot), "artifact_usage.toml"),
+        )
+    end
+
+    # Next, figure out which files are still extant
+    all_index_files = vcat(
+        unique(f for (_, files) in manifest_usage_by_depot for f in keys(files)),
+        unique(f for (_, files) in artifact_usage_by_depot for f in keys(files)),
+    )
+    all_index_files = Set(filter(isfile, all_index_files))
+
+    # Immediately write this back as condensed manifest_usage.toml files
+    if !ctx.preview
+        function write_condensed_usage(usage_by_depot, fname)
+            for (depot, usage) in usage_by_depot
+                # Keep only the keys of the files that are still extant
+                usage = filter(p -> p[1] in all_index_files, usage)
+
+                # Expand it back into a dict of arrays-of-dicts
+                usage = Dict(k => [Dict("time" => v)] for (k, v) in usage)
+
+                # Write it out to disk within this depot
+                usage_path = joinpath(logdir(depot), fname)
+                if !isempty(usage) || isfile(usage_path)
+                    open(usage_path, "w") do io
+                        TOML.print(io, usage, sorted=true)
                     end
                 end
             end
         end
+        write_condensed_usage(manifest_usage_by_depot, "manifest_usage.toml")
+        write_condensed_usage(artifact_usage_by_depot, "artifact_usage.toml")
     end
 
+    # Next, we will process the manifest.toml and artifacts.toml files separately,
+    # extracting from them the paths of the packages and artifacts that they reference.
+    all_manifest_files = filter(f -> endswith(f, "Manifest.toml"), all_index_files)
+    all_artifacts_files = filter(f -> !endswith(f, "Manifest.toml"), all_index_files)
+
+    function process_manifest(path)
+        # Read the manifest in
+        manifest = try
+            read_manifest(path)
+        catch e
+            @warn "Reading manifest file at $path failed with error" exception = e
+            return nothing
+        end
+
+        # Collect the locations of every package referred to in this manifest
+        pkg_dir(uuid, entry) = Operations.find_installed(entry.name, uuid, entry.tree_hash)
+        return [pkg_dir(u, e) for (u, e) in manifest if e.tree_hash != nothing]
+    end
+
+    function process_artifacts_toml(path)
+        # Not only do we need to check if this file doesn't exist, we also need to check
+        # to see if it this artifact is contained within a package that is going to go
+        # away.  This places an inherent ordering between marking packages and marking
+        # artifacts; the package marking must be done first so that we can ensure that
+        # all artifacts that are solely bound within such packages also get reaped.
+        if any(startswith(path, package_dir) for package_dir in packages_to_delete)
+            return nothing
+        end
+
+        artifact_dict = try
+            parse_toml(path)
+        catch e
+            @warn "Reading artifacts file at $path failed with error" exception = e
+            return nothing
+        end
+
+        artifact_path_list = String[]
+        for name in keys(artifact_dict)
+            getpaths(meta) = artifact_paths(SHA1(hex2bytes(meta["git-tree-sha1"])))
+            if isa(artifact_dict[name], Array)
+                for platform_meta in artifact_dict[name]
+                    append!(artifact_path_list, getpaths(platform_meta))
+                end
+            else
+                append!(artifact_path_list, getpaths(artifact_dict[name]))
+            end
+        end
+        return artifact_path_list
+    end
+
+    # Mark packages/artifacts as active or not by calling the appropriate
+    function mark(process_func::Function, index_files)
+        marked_paths = String[]
+        for index_file in index_files
+            # Check to see if it's still alive
+            paths = process_func(index_file)
+            if paths != nothing
+                # Print the path of this beautiful, extant file to the user
+                println("        $(Types.pathrepr(index_file))")
+                append!(marked_paths, paths)
+            end
+        end
+
+        # Return the list of marked paths
+        return Set(marked_paths)
+    end
+
+    gc_time = now()
+    function merge_orphanages!(new_orphanage, paths, deletion_list, old_orphanage = Dict())
+        for path in paths
+            free_time = something(
+                get(old_orphanage, path, nothing),
+                gc_time,
+            )
+
+            # No matter what, store the free time in the new orphanage. This allows
+            # something terrible to go wrong while trying to delete the artifact/
+            # package and it will still try to be deleted next time.  The only time
+            # something is removed from an orphanage is when it didn't exist before
+            # we even started the `gc` run.
+            new_orphanage[path] = free_time
+
+            # If this path was orphaned long enough ago, add it to the deletion list.
+            # Otherwise, we continue to propagate its orphaning date but don't delete
+            # it.  It will get cleaned up at some future `gc`, or it will be used
+            # again during a future `gc` in which case it will not persist within the
+            # orphanage list.
+            if gc_time - free_time >= collect_delay
+                push!(deletion_list, path)
+            end
+        end
+    end
+
+
+    # Scan manifests, parse them, read in all UUIDs listed and mark those as active
+    printpkgstyle(ctx, :Active, "manifests:")
+    packages_to_keep = mark(process_manifest, all_manifest_files)
+
+    # Do an initial scan of our depots to get a preliminary `packages_to_delete`.
+    packages_to_delete = String[]
+    for depot in depots()
+        depot_orphaned_packages = String[]
+
+        packagedir = abspath(depot, "packages")
+        if isdir(packagedir)
+            for name in readdir(packagedir)
+                !isdir(joinpath(packagedir, name)) && continue
+
+                for slug in readdir(joinpath(packagedir, name))
+                    pkg_dir = joinpath(packagedir, name, slug)
+                    !isdir(pkg_dir) && continue
+
+                    if !(pkg_dir in packages_to_keep)
+                        push!(depot_orphaned_packages, pkg_dir)
+                    end
+                end
+            end
+        end
+
+        merge_orphanages!(Dict(), depot_orphaned_packages, packages_to_delete)
+    end
+
+    # Next, do the same for artifacts.  Note that we MUST do this after calculating
+    # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
+    # `Artifacts.toml` files that will be deleted by the future culling operation.
+    printpkgstyle(ctx, :Active, "artifacts:")
+    artifacts_to_keep = mark(process_artifacts_toml, all_artifacts_files)
+
+    # Collect all orphaned paths (packages and artifacts that are not reachable).  These
+    # are implicitly defined in that we walk all packages/artifacts installed, then if
+    # they were not marked in the above steps, we reap them.
+    packages_to_delete = String[]
+    artifacts_to_delete = String[]
+    for depot in depots()
+        # We track orphaned objects on a per-depot basis, writing out our `orphaned.toml`
+        # tracking file immediately, only pushing onto the overall `*_to_delete` lists if
+        # the package has been orphaned for at least `collect_delay` seconds.
+        depot_orphaned_packages = String[]
+        depot_orphaned_artifacts = String[]
+
+        packagedir = abspath(depot, "packages")
+        if isdir(packagedir)
+            for name in readdir(packagedir)
+                !isdir(joinpath(packagedir, name)) && continue
+
+                for slug in readdir(joinpath(packagedir, name))
+                    pkg_dir = joinpath(packagedir, name, slug)
+                    !isdir(pkg_dir) && continue
+
+                    if !(pkg_dir in packages_to_keep)
+                        push!(depot_orphaned_packages, pkg_dir)
+                    end
+                end
+            end
+        end
+
+        artifactsdir = abspath(depot, "artifacts")
+        if isdir(artifactsdir)
+            for hash in readdir(artifactsdir)
+                artifact_path = joinpath(artifactsdir, hash)
+                !isdir(artifact_path) && continue
+
+                if !(artifact_path in artifacts_to_keep)
+                    push!(depot_orphaned_artifacts, artifact_path)
+                end
+            end
+        end
+
+        # Read in this depot's `orphaned.toml` file:
+        orphanage_file = joinpath(logdir(depot), "orphaned.toml")
+        new_orphanage = Dict{String, DateTime}()
+        old_orphanage = try
+            TOML.parse(String(read(orphanage_file)))
+        catch
+            Dict{String, DateTime}()
+        end
+
+        # Update the package and artifact lists of things to delete, and
+        # create the `new_orphanage` list for this depot.
+        merge_orphanages!(new_orphanage, depot_orphaned_packages, packages_to_delete, old_orphanage)
+        merge_orphanages!(new_orphanage, depot_orphaned_artifacts, artifacts_to_delete, old_orphanage)
+
+        # Write out the `new_orphanage` for this depot, if we're not in preview mode.
+        if !ctx.preview && (!isempty(new_orphanage) || isfile(orphanage_file))
+            mkpath(dirname(orphanage_file))
+            open(orphanage_file, "w") do io
+                TOML.print(io, new_orphanage, sorted=true)
+            end
+        end
+    end
+
+    # Next, we calculate the space savings we're about to gain!
     pretty_byte_str = (size) -> begin
         bytes, mb = Base.prettyprint_getunits(size, length(Base._mem_units), Int64(1024))
         return @sprintf("%.3f %s", bytes, Base._mem_units[mb])
     end
 
-    # Delete paths for noreachable package versions and compute size saved
     function recursive_dir_size(path)
         size = 0
         for (root, dirs, files) in walkdir(path)
             for file in files
-                size += lstat(joinpath(root, file)).size
+                path = joinpath(root, file)
+                try
+                    size += lstat(path).size
+                catch
+                    @warn "Failed to calculate size of $path"
+                end
             end
         end
         return size
     end
 
-    sz = 0
-    for path in paths_to_delete
-        sz_pkg = recursive_dir_size(path)
+    # Delete paths for unreachable package versions and artifacts, and computing size saved
+    function delete_path(path)
+        path_size = recursive_dir_size(path)
         if !ctx.preview
             try
                 Base.rm(path; recursive=true)
@@ -343,36 +580,55 @@ function gc(ctx::Context=Context(); kwargs...)
                 @warn "Failed to delete $path"
             end
         end
-        printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" * pretty_byte_str(sz_pkg) * ")")
-        sz += sz_pkg
+        printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" * pretty_byte_str(path_size) * ")")
+        return path_size
     end
 
-    # Delete package paths that are now empty
-    for depot in depots()
-        packagedir = abspath(depot, "packages")
-        if isdir(packagedir)
+    package_space_freed = 0
+    artifact_space_freed = 0
+    for path in packages_to_delete
+        package_space_freed += delete_path(path)
+    end
+    for path in artifacts_to_delete
+        artifact_space_freed += delete_path(path)
+    end
+
+    # Prune package paths that are now empty
+    if !ctx.preview
+        for depot in depots()
+            packagedir = abspath(depot, "packages")
+            !isdir(packagedir) && continue
+
             for name in readdir(packagedir)
                 name_path = joinpath(packagedir, name)
-                if isdir(name_path)
-                    if isempty(readdir(name_path))
-                        !ctx.preview && Base.rm(name_path)
-                    end
-                end
+                !isdir(name_path) && continue
+                !isempty(readdir(name_path)) && continue
+
+                Base.rm(name_path)
             end
         end
     end
 
-    # Write the new condensed usage file
-    if !ctx.preview
-        open(usage_file, "w") do io
-            TOML.print(io, new_usage, sorted=true)
-        end
-    end
-    ndel = length(paths_to_delete)
-    byte_save_str = ndel == 0 ? "" : (" (" * pretty_byte_str(sz) * ")")
-    printpkgstyle(ctx, :Deleted, "$(ndel) package installation$(ndel == 1 ? "" : "s")$byte_save_str")
+    ndel_pkg = length(packages_to_delete)
+    ndel_art = length(artifacts_to_delete)
 
-    ctx.preview && preview_info()
+    if ndel_pkg > 0
+        s = ndel_pkg == 1 ? "" : "s"
+        bytes_saved_string = pretty_byte_str(package_space_freed)
+        printpkgstyle(ctx, :Deleted, "$(ndel_pkg) package installation$(s) ($bytes_saved_string)")
+    end
+    if ndel_art > 0
+        s = ndel_art == 1 ? "" : "s"
+        bytes_saved_string = pretty_byte_str(artifact_space_freed)
+        printpkgstyle(ctx, :Deleted, "$(ndel_art) artifact installation$(s) ($bytes_saved_string)")
+    end
+    if ndel_pkg == 0 && ndel_art == 0
+        printpkgstyle(ctx, :Deleted, "no artifacts or packages")
+    end
+
+    if ctx.preview
+        preview_info()
+    end
     return
 end
 
@@ -494,7 +750,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         mv(tmp_source, sourcepath; force=true)
     end
     new_apply = Operations.download_source(ctx, pkgs)
-    Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
+    Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
 end
 
 
@@ -579,6 +835,15 @@ function activate(path::AbstractString; shared::Bool=false)
         printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
     end
     return nothing
+end
+function activate(f::Function, args...; kwargs...)
+    p = Base.active_project()
+    try
+        Pkg.activate(args...; kwargs...)
+        f()
+    finally
+        Pkg.activate(p)
+    end
 end
 
 function setprotocol!(;
