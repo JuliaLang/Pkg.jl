@@ -8,7 +8,7 @@ import LibGit2
 
 import REPL
 using REPL.TerminalMenus
-using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..BinaryProvider, ..GitTools, ..Display
+using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
 import ..Pkg
 
@@ -480,7 +480,7 @@ function install_archive(
         archive_url !== nothing || continue
         path = tempname() * randstring(6) * ".tar.gz"
         url_success = true
-        cmd = BinaryProvider.gen_download_cmd(archive_url, path);
+        cmd = PlatformEngines.gen_download_cmd(archive_url, path);
         try
             run(cmd, (devnull, devnull, devnull))
         catch e
@@ -490,7 +490,7 @@ function install_archive(
         url_success || continue
         dir = joinpath(tempdir(), randstring(12))
         mkpath(dir)
-        cmd = BinaryProvider.gen_unpack_cmd(path, dir);
+        cmd = PlatformEngines.gen_unpack_cmd(path, dir);
         # Might fail to extract an archive (Pkg#190)
         try
             run(cmd, (devnull, devnull, devnull))
@@ -577,15 +577,15 @@ end
 
 function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                         urls::Dict{UUID, Vector{String}}; readonly=true)
-    BinaryProvider.probe_platform_engines!()
-    new_versions = UUID[]
+    PlatformEngines.probe_platform_engines!()
+    new_pkgs = PackageSpec[]
 
     pkgs_to_install = Tuple{PackageSpec, String}[]
     for pkg in pkgs
         path = source_path(pkg)
         ispath(path) && continue
         push!(pkgs_to_install, (pkg, path))
-        push!(new_versions, pkg.uuid)
+        push!(new_pkgs, pkg)
     end
 
     widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
@@ -656,7 +656,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
         printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
 
-    return new_versions
+    return new_pkgs
 end
 
 ################################
@@ -975,8 +975,14 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bo
     update_manifest!(ctx, pkgs)
     # TODO is it still necessary to prune? I don't think so..
     new_apply = download_source(ctx, pkgs)
+
+    # After downloading resolutionary packages, search for Artifact.toml files
+    # and ensure they are all downloaded and unpacked as well:
+    # TODO: NABIL: Implement this!
+    #download_artifacts(ctx, new_apply)
+
     write_env(ctx) # write env before building
-    build_versions(ctx, union(new_apply, new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
 # Input: name, uuid, and path
@@ -995,7 +1001,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=false)
     write_env(ctx) # write env before building
-    build_versions(ctx, union(new_apply, new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
 # load version constraint
@@ -1058,7 +1064,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
     write_env(ctx) # write env before building
-    build_versions(ctx, union(new_apply, new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
     # TODO what to do about repo packages?
 end
 
@@ -1091,7 +1097,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
 
     new = download_source(ctx, pkgs)
     write_env(ctx) # write env before building
-    build_versions(ctx, new)
+    build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
 
 update_package_free!(ctx::Context, pkg::PackageSpec, ::Nothing) =
@@ -1135,7 +1141,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
         write_env(ctx) # write env before building
-        build_versions(ctx, new)
+        build_versions(ctx, UUID[pkg.uuid for pkg in new])
     else
         foreach(pkg -> manifest_info(ctx.env, pkg.uuid).pinned = false, pkgs)
         write_env(ctx)

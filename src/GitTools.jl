@@ -3,6 +3,8 @@
 module GitTools
 
 using ..Pkg
+using SHA
+import Base: SHA1
 import LibGit2
 using Printf
 
@@ -162,6 +164,87 @@ function fetch(repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs.
         print(stdout, "\033[2K") # clear line
         print(stdout, "\e[?25h") # put back cursor
     end
+end
+
+
+# This code gratefully adapted from https://github.com/simonbyrne/GitX.jl
+@enum GitMode mode_dir=0o040000 mode_normal=0o100644 mode_executable=0o100755 mode_symlink=0o120000 mode_submodule=0o160000
+Base.string(mode::GitMode) = string(UInt32(mode); base=8)
+Base.print(io::IO, mode::GitMode) = print(io, string(mode))
+
+function gitmode(path::AbstractString)
+    if isdir(path)
+        return mode_dir
+    elseif islink(path)
+        return mode_symlink
+    elseif Sys.isexecutable(path)
+        return mode_executable
+    else
+        return mode_normal
+    end
+end
+
+"""
+    blob_hash(path::AbstractString)
+
+Calculate the git blob hash of a given path.
+"""
+function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
+    ctx = HashType()
+    datalen = filesize(path)
+
+    # First, the header
+    SHA.update!(ctx, Vector{UInt8}("blob $(datalen)\0"))
+
+    # Next, read data in in chunks of 4KB
+    buff = Vector{UInt8}(undef, 4*1024)
+    open(path, "r") do io
+        while !eof(io)
+            num_read = readbytes!(io, buff)
+            update!(ctx, buff, num_read)
+        end
+    end
+
+    # Finish it off and return the digest!
+    return SHA.digest!(ctx)
+end
+
+"""
+    tree_hash(root::AbstractString)
+
+Calculate the git tree hash of a given path.
+"""
+function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
+    entries = Tuple{String, Vector{UInt8}, GitMode}[]
+    for f in readdir(root)
+        # Skip `.git` directories
+        if f == ".git"
+            continue
+        end
+
+        filepath = abspath(root, f)
+        mode = gitmode(filepath)
+        if mode == mode_dir
+            hash = tree_hash(filepath)
+        else
+            hash = blob_hash(filepath)
+        end
+        push!(entries, (f, hash, gitmode(filepath)))
+    end
+
+    # Sort entries by name (with trailing slashes for directories)
+    sort!(entries, by = ((name, hash, mode),) -> mode == mode_dir ? name*"/" : name)
+
+    # Return the hash of these entries
+    content_size = sum(((n, h, m),) -> ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + 20, entries)
+
+    ctx = HashType()
+    SHA.update!(ctx, Vector{UInt8}("tree $(content_size)\0"))
+    for (name, hash, mode) in entries
+        SHA.update!(ctx, Vector{UInt8}("$(mode) $(name)\0"))
+        SHA.update!(ctx, hash)
+    end
+    return SHA.digest!(ctx)
 end
 
 end # module

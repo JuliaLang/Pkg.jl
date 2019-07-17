@@ -28,6 +28,7 @@ include("../ext/TOML/src/TOML.jl")
 
 include("GitTools.jl")
 include("PlatformEngines.jl")
+include("BinaryPlatforms.jl")
 include("Types.jl")
 include("Compress.jl")
 include("Display.jl")
@@ -38,12 +39,16 @@ include("Operations.jl")
 include("API.jl")
 include("Registry.jl")
 include("REPLMode.jl")
+include("Artifacts.jl")
 
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
 # legacy CI script support
 import .API: clone, dir
+
+# Import artifacts API
+using .Artifacts, .PlatformEngines
 
 
 """

@@ -786,5 +786,6 @@ end
 include("repl.jl")
 include("api.jl")
 include("registry.jl")
+include("artifacts.jl")
 
 end # module

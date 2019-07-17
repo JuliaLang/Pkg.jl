@@ -1,4 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
+import Pkg
 
 function temp_pkg_dir(fn::Function;rm=true)
     local env_dir
