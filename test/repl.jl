@@ -83,7 +83,7 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
 
     pkg"test Example"
     @test isinstalled(TEST_PKG)
-    @test Pkg.API.__installed()[TEST_PKG.name] > v
+    @test Pkg.API.__installed()[TEST_PKG.name] >= v
     pkg = "UnregisteredWithoutProject"
     p = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg"))
     Pkg.REPLMode.pkgstr("add $p; precompile")

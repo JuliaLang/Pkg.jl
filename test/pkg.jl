@@ -194,7 +194,7 @@ temp_pkg_dir() do project_path
                 @test_throws PkgError Pkg.develop(Pkg.PackageSpec(url="bleh", rev="blurg"))
                 Pkg.develop(TEST_PKG.name)
                 @test isinstalled(TEST_PKG)
-                @test Pkg.API.__installed()[TEST_PKG.name] > old_v
+                @test Pkg.API.__installed()[TEST_PKG.name] >= old_v
                 test_pkg_main_file = joinpath(devdir, TEST_PKG.name, "src", TEST_PKG.name * ".jl")
                 @test isfile(test_pkg_main_file)
                 # Pkg #152
