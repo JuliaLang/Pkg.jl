@@ -1,4 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
+import Base: get
+
 
 "TOML Table"
 struct Table
