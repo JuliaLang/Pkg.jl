@@ -66,7 +66,7 @@ function _print(io::IO, a::AbstractDict,
         value = a[key]
         is_tabular(value) && continue
         Base.print(io, ' '^4max(0,indent-1))
-        printkey(io, [key])
+        printkey(io, [String(key)])
         Base.print(io, " = ") # print separator
         printvalue(io, value, sorted = sorted)
         Base.print(io, "\n")  # new line?
@@ -76,7 +76,7 @@ function _print(io::IO, a::AbstractDict,
     for key in akeys
         value = a[key]
         if is_table(value)
-            push!(ks, key)
+            push!(ks, String(key))
             header = !all(is_tabular(v) for v in values(value))
             if header
                 # print table
@@ -94,7 +94,7 @@ function _print(io::IO, a::AbstractDict,
             # print array of tables
             first_block || println(io)
             first_block = false
-            push!(ks, key)
+            push!(ks, String(key))
             for v in value
                 Base.print(io, ' '^4indent)
                 Base.print(io,"[[")

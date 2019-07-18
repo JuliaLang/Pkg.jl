@@ -1,14 +1,15 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-using TOML
+using TOML  
 import TOML: linecol, whitespace, comment, newline, expect, lookup, Parser, parse
+
 
 using Test
 using Dates
 
 macro testval(s, v)
     f = "foo = $s"
-    :( @test TOML.get(parse(Parser($f)))["foo"] == $v )
+    :( @test TOML.parse(Parser($f))["foo"] == $v )
 end
 
 macro fail(s...)
@@ -43,7 +44,7 @@ macro fail(s...)
             end
             if !TOML.isnull($ppvar)
                 println("RESULT:")
-                println(TOML.get($ppvar))
+                println(TOML.$ppvar)
             end
         end
     else
@@ -92,7 +93,7 @@ macro success(s...)
             end
             if !TOML.isnull($ppvar)
                 println("RESULT:")
-                println(TOML.get($ppvar))
+                println(TOML.$ppvar)
             end
         end
     else
@@ -131,15 +132,15 @@ end
 
     @testset "Lookups" begin
         p = Parser("""hello."world\\t".a.0.'escaped'.value""")
-        @testset for (p, s) in zip(TOML.get(lookup(p)), ["hello"; "world\t"; "a"; "0"; "escaped"; "value"])
+        @testset for (p, s) in zip(TOML.lookup(p), ["hello"; "world\t"; "a"; "0"; "escaped"; "value"])
             @test p == s
         end
 
         p = Parser("")
-        @test TOML.get(lookup(p)) == String[]
+        @test TOML.lookup(p) == String[]
 
         p = Parser("value")
-        @test TOML.get(lookup(p)) == String["value"]
+        @test TOML.lookup(p) == String["value"]
 
         p = Parser("\"\"")
         #TODO: @test get(lookup(p)) == String[""]
@@ -191,7 +192,7 @@ bbb = \"aaa\"\r
             foo = \"\"\"\\\r\n\"\"\"
             bar = \"\"\"\\\r\n   \r\n   \r\n   a\"\"\"
         ")
-        res = TOML.get(parse(p))
+        res = TOML.parse(p)
         @test res["foo"] == ""
         @test res["bar"] == "a"
 
@@ -267,7 +268,7 @@ trimmed in raw strings.
     is preserved.
 '''
 """)
-        res = TOML.get(parse(p))
+        res = TOML.parse(p)
 
         @test res["bar"]  == "\0"
         @test res["key1"] == "One\nTwo"
@@ -365,12 +366,16 @@ trimmed in raw strings.
         @testval("2016-09-09T09:09:09.0Z", DateTime(2016,9,9,9,9,9))
         @testval("2016-09-09T09:09:09.0+10:00", DateTime(2016,9,9,19,9,9))
         @testval("2016-09-09T09:09:09.012-02:00", DateTime(2016,9,9,7,9,9,12))
+        @testval("2016-09-09T09:09:09.0+10:00", Dates.DateTime(2016,9,9,19,9,9))
+        @testval("2016-09-09T09:09:09.012-02:00", Dates.DateTime(2016,9,9,7,9,9,12))
 
         @fail("foo = 2016-09-09T09:09:09.Z", "malformed date literal")
         @fail("foo = 2016-9-09T09:09:09Z", "malformed date literal")
         @fail("foo = 2016-09-09T09:09:09+2:00", "malformed date literal")
         @fail("foo = 2016-09-09T09:09:09-2:00", "malformed date literal")
         @fail("foo = 2016-09-09T09:09:09Z-2:00", "expected a newline after a key")
+        @fail("foo = 2016-09-09s09:09:09Z", "malformed date literal")
+        @fail("foo = 2016-09-09 09:09:09x", "malformed date literal")
 
     end
 
@@ -391,7 +396,7 @@ trimmed in raw strings.
             \"character encoding\" = \"value\"
             'ʎǝʞ' = \"value\"
         ")
-        res = TOML.get(parse(p))
+        res = TOML.parse(p)
 
         @test haskey(res, "foo")
         @test haskey(res, "-")
@@ -441,7 +446,7 @@ trimmed in raw strings.
             ['a.a']
             ['\"\"']
         ")
-        res = TOML.get(parse(p))
+        res = TOML.parse(p)
         @test haskey(res, "a.a")
         @test haskey(res, "f f")
         @test haskey(res, "f.f")
@@ -450,7 +455,7 @@ trimmed in raw strings.
         @test haskey(res["a"], "b")
 
 
-        @test haskey(TOML.get(parse(Parser("[foo]"))), "foo")
+        @test haskey(TOML.parse(Parser("[foo]")), "foo")
 
 
         @testset "Inline Tables" begin
@@ -548,7 +553,7 @@ trimmed in raw strings.
   [foo.bar]
     #...
 """)
-        res = TOML.get(parse(p))
+        res = parse(p)
         @test haskey(res, "foo")
         arr = res["foo"]
         @test length(arr) == 2
@@ -571,9 +576,10 @@ trimmed in raw strings.
   [[fruit.variety]]
     name = "plantain"
 """)
-        res = TOML.get(parse(p))
+        res = parse(p)
         @test haskey(res, "fruit")
         fruit = res["fruit"]
+
         @test length(fruit) == 2
         @test isa(fruit[1], TOML.Table)
         apple = fruit[1]
@@ -673,6 +679,12 @@ data = [ ["gamma", "delta"], [1, 2] ] # just an update to make sure parsers supp
     d = Dict("1.10" => 10, "1.1" => 1)
     TOML.print(io, d; sorted=true, by = VersionNumber)
     @test String(take!(io)) == "\"1.1\" = 1\n\"1.10\" = 10\n"
+
+    # symbols as Keys
+    io = IOBuffer()
+    d = Dict(:products=>[Dict("name"=>"me","cnt"=>3),Dict{String,Any}(),Dict(:name=>"you","cnt"=>5)])
+    TOML.print(io, d)
+    @test String(take!(io)) == "[[products]]\nname = \"me\"\ncnt = 3\n[[products]]\n[[products]]\ncnt = 5\nname = \"you\"\n"
 
 end
 end
