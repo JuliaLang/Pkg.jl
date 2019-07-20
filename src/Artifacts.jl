@@ -317,15 +317,19 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
                        download_info::Union{Vector{Tuple},Nothing} = nothing,
                        force::Bool = false)
     # First, check to see if this artifact is already bound:
-    artifact_dict = parse_toml(artifact_toml)
+    if isfile(artifact_toml)
+        artifact_dict = parse_toml(artifact_toml)
     
-    if !force && haskey(artifact_toml, name)
-        meta = artifact_toml[name]
-        if !isa(meta, Array)
-            error("Mapping for '$name' within $(artifact_toml) already exists!")
-        elseif any((unpack_platform(x, name, artifact_toml) for x in meta) .== platform)
-            error("Mapping for '$name'/$(triplet(platform)) within $(artifact_toml) already exists!")
+        if !force && haskey(artifact_toml, name)
+            meta = artifact_dict[name]
+            if !isa(meta, Array)
+                error("Mapping for '$name' within $(artifact_toml) already exists!")
+            elseif any((unpack_platform(x, name, artifact_toml) for x in meta) .== platform)
+                error("Mapping for '$name'/$(triplet(platform)) within $(artifact_toml) already exists!")
+            end
         end
+    else
+        artifact_dict = Dict()
     end
 
     # Otherwise, the new piece of data we're going to write out is this dict:
@@ -337,7 +341,7 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
     # vector of dicts, each with its own `url` and `sha256`, since different tarballs can
     # expand to the same tree hash.
     if download_info != nothing
-        artifact_dict[name]["download"] = [
+        meta["download"] = [
             Dict("url" => dl[1],
                  "sha256" => dl[2],
             ) for dl in download_info
