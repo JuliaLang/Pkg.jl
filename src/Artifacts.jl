@@ -5,11 +5,11 @@ import ..depots1
 import ..GitTools: tree_hash
 import ..Operations: set_readonly, parse_toml
 using ..BinaryPlatforms
-import ..PlatformEngines: download_verify_unpack, probe_platform_engines!
+import ..PlatformEngines: download_verify_unpack, probe_platform_engines!, package
 
 export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact, unbind_artifact, download_artifact,
-       find_artifact_toml, ensure_artifact_installed, @artifact_str
+       find_artifact_toml, ensure_artifact_installed, @artifact_str, archive_artifact
 
 ## Philosophy of Artifacts:
 #
@@ -47,6 +47,7 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 #   - artifact_path(hash):   returns the path to a hash on disk, throws if it does not exist
 #   - remove_artifact(hash): deletes `path(hash)` if it exists, does nothing otherwise.
 #   - verify_artifact(hash): verifies that the artifact maintains integrity on-disk.
+#   - archive_artifact(hash, out_path): compresses an artifact into a tarball.
 #
 # - Name level:
 #   - artifact_meta(name, toml_path; platform): returns a `Dict` of the metadata stored
@@ -143,6 +144,27 @@ function verify_artifact(hash::SHA1)
 
     return hash.bytes == tree_hash(artifact_path(hash))
 end
+
+"""
+    archive_artifact(hash::SHA1, tarball_path::String)
+
+Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256
+of the resultant tarball.  Throws an error if the artifact does not exist.
+"""
+function archive_artifact(hash::SHA1, tarball_path::String)
+    if !artifact_exists(hash)
+        error("Unable to archive artifact $(bytes2hex(hash.bytes)): does not exist!")
+    end
+
+	# Package it up
+	package(artifact_path(hash), tarball_path)
+
+    # Calculate its sha256 and return that
+    return open(tarball_path, "r") do io
+        return bytes2hex(sha256(io))
+    end
+end
+
 
 """
     unpack_platform(entry::Dict, name::String, artifact_toml::String)
