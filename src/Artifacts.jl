@@ -5,6 +5,7 @@ import ..depots1
 import ..GitTools: tree_hash
 import ..Operations: set_readonly, parse_toml
 using ..BinaryPlatforms
+import ..TOML
 import ..PlatformEngines: download_verify_unpack, probe_platform_engines!, package
 
 export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
