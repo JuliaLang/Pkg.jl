@@ -315,7 +315,7 @@ URLs will be listed as possible locations where this artifact can be obtained.  
 """
 function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
                        platform::Union{Platform,Nothing} = nothing,
-                       download_info::Union{Vector{Tuple},Nothing} = nothing,
+                       download_info::Union{Vector{<:Tuple},Nothing} = nothing,
                        force::Bool = false)
     # First, check to see if this artifact is already bound:
     if isfile(artifact_toml)
