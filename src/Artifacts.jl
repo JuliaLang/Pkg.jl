@@ -3,9 +3,9 @@ module Artifacts
 import Base: get, SHA1
 import ..depots1
 import ..GitTools: tree_hash
-import ..Operations: set_readonly, parse_toml
 using ..BinaryPlatforms
 import ..TOML
+import ..Types: parse_toml
 import ..PlatformEngines: download_verify_unpack, probe_platform_engines!, package
 
 export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
@@ -316,6 +316,7 @@ URLs will be listed as possible locations where this artifact can be obtained.  
 function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
                        platform::Union{Platform,Nothing} = nothing,
                        download_info::Union{Vector{<:Tuple},Nothing} = nothing,
+                       lazy::Bool = false,
                        force::Bool = false)
     # First, check to see if this artifact is already bound:
     if isfile(artifact_toml)
@@ -337,6 +338,11 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
     meta = Dict{String,Any}(
         "git-tree-sha1" => bytes2hex(hash.bytes),
     )
+
+    # If we're set to be lazy, then lazy we shall be
+    if lazy
+        meta["lazy"] = true
+    end
 
     # Integrate download info, if it is given.  We represent the download info as a
     # vector of dicts, each with its own `url` and `sha256`, since different tarballs can
@@ -375,6 +381,13 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
     return
 end
 
+
+"""
+    unbind_artifact(name::String, artifact_toml::String; platform = nothing)
+
+Unbind the given `name` from an `Artifact.toml` file.  Silently fails if no such binding
+exists within the file.
+"""
 function unbind_artifact(name::String, artifact_toml::String;
                          platform::Union{Platform,Nothing} = nothing)
     artifact_dict = parse_toml(artifact_toml)
@@ -465,6 +478,12 @@ function ensure_artifact_installed(name::String, artifact_toml::String;
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifact_toml)'")
     end
+
+    return ensure_artifact_installed(name, meta; platform=platform)
+end
+
+function ensure_artifact_installed(name::String, meta::Dict;
+                                   platform::Platform = platform_key_abi())
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
@@ -488,6 +507,29 @@ function ensure_artifact_installed(name::String, artifact_toml::String;
     end
 end
 
+
+"""
+    ensure_all_artifacts_installed(artifact_toml::String;
+                                   platform = platform_key_abi())
+
+Installs all non-lazy artifacts from a given `Artifact.toml` file.
+"""
+function ensure_all_artifacts_installed(artifact_toml::String;
+                                        platform::Platform = platform_key_abi())
+    if !isfile(artifact_toml)
+        return
+    end
+    artifact_dict = parse_toml(artifact_toml)
+
+    for (name, meta) in artifact_dict
+        hash = SHA1(meta["git-tree-sha1"])
+        if artifact_exists(hash) || !haskey(meta, "download") || get(meta, "lazy", false)
+            continue
+        end
+
+        ensure_artifact_installed(name, meta; platform=platform)
+    end
+end
 
 
 """

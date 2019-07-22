@@ -10,6 +10,7 @@ import REPL
 using REPL.TerminalMenus
 using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
+import ..Artifacts: ensure_all_artifacts_installed
 import ..Pkg
 
 
@@ -94,17 +95,6 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
         entry.deps = load_deps(ctx, pkg)
         ctx.env.manifest[pkg.uuid] = entry
     end
-end
-
-function set_readonly(path)
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            filepath = joinpath(root, file)
-            fmode = filemode(filepath)
-            chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
-        end
-    end
-    return nothing
 end
 
 ####################
@@ -459,6 +449,29 @@ function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
     return urls
 end
 
+function load_artifacts(ctx::Context, pkg::Vector{PackageSpec})
+    artifacts = Dict{SHA1,Dict}()
+    for pkg in pkgs
+        for path in registered_paths(ctx.env, pkg.uuid)
+            # Check to see if this package has an Artifact.toml
+            artifact_toml = joinpath(path, "Artifact.toml")
+            if isfile(artifact_toml)
+                # If it does, install everything not marked as `lazy` that has a download key
+                artifact_dict = parse_toml(artifact_toml, "Artifact.toml")
+                for (artifact, meta) in artifact_dict
+                    if haskey(meta, "download") && !get(meta, "lazy", false)
+                        artifacts[hash] = unique(vcat(
+                            get(artifacts, hash, []),
+                            meta["download"],
+                        ))
+                    end
+                end
+            end
+        end
+    end
+    return artifacts
+end
+
 ########################
 # Package installation #
 ########################
@@ -565,6 +578,20 @@ function install_git(
     finally
         repo !== nothing && LibGit2.close(repo)
         tree !== nothing && LibGit2.close(tree)
+    end
+end
+
+function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec})
+    pkgs = filter(tracking_registered_version, pkgs)
+    
+    for pkg in pkgs
+        for path in registered_paths(ctx.env, pkg.uuid)
+            # Check to see if this package has an Artifact.toml
+            artifact_toml = joinpath(path, "Artifact.toml")
+            if isfile(artifact_toml)
+                ensure_all_artifacts_installed(artifact_toml)
+            end
+        end
     end
 end
 
@@ -978,8 +1005,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bo
 
     # After downloading resolutionary packages, search for Artifact.toml files
     # and ensure they are all downloaded and unpacked as well:
-    # TODO: NABIL: Implement this!
-    #download_artifacts(ctx, new_apply)
+    download_artifacts(ctx, new_apply)
 
     write_env(ctx) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1000,6 +1026,8 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=false)
+    download_artifacts(ctx, new_apply)
+
     write_env(ctx) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
@@ -1063,6 +1091,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     prune_manifest(ctx.env)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
+    download_artifacts(ctx, new_apply)
     write_env(ctx) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
     # TODO what to do about repo packages?
@@ -1096,6 +1125,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     update_manifest!(ctx, pkgs)
 
     new = download_source(ctx, pkgs)
+    download_artifacts(ctx, new)
     write_env(ctx) # write env before building
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
@@ -1140,6 +1170,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         resolve_versions!(ctx, pkgs)
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
+        download_artifacts(ctx, new)
         write_env(ctx) # write env before building
         build_versions(ctx, UUID[pkg.uuid for pkg in new])
     else

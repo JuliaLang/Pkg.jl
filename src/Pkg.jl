@@ -35,11 +35,11 @@ include("Display.jl")
 include("Pkg2/Pkg2.jl")
 include("GraphType.jl")
 include("Resolve.jl")
+include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
 include("Registry.jl")
 include("REPLMode.jl")
-include("Artifacts.jl")
 
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
