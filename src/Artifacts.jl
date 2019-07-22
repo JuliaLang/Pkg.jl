@@ -255,7 +255,11 @@ function artifact_meta(name::String, artifact_toml::String;
     end
 
     # Parse the toml for the 
-    artifact_dict = parse_toml(artifact_toml)
+    return artifact_meta(name, parse_toml(artifact_toml), artifact_toml; platform=platform)
+end
+
+function artifact_meta(name::String, artifact_dict::Dict, artifact_toml::String;
+                       platform::Platform = platform_key_abi())
     if !haskey(artifact_dict, name)
         return nothing
     end
@@ -521,7 +525,8 @@ function ensure_all_artifacts_installed(artifact_toml::String;
     end
     artifact_dict = parse_toml(artifact_toml)
 
-    for (name, meta) in artifact_dict
+    for name in keys(artifact_dict)
+        meta = artifact_meta(name, artifact_dict, artifact_toml; platform=platform)
         hash = SHA1(meta["git-tree-sha1"])
         if artifact_exists(hash) || !haskey(meta, "download") || get(meta, "lazy", false)
             continue

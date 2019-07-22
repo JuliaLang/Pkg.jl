@@ -582,15 +582,12 @@ function install_git(
 end
 
 function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec})
-    pkgs = filter(tracking_registered_version, pkgs)
-    
     for pkg in pkgs
-        for path in registered_paths(ctx.env, pkg.uuid)
-            # Check to see if this package has an Artifact.toml
-            artifact_toml = joinpath(path, "Artifact.toml")
-            if isfile(artifact_toml)
-                ensure_all_artifacts_installed(artifact_toml)
-            end
+        path = source_path(pkg)
+        # Check to see if this package has an Artifact.toml
+        artifact_toml = joinpath(path, "Artifact.toml")
+        if isfile(artifact_toml)
+            ensure_all_artifacts_installed(artifact_toml)
         end
     end
 end
@@ -1005,7 +1002,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bo
 
     # After downloading resolutionary packages, search for Artifact.toml files
     # and ensure they are all downloaded and unpacked as well:
-    download_artifacts(ctx, new_apply)
+    download_artifacts(ctx, pkgs)
 
     write_env(ctx) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1026,7 +1023,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=false)
-    download_artifacts(ctx, new_apply)
+    download_artifacts(ctx, pkgs)
 
     write_env(ctx) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1091,7 +1088,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     prune_manifest(ctx.env)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
-    download_artifacts(ctx, new_apply)
+    download_artifacts(ctx, pkgs)
     write_env(ctx) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
     # TODO what to do about repo packages?
@@ -1125,7 +1122,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     update_manifest!(ctx, pkgs)
 
     new = download_source(ctx, pkgs)
-    download_artifacts(ctx, new)
+    download_artifacts(ctx, pkgs)
     write_env(ctx) # write env before building
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
