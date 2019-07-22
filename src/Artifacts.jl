@@ -321,7 +321,7 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
     if isfile(artifact_toml)
         artifact_dict = parse_toml(artifact_toml)
     
-        if !force && haskey(artifact_toml, name)
+        if !force && haskey(artifact_dict, name)
             meta = artifact_dict[name]
             if !isa(meta, Array)
                 error("Mapping for '$name' within $(artifact_toml) already exists!")
@@ -334,7 +334,7 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
     end
 
     # Otherwise, the new piece of data we're going to write out is this dict:
-    meta = Dict(
+    meta = Dict{String,Any}(
         "git-tree-sha1" => bytes2hex(hash.bytes),
     )
 
@@ -383,7 +383,7 @@ function unbind_artifact(name::String, artifact_toml::String;
     end
 
     if platform == nothing
-        remove!(artifact_dict, name)
+        delete!(artifact_dict, name)
     else
         artifact_dict[name] = filter(
             x -> unpack_platform(x, name, artifact_toml) != platform,

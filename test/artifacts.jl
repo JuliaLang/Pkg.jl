@@ -155,6 +155,39 @@ end
             @test !verify_artifact(arty_hash)
         end
     end
+
+    # Test binding/unbinding
+    mktempdir() do path
+        hash = create_artifact() do path
+            open(joinpath(path, "foo.txt"), "w") do io
+                println(io, "hello, world!")
+            end
+        end
+
+        # Bind this artifact to something
+        artifact_toml = joinpath(path, "Artifact.toml")
+        @test artifact_hash("foo_txt", artifact_toml) == nothing
+        bind_artifact("foo_txt", hash, artifact_toml)
+
+        # Test that this binding worked
+        @test artifact_hash("foo_txt", artifact_toml) == hash
+        @test ensure_artifact_installed("foo_txt", artifact_toml) == artifact_path(hash)
+
+        # Test that we can overwrite bindings
+        hash2 = create_artifact() do path
+            open(joinpath(path, "foo.txt"), "w") do io
+                println(io, "goodbye, world!")
+            end
+        end
+        @test_throws ErrorException bind_artifact("foo_txt", hash2, artifact_toml)
+        @test artifact_hash("foo_txt", artifact_toml) == hash
+        bind_artifact("foo_txt", hash2, artifact_toml; force=true)
+        @test artifact_hash("foo_txt", artifact_toml) == hash2
+
+        # Test that we can un-bind
+        unbind_artifact("foo_txt", artifact_toml)
+        @test artifact_hash("foo_txt", artifact_toml) == nothing
+    end
 end
 
 ###################################################################
