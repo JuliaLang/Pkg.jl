@@ -264,7 +264,7 @@ function artifact_meta(name::String, artifact_toml::String;
     # If it's an array, find the entry that best matches our current platform
     if isa(meta, Array)
         dl_dict = Dict(unpack_platform(x, name, artifact_toml) => x for x in meta)
-        meta = select_platform(dl_dict)
+        meta = select_platform(dl_dict, platform)
     
     # If it's NOT a dict, complain
     elseif !isa(meta, Dict)
@@ -273,7 +273,7 @@ function artifact_meta(name::String, artifact_toml::String;
     end
 
     # This is such a no-no, we are going to call it out right here, right now.
-    if !haskey(meta, "git-tree-sha1")
+    if meta != nothing && !haskey(meta, "git-tree-sha1")
         @warn("Invalid Artifact.toml at $(artifact_toml): artifact '$name' contains no `git-tree-sha1`!")
         return nothing
     end
@@ -325,7 +325,7 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
             meta = artifact_dict[name]
             if !isa(meta, Array)
                 error("Mapping for '$name' within $(artifact_toml) already exists!")
-            elseif any((unpack_platform(x, name, artifact_toml) for x in meta) .== platform)
+            elseif any((unpack_platform(x, name, artifact_toml) for x in meta) .== Ref(platform))
                 error("Mapping for '$name'/$(triplet(platform)) within $(artifact_toml) already exists!")
             end
         end

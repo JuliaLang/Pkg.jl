@@ -187,6 +187,27 @@ end
         # Test that we can un-bind
         unbind_artifact("foo_txt", artifact_toml)
         @test artifact_hash("foo_txt", artifact_toml) == nothing
+
+        # Test platform-specific binding and providing download_info
+        download_info = [
+            ("http://google.com/hello_world", "0"^64),
+            ("http://microsoft.com/hello_world", "a"^64),
+        ]
+
+        # First, test the binding of things with various platforms and overwriting and such works properly
+        bind_artifact("foo_txt", hash, artifact_toml; download_info=download_info, platform=Linux(:x86_64))
+        @test artifact_hash("foo_txt", artifact_toml; platform=Linux(:x86_64)) == hash
+        @test artifact_hash("foo_txt", artifact_toml; platform=MacOS()) == nothing
+        @test_throws ErrorException bind_artifact("foo_txt", hash2, artifact_toml; download_info=download_info, platform=Linux(:x86_64))
+        bind_artifact("foo_txt", hash2, artifact_toml; download_info=download_info, platform=Linux(:x86_64), force=true)
+        bind_artifact("foo_txt", hash, artifact_toml; download_info=download_info, platform=Windows(:i686))
+        @test artifact_hash("foo_txt", artifact_toml; platform=Linux(:x86_64)) == hash2
+        @test artifact_hash("foo_txt", artifact_toml; platform=Windows(:i686)) == hash
+
+        # Next, check that we can get the download_info properly:
+        meta = artifact_meta("foo_txt", artifact_toml; platform=Windows(:i686))
+        @test meta["download"][1]["url"] == "http://google.com/hello_world"
+        @test meta["download"][2]["sha256"] == "a"^64
     end
 end
 
