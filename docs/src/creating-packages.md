@@ -14,10 +14,10 @@ This file is executed when the package is loaded.
 
 ### Generating files for a package
 
-To generate files for a new package, use `pkg> generate`.
+To generate files for a new package, use `Pkg.generate`.
 
 ```
-(v1.0) pkg> generate HelloWorld
+(v1.1) Pkg.generate("HelloWorld.jl")
 ```
 
 This creates a new project `HelloWorld` with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
