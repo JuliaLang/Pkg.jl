@@ -17,6 +17,27 @@ test_test(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
             @test true
         end
     end end
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "BasicSandbox")
+        Pkg.activate(joinpath(tmp, "BasicSandbox"))
+        test_test(; output_seconds = -1) do
+            @test true
+        end
+    end end
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "BasicSandbox")
+        Pkg.activate(joinpath(tmp, "BasicSandbox"))
+        test_test(; output_seconds = 0) do
+            @test true
+        end
+    end end
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "BasicSandbox")
+        Pkg.activate(joinpath(tmp, "BasicSandbox"))
+        test_test(; output_seconds = 1) do
+            @test true
+        end
+    end end
     # try to use subgraph from active env
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "TransferSubgraph")

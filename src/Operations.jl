@@ -1149,6 +1149,19 @@ function gen_test_code(testfile::String; coverage=false)
     ```
 end
 
+function gen_dummy_output_code(output_seconds::Integer)
+    code = """
+        while true
+            println("Tests are still running")
+            sleep($(output_seconds))
+        end
+    """
+    return ```
+    $(Base.julia_cmd())
+    --eval $code
+    ```
+end
+
 function with_temp_env(fn::Function, temp_env::String)
     load_path = copy(LOAD_PATH)
     active_project = Base.ACTIVE_PROJECT[]
@@ -1228,7 +1241,7 @@ end
 
 testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
-function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, test_fn=nothing)
+function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, test_fn=nothing, output_seconds::Integer=0)
     ctx.preview || Pkg.instantiate(ctx)
 
     # load manifest data
@@ -1274,11 +1287,17 @@ function test(ctx::Context, pkgs::Vector{PackageSpec}; coverage=false, test_fn=n
             @info "Running Sandbox"
             test_fn !== nothing && test_fn()
             Display.status(Context(), mode=PKGMODE_PROJECT)
+            if output_seconds > 0
+                dummy_output_process = run(pipeline(gen_dummy_output_code(output_seconds), stdout); wait = false)
+            end
             try
                 run(gen_test_code(testfile(source_path); coverage=coverage))
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
             catch err
                 push!(pkgs_errored, pkg.name)
+            end
+            if output_seconds > 0
+                kill(dummy_output_process)
             end
         end
     end

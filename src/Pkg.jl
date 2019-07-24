@@ -139,9 +139,9 @@ const update = API.up
 
 
 """
-    Pkg.test(; coverage::Bool=false)
-    Pkg.test(pkg::Union{String, Vector{String}; coverage::Bool=false)
-    Pkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; coverage::Bool=false)
+    Pkg.test(; coverage::Bool=false, output_seconds::Integer = 0)
+    Pkg.test(pkg::Union{String, Vector{String}; coverage::Bool=false, output_seconds::Integer = 0)
+    Pkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; coverage::Bool=false, output_seconds::Integer = 0)
 
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its
@@ -169,6 +169,9 @@ The tests are executed in a new process with `check-bounds=yes` and by default `
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
 Inlining of functions during testing can be disabled (for better coverage accuracy)
 by starting julia with `--inline=no`.
+
+If `output_seconds` is greater than 0, then a dummy line of output will be written
+every `output_seconds` seconds until the tests finish.
 """
 const test = API.test
 
