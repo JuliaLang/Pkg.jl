@@ -71,7 +71,7 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 #     given source path.  Returns `nothing` if none could be found.
 
 
-const ARTIFACT_DIR_OVERRIDE[] = Ref{Union{String,Nothing}}(nothing)
+const ARTIFACT_DIR_OVERRIDE = Ref{Union{String,Nothing}}(nothing)
 """
     with_artifacts_directory(f::Function, artifacts_dir::String)
 
