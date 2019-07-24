@@ -583,6 +583,15 @@ function activate(path::AbstractString; shared::Bool=false)
     end
     return nothing
 end
+function activate(f::Function, args...; kwargs...)
+    p = Base.active_project()
+    try
+        Pkg.activate(args...; kwargs...)
+        f()
+    finally
+        Pkg.activate(p)
+    end
+end
 
 function setprotocol!(;
     domain::AbstractString="github.com",
