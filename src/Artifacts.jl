@@ -71,6 +71,29 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 #     given source path.  Returns `nothing` if none could be found.
 
 
+const ARTIFACT_DIR_OVERRIDE[] = Ref{Union{String,Nothing}}(nothing)
+"""
+    with_artifacts_directory(f::Function, artifacts_dir::String)
+
+Helper function to allow temporarily changing the artifact installation directory.
+"""
+function with_artifacts_directory(f::Function, artifacts_dir::String)
+    try
+        ARTIFACT_DIR_OVERRIDE[] = artifacts_dir
+        f()
+    finally
+        ARTIFACT_DIR_OVERRIDE[] = nothing
+    end
+end
+
+function artifacts_dir(args...)
+    if ARTIFACT_DIR_OVERRIDE[] === nothing
+        return abspath(depots1(), "artifacts", args...)
+    else
+        return abspath(ARTIFACT_DIR_OVERRIDE[], args...)
+    end
+end
+
 """
     create_artifact(f::Function)
 
@@ -80,11 +103,10 @@ identifying tree hash of this artifact.
 """
 function create_artifact(f::Function)
     # Ensure the `artifacts` directory exists.
-    artifacts_dir = abspath(depots1(), "artifacts")
-    mkpath(artifacts_dir)
+    mkpath(artifacts_dir())
 
     # Temporary directory where we'll do our creation business
-    temp_dir = mktempdir(artifacts_dir; prefix="create_")
+    temp_dir = mktempdir(artifacts_dir(); prefix="create_")
 
     try
         # allow the user to do their work inside the temporary directory
@@ -115,7 +137,7 @@ end
 
 Given an artifact (identified by SHA1 git tree hash), return its installation path.
 """
-artifact_path(hash::SHA1) = abspath(depots1(), "artifacts", bytes2hex(hash.bytes))
+artifact_path(hash::SHA1) = artifacts_dir(bytes2hex(hash.bytes))
 
 """
     artifact_exists(hash::SHA1)
