@@ -54,7 +54,8 @@ end
 
 @testset "Pkg.status" begin
     temp_pkg_dir() do project_path
-        Pkg.add(["Example", "Random"])
+        Pkg.add(PackageSpec(name="Example", version="0.5.1"))
+        Pkg.add("Random")
         Pkg.status()
         Pkg.status("Example")
         Pkg.status(["Example", "Random"])
