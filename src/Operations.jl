@@ -71,6 +71,18 @@ function load_all_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Bool=t
     load_direct_deps!(ctx, pkgs; version=version)
 end
 
+function is_instanitated(ctx::Context)::Bool
+    # Load everything
+    pkgs = PackageSpec[]
+    Operations.load_all_deps!(ctx, pkgs)
+    # Make sure all paths exist
+    for pkg in pkgs
+        sourcepath = Operations.source_path(pkg)
+        isdir(sourcepath) || return false
+    end
+    return true
+end
+
 function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
     manifest = ctx.env.manifest
     empty!(manifest)
