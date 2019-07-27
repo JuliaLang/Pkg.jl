@@ -1,4 +1,34 @@
-Pkg v1.1.0 Release Notes
+Pkg v1.3 Release Notes
+========================
+
+New features
+------------
+* `Pkg.offline` can be used to toggle the new offline mode. In offline mode
+Pkg tries harder to do operations without connecting to internet ([#OFFLINEPR]).
+
+* `Pkg.test` now accept `julia_args` and `test_args` as keyword arguments
+for passing Julia flags and Julia arguments (`ARGS`), respectively, to the
+underlying test process ([#TESTARGSPR]).
+
+* Package arguments in the Pkg REPL may now be separated by comma, e.g.
+`pkg> add Example, JSON` now works ([#COMMAPR]).
+
+* `Pkg.precompile()` is now available ([#PRECOMPILEPR]).
+
+Changed functionality
+---------------------
+* `pkg> status` (and `Pkg.status()`) now shows the absolute status also for
+projects in git repositories. To show the diff, use `pkg> status --diff`
+(`Pkg.status(diff=true)`) ([#STATUSPR]).
+
+Pkg v1.2 Release Notes
+========================
+
+New features
+------------
+* Experimental support for `test/Project.toml` for specifying test-dependencies ([#SANDBOXPR]).
+
+Pkg v1.1 Release Notes
 ========================
 
 New features
@@ -28,3 +58,9 @@ Deprecated or removed
 [#642]: https://github.com/JuliaLang/Pkg.jl/pull/642
 [#588]: https://github.com/JuliaLang/Pkg.jl/pull/588
 [#881]: https://github.com/JuliaLang/Pkg.jl/pull/881
+[#STATUSPR]: https://github.com/JuliaLang/Pkg.jl/pull/STATUSPR
+[#PRECOMPILEPR]: https://github.com/JuliaLang/Pkg.jl/pull/PRECOMPILEPR
+[#OFFLINEPR]: https://github.com/JuliaLang/Pkg.jl/pull/OFFLINEPR
+[#TESTARGSPR]: https://github.com/JuliaLang/Pkg.jl/pull/TESTARGSPR
+[#COMMAPR]: https://github.com/JuliaLang/Pkg.jl/pull/COMMAPR
+[#SANDBOXPR]: https://github.com/JuliaLang/Pkg.jl/pull/SANDBOXPR
