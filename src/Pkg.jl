@@ -55,7 +55,7 @@ An enum with the instances
   * `PKGMODE_PROJECT`
 
 Determines if operations should be made on a project or manifest level.
-Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.rm`](@ref).
+Used as an argument to [`PackageSpec`](@ref) or as an argument to [`Pkg.rm`](@ref).
 """
 const PackageMode = Types.PackageMode
 
@@ -71,11 +71,11 @@ An enum with the instances
   * `UPLEVEL_MAJOR`
 
 Determines how much a package is allowed to be updated.
-Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.update`](@ref).
+Used as an argument to [`PackageSpec`](@ref) or as an argument to [`Pkg.update`](@ref).
 """
 const UpgradeLevel = Types.UpgradeLevel
 
-# Define new variables so tab comleting Pkg. works.
+# Define new variables so tab completing Pkg. works.
 """
     Pkg.add(pkg::Union{String, Vector{String}})
     Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}})
@@ -130,7 +130,7 @@ const rm = API.rm
     Pkg.update(pkg::Union{String, Vector{String}})
     Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
-Update a package `pkg`. If no posistional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
+Update a package `pkg`. If no positional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
 If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
