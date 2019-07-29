@@ -94,7 +94,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false, kwargs
     ensure_resolved(ctx.env, pkgs, registry=true)
 
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
-        pkgerror("Cannot $mode package with the same name or uuid as the project")
+        pkgerror("Cannot add package with the same name or uuid as the project")
 
     Operations.add(ctx, pkgs, new_git; strict=strict)
     ctx.preview && preview_info()
