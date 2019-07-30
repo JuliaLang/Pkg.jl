@@ -1,5 +1,9 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+# TODO
+#   add overall how-to docstring
+#   create test cases of malformed TOML to see if caught and errors reported correctly
+
 module TOML
     using Dates
 
