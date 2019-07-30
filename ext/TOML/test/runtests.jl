@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-using TOML  
+using TOML
 import TOML: linecol, whitespace, comment, newline, expect, lookup, Parser, parse
 
 
@@ -42,7 +42,7 @@ macro fail(s...)
                     println(e)
                 end
             end
-            if !TOML.isnull($ppvar)
+            if $ppvar !== nothing
                 println("RESULT:")
                 println(TOML.$ppvar)
             end
@@ -66,7 +66,7 @@ macro fail(s...)
         local $ppvar = parse($pvar)
         $dbgexp
         $errtsts
-        @test TOML.isnull($ppvar)
+        @test $ppvar === nothing
     end
 end
 
@@ -91,7 +91,7 @@ macro success(s...)
                     println(e)
                 end
             end
-            if !TOML.isnull($ppvar)
+            if $ppvar !== nothing
                 println("RESULT:")
                 println(TOML.$ppvar)
             end
@@ -104,7 +104,7 @@ macro success(s...)
         local $pvar = Parser($teststr)
         local $ppvar = parse($pvar)
         $dbgexp
-        @test !TOML.isnull($ppvar)
+        @test $ppvar !== nothing
     end
 end
 
