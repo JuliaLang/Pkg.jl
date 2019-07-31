@@ -528,7 +528,7 @@ function canonical_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool; defau
     dev_dir = shared ? Pkg.devdir() : joinpath(dirname(ctx.env.project_file), "dev")
     dev_path = joinpath(dev_dir, pkg.name)
 
-    if isdir(dev_path)
+    if casesensitive_isdir(dev_path)
         if !isfile(joinpath(dev_path, "src", pkg.name * ".jl"))
             pkgerror("Path `$(dev_path)` exists but it does not contain `src/$(pkg.name).jl")
         end
