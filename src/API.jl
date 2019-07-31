@@ -12,6 +12,7 @@ import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 using Pkg.Types: VersionTypes
+using ..BinaryPlatforms
 
 
 preview_info() = printstyled("───── Preview mode ─────\n"; color=Base.info_color(), bold=true)
@@ -34,8 +35,8 @@ develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = develop([pkg]; kwa
 develop(pkgs::Vector{<:AbstractString}; kwargs...) =
     develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
 develop(pkgs::Vector{PackageSpec}; kwargs...)      = develop(Context(), pkgs; kwargs...)
-function develop(ctx::Context, pkgs::Vector{PackageSpec};
-                 shared::Bool=true, strict::Bool=false, kwargs...)
+function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
+                 strict::Bool=false, platform::Platform=platform_key_abi(), kwargs...)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -56,7 +57,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec};
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
         pkgerror("Cannot `develop` package with the same name or uuid as the project")
 
-    Operations.develop(ctx, pkgs, new_git; strict=strict)
+    Operations.develop(ctx, pkgs, new_git; strict=strict, platform=platform)
     ctx.preview && preview_info()
     return
 end
@@ -65,7 +66,8 @@ add(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add([pkg]; kwargs...)
 add(pkgs::Vector{<:AbstractString}; kwargs...) =
     add([check_package_name(pkg, :add) for pkg in pkgs]; kwargs...)
 add(pkgs::Vector{PackageSpec}; kwargs...)      = add(Context(), pkgs; kwargs...)
-function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false, kwargs...)
+function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
+             platform::Platform=platform_key_abi(), kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -96,7 +98,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false, kwargs
     any(pkg -> Types.collides_with_project(ctx.env, pkg), pkgs) &&
         pkgerror("Cannot add package with the same name or uuid as the project")
 
-    Operations.add(ctx, pkgs, new_git; strict=strict)
+    Operations.add(ctx, pkgs, new_git; strict=strict, platform=platform)
     ctx.preview && preview_info()
     return
 end

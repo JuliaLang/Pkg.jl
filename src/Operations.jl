@@ -11,6 +11,7 @@ using REPL.TerminalMenus
 using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed
+using ..BinaryPlatforms
 import ..Pkg
 
 
@@ -581,13 +582,14 @@ function install_git(
     end
 end
 
-function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec})
+function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
+                            platform::Platform=platform_key_abi())
     for pkg in pkgs
         path = source_path(pkg)
         # Check to see if this package has an Artifact.toml
         artifact_toml = joinpath(path, "Artifact.toml")
         if isfile(artifact_toml)
-            ensure_all_artifacts_installed(artifact_toml)
+            ensure_all_artifacts_installed(artifact_toml; platform=platform)
         end
     end
 end
@@ -984,7 +986,8 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bool=false)
+function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
+             strict::Bool=false, platform::Platform=platform_key_abi())
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -1002,7 +1005,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bo
 
     # After downloading resolutionary packages, search for Artifact.toml files
     # and ensure they are all downloaded and unpacked as well:
-    download_artifacts(ctx, pkgs)
+    download_artifacts(ctx, pkgs; platform=platform)
 
     write_env(ctx) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1010,7 +1013,7 @@ end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
-                 strict::Bool=false)
+                 strict::Bool=false, platform::Platform=platform_key_abi())
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
@@ -1023,7 +1026,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=false)
-    download_artifacts(ctx, pkgs)
+    download_artifacts(ctx, pkgs; platform=platform)
 
     write_env(ctx) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
