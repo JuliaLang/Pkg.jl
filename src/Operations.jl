@@ -969,7 +969,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bo
     end
     foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
     # load dep graph
-    strict ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs)
+    strict ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs; version=false)
     check_registered(ctx, pkgs)
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
@@ -987,7 +987,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     for pkg in pkgs
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
-    strict ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs)
+    strict ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs; version=false)
     check_registered(ctx, pkgs)
 
     # resolve & apply package versions
