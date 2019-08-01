@@ -4,6 +4,7 @@ using Test
 using UUIDs
 using Pkg
 
+include("utils.jl")
 test_test(fn, name; kwargs...) = Pkg.test(name; test_fn=fn, kwargs...)
 test_test(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
 

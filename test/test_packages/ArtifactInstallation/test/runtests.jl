@@ -1,0 +1,2 @@
+import ArtifactInstallation
+ArtifactInstallation.do_test()

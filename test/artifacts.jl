@@ -1,6 +1,10 @@
+module ArtifactTests
+
 using Test, Pkg.Artifacts, Pkg.BinaryPlatforms
 import Pkg.Artifacts: pack_platform!, unpack_platform
 import Base: SHA1
+
+include("utils.jl")
 
 @testset "Serialization Tools" begin
     # First, some basic tests
@@ -211,21 +215,25 @@ end
     end
 end
 
-###################################################################
-# NABIL: Remove this!
-include("utils.jl")
-###################################################################
-
 
 @testset "Artifact Usage" begin
     # Do a quick little install of our ArtifactTOMLSearch example
     include(joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch", "pkg.jl"))
     @test ATSMod.do_test()
 
-    # TODO: This is awaiting future output from Pkg-enabled BB
-    #temp_pkg_dir() do project_path; mktempdir() do tmp
-    #    copy_test_package(tmp, "ArtifactInstallation")
-    #    Pkg.activate(joinpath(tmp, "ArtifactInstallation"))
-    #    Pkg.test()
-    #end end
+    temp_pkg_dir() do project_path
+        Pkg.activate(project_path)
+        add_test_package("ArtifactInstallation", Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"))
+
+        # Run test harness
+        Pkg.test("ArtifactInstallation")
+
+        # Also manually do it
+        @eval begin
+            using ArtifactInstallation
+            @test invokeArtifactInstallation.do_test()
+        end
+    end
 end
+
+end # module
