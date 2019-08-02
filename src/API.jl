@@ -498,7 +498,6 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         mv(tmp_source, sourcepath; force=true)
     end
     new_apply = Operations.download_source(ctx, pkgs)
-    z = union([pkg.uuid for pkg in new_apply], new_git)
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
