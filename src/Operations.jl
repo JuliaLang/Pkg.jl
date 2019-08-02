@@ -1144,13 +1144,12 @@ end
 
 function gen_test_code(testfile::String;
         coverage=false,
-        julia_args::Vector{Cmd}=Cmd[],
-        test_args::Vector{String}=String[])
-    julia_args_str::Vector{String} = vcat([x.exec for x in julia_args]...)
+        julia_args::Cmd=``,
+        test_args::Cmd=``)
     code = """
         $(Base.load_path_setup_code(false))
         cd($(repr(dirname(testfile))))
-        append!(empty!(ARGS), $(repr(test_args)))
+        append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(testfile)))
         """
     return ```
@@ -1162,7 +1161,7 @@ function gen_test_code(testfile::String;
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
-        $(julia_args_str)
+        $(julia_args)
         --eval $(code)
     ```
 end
@@ -1248,8 +1247,8 @@ testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
         coverage=false, test_fn=nothing,
-        julia_args::Vector{Cmd}=Cmd[],
-        test_args::Vector{String}=String[])
+        julia_args::Cmd=``,
+        test_args::Cmd=``)
     ctx.preview || Pkg.instantiate(ctx)
 
     # load manifest data

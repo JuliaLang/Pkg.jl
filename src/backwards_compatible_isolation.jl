@@ -572,7 +572,7 @@ end
 
 function backwards_compatibility_for_test(
     ctx::Context, pkg::PackageSpec, testfile::String, pkgs_errored::Vector{String},
-    coverage; julia_args=Cmd[], test_args=String[]
+    coverage; julia_args=``, test_args=``
 )
     printpkgstyle(ctx, :Testing, pkg.name)
     if ctx.preview
@@ -582,10 +582,9 @@ function backwards_compatibility_for_test(
     code = """
         $(Base.load_path_setup_code(false))
         cd($(repr(dirname(testfile))))
-        append!(empty!(ARGS), $(repr(test_args)))
+        append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(testfile)))
         """
-    julia_args_str = vcat([x.exec for x in julia_args]...)
     cmd = ```
         $(Base.julia_cmd())
         --code-coverage=$(coverage ? "user" : "none")
@@ -595,7 +594,7 @@ function backwards_compatibility_for_test(
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
-        $(julia_args_str)
+        $(julia_args)
         --eval $code
     ```
     run_test = () -> begin
