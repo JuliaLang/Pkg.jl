@@ -261,10 +261,10 @@ end
         copy_test_package(tmp, "TestArguments")
         Pkg.activate(joinpath(tmp, "TestArguments"))
         # test the old code path (no test/Project.toml)
-        Pkg.test("TestArguments"; test_args=["a", "b"], julia_args = [`--quiet --check-bounds=no`])
+        Pkg.test("TestArguments"; test_args=`a b`, julia_args=`--quiet --check-bounds=no`)
         # test new code path
         touch(joinpath(tmp, "TestArguments", "test", "Project.toml"))
-        Pkg.test("TestArguments"; test_args=["a", "b"], julia_args = [`--quiet --check-bounds=no`])
+        Pkg.test("TestArguments"; test_args=`a b`, julia_args=`--quiet --check-bounds=no`)
     end
 end
 

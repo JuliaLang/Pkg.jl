@@ -230,10 +230,8 @@ test(pkgs::Vector{<:AbstractString}; kwargs...)          = test([PackageSpec(pkg
 test(pkgs::Vector{PackageSpec}; kwargs...)               = test(Context(), pkgs; kwargs...)
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, test_fn=nothing,
-              julia_args::AbstractVector{<:Base.AbstractCmd}=Cmd[],
-              test_args::AbstractVector{<:AbstractString}=String[], kwargs...)
-    julia_args = convert(Vector{Cmd}, julia_args)
-    test_args = convert(Vector{String}, test_args)
+              julia_args::Cmd=``,
+              test_args::Cmd=``, kwargs...)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()

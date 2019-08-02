@@ -144,8 +144,8 @@ const update = API.up
 
 **Keyword arguments:**
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
-  - `julia_args`: vector of `Cmd` passed to the test process.
-  - `test_args`: vector of test arguments (`ARGS`) available in the test process.
+  - `julia_args::Cmd`: options to be passed the test process.
+  - `test_args::Cmd`: test arguments (`ARGS`) available in the test process.
 
 !!! compat "Julia 1.3"
     `julia_args` and `test_args` requires at least Julia 1.3.
