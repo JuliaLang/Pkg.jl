@@ -87,7 +87,6 @@ function with_artifacts_directory(f::Function, artifacts_dir::String)
 end
 
 function artifacts_dir(args...)
-    global ARTIFACT_DIR_OVERRIDE
     if ARTIFACT_DIR_OVERRIDE[] === nothing
         return abspath(depots1(), "artifacts", args...)
     else
