@@ -46,7 +46,7 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 # - Hash level:
 #   - artifact_exists(hash): returns true if the hash exists on disk, false otherwise
 #   - artifact_path(hash):   returns the path to a hash on disk, throws if it does not exist
-#   - remove_artifact(hash): deletes `path(hash)` if it exists, does nothing otherwise.
+#   - remove_artifact(hash): deletes `artifact_path(hash)` if it exists, does nothing otherwise.
 #   - verify_artifact(hash): verifies that the artifact maintains integrity on-disk.
 #   - archive_artifact(hash, out_path): compresses an artifact into a tarball.
 #
