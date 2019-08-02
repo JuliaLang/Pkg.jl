@@ -291,7 +291,6 @@ function artifact_meta(name::String, artifact_dict::Dict, artifact_toml::String;
     if isa(meta, Array)
         dl_dict = Dict(unpack_platform(x, name, artifact_toml) => x for x in meta)
         meta = select_platform(dl_dict, platform)
-    
     # If it's NOT a dict, complain
     elseif !isa(meta, Dict)
         @warn("Invalid Artifact.toml at $(artifact_toml): artifact '$name' malformed, must be array or dict!")
