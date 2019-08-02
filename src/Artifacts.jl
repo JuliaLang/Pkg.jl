@@ -78,7 +78,6 @@ const ARTIFACT_DIR_OVERRIDE = Ref{Union{String,Nothing}}(nothing)
 Helper function to allow temporarily changing the artifact installation directory.
 """
 function with_artifacts_directory(f::Function, artifacts_dir::String)
-    global ARTIFACT_DIR_OVERRIDE
     try
         ARTIFACT_DIR_OVERRIDE[] = artifacts_dir
         f()
