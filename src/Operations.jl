@@ -454,11 +454,11 @@ function load_artifacts(ctx::Context, pkg::Vector{PackageSpec})
     artifacts = Dict{SHA1,Dict}()
     for pkg in pkgs
         for path in registered_paths(ctx.env, pkg.uuid)
-            # Check to see if this package has an Artifact.toml
-            artifact_toml = joinpath(path, "Artifact.toml")
-            if isfile(artifact_toml)
+            # Check to see if this package has an Artifacts.toml
+            artifacts_toml = joinpath(path, "Artifacts.toml")
+            if isfile(artifacts_toml)
                 # If it does, install everything not marked as `lazy` that has a download key
-                artifact_dict = parse_toml(artifact_toml, "Artifact.toml")
+                artifact_dict = parse_toml(artifacts_toml, "Artifacts.toml")
                 for (artifact, meta) in artifact_dict
                     if haskey(meta, "download") && !get(meta, "lazy", false)
                         artifacts[hash] = unique(vcat(
@@ -586,10 +586,10 @@ function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
                             platform::Platform=platform_key_abi())
     for pkg in pkgs
         path = source_path(pkg)
-        # Check to see if this package has an Artifact.toml
-        artifact_toml = joinpath(path, "Artifact.toml")
-        if isfile(artifact_toml)
-            ensure_all_artifacts_installed(artifact_toml; platform=platform)
+        # Check to see if this package has an Artifacts.toml
+        artifacts_toml = joinpath(path, "Artifacts.toml")
+        if isfile(artifacts_toml)
+            ensure_all_artifacts_installed(artifacts_toml; platform=platform)
         end
     end
 end
@@ -1003,7 +1003,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     # TODO is it still necessary to prune? I don't think so..
     new_apply = download_source(ctx, pkgs)
 
-    # After downloading resolutionary packages, search for Artifact.toml files
+    # After downloading resolutionary packages, search for Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
     download_artifacts(ctx, pkgs; platform=platform)
 

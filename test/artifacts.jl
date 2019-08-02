@@ -56,7 +56,7 @@ include("utils.jl")
     for p in platforms
         meta = Dict()
         pack_platform!(meta, p)
-        @test unpack_platform(meta, "foo", "<in-memory-Artifact.toml>") == p
+        @test unpack_platform(meta, "foo", "<in-memory-Artifacts.toml>") == p
     end
 end
 
@@ -126,33 +126,33 @@ end
     end
 end
 
-@testset "Artifact.toml Utilities" begin
-    # First, let's test our ability to find Artifact.toml files;
+@testset "Artifacts.toml Utilities" begin
+    # First, let's test our ability to find Artifacts.toml files;
     ATS = joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch")
     test_modules = [
-        joinpath(ATS, "pkg.jl") =>  joinpath(ATS, "Artifact.toml"),
-        joinpath(ATS, "sub_module", "pkg.jl") =>  joinpath(ATS, "Artifact.toml"),
-        joinpath(ATS, "sub_package", "pkg.jl") =>  joinpath(ATS, "sub_package", "Artifact.toml"),
+        joinpath(ATS, "pkg.jl") =>  joinpath(ATS, "Artifacts.toml"),
+        joinpath(ATS, "sub_module", "pkg.jl") =>  joinpath(ATS, "Artifacts.toml"),
+        joinpath(ATS, "sub_package", "pkg.jl") =>  joinpath(ATS, "sub_package", "Artifacts.toml"),
         joinpath(@__DIR__, "test_packages", "BasicSandbox", "src", "Foo.jl") => nothing,
     ]
-    for (test_src, artifact_toml) in test_modules
-        # Test that the Artifact.toml that was found is what we expected
-        @test find_artifact_toml(test_src) == artifact_toml
+    for (test_src, artifacts_toml) in test_modules
+        # Test that the Artifacts.toml that was found is what we expected
+        @test find_artifact_toml(test_src) == artifacts_toml
 
         # Load `arty` and check its gitsha
-        if artifact_toml !== nothing
+        if artifacts_toml !== nothing
             arty_hash = SHA1("43563e7631a7eafae1f9f8d9d332e3de44ad7239")
-            @test artifact_hash("arty", artifact_toml) == arty_hash
+            @test artifact_hash("arty", artifacts_toml) == arty_hash
 
             # Ensure it's installable (we uninstall first, to make sure)
             remove_artifact(arty_hash)
             @test !artifact_exists(arty_hash)
 
-            @test ensure_artifact_installed("arty", artifact_toml) == artifact_path(arty_hash)
+            @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
             @test verify_artifact(arty_hash)
 
             # Make sure doing it twice "just works"
-            @test ensure_artifact_installed("arty", artifact_toml) == artifact_path(arty_hash)
+            @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
 
             # clean up after thyself
             remove_artifact(arty_hash)
@@ -169,13 +169,13 @@ end
         end
 
         # Bind this artifact to something
-        artifact_toml = joinpath(path, "Artifact.toml")
-        @test artifact_hash("foo_txt", artifact_toml) == nothing
-        bind_artifact("foo_txt", hash, artifact_toml)
+        artifacts_toml = joinpath(path, "Artifacts.toml")
+        @test artifact_hash("foo_txt", artifacts_toml) == nothing
+        bind_artifact("foo_txt", hash, artifacts_toml)
 
         # Test that this binding worked
-        @test artifact_hash("foo_txt", artifact_toml) == hash
-        @test ensure_artifact_installed("foo_txt", artifact_toml) == artifact_path(hash)
+        @test artifact_hash("foo_txt", artifacts_toml) == hash
+        @test ensure_artifact_installed("foo_txt", artifacts_toml) == artifact_path(hash)
 
         # Test that we can overwrite bindings
         hash2 = create_artifact() do path
@@ -183,14 +183,14 @@ end
                 println(io, "goodbye, world!")
             end
         end
-        @test_throws ErrorException bind_artifact("foo_txt", hash2, artifact_toml)
-        @test artifact_hash("foo_txt", artifact_toml) == hash
-        bind_artifact("foo_txt", hash2, artifact_toml; force=true)
-        @test artifact_hash("foo_txt", artifact_toml) == hash2
+        @test_throws ErrorException bind_artifact("foo_txt", hash2, artifacts_toml)
+        @test artifact_hash("foo_txt", artifacts_toml) == hash
+        bind_artifact("foo_txt", hash2, artifacts_toml; force=true)
+        @test artifact_hash("foo_txt", artifacts_toml) == hash2
 
         # Test that we can un-bind
-        unbind_artifact("foo_txt", artifact_toml)
-        @test artifact_hash("foo_txt", artifact_toml) == nothing
+        unbind_artifact("foo_txt", artifacts_toml)
+        @test artifact_hash("foo_txt", artifacts_toml) == nothing
 
         # Test platform-specific binding and providing download_info
         download_info = [
@@ -199,17 +199,17 @@ end
         ]
 
         # First, test the binding of things with various platforms and overwriting and such works properly
-        bind_artifact("foo_txt", hash, artifact_toml; download_info=download_info, platform=Linux(:x86_64))
-        @test artifact_hash("foo_txt", artifact_toml; platform=Linux(:x86_64)) == hash
-        @test artifact_hash("foo_txt", artifact_toml; platform=MacOS()) == nothing
-        @test_throws ErrorException bind_artifact("foo_txt", hash2, artifact_toml; download_info=download_info, platform=Linux(:x86_64))
-        bind_artifact("foo_txt", hash2, artifact_toml; download_info=download_info, platform=Linux(:x86_64), force=true)
-        bind_artifact("foo_txt", hash, artifact_toml; download_info=download_info, platform=Windows(:i686))
-        @test artifact_hash("foo_txt", artifact_toml; platform=Linux(:x86_64)) == hash2
-        @test artifact_hash("foo_txt", artifact_toml; platform=Windows(:i686)) == hash
+        bind_artifact("foo_txt", hash, artifacts_toml; download_info=download_info, platform=Linux(:x86_64))
+        @test artifact_hash("foo_txt", artifacts_toml; platform=Linux(:x86_64)) == hash
+        @test artifact_hash("foo_txt", artifacts_toml; platform=MacOS()) == nothing
+        @test_throws ErrorException bind_artifact("foo_txt", hash2, artifacts_toml; download_info=download_info, platform=Linux(:x86_64))
+        bind_artifact("foo_txt", hash2, artifacts_toml; download_info=download_info, platform=Linux(:x86_64), force=true)
+        bind_artifact("foo_txt", hash, artifacts_toml; download_info=download_info, platform=Windows(:i686))
+        @test artifact_hash("foo_txt", artifacts_toml; platform=Linux(:x86_64)) == hash2
+        @test artifact_hash("foo_txt", artifacts_toml; platform=Windows(:i686)) == hash
 
         # Next, check that we can get the download_info properly:
-        meta = artifact_meta("foo_txt", artifact_toml; platform=Windows(:i686))
+        meta = artifact_meta("foo_txt", artifacts_toml; platform=Windows(:i686))
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
         @test meta["download"][2]["sha256"] == "a"^64
     end

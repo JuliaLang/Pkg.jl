@@ -3,8 +3,8 @@ using Pkg.Artifacts, Test, Libdl
 
 function do_test()
     # First, check that `"c_simple"` is installed automatically
-    artifact_toml = joinpath(@__DIR__, "..", "Artifact.toml")
-    @test artifact_exists(artifact_hash("c_simple", artifact_toml))
+    artifacts_toml = joinpath(@__DIR__, "..", "Artifacts.toml")
+    @test artifact_exists(artifact_hash("c_simple", artifacts_toml))
 
     # Test that we can use `artifact""` to get at c_simple
     c_simple_exe = joinpath(artifact"c_simple", "bin", "c_simple")

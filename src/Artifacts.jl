@@ -17,14 +17,14 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 # - At the lowest level, artifacts are content-addressed chunks of data.  Similarly to
 #   how packages are identified by UUIDs but have human-readable mappings through the
 #   registry, artifacts are identified by their SHA1 git tree hashes, but have human-
-#   readable mappings through `Artifact.toml` files.
+#   readable mappings through `Artifacts.toml` files.
 #
 # - Artifacts do not _need_ to have names bound to them; they are first and foremost
 #   identified by their tree hash.  A name is merely a pointer to a hash, and the hash
 #   itself is what is used in all operations except the initial lookup.
 #
 # - A single name can be associated with multiple hashes, where one is chosen at runtime.
-#   The canonical example of this is platform-dependent artifacts.  At `Artifact.toml`
+#   The canonical example of this is platform-dependent artifacts.  At `Artifacts.toml`
 #   parse-time one of the list of hashes will be chosen as the best match for the
 #   current environment (Julia version, OS, processor architecture, etc...), and note
 #   that it is acceptable for there to be multiple possible choices (e.g. an AVX2-
@@ -33,7 +33,7 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 #
 # - Artifacts can be created on-machine through the `create()` functional API, and can
 #   also be downloaded as tarballs from external webservers by embedding information into
-#   the `Artifact.toml` file.  This can be done programmatically through the
+#   the `Artifacts.toml` file.  This can be done programmatically through the
 #   `bind_artifact()` function.
 
 
@@ -52,13 +52,13 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 #
 # - Name level:
 #   - artifact_meta(name, toml_path; platform): returns a `Dict` of the metadata stored
-#     within a given `Artifact.toml` file, including things like URL, platform, etc...
+#     within a given `Artifacts.toml` file, including things like URL, platform, etc...
 #     If the artifact is a multi-map due to being platform-specific, chooses the best
 #     match among its options. Returns `nothing` if no appropriate mapping exists.
 #   - artifact_hash(args...; kwargs...): returns the hash of the requested name mapping
 #     via `artifact_meta(args...; kwargs...)["git-tree-sha1"]`, or similar.
 #   - bind_artifact(name, hash, toml_path; platform): builds a mapping from `name` to
-#     `hash` within the given `Artifact.toml` file.  Optionally sets this as a platform-
+#     `hash` within the given `Artifacts.toml` file.  Optionally sets this as a platform-
 #     specific artifact.
 #   - unbind_artifact(name, toml_path; platform): deletes a mapping previously bound.
 #   - download_artifact(hash, url, tarball_hash): downloads an artifact from a given URL
@@ -67,7 +67,7 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 #     `download_artifact()`, does the lookups and loop around multiple download URLs.
 #
 # - Utilities:
-#   - find_artifact_toml(path): Attempts to find the Artifact.toml that exists for a
+#   - find_artifact_toml(path): Attempts to find the Artifacts.toml that exists for a
 #     given source path.  Returns `nothing` if none could be found.
 
 
@@ -190,19 +190,19 @@ end
 
 
 """
-    unpack_platform(entry::Dict, name::String, artifact_toml::String)
+    unpack_platform(entry::Dict, name::String, artifacts_toml::String)
 
-Given an `entry` for the artifact named `name`, located within the file `artifact_toml`,
+Given an `entry` for the artifact named `name`, located within the file `artifacts_toml`,
 returns the `Platform` object that this entry specifies.  Returns `nothing` on error.
 """
-function unpack_platform(entry::Dict, name::String, artifact_toml::String)
+function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
     if !haskey(entry, "os")
-        @warn("Invalid Artifact.toml at '$(artifact_toml)': platform-specific artifact entry '$name' missing 'os' key")
+        @warn("Invalid Artifacts.toml at '$(artifacts_toml)': platform-specific artifact entry '$name' missing 'os' key")
         return nothing
     end
 
     if !haskey(entry, "arch")
-        @warn("Invalid Artfiact.toml at '$(artifact_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
+        @warn("Invalid Artfiact.toml at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
         return nothing
     end
 
@@ -263,24 +263,24 @@ function pack_platform!(meta::Dict, p::Platform)
 end
 
 """
-    artifact_meta(name::String, artifact_toml::String;
+    artifact_meta(name::String, artifacts_toml::String;
                   platform::Platform = platform_key_abi())
 
 Get metadata about a given artifact (identified by name) stored within the given
-`Artifact.toml` file.  If the artifact is platform-specific, use `platform` to choose the
+`Artifacts.toml` file.  If the artifact is platform-specific, use `platform` to choose the
 most appropriate mapping.  If none is found, return `nothing`.
 """
-function artifact_meta(name::String, artifact_toml::String;
+function artifact_meta(name::String, artifacts_toml::String;
                        platform::Platform = platform_key_abi())
-    if !isfile(artifact_toml)
+    if !isfile(artifacts_toml)
         return nothing
     end
 
     # Parse the toml for the 
-    return artifact_meta(name, parse_toml(artifact_toml), artifact_toml; platform=platform)
+    return artifact_meta(name, parse_toml(artifacts_toml), artifacts_toml; platform=platform)
 end
 
-function artifact_meta(name::String, artifact_dict::Dict, artifact_toml::String;
+function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String;
                        platform::Platform = platform_key_abi())
     if !haskey(artifact_dict, name)
         return nothing
@@ -289,17 +289,17 @@ function artifact_meta(name::String, artifact_dict::Dict, artifact_toml::String;
 
     # If it's an array, find the entry that best matches our current platform
     if isa(meta, Array)
-        dl_dict = Dict(unpack_platform(x, name, artifact_toml) => x for x in meta)
+        dl_dict = Dict(unpack_platform(x, name, artifacts_toml) => x for x in meta)
         meta = select_platform(dl_dict, platform)
     # If it's NOT a dict, complain
     elseif !isa(meta, Dict)
-        @warn("Invalid Artifact.toml at $(artifact_toml): artifact '$name' malformed, must be array or dict!")
+        @warn("Invalid Artifacts.toml at $(artifacts_toml): artifact '$name' malformed, must be array or dict!")
         return nothing
     end
 
     # This is such a no-no, we are going to call it out right here, right now.
     if meta != nothing && !haskey(meta, "git-tree-sha1")
-        @warn("Invalid Artifact.toml at $(artifact_toml): artifact '$name' contains no `git-tree-sha1`!")
+        @warn("Invalid Artifacts.toml at $(artifacts_toml): artifact '$name' contains no `git-tree-sha1`!")
         return nothing
     end
 
@@ -308,14 +308,14 @@ function artifact_meta(name::String, artifact_dict::Dict, artifact_toml::String;
 end
 
 """
-    artifact_hash(name::String, artifact_toml::String; platform::Platform = platform_key_abi())
+    artifact_hash(name::String, artifacts_toml::String; platform::Platform = platform_key_abi())
 
 Thin wrapper around `artifact_meta()` to return the hash of the specified, platform-
 collapsed artifact.  Returns `nothing` if no mapping can be found.
 """
-function artifact_hash(name::String, artifact_toml::String;
+function artifact_hash(name::String, artifacts_toml::String;
                        platform::Platform = platform_key_abi())
-    meta = artifact_meta(name, artifact_toml; platform=platform)
+    meta = artifact_meta(name, artifacts_toml; platform=platform)
     if meta === nothing
         return nothing
     end
@@ -324,35 +324,35 @@ function artifact_hash(name::String, artifact_toml::String;
 end
 
 """
-    bind_artifact(name::String, hash::SHA1, artifact_toml::String;
+    bind_artifact(name::String, hash::SHA1, artifacts_toml::String;
                   platform::Union{Platform,Nothing} = nothing,
                   download_info::Union{Vector{Tuple},Nothing} = nothing,
                   force::Bool = false)
 
-Writes a mapping of `name` -> `hash` within the given `Artifact.toml` file.  If
+Writes a mapping of `name` -> `hash` within the given `Artifacts.toml` file.  If
 `platform` is not `nothing`, this artifact is marked as platform-specific, and will be
 a multi-mapping.  It is valid to bind multiple artifacts with the same name, but
-different `platform`s and `hash`'es within the same `artifact_toml`.  If `force` is set
+different `platform`s and `hash`'es within the same `artifacts_toml`.  If `force` is set
 to `true`, this will overwrite a pre-existant mapping, otherwise an error is raised.
 
 `download_info` is an optional tuple that contains a vector of URLs and a hash.  These
 URLs will be listed as possible locations where this artifact can be obtained.  The
 """
-function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
+function bind_artifact(name::String, hash::SHA1, artifacts_toml::String;
                        platform::Union{Platform,Nothing} = nothing,
                        download_info::Union{Vector{<:Tuple},Nothing} = nothing,
                        lazy::Bool = false,
                        force::Bool = false)
     # First, check to see if this artifact is already bound:
-    if isfile(artifact_toml)
-        artifact_dict = parse_toml(artifact_toml)
+    if isfile(artifacts_toml)
+        artifact_dict = parse_toml(artifacts_toml)
     
         if !force && haskey(artifact_dict, name)
             meta = artifact_dict[name]
             if !isa(meta, Array)
-                error("Mapping for '$name' within $(artifact_toml) already exists!")
-            elseif any((unpack_platform(x, name, artifact_toml) for x in meta) .== Ref(platform))
-                error("Mapping for '$name'/$(triplet(platform)) within $(artifact_toml) already exists!")
+                error("Mapping for '$name' within $(artifacts_toml) already exists!")
+            elseif any((unpack_platform(x, name, artifacts_toml) for x in meta) .== Ref(platform))
+                error("Mapping for '$name'/$(triplet(platform)) within $(artifacts_toml) already exists!")
             end
         end
     else
@@ -392,7 +392,7 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
         else
             # Delete any entries that contain identical platforms
             artifact_dict[name] = filter(
-                x -> unpack_platform(x, name, artifact_toml) != platform,
+                x -> unpack_platform(x, name, artifacts_toml) != platform,
                 artifact_dict[name]
             )
             push!(artifact_dict[name], meta)
@@ -400,7 +400,7 @@ function bind_artifact(name::String, hash::SHA1, artifact_toml::String;
     end
 
     # Spit it out onto disk
-    open(artifact_toml, "w") do io
+    open(artifacts_toml, "w") do io
         TOML.print(io, artifact_dict, sorted=true)
     end
     return
@@ -408,14 +408,14 @@ end
 
 
 """
-    unbind_artifact(name::String, artifact_toml::String; platform = nothing)
+    unbind_artifact(name::String, artifacts_toml::String; platform = nothing)
 
-Unbind the given `name` from an `Artifact.toml` file.  Silently fails if no such binding
+Unbind the given `name` from an `Artifacts.toml` file.  Silently fails if no such binding
 exists within the file.
 """
-function unbind_artifact(name::String, artifact_toml::String;
+function unbind_artifact(name::String, artifacts_toml::String;
                          platform::Union{Platform,Nothing} = nothing)
-    artifact_dict = parse_toml(artifact_toml)
+    artifact_dict = parse_toml(artifacts_toml)
     if !haskey(artifact_dict, name)
         return
     end
@@ -424,12 +424,12 @@ function unbind_artifact(name::String, artifact_toml::String;
         delete!(artifact_dict, name)
     else
         artifact_dict[name] = filter(
-            x -> unpack_platform(x, name, artifact_toml) != platform,
+            x -> unpack_platform(x, name, artifacts_toml) != platform,
             artifact_dict[name]
         )
     end
 
-    open(artifact_toml, "w") do io
+    open(artifacts_toml, "w") do io
         TOML.print(io, artifact_dict, sorted=true)
     end
     return
@@ -461,7 +461,7 @@ end
     find_artifact_toml(path::String)
 
 Given the path to a `.jl` file, (such as the one returned by `__source__.file` in a macro
-context), find the `Artifact.toml` that is contained within the containing project (if it
+context), find the `Artifacts.toml` that is contained within the containing project (if it
 exists), otherwise return `nothing`.
 """
 function find_artifact_toml(path::String)
@@ -470,13 +470,13 @@ function find_artifact_toml(path::String)
     end
 
     while dirname(path) != path
-        # Does this `Artifact.toml` exist?
-        artifact_toml_path = joinpath(path, "Artifact.toml")
+        # Does this `Artifacts.toml` exist?
+        artifact_toml_path = joinpath(path, "Artifacts.toml")
         if isfile(artifact_toml_path)
             return abspath(artifact_toml_path)
         end
 
-        # Does a `Project.toml` file exist here, in the absence of an Artifact.toml?
+        # Does a `Project.toml` file exist here, in the absence of an Artifacts.toml?
         # If so, stop the search as we've probably hit the top-level of this 
         if isfile(joinpath(path, "Project.toml"))
             return nothing
@@ -491,17 +491,17 @@ function find_artifact_toml(path::String)
 end
 
 """
-    ensure_artifact_installed(name::String, artifact_toml::String;
+    ensure_artifact_installed(name::String, artifacts_toml::String;
                               platform::Platform = platform_key_abi())
 
 Ensures an artifact is installed, downloading it via the download information stored in
-`artifact_toml` if necessary.  Throws an error if unable to install.
+`artifacts_toml` if necessary.  Throws an error if unable to install.
 """
-function ensure_artifact_installed(name::String, artifact_toml::String;
+function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::Platform = platform_key_abi())
-    meta = artifact_meta(name, artifact_toml)
+    meta = artifact_meta(name, artifacts_toml)
     if meta === nothing
-        error("Cannot locate artifact '$(name)' in '$(artifact_toml)'")
+        error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
     end
 
     return ensure_artifact_installed(name, meta; platform=platform)
@@ -515,7 +515,7 @@ function ensure_artifact_installed(name::String, meta::Dict;
         # If this artifact does not exist on-disk already, ensure it has download
         # information, then download it!
         if !haskey(meta, "download")
-            error("Cannot automatically install '$(name)'; no download section in '$(artifact_toml)'")
+            error("Cannot automatically install '$(name)'; no download section in '$(artifacts_toml)'")
         end
     
         # Attempt to download from all sources
@@ -526,7 +526,7 @@ function ensure_artifact_installed(name::String, meta::Dict;
                 return artifact_path(hash)
             end
         end
-        error("Unable to automatically install '$(name)' from '$(artifact_toml)'")
+        error("Unable to automatically install '$(name)' from '$(artifacts_toml)'")
     else
         return artifact_path(hash)
     end
@@ -534,20 +534,20 @@ end
 
 
 """
-    ensure_all_artifacts_installed(artifact_toml::String;
+    ensure_all_artifacts_installed(artifacts_toml::String;
                                    platform = platform_key_abi())
 
-Installs all non-lazy artifacts from a given `Artifact.toml` file.
+Installs all non-lazy artifacts from a given `Artifacts.toml` file.
 """
-function ensure_all_artifacts_installed(artifact_toml::String;
+function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::Platform = platform_key_abi())
-    if !isfile(artifact_toml)
+    if !isfile(artifacts_toml)
         return
     end
-    artifact_dict = parse_toml(artifact_toml)
+    artifact_dict = parse_toml(artifacts_toml)
 
     for name in keys(artifact_dict)
-        meta = artifact_meta(name, artifact_dict, artifact_toml; platform=platform)
+        meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
         hash = SHA1(meta["git-tree-sha1"])
         if artifact_exists(hash) || !haskey(meta, "download") || get(meta, "lazy", false)
             continue
@@ -563,14 +563,14 @@ end
 
 Macro that is used to automatically ensure an artifact is installed, and return its
 location on-disk.  Automatically looks the artifact up by name in the project's
-`Artifact.toml` file.  Throws an error on inability to install the requested artifact.
+`Artifacts.toml` file.  Throws an error on inability to install the requested artifact.
 """
 macro artifact_str(name)
     return quote
-        local artifact_toml = $(find_artifact_toml)($(string(__source__.file)))
-        if artifact_toml === nothing
+        local artifacts_toml = $(find_artifact_toml)($(string(__source__.file)))
+        if artifacts_toml === nothing
             error(string(
-                "Cannot locate 'Artifact.toml' file when attempting to use artifact '",
+                "Cannot locate 'Artifacts.toml' file when attempting to use artifact '",
                 $(esc(name)),
                 "' in '",
                 $(esc(__module__)),
@@ -579,7 +579,7 @@ macro artifact_str(name)
         end
 
         # This is the resultant value at the end of all things
-        $(ensure_artifact_installed)($(esc(name)), artifact_toml)
+        $(ensure_artifact_installed)($(esc(name)), artifacts_toml)
     end
 end
 
