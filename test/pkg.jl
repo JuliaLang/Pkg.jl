@@ -151,21 +151,21 @@ temp_pkg_dir() do project_path
     @testset "adding and upgrading different versions" begin
         # VersionNumber
         Pkg.add(PackageSpec(TEST_PKG.name, v"0.3"))
-        @test Pkg.API.__installed()[TEST_PKG.name] == v"0.3"
+        @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3"
         Pkg.add(PackageSpec(TEST_PKG.name, v"0.3.1"))
-        @test Pkg.API.__installed()[TEST_PKG.name] == v"0.3.1"
+        @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3.1"
         Pkg.rm(TEST_PKG.name)
 
         # VersionRange
         Pkg.add(PackageSpec(TEST_PKG.name, VersionSpec(VersionRange("0.3.0-0.3.2"))))
-        @test Pkg.API.__installed()[TEST_PKG.name] == v"0.3.2"
+        @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3.2"
         # Check that adding another packages doesn't upgrade other packages
         Pkg.add("Test")
-        @test Pkg.API.__installed()[TEST_PKG.name] == v"0.3.2"
+        @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3.2"
         Pkg.update(; level = UPLEVEL_PATCH)
-        @test Pkg.API.__installed()[TEST_PKG.name] == v"0.3.3"
+        @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3.3"
         Pkg.update(; level = UPLEVEL_MINOR)
-        @test Pkg.API.__installed()[TEST_PKG.name].minor != 3
+        @test Pkg.dependencies()[TEST_PKG.uuid].version.minor != 3
         Pkg.rm(TEST_PKG.name)
     end
 
@@ -181,27 +181,27 @@ temp_pkg_dir() do project_path
 
     @testset "pinning / freeing" begin
         Pkg.add(TEST_PKG.name)
-        old_v = Pkg.API.__installed()[TEST_PKG.name]
+        old_v = Pkg.dependencies()[TEST_PKG.uuid].version
         Pkg.pin(PackageSpec(TEST_PKG.name, v"0.2"))
-        @test Pkg.API.__installed()[TEST_PKG.name].minor == 2
+        @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
         Pkg.update(TEST_PKG.name)
-        @test Pkg.API.__installed()[TEST_PKG.name].minor == 2
+        @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
         Pkg.free(TEST_PKG.name)
         Pkg.update()
-        @test Pkg.API.__installed()[TEST_PKG.name] == old_v
+        @test Pkg.dependencies()[TEST_PKG.uuid].version == old_v
         Pkg.rm(TEST_PKG.name)
     end
 
     @testset "develop / freeing" begin
         Pkg.add(TEST_PKG.name)
-        old_v = Pkg.API.__installed()[TEST_PKG.name]
+        old_v = Pkg.dependencies()[TEST_PKG.uuid].version
         Pkg.rm(TEST_PKG.name)
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
                 @test_throws PkgError Pkg.develop(Pkg.PackageSpec(url="bleh", rev="blurg"))
                 Pkg.develop(TEST_PKG.name)
                 @test isinstalled(TEST_PKG)
-                @test Pkg.API.__installed()[TEST_PKG.name] > old_v
+                @test Pkg.dependencies()[TEST_PKG.uuid].version > old_v
                 test_pkg_main_file = joinpath(devdir, TEST_PKG.name, "src", TEST_PKG.name * ".jl")
                 @test isfile(test_pkg_main_file)
                 # Pkg #152
@@ -227,7 +227,7 @@ temp_pkg_dir() do project_path
                 @test isfile(joinpath(devdir, TEST_PKG.name, "deps", "deps.jl"))
                 Pkg.test(TEST_PKG.name)
                 Pkg.free(TEST_PKG.name)
-                @test Pkg.API.__installed()[TEST_PKG.name] == old_v
+                @test Pkg.dependencies()[TEST_PKG.uuid].version == old_v
             end
         end
     end
@@ -239,7 +239,7 @@ temp_pkg_dir() do project_path
     @testset "stdlibs as direct dependency" begin
         uuid_pkg = (name = "CRC32c", uuid = UUID("8bf52ea8-c179-5cab-976a-9e18b702a9bc"))
         Pkg.add("CRC32c")
-        @test haskey(Pkg.API.__installed(), uuid_pkg.name)
+        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         Pkg.update()
         # Disable until fixed in Base
         # Pkg.test("CRC32c")
@@ -337,7 +337,7 @@ end
 temp_pkg_dir() do project_path
     @testset "libgit2 downloads" begin
         Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
-        @test haskey(Pkg.installed(), TEST_PKG.name)
+        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         @eval import $(Symbol(TEST_PKG.name))
         @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
         Pkg.rm(TEST_PKG.name)
@@ -349,7 +349,7 @@ temp_pkg_dir() do project_path
             cd(joinpath(dir, "UnregisteredWithProject")) do
                 with_current_env() do
                     Pkg.update()
-                    @test haskey(Pkg.API.__installed(), "Example")
+                    @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
                 end
             end
         end
@@ -359,12 +359,12 @@ end
 temp_pkg_dir() do project_path
     @testset "libgit2 downloads" begin
         Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
-        @test haskey(Pkg.API.__installed(), TEST_PKG.name)
+        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         Pkg.rm(TEST_PKG.name)
     end
     @testset "tarball downloads" begin
         Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
-        @test haskey(Pkg.API.__installed(), "JSON")
+        @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
         Pkg.rm("JSON")
     end
 end
@@ -806,6 +806,18 @@ end
         @test !isfile(joinpath(dir, "Manifest.toml"))
         @test isfile(joinpath(dir, "JuliaManifest.toml"))
     end
+end
+
+@testset "query interface basic tests" begin
+    temp_pkg_dir() do project_path; with_temp_env() do
+        Pkg.develop("Example")
+        Pkg.add("Unicode")
+        Pkg.add("Markdown")
+        @test length(Pkg.project().dependencies) == 3
+        xs = Dict(uuid => pkg for (uuid, pkg) in Pkg.dependencies() if pkg.isdeveloped)
+        @test length(xs) == 1
+        @test xs[TEST_PKG.uuid].ispinned == false
+    end end
 end
 
 include("repl.jl")

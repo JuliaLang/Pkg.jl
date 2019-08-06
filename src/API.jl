@@ -20,6 +20,26 @@ preview_info() = printstyled("───── Preview mode ─────\n"; c
 
 include("generate.jl")
 
+dependencies() = dependencies(Context())
+function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
+    pkgs = PackageSpec[]
+    Operations.load_all_deps!(ctx, pkgs)
+    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
+    return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
+end
+
+project() = project(Context())
+function project(ctx::Context)
+    ctx.env.pkg !== nothing || pkgerror("Active environment is not a project.")
+    return ProjectInfo(
+        name         = ctx.env.pkg.name,
+        uuid         = ctx.env.pkg.uuid,
+        version      = ctx.env.pkg.version,
+        dependencies = ctx.env.project.deps,
+        path         = ctx.env.project_file
+    )
+end
+
 function check_package_name(x::AbstractString, mode=nothing)
     if !(occursin(Pkg.REPLMode.name_re, x))
         message = "$x is not a valid packagename."
@@ -252,17 +272,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     end
     Operations.test(ctx, pkgs; coverage=coverage, test_fn=test_fn, julia_args=julia_args, test_args=test_args)
     return
-end
-
-installed() = __installed(PKGMODE_PROJECT)
-function __installed(mode::PackageMode=PKGMODE_MANIFEST)
-    diffs = Display.status(Context(), PackageSpec[], mode=mode, use_as_api=true)
-    version_status = Dict{String, Union{VersionNumber,Nothing}}()
-    diffs == nothing && return version_status
-    for entry in diffs
-        version_status[entry.name] = entry.new.ver
-    end
-    return version_status
 end
 
 """

@@ -66,7 +66,7 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"activate ."
     pkg"add Example@0.5"
     @test isinstalled(TEST_PKG)
-    v = Pkg.API.__installed()[TEST_PKG.name]
+    v = Pkg.dependencies()[TEST_PKG.uuid].version
     pkg"rm Example"
     pkg"add Example, Random"
     pkg"rm Example Random"
@@ -83,15 +83,16 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
 
     pkg"test Example"
     @test isinstalled(TEST_PKG)
-    @test Pkg.API.__installed()[TEST_PKG.name] > v
+    @test Pkg.dependencies()[TEST_PKG.uuid].version > v
     pkg = "UnregisteredWithoutProject"
     p = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg"))
     Pkg.REPLMode.pkgstr("add $p; precompile")
     @eval import $(Symbol(pkg))
-    @test Pkg.API.__installed()[pkg] == v"0.0"
+    @test first([info for (uuid, info) in Pkg.dependencies() if info.name == pkg]).version == v"0.0"
     Pkg.test("UnregisteredWithoutProject")
 
     pkg2 = "UnregisteredWithProject"
+    pkg2_uuid = UUID("58262bb0-2073-11e8-3727-4fe182c12249")
     p2 = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg2"))
     Pkg.REPLMode.pkgstr("add $p2")
     Pkg.REPLMode.pkgstr("pin $pkg2")
@@ -99,7 +100,7 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     # FIXME: why isn't this testing the Pkg after importing, rather than after freeing it
     #@eval import Example
     #@eval import $(Symbol(pkg2))
-    @test Pkg.API.__installed()[pkg2] == v"0.1.0"
+    @test Pkg.dependencies()[pkg2_uuid].version == v"0.1.0"
     Pkg.REPLMode.pkgstr("free $pkg2")
     @test_throws PkgError Pkg.REPLMode.pkgstr("free $pkg2")
     Pkg.test("UnregisteredWithProject")
@@ -114,7 +115,7 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
         LibGit2.add!(repo, "*")
         LibGit2.commit(repo, "bump version"; author = TEST_SIG, committer=TEST_SIG)
         pkg"update"
-        @test Pkg.API.__installed()[pkg2] == v"0.2.0"
+        @test Pkg.dependencies()[pkg2_uuid].version == v"0.2.0"
         Pkg.REPLMode.pkgstr("rm $pkg2")
 
         c = LibGit2.commit(repo, "empty commit"; author = TEST_SIG, committer=TEST_SIG)
@@ -139,7 +140,7 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
                 mktempdir() do depot_dir
                     pushfirst!(DEPOT_PATH, depot_dir)
                     pkg"instantiate"
-                    @test Pkg.API.__installed()[pkg2] == v"0.2.0"
+                    @test Pkg.dependencies()[pkg2_uuid].version == v"0.2.0"
                 end
             finally
                 empty!(DEPOT_PATH)
@@ -180,8 +181,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     Pkg.REPLMode.pkgstr("build; precompile")
                     @test Base.find_package("UnregisteredWithProject") == joinpath(p1_new_path, "src", "UnregisteredWithProject.jl")
                     @test Base.find_package("UnregisteredWithoutProject") == joinpath(p2_new_path, "src", "UnregisteredWithoutProject.jl")
-                    @test Pkg.API.__installed()["UnregisteredWithProject"] == v"0.1.0"
-                    @test Pkg.API.__installed()["UnregisteredWithoutProject"] == v"0.0.0"
+                    @test Pkg.dependencies()[UUID("58262bb0-2073-11e8-3727-4fe182c12249")].version == v"0.1.0"
+                    @test Pkg.dependencies()[Pkg.Types.Context().env.project.deps["UnregisteredWithoutProject"]].version == v"0.0.0"
                     Pkg.test("UnregisteredWithoutProject")
                     Pkg.test("UnregisteredWithProject")
                 end
@@ -204,8 +205,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     mkdir("tests")
                     cd("tests")
                     pkg"develop ../SubModule2"
-                    @test Pkg.API.__installed()["SubModule1"] == v"0.1.0"
-                    @test Pkg.API.__installed()["SubModule2"] == v"0.1.0"
+                    @test Pkg.dependencies()[uuid1].version == v"0.1.0"
+                    @test Pkg.dependencies()[uuid2].version == v"0.1.0"
                     # make sure paths to SubModule1 and SubModule2 are relative
                     manifest = Pkg.Types.Context().env.manifest
                     @test manifest[uuid1].path == "SubModule1"
@@ -291,8 +292,8 @@ cd_tempdir() do tmp
     pkg"activate ."
     pkg"develop .." # HelloWorld
     pkg"develop ../SubModule"
-    @test Pkg.installed()["HelloWorld"] == v"0.1.0"
-    @test Pkg.installed()["SubModule"] == v"0.1.0"
+    @test Pkg.dependencies()[uuid1].version == v"0.1.0"
+    @test Pkg.dependencies()[uuid2].version == v"0.1.0"
     manifest = Pkg.Types.Context().env.manifest
     @test manifest[uuid1].path == ".."
     @test manifest[uuid2].path == joinpath("..", "SubModule")
@@ -471,7 +472,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 test BigProject
                 test
                 """)
-            current_json = Pkg.API.installed()["JSON"]
+            json_uuid = Pkg.project().dependencies["JSON"]
+            current_json = Pkg.dependencies()[json_uuid].version
             old_project = read("Project.toml", String)
             open("Project.toml"; append=true) do io
                 print(io, """
@@ -482,10 +484,10 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 )
             end
             pkg"up"
-            @test Pkg.API.installed()["JSON"].minor == 18
+            @test Pkg.dependencies()[json_uuid].version.minor == 18
             write("Project.toml", old_project)
             pkg"up"
-            @test Pkg.API.installed()["JSON"] == current_json
+            @test Pkg.dependencies()[json_uuid].version == current_json
         end
     end
 end; end

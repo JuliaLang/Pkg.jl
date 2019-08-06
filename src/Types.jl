@@ -20,7 +20,7 @@ using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
-    PackageSpec, EnvCache, Context, GitRepo, Context!, get_deps,
+    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, get_deps,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
@@ -1379,6 +1379,31 @@ function write_env(ctx::Context; display_diff=true)
     old_env = EnvCache(env.env) # load old environment for comparison
     write_project(env.project, env, old_env, ctx; display_diff=display_diff)
     write_manifest(env.manifest, env, old_env, ctx; display_diff=display_diff)
+end
+
+###
+### PackageInfo
+###
+
+Base.@kwdef struct PackageInfo
+    name::String
+    version::Union{Nothing,VersionNumber}
+    ispinned::Bool
+    isdeveloped::Bool
+    source::String
+    dependencies::Vector{UUID}
+end
+
+###
+### ProjectInfo
+###
+
+Base.@kwdef struct ProjectInfo
+    name::String
+    uuid::UUID
+    version::VersionNumber
+    dependencies::Dict{String,UUID}
+    path::String
 end
 
 end # module
