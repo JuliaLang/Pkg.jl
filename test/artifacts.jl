@@ -142,32 +142,33 @@ end
         joinpath(@__DIR__, "test_packages", "BasicSandbox", "src", "Foo.jl") => nothing,
     ]
     for (test_src, artifacts_toml) in test_modules
-        # Test that the Artifacts.toml that was found is what we expected
-        @test find_artifacts_toml(test_src) == artifacts_toml
+        temp_pkg_dir() do pkg_dir
+            # Test that the Artifacts.toml that was found is what we expected
+            @test find_artifacts_toml(test_src) == artifacts_toml
 
-        # Load `arty` and check its gitsha
-        if artifacts_toml !== nothing
-            arty_hash = SHA1("43563e7631a7eafae1f9f8d9d332e3de44ad7239")
-            @test artifact_hash("arty", artifacts_toml) == arty_hash
+            # Load `arty` and check its gitsha
+            if artifacts_toml !== nothing
+                arty_hash = SHA1("43563e7631a7eafae1f9f8d9d332e3de44ad7239")
+                @test artifact_hash("arty", artifacts_toml) == arty_hash
 
-            # Ensure it's installable (we uninstall first, to make sure)
-            remove_artifact(arty_hash)
-            @test !artifact_exists(arty_hash)
+                # Ensure it's installable (we uninstall first, to make sure)
+                @test !artifact_exists(arty_hash)
 
-            @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
-            @test verify_artifact(arty_hash)
+                @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
+                @test verify_artifact(arty_hash)
 
-            # Make sure doing it twice "just works"
-            @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
+                # Make sure doing it twice "just works"
+                @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
 
-            # clean up after thyself
-            remove_artifact(arty_hash)
-            @test !verify_artifact(arty_hash)
+                # clean up after thyself
+                remove_artifact(arty_hash)
+                @test !verify_artifact(arty_hash)
+            end
         end
     end
 
     # Test binding/unbinding
-    mktempdir() do path
+    temp_pkg_dir() do path
         hash = create_artifact() do path
             open(joinpath(path, "foo.txt"), "w") do io
                 print(io, "hello, world!")
@@ -241,9 +242,15 @@ end
     include(joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch", "pkg.jl"))
     @test ATSMod.do_test()
 
-    temp_pkg_dir() do project_path
-        Pkg.activate(project_path)
-        add_test_package("ArtifactInstallation", Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"))
+    mktempdir() do project_path
+        copy_test_package(project_path, "ArtifactInstallation")
+        Pkg.activate(joinpath(project_path))
+        add_this_pkg()
+        Pkg.add(Pkg.Types.PackageSpec(
+            name="ArtifactInstallation",
+            uuid=Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"),
+            path=joinpath(project_path, "ArtifactInstallation"),
+        ))
 
         # Run test harness
         Pkg.test("ArtifactInstallation")
@@ -257,7 +264,7 @@ end
 end
 
 @testset "Artifact GC collect delay" begin
-    temp_pkg_dir() do project_path
+    temp_pkg_dir() do tmpdir
         live_hash = create_artifact() do path
             open(joinpath(path, "README.md"), "w") do io
                 print(io, "I will not go quietly into that dark night.")
@@ -285,7 +292,7 @@ end
         @test !isfile(usage_path)
 
         # We bind them here and now
-        artifacts_toml = joinpath(project_path, "Artifacts.toml")
+        artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
         bind_artifact!(artifacts_toml, "live", live_hash)
         bind_artifact!(artifacts_toml, "die", die_hash)
         
