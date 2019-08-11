@@ -1072,30 +1072,46 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     # TODO what to do about repo packages?
 end
 
-function update_package_pin!(pkg::PackageSpec, ::Nothing)
+function update_package_pin!(ctx::Context, pkg::PackageSpec, ::Nothing)
     if pkg.version == VersionSpec() # no version to pin
         pkgerror("Can not `pin` a package which does not exist in the manifest")
     end
-    is_stdlib(pkg.uuid) && pkgerror("cannot `pin` stdlibs.")
+    if is_stdlib(pkg.uuid)
+        pkgerror("`pin` can not be applied to `$(pkg.name)` because it is a stdlib.")
+    end
     pkg.pinned = true
 end
 
-function update_package_pin!(pkg::PackageSpec, entry::PackageEntry)
-    is_stdlib(pkg.uuid) && pkgerror("cannot `pin` stdlibs.")
-    !entry.pinned || pkgerror("`$(entry.name)` already pinned, use `free` first.")
-    entry.path === nothing || pkgerror("Can not `pin` `dev`ed package")
+function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
+    if is_stdlib(pkg.uuid)
+        pkgerror("`pin` can not be applied to `$(pkg.name)` because it is a stdlib.")
+    end
+    if entry.pinned && pkg.version == VersionSpec()
+        pkgerror("`$(entry.name)` is already pinned. Use `free` to remove a pin.")
+    end
+    # update pinned package
     pkg.pinned = true
-    pkg.version == VersionSpec() && (pkg.version = entry.version) # pin at current version
-    pkg.tree_hash = entry.tree_hash
-    pkg.repo = entry.repo
+    if pkg.version == VersionSpec()
+        pkg.version = entry.version # pin at current version
+        pkg.repo = entry.repo
+        pkg.tree_hash = entry.tree_hash
+        pkg.path = entry.path
+    else # given explicit registered version
+        if entry.repo.url !== nothing || entry.path !== nothing
+            # A pin in this case includes an implicit `free` to switch to tracking registered versions
+            # First, make sure the package is registered so we have something to free to
+            if isempty(registered_paths(ctx.env, pkg.uuid))
+                pkgerror("Unable to pin `$(pkg.name)` to an arbitrary version since it could not be found in a registry.")
+            end
+        end
+    end
 end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
-    foreach(pkg -> update_package_pin!(pkg, manifest_info(ctx.env, pkg.uuid)), pkgs)
+    foreach(pkg -> update_package_pin!(ctx, pkg, manifest_info(ctx.env, pkg.uuid)), pkgs)
     load_direct_deps!(ctx, pkgs)
     check_registered(ctx, pkgs)
 
-    # TODO check that versions exist ? -> I guess resolve_versions should check ?
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
 

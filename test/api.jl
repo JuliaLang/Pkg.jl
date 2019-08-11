@@ -3,7 +3,7 @@
 module APITests
 
 using Pkg, Test
-import Pkg.Types.PkgError
+import Pkg.Types.PkgError, Pkg.Types.ResolverError
 
 include("utils.jl")
 
@@ -247,12 +247,21 @@ end
     end
 end
 
-@testset "Pkg.free" begin
-    # `pin` should not override previous `pin`
+@testset "Pkg.pin" begin
+    # `pin` should detect unregistered packages
     temp_pkg_dir() do project_path; with_temp_env() do env_path
-        Pkg.add(Pkg.PackageSpec(;name="Example"))
-        Pkg.pin(Pkg.PackageSpec(;name="Example", version="0.3.0"))
-        @test_throws PkgError Pkg.pin(Pkg.PackageSpec(;name="Example", version="0.4.0"))
+        Pkg.add(Pkg.PackageSpec(;url="https://github.com/00vareladavid/Unregistered.jl"))
+        @test_throws PkgError Pkg.pin(Pkg.PackageSpec(;name="Unregistered", version="0.1.0"))
+    end end
+    # when dealing with packages tracking a repo of a regsitered package, `pin` should do an implicit free
+    temp_pkg_dir() do project_path; with_temp_env() do env_path
+        Pkg.add(Pkg.PackageSpec(;name="Example",rev="master"))
+        Pkg.pin(Pkg.PackageSpec(;name="Example",version="0.1.0"))
+    end end
+    # pin should check for a valid version number
+    temp_pkg_dir() do project_path; with_temp_env() do env_path
+        Pkg.add(Pkg.PackageSpec(;name="Example",rev="master"))
+        @test_throws ResolverError Pkg.pin(Pkg.PackageSpec(;name="Example",version="100.0.0"))
     end end
 end
 
