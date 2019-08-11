@@ -5,6 +5,10 @@
 module PlatformEngines
 using SHA, Logging
 
+export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
+       download_verify, unpack, package, download_verify_unpack,
+       list_tarball_files, list_tarball_symlinks
+
 # In this file, we setup the `gen_download_cmd()`, `gen_unpack_cmd()` and
 # `gen_package_cmd()` functions by providing methods to probe the environment
 # and determine the most appropriate platform binaries to call.
@@ -56,8 +60,7 @@ Return a `Cmd` that will list the files contained within the tarball located at
 `tarball_path`.  The list will not include directories contained within the
 tarball.
 
-This method is initialized by `probe_platform_engines()`, which should be
-automatically called upon first import of `BinaryProvider`.
+This method is initialized by `probe_platform_engines()`.
 """
 gen_list_tarball_cmd = (tarball_path::AbstractString) ->
     error("Call `probe_platform_engines()` before `gen_list_tarball_cmd()`")
@@ -67,12 +70,21 @@ gen_list_tarball_cmd = (tarball_path::AbstractString) ->
 
 Parses the result of `gen_list_tarball_cmd()` into something useful.
 
-This method is initialized by `probe_platform_engines()`, which should be
-automatically called upon first import of `BinaryProvider`.
+This method is initialized by `probe_platform_engines()`.
 """
 parse_tarball_listing = (output::AbstractString) ->
     error("Call `probe_platform_engines()` before `parse_tarball_listing()`")
 
+"""
+    parse_symlinks(output::AbstractString)
+
+Returns a regex to parse symlinks from tarball listings.
+
+This method is initialized by `probe_platform_engines()`.
+"""
+
+parse_symlinks = () ->
+    error("Call `probe_platform_engines()` before `parse_symlinks()`")
 
 """
     probe_cmd(cmd::Cmd; verbose::Bool = false)
@@ -162,7 +174,7 @@ If `verbose` is `true`, print out the various engines as they are searched.
 function probe_platform_engines!(;verbose::Bool = false)
     global already_probed
     global gen_download_cmd, gen_list_tarball_cmd, gen_package_cmd
-    global gen_unpack_cmd, parse_tarball_listing
+    global gen_unpack_cmd, parse_tarball_listing, parse_symlinks
 
     # Quick-escape for Pkg, since we do this a lot
     if already_probed
@@ -197,17 +209,7 @@ function probe_platform_engines!(;verbose::Bool = false)
         return (path; verbose = false) ->
             pipeline(`$exe7z x $path -so`, `$exe7z l -ttar -y -si $(verbose ? ["-slt"] : [])`)
     end
-
-    # Tar is rather less verbose, and we don't need to search multiple places
-    # for it, so just rely on PATH to have `tar` available for us:
-
-    # compression_engines is a list of (test_cmd, unpack_opts_functor,
-    # package_opts_functor, list_opts_functor, parse_functor).  The probulator
-    # will check each of them by attempting to run `$test_cmd`, and if that
-    # works, will set the global compression functions appropriately.
-    gen_7z = (p) -> (unpack_7z(p), package_7z(p), list_7z(p), parse_7z_list)
-    compression_engines = Tuple[]
-
+    
     # the regex at the last position is meant for parsing the symlinks from verbose 7z-listing
     # "Path = ([^\r\n]+)\r?\n" matches the symlink name which is followed by an optional return and a new line
     # (?:[^\r\n]+\r?\n)+ = a group of non-empty lines (information belonging to one file is written as a block of lines followed by an empty line)
@@ -260,7 +262,7 @@ function probe_platform_engines!(;verbose::Bool = false)
     compression_engines = Tuple[]
 
     (tmpfile, io) = mktemp()
-    write(io, "Demo file for tar listing (Julia package BinaryProvider.jl)")
+    write(io, "Demo file for tar listing (Pkg.jl)")
     close(io)
 
     for tar_cmd in [`tar`, `busybox tar`]
@@ -326,7 +328,7 @@ function probe_platform_engines!(;verbose::Bool = false)
             elseif endswith(tarball_path, ".bz2")
                 Jjz = "j"
             end
-            return `$tar_cmd -c$(Jjz)vf $tarball_path -C$(in_path) .`
+            return `$tar_cmd -c$(Jjz)f $tarball_path -C$(in_path) .`
         end
         list_tar = (in_path; verbose = false) -> begin
             Jjz = "z"
@@ -447,13 +449,14 @@ function probe_platform_engines!(;verbose::Bool = false)
     end
 
     # Search for a compression engine
-    for (test, unpack, package, list, parse) in compression_engines
+    for (test, unpack, package, list, parse, symlink) in compression_engines
         if probe_cmd(`$test`; verbose=verbose)
             # Set our compression command generators
             gen_unpack_cmd = unpack
             gen_package_cmd = package
             gen_list_tarball_cmd = list
             parse_tarball_listing = parse
+            parse_symlinks = () -> symlink
 
             if verbose
                 @info("Found compression engine $(test.exec[1])")
@@ -493,6 +496,12 @@ by  `list_tarball_files`.
 """
 function parse_7z_list(output::AbstractString)
     lines = [chomp(l) for l in split(output, "\n")]
+
+    # If we didn't get anything, complain immediately
+    if isempty(lines)
+        return []
+    end
+
     # Remove extraneous "\r" for windows platforms
     for idx in 1:length(lines)
         if endswith(lines[idx], '\r')
@@ -500,11 +509,11 @@ function parse_7z_list(output::AbstractString)
         end
     end
 
-    # Find index of " Name". (can't use `findfirst(generator)` until this is
-    # closed: https://github.com/JuliaLang/julia/issues/16884
-    header_row = findall(occursin(" Name", l) && occursin(" Attr", l) for l in lines)[1]
-    name_idx = search(lines[header_row], "Name")[1]
-    attr_idx = search(lines[header_row], "Attr")[1] - 1
+    # Find index of " Name".  Have to `collect()` as `findfirst()` doesn't work with
+    # generators: https://github.com/JuliaLang/julia/issues/16884
+    header_row = findfirst(collect(occursin(" Name", l) && occursin(" Attr", l) for l in lines))
+    name_idx = findfirst("Name", lines[header_row])[1]
+    attr_idx = findfirst("Attr", lines[header_row])[1] - 1
 
     # Filter out only the names of files, ignoring directories
     lines = [l[name_idx:end] for l in lines if length(l) > name_idx && l[attr_idx] != 'D']
@@ -513,7 +522,7 @@ function parse_7z_list(output::AbstractString)
     end
 
     # Extract within the bounding lines of ------------
-    bounds = [i for i in 1:length(lines) if all([c for c in lines[i]] .== '-')]
+    bounds = [i for i in 1:length(lines) if all([c for c in lines[i]] .== Ref('-'))]
     lines = lines[bounds[1]+1:bounds[2]-1]
 
     # Eliminate `./` prefix, if it exists
@@ -666,6 +675,48 @@ function download_verify(url::AbstractString, hash::AbstractString,
     return !file_existed
 end
 
+function get_tarball_contents(path::AbstractString; verbose_tar::Bool = false)
+    if !isfile(path)
+        error("Tarball path $(path) does not exist")
+    end
+
+    # Run the listing command, then parse the output
+    cmd = gen_list_tarball_cmd(path; verbose=verbose_tar)
+    output = try
+        out_pipe = Pipe()
+        P = run(pipeline(cmd; stdout=out_pipe); wait=false)
+        close(out_pipe.in)
+        output = @async String(read(out_pipe))
+		wait(P)
+		fetch(output)
+    catch
+        error("Could not list contents of tarball $(path)")
+    end
+
+    return output
+end
+
+"""
+    list_tarball_files(path::AbstractString; verbose::Bool = false)
+
+Given a `.tar.gz` filepath, list the compressed contents.
+"""
+function list_tarball_files(tarball_path::AbstractString)
+    return parse_tarball_listing(get_tarball_contents(tarball_path))
+end
+
+"""
+    list_tarball_symlinks(path::AbstractString; verbose::Bool = false)
+
+Given a `.tar.gz` filepath, return a dictionary of symlinks in the archive
+"""
+function list_tarball_symlinks(tarball_path::AbstractString)
+    output = get_tarball_contents(tarball_path; verbose_tar = true)
+    mm = [m.captures for m in eachmatch(parse_symlinks(), output)]
+    symlinks = [m[1] => joinpath(dirname(m[1]), m[2]) for m in mm]
+    return symlinks
+end
+
 
 """
     unpack(tarball_path::AbstractString, dest::AbstractString;
@@ -724,8 +775,7 @@ function unpack(tarball_path::AbstractString, dest::AbstractString;
 end
 
 """
-    package(src_dir::AbstractString, tarball_path::AbstractString;
-            verbose::Bool = false)
+    package(src_dir::AbstractString, tarball_path::AbstractString)
 
 Compress `src_dir` into a tarball located at `tarball_path`.
 """
@@ -736,7 +786,7 @@ function package(src_dir::AbstractString, tarball_path::AbstractString)
     withenv("GZIP" => "-9") do
         cmd = gen_package_cmd(src_dir, tarball_path)
         try
-            run(cmd)
+            run(cmd, (devnull, devnull, devnull))
         catch e
             if isa(e, InterruptException)
                 rethrow()

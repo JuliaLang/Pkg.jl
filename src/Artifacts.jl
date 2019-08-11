@@ -6,7 +6,8 @@ import ..GitTools: tree_hash, set_readonly
 using ..BinaryPlatforms
 import ..TOML
 import ..Types: parse_toml, write_env_usage
-import ..PlatformEngines: download_verify_unpack, probe_platform_engines!, package
+using ..PlatformEngines
+using SHA
 
 export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
@@ -220,6 +221,8 @@ function archive_artifact(hash::SHA1, tarball_path::String)
         error("Unable to archive artifact $(bytes2hex(hash.bytes)): does not exist!")
     end
 
+    probe_platform_engines!()
+
     # Package it up
     package(artifact_path(hash), tarball_path)
 
@@ -243,7 +246,7 @@ function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
     end
 
     if !haskey(entry, "arch")
-        @warn("Invalid Artfiact.toml at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
+        @warn("Invalid Artifacts.toml at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
         return nothing
     end
 

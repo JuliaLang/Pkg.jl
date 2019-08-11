@@ -1,6 +1,6 @@
 module ArtifactTests
 
-using Test, Pkg.Artifacts, Pkg.BinaryPlatforms
+using Test, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform
 import Base: SHA1
 
@@ -57,6 +57,15 @@ include("utils.jl")
         meta = Dict()
         pack_platform!(meta, p)
         @test unpack_platform(meta, "foo", "<in-memory-Artifacts.toml>") == p
+
+        # Test that some things raise warnings
+        bad_meta = copy(meta)
+        delete!(bad_meta, "os")
+        @test_logs (:warn, r"Invalid Artifacts.toml") unpack_platform(bad_meta, "foo", "")
+
+        bad_meta = copy(meta)
+        delete!(bad_meta, "arch")
+        @test_logs (:warn, r"Invalid Artifacts.toml") unpack_platform(bad_meta, "foo", "")
     end
 end
 
@@ -224,6 +233,12 @@ end
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
         @test meta["download"][2]["sha256"] == "a"^64
     end
+
+    # Let's test some known-bad Artifacts.toml files
+    badifact_dir = joinpath(@__DIR__, "artifacts", "bad")
+    for artifacts_toml in [joinpath(badifact_dir, f) for f in readdir(badifact_dir) if endswith(f, ".toml")]
+        @test_logs (:warn, r"Invalid Artifacts.toml") artifact_meta("broken_artifact", artifacts_toml)
+    end
 end
 
 @testset "with_artifacts_directory()" begin
@@ -236,6 +251,22 @@ end
         end
     end
 end
+
+@testset "Artifact archival" begin
+    mktempdir() do art_dir
+        Pkg.Artifacts.with_artifacts_directory(art_dir) do
+            hash = create_artifact(p -> touch(joinpath(p, "foo")))
+            tarball_path = joinpath(art_dir, "foo.tar.gz")
+            archive_artifact(hash, tarball_path)
+            @test "foo" in list_tarball_files(tarball_path)
+
+            # Test archiving something that doesn't exist fails
+            remove_artifact(hash)
+            @test_throws ErrorException archive_artifact(hash, tarball_path)
+        end
+    end
+end
+
 
 @testset "Artifact Usage" begin
     # Do a quick little install of our ArtifactTOMLSearch example

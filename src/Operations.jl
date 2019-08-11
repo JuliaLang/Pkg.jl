@@ -471,20 +471,17 @@ function install_archive(
         archive_url !== nothing || continue
         path = tempname() * randstring(6) * ".tar.gz"
         url_success = true
-        cmd = PlatformEngines.gen_download_cmd(archive_url, path);
         try
-            run(cmd, (devnull, devnull, devnull))
+            PlatformEngines.download(archive_url, path; verbose=false)
         catch e
             e isa InterruptException && rethrow()
             url_success = false
         end
         url_success || continue
         dir = joinpath(tempdir(), randstring(12))
-        mkpath(dir)
-        cmd = PlatformEngines.gen_unpack_cmd(path, dir);
         # Might fail to extract an archive (Pkg#190)
         try
-            run(cmd, (devnull, devnull, devnull))
+            unpack(path, dir; verbose=false)
         catch e
             e isa InterruptException && rethrow()
             @warn "failed to extract archive downloaded from $(archive_url)"
@@ -581,7 +578,7 @@ end
 
 function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                         urls::Dict{UUID, Vector{String}}; readonly=true)
-    PlatformEngines.probe_platform_engines!()
+    probe_platform_engines!()
     new_pkgs = PackageSpec[]
 
     pkgs_to_install = Tuple{PackageSpec, String}[]

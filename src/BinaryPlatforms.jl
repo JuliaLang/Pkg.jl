@@ -1,6 +1,8 @@
 module BinaryPlatforms
 
-export platform_key_abi, platform_dlext, valid_dl_path, arch, libc, compiler_abi, libgfortran_version, libstdcxx_version, cxxstring_abi,
+export platform_key_abi, platform_dlext, valid_dl_path, arch, libc, compiler_abi,
+       libgfortran_version, libstdcxx_version, cxxstring_abi, parse_dl_name_version,
+       detect_libgfortran_version, detect_libstdcxx_version, detect_cxxstring_abi,
        call_abi, wordsize, triplet, select_platform, platforms_match,
        CompilerABI, Platform, UnknownPlatform, Linux, MacOS, Windows, FreeBSD
 import Base: show
@@ -126,6 +128,7 @@ function gcc_version(cabi::CompilerABI, GCC_versions::Vector{VersionNumber})
             # See https://gcc.gnu.org/onlinedocs/libstdc++/manual/abi.html
             # for the whole list, as well as many other interesting factoids.
             mapping = Dict(
+                19 => v"4.8.5",
                 20 => v"4.9.0",
                 21 => v"5.1.0",
                 22 => v"6.1.0",
