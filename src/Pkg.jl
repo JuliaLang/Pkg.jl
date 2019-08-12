@@ -269,12 +269,14 @@ const develop = API.develop
 const generate = API.generate
 
 """
-    Pkg.instantiate()
+    Pkg.instantiate(; verbose = false)
 
 If a `Manifest.toml` file exists in the current project, download all
 the packages declared in that manifest.
 Otherwise, resolve a set of feasible packages from the `Project.toml` files
 and install them.
+`verbose = true` prints the build output to `stdout`/`stderr` instead of
+redirecting to the `build.log` file.
 """
 const instantiate = API.instantiate
 

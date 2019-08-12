@@ -41,12 +41,13 @@ If `cmd` is a full command, display help for `cmd`.
     :option_spec => OptionDeclaration[
         [:name => "project", :short_name => "p", :api => :manifest => false],
         [:name => "manifest", :short_name => "m", :api => :manifest => true],
+        [:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
     :description => "downloads all the dependencies for the project",
     :help => md"""
-    instantiate
-    instantiate [-m|--manifest]
-    instantiate [-p|--project]
+    instantiate [-v|--verbose]
+    instantiate [-v|--verbose] [-m|--manifest]
+    instantiate [-v|--verbose] [-p|--project]
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.

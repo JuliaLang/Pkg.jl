@@ -459,7 +459,7 @@ end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
-                     update_registry::Bool=true, kwargs...)
+                     update_registry::Bool=true, verbose::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if (!isfile(ctx.env.manifest_file) && manifest == nothing) || manifest == false
         up(ctx; update_registry=update_registry)
@@ -494,7 +494,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         mv(tmp_source, sourcepath; force=true)
     end
     new_apply = Operations.download_source(ctx, pkgs)
-    Operations.build_versions(ctx, union(new_apply, new_git))
+    Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
 end
 
 
