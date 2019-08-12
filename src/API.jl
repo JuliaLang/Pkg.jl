@@ -836,13 +836,13 @@ function activate(path::AbstractString; shared::Bool=false)
     end
     return nothing
 end
-function activate(f::Function, args...; kwargs...)
-    p = Base.active_project()
+function activate(f::Function, new_project::AbstractString)
+    old = Base.ACTIVE_PROJECT[]
+    Base.ACTIVE_PROJECT[] = new_project
     try
-        Pkg.activate(args...; kwargs...)
         f()
     finally
-        Pkg.activate(p)
+        Base.ACTIVE_PROJECT[] = old
     end
 end
 
