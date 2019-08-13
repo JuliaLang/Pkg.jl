@@ -76,7 +76,11 @@ const ARTIFACTS_DIR_OVERRIDE = Ref{Union{String,Nothing}}(nothing)
 """
     with_artifacts_directory(f::Function, artifacts_dir::String)
 
-Helper function to allow temporarily changing the 'first-choice' artifact installation directory.
+Helper function to allow temporarily changing the artifact installation and search
+directory.  When this is set, no other directory will be searched for artifacts, and new
+artifacts will be installed within this directory.  Similarly, removing an artifact will
+only effect the given artifact directory.  To layer artifact installation locations, use
+the typical Julia depot path mechanism.
 """
 function with_artifacts_directory(f::Function, artifacts_dir::String)
     try
@@ -87,6 +91,13 @@ function with_artifacts_directory(f::Function, artifacts_dir::String)
     end
 end
 
+"""
+    artifacts_dirs(args...)
+
+Return a list of paths joined into all possible artifacts directories, as dictated by the
+current set of depot paths and the current artifact directory override via the method
+`with_artifacts_dir()`.
+"""
 function artifacts_dirs(args...)
     if ARTIFACTS_DIR_OVERRIDE[] === nothing
         return [abspath(depot, "artifacts", args...) for depot in depots()]
@@ -94,6 +105,148 @@ function artifacts_dirs(args...)
         # If we've been given an override, use _only_ that directory.
         return [abspath(ARTIFACTS_DIR_OVERRIDE[], args...)]
     end
+end
+
+"""
+    ARTIFACT_OVERRIDES
+
+Artifact locations can be overridden by writing `Override.toml` files within the artifact
+directories of Pkg depots.  For example, in the default depot `~/.julia`, one may create
+a `~/.julia/artifacts/Override.toml` file with the following contents:
+
+    78f35e74ff113f02274ce60dab6e92b4546ef806 = "/path/to/replacement"
+    c76f8cda85f83a06d17de6c57aabf9e294eb2537 = "fb886e813a4aed4147d5979fcdf27457d20aa35d"
+
+    [d57dbccd-ca19-4d82-b9b8-9d660942965b]
+    c_simple = "/path/to/c_simple_dir"
+    libfoo = "fb886e813a4aed4147d5979fcdf27457d20aa35d""
+
+This file defines four overrides; two which override specific artifacts identified
+through their content hashes, two which override artifacts based on their bound names
+within a particular package's UUID.  In both cases, there are two different targets of
+the override: overriding to an on-disk location through an absolutet path, and
+overriding to another artifact by its content-hash.
+"""
+global ARTIFACT_OVERRIDES = Ref{Union{Dict,Nothing}}(nothing)
+function load_overrides(;force::Bool = false)
+    if ARTIFACT_OVERRIDES[] != nothing && !force
+        return ARTIFACT_OVERRIDES[]
+    end
+
+    # We organize our artifact location overrides into two camps:
+    #  - overrides per UUID with artifact names mapped to a new location
+    #  - overrides per hash, mapped to a new location.
+    #
+    # Overrides per UUID/bound name are intercepted upon Artifacts.toml load, and new
+    # entries within the "hash" overrides are generated on-the-fly.  Thus, all redirects
+    # mechanisticly happen through the "hash" overrides.
+    overrides = Dict(
+        # Overrides by UUID
+        :UUID => Dict{Base.UUID,Dict{String,Union{String,SHA1}}}(),
+
+        # Overrides by hash
+        :hash => Dict{SHA1,Union{String,SHA1}}(),
+    )
+
+    for override_file in reverse(artifacts_dirs("Overrides.toml"))
+        !isfile(override_file) && continue
+
+        # Load the toml file
+        depot_override_dict = parse_toml(override_file)
+
+        function parse_mapping(mapping::String, name::String)
+            if !isabspath(mapping) && !isempty(mapping)
+                try
+                    mapping = Base.SHA1(mapping)
+                catch e
+                    @warn("Invalid override in '$(override_file)': entry '$(name)' must map to an absolute path or SHA1 hash!")
+                    rethrow()
+                end
+            end
+            return mapping
+        end
+        function parse_mapping(mapping::Dict, name::String)
+            return Dict(k => parse_mapping(v, name) for (k, v) in mapping)
+        end
+
+        for (k, mapping) in depot_override_dict
+            # First, parse the mapping. Is it an absolute path, a valid SHA1-hash, or neither?
+            try
+                mapping = parse_mapping(mapping, k)
+            catch
+                @warn("Invalid override in '$(override_file)': failed to parse entry `$(k)`")
+                continue
+            end
+
+            # Next, determine if this is a hash override or a UUID/name override
+            if isa(mapping, String) || isa(mapping, SHA1)
+                # if this mapping is a direct mapping (e.g. a String), store it as a hash override
+                hash = try
+                    Base.SHA1(hex2bytes(k))
+                catch
+                    @warn("Invalid override in '$(override_file)': Invalid SHA1 hash '$(k)'")
+                    continue
+                end
+
+                # If this mapping is the empty string, un-override it
+                if mapping == ""
+                    delete!(overrides[:hash], hash)
+                else
+                    overrides[:hash][hash] = mapping
+                end
+            elseif isa(mapping, Dict)
+                # Convert `k` into a uuid
+                uuid = try
+                    Base.UUID(k)
+                catch
+                    @warn("Invalid override in '$(override_file)': Invalid UUID '$(k)'")
+                    continue
+                end
+
+                # If this mapping is itself a dict, store it as a set of UUID/artifact name overrides
+                if !haskey(overrides[:UUID], uuid)
+                    overrides[:UUID][uuid] = Dict{String,Union{String,SHA1}}()
+                end
+
+                # For each name in the mapping, update appropriately
+                for name in keys(mapping)
+                    # If the mapping for this name is the empty string, un-override it
+                    if mapping[name] == ""
+                        delete!(overrides[:UUID][uuid], name)
+                    else
+                        # Otherwise, store it!
+                        overrides[:UUID][uuid][name] = mapping[name]
+                    end
+                end
+            else
+                @warn("Invalid override in '$(override_file)': entry '$(k)' must be a string or a dictionary")
+                continue
+            end
+        end
+    end
+
+    ARTIFACT_OVERRIDES[] = overrides
+end
+
+# Helpers to map an override to an actual path
+map_override_path(x::String) = x
+map_override_path(x::SHA1) = artifact_path(x)
+map_override_path(x::Nothing) = nothing
+
+"""
+    query_override(hash::SHA1; overrides::Dict = load_overrides())
+
+Query the loaded `<DEPOT>/artifacts/Overrides.toml` settings for artifacts that should be
+redirected to a particular path or another content-hash.
+"""
+function query_override(hash::SHA1; overrides::Dict = load_overrides())
+    return map_override_path(get(overrides[:hash], hash, nothing))
+end
+function query_override(pkg::Base.UUID, artifact_name::String; overrides::Dict = load_overrides())
+    if haskey(overrides[:UUID], pkg)
+        return map_override_path(get(overrides[:UUID][pkg], artifact_name, nothing))
+    end
+    return nothing
 end
 
 """
@@ -120,11 +273,16 @@ function create_artifact(f::Function)
 
         # If we created a dupe, just let the temp directory get destroyed. It's got the
         # same contents as whatever already exists after all, so it doesn't matter.  Only
-        # move its contents if it actually contains new contents.
-        if !artifact_exists(artifact_hash)
+        # move its contents if it actually contains new contents.  Note that we explicitly
+        # set `honor_overrides=false` here, as we wouldn't want to drop things into the
+        # system directory by accidentally creating something with the same content-hash
+        # as something that was foolishly overridden.  This should be virtually impossible
+        # unless the user has been very unwise, but let's be cautious.
+        new_path = artifact_path(artifact_hash; honor_overrides=false)
+        if !isdir(new_path)
             # Move this generated directory to its final destination, set it to read-only
-            mv(temp_dir, artifact_path(artifact_hash))
-            set_readonly(artifact_path(artifact_hash))
+            mv(temp_dir, new_path)
+            set_readonly(new_path)
         end
 
         # Give the people what they want
@@ -136,23 +294,33 @@ function create_artifact(f::Function)
 end
 
 """
-    artifact_paths(hash::SHA1)
+    artifact_paths(hash::SHA1; honor_overrides::Bool=true)
 
 Return all possible paths for an artifact given the current list of depots as returned
 by `Pkg.depots()`.  It is very likely that only some of these exist.
 """
-artifact_paths(hash::SHA1) = artifacts_dirs(bytes2hex(hash.bytes))
+function artifact_paths(hash::SHA1; honor_overrides::Bool=true)
+    # First, check to see if we've got an override:
+    if honor_overrides
+        override = query_override(hash)
+        if override != nothing
+            return [override]
+        end
+    end
+
+    return artifacts_dirs(bytes2hex(hash.bytes))
+end
 
 """
-    artifact_path(hash::SHA1)
+    artifact_path(hash::SHA1; honor_overrides::Bool=true)
 
 Given an artifact (identified by SHA1 git tree hash), return its installation path.  If
 the artifact does not exist, returns the location it would be installed to.  If
 `force_
 """
-function artifact_path(hash::SHA1)
+function artifact_path(hash::SHA1; honor_overrides::Bool=true)
     # Get all possible paths (rooted in all depots)
-    possible_paths = artifact_paths(hash)
+    possible_paths = artifact_paths(hash; honor_overrides=honor_overrides)
 
     # Find the first path that exists and return it
     for p in possible_paths
@@ -166,57 +334,77 @@ function artifact_path(hash::SHA1)
 end
 
 """
-    artifact_exists(hash::SHA1)
+    artifact_exists(hash::SHA1; honor_overrides::Bool=true)
 
 Returns whether or not the given artifact (identified by its sha1 git tree hash) exists
 on-disk.  Note that it is possible that the given artifact exists in multiple locations
 (e.g. within multiple depots).
 """
-artifact_exists(hash::SHA1) = any(isdir.(artifact_paths(hash)))
+function artifact_exists(hash::SHA1; honor_overrides::Bool=true)
+    return any(isdir.(artifact_paths(hash; honor_overrides=honor_overrides)))
+end
 
 """
-    remove_artifact(hash::SHA1; first_only::Bool = false)
+    remove_artifact(hash::SHA1; honor_overrides::Bool=false)
 
 Removes the given artifact (identified by its SHA1 git tree hash) from disk.  Note that
-if an artifact is installed in multiple depots, it will be removed from all of them
-unless `first_only` is set to `true`, in which case only the first found artifact is
-removed.
+if an artifact is installed in multiple depots, it will be removed from all of them.  If
+an overridden artifact is requested for removal, it will be silently ignored; this method
+will never attempt to remove an overridden artifact.
 """
-function remove_artifact(hash::SHA1; first_only::Bool = false)
+function remove_artifact(hash::SHA1)
+    if query_override(hash) != nothing
+        # We never remove overridden artifacts.
+        return
+    end
+
     # Get all possible paths (rooted in all depots)
     possible_paths = artifacts_dirs(bytes2hex(hash.bytes))
     for path in possible_paths
         if isdir(path)
             rm(path; recursive=true, force=true)
-
-            # If we're asked to only remove one, then break out
-            first_only && break
         end
     end
 end
 
 """
-    verify_artifact(hash::SHA1)
+    verify_artifact(hash::SHA1; honor_overrides::Bool=false)
 
 Verifies that the given artifact (identified by its SHA1 git tree hash) is installed on-
-disk, and retains its integrity. 
+disk, and retains its integrity.  If the given artifact is overridden, skips the
+verification unless `honor_overrides` is set to `true`.
 """
-function verify_artifact(hash::SHA1)
+function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
+    # Silently skip overridden artifacts unless we really ask for it
+    if !honor_overrides
+        if query_override(hash) != nothing
+            return true
+        end
+    end
+
+    # If it doesn't even exist, then skip out
     if !artifact_exists(hash)
         return false
     end
 
+    # Otherwise actually run the verification
     return hash.bytes == tree_hash(artifact_path(hash))
 end
 
 """
-    archive_artifact(hash::SHA1, tarball_path::String)
+    archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
 
-Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256
-of the resultant tarball, as a hexidecimal string.
-Throws an error if the artifact does not exist.
+Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256 of the
+resultant tarball as a hexidecimal string. Throws an error if the artifact does not
+exist.  If the artifact is overridden, throws an error unless `honor_overrides` is set.
 """
-function archive_artifact(hash::SHA1, tarball_path::String)
+function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
+    if !honor_overrides
+        if query_override(hash) != nothing
+            error("Will not archive an overridden artifact unless `honor_overrides` is set!")
+        end
+    end
+
     if !artifact_exists(hash)
         error("Unable to archive artifact $(bytes2hex(hash.bytes)): does not exist!")
     end
@@ -307,21 +495,63 @@ function pack_platform!(meta::Dict, p::Platform)
 end
 
 """
+    load_artifacts_toml(artifacts_toml::String;
+                        pkg_uuid::Union{UUID,Nothing}=nothing)
+
+Loads an `Artifacts.toml` file from disk.  If `pkg_uuid` is set to the `UUID` of the
+owning package, UUID/name overrides stored in a depot `Overrides.toml` will be resolved.
+"""
+function load_artifacts_toml(artifacts_toml::String;
+                             pkg_uuid::Union{Base.UUID,Nothing} = nothing)
+    artifact_dict = parse_toml(artifacts_toml)
+
+    # Insert just-in-time hash overrides by looking up the names of anything we need to
+    # override for this UUID, and inserting new overrides for those hashes.
+    overrides = load_overrides()
+    if pkg_uuid != nothing && haskey(overrides[:UUID], pkg_uuid)
+        pkg_overrides = overrides[:UUID][pkg_uuid]
+
+        for name in keys(artifact_dict)
+            # Skip names that we're not overriding
+            if !haskey(pkg_overrides, name)
+                continue
+            end
+
+            # If we've got a platform-specific friend, override all hashes:
+            if isa(artifact_dict[name], Array)
+                for entry in artifact_dict[name]
+                    hash = SHA1(entry["git-tree-sha1"])
+                    overrides[:hash][hash] = overrides[:UUID][pkg_uuid][name]
+                end
+            elseif isa(artifact_dict[name], Dict)
+                hash = SHA1(artifact_dict[name]["git-tree-sha1"])
+                overrides[:hash][hash] = overrides[:UUID][pkg_uuid][name]
+            end
+        end
+    end
+
+    return artifact_dict
+end
+
+"""
     artifact_meta(name::String, artifacts_toml::String;
-                  platform::Platform = platform_key_abi())
+                  platform::Platform = platform_key_abi(),
+                  pkg_uuid::Union{Base.UUID,Nothing}=nothing)
 
 Get metadata about a given artifact (identified by name) stored within the given
 `Artifacts.toml` file.  If the artifact is platform-specific, use `platform` to choose the
 most appropriate mapping.  If none is found, return `nothing`.
 """
 function artifact_meta(name::String, artifacts_toml::String;
-                       platform::Platform = platform_key_abi())
+                       platform::Platform = platform_key_abi(),
+                       pkg_uuid::Union{Base.UUID,Nothing}=nothing)
     if !isfile(artifacts_toml)
         return nothing
     end
 
-    # Parse the toml for the 
-    return artifact_meta(name, parse_toml(artifacts_toml), artifacts_toml; platform=platform)
+    # Parse the toml of the artifacts_toml file
+    artifact_dict = load_artifacts_toml(artifacts_toml; pkg_uuid=pkg_uuid)
+    return artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
 end
 
 function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String;
@@ -358,7 +588,8 @@ Thin wrapper around `artifact_meta()` to return the hash of the specified, platf
 collapsed artifact.  Returns `nothing` if no mapping can be found.
 """
 function artifact_hash(name::String, artifacts_toml::String;
-                       platform::Platform = platform_key_abi())
+                       platform::Platform = platform_key_abi(),
+                       pkg_uuid::Union{Base.UUID,Nothing}=nothing)
     meta = artifact_meta(name, artifacts_toml; platform=platform)
     if meta === nothing
         return nothing
@@ -551,22 +782,24 @@ end
 
 """
     ensure_artifact_installed(name::String, artifacts_toml::String;
-                              platform::Platform = platform_key_abi())
+                              platform::Platform = platform_key_abi(),
+                              pkg_uuid::Union{Base.UUID,Nothing}=nothing)
 
 Ensures an artifact is installed, downloading it via the download information stored in
 `artifacts_toml` if necessary.  Throws an error if unable to install.
 """
 function ensure_artifact_installed(name::String, artifacts_toml::String;
-                                   platform::Platform = platform_key_abi())
-    meta = artifact_meta(name, artifacts_toml)
+                                   platform::Platform = platform_key_abi(),
+                                   pkg_uuid::Union{Base.UUID,Nothing}=nothing)
+    meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
     end
 
-    return ensure_artifact_installed(name, meta; platform=platform)
+    return ensure_artifact_installed(name, meta, artifacts_toml; platform=platform)
 end
 
-function ensure_artifact_installed(name::String, meta::Dict;
+function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::String;
                                    platform::Platform = platform_key_abi())
     hash = SHA1(meta["git-tree-sha1"])
 
@@ -594,25 +827,29 @@ end
 
 """
     ensure_all_artifacts_installed(artifacts_toml::String;
-                                   platform = platform_key_abi())
+                                   platform = platform_key_abi(),
+                                   package_uuid = nothing)
 
-Installs all non-lazy artifacts from a given `Artifacts.toml` file.
+Installs all non-lazy artifacts from a given `Artifacts.toml` file.  `package_uuid` must
+be provided to properly support overrides from `Overrides.toml` entries in depots.
 """
 function ensure_all_artifacts_installed(artifacts_toml::String;
-                                        platform::Platform = platform_key_abi())
+                                        platform::Platform = platform_key_abi(),
+                                        pkg_uuid::Union{Nothing,Base.UUID} = nothing)
     if !isfile(artifacts_toml)
         return
     end
-    artifact_dict = parse_toml(artifacts_toml)
+    artifact_dict = load_artifacts_toml(artifacts_toml; pkg_uuid=pkg_uuid)
 
     for name in keys(artifact_dict)
         meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
         hash = SHA1(meta["git-tree-sha1"])
+
         if artifact_exists(hash) || !haskey(meta, "download") || get(meta, "lazy", false)
             continue
         end
 
-        ensure_artifact_installed(name, meta; platform=platform)
+        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform)
     end
 end
 
@@ -637,8 +874,13 @@ macro artifact_str(name)
             ))
         end
 
+        local pkg_uuid = nothing
+        if haskey(Base.module_keys, $(__module__))
+            pkg_uuid = Base.module_keys[$(__module__)].uuid
+        end
+
         # This is the resultant value at the end of all things
-        $(ensure_artifact_installed)($(esc(name)), artifacts_toml)
+        $(ensure_artifact_installed)($(esc(name)), artifacts_toml; pkg_uuid=pkg_uuid)
     end
 end
 

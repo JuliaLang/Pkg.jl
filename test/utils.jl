@@ -156,6 +156,7 @@ function copy_test_package(tmpdir::String, name::String)
     end
 end
 function add_test_package(name::String, uuid::UUID)
+    test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
     spec = Pkg.Types.PackageSpec(
         name=name,
         uuid=uuid,

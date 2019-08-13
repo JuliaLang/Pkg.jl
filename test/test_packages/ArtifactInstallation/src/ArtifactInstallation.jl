@@ -1,5 +1,6 @@
 module ArtifactInstallation
 using Pkg.Artifacts, Test, Libdl
+export do_test
 
 function do_test()
     # First, check that `"c_simple"` is installed automatically

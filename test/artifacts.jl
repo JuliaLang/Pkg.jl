@@ -1,10 +1,21 @@
 module ArtifactTests
 
 using Test, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
-import Pkg.Artifacts: pack_platform!, unpack_platform
+import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory
+using Pkg.TOML
 import Base: SHA1
 
 include("utils.jl")
+
+# Helper function to create an artifact, then chmod() the whole thing to 0o755.  This is
+# important to keep hashes stable across platforms that have different umasks, changing
+# the permissions within a tree hash, breaking our tests.
+function create_artifact_chmod(f::Function)
+    create_artifact() do path
+        f(path)
+        chmod(path, 0o755; recursive=true)
+    end
+end
 
 @testset "Serialization Tools" begin
     # First, some basic tests
@@ -77,7 +88,6 @@ end
             open(joinpath(path, "foo"), "w") do io
                 print(io, "Hello, world!")
             end
-            chmod(path, 0o755; recursive=true)
         end, "12d608198abb00873cab63f54abbfa4b6176cdc6"),
 
         # Next we will test creating multiple files
@@ -88,7 +98,6 @@ end
             open(joinpath(path, "foo2"), "w") do io
                 print(io, "world!")
             end
-            chmod(path, 0o755; recursive=true)
         end, "5ffd6c27b06f413a5829e44ebc72356ef35dcc5a"),
 
         # Finally, we will have nested directories and all that good stuff
@@ -103,7 +112,6 @@ end
             open(joinpath(path, "foo3"), "w") do io
                 print(io, "baz!")
             end
-            chmod(path, 0o755; recursive=true)
         end, "82d49cf70690ea5cab519986313828eb03ba8358"),
     ]
 
@@ -125,7 +133,7 @@ end
 
     for (creator, known_hash) in creators
         # Create artifact
-        hash = create_artifact(creator)
+        hash = create_artifact_chmod(creator)
         
         # Ensure it hashes to the correct gitsha:
         @test hash.bytes == hex2bytes(known_hash)
@@ -243,7 +251,7 @@ end
 
 @testset "with_artifacts_directory()" begin
     mktempdir() do art_dir
-        Pkg.Artifacts.with_artifacts_directory(art_dir) do
+        with_artifacts_directory(art_dir) do
             hash = create_artifact() do path
                 touch(joinpath(path, "foo"))
             end
@@ -254,7 +262,7 @@ end
 
 @testset "Artifact archival" begin
     mktempdir() do art_dir
-        Pkg.Artifacts.with_artifacts_directory(art_dir) do
+        with_artifacts_directory(art_dir) do
             hash = create_artifact(p -> touch(joinpath(p, "foo")))
             tarball_path = joinpath(art_dir, "foo.tar.gz")
             archive_artifact(hash, tarball_path)
@@ -287,32 +295,30 @@ end
         Pkg.test("ArtifactInstallation")
 
         # Also manually do it
-        @eval begin
+        Core.eval(Module(:__anon__), quote
             using ArtifactInstallation
-            @test ArtifactInstallation.do_test()
-        end
+            do_test()
+        end)
     end
 end
 
 @testset "Artifact GC collect delay" begin
     temp_pkg_dir() do tmpdir
-        live_hash = create_artifact() do path
+        live_hash = create_artifact_chmod() do path
             open(joinpath(path, "README.md"), "w") do io
                 print(io, "I will not go quietly into that dark night.")
             end
             open(joinpath(path, "binary.data"), "w") do io
                 write(io, rand(UInt8, 1024))
             end
-            chmod(path, 0o755; recursive=true)
         end
-        die_hash = create_artifact() do path
+        die_hash = create_artifact_chmod() do path
             open(joinpath(path, "README.md"), "w") do io
                 print(io, "Let me sleep!")
             end
             open(joinpath(path, "binary.data"), "w") do io
                 write(io, rand(UInt8, 1024))
             end
-            chmod(path, 0o755; recursive=true)
         end
 
         # We have created two separate artifacts
@@ -371,6 +377,145 @@ end
         Pkg.gc(;collect_delay=0)
         @test !artifact_exists(live_hash)
         @test !artifact_exists(die_hash)
+    end
+end
+
+@testset "Override.toml" begin
+    # We are going to test artifact overrides by creating an overlapping set of depots,
+    # each with some artifacts installed within, then checking via things like
+    # `artifact_path()` to ensure that our overrides are actually working.
+
+    mktempdir() do depot_container
+        depot1 = joinpath(depot_container, "depot1")
+        depot2 = joinpath(depot_container, "depot2")
+        depot3 = joinpath(depot_container, "depot3")
+
+        make_foo(dir) = open(io -> print(io, "foo"), joinpath(dir, "foo"), "w")
+        make_bar(dir) = open(io -> print(io, "bar"), joinpath(dir, "bar"), "w")
+        make_baz(dir) = open(io -> print(io, "baz"), joinpath(dir, "baz"), "w")
+
+        foo_hash = SHA1("2bedb51a2f1b5796969d803f64520fe034be6e5e")
+        bar_hash = SHA1("7e9375e9850a500c540e7ead2d639b01c4ae4cc6")
+        baz_hash = SHA1("1b9dcacdfd8732dab21d839207a3a0eb28bc23a4")
+
+        # First, create artifacts in each depot, with some overlap
+        with_artifacts_directory(joinpath(depot3, "artifacts")) do
+            @test create_artifact_chmod(make_foo) == foo_hash
+            @test create_artifact_chmod(make_bar) == bar_hash
+            @test create_artifact_chmod(make_baz) == baz_hash
+        end
+        with_artifacts_directory(joinpath(depot2, "artifacts")) do
+            @test create_artifact_chmod(make_bar) == bar_hash
+            @test create_artifact_chmod(make_baz) == baz_hash
+        end
+        with_artifacts_directory(joinpath(depot1, "artifacts")) do
+            @test create_artifact_chmod(make_baz) == baz_hash
+        end
+
+        # Next, set up our depot path, with `depot1` as the "innermost" depot. 
+        old_depot_path = DEPOT_PATH
+        empty!(DEPOT_PATH)
+        append!(DEPOT_PATH, [depot1, depot2, depot3])
+
+        # First sanity check; does our depot path searching code actually work properly?
+        @test startswith(artifact_path(foo_hash), depot3)
+        @test startswith(artifact_path(bar_hash), depot2)
+        @test startswith(artifact_path(baz_hash), depot1)
+
+        # Our `test/test_packages/ArtifactOverrideLoading` package contains some artifacts
+        # that will not load unless they are properly overridden
+        aol_uuid = Base.UUID("7b879065-7f74-5fa4-bdd5-9b7a15df8941")
+
+        # Create an arbitrary absolute path for `barty`
+        barty_override_path = abspath(joinpath(depot_container, "a_wild_barty_appears"))
+        mkpath(barty_override_path)
+
+        # Next, let's start spitting out some Overrides.toml files.  We'll make
+        # one in `depot2`, then eventually create one in `depot1` to override these
+        # overrides!
+        open(joinpath(depot2, "artifacts", "Overrides.toml"), "w") do io
+            overrides = Dict(
+                # Override baz_hash to point to `bar_hash`
+                bytes2hex(baz_hash.bytes) => bytes2hex(bar_hash.bytes),
+
+                # Override "ArtifactOverrideLoading.arty" to point to `bar_hash` as well.
+                # Override "ArtifactOverrideLoading.barty" to point to a location on disk
+                string(aol_uuid) => Dict(
+                    "arty" => bytes2hex(bar_hash.bytes),
+                    "barty" => barty_override_path,
+                )
+            )
+            TOML.print(io, overrides)
+        end
+
+        # Force Pkg to reload what it knows about artifact overrides
+        Pkg.Artifacts.load_overrides(;force=true)
+
+        # Verify that the hash-based override worked
+        @test artifact_path(baz_hash) == artifact_path(bar_hash)
+        @test !endswith(artifact_path(baz_hash), bytes2hex(baz_hash.bytes))
+
+        # Verify that the name-based override worked; extract paths from module that
+        # loads overridden package artifacts.
+        Pkg.activate(depot_container) do
+            copy_test_package(depot_container, "ArtifactOverrideLoading")
+            add_this_pkg()
+            Pkg.add(Pkg.Types.PackageSpec(
+                name="ArtifactOverrideLoading",
+                uuid=aol_uuid,
+                path=joinpath(depot_container, "ArtifactOverrideLoading"),
+            ))
+
+            (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
+                using ArtifactOverrideLoading
+                arty_path, barty_path
+            end)
+        
+            @test arty_path == artifact_path(bar_hash)
+            @test barty_path == barty_override_path
+        end
+
+        # Excellent.  Let's add another Overrides.toml, this time in `depot1`, to muck
+        # with the two overrides we put in previously, as well as `foo_hash`.
+        open(joinpath(depot1, "artifacts", "Overrides.toml"), "w") do io
+            overrides = Dict(
+                # Override `foo` to an absolute path, then remove all overrides on `baz`
+                bytes2hex(foo_hash.bytes) => barty_override_path,
+                bytes2hex(baz_hash.bytes) => "",
+
+                # Override "ArtifactOverrideLoading.arty" to point to `barty_override_path` as well.
+                string(aol_uuid) => Dict(
+                    "arty" => barty_override_path,
+                )
+            )
+            TOML.print(io, overrides)
+        end
+
+        # Force Pkg to reload what it knows about artifact overrides
+        Pkg.Artifacts.load_overrides(;force=true)
+
+        # Force Julia to re-load ArtifactOverrideLoading from scratch
+        pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
+        delete!(Base.loaded_modules, pkgid)
+
+        # Verify that the hash-based overrides (and clears) worked
+        @test artifact_path(foo_hash) == barty_override_path
+        @test endswith(artifact_path(baz_hash), bytes2hex(baz_hash.bytes))
+
+        # Verify that the name-based override worked; extract paths from module that
+        # loads overridden package artifacts.
+        Pkg.activate(depot_container) do
+            (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
+                using ArtifactOverrideLoading
+                arty_path, barty_path
+            end)
+
+            @test arty_path == barty_override_path
+            @test barty_path == barty_override_path
+        end
+
+        empty!(DEPOT_PATH)
+        append!(DEPOT_PATH, old_depot_path)
     end
 end
 
