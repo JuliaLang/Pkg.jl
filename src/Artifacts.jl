@@ -13,65 +13,6 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
        find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact
 
-## Philosophy of Artifacts:
-#
-# - At the lowest level, artifacts are content-addressed chunks of data.  Similarly to
-#   how packages are identified by UUIDs but have human-readable mappings through the
-#   registry, artifacts are identified by their SHA1 git tree hashes, but have human-
-#   readable mappings through `Artifacts.toml` files.
-#
-# - Artifacts do not _need_ to have names bound to them; they are first and foremost
-#   identified by their tree hash.  A name is merely a pointer to a hash, and the hash
-#   itself is what is used in all operations except the initial lookup.
-#
-# - A single name can be associated with multiple hashes, where one is chosen at runtime.
-#   The canonical example of this is platform-dependent artifacts.  At `Artifacts.toml`
-#   parse-time one of the list of hashes will be chosen as the best match for the
-#   current environment (Julia version, OS, processor architecture, etc...), and note
-#   that it is acceptable for there to be multiple possible choices (e.g. an AVX2-
-#   optimized build and a generic x86_64 build that will both run on a modern processor),
-#   however one single hash will be stably chosen from the multiple possibilities.
-#
-# - Artifacts can be created on-machine through the `create()` functional API, and can
-#   also be downloaded as tarballs from external webservers by embedding information into
-#   the `Artifacts.toml` file.  This can be done programmatically through the
-#   `bind_artifact!()` function.
-
-
-# Levels of API:
-#
-# - Base level:
-#   - create_artifact(): given no information, simply creates an artifact through a user-provided
-#     callback and returns the hash of the resultant file.
-#
-# - Hash level:
-#   - artifact_exists(hash): returns true if the hash exists on disk, false otherwise
-#   - artifact_path(hash):   returns the path to a hash on disk, throws if it does not exist
-#   - remove_artifact(hash): deletes `artifact_path(hash)` if it exists, does nothing otherwise.
-#   - verify_artifact(hash): verifies that the artifact maintains integrity on-disk.
-#   - archive_artifact(hash, out_path): compresses an artifact into a tarball.
-#
-# - Name level:
-#   - artifact_meta(name, toml_path; platform): returns a `Dict` of the metadata stored
-#     within a given `Artifacts.toml` file, including things like URL, platform, etc...
-#     If the artifact is a multi-map due to being platform-specific, chooses the best
-#     match among its options. Returns `nothing` if no appropriate mapping exists.
-#   - artifact_hash(args...; kwargs...): returns the hash of the requested name mapping
-#     via `artifact_meta(args...; kwargs...)["git-tree-sha1"]`, or similar.
-#   - bind_artifact!(name, hash, toml_path; platform): builds a mapping from `name` to
-#     `hash` within the given `Artifacts.toml` file.  Optionally sets this as a platform-
-#     specific artifact.
-#   - unbind_artifact!(name, toml_path; platform): deletes a mapping previously bound.
-#   - download_artifact(hash, url, tarball_hash): downloads an artifact from a given URL
-#     to the artifact store.
-#   - ensure_artifact_installed(name, toml_path; platform): Wrapper around
-#     `download_artifact()`, does the lookups and loop around multiple download URLs.
-#
-# - Utilities:
-#   - find_artifacts_toml(path): Attempts to find the Artifacts.toml that exists for a
-#     given source path.  Returns `nothing` if none could be found.
-
-
 const ARTIFACTS_DIR_OVERRIDE = Ref{Union{String,Nothing}}(nothing)
 """
     with_artifacts_directory(f::Function, artifacts_dir::String)
@@ -297,7 +238,7 @@ end
     artifact_paths(hash::SHA1; honor_overrides::Bool=true)
 
 Return all possible paths for an artifact given the current list of depots as returned
-by `Pkg.depots()`.  It is very likely that only some of these exist.
+by `Pkg.depots()`.  All, some or none of these paths may exist on disk.
 """
 function artifact_paths(hash::SHA1; honor_overrides::Bool=true)
     # First, check to see if we've got an override:
@@ -315,8 +256,7 @@ end
     artifact_path(hash::SHA1; honor_overrides::Bool=true)
 
 Given an artifact (identified by SHA1 git tree hash), return its installation path.  If
-the artifact does not exist, returns the location it would be installed to.  If
-`force_
+the artifact does not exist, returns the location it would be installed to.
 """
 function artifact_path(hash::SHA1; honor_overrides::Bool=true)
     # Get all possible paths (rooted in all depots)
@@ -351,6 +291,10 @@ Removes the given artifact (identified by its SHA1 git tree hash) from disk.  No
 if an artifact is installed in multiple depots, it will be removed from all of them.  If
 an overridden artifact is requested for removal, it will be silently ignored; this method
 will never attempt to remove an overridden artifact.
+
+In general, we recommend that you use `Pkg.gc()` to manage artifact installations and do
+not use `remove_artifact()` directly, as it can be difficult to know if an artifact is
+being used by another package.
 """
 function remove_artifact(hash::SHA1)
     if query_override(hash) != nothing
