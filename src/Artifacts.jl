@@ -68,7 +68,7 @@ within a particular package's UUID.  In both cases, there are two different targ
 the override: overriding to an on-disk location through an absolutet path, and
 overriding to another artifact by its content-hash.
 """
-global ARTIFACT_OVERRIDES = Ref{Union{Dict,Nothing}}(nothing)
+const ARTIFACT_OVERRIDES = Ref{Union{Dict,Nothing}}(nothing)
 function load_overrides(;force::Bool = false)
     if ARTIFACT_OVERRIDES[] != nothing && !force
         return ARTIFACT_OVERRIDES[]
