@@ -262,8 +262,10 @@ once used will inevitably become old and not used from any existing project.
 `Pkg` keeps a log of all projects used so it can go through the log and see exactly which projects still exist
 and what packages/artifacts those projects used.
 If a package or artifact is not marked as used by any project, it is added to a list of orphaned packages.
-Packages and artifacts that are in the orphan list for 30 consecutive days are deleted from the system.
-This timing is configurable via the `collect_delay` keyword argument to `Pkg.gc()` (With a value of `0` uninstalling everything immediately).
+Packages and artifacts that are in the orphan list for 30 days without being used again are deleted from the system on the next garbage collection.
+This timing is configurable via the `collect_delay` keyword argument to `Pkg.gc()`.
+A value of `0` will cause anything currently not in use immediately, skipping the orphans list entirely;
+If you are short on disk space and want to clean out as many unused packages and artifacts as possible, you may want to try this, but if you need these versions again, you will have to download them again.
 To run a typical garbage collection with default arguments, simply use the `gc` command at the `pkg>` REPL:
 
 ```

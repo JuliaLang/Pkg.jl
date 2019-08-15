@@ -1,13 +1,13 @@
 # [**8.** Artifacts](@id Artifacts)
 
-`Pkg` can reason about containers of binary data that are not Julia packages.  These chunks of data can contain platform-specific binaries, datasets, text, or any other kind of data that would be convenient to place within an immutable, lifecycled datastore.
+`Pkg` can install and manage containers of data that are not Julia packages.  These containers can contain platform-specific binaries, datasets, text, or any other kind of data that would be convenient to place within an immutable, life-cycled datastore.
 These containers, (called "Artifacts") can be created locally, hosted anywhere, and automatically downloaded and unpacked upon installation of your Julia package.
-They are used to provide the binary dependencies for packages built with [`BinaryBuilder.jl`](https://github.com/JuliaPackaging/BinaryBuilder.jl).
+This mechanism is also used to provide the binary dependencies for packages built with [`BinaryBuilder.jl`](https://github.com/JuliaPackaging/BinaryBuilder.jl).
 
 ## `Artifacts.toml` files
 
-`Pkg` provides an API for working with artifacts, as well as a TOML file format for recording artifact usage in your packages, and to make automatic downloading of artifacts at package install time.
-Artifacts are referred to by content-hash, or optionally by a name that is bound to a hash through an `Artifacts.toml` file.
+`Pkg` provides an API for working with artifacts, as well as a TOML file format for recording artifact usage in your packages, and to automate downloading of artifacts at package install time.
+Artifacts can always be referred to by content hash, but are typically accessed by a name that is bound to a content hash in an `Artifacts.toml` file that lives in a project's source tree.
 An example `Artifacts.toml` file is shown here as an example:
 
 ```TOML
@@ -69,8 +69,12 @@ Artifacts can be manipulated using convenient APIs exposed from the `Pkg.Artifac
 As a motivating example, let us imagine that we are writing a package that needs to load the [Iris machine learning dataset](https://archive.ics.uci.edu/ml/datasets/iris).
 While we could just download the dataset during a build step into the package directory, and many packages currently do precisely this, that has some significant drawbacks:
 
-* First, it modifies the package directory, making package installation stateful, which we'd like to avoid.  In the future, we would like to reach the point where packages can be installed completely read-only, instead of being able to modify themselves after installation.
-* Second, the downloaded data is not shared across different versions of our package. If we have three different versions of the package installed for use by various projects, then we need three different copies of the data, even if it hasn't changed between those versions. Moreover, each time we upgrade or downgrade the package, unless we do something clever (and probably brittle), we will have to download the data again.
+* First, it modifies the package directory, making package installation stateful, which we want to avoid.
+  In the future, we would like to reach the point where packages can be installed completely read-only, instead of being able to modify themselves after installation.
+
+* Second, the downloaded data is not shared across different versions of our package.
+  If we have three different versions of the package installed for use by various projects, then we need three different copies of the data, even if it hasn't changed between those versions.
+  Moreover, each time we upgrade or downgrade the package, unless we do something clever (and probably brittle), we have to download the data again.
 
 With artifacts, we will instead check to see if our `iris` artifact already exists on-disk and only if it doesn't will we download and install it, after which we can bind the result into our `Artifacts.toml` file:
 
@@ -132,11 +136,12 @@ For a full listing of docstrings and methods, see the [Artifacts Reference](@ref
 
 ## Overriding artifact locations
 
-It is occasionally convenient to be able to override the location of an artifact.
-A common usecase is a restrictive computing environment where certain versions of a binary dependency must be used.
+It is occasionally necessary to be able to override the location and content of an artifact.
+A common use case is a computing environment where certain versions of a binary dependency must be used, regardless of what version of this dependency a package was published with.
 While a typical Julia configuration would download, unpack and link against a generic library, a system administrator may wish to disable this and instead use a library already installed on the local machine.
 To enable this, `Pkg` supports a per-depot `Overrides.toml` file placed within the `artifacts` depot directory (e.g. `~/.julia/artifacts/Overrides.toml` for the default user depot) that can override the location of an artifact either by content-hash or by package UUID and bound artifact name.
-Additionally, the destination location can be either an absolute path, or a new artifact content-hash, to support sysadmins in creating new, custom artifacts, then overriding other packages to use that new artifact.
+Additionally, the destination location can be either an absolute path, or a replacement artifact content hash.
+This allows sysadmins to create their own artifacts which they can then use by overriding other packages to use the new artifact.
 
 ```TOML
 # Override single hash to absolute path
