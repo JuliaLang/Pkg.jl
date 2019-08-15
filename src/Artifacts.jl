@@ -100,7 +100,7 @@ function load_overrides(;force::Bool = false)
                 try
                     mapping = Base.SHA1(mapping)
                 catch e
-                    @warn("Invalid override in '$(override_file)': entry '$(name)' must map to an absolute path or SHA1 hash!")
+                    @error("Invalid override in '$(override_file)': entry '$(name)' must map to an absolute path or SHA1 hash!")
                     rethrow()
                 end
             end
@@ -115,7 +115,7 @@ function load_overrides(;force::Bool = false)
             try
                 mapping = parse_mapping(mapping, k)
             catch
-                @warn("Invalid override in '$(override_file)': failed to parse entry `$(k)`")
+                @error("Invalid override in '$(override_file)': failed to parse entry `$(k)`")
                 continue
             end
 
@@ -125,7 +125,7 @@ function load_overrides(;force::Bool = false)
                 hash = try
                     Base.SHA1(hex2bytes(k))
                 catch
-                    @warn("Invalid override in '$(override_file)': Invalid SHA1 hash '$(k)'")
+                    @error("Invalid override in '$(override_file)': Invalid SHA1 hash '$(k)'")
                     continue
                 end
 
@@ -140,7 +140,7 @@ function load_overrides(;force::Bool = false)
                 uuid = try
                     Base.UUID(k)
                 catch
-                    @warn("Invalid override in '$(override_file)': Invalid UUID '$(k)'")
+                    @error("Invalid override in '$(override_file)': Invalid UUID '$(k)'")
                     continue
                 end
 
@@ -160,7 +160,7 @@ function load_overrides(;force::Bool = false)
                     end
                 end
             else
-                @warn("Invalid override in '$(override_file)': entry '$(k)' must be a string or a dictionary")
+                @error("Invalid override in '$(override_file)': entry '$(k)' must be a string or a dictionary")
                 continue
             end
         end
@@ -373,12 +373,12 @@ returns the `Platform` object that this entry specifies.  Returns `nothing` on e
 """
 function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
     if !haskey(entry, "os")
-        @warn("Invalid Artifacts.toml at '$(artifacts_toml)': platform-specific artifact entry '$name' missing 'os' key")
+        @error("Invalid Artifacts.toml at '$(artifacts_toml)': platform-specific artifact entry '$name' missing 'os' key")
         return nothing
     end
 
     if !haskey(entry, "arch")
-        @warn("Invalid Artifacts.toml at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
+        @error("Invalid Artifacts.toml at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
         return nothing
     end
 
@@ -511,13 +511,13 @@ function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String
         meta = select_platform(dl_dict, platform)
     # If it's NOT a dict, complain
     elseif !isa(meta, Dict)
-        @warn("Invalid Artifacts.toml at $(artifacts_toml): artifact '$name' malformed, must be array or dict!")
+        @error("Invalid Artifacts.toml at $(artifacts_toml): artifact '$name' malformed, must be array or dict!")
         return nothing
     end
 
     # This is such a no-no, we are going to call it out right here, right now.
     if meta != nothing && !haskey(meta, "git-tree-sha1")
-        @warn("Invalid Artifacts.toml at $(artifacts_toml): artifact '$name' contains no `git-tree-sha1`!")
+        @error("Invalid Artifacts.toml at $(artifacts_toml): artifact '$name' contains no `git-tree-sha1`!")
         return nothing
     end
 
