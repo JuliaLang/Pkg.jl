@@ -159,9 +159,6 @@ function load_overrides(;force::Bool = false)
                         overrides[:UUID][uuid][name] = mapping[name]
                     end
                 end
-            else
-                @error("Invalid override in '$(override_file)': entry '$(k)' must be a string or a dictionary")
-                continue
             end
         end
     end

@@ -72,11 +72,11 @@ end
         # Test that some things raise warnings
         bad_meta = copy(meta)
         delete!(bad_meta, "os")
-        @test_logs (:warn, r"Invalid Artifacts.toml") unpack_platform(bad_meta, "foo", "")
+        @test_logs (:error, r"Invalid Artifacts.toml") unpack_platform(bad_meta, "foo", "")
 
         bad_meta = copy(meta)
         delete!(bad_meta, "arch")
-        @test_logs (:warn, r"Invalid Artifacts.toml") unpack_platform(bad_meta, "foo", "")
+        @test_logs (:error, r"Invalid Artifacts.toml") unpack_platform(bad_meta, "foo", "")
     end
 end
 
@@ -245,7 +245,7 @@ end
     # Let's test some known-bad Artifacts.toml files
     badifact_dir = joinpath(@__DIR__, "artifacts", "bad")
     for artifacts_toml in [joinpath(badifact_dir, f) for f in readdir(badifact_dir) if endswith(f, ".toml")]
-        @test_logs (:warn, r"Invalid Artifacts.toml") artifact_meta("broken_artifact", artifacts_toml)
+        @test_logs (:error, r"Invalid Artifacts.toml") artifact_meta("broken_artifact", artifacts_toml)
     end
 end
 
@@ -514,6 +514,31 @@ end
             @test barty_path == barty_override_path
         end
 
+        # Finally, let's test some invalid overrides:
+        function test_invalid_override(overrides::Dict, msg)
+            open(joinpath(depot1, "artifacts", "Overrides.toml"), "w") do io
+                TOML.print(io, overrides)
+            end
+            @test_logs (:error, msg) match_mode=:any Pkg.Artifacts.load_overrides(;force=true)
+        end
+
+        # Mapping to a non-absolute path or SHA1 hash
+        test_invalid_override(
+            Dict("0"^40 => "invalid override target"),
+            r"must map to an absolute path or SHA1 hash!",
+        )
+        test_invalid_override(
+            Dict("0"^41 => "1"^40),
+            r"Invalid SHA1 hash",
+        )
+        test_invalid_override(
+            Dict("invalid UUID" => Dict("0"^40 => "1"^40)),
+            r"Invalid UUID",
+        )
+        test_invalid_override(
+            Dict("0"^40 => ["not", "a", "string", "or", "dict"]),
+            r"failed to parse entry",
+        )
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
     end
