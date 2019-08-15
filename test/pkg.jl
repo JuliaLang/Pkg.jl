@@ -6,6 +6,7 @@ import Random: randstring
 import LibGit2
 using Test
 using UUIDs
+using Dates
 
 using Pkg
 using Pkg.Types
@@ -135,11 +136,11 @@ temp_pkg_dir() do project_path
         pkgdir = joinpath(Pkg.depots1(), "packages")
 
         # Test to ensure that with a long enough collect_delay, nothing gets reaped
-        Pkg.gc(;collect_delay=1000)
+        Pkg.gc(;collect_delay=Day(1000))
         @test !isempty(readdir(pkgdir))
 
         # Setting collect_delay to zero causes it to be reaped immediately, howeveage
-        Pkg.gc(;collect_delay=0)
+        Pkg.gc(;collect_delay=Second(0))
         @test isempty(readdir(pkgdir))
     end
 

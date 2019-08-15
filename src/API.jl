@@ -263,7 +263,7 @@ function __installed(mode::PackageMode=PKGMODE_MANIFEST)
 end
 
 """
-    gc(ctx::Context=Context(); kwargs...)
+    gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
@@ -271,13 +271,10 @@ finding artifacts and packages that are thereafter not used by any other project
 method will only remove package versions and artifacts that have been continually un-used
 for a period of `collect_delay`; which defaults to thirty days.
 """
-function gc(ctx::Context=Context(); collect_delay=60*60*24*30, kwargs...)
+function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
     Context!(ctx; kwargs...)
     ctx.preview && preview_info()
     env = ctx.env
-
-    # Convert to a DateTime immediately, offering millisecond resolution
-    collect_delay = Millisecond(round(Int64,1000*collect_delay))
 
     # First, we load in our `manifest_usage.toml` files which will tell us when our
     # "index files" (`Manifest.toml`, `Artifacts.toml`) were last used.  We will combine
@@ -494,7 +491,7 @@ function gc(ctx::Context=Context(); collect_delay=60*60*24*30, kwargs...)
     for depot in depots()
         # We track orphaned objects on a per-depot basis, writing out our `orphaned.toml`
         # tracking file immediately, only pushing onto the overall `*_to_delete` lists if
-        # the package has been orphaned for at least `collect_delay` seconds.
+        # the package has been orphaned for at least a period of `collect_delay`
         depot_orphaned_packages = String[]
         depot_orphaned_artifacts = String[]
 

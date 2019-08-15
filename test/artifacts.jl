@@ -2,7 +2,7 @@ module ArtifactTests
 
 using Test, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory
-using Pkg.TOML
+using Pkg.TOML, Dates
 import Base: SHA1
 
 include("utils.jl")
@@ -359,7 +359,7 @@ end
         # This should reap the `die_hash` immediately, as it has already been moved to
         # the orphaned list.
         sleep(0.2)
-        Pkg.gc(;collect_delay=0.1)
+        Pkg.gc(;collect_delay=Millisecond(100))
         @test artifact_exists(live_hash)
         @test !artifact_exists(die_hash)
 
@@ -374,7 +374,7 @@ end
         # Next, unbind the live_hash, then run with collect_delay=0, and ensure that
         # things are cleaned up immediately.
         unbind_artifact!(artifacts_toml, "live")
-        Pkg.gc(;collect_delay=0)
+        Pkg.gc(;collect_delay=Second(0))
         @test !artifact_exists(live_hash)
         @test !artifact_exists(die_hash)
     end
