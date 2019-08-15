@@ -277,8 +277,8 @@ To run a typical garbage collection with default arguments, simply use the `gc` 
     Active artifacts:
         `~/src/MyProject/Artifacts.toml`
 
-   Deleted /Users/kristoffer/.julia/packages/BenchmarkTools/1cAj: 146.302 KiB
-   Deleted /Users/kristoffer/.julia/packages/Cassette/BXVB: 795.557 KiB
+    Deleted ~/.julia/packages/BenchmarkTools/1cAj: 146.302 KiB
+    Deleted ~/.julia/packages/Cassette/BXVB: 795.557 KiB
    ...
    Deleted `~/.julia/artifacts/e44cdf2579a92ad5cbacd1cddb7414c8b9d2e24e` (152.253 KiB)
    Deleted `~/.julia/artifacts/f2df5266567842bbb8a06acca56bcabf813cd73f` (21.536 MiB)

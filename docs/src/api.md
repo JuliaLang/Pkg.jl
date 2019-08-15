@@ -54,7 +54,7 @@ Pkg.Registry.status
 ## [Artifacts API Reference](@id Artifacts-Reference)
 
 !!! compat "Julia 1.3"
-    Pkg's artifacts API requires at least Julia 1.3
+    Pkg's artifacts API requires at least Julia 1.3.
 
 ```@docs
 Pkg.Artifacts.create_artifact
