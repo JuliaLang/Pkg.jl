@@ -1,4 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
+import Pkg
 
 function temp_pkg_dir(fn::Function;rm=true)
     local env_dir
@@ -138,5 +139,39 @@ function git_init_package(tmp, path)
     return pkgpath
 end
 
-copy_test_package(tmpdir::String, name::String) =
+function copy_test_package(tmpdir::String, name::String)
     cp(joinpath(@__DIR__, "test_packages", name), joinpath(tmpdir, name))
+
+    # The known Pkg UUID, and whatever UUID we're currently using for testing
+    known_pkg_uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+    pkg_uuid = Pkg.TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["uuid"]
+
+    # We usually want this test package to load our pkg, so update its Pkg UUID:
+    test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
+    for f in ("Manifest.toml", "Project.toml")
+        fpath = joinpath(tmpdir, name, f)
+        if isfile(fpath)
+            write(fpath, replace(read(fpath, String), known_pkg_uuid => pkg_uuid))
+        end
+    end
+end
+function add_test_package(name::String, uuid::UUID)
+    test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
+    spec = Pkg.Types.PackageSpec(
+        name=name,
+        uuid=uuid,
+        path=test_pkg_dir,
+    )
+    Pkg.add(spec)
+end
+
+function add_this_pkg()
+    pkg_dir = dirname(@__DIR__)
+    pkg_uuid = Pkg.TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
+    spec = Pkg.Types.PackageSpec(
+        name="Pkg",
+        uuid=UUID(pkg_uuid),
+        path=pkg_dir,
+    )
+    Pkg.develop(spec)
+end

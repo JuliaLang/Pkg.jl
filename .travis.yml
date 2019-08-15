@@ -1,7 +1,9 @@
 language: julia
 
 julia:
-  - 1.0
+  - 1.1
+  - 1.2
+  - 1.3
   - nightly
 
 os:
@@ -31,8 +33,8 @@ stages:
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia --project --check-bounds=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"));
-                                           import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
+  - julia --project -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"));'
+  - julia --project --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
 
 jobs:
   include:

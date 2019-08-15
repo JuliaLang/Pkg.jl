@@ -1,4 +1,4 @@
-# [**11.** API Reference](@id API-Reference)
+# [**12.** API Reference](@id API-Reference)
 
 This section describes the function interface, or "API mode",
 for interacting with Pkg.jl. The function API is recommended
@@ -49,4 +49,27 @@ Pkg.Registry.add
 Pkg.Registry.rm
 Pkg.Registry.update
 Pkg.Registry.status
+```
+
+## [Artifacts API Reference](@id Artifacts-Reference)
+
+!!! compat "Julia 1.3"
+    Pkg's artifacts API requires at least Julia 1.3.
+
+```@docs
+Pkg.Artifacts.create_artifact
+Pkg.Artifacts.artifact_exists
+Pkg.Artifacts.artifact_path
+Pkg.Artifacts.remove_artifact
+Pkg.Artifacts.verify_artifact
+Pkg.Artifacts.artifact_meta
+Pkg.Artifacts.artifact_hash
+Pkg.Artifacts.bind_artifact!
+Pkg.Artifacts.unbind_artifact!
+Pkg.Artifacts.download_artifact
+Pkg.Artifacts.find_artifacts_toml
+Pkg.Artifacts.ensure_artifact_installed
+Pkg.Artifacts.ensure_all_artifacts_installed
+Pkg.Artifacts.@artifact_str
+Pkg.Artifacts.archive_artifact
 ```

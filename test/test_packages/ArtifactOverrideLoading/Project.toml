@@ -1,0 +1,6 @@
+name = "ArtifactOverrideLoading"
+uuid = "9f5278ee-142d-5d9a-9723-c4aebaa272e1"
+version = "0.1.0"
+
+[deps]
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"

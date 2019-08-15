@@ -28,11 +28,12 @@ makedocs(
         "creating-packages.md",
         "compatibility.md",
         "registries.md",
+        "artifacts.md",
         # "faq.md",
         "glossary.md",
         "toml-files.md",
         "repl.md",
-        "api.md"
+        "api.md",
     ],
 )
 

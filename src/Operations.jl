@@ -8,8 +8,10 @@ import LibGit2
 
 import REPL
 using REPL.TerminalMenus
-using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..BinaryProvider, ..GitTools, ..Display
+using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
+import ..Artifacts: ensure_all_artifacts_installed
+using ..BinaryPlatforms
 import ..Pkg
 
 
@@ -94,17 +96,6 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
         entry.deps = load_deps(ctx, pkg)
         ctx.env.manifest[pkg.uuid] = entry
     end
-end
-
-function set_readonly(path)
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            filepath = joinpath(root, file)
-            fmode = filemode(filepath)
-            chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
-        end
-    end
-    return nothing
 end
 
 ####################
@@ -480,20 +471,17 @@ function install_archive(
         archive_url !== nothing || continue
         path = tempname() * randstring(6) * ".tar.gz"
         url_success = true
-        cmd = BinaryProvider.gen_download_cmd(archive_url, path);
         try
-            run(cmd, (devnull, devnull, devnull))
+            PlatformEngines.download(archive_url, path; verbose=false)
         catch e
             e isa InterruptException && rethrow()
             url_success = false
         end
         url_success || continue
         dir = joinpath(tempdir(), randstring(12))
-        mkpath(dir)
-        cmd = BinaryProvider.gen_unpack_cmd(path, dir);
         # Might fail to extract an archive (Pkg#190)
         try
-            run(cmd, (devnull, devnull, devnull))
+            unpack(path, dir; verbose=false)
         catch e
             e isa InterruptException && rethrow()
             @warn "failed to extract archive downloaded from $(archive_url)"
@@ -568,6 +556,19 @@ function install_git(
     end
 end
 
+function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
+                            platform::Platform=platform_key_abi())
+    for pkg in pkgs
+        path = source_path(pkg)
+        # Check to see if this package has an Artifacts.toml
+        artifacts_toml = joinpath(path, "Artifacts.toml")
+        if isfile(artifacts_toml)
+            ensure_all_artifacts_installed(artifacts_toml; platform=platform)
+            write_env_usage(artifacts_toml, "artifact_usage.toml")
+        end
+    end
+end
+
 # install & update manifest
 function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
     pkgs = filter(tracking_registered_version, pkgs)
@@ -577,15 +578,15 @@ end
 
 function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                         urls::Dict{UUID, Vector{String}}; readonly=true)
-    BinaryProvider.probe_platform_engines!()
-    new_versions = UUID[]
+    probe_platform_engines!()
+    new_pkgs = PackageSpec[]
 
     pkgs_to_install = Tuple{PackageSpec, String}[]
     for pkg in pkgs
         path = source_path(pkg)
         ispath(path) && continue
         push!(pkgs_to_install, (pkg, path))
-        push!(new_versions, pkg.uuid)
+        push!(new_pkgs, pkg)
     end
 
     widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
@@ -656,7 +657,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
         printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
 
-    return new_versions
+    return new_pkgs
 end
 
 ################################
@@ -960,7 +961,8 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bool=false)
+function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
+             strict::Bool=false, platform::Platform=platform_key_abi())
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -975,13 +977,18 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[]; strict::Bo
     update_manifest!(ctx, pkgs)
     # TODO is it still necessary to prune? I don't think so..
     new_apply = download_source(ctx, pkgs)
+
+    # After downloading resolutionary packages, search for Artifacts.toml files
+    # and ensure they are all downloaded and unpacked as well:
+    download_artifacts(ctx, pkgs; platform=platform)
+
     write_env(ctx) # write env before building
-    build_versions(ctx, union(new_apply, new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
-                 strict::Bool=false)
+                 strict::Bool=false, platform::Platform=platform_key_abi())
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
@@ -994,8 +1001,10 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=false)
+    download_artifacts(ctx, pkgs; platform=platform)
+
     write_env(ctx) # write env before building
-    build_versions(ctx, union(new_apply, new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
 # load version constraint
@@ -1057,8 +1066,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     prune_manifest(ctx.env)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
+    download_artifacts(ctx, pkgs)
     write_env(ctx) # write env before building
-    build_versions(ctx, union(new_apply, new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
     # TODO what to do about repo packages?
 end
 
@@ -1090,8 +1100,9 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     update_manifest!(ctx, pkgs)
 
     new = download_source(ctx, pkgs)
+    download_artifacts(ctx, pkgs)
     write_env(ctx) # write env before building
-    build_versions(ctx, new)
+    build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
 
 update_package_free!(ctx::Context, pkg::PackageSpec, ::Nothing) =
@@ -1134,8 +1145,9 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         resolve_versions!(ctx, pkgs)
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
+        download_artifacts(ctx, new)
         write_env(ctx) # write env before building
-        build_versions(ctx, new)
+        build_versions(ctx, UUID[pkg.uuid for pkg in new])
     else
         foreach(pkg -> manifest_info(ctx.env, pkg.uuid).pinned = false, pkgs)
         write_env(ctx)

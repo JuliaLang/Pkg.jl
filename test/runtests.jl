@@ -2,7 +2,10 @@
 
 module PkgTests
 
+include("utils.jl")
 include("pkg.jl")
+include("binaryplatforms.jl")
+include("platformengines.jl")
 include("sandbox.jl")
 include("resolve.jl")
 

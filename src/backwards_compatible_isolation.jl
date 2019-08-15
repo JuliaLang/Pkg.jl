@@ -222,7 +222,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}; mode=:add, upda
 end
 
 function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UUID,SHA1}, urls::Dict{UUID,Vector{String}}; mode=:add, update=true)
-    BinaryProvider.probe_platform_engines!()
+    probe_platform_engines!()
     new_versions = UUID[]
 
     pkgs_to_install = Tuple{PackageSpec, String}[]

@@ -8,6 +8,8 @@ version = "1.2.0"
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
+Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"

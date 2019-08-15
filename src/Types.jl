@@ -13,6 +13,7 @@ using REPL.TerminalMenus
 using ..TOML
 import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 import Pkg: GitTools, depots, depots1, logdir
+import ..BinaryPlatforms: Platform
 
 import Base: SHA1
 using SHA
@@ -20,7 +21,7 @@ using SHA
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
     PackageSpec, EnvCache, Context, GitRepo, Context!, get_deps,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, write_env, parse_toml, find_registered!,
+    PkgError, pkgerror, has_name, has_uuid, is_stdlib, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
@@ -111,6 +112,20 @@ struct PkgError <: Exception
 end
 pkgerror(msg::String...) = throw(PkgError(join(msg)))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
+
+
+############
+# Artifact #
+############
+Base.@kwdef struct Artifact
+    name::Union{String,Nothing} = nothing
+    url::Union{String,Nothing} = nothing
+    tree_hash::Union{SHA1,Nothing} = nothing
+    tarball_hash::Union{Vector{UInt8},Nothing} = nothing
+    extract::Bool = false
+    filename::Union{String,Nothing} = nothing
+    platform::Union{Platform,Nothing} = nothing
+end
 
 
 ###############
@@ -331,7 +346,7 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     manifest_file = project.manifest !== nothing ?
         abspath(project.manifest) :
         manifestfile_path(dir)
-    write_env_usage(manifest_file)
+    write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
     uuids = Dict{String,Vector{UUID}}()
     paths = Dict{UUID,Vector{String}}()
@@ -437,15 +452,18 @@ function project_compatibility(ctx::Context, name::String)
     return compat === nothing ? VersionSpec() : VersionSpec(semver_spec(compat))
 end
 
-function write_env_usage(manifest_file::AbstractString)
+function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
     !ispath(logdir()) && mkpath(logdir())
-    usage_file = joinpath(logdir(), "manifest_usage.toml")
+    usage_file = joinpath(logdir(), usage_filepath)
     touch(usage_file)
-    !isfile(manifest_file) && return
-    # Do not rewrite as do syntax (no longer precompilable)
+
+    # Don't record ghost usage
+    !isfile(source_file) && return
+
+    # Do not rewrite as do-block syntax (no longer precompilable)
     io = open(usage_file, "a")
     print(io, """
-    [[$(repr(manifest_file))]]
+    [[$(repr(source_file))]]
     time = $(now())Z
     """)
     close(io)

@@ -257,23 +257,34 @@ shell> cat ~/.julia/packages/MbedTLS/h1Vu/deps/build.log
 ```
 ## Garbage collecting old, unused packages
 
-As packages are updated and projects are deleted, installed packages that were once used will inevitably
-become old and not used from any existing project.
-Pkg keeps a log of all projects used so it can go through the log and see exactly which projects still exist
-and what packages those projects used. The rest can be deleted.
-This is done with the `gc` command:
+As packages are updated and projects are deleted, installed package versions and artifacts that were
+once used will inevitably become old and not used from any existing project.
+`Pkg` keeps a log of all projects used so it can go through the log and see exactly which projects still exist
+and what packages/artifacts those projects used.
+If a package or artifact is not marked as used by any project, it is added to a list of orphaned packages.
+Packages and artifacts that are in the orphan list for 30 days without being used again are deleted from the system on the next garbage collection.
+This timing is configurable via the `collect_delay` keyword argument to `Pkg.gc()`.
+A value of `0` will cause anything currently not in use immediately, skipping the orphans list entirely;
+If you are short on disk space and want to clean out as many unused packages and artifacts as possible, you may want to try this, but if you need these versions again, you will have to download them again.
+To run a typical garbage collection with default arguments, simply use the `gc` command at the `pkg>` REPL:
 
 ```
 (v1.0) pkg> gc
     Active manifests at:
-        `/Users/kristoffer/BinaryProvider/Manifest.toml`
+        `~/BinaryProvider/Manifest.toml`
         ...
-        `/Users/kristoffer/Compat.jl/Manifest.toml`
-   Deleted /Users/kristoffer/.julia/packages/BenchmarkTools/1cAj: 146.302 KiB
-   Deleted /Users/kristoffer/.julia/packages/Cassette/BXVB: 795.557 KiB
+        `~/Compat.jl/Manifest.toml`
+    Active artifacts:
+        `~/src/MyProject/Artifacts.toml`
+
+    Deleted ~/.julia/packages/BenchmarkTools/1cAj: 146.302 KiB
+    Deleted ~/.julia/packages/Cassette/BXVB: 795.557 KiB
    ...
-   Deleted /Users/kristoffer/.julia/packages/WeakRefStrings/YrK6: 27.328 KiB
-   Deleted 36 package installations: 113.205 MiB
+   Deleted `~/.julia/artifacts/e44cdf2579a92ad5cbacd1cddb7414c8b9d2e24e` (152.253 KiB)
+   Deleted `~/.julia/artifacts/f2df5266567842bbb8a06acca56bcabf813cd73f` (21.536 MiB)
+
+   Deleted 36 package installations (113.205 MiB)
+   Deleted 15 artifact installations (20.759 GiB)
 ```
 
 Note that only packages in `~/.julia/packages` are deleted.
