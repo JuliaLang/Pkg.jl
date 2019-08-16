@@ -73,7 +73,7 @@ function load_all_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Bool=t
     load_direct_deps!(ctx, pkgs; version=version)
 end
 
-function is_instanitated(ctx::Context)::Bool
+function is_instantiated(ctx::Context)::Bool
     # Load everything
     pkgs = PackageSpec[]
     Operations.load_all_deps!(ctx, pkgs)
