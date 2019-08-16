@@ -209,7 +209,7 @@ function probe_platform_engines!(;verbose::Bool = false)
         return (path; verbose = false) ->
             pipeline(`$exe7z x $path -so`, `$exe7z l -ttar -y -si $(verbose ? ["-slt"] : [])`)
     end
-    
+
     # the regex at the last position is meant for parsing the symlinks from verbose 7z-listing
     # "Path = ([^\r\n]+)\r?\n" matches the symlink name which is followed by an optional return and a new line
     # (?:[^\r\n]+\r?\n)+ = a group of non-empty lines (information belonging to one file is written as a block of lines followed by an empty line)
@@ -435,7 +435,7 @@ function probe_platform_engines!(;verbose::Bool = false)
         if probe_cmd(`$test`; verbose=verbose)
             # Set our download command generator
             gen_download_cmd = (url, out_path) ->
-                dl_func(Base.download_url(url), out_path)
+                dl_func(isdefined(Base, :download_url) ? Base.download_url(url) : url, out_path)
             download_found = true
 
             if verbose
