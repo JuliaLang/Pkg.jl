@@ -258,8 +258,9 @@ temp_pkg_dir() do project_path
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
                 try
-                    Pkg.setprotocol!(domain = "github.com", protocol = "notarealprotocol")
-                    @test_throws PkgError Pkg.develop("Example")
+                    # Test below commented out because it is really slow, https://github.com/JuliaLang/Pkg.jl/issues/1291
+                    #Pkg.setprotocol!(domain = "github.com", protocol = "notarealprotocol")
+                    #@test_throws PkgError Pkg.develop("Example")
                     Pkg.setprotocol!(domain = "github.com", protocol = "https")
                     Pkg.develop("Example")
                     @test isinstalled(TEST_PKG)
