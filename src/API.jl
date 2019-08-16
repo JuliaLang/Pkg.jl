@@ -729,7 +729,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
                  " Finally, run `Pkg.instantiate()` again.")
     end
-    Operations.is_instanitated(ctx) && return
+    Operations.is_instantiated(ctx) && return
     Types.update_registries(ctx)
     pkgs = PackageSpec[]
     Operations.load_all_deps!(ctx, pkgs)
