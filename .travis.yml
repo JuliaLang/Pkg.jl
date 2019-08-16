@@ -1,8 +1,7 @@
 language: julia
 
 julia:
-  - 1.0
-  - nightly
+  - 1.1
 
 os:
   - linux
@@ -37,7 +36,7 @@ script:
 jobs:
   include:
     - stage: docs
-      julia: nightly
+      julia: 1.1
       os: linux
       script:
         - julia -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"))'
