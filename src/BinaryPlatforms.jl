@@ -389,7 +389,7 @@ Get the word size for the given `Platform` object.
 
 # Examples
 ```jldoctest
-julia> wordsize(Linux(:arm7vl))
+julia> wordsize(Linux(:armv7l))
 32
 
 julia> wordsize(MacOS())
@@ -412,7 +412,7 @@ julia> triplet(MacOS())
 julia> triplet(Windows(:i686))
 "i686-w64-mingw32"
 
-julia> triplet(Linux(:armv7l, :default_libc, :default_abi, CompilerABI(;libgfortran_version=v"3"))
+julia> triplet(Linux(:armv7l; compiler_abi=CompilerABI(;libgfortran_version=v"3")))
 "arm-linux-gnueabihf-libgfortran3"
 ```
 """
