@@ -434,7 +434,8 @@ function probe_platform_engines!(;verbose::Bool = false)
     for (test, dl_func) in download_engines
         if probe_cmd(`$test`; verbose=verbose)
             # Set our download command generator
-            gen_download_cmd = dl_func
+            gen_download_cmd = (url, out_path) ->
+                dl_func(Base.download_url(url), out_path)
             download_found = true
 
             if verbose
