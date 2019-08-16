@@ -341,7 +341,6 @@ julia> libc(Linux(:aarch64))
 :glibc
 
 julia> libc(FreeBSD(:x86_64))
-:default_libc
 ```
 """
 libc(p::Platform) = p.libc
