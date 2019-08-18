@@ -670,14 +670,34 @@ function download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::S
         return true
     end
 
+    # Ensure that we're ready to download things
     probe_platform_engines!()
 
-    return download_verify_unpack(
-        tarball_url,
-        tarball_hash,
-        artifact_path(tree_hash),
-        verbose=verbose,
-    )
+    # We download by using `create_artifact()`.  We do this because the download may
+    # be corrupted or even malicious; we don't want to clobber someone else's artifact
+    # by trusting the tree hash that has been given to us; we will instead download it
+    # to a temporary directory, calculate the true tree hash, then move it to the proper
+    # location only after knowing what it is, and if something goes wrong in the process,
+    # everything should be cleaned up.  Luckily, that is precisely what our
+    # `create_artifact()` wrapper does, so we use that here.
+    calc_hash = try
+        create_artifact() do dir
+            download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose)
+        end
+    catch e
+        # If something went wrong during download, return false
+        return false
+    end
+
+    # Did we get what we expected?  If not, freak out.
+    if calc_hash.bytes != tree_hash.bytes
+        msg  = "Tree Hash Mismatch!\n"
+        msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
+        msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+        @error(msg)
+        return false
+    end
+    return true
 end
 
 """
