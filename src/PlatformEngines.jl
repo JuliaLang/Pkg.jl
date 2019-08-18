@@ -623,34 +623,19 @@ function download_verify(url::AbstractString, hash::AbstractString,
 
         # verify download, if it passes, return happy.  If it fails, (and
         # `force` is `true`, re-download!)
-        try
-            verify(dest, hash; verbose=verbose)
+        if verify(dest, hash; verbose=verbose)
             return true
-        catch e
-            if isa(e, InterruptException)
-                rethrow()
-            end
-            if !force
-                rethrow()
-            end
-            if verbose
-                @info("Verification failed, re-downloading...")
-            end
+        elseif !force
+            error("Verification failed, not overwriting $(dest)")
         end
     end
 
     # Make sure the containing folder exists
     mkpath(dirname(dest))
 
-    try
-        # Download the file, optionally continuing
-        download(url, dest; verbose=verbose || !quiet_download)
-
-        verify(dest, hash; verbose=verbose)
-    catch e
-        if isa(e, InterruptException)
-            rethrow()
-        end
+    # Download the file, optionally continuing
+    download(url, dest; verbose=verbose || !quiet_download)
+    if !verify(dest, hash; verbose=verbose)
         # If the file already existed, it's possible the initially downloaded chunk
         # was bad.  If verification fails after downloading, auto-delete the file
         # and start over from scratch.
@@ -662,11 +647,13 @@ function download_verify(url::AbstractString, hash::AbstractString,
 
             # Download and verify from scratch
             download(url, dest; verbose=verbose || !quiet_download)
-            verify(dest, hash; verbose=verbose)
+            if !verify(dest, hash; verbose=verbose)
+                error("Verification failed")
+            end
         else
             # If it didn't verify properly and we didn't resume, something is
             # very wrong and we must complain mightily.
-            rethrow()
+            error("Verification failed")
         end
     end
 
@@ -907,15 +894,14 @@ end
            verbose::Bool = false, report_cache_status::Bool = false)
 
 Given a file `path` and a `hash`, calculate the SHA256 of the file and compare
-it to `hash`.  If an error occurs, `verify()` will throw an error.  This method
-caches verification results in a `"\$(path).sha256"` file to accelerate re-
-verification of files that have been previously verified.  If no `".sha256"`
-file exists, a full verification will be done and the file will be created,
-with the calculated hash being stored within the `".sha256"` file.  If a
-`".sha256"` file does exist, its contents are checked to ensure that the hash
-contained within matches the given `hash` parameter, and its modification time
-shows that the file located at `path` has not been modified since the last
-verification.
+it to `hash`.  This method caches verification results in a `"\$(path).sha256"`
+file to accelerate reverification of files that have been previously verified.
+If no `".sha256"` file exists, a full verification will be done and the file
+will be created, with the calculated hash being stored within the `".sha256"`
+file.  If a `".sha256"` file does exist, its contents are checked to ensure
+that the hash contained within matches the given `hash` parameter, and its
+modification time shows that the file located at `path` has not been modified
+since the last verification.
 
 If `report_cache_status` is set to `true`, then the return value will be a
 `Symbol` giving a granular status report on the state of the hash cache, in
@@ -970,17 +956,23 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
         status = :hash_cache_missing
     end
 
-    open(path) do file
-        calc_hash = bytes2hex(sha256(file))
-        if verbose
-            @info("Calculated hash $calc_hash for file $path")
-        end
+    calc_hash = open(path) do file
+        bytes2hex(sha256(file))
+    end
 
-        if calc_hash != hash
-            msg  = "Hash Mismatch!\n"
-            msg *= "  Expected sha256:   $hash\n"
-            msg *= "  Calculated sha256: $calc_hash"
-            error(msg)
+    if verbose
+        @info("Calculated hash $calc_hash for file $path")
+    end
+
+    if calc_hash != hash
+        msg  = "Hash Mismatch!\n"
+        msg *= "  Expected sha256:   $hash\n"
+        msg *= "  Calculated sha256: $calc_hash"
+        @error(msg)
+        if report_cache_status
+            return false, :hash_mismatch
+        else
+            return false
         end
     end
 
