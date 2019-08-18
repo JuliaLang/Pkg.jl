@@ -555,8 +555,8 @@ to `true`, this will overwrite a pre-existant mapping, otherwise an error is rai
 `download_info` is an optional tuple that contains a vector of URLs and a hash.  These
 URLs will be listed as possible locations where this artifact can be obtained.  If `lazy`
 is set to `true`, even if download information is available, this artifact will not be
-downloaded until it is accessed via the `artifact"name"` syntax, or `ensure_installed()`
-is called upon it.
+downloaded until it is accessed via the `artifact"name"` syntax, or
+`ensure_artifact_installed()` is called upon it.
 """
 function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         platform::Union{Platform,Nothing} = nothing,
