@@ -124,3 +124,9 @@ sha256 = "e65d2f13f2085f2c279830e863292312a72930fee5ba3c792b14c33ce5c5cc58"
 url = "https://github.com/staticfloat/small_bin/raw/master/socrates.tar.bz2"
 sha256 = "13fc17b97be41763b02cbb80e9d048302cec3bd3d446c2ed6e8210bddcd3ac76"
 
+[collapse_the_symlink]
+git-tree-sha1 = "634bd3979e06385661f40d7ec1596ba94fd1c16d"
+
+[[collapse_the_symlink.download]]
+url = "https://github.com/staticfloat/small_bin/raw/master/collapse_the_symlink/collapse_the_symlink.tar.gz"
+sha256 = "956c1201405f64d3465cc28cb0dec9d63c11a08cad28c381e13bb22e1fc469d3"

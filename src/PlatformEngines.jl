@@ -984,9 +984,19 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
         end
     end
 
-    # Save a hash cache if everything worked out fine
-    open(hash_path, "w") do file
-        write(file, hash)
+    # Try to save a hash cache if everything worked out fine
+    try
+        open(hash_path, "w") do file
+            write(file, hash)
+        end
+    catch e
+        if isa(e, InterruptException)
+            rethrow(e)
+        end
+
+        if verbose
+            @warn("Unable to create hash cache file $(hash_path)")
+        end
     end
 
     if report_cache_status

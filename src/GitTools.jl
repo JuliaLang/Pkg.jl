@@ -199,11 +199,19 @@ function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
 
     # Next, read data in in chunks of 4KB
     buff = Vector{UInt8}(undef, 4*1024)
-    open(path, "r") do io
-        while !eof(io)
-            num_read = readbytes!(io, buff)
-            update!(ctx, buff, num_read)
+
+    try
+        open(path, "r") do io
+            while !eof(io)
+                num_read = readbytes!(io, buff)
+                update!(ctx, buff, num_read)
+            end
         end
+    catch e
+        if isa(e, InterruptException)
+            rethrow(e)
+        end
+        @warn("Unable to open $(path) for hashing; git-tree-sha1 likely suspect")
     end
 
     # Finish it off and return the digest!
@@ -253,7 +261,10 @@ function set_readonly(path)
         for file in files
             filepath = joinpath(root, file)
             fmode = filemode(filepath)
-            chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
+            try
+                chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
+            catch
+            end
         end
     end
     return nothing
