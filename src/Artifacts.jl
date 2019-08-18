@@ -789,14 +789,18 @@ end
 """
     ensure_all_artifacts_installed(artifacts_toml::String;
                                    platform = platform_key_abi(),
-                                   package_uuid = nothing)
+                                   pkg_uuid = nothing,
+                                   include_lazy = false)
 
 Installs all non-lazy artifacts from a given `Artifacts.toml` file.  `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
+
+If `include_lazy` is set to `true`, then lazy packages will be installed as well.
 """
 function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::Platform = platform_key_abi(),
-                                        pkg_uuid::Union{Nothing,Base.UUID} = nothing)
+                                        pkg_uuid::Union{Nothing,Base.UUID} = nothing,
+                                        include_lazy::Bool = false)
     if !isfile(artifacts_toml)
         return
     end
@@ -810,7 +814,7 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
         meta === nothing && continue
 
         # If this mapping doesn't have a `download` stanza or is lazy, skip it
-        if !haskey(meta, "download") || get(meta, "lazy", false)
+        if !haskey(meta, "download") || (get(meta, "lazy", false) && !include_lazy)
             continue
         end
 
