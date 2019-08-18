@@ -128,7 +128,7 @@ url = "https://github.com/staticfloat/small_bin/raw/master/socrates.tar.bz2"
 sha256 = "13fc17b97be41763b02cbb80e9d048302cec3bd3d446c2ed6e8210bddcd3ac76"
 
 [collapse_the_symlink]
-git-tree-sha1 = "634bd3979e06385661f40d7ec1596ba94fd1c16d"
+git-tree-sha1 = "69a468bd51751f4ed7eda31c240e775df06d6ee6"
 
 [[collapse_the_symlink.download]]
 url = "https://github.com/staticfloat/small_bin/raw/master/collapse_the_symlink/collapse_the_symlink.tar.gz"

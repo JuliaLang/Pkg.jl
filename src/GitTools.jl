@@ -178,7 +178,8 @@ function gitmode(path::AbstractString)
         return mode_dir
     elseif islink(path)
         return mode_symlink
-    elseif Sys.isexecutable(path)
+    # We cannot use `Sys.isexecutable()` because on Windows, that simply calls `isfile()`
+    elseif filemode(path) & 0o010 == 0o010
         return mode_executable
     else
         return mode_normal
@@ -192,7 +193,11 @@ Calculate the git blob hash of a given path.
 """
 function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
     ctx = HashType()
-    datalen = filesize(path)
+    if islink(path)
+        datalen = length(readlink(path))
+    else
+        datalen = filesize(path)
+    end
 
     # First, the header
     SHA.update!(ctx, Vector{UInt8}("blob $(datalen)\0"))
@@ -201,10 +206,14 @@ function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
     buff = Vector{UInt8}(undef, 4*1024)
 
     try
-        open(path, "r") do io
-            while !eof(io)
-                num_read = readbytes!(io, buff)
-                update!(ctx, buff, num_read)
+        if islink(path)
+            update!(ctx, Vector{UInt8}(readlink(path)))
+        else
+            open(path, "r") do io
+                while !eof(io)
+                    num_read = readbytes!(io, buff)
+                    update!(ctx, buff, num_read)
+                end
             end
         end
     catch e
