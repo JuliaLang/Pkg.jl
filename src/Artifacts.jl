@@ -803,13 +803,18 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
     artifact_dict = load_artifacts_toml(artifacts_toml; pkg_uuid=pkg_uuid)
 
     for name in keys(artifact_dict)
+        # Get the metadata about this name for the requested platform
         meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
-        hash = SHA1(meta["git-tree-sha1"])
 
-        if artifact_exists(hash) || !haskey(meta, "download") || get(meta, "lazy", false)
+        # If there are no instances of this name for the desired platform, skip it
+        meta === nothing && continue
+
+        # If this mapping doesn't have a `download` stanza or is lazy, skip it
+        if !haskey(meta, "download") || get(meta, "lazy", false)
             continue
         end
 
+        # Otherwise, let's try and install it!
         ensure_artifact_installed(name, meta, artifacts_toml; platform=platform)
     end
 end

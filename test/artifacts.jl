@@ -1,7 +1,7 @@
 module ArtifactTests
 
 using Test, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
-import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory
+import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed
 using Pkg.TOML, Dates
 import Base: SHA1
 
@@ -148,6 +148,17 @@ end
     end
 end
 
+@testset "with_artifacts_directory()" begin
+    mktempdir() do art_dir
+        with_artifacts_directory(art_dir) do
+            hash = create_artifact() do path
+                touch(joinpath(path, "foo"))
+            end
+            @test startswith(artifact_path(hash), art_dir)
+        end
+    end
+end
+
 @testset "Artifacts.toml Utilities" begin
     # First, let's test our ability to find Artifacts.toml files;
     ATS = joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch")
@@ -244,21 +255,31 @@ end
 
     # Let's test some known-bad Artifacts.toml files
     badifact_dir = joinpath(@__DIR__, "artifacts", "bad")
-    for artifacts_toml in [joinpath(badifact_dir, f) for f in readdir(badifact_dir) if endswith(f, ".toml")]
-        @test_logs (:error, r"Invalid Artifacts.toml") artifact_meta("broken_artifact", artifacts_toml)
-    end
-end
 
-@testset "with_artifacts_directory()" begin
-    mktempdir() do art_dir
-        with_artifacts_directory(art_dir) do
-            hash = create_artifact() do path
-                touch(joinpath(path, "foo"))
+    # First, parsing errors
+    @test_logs (:error, r"contains no `git-tree-sha1`") artifact_meta("broken_artifact", joinpath(badifact_dir, "no_gitsha.toml"))
+    @test_logs (:error, r"malformed, must be array or dict!") artifact_meta("broken_artifact", joinpath(badifact_dir, "not_a_table.toml"))
+
+    # Next, test incorrect download errors
+    mktempdir() do dir
+        with_artifacts_directory(dir) do
+            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
+            @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
+                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
             end
-            @test startswith(artifact_path(hash), art_dir)
+        end
+    end
+
+    mktempdir() do dir
+        with_artifacts_directory(dir) do
+            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml")) != nothing
+            @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
+                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
+            end
         end
     end
 end
+
 
 @testset "Artifact archival" begin
     mktempdir() do art_dir
@@ -275,12 +296,14 @@ end
     end
 end
 
-
 @testset "Artifact Usage" begin
     # Do a quick little install of our ArtifactTOMLSearch example
     include(joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch", "pkg.jl"))
     @test ATSMod.do_test()
 
+    # Don't use `temp_pkg_dir()` here because we need `Pkg.test()` to run in the
+    # same package context as the one we're running in right now.  Yes, this pollutes
+    # the global artifact namespace and package list, but it should be harmless.
     mktempdir() do project_path
         copy_test_package(project_path, "ArtifactInstallation")
         Pkg.activate(joinpath(project_path))
@@ -299,6 +322,28 @@ end
             using ArtifactInstallation
             do_test()
         end)
+    end
+
+    # Ensure that porous platform coverage works with ensure_all_installed()
+    temp_pkg_dir() do project_path
+        copy_test_package(project_path, "ArtifactInstallation")
+        artifacts_toml = joinpath(project_path, "ArtifactInstallation", "Artifacts.toml")
+
+        # Install artifacts such that `c_simple` is not installed properly
+        # because of the platform we requested, but `socrates` is.
+        ensure_all_artifacts_installed(artifacts_toml; platform=Linux(:powerpc64le))
+
+        # Test that c_simple doesn't even show up
+        c_simple_hash = artifact_hash("c_simple", artifacts_toml; platform=Linux(:powerpc64le))
+        @test c_simple_hash == nothing
+
+        # Test that socrates shows up, but is not installed
+        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=Linux(:powerpc64le))
+        @test !artifact_exists(socrates_hash)
+
+        # Test that collapse_the_symlink is installed
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=Linux(:powerpc64le))
+        @test artifact_exists(cts_hash)
     end
 end
 
