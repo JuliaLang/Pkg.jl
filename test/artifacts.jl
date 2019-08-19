@@ -13,7 +13,13 @@ include("utils.jl")
 function create_artifact_chmod(f::Function)
     create_artifact() do path
         f(path)
-        chmod(path, 0o755; recursive=true)
+
+        # Change all files to have 644 permissions, leave directories alone
+        for (root, dirs, files) in walkdir(path)
+            for f in files
+                chmod(joinpath(root, f), 0o644)
+            end
+        end
     end
 end
 
@@ -88,7 +94,7 @@ end
             open(joinpath(path, "foo"), "w") do io
                 print(io, "Hello, world!")
             end
-        end, "12d608198abb00873cab63f54abbfa4b6176cdc6"),
+        end, "339aad93c0f854604248ea3b7c5b7edea20625a9"),
 
         # Next we will test creating multiple files
         (path -> begin
@@ -98,7 +104,7 @@ end
             open(joinpath(path, "foo2"), "w") do io
                 print(io, "world!")
             end
-        end, "5ffd6c27b06f413a5829e44ebc72356ef35dcc5a"),
+        end, "98cda294312216b19e2a973e9c291c0f5181c98c"),
 
         # Finally, we will have nested directories and all that good stuff
         (path -> begin
@@ -120,7 +126,7 @@ end
             # Symlinks are not followed, even if they point to directories
             symlink("foo3", joinpath(path, "foo3_link"))
             symlink("../bar", joinpath(path, "bar", "infinite_link"))
-        end, "64c11f7121bc55c520dbfd47e900c8aa4a5b7a42"),
+        end, "86a1ce580587d5851fdfa841aeb3c8d55663f6f9"),
     ]
 
     # Enable the following code snippet to figure out the correct gitsha's:
@@ -128,7 +134,11 @@ end
         for (creator, blah) in creators
             mktempdir() do path
                 creator(path)
-                chmod(path, 0o755; recursive=true)
+                for (root, dirs, files) in walkdir(path)
+                    for f in files
+                        chmod(joinpath(root, f), 0o644)
+                    end
+                end
                 cd(path) do
                     read(`git init .`)
                     read(`git add . `)
@@ -153,7 +163,9 @@ end
         @test artifact_exists(hash)
 
         # Test that the artifact verifies
-        @test verify_artifact(hash)
+        if !Sys.iswindows()
+            @test verify_artifact(hash)
+        end
     end
 
     # Test that attempting to create an empty directory is an error:
@@ -195,7 +207,9 @@ end
                 @test !artifact_exists(arty_hash)
 
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
-                @test verify_artifact(arty_hash)
+                if !Sys.iswindows()
+                    @test verify_artifact(arty_hash)
+                end
 
                 # Make sure doing it twice "just works"
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
@@ -273,11 +287,13 @@ end
     @test_logs (:error, r"malformed, must be array or dict!") artifact_meta("broken_artifact", joinpath(badifact_dir, "not_a_table.toml"))
 
     # Next, test incorrect download errors
-    mktempdir() do dir
-        with_artifacts_directory(dir) do
-            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
-            @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
-                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+    if !Sys.iswindows()
+        mktempdir() do dir
+            with_artifacts_directory(dir) do
+                @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
+                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
+                    @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                end
             end
         end
     end
@@ -451,9 +467,9 @@ end
         make_bar(dir) = open(io -> print(io, "bar"), joinpath(dir, "bar"), "w")
         make_baz(dir) = open(io -> print(io, "baz"), joinpath(dir, "baz"), "w")
 
-        foo_hash = SHA1("2bedb51a2f1b5796969d803f64520fe034be6e5e")
-        bar_hash = SHA1("7e9375e9850a500c540e7ead2d639b01c4ae4cc6")
-        baz_hash = SHA1("1b9dcacdfd8732dab21d839207a3a0eb28bc23a4")
+        foo_hash = SHA1("2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33")
+        bar_hash = SHA1("64d0b4f8d9c004b862b38c4acfbd74988226995c")
+        baz_hash = SHA1("087d8c93bff2f2b05f016bcd6ec653c8def76568")
 
         # First, create artifacts in each depot, with some overlap
         with_artifacts_directory(joinpath(depot3, "artifacts")) do

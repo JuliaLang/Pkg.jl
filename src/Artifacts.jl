@@ -673,30 +673,56 @@ function download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::S
     # Ensure that we're ready to download things
     probe_platform_engines!()
 
-    # We download by using `create_artifact()`.  We do this because the download may
-    # be corrupted or even malicious; we don't want to clobber someone else's artifact
-    # by trusting the tree hash that has been given to us; we will instead download it
-    # to a temporary directory, calculate the true tree hash, then move it to the proper
-    # location only after knowing what it is, and if something goes wrong in the process,
-    # everything should be cleaned up.  Luckily, that is precisely what our
-    # `create_artifact()` wrapper does, so we use that here.
-    calc_hash = try
-        create_artifact() do dir
-            download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose)
+    if Sys.iswindows()
+        # The destination directory we're hoping to fill:
+        dest_dir = artifact_path(tree_hash; honor_overrides=false)
+
+        # On Windows, we have some issues around stat() and chmod() that make properly
+        # determining the git tree hash problematic; for this reason, we use the "unsafe"
+        # artifact unpacking method, which does not properly verify unpacked git tree
+        # hash.  This will be fixed in a future Julia release which will properly interrogate
+        # the filesystem ACLs for executable permissions, which git tree hashes care about.
+        try
+            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose)
+        catch e
+            # Clean that destination directory out if something went wrong
+            rm(dest_dir; force=true, recursive=true)
+
+            if isa(e, InterruptException)
+                rethrow(e)
+            end
+            return false
         end
-    catch e
-        # If something went wrong during download, return false
-        return false
+    else
+        # We download by using `create_artifact()`.  We do this because the download may
+        # be corrupted or even malicious; we don't want to clobber someone else's artifact
+        # by trusting the tree hash that has been given to us; we will instead download it
+        # to a temporary directory, calculate the true tree hash, then move it to the proper
+        # location only after knowing what it is, and if something goes wrong in the process,
+        # everything should be cleaned up.  Luckily, that is precisely what our
+        # `create_artifact()` wrapper does, so we use that here.
+        calc_hash = try
+            create_artifact() do dir
+                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose)
+            end
+        catch e
+            if isa(e, InterruptException)
+                rethrow(e)
+            end
+            # If something went wrong during download, return false
+            return false
+        end
+
+        # Did we get what we expected?  If not, freak out.
+        if calc_hash.bytes != tree_hash.bytes
+            msg  = "Tree Hash Mismatch!\n"
+            msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
+            msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+            @error(msg)
+            return false
+        end
     end
 
-    # Did we get what we expected?  If not, freak out.
-    if calc_hash.bytes != tree_hash.bytes
-        msg  = "Tree Hash Mismatch!\n"
-        msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
-        msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
-        @error(msg)
-        return false
-    end
     return true
 end
 
