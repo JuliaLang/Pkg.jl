@@ -174,10 +174,10 @@ Base.string(mode::GitMode) = string(UInt32(mode); base=8)
 Base.print(io::IO, mode::GitMode) = print(io, string(mode))
 
 function gitmode(path::AbstractString)
-    if isdir(path)
-        return mode_dir
-    elseif islink(path)
+    if islink(path)
         return mode_symlink
+    elseif isdir(path)
+        return mode_dir
     # We cannot use `Sys.isexecutable()` because on Windows, that simply calls `isfile()`
     elseif filemode(path) & 0o010 == 0o010
         return mode_executable

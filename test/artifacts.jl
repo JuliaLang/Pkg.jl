@@ -116,7 +116,11 @@ end
             # Empty directories do nothing to effect the hash, so we create one with a
             # random name to prove that it does not get hashed into the rest.
             mkpath(joinpath(path, Random.randstring(8)))
-        end, "82d49cf70690ea5cab519986313828eb03ba8358"),
+
+            # Symlinks are not followed, even if they point to directories
+            symlink("foo3", joinpath(path, "foo3_link"))
+            symlink("../bar", joinpath(path, "bar", "infinite_link"))
+        end, "64c11f7121bc55c520dbfd47e900c8aa4a5b7a42"),
     ]
 
     # Enable the following code snippet to figure out the correct gitsha's:
@@ -124,6 +128,7 @@ end
         for (creator, blah) in creators
             mktempdir() do path
                 creator(path)
+                chmod(path, 0o755; recursive=true)
                 cd(path) do
                     read(`git init .`)
                     read(`git add . `)
