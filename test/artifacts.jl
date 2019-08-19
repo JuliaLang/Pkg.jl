@@ -1,6 +1,6 @@
 module ArtifactTests
 
-using Test, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
+using Test, Random, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed
 using Pkg.TOML, Dates
 import Base: SHA1
@@ -112,6 +112,10 @@ end
             open(joinpath(path, "foo3"), "w") do io
                 print(io, "baz!")
             end
+
+            # Empty directories do nothing to effect the hash, so we create one with a
+            # random name to prove that it does not get hashed into the rest.
+            mkpath(joinpath(path, Random.randstring(8)))
         end, "82d49cf70690ea5cab519986313828eb03ba8358"),
     ]
 
@@ -146,6 +150,9 @@ end
         # Test that the artifact verifies
         @test verify_artifact(hash)
     end
+
+    # Test that attempting to create an empty directory is an error:
+    @test_throws ArgumentError create_artifact(x -> nothing)
 end
 
 @testset "with_artifacts_directory()" begin
