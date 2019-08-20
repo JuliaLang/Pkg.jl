@@ -624,7 +624,7 @@ end
         # the following should not error
         Pkg.add("UUIDs")
         Pkg.test("UUIDs")
-        @test_throws PkgError("cannot `pin` stdlibs.") Pkg.pin("UUIDs")
+        @test_throws PkgError("`pin` can not be applied to `UUIDs` because it is a stdlib.") Pkg.pin("UUIDs")
     end
 end
 
