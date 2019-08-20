@@ -174,11 +174,12 @@ Base.string(mode::GitMode) = string(UInt32(mode); base=8)
 Base.print(io::IO, mode::GitMode) = print(io, string(mode))
 
 function gitmode(path::AbstractString)
-    if isdir(path)
-        return mode_dir
-    elseif islink(path)
+    if islink(path)
         return mode_symlink
-    elseif Sys.isexecutable(path)
+    elseif isdir(path)
+        return mode_dir
+    # We cannot use `Sys.isexecutable()` because on Windows, that simply calls `isfile()`
+    elseif filemode(path) & 0o010 == 0o010
         return mode_executable
     else
         return mode_normal
@@ -192,18 +193,34 @@ Calculate the git blob hash of a given path.
 """
 function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
     ctx = HashType()
-    datalen = filesize(path)
+    if islink(path)
+        datalen = length(readlink(path))
+    else
+        datalen = filesize(path)
+    end
 
     # First, the header
     SHA.update!(ctx, Vector{UInt8}("blob $(datalen)\0"))
 
     # Next, read data in in chunks of 4KB
     buff = Vector{UInt8}(undef, 4*1024)
-    open(path, "r") do io
-        while !eof(io)
-            num_read = readbytes!(io, buff)
-            update!(ctx, buff, num_read)
+
+    try
+        if islink(path)
+            update!(ctx, Vector{UInt8}(readlink(path)))
+        else
+            open(path, "r") do io
+                while !eof(io)
+                    num_read = readbytes!(io, buff)
+                    update!(ctx, buff, num_read)
+                end
+            end
         end
+    catch e
+        if isa(e, InterruptException)
+            rethrow(e)
+        end
+        @warn("Unable to open $(path) for hashing; git-tree-sha1 likely suspect")
     end
 
     # Finish it off and return the digest!
@@ -213,7 +230,8 @@ end
 """
     tree_hash(root::AbstractString)
 
-Calculate the git tree hash of a given path.
+Calculate the git tree hash of a given path.  Note that attempting to take the
+tree hash of an empty directory will throw an error.
 """
 function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
@@ -226,7 +244,14 @@ function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
         filepath = abspath(root, f)
         mode = gitmode(filepath)
         if mode == mode_dir
-            hash = tree_hash(filepath)
+            try
+                hash = tree_hash(filepath)
+            catch e
+                if isa(e, ArgumentError)
+                    continue
+                end
+                rethrow(e)
+            end
         else
             hash = blob_hash(filepath)
         end
@@ -236,9 +261,12 @@ function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
     # Sort entries by name (with trailing slashes for directories)
     sort!(entries, by = ((name, hash, mode),) -> mode == mode_dir ? name*"/" : name)
 
-    # Return the hash of these entries
+    if isempty(entries)
+        ArgumentError("Invalid to calculate tree hash of empty directory")
+    end
     content_size = sum(((n, h, m),) -> ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + 20, entries)
 
+    # Return the hash of these entries
     ctx = HashType()
     SHA.update!(ctx, Vector{UInt8}("tree $(content_size)\0"))
     for (name, hash, mode) in entries
@@ -253,7 +281,10 @@ function set_readonly(path)
         for file in files
             filepath = joinpath(root, file)
             fmode = filemode(filepath)
-            chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
+            try
+                chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
+            catch
+            end
         end
     end
     return nothing

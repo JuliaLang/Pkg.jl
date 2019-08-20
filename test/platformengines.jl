@@ -82,32 +82,41 @@ end
         foo_hash = bytes2hex(sha256("test"))
 
         # Check that verifying with the right hash works
-        @info("This should say; no hash cache found")
-        ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
-        @test ret == true
-        @test status == :hash_cache_missing
+        @test_logs (:info, r"No hash cache found") match_mode=:any begin
+            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+            @test ret == true
+            @test status == :hash_cache_missing
+        end
 
         # Check that it created a .sha256 file
         @test isfile("$(foo_path).sha256")
 
         # Check that it verifies the second time around properly
-        @info("This should say; hash cache is consistent")
-        ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
-        @test ret == true
-        @test status == :hash_cache_consistent
+        @test_logs (:info, r"Hash cache is consistent") match_mode=:any begin
+            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+            @test ret == true
+            @test status == :hash_cache_consistent
+        end
 
         # Sleep for imprecise filesystems
         sleep(2)
 
         # Get coverage of messing with different parts of the verification chain
         touch(foo_path)
-        @info("This should say; file has been modified")
-        ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
-        @test ret == true
-        @test status == :file_modified
+        @test_logs (:info, r"File has been modified") match_mode=:any begin
+            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+            @test ret == true
+            @test status == :file_modified
+        end
 
-        # Ensure that we throw an exception when we can't verify properly
-        @test_throws ErrorException verify(foo_path, "0"^32; verbose=true)
+        # Ensure that we print an error when verification fails
+        rm("$(foo_path).sha256"; force=true)
+        @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
+            @test !verify(foo_path, "0"^64; verbose=true)
+        end
+
+        # Ensure that incorrect lengths cause an exception
+        @test_throws ErrorException verify(foo_path, "0"^65; verbose=true)
 
         # Ensure that messing with the hash file works properly
         touch(foo_path)
@@ -115,18 +124,24 @@ end
         open("$(foo_path).sha256", "w") do file
             write(file, "this is not the right hash")
         end
-        @info("This should say; hash has changed")
-        ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
-        @test ret == true
-        @test status == :hash_cache_mismatch
+        @test_logs (:info, r"hash cache invalidated") match_mode=:any begin
+            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+            @test ret == true
+            @test status == :hash_cache_mismatch
+        end
 
         # Ensure that messing with the actual file works properly
         open("$(foo_path)", "w") do file
             write(file, "this is not the right content")
         end
+
         # Delete hash cache file to force re-verification
         rm("$(foo_path).sha256"; force=true)
-        @test_throws ErrorException verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+        @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
+            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+            @test ret == false
+            @test status == :hash_mismatch
+        end
     end
 end
 

@@ -1,7 +1,7 @@
 module ArtifactTests
 
-using Test, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
-import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory
+using Test, Random, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
+import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed
 using Pkg.TOML, Dates
 import Base: SHA1
 
@@ -13,7 +13,13 @@ include("utils.jl")
 function create_artifact_chmod(f::Function)
     create_artifact() do path
         f(path)
-        chmod(path, 0o755; recursive=true)
+
+        # Change all files to have 644 permissions, leave directories alone
+        for (root, dirs, files) in walkdir(path)
+            for f in files
+                chmod(joinpath(root, f), 0o644)
+            end
+        end
     end
 end
 
@@ -88,7 +94,7 @@ end
             open(joinpath(path, "foo"), "w") do io
                 print(io, "Hello, world!")
             end
-        end, "12d608198abb00873cab63f54abbfa4b6176cdc6"),
+        end, "339aad93c0f854604248ea3b7c5b7edea20625a9"),
 
         # Next we will test creating multiple files
         (path -> begin
@@ -98,7 +104,7 @@ end
             open(joinpath(path, "foo2"), "w") do io
                 print(io, "world!")
             end
-        end, "5ffd6c27b06f413a5829e44ebc72356ef35dcc5a"),
+        end, "98cda294312216b19e2a973e9c291c0f5181c98c"),
 
         # Finally, we will have nested directories and all that good stuff
         (path -> begin
@@ -112,7 +118,15 @@ end
             open(joinpath(path, "foo3"), "w") do io
                 print(io, "baz!")
             end
-        end, "82d49cf70690ea5cab519986313828eb03ba8358"),
+
+            # Empty directories do nothing to effect the hash, so we create one with a
+            # random name to prove that it does not get hashed into the rest.
+            mkpath(joinpath(path, Random.randstring(8)))
+
+            # Symlinks are not followed, even if they point to directories
+            symlink("foo3", joinpath(path, "foo3_link"))
+            symlink("../bar", joinpath(path, "bar", "infinite_link"))
+        end, "86a1ce580587d5851fdfa841aeb3c8d55663f6f9"),
     ]
 
     # Enable the following code snippet to figure out the correct gitsha's:
@@ -120,6 +134,11 @@ end
         for (creator, blah) in creators
             mktempdir() do path
                 creator(path)
+                for (root, dirs, files) in walkdir(path)
+                    for f in files
+                        chmod(joinpath(root, f), 0o644)
+                    end
+                end
                 cd(path) do
                     read(`git init .`)
                     read(`git add . `)
@@ -144,7 +163,23 @@ end
         @test artifact_exists(hash)
 
         # Test that the artifact verifies
-        @test verify_artifact(hash)
+        if !Sys.iswindows()
+            @test verify_artifact(hash)
+        end
+    end
+
+    # Test that attempting to create an empty directory is an error:
+    @test_throws ArgumentError create_artifact(x -> nothing)
+end
+
+@testset "with_artifacts_directory()" begin
+    mktempdir() do art_dir
+        with_artifacts_directory(art_dir) do
+            hash = create_artifact() do path
+                touch(joinpath(path, "foo"))
+            end
+            @test startswith(artifact_path(hash), art_dir)
+        end
     end
 end
 
@@ -172,7 +207,9 @@ end
                 @test !artifact_exists(arty_hash)
 
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
-                @test verify_artifact(arty_hash)
+                if !Sys.iswindows()
+                    @test verify_artifact(arty_hash)
+                end
 
                 # Make sure doing it twice "just works"
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
@@ -244,21 +281,33 @@ end
 
     # Let's test some known-bad Artifacts.toml files
     badifact_dir = joinpath(@__DIR__, "artifacts", "bad")
-    for artifacts_toml in [joinpath(badifact_dir, f) for f in readdir(badifact_dir) if endswith(f, ".toml")]
-        @test_logs (:error, r"Invalid Artifacts.toml") artifact_meta("broken_artifact", artifacts_toml)
-    end
-end
 
-@testset "with_artifacts_directory()" begin
-    mktempdir() do art_dir
-        with_artifacts_directory(art_dir) do
-            hash = create_artifact() do path
-                touch(joinpath(path, "foo"))
+    # First, parsing errors
+    @test_logs (:error, r"contains no `git-tree-sha1`") artifact_meta("broken_artifact", joinpath(badifact_dir, "no_gitsha.toml"))
+    @test_logs (:error, r"malformed, must be array or dict!") artifact_meta("broken_artifact", joinpath(badifact_dir, "not_a_table.toml"))
+
+    # Next, test incorrect download errors
+    if !Sys.iswindows()
+        mktempdir() do dir
+            with_artifacts_directory(dir) do
+                @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
+                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
+                    @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                end
             end
-            @test startswith(artifact_path(hash), art_dir)
+        end
+    end
+
+    mktempdir() do dir
+        with_artifacts_directory(dir) do
+            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml")) != nothing
+            @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
+                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
+            end
         end
     end
 end
+
 
 @testset "Artifact archival" begin
     mktempdir() do art_dir
@@ -275,12 +324,14 @@ end
     end
 end
 
-
 @testset "Artifact Usage" begin
     # Do a quick little install of our ArtifactTOMLSearch example
     include(joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch", "pkg.jl"))
     @test ATSMod.do_test()
 
+    # Don't use `temp_pkg_dir()` here because we need `Pkg.test()` to run in the
+    # same package context as the one we're running in right now.  Yes, this pollutes
+    # the global artifact namespace and package list, but it should be harmless.
     mktempdir() do project_path
         copy_test_package(project_path, "ArtifactInstallation")
         Pkg.activate(joinpath(project_path))
@@ -299,6 +350,28 @@ end
             using ArtifactInstallation
             do_test()
         end)
+    end
+
+    # Ensure that porous platform coverage works with ensure_all_installed()
+    temp_pkg_dir() do project_path
+        copy_test_package(project_path, "ArtifactInstallation")
+        artifacts_toml = joinpath(project_path, "ArtifactInstallation", "Artifacts.toml")
+
+        # Install artifacts such that `c_simple` is not installed properly
+        # because of the platform we requested, but `socrates` is.
+        ensure_all_artifacts_installed(artifacts_toml; platform=Linux(:powerpc64le))
+
+        # Test that c_simple doesn't even show up
+        c_simple_hash = artifact_hash("c_simple", artifacts_toml; platform=Linux(:powerpc64le))
+        @test c_simple_hash == nothing
+
+        # Test that socrates shows up, but is not installed
+        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=Linux(:powerpc64le))
+        @test !artifact_exists(socrates_hash)
+
+        # Test that collapse_the_symlink is installed
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=Linux(:powerpc64le))
+        @test artifact_exists(cts_hash)
     end
 end
 
@@ -394,9 +467,9 @@ end
         make_bar(dir) = open(io -> print(io, "bar"), joinpath(dir, "bar"), "w")
         make_baz(dir) = open(io -> print(io, "baz"), joinpath(dir, "baz"), "w")
 
-        foo_hash = SHA1("2bedb51a2f1b5796969d803f64520fe034be6e5e")
-        bar_hash = SHA1("7e9375e9850a500c540e7ead2d639b01c4ae4cc6")
-        baz_hash = SHA1("1b9dcacdfd8732dab21d839207a3a0eb28bc23a4")
+        foo_hash = SHA1("2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33")
+        bar_hash = SHA1("64d0b4f8d9c004b862b38c4acfbd74988226995c")
+        baz_hash = SHA1("087d8c93bff2f2b05f016bcd6ec653c8def76568")
 
         # First, create artifacts in each depot, with some overlap
         with_artifacts_directory(joinpath(depot3, "artifacts")) do

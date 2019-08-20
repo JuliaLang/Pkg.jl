@@ -23,15 +23,18 @@ os = "macos"
     [[c_simple.download]]
     sha256 = "e88816a1492eecb4569bb24b3e52b757e59c87419dba962e99148b338369f326"
     url = "https://github.com/JuliaBinaryWrappers/c_simple_jll.jl/releases/download/c_simple+v1.2.3-pkgtest/c_simple.v1.2.3.x86_64-apple-darwin14.tar.gz"
-[[c_simple]]
-arch = "powerpc64le"
-git-tree-sha1 = "dc9f84891c8215f90095b619533e141179b6cc06"
-libc = "glibc"
-os = "linux"
 
-    [[c_simple.download]]
-    sha256 = "715af8f0405cff35feef5ad5e93836bb1bb0f93c77218bfdad411c8a4368ab4b"
-    url = "https://github.com/JuliaBinaryWrappers/c_simple_jll.jl/releases/download/c_simple+v1.2.3-pkgtest/c_simple.v1.2.3.powerpc64le-linux-gnu.tar.gz"
+# NOTE: We explicitly comment this out, to test porous platform support.  Don't un-comment this!
+#[[c_simple]]
+#arch = "powerpc64le"
+#git-tree-sha1 = "dc9f84891c8215f90095b619533e141179b6cc06"
+#libc = "glibc"
+#os = "linux"
+#
+#    [[c_simple.download]]
+#    sha256 = "715af8f0405cff35feef5ad5e93836bb1bb0f93c77218bfdad411c8a4368ab4b"
+#    url = "https://github.com/JuliaBinaryWrappers/c_simple_jll.jl/releases/download/c_simple+v1.2.3-pkgtest/c_simple.v1.2.3.powerpc64le-linux-gnu.tar.gz"
+
 [[c_simple]]
 arch = "i686"
 git-tree-sha1 = "78e282b79c16febc54a56ed244088ff92a55533f"
@@ -124,3 +127,9 @@ sha256 = "e65d2f13f2085f2c279830e863292312a72930fee5ba3c792b14c33ce5c5cc58"
 url = "https://github.com/staticfloat/small_bin/raw/master/socrates.tar.bz2"
 sha256 = "13fc17b97be41763b02cbb80e9d048302cec3bd3d446c2ed6e8210bddcd3ac76"
 
+[collapse_the_symlink]
+git-tree-sha1 = "69a468bd51751f4ed7eda31c240e775df06d6ee6"
+
+[[collapse_the_symlink.download]]
+url = "https://github.com/staticfloat/small_bin/raw/master/collapse_the_symlink/collapse_the_symlink.tar.gz"
+sha256 = "956c1201405f64d3465cc28cb0dec9d63c11a08cad28c381e13bb22e1fc469d3"

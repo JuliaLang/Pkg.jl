@@ -136,10 +136,16 @@ const platform = platform_key_abi()
         @test platform_key_abi("x86_64-linux-gnu-libstdcxx26") == Linux(:x86_64, compiler_abi=CompilerABI(libstdcxx_version=v"3.4.26"))
 
         # Make sure some of these things are rejected
-        @test platform_key_abi("totally FREEFORM text!!1!!!1!") == UnknownPlatform()
-        @test platform_key_abi("invalid-triplet-here") == UnknownPlatform()
-        @test platform_key_abi("aarch64-linux-gnueabihf") == UnknownPlatform()
-        @test platform_key_abi("x86_64-w32-mingw64") == UnknownPlatform()
+        function test_bad_platform(p_str)
+            @test_logs (:warn, r"not an officially supported platform") begin
+                @test platform_key_abi(p_str) == UnknownPlatform()
+            end
+        end
+
+        test_bad_platform("totally FREEFORM text!!1!!!1!")
+        test_bad_platform("invalid-triplet-here")
+        test_bad_platform("aarch64-linux-gnueabihf")
+        test_bad_platform("x86_64-w32-mingw64")
     end
 
     @testset "platforms_match()" begin
@@ -251,7 +257,9 @@ const platform = platform_key_abi()
         @test detect_libgfortran_version("libgfortran.so.5", Linux(:x86_64)) == v"5"
         @test detect_libgfortran_version("libgfortran.4.dylib", MacOS()) == v"4"
         @test detect_libgfortran_version("libgfortran-3.dll", Windows(:x86_64)) == v"3"
-        @test detect_libgfortran_version("blah.so", Linux(:aarch64)) == nothing
+        @test_logs (:warn, r"Unable to determine libgfortran version") begin
+            @test detect_libgfortran_version("blah.so", Linux(:aarch64)) == nothing
+        end
 
         # Let's check and ensure that we can autodetect the currently-running Julia process
         @test detect_libgfortran_version() != nothing

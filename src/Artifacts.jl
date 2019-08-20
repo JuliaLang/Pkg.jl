@@ -555,8 +555,8 @@ to `true`, this will overwrite a pre-existant mapping, otherwise an error is rai
 `download_info` is an optional tuple that contains a vector of URLs and a hash.  These
 URLs will be listed as possible locations where this artifact can be obtained.  If `lazy`
 is set to `true`, even if download information is available, this artifact will not be
-downloaded until it is accessed via the `artifact"name"` syntax, or `ensure_installed()`
-is called upon it.
+downloaded until it is accessed via the `artifact"name"` syntax, or
+`ensure_artifact_installed()` is called upon it.
 """
 function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         platform::Union{Platform,Nothing} = nothing,
@@ -670,14 +670,60 @@ function download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::S
         return true
     end
 
+    # Ensure that we're ready to download things
     probe_platform_engines!()
 
-    return download_verify_unpack(
-        tarball_url,
-        tarball_hash,
-        artifact_path(tree_hash),
-        verbose=verbose,
-    )
+    if Sys.iswindows()
+        # The destination directory we're hoping to fill:
+        dest_dir = artifact_path(tree_hash; honor_overrides=false)
+
+        # On Windows, we have some issues around stat() and chmod() that make properly
+        # determining the git tree hash problematic; for this reason, we use the "unsafe"
+        # artifact unpacking method, which does not properly verify unpacked git tree
+        # hash.  This will be fixed in a future Julia release which will properly interrogate
+        # the filesystem ACLs for executable permissions, which git tree hashes care about.
+        try
+            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose)
+        catch e
+            # Clean that destination directory out if something went wrong
+            rm(dest_dir; force=true, recursive=true)
+
+            if isa(e, InterruptException)
+                rethrow(e)
+            end
+            return false
+        end
+    else
+        # We download by using `create_artifact()`.  We do this because the download may
+        # be corrupted or even malicious; we don't want to clobber someone else's artifact
+        # by trusting the tree hash that has been given to us; we will instead download it
+        # to a temporary directory, calculate the true tree hash, then move it to the proper
+        # location only after knowing what it is, and if something goes wrong in the process,
+        # everything should be cleaned up.  Luckily, that is precisely what our
+        # `create_artifact()` wrapper does, so we use that here.
+        calc_hash = try
+            create_artifact() do dir
+                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose)
+            end
+        catch e
+            if isa(e, InterruptException)
+                rethrow(e)
+            end
+            # If something went wrong during download, return false
+            return false
+        end
+
+        # Did we get what we expected?  If not, freak out.
+        if calc_hash.bytes != tree_hash.bytes
+            msg  = "Tree Hash Mismatch!\n"
+            msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
+            msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+            @error(msg)
+            return false
+        end
+    end
+
+    return true
 end
 
 """
@@ -769,27 +815,36 @@ end
 """
     ensure_all_artifacts_installed(artifacts_toml::String;
                                    platform = platform_key_abi(),
-                                   package_uuid = nothing)
+                                   pkg_uuid = nothing,
+                                   include_lazy = false)
 
 Installs all non-lazy artifacts from a given `Artifacts.toml` file.  `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
+
+If `include_lazy` is set to `true`, then lazy packages will be installed as well.
 """
 function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::Platform = platform_key_abi(),
-                                        pkg_uuid::Union{Nothing,Base.UUID} = nothing)
+                                        pkg_uuid::Union{Nothing,Base.UUID} = nothing,
+                                        include_lazy::Bool = false)
     if !isfile(artifacts_toml)
         return
     end
     artifact_dict = load_artifacts_toml(artifacts_toml; pkg_uuid=pkg_uuid)
 
     for name in keys(artifact_dict)
+        # Get the metadata about this name for the requested platform
         meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
-        hash = SHA1(meta["git-tree-sha1"])
 
-        if artifact_exists(hash) || !haskey(meta, "download") || get(meta, "lazy", false)
+        # If there are no instances of this name for the desired platform, skip it
+        meta === nothing && continue
+
+        # If this mapping doesn't have a `download` stanza or is lazy, skip it
+        if !haskey(meta, "download") || (get(meta, "lazy", false) && !include_lazy)
             continue
         end
 
+        # Otherwise, let's try and install it!
         ensure_artifact_installed(name, meta, artifacts_toml; platform=platform)
     end
 end
