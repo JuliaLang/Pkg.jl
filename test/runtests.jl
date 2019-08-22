@@ -2,6 +2,8 @@
 
 module PkgTests
 
+import Pkg
+Pkg.API.RUNNING_CI[] = true
 old_depot_path = copy(DEPOT_PATH)
 depot_dir = mktempdir()
 try
