@@ -215,7 +215,7 @@ function manifestfile_path(env_path::String; strict=false)
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
-    return strict ? nothing : joinpath(env_path, "Manifest.toml")
+    return strict ? nothing : replace(projectfile_path(env_path), r"Project\.toml$" => "Manifest.toml")
 end
 
 function find_project_file(env::Union{Nothing,String}=nothing)
