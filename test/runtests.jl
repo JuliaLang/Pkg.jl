@@ -2,6 +2,7 @@
 
 module PkgTests
 
+import Pkg
 Pkg.API.RUNNING_CI[] = true
 include("utils.jl")
 include("pkg.jl")
