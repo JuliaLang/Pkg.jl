@@ -140,6 +140,7 @@ up(pkg::Union{AbstractString, PackageSpec}; kwargs...) = up([pkg]; kwargs...)
 up(pkgs::Vector{<:AbstractString}; kwargs...)          = up([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 up(pkgs::Vector{PackageSpec}; kwargs...)               = up(Context(), pkgs; kwargs...)
 
+const RUNNING_CI = Ref(false)
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
@@ -150,7 +151,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     ctx.preview && preview_info()
     if update_registry
         Types.clone_default_registries()
-        Types.update_registries(ctx; force=true)
+        Types.update_registries(ctx; force=!RUNNING_CI[])
     end
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT

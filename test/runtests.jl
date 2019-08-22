@@ -2,6 +2,7 @@
 
 module PkgTests
 
+Pkg.API.RUNNING_CI[] = true
 include("utils.jl")
 include("pkg.jl")
 include("binaryplatforms.jl")
