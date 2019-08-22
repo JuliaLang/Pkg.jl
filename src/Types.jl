@@ -1136,7 +1136,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
             # Using LibGit2.with here crashes julia when running the
             # tests for PkgDev wiht "Unreachable reached".
             # This seems to work around it.
-            local repo
+            repo = nothing
             try
                 repo = LibGit2.GitRepo(reg.path)
                 if LibGit2.isdirty(repo)
@@ -1177,7 +1177,9 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                 end
                 @label done
             finally
-                close(repo)
+                if repo isa LibGit2.GitRepo
+                    close(repo)
+                end
             end
         end
     end
