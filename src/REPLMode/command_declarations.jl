@@ -227,18 +227,20 @@ packages have changed causing the current Manifest to be out of sync.
     :arg_parser => parse_activate,
     :option_spec => OptionDeclaration[
         [:name => "shared", :api => :shared => true],
+        [:name => "temp", :api => :temp => true],
     ],
     :completions => complete_activate,
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
     activate
-    activate [--shared] path
+    activate [--shared|--temp] [path]
 
 Activate the environment at the given `path`, or the home project environment if no `path` is specified.
 The active environment is the environment that is modified by executing package commands.
 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
 it will be placed in the first depot of the stack.
+Use the `temp` option to create temporary environments. This should be useful for experimenting with packages.
 """ ,
 ],[ :name => "update",
     :short_name => "up",
