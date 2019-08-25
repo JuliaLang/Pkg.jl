@@ -62,9 +62,9 @@ function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Noth
                     r isa Pkg2.Reqs.Requirement || continue
                     push!(dep_pkgs, PackageSpec(name=r.package))
                 end
-                registry_resolve!(env, dep_pkgs)
-                project_deps_resolve!(ctx.env, dep_pkgs)
-                ensure_resolved(env, dep_pkgs; registry=true)
+                registry_resolve!(ctx, dep_pkgs)
+                project_deps_resolve!(ctx, dep_pkgs)
+                ensure_resolved(ctx, dep_pkgs; registry=true)
             end
             for dep_pkg in dep_pkgs
                 dep_pkg.name == "julia" && continue
@@ -73,7 +73,7 @@ function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Noth
         end
         entry.deps = deps
     else
-        for path in registered_paths(env, uuid)
+        for path in registered_paths(ctx, uuid)
             data = load_package_data(UUID, joinpath(path, "Deps.toml"), version)
             if data !== nothing
                 entry.deps = data
@@ -100,7 +100,7 @@ function _resolve_versions!(
         uuid_to_name[uuid] = name
 
         uuid_idx = findfirst(isequal(uuid), uuids)
-        entry = manifest_info(ctx.env, uuid)
+        entry = manifest_info(ctx, uuid)
         if entry !== nothing && entry.version !== nothing # stdlibs might not have a version
             ver = VersionSpec(entry.version)
         else
@@ -147,7 +147,7 @@ function _resolve_versions!(
 
     simplify_graph!(graph)
     vers = resolve(graph)
-    find_registered!(ctx.env, collect(keys(vers)))
+    find_registered!(ctx, collect(keys(vers)))
     # update vector of package versions
     for pkg in pkgs
         # Fixed packages are not returned by resolve (they already have their version set)
@@ -156,7 +156,7 @@ function _resolve_versions!(
     uuids = UUID[pkg.uuid for pkg in pkgs]
     for (uuid, ver) in vers
         uuid in uuids && continue
-        name = (uuid in keys(ctx.stdlibs)) ? ctx.stdlibs[uuid] : registered_name(ctx.env, uuid)
+        name = (uuid in keys(ctx.stdlibs)) ? ctx.stdlibs[uuid] : registered_name(ctx, uuid)
         push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
     end
     return vers
@@ -168,7 +168,7 @@ function _collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::
     uuid_to_pkg = Dict{UUID,PackageSpec}()
     for pkg in pkgs
         local path
-        entry = manifest_info(ctx.env, pkg.uuid)
+        entry = manifest_info(ctx, pkg.uuid)
         if pkg.special_action == PKGSPEC_FREED && !entry.pinned
             continue
         elseif pkg.special_action == PKGSPEC_DEVELOPED
@@ -324,7 +324,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
         end
     end
 
-    prune_manifest(ctx.env)
+    prune_manifest(ctx)
     return new_versions
 end
 
@@ -337,7 +337,7 @@ function _add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; new_git = UUID
     # the manifest version in the specified version set
     # then leave the package as is at the installed version
     for (name::String, uuid::UUID) in ctx.env.project.deps
-        entry = manifest_info(ctx.env, uuid)
+        entry = manifest_info(ctx, uuid)
         entry !== nothing && entry.version !== nothing || continue
         for pkg in pkgs
             pkg.uuid == uuid && entry.version ∈ pkg.version || continue
@@ -361,7 +361,7 @@ function _version_data!(ctx::Context, pkgs::Vector{PackageSpec})
         uuid = pkg.uuid
         ver = pkg.version::VersionNumber
         clones[uuid] = String[]
-        for path in registered_paths(ctx.env, uuid)
+        for path in registered_paths(ctx, uuid)
             info = parse_toml(path, "Package.toml")
             repo = info["repo"]
             repo in clones[uuid] || push!(clones[uuid], repo)
@@ -389,10 +389,10 @@ function collect_target_deps!(
     # Find the path to the package
     if pkg.uuid in keys(ctx.stdlibs)
         path = Types.stdlib_path(pkg.name)
-    elseif Types.is_project_uuid(ctx.env, pkg.uuid)
+    elseif Types.is_project_uuid(ctx, pkg.uuid)
         path = dirname(ctx.env.project_file)
     else
-        entry = manifest_info(ctx.env, pkg.uuid)
+        entry = manifest_info(ctx, pkg.uuid)
         path = (entry.path !== nothing) ?
             project_rel_path(ctx, entry.path) :
             find_installed(pkg.name, pkg.uuid, entry.tree_hash)
@@ -445,7 +445,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     # unless we already have resolved for the current environment, which the calleer indicates
     # with `might_need_to_resolve`
     need_to_resolve = false
-    is_project = Types.is_project(localctx.env, pkg)
+    is_project = Types.is_project(localctx, pkg)
 
     target = nothing
     if pkg.special_action == PKGSPEC_TESTED
@@ -472,7 +472,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         end
         pkg.uuid in seen && return
         push!(seen, pkg.uuid)
-        entry = manifest_info(localctx.env, pkg.uuid)
+        entry = manifest_info(localctx, pkg.uuid)
         entry === nothing && return
         need_to_resolve |= (entry.path !== nothing)
         localctx.env.project.deps[pkg.name] = pkg.uuid
@@ -536,7 +536,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
             target_deps = deepcopy(pkgs)
             _add_or_develop(localctx, pkgs)
             need_to_resolve = false # add resolves
-            entry = manifest_info(localctx.env, pkg.uuid)
+            entry = manifest_info(localctx, pkg.uuid)
             for deppkg in target_deps
                 entry.deps[deppkg.name] = deppkg.uuid
             end
@@ -551,7 +551,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
             _resolve_versions!(localctx, pkgs)
             new = apply_versions(localctx, pkgs)
         else
-            prune_manifest(localctx.env)
+            prune_manifest(localctx)
         end
         # Remove deps that we added to the project just to keep their versions fixed,
         # since we know all of the packages should be in the manifest this should be
@@ -606,7 +606,7 @@ function backwards_compatibility_for_test(
         end
     end
     with_dependencies_loadable_at_toplevel(ctx, pkg; might_need_to_resolve=true) do localctx
-        if !Types.is_project_uuid(ctx.env, pkg.uuid)
+        if !Types.is_project_uuid(ctx, pkg.uuid)
             Display.status(localctx, mode=PKGMODE_MANIFEST)
         end
 

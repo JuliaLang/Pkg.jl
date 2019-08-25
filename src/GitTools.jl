@@ -104,13 +104,13 @@ function normalize_url(url::AbstractString)
     end
 end
 
-ensure_clone(target_path, url; kwargs...) =
-    ispath(target_path) ? LibGit2.GitRepo(target_path) : GitTools.clone(url, target_path; kwargs...)
+ensure_clone(ctx, target_path, url; kwargs...) =
+    ispath(target_path) ? LibGit2.GitRepo(target_path) : GitTools.clone(ctx, url, target_path; kwargs...)
 
-function clone(url, source_path; header=nothing, kwargs...)
+function clone(ctx, url, source_path; header=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
-    Pkg.Types.printpkgstyle(stdout, :Cloning, header == nothing ? "git-repo `$url`" : header)
+    Pkg.Types.printpkgstyle(ctx, :Cloning, header == nothing ? "git-repo `$url`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
@@ -136,14 +136,14 @@ function clone(url, source_path; header=nothing, kwargs...)
     end
 end
 
-function fetch(repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
+function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
         end
     end
     remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(stdout, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
+    Pkg.Types.printpkgstyle(ctx, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
