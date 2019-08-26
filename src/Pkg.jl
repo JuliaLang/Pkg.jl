@@ -95,7 +95,7 @@ Pkg.add("Example") # Add a package from registry
 Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version; latest release in the 0.3 series
 Pkg.add(PackageSpec(name="Example", version="0.3.1")) # Specify version; exact release
 Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url to remote gitrepo
-Pkg.add(PackageSpec(url="/remote/mycompany/juliapackages/OurPackage"))` # From path to local gitrepo
+Pkg.add(PackageSpec(url="/remote/mycompany/juliapackages/OurPackage")) # From path to local gitrepo
 ```
 
 See also [`PackageSpec`](@ref).
