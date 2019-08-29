@@ -4,19 +4,19 @@
 function read_field(name::String, default, info, map)
     x = get(info, name, default)
     x == default && return default
-    x isa String || pkgerror("Expected field `$name` to be a String")
+    x isa String || pkgerror("Expected field `$name` to be a String.")
     return map(x)
 end
 
 read_pinned(::Nothing) = false
 read_pinned(pinned::Bool) = pinned
-read_pinned(pinned) = pkgerror("Expected field `pinned` to be a Boolean")
+read_pinned(pinned) = pkgerror("Expected field `pinned` to be a Boolean.")
 
 function safe_SHA1(sha::String)
     try sha = SHA1(sha)
     catch err
         err isa ArgumentError || rethrow()
-        pkgerror("Could not parse `git-tree-sha1` field as a SHA")
+        pkgerror("Could not parse `git-tree-sha1` field as a SHA.")
     end
     return sha
 end
@@ -25,7 +25,7 @@ function safe_uuid(uuid::String)::UUID
     try uuid = UUID(uuid)
     catch err
         err isa ArgumentError || rethrow()
-        pkgerror("Could not parse `uuid` field as a UUID")
+        pkgerror("Could not parse `uuid` field as a UUID.")
     end
     return uuid
 end
@@ -34,7 +34,7 @@ function safe_bool(bool::String)
     try bool = parse(Bool, bool)
     catch err
         err isa ArgumentError || rethrow()
-        pkgerror("Could not parse `pinned` field as a Bool")
+        pkgerror("Could not parse `pinned` field as a Bool.")
     end
     return bool
 end
@@ -44,7 +44,7 @@ function safe_version(version::String)::VersionNumber
     try version = VersionNumber(version)
     catch err
         err isa ArgumentError || rethrow()
-        pkgerror("Could not parse `version` as a `VersionNumber`")
+        pkgerror("Could not parse `version` as a `VersionNumber`.")
     end
     return version
 end
@@ -58,10 +58,10 @@ function safe_path(path::String)
 end
 
 read_deps(::Nothing) = Dict{String, UUID}()
-read_deps(deps) = pkgerror("Expected `deps` field to be either a list or a table")
+read_deps(deps) = pkgerror("Expected `deps` field to be either a list or a table.")
 function read_deps(deps::AbstractVector)
     for dep in deps
-        dep isa String || pkgerror("Expected `dep` entry to be a String")
+        dep isa String || pkgerror("Expected `dep` entry to be a String.")
     end
     return deps
 end
@@ -79,17 +79,22 @@ struct Stage1
     deps::Union{AbstractVector{<:AbstractString}, Dict{String,UUID}}
 end
 
-handle_deps(deps, manifest) = deps
-function handle_deps(deps::Vector{String}, manifest::Dict{String,Vector{Stage1}})
+normalize_deps(name, uuid, deps, manifest) = deps
+function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,Vector{Stage1}})
     if length(deps) != length(unique(deps))
-        pkgerror("Duplicate entry in `deps` field")
+        pkgerror("Duplicate entry in `$name=$uuid`'s `deps` field.")
     end
     final = Dict{String,UUID}()
-    for name in deps
-        infos = get(manifest, name, nothing)
-        infos !== nothing || pkgerror("Dependency on `$name` but no such entry in manifest")
-        length(infos) == 1 || pkgerror("Ambiguous dependency on `$name`")
-        final[name] = infos[1].uuid
+    for dep in deps
+        infos = get(manifest, dep, nothing)
+        if infos === nothing
+            pkgerror("`$name=$uuid` depends on `$dep`, ",
+                     "but no such entry exists in the manifest.")
+        end
+        # should have used dict format instead of vector format
+        length(infos) == 1 || pkgerror("Invalid manfiest format. ",
+                                       "`$name=$uuid`'s dependency on `$dep` is ambiguous.")
+        final[dep] = infos[1].uuid
     end
     return final
 end
@@ -97,18 +102,24 @@ end
 function validate_manifest(stage1::Dict{String,Vector{Stage1}})
     # expand vector format deps
     for (name, infos) in stage1, info in infos
-        info.entry.deps = handle_deps(info.deps, stage1)
+        info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
     end
-    # invariant: all dependencies are now Dict{String,UUID}
+    # invariant: all dependencies are now normalized to Dict{String,UUID}
     manifest = Dict{UUID, PackageEntry}()
     for (name, infos) in stage1, info in infos
         manifest[info.uuid] = info.entry
     end
     # now just verify the graph structure
-    for (_, entry) in manifest, (name, uuid) in entry.deps
-        dep = get(manifest, uuid, nothing)
-        dep !== nothing || pkgerror("`$(entry.name)` depends on `$name=$uuid`, but no entry in manifest")
-        dep.name == name || pkgerror("Dependency name does not match UUID")
+    for (entry_uuid, entry) in manifest, (name, uuid) in entry.deps
+        dep_entry = get(manifest, uuid, nothing)
+        if dep_entry === nothing
+            pkgerror("`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
+                     "but no such entry exists in the manifest.")
+        end
+        if dep_entry.name != name
+            pkgerror("`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
+                     "but entry with UUID `$uuid` has name `$(dep_entry.name)`.")
+        end
     end
     return manifest
 end
@@ -119,14 +130,21 @@ function Manifest(raw::Dict)::Manifest
         # TODO is name guaranteed to be a string?
         entry = PackageEntry()
         entry.name     = name
-        entry.pinned   = read_pinned(get(info, "pinned", nothing))
-        uuid           = read_field("uuid",          nothing, info, safe_uuid)
-        entry.version  = read_field("version",       nothing, info, safe_version)
-        entry.path     = read_field("path",          nothing, info, safe_path)
-        entry.repo.url = read_field("repo-url",      nothing, info, identity)
-        entry.repo.rev = read_field("repo-rev",      nothing, info, identity)
-        entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
-        deps = read_deps(get(info, "deps", nothing))
+        uuid = nothing
+        deps = nothing
+        try
+            uuid           = read_field("uuid",          nothing, info, safe_uuid)
+            entry.pinned   = read_pinned(get(info, "pinned", nothing))
+            entry.version  = read_field("version",       nothing, info, safe_version)
+            entry.path     = read_field("path",          nothing, info, safe_path)
+            entry.repo.url = read_field("repo-url",      nothing, info, identity)
+            entry.repo.rev = read_field("repo-rev",      nothing, info, identity)
+            entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
+            deps = read_deps(get(info, "deps", nothing))
+        catch
+            @error "Could not parse entry for `$name`"
+            rethrow()
+        end
         entry.other = info
         stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps))
     end
