@@ -558,7 +558,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         # a trivial modification of the project file only.
         # See issue https://github.com/JuliaLang/Pkg.jl/issues/1144
         not_loadable = setdiff(should_be_in_manifest, should_be_in_project)
-        Operations.rm(localctx, [PackageSpec(uuid = uuid) for uuid in not_loadable])
+        Pkg.API.rm(localctx, [PackageSpec(uuid = uuid) for uuid in not_loadable])
 
         write_env(localctx, display_diff = false)
         will_resolve && build_versions(localctx, new)
