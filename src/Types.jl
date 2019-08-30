@@ -585,17 +585,35 @@ function fresh_clone(ctx::Context, pkg::PackageSpec)
     return temp_repo
 end
 
+function dev_resolve_pkg!(ctx::Context, pkg::PackageSpec)
+    if pkg.uuid === nothing # have to resolve UUID
+        uuid = get(ctx.env.project.deps, pkg.name, nothing)
+        if uuid !== nothing # try to resolve with manifest
+            entry = manifest_info(ctx, uuid)
+            if entry.repo.url !== nothing
+                @debug "Resolving dev repo against manifest."
+                pkg.repo = entry.repo
+                return nothing # no need to continue, found pkg info
+            end
+        end
+        registry_resolve!(ctx, pkg)
+        if pkg.uuid === nothing
+            pkgerror("Package `$pkg.name` could not be found in the manifest ",
+                     "or in a regsitry.")
+        end
+    end
+    paths = registered_paths(ctx, pkg.uuid)
+    isempty(paths) && pkgerror("Package with UUID `$(pkg.uuid)` could not be found in a registry.")
+    _, pkg.repo.url = Types.registered_info(ctx, pkg.uuid, "repo")[1] #TODO look into [1]
+end
+
 function remote_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool)
     # Only update the registry in case of developing a non-local package
     update_registries(ctx)
-    # We save the repo in case another environement wants to develop from the same repo,
+    # We save the repo in case another environment wants to develop from the same repo,
     # this avoids having to reclone it from scratch.
     if pkg.repo.url === nothing # specified by name or uuid
-        if !has_uuid(pkg)
-            registry_resolve!(ctx, pkg)
-            ensure_resolved(ctx, [pkg]; registry=true)
-        end
-        _, pkg.repo.url = Types.registered_info(ctx, pkg.uuid, "repo")[1] #TODO look into [1]
+        dev_resolve_pkg!(ctx, pkg)
     end
     temp_clone = fresh_clone(ctx, pkg)
     # parse repo to determine dev path
