@@ -16,6 +16,17 @@ include("utils.jl")
     end
 end
 
+@testset "Pkg.rm" begin
+    # rm should remove compat entries
+    temp_pkg_dir() do tmp
+        copy_test_package(tmp, "BasicCompat")
+        Pkg.activate(joinpath(tmp, "BasicCompat"))
+        @test haskey(Pkg.Types.Context().env.project.compat, "Example")
+        Pkg.rm("Example")
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
+    end
+end
+
 @testset "Pkg.activate" begin
     temp_pkg_dir() do project_path
         cd_tempdir() do tmp

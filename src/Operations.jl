@@ -871,11 +871,10 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         pkg.mode == PKGMODE_PROJECT || continue
         found = false
         for (name::String, uuid::UUID) in ctx.env.project.deps
-            has_name(pkg) && pkg.name == name ||
-            has_uuid(pkg) && pkg.uuid == uuid || continue
-            !has_name(pkg) || pkg.name == name ||
+            pkg.name == name || pkg.uuid == uuid || continue
+            pkg.name == name ||
                 error("project file name mismatch for `$uuid`: $(pkg.name) ≠ $name")
-            !has_uuid(pkg) || pkg.uuid == uuid ||
+            pkg.uuid == uuid ||
                 error("project file UUID mismatch for `$name`: $(pkg.uuid) ≠ $uuid")
             uuid in drop || push!(drop, uuid)
             found = true
@@ -893,6 +892,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     if length(ctx.env.project.deps) == n
         println(ctx.io, "No changes")
         return
+    end
+    filter!(ctx.env.project.compat) do (name, _)
+        name in keys(ctx.env.project.deps)
     end
     deps_names = append!(collect(keys(ctx.env.project.deps)),
                          collect(keys(ctx.env.project.extras)))
