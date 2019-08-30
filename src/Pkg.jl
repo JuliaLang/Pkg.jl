@@ -271,43 +271,44 @@ const develop = API.develop
 const generate = API.generate
 
 """
-!!! note
-    This feature is experimental.
-
     Pkg.dependencies()::Dict{UUID, PackageInfo}
+
+!!! compat "Julia 1.4"
+    This feature requires Julia 1.4, and is considered experimental.
 
 Query the dependecy graph.
 The result is a `Dict` that maps a package UUID to a `PackageInfo` struct representing the dependency (a package).
 
-PackageInfo fields:
+# `PackageInfo` fields
 
-| `field`        | `Description`                                              |
-|:---------------|:-----------------------------------------------------------|
-| `name`         | The name of the package                                    |
-| `version`      | The version of the package (this is `Nothing` for stdlibs) |
-| `isdeveloped`  | Whether a package is directly tracking a directory         |
-| `ispinned`     | Whether a package is pinned                                |
-| `source`       | The directory containing the source code for that package  |
-| `dependencies` | The dependencies of that package as a vector of UUIDs      |
+| Field        | Description                                                |
+|:-------------|:-----------------------------------------------------------|
+| name         | The name of the package                                    |
+| version      | The version of the package (this is `Nothing` for stdlibs) |
+| isdeveloped  | Whether a package is directly tracking a directory         |
+| ispinned     | Whether a package is pinned                                |
+| source       | The directory containing the source code for that package  |
+| dependencies | The dependencies of that package as a vector of UUIDs      |
 """
 const dependencies = API.dependencies
 
 """
-!!! note
-    This feature is experimental.
-
     Pkg.project()::ProjectInfo
+
+!!! compat "Julia 1.4"
+    This feature requires Julia 1.4, and is considered experimental.
 
 Request a `ProjectInfo` struct which contains information about the active project.
 
-ProjectInfo fields:
-| `field`        | `Description`                                                                               |
-|:---------------|:--------------------------------------------------------------------------------------------|
-| `name`         | The project's name                                                                          |
-| `uuid`         | The project's UUID                                                                          |
-| `version`      | The project's version                                                                       |
-| `dependencies` | The project's direct dependencies as a `Dict` which maps dependency name to dependency UUID |
-| `path`         | The location of the project file which defines the active project                           |
+# `ProjectInfo` fields
+
+| Field        | Description                                                                                 |
+|:-------------|:--------------------------------------------------------------------------------------------|
+| name         | The project's name                                                                          |
+| uuid         | The project's UUID                                                                          |
+| version      | The project's version                                                                       |
+| dependencies | The project's direct dependencies as a `Dict` which maps dependency name to dependency UUID |
+| path         | The location of the project file which defines the active project                           |
 """
 const project = API.project
 
