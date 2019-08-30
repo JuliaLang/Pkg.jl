@@ -49,7 +49,7 @@ is_dep(ctx::Context, pkg::PackageSpec) =
 function load_direct_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Bool=true)
     # load rest of deps normally
     for (name::String, uuid::UUID) in ctx.env.project.deps
-        pkgs[uuid] === nothing || continue # dont duplicate packages
+        pkgs[uuid] === nothing || continue # do not duplicate packages
         entry = manifest_info(ctx, uuid)
         push!(pkgs, entry === nothing ?
               PackageSpec(;uuid=uuid, name=name) :
@@ -66,6 +66,7 @@ end
 
 function load_all_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Bool=true)
     for (uuid, entry) in ctx.env.manifest
+        pkgs[uuid] === nothing || continue # do not duplicate packages
         push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, path=entry.path,
                                 version = version ? something(entry.version, VersionSpec()) : VersionSpec(),
                                 repo=entry.repo, tree_hash=entry.tree_hash))
@@ -1336,6 +1337,27 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
                  join(pkgs_errored, ", "),
                  " errored during testing")
     end
+end
+
+function package_info(ctx::Context, pkg::PackageSpec)::PackageInfo
+    entry = manifest_info(ctx, pkg.uuid)
+    if entry === nothing
+        pkgerror("Can not query `$(pkg.name)` because it does not exist in the manifest.",
+                 " Use `Pkg.resolve()` to populate the manifest.")
+    end
+    package_info(ctx, pkg, entry)
+end
+
+function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
+    info = PackageInfo(
+        name         = pkg.name,
+        version      = pkg.version != VersionSpec() ? pkg.version : nothing,
+        ispinned     = pkg.pinned,
+        isdeveloped  = pkg.path !== nothing,
+        source       = project_rel_path(ctx, source_path(pkg)),
+        dependencies = collect(values(entry.deps)),
+    )
+    return info
 end
 
 end # module
