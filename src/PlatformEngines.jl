@@ -603,15 +603,15 @@ if `force` is not set and the already-existent file fails verification, or if
 `force` is set, verification fails, and then verification fails again after
 redownloading the file.
 
-If `quiet_download` is set to `false` (the default), this method will print to
-stdout when downloading a new file.  If it is set to `true` (and `verbose` is
+If `quiet_download` is set to `false`, this method will print to
+stdout when downloading a new file.  If it is set to `true` (default, and `verbose` is
 set to `false`) the downloading process will be completely silent.  If
 `verbose` is set to `true`, messages about integrity verification will be
 printed in addition to messages regarding downloading.
 """
 function download_verify(url::AbstractString, hash::AbstractString,
                          dest::AbstractString; verbose::Bool = false,
-                         force::Bool = false, quiet_download::Bool = false)
+                         force::Bool = false, quiet_download::Bool = true)
     # Whether the file existed in the first place
     file_existed = false
 
