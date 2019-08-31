@@ -9,6 +9,7 @@ export @pkg_str
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
 export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
+export PreserveLevel, PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
 depots() = Base.DEPOT_PATH
@@ -42,6 +43,7 @@ include("REPLMode/REPLMode.jl")
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
+import .Types: PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 
 # Import artifacts API
 using .Artifacts, .PlatformEngines
@@ -76,18 +78,34 @@ Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.update`
 """
 const UpgradeLevel = Types.UpgradeLevel
 
+const PreserveLevel = Types.PreserveLevel
+
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}})
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
 a package, also inside that package.
 
+## Resolution Tiers
+`Pkg` resolves the set of packages in your environment using a tiered algorithm.
+The `preserve` keyword argument allows you to key into a specific tier in the resolve algorithm.
+The following table describes the argument values for `preserve` (in order of strictness):
+
+| Value             | Description                                                                         |
+|:------------------|:------------------------------------------------------------------------------------|
+| `PRESERVE_ALL`    | Preserve the state of all existing dependencies (including recursive dependencies)  |
+| `PRESERVE_DIRECT` | Preserve the state of all existing direct dependencies                              |
+| `PRESERVE_SEMVER` | Preserve semver-compatible versions of direct dependencies                          |
+| `PRESERVE_NONE`   | Do not attempt to preserve any version information                                  |
+| `PRESERVE_TIERED` | Use the tier which will preserve the most version information (this is the default) |
+
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
+Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and preserve existing dependencies
 Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version; latest release in the 0.3 series
 Pkg.add(PackageSpec(name="Example", version="0.3.1")) # Specify version; exact release
 Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url to remote gitrepo

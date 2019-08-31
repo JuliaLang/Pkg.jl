@@ -19,8 +19,7 @@ include("generate.jl")
 
 dependencies() = dependencies(Context())
 function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
-    pkgs = PackageSpec[]
-    Operations.load_all_deps!(ctx, pkgs)
+    pkgs = Operations.load_all_deps(ctx)
     find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
 end
@@ -81,7 +80,7 @@ add(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add([pkg]; kwargs...)
 add(pkgs::Vector{<:AbstractString}; kwargs...) =
     add([check_package_name(pkg, :add) for pkg in pkgs]; kwargs...)
 add(pkgs::Vector{PackageSpec}; kwargs...)      = add(Context(), pkgs; kwargs...)
-function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
+function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
              platform::Platform=platform_key_abi(), kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -112,7 +111,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
     any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
         pkgerror("Cannot add package with the same name or uuid as the project")
 
-    Operations.add(ctx, pkgs, new_git; strict=strict, platform=platform)
+    Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform)
     return
 end
 
@@ -696,8 +695,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
     Operations.is_instantiated(ctx) && return
     Types.update_registries(ctx)
-    pkgs = PackageSpec[]
-    Operations.load_all_deps!(ctx, pkgs)
+    pkgs = Operations.load_all_deps(ctx)
     Operations.check_registered(ctx, pkgs)
     new_git = UUID[]
     for pkg in pkgs

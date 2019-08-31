@@ -141,8 +141,9 @@ function git_init_package(tmp, path)
     return pkgpath
 end
 
-function copy_test_package(tmpdir::String, name::String)
+function copy_test_package(tmpdir::String, name::String; use_pkg=true)
     cp(joinpath(@__DIR__, "test_packages", name), joinpath(tmpdir, name))
+    use_pkg || return
 
     # The known Pkg UUID, and whatever UUID we're currently using for testing
     known_pkg_uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"

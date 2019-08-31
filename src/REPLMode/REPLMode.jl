@@ -488,6 +488,15 @@ function do_pin!(ctx::APIOptions, args::Vector, api_opts::APIOptions)
     API.pin(Context!(ctx), args; collect(api_opts)...)
 end
 
+function do_preserve(x::String)
+    x == "all"    && return Types.PRESERVE_ALL
+    x == "direct" && return Types.PRESERVE_DIRECT
+    x == "semver" && return Types.PRESERVE_SEMVER
+    x == "none"   && return Types.PRESERVE_NONE
+    x == "tiered" && return Types.PRESERVE_TIERED
+    pkgerror("`$x` is not a valid argument for `--preserve`.")
+end
+
 do_add!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
     API.add(Context!(ctx), args; collect(api_opts)...)
 
