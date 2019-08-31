@@ -95,8 +95,8 @@ Pkg.Registry.status()
 ```
 """
 status(; kwargs...) = status(Context(); kwargs...)
-function status(ctx::Context; kwargs...)
-    Context!(ctx; kwargs...)
+function status(ctx::Context; io::IO=stdout, kwargs...)
+    Context!(ctx; io=io, kwargs...)
     regs = Types.collect_registries()
     regs = unique(r -> r.uuid, regs) # Maybe not?
     Types.printpkgstyle(ctx, Symbol("Registry Status"), "")

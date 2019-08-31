@@ -309,7 +309,7 @@ end
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
-    io::IO = stdout
+    io::IO = stderr
     preview::Bool = false
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
@@ -1352,17 +1352,11 @@ function manifest_info(ctx::Context, uuid::UUID)::Union{PackageEntry,Nothing}
     return get(ctx.env.manifest, uuid, nothing)
 end
 
-# TODO: redirect to ctx stream
-function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false)
+function printpkgstyle(ctx::Context, cmd::Symbol, text::String, ignore_indent::Bool=false)
     indent = textwidth(string(:Downloaded))
     ignore_indent && (indent = 0)
-    printstyled(io, lpad(string(cmd), indent), color=:green, bold=true)
-    println(io, " ", text)
-end
-
-# TODO: use ctx specific context
-function printpkgstyle(ctx::Context, cmd::Symbol, text::String, ignore_indent::Bool=false)
-    printpkgstyle(ctx.io, cmd, text)
+    printstyled(ctx.io, lpad(string(cmd), indent), color=:green, bold=true)
+    println(ctx.io, " ", text)
 end
 
 

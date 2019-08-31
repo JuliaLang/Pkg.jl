@@ -3,28 +3,27 @@
 generate(path::String; kwargs...) = generate(Context(), path; kwargs...)
 function generate(ctx::Context, path::String; kwargs...)
     Context!(ctx; kwargs...)
-    ctx.preview && preview_info()
+    preview_info(ctx)
     dir, pkg = dirname(path), basename(path)
     Base.isidentifier(pkg) || pkgerror("$(repr(pkg)) is not a valid package name")
     isdir(path) && pkgerror("$(abspath(path)) already exists")
-    printstyled("Generating"; color=:green, bold=true)
-    print(" project $pkg:\n")
-    uuid = project(pkg, dir; preview=ctx.preview)
-    entrypoint(pkg, dir; preview=ctx.preview)
-    ctx.preview && preview_info()
+    printpkgstyle(ctx, :Generating, " project $pkg:")
+    uuid = project(ctx, pkg, dir)
+    entrypoint(ctx, pkg, dir)
+    preview_info(ctx)
     return Dict(pkg => uuid)
 end
 
-function genfile(f::Function, pkg::String, dir::String, file::String; preview::Bool)
+function genfile(f::Function, ctx::Context, pkg::String, dir::String, file::String)
     path = joinpath(dir, pkg, file)
-    println(stdout, "    $path")
-    preview && return
+    println(ctx.io, "    $path")
+    ctx.preview && return
     mkpath(dirname(path))
     open(f, path, "w")
     return
 end
 
-function project(pkg::String, dir::String; preview::Bool)
+function project(ctx::Context, pkg::String, dir::String)
     name = email = nothing
     gitname = LibGit2.getconfig("user.name", "")
     isempty(gitname) || (name = gitname)
@@ -50,7 +49,7 @@ function project(pkg::String, dir::String; preview::Bool)
     authors = ["$name " * (email == nothing ? "" : "<$email>")]
 
     uuid = UUIDs.uuid4()
-    genfile(pkg, dir, "Project.toml"; preview=preview) do io
+    genfile(ctx, pkg, dir, "Project.toml") do io
         toml = Dict("authors" => authors,
                     "name" => pkg,
                     "uuid" => string(uuid),
@@ -61,8 +60,8 @@ function project(pkg::String, dir::String; preview::Bool)
     return uuid
 end
 
-function entrypoint(pkg::String, dir; preview::Bool)
-    genfile(pkg, dir, "src/$pkg.jl"; preview=preview) do io
+function entrypoint(ctx::Context, pkg::String, dir)
+    genfile(ctx, pkg, dir, "src/$pkg.jl") do io
         print(io,
            """
             module $pkg

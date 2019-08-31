@@ -726,7 +726,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}, verbose::Bool)
     uuids = UUID[]
     _get_deps!(ctx, pkgs, uuids)
     build_versions(ctx, uuids; might_need_to_resolve=true, verbose=verbose)
-    ctx.preview && preview_info()
 end
 
 function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,Int}
@@ -816,9 +815,9 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
 
         sandbox(ctx, pkg, source_path, builddir(source_path)) do
             ok = open(log_file, "w") do log
+                std = verbose ? ctx.io : log
                 success(pipeline(gen_build_code(buildfile(source_path)),
-                                 stdout = verbose ? stdout : log,
-                                 stderr = verbose ? stderr : log))
+                                 stdout=std, stderr=std))
             end
             ok && return
             n_lines = isinteractive() ? 100 : 5000
