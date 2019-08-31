@@ -792,20 +792,20 @@ end
 end
 
 @testset "create manifest file similar to project file" begin
-    cd_tempdir() do dir
+    temp_pkg_dir() do project_path; mktempdir() do dir
         touch(joinpath(dir, "Project.toml"))
-        Pkg.activate(".")
+        Pkg.activate(dir)
         Pkg.add("Example")
         @test isfile(joinpath(dir, "Manifest.toml"))
         @test !isfile(joinpath(dir, "JuliaManifest.toml"))
-    end
-    cd_tempdir() do dir
+    end end
+    temp_pkg_dir() do project_path; mktempdir() do dir
         touch(joinpath(dir, "JuliaProject.toml"))
-        Pkg.activate(".")
+        Pkg.activate(dir)
         Pkg.add("Example")
         @test !isfile(joinpath(dir, "Manifest.toml"))
         @test isfile(joinpath(dir, "JuliaManifest.toml"))
-    end
+    end end
 end
 
 @testset "query interface basic tests" begin
