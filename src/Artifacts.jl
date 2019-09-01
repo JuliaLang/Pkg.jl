@@ -5,7 +5,8 @@ import ..depots1, ..depots
 import ..GitTools: tree_hash, set_readonly
 using ..BinaryPlatforms
 import ..TOML
-import ..Types: parse_toml, write_env_usage
+import ..Types: parse_toml
+import ..EnvCaches: write_env_usage
 using ..PlatformEngines
 using SHA
 

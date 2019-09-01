@@ -11,6 +11,7 @@ using REPL.TerminalMenus
 using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names
+import ..EnvCaches: write_env_usage
 using ..BinaryPlatforms
 import ..Pkg
 

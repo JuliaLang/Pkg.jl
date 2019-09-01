@@ -33,7 +33,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     RegistrySpec
 
 using ..PkgErrors, ..GitRepos, ..VersionTypes, ..Manifests, ..Projects, ..PackageSpecs,
-    ..Utils
+    ..Utils, ..EnvCaches
 
 ## ordering of UUIDs ##
 
@@ -118,32 +118,6 @@ Base.@kwdef struct Artifact
     platform::Union{Platform,Nothing} = nothing
 end
 
-############
-# EnvCache #
-############
-
-mutable struct EnvCache
-    # environment info:
-    env::Union{Nothing,String}
-    git::Union{Nothing,String}
-
-    # paths for files:
-    project_file::String
-    manifest_file::String
-
-    # name / uuid of the project
-    pkg::Union{PackageSpec, Nothing}
-
-    # cache of metadata:
-    project::Project
-    manifest::Manifest
-
-    # registered package info:
-    uuids::Dict{String,Vector{UUID}}
-    paths::Dict{UUID,Vector{String}}
-    names::Dict{UUID,Vector{String}}
-end
-
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
@@ -159,44 +133,6 @@ Base.@kwdef mutable struct Context
     # Remove next field when support for Pkg2 CI scripts is removed
     currently_running_target::Bool = false
     old_pkg2_clone_name::String = ""
-end
-
-function EnvCache(env::Union{Nothing,String}=nothing)
-    project_file = find_project_file(env)
-    project_dir = dirname(project_file)
-    git = ispath(joinpath(project_dir, ".git")) ? project_dir : nothing
-    # read project file
-    project = read_project(project_file)
-    # initiaze project package
-    if any(x -> x !== nothing, [project.name, project.uuid, project.version])
-        project_package = PackageSpec(
-            name = project.name,
-            uuid = project.uuid,
-            version = something(project.version, VersionNumber("0.0")),
-        )
-    else
-        project_package = nothing
-    end
-    # determine manifest file
-    dir = abspath(project_dir)
-    manifest_file = project.manifest !== nothing ?
-        abspath(project.manifest) :
-        manifestfile_path(dir)
-    write_env_usage(manifest_file, "manifest_usage.toml")
-    manifest = read_manifest(manifest_file)
-    uuids = Dict{String,Vector{UUID}}()
-    paths = Dict{UUID,Vector{String}}()
-    names = Dict{UUID,Vector{String}}()
-    return EnvCache(env,
-        git,
-        project_file,
-        manifest_file,
-        project_package,
-        project,
-        manifest,
-        uuids,
-        paths,
-        names,)
 end
 
 project_uuid(ctx::Context) = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid
@@ -258,23 +194,6 @@ get_deps(ctx::Context, target::Union{Nothing,String}=nothing) =
 function project_compatibility(ctx::Context, name::String)
     compat = get(ctx.env.project.compat, name, nothing)
     return compat === nothing ? VersionSpec() : VersionSpec(semver_spec(compat))
-end
-
-function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
-    !ispath(logdir()) && mkpath(logdir())
-    usage_file = joinpath(logdir(), usage_filepath)
-    touch(usage_file)
-
-    # Don't record ghost usage
-    !isfile(source_file) && return
-
-    # Do not rewrite as do-block syntax (no longer precompilable)
-    io = open(usage_file, "a")
-    print(io, """
-    [[$(repr(source_file))]]
-    time = $(now())Z
-    """)
-    close(io)
 end
 
 function read_package(f::String)
