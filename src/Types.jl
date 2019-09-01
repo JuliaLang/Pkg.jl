@@ -118,9 +118,16 @@ Base.@kwdef struct Artifact
     platform::Union{Platform,Nothing} = nothing
 end
 
+Base.@kwdef struct RegCache
+    uuids::Dict{String,Vector{UUID}} = Dict{String,Vector{UUID}}()
+    paths::Dict{UUID,Vector{String}} = Dict{UUID,Vector{String}}()
+    names::Dict{UUID,Vector{String}} = Dict{UUID,Vector{String}}()
+end
+
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
+    reg::RegCache = RegCache()
     io::IO = stderr
     preview::Bool = false
     use_libgit2_for_all_downloads::Bool = false
@@ -942,15 +949,15 @@ function find_registered!(ctx::Context,
     uuids::Vector{UUID}=UUID[]
 )::Nothing
     # only look if there's something new to see
-    names = filter(name -> !haskey(ctx.env.uuids, name), names)
-    uuids = filter(uuid -> !haskey(ctx.env.paths, uuid), uuids)
+    names = filter(name -> !haskey(ctx.reg.uuids, name), names)
+    uuids = filter(uuid -> !haskey(ctx.reg.paths, uuid), uuids)
     isempty(names) && isempty(uuids) && return
 
     # since we're looking anyway, look for everything
     save(name::String) =
-        name in names || haskey(ctx.env.uuids, name) || push!(names, name)
+        name in names || haskey(ctx.reg.uuids, name) || push!(names, name)
     save(uuid::UUID) =
-        uuid in uuids || haskey(ctx.env.paths, uuid) || push!(uuids, uuid)
+        uuid in uuids || haskey(ctx.reg.paths, uuid) || push!(uuids, uuid)
 
     # lookup any dependency in the project file
     for (name, uuid) in ctx.env.project.deps
@@ -968,9 +975,9 @@ function find_registered!(ctx::Context,
     # if there's still nothing to look for, return early
     isempty(names) && isempty(uuids) && return
     # initialize env entries for names and uuids
-    for name in names; ctx.env.uuids[name] = UUID[]; end
-    for uuid in uuids; ctx.env.paths[uuid] = String[]; end
-    for uuid in uuids; ctx.env.names[uuid] = String[]; end
+    for name in names; ctx.reg.uuids[name] = UUID[]; end
+    for uuid in uuids; ctx.reg.paths[uuid] = String[]; end
+    for uuid in uuids; ctx.reg.names[uuid] = String[]; end
 
     # note: empty vectors will be left for names & uuids that aren't found
     clone_default_registries(ctx)
@@ -980,12 +987,12 @@ function find_registered!(ctx::Context,
               uuid = UUID(_uuid)
               name = pkgdata["name"]
               path = abspath(registry.path, pkgdata["path"])
-              push!(get!(ctx.env.uuids, name, UUID[]), uuid)
-              push!(get!(ctx.env.paths, uuid, String[]), path)
-              push!(get!(ctx.env.names, uuid, String[]), name)
+              push!(get!(ctx.reg.uuids, name, UUID[]), uuid)
+              push!(get!(ctx.reg.paths, uuid, String[]), path)
+              push!(get!(ctx.reg.names, uuid, String[]), name)
         end
     end
-    for d in (ctx.env.uuids, ctx.env.paths, ctx.env.names)
+    for d in (ctx.reg.uuids, ctx.reg.paths, ctx.reg.names)
         for (k, v) in d
             unique!(v)
         end
@@ -995,19 +1002,19 @@ end
 # Get registered uuids associated with a package name
 function registered_uuids(ctx::Context, name::String)::Vector{UUID}
     find_registered!(ctx, [name], UUID[])
-    return unique(ctx.env.uuids[name])
+    return unique(ctx.reg.uuids[name])
 end
 
 # Get registered paths associated with a package uuid
 function registered_paths(ctx::Context, uuid::UUID)::Vector{String}
     find_registered!(ctx, String[], [uuid])
-    return ctx.env.paths[uuid]
+    return ctx.reg.paths[uuid]
 end
 
 #Get registered names associated with a package uuid
 function registered_names(ctx::Context, uuid::UUID)::Vector{String}
     find_registered!(ctx, String[], [uuid])
-    return ctx.env.names[uuid]
+    return ctx.reg.names[uuid]
 end
 
 # Determine a single UUID for a given name, prompting if needed
@@ -1037,7 +1044,7 @@ function registered_uuid(ctx::Context, name::String)::Union{Nothing,UUID}
         menu = RadioMenu(choices)
         choice = request("There are multiple registered `$name` packages, choose one:", menu)
         choice == -1 && return nothing
-        ctx.env.paths[choices_cache[choice][1]] = [choices_cache[choice][2]]
+        ctx.reg.paths[choices_cache[choice][1]] = [choices_cache[choice][2]]
         return choices_cache[choice][1]
     else
         pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
@@ -1060,8 +1067,8 @@ end
 
 # Return most current package info for a registered UUID
 function registered_info(ctx::Context, uuid::UUID, key::String)
-    haskey(ctx.env.paths, uuid) || find_registered!(ctx, [uuid])
-    paths = ctx.env.paths[uuid]
+    haskey(ctx.reg.paths, uuid) || find_registered!(ctx, [uuid])
+    paths = ctx.reg.paths[uuid]
     isempty(paths) && pkgerror("`$uuid` is not registered")
     values = []
     for path in paths

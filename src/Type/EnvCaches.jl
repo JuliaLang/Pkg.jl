@@ -2,7 +2,6 @@ module EnvCaches
 
 export EnvCache
 
-using UUIDs # TODO remove this when creating RegCache
 import ..Pkg: logdir
 using  Dates
 using  ..PackageSpecs, ..Projects, ..Manifests, ..Utils
@@ -11,7 +10,6 @@ using  ..PackageSpecs, ..Projects, ..Manifests, ..Utils
 ###
 ### EnvCache
 ###
-# TODO move to RegCache
 mutable struct EnvCache
     # environment info:
     env::Union{Nothing,String} # TODO get rid of this field
@@ -24,10 +22,6 @@ mutable struct EnvCache
     # cache of metadata:
     project::Project
     manifest::Manifest
-    # registered package info:
-    uuids::Dict{String,Vector{UUID}}
-    paths::Dict{UUID,Vector{String}}
-    names::Dict{UUID,Vector{String}}
 end
 
 function EnvCache(env::Union{Nothing,String}=nothing)
@@ -53,9 +47,6 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         manifestfile_path(dir)
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
-    uuids = Dict{String,Vector{UUID}}()
-    paths = Dict{UUID,Vector{String}}()
-    names = Dict{UUID,Vector{String}}()
     return EnvCache(env,
         git,
         project_file,
@@ -63,9 +54,7 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         project_package,
         project,
         manifest,
-        uuids,
-        paths,
-        names,)
+        )
 end
 
 ###
