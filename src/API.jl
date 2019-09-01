@@ -11,7 +11,7 @@ import LibGit2
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
-using Pkg.Types: VersionTypes
+using Pkg.Types: _VersionTypes
 using ..BinaryPlatforms
 using ..Artifacts: artifact_paths
 
@@ -888,6 +888,6 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
 end
 Package(name::AbstractString) = PackageSpec(name)
 Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
-Package(name::AbstractString, uuid::UUID, version::VersionTypes) = PackageSpec(name, uuid, version)
+Package(name::AbstractString, uuid::UUID, version::_VersionTypes) = PackageSpec(name, uuid, version)
 
 end # module

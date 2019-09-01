@@ -32,9 +32,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     projectfile_path, manifestfile_path,
     RegistrySpec
 
-using ..PkgErrors, ..GitRepos
-
-include("versions.jl")
+using ..PkgErrors, ..GitRepos, ..VersionTypes
 
 ## ordering of UUIDs ##
 
@@ -128,12 +126,12 @@ end
 @enum(PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED,
                             PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED)
 
-const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
+const _VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
 
 Base.@kwdef mutable struct PackageSpec
     name::Union{Nothing,String} = nothing
     uuid::Union{Nothing,UUID} = nothing
-    version::VersionTypes = VersionSpec()
+    version::_VersionTypes = VersionSpec()
     tree_hash::Union{Nothing,SHA1} = nothing
     repo::GitRepo = GitRepo()
     path::Union{Nothing,String} = nothing
@@ -143,8 +141,8 @@ Base.@kwdef mutable struct PackageSpec
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
-PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
-PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
+PackageSpec(name::AbstractString, version::_VersionTypes) = PackageSpec(;name=name, version=version)
+PackageSpec(n::AbstractString, u::UUID, v::_VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
 
 has_name(pkg::PackageSpec) = pkg.name !== nothing
 has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
@@ -236,7 +234,7 @@ Base.@kwdef mutable struct Project
     # Fields
     name::Union{String, Nothing} = nothing
     uuid::Union{UUID, Nothing} = nothing
-    version::Union{VersionTypes, Nothing} = nothing
+    version::Union{_VersionTypes, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
