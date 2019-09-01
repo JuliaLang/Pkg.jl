@@ -26,6 +26,7 @@ const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 # load snapshotted dependencies
 include("../ext/TOML/src/TOML.jl")
 
+include("Utils.jl")
 include("GitTools.jl")
 include("PlatformEngines.jl")
 include("BinaryPlatforms.jl")
