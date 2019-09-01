@@ -32,6 +32,8 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     projectfile_path, manifestfile_path,
     RegistrySpec
 
+using ..PkgErrors
+
 include("versions.jl")
 
 ## ordering of UUIDs ##
@@ -103,16 +105,6 @@ function Base.showerror(io::IO, pkgerr::ResolverError)
         end
     end
 end
-
-#################
-# Pkg Error #
-#################
-struct PkgError <: Exception
-    msg::String
-end
-pkgerror(msg::String...) = throw(PkgError(join(msg)))
-Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
-
 
 ############
 # Artifact #
