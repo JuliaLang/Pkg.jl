@@ -32,7 +32,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     projectfile_path, manifestfile_path,
     RegistrySpec
 
-using ..PkgErrors, ..GitRepos, ..VersionTypes
+using ..PkgErrors, ..GitRepos, ..VersionTypes, ..Manifests
 
 ## ordering of UUIDs ##
 
@@ -243,35 +243,6 @@ Base.@kwdef mutable struct Project
     compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
 end
 
-Base.@kwdef mutable struct PackageEntry
-    name::Union{String,Nothing} = nothing
-    version::Union{VersionNumber,Nothing} = nothing
-    path::Union{String,Nothing} = nothing
-    pinned::Bool = false
-    repo::GitRepo = GitRepo()
-    tree_hash::Union{Nothing,SHA1} = nothing
-    deps::Dict{String,UUID} = Dict{String,UUID}()
-    other::Union{Dict,Nothing} = nothing
-end
-const Manifest = Dict{UUID,PackageEntry}
-
-function Base.show(io::IO, pkg::PackageEntry)
-    f = []
-    pkg.name      !== nothing && push!(f, "name"      => pkg.name)
-    pkg.version   !== nothing && push!(f, "version"   => pkg.version)
-    pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
-    pkg.path      !== nothing && push!(f, "dev/path"  => pkg.path)
-    pkg.pinned                && push!(f, "pinned"    => pkg.pinned)
-    pkg.repo.url  !== nothing && push!(f, "url/path"  => "`$(pkg.repo.url)`")
-    pkg.repo.rev  !== nothing && push!(f, "rev"       => pkg.repo.rev)
-    print(io, "PackageEntry(\n")
-    for (field, value) in f
-        print(io, "  ", field, " = ", value, "\n")
-    end
-    print(io, ")")
-end
-
-
 mutable struct EnvCache
     # environment info:
     env::Union{Nothing,String}
@@ -312,7 +283,6 @@ Base.@kwdef mutable struct Context
 end
 
 include("project.jl")
-include("manifest.jl")
 
 function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
@@ -1372,6 +1342,16 @@ function pathrepr(path::String)
         path = "@stdlib/" * basename(path)
     end
     return "`" * Base.contractuser(path) * "`"
+end
+
+function Manifests.write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)
+    isempty(manifest) && !ispath(env.manifest_file) && return
+
+    if display_diff && !(ctx.currently_running_target)
+        printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
+        Pkg.Display.print_manifest_diff(ctx, old_env, env)
+    end
+    !ctx.preview && write_manifest(manifest, env.manifest_file)
 end
 
 function write_env(ctx::Context; display_diff=true)

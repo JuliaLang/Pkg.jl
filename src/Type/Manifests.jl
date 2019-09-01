@@ -1,6 +1,45 @@
-###########
-# READING #
-###########
+module Manifests
+
+export Manifest, PackageEntry, read_manifest, write_manifest
+
+import Base: SHA1
+using  UUIDs
+using  ..PkgErrors, ..GitRepos, ..TOML
+
+###
+### PackageEntry
+###
+Base.@kwdef mutable struct PackageEntry
+    name::Union{String,Nothing} = nothing
+    version::Union{VersionNumber,Nothing} = nothing
+    path::Union{String,Nothing} = nothing
+    pinned::Bool = false
+    repo::GitRepo = GitRepo()
+    tree_hash::Union{Nothing,SHA1} = nothing
+    deps::Dict{String,UUID} = Dict{String,UUID}()
+    other::Union{Dict,Nothing} = nothing
+end
+const Manifest = Dict{UUID,PackageEntry}
+
+function Base.show(io::IO, pkg::PackageEntry)
+    f = []
+    pkg.name      !== nothing && push!(f, "name"      => pkg.name)
+    pkg.version   !== nothing && push!(f, "version"   => pkg.version)
+    pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
+    pkg.path      !== nothing && push!(f, "dev/path"  => pkg.path)
+    pkg.pinned                && push!(f, "pinned"    => pkg.pinned)
+    pkg.repo.url  !== nothing && push!(f, "url/path"  => "`$(pkg.repo.url)`")
+    pkg.repo.rev  !== nothing && push!(f, "rev"       => pkg.repo.rev)
+    print(io, "PackageEntry(\n")
+    for (field, value) in f
+        print(io, "  ", field, " = ", value, "\n")
+    end
+    print(io, ")")
+end
+
+###
+### READING
+###
 function read_field(name::String, default, info, map)
     x = get(info, name, default)
     x == default && return default
@@ -39,7 +78,6 @@ function safe_bool(bool::String)
     return bool
 end
 
-# note: returns raw version *not* parsed version
 function safe_version(version::String)::VersionNumber
     try version = VersionNumber(version)
     catch err
@@ -154,9 +192,9 @@ end
 read_manifest(path::String)::Manifest =
     isfile(path) ? open(io->read_manifest(io;path=path), path) : Dict{UUID,PackageEntry}()
 
-###########
-# WRITING #
-###########
+###
+### WRITING
+###
 function destructure(manifest::Manifest)::Dict
     function entry!(entry, key, value; default=nothing)
         if value == default
@@ -210,12 +248,4 @@ function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     open(f -> write(f, seekstart(io)), manifest_file; truncate=true)
 end
 
-function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)
-    isempty(manifest) && !ispath(env.manifest_file) && return
-
-    if display_diff && !(ctx.currently_running_target)
-        printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
-        Pkg.Display.print_manifest_diff(ctx, old_env, env)
-    end
-    !ctx.preview && write_manifest(manifest, env.manifest_file)
-end
+end #module
