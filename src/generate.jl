@@ -55,7 +55,7 @@ function project(ctx::Context, pkg::String, dir::String)
                     "uuid" => string(uuid),
                     "version" => "0.1.0",
                     )
-        TOML.print(io, toml, sorted=true, by=key -> (Types.project_key_order(key), key))
+        TOML.print(io, toml, sorted=true, by=key -> (Types.Projects.project_key_order(key), key))
     end
     return uuid
 end

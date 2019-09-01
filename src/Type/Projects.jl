@@ -1,14 +1,32 @@
-#########
-# UTILS #
-#########
-listed_deps(project::Project) =
-    append!(collect(keys(project.deps)), collect(keys(project.extras)))
+module Projects
 
-###########
-# READING #
-###########
-read_project_uuid(::Nothing) = nothing
-function read_project_uuid(uuid::String)
+export Project, read_project, write_project
+
+using  UUIDs
+using  ..PkgErrors, ..VersionTypes, ..GitRepos, ..TOML
+
+###
+### Project
+###
+Base.@kwdef mutable struct Project
+    other::Dict{String,Any} = Dict{String,Any}()
+    # Fields
+    name::Union{Nothing,String} = nothing
+    uuid::Union{Nothing,UUID} = nothing
+    version::Union{Nothing,VersionNumber} = nothing # !! this used to be `VersionTypes`
+    manifest::Union{Nothing,String} = nothing
+    # Sections
+    deps::Dict{String,UUID} = Dict{String,UUID}()
+    extras::Dict{String,UUID} = Dict{String,UUID}()
+    targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
+    compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
+end
+
+###
+### Reading
+###
+read_uuid(::Nothing) = nothing
+function read_uuid(uuid::String)
     try uuid = UUID(uuid)
     catch err
         err isa ArgumentError || rethrow()
@@ -16,20 +34,20 @@ function read_project_uuid(uuid::String)
     end
     return uuid
 end
-read_project_uuid(uuid) = pkgerror("Expected project UUID to be a string")
+read_uuid(uuid) = pkgerror("Expected project UUID to be a string")
 
-read_project_version(::Nothing) = nothing
-function read_project_version(version::String)
+read_version(::Nothing) = nothing
+function read_version(version::String)
     try version = VersionNumber(version)
     catch err
         err isa ArgumentError || rethrow()
         pkgerror("Could not parse project version as a version")
     end
 end
-read_project_version(version) = pkgerror("Expected project version to be a string")
+read_version(version) = pkgerror("Expected project version to be a string")
 
-read_project_deps(::Nothing, section::String) = Dict{String,UUID}()
-function read_project_deps(raw::Dict{String,Any}, section_name::String)
+read_deps(::Nothing, section::String) = Dict{String,UUID}()
+function read_deps(raw::Dict{String,Any}, section_name::String)
     deps = Dict{String,UUID}()
     for (name, uuid) in raw
         try
@@ -42,12 +60,12 @@ function read_project_deps(raw::Dict{String,Any}, section_name::String)
     end
     return deps
 end
-function read_project_deps(raw, section_name::String)
+function read_deps(raw, section_name::String)
     pkgerror("Expected `$(section_name)` section to be a key-value list")
 end
 
-read_project_targets(::Nothing, project::Project) = Dict{String,Vector{String}}()
-function read_project_targets(raw::Dict{String,Any}, project::Project)
+read_targets(::Nothing, project::Project) = Dict{String,Vector{String}}()
+function read_targets(raw::Dict{String,Any}, project::Project)
     for (target, deps) in raw
         deps isa Vector{String} || pkgerror("""
             Expected value for target `$target` to be a list of dependency names.
@@ -55,21 +73,26 @@ function read_project_targets(raw::Dict{String,Any}, project::Project)
     end
     return raw
 end
-read_project_targets(raw, project::Project) =
+read_targets(raw, project::Project) =
     pkgerror("Expected `targets` section to be a key-value list")
 
-read_project_compat(::Nothing, project::Project) = Dict{String,String}()
-function read_project_compat(raw::Dict{String,Any}, project::Project)
+read_compat(::Nothing, project::Project) = Dict{String,String}()
+function read_compat(raw::Dict{String,Any}, project::Project)
     for (name, version) in raw
         try VersionSpec(semver_spec(version))
         catch err
+            @show err
             pkgerror("Could not parse compatibility version for dependency `$name`")
         end
     end
     return raw
 end
-read_project_compat(raw, project::Project) =
+read_compat(raw, project::Project) =
     pkgerror("Expected `compat` section to be a key-value list")
+
+
+listed_deps(project::Project) =
+    append!(collect(keys(project.deps)), collect(keys(project.extras)))
 
 function validate(project::Project)
     # deps
@@ -114,12 +137,12 @@ function Project(raw::Dict)
     project.other    = raw
     project.name     = get(raw, "name", nothing)
     project.manifest = get(raw, "manifest", nothing)
-    project.uuid     = read_project_uuid(get(raw, "uuid", nothing))
-    project.version  = read_project_version(get(raw, "version", nothing))
-    project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
-    project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
-    project.compat   = read_project_compat(get(raw, "compat", nothing), project)
-    project.targets  = read_project_targets(get(raw, "targets", nothing), project)
+    project.uuid     = read_uuid(get(raw, "uuid", nothing))
+    project.version  = read_version(get(raw, "version", nothing))
+    project.deps     = read_deps(get(raw, "deps", nothing), "deps")
+    project.extras   = read_deps(get(raw, "extras", nothing), "extras")
+    project.compat   = read_compat(get(raw, "compat", nothing), project)
+    project.targets  = read_targets(get(raw, "targets", nothing), project)
     validate(project)
     return project
 end
@@ -143,9 +166,9 @@ end
 read_project(path::String) =
     isfile(path) ? open(io->read_project(io;path=path), path) : Project()
 
-###########
-# WRITING #
-###########
+###
+### Writing
+###
 function destructure(project::Project)::Dict
     raw = deepcopy(project.other)
 
@@ -175,16 +198,5 @@ function write_project(project::Dict, project_file::AbstractString)
     TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
     open(f -> write(f, seekstart(io)), project_file; truncate=true)
 end
-function write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
-    project = destructure(ctx.env.project)
-    if !isempty(project) || ispath(env.project_file)
-        if display_diff && !(ctx.currently_running_target)
-            printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
-            Pkg.Display.print_project_diff(ctx, old_env, env)
-        end
-        if !ctx.preview
-            mkpath(dirname(env.project_file))
-            write_project(project, env.project_file)
-        end
-    end
-end
+
+end #module

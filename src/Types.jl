@@ -32,7 +32,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     projectfile_path, manifestfile_path,
     RegistrySpec
 
-using ..PkgErrors, ..GitRepos, ..VersionTypes, ..Manifests
+using ..PkgErrors, ..GitRepos, ..VersionTypes, ..Manifests, ..Projects
 
 ## ordering of UUIDs ##
 
@@ -229,20 +229,6 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     return safe_realpath(project_file)
 end
 
-Base.@kwdef mutable struct Project
-    other::Dict{String,Any} = Dict{String,Any}()
-    # Fields
-    name::Union{String, Nothing} = nothing
-    uuid::Union{UUID, Nothing} = nothing
-    version::Union{_VersionTypes, Nothing} = nothing
-    manifest::Union{String, Nothing} = nothing
-    # Sections
-    deps::Dict{String,UUID} = Dict{String,UUID}()
-    extras::Dict{String,UUID} = Dict{String,UUID}()
-    targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
-    compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
-end
-
 mutable struct EnvCache
     # environment info:
     env::Union{Nothing,String}
@@ -281,8 +267,6 @@ Base.@kwdef mutable struct Context
     currently_running_target::Bool = false
     old_pkg2_clone_name::String = ""
 end
-
-include("project.jl")
 
 function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
@@ -1342,6 +1326,20 @@ function pathrepr(path::String)
         path = "@stdlib/" * basename(path)
     end
     return "`" * Base.contractuser(path) * "`"
+end
+
+function Projects.write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
+    project = Projects.destructure(ctx.env.project)
+    if !isempty(project) || ispath(env.project_file)
+        if display_diff && !(ctx.currently_running_target)
+            printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
+            Pkg.Display.print_project_diff(ctx, old_env, env)
+        end
+        if !ctx.preview
+            mkpath(dirname(env.project_file))
+            write_project(project, env.project_file)
+        end
+    end
 end
 
 function Manifests.write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)
