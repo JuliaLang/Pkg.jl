@@ -11,7 +11,7 @@ import LibGit2
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
-using Pkg.Types: _VersionTypes
+using Pkg.PackageSpecs: _VersionTypes
 using ..BinaryPlatforms
 using ..Artifacts: artifact_paths
 
