@@ -32,7 +32,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     projectfile_path, manifestfile_path,
     RegistrySpec
 
-using ..PkgErrors
+using ..PkgErrors, ..GitRepos
 
 include("versions.jl")
 
@@ -129,15 +129,6 @@ end
                             PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
-
-# The url field can also be a local path, rename?
-Base.@kwdef mutable struct GitRepo
-    url::Union{Nothing,String} = nothing
-    rev::Union{Nothing,String} = nothing
-end
-
-Base.:(==)(r1::GitRepo, r2::GitRepo) =
-    r1.url == r2.url && r1.rev == r2.rev
 
 Base.@kwdef mutable struct PackageSpec
     name::Union{Nothing,String} = nothing
