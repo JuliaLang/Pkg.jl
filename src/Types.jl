@@ -34,6 +34,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
 
 using ..PkgErrors, ..GitRepos, ..VersionTypes, ..Manifests, ..Projects, ..PackageSpecs,
     ..Utils, ..EnvCaches, ..Contexts, ..RegistrySpecs
+import ..Infos: ProjectInfo, PackageInfo
 
 ## ordering of UUIDs ##
 
@@ -1011,31 +1012,6 @@ function write_env(ctx::Context; display_diff=true)
     old_env = EnvCache(env.env) # load old environment for comparison
     write_project(env.project, env, old_env, ctx; display_diff=display_diff)
     write_manifest(env.manifest, env, old_env, ctx; display_diff=display_diff)
-end
-
-###
-### PackageInfo
-###
-
-Base.@kwdef struct PackageInfo
-    name::String
-    version::Union{Nothing,VersionNumber}
-    ispinned::Bool
-    isdeveloped::Bool
-    source::String
-    dependencies::Vector{UUID}
-end
-
-###
-### ProjectInfo
-###
-
-Base.@kwdef struct ProjectInfo
-    name::String
-    uuid::UUID
-    version::VersionNumber
-    dependencies::Dict{String,UUID}
-    path::String
 end
 
 end # module
