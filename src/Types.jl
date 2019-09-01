@@ -33,7 +33,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     RegistrySpec
 
 using ..PkgErrors, ..GitRepos, ..VersionTypes, ..Manifests, ..Projects, ..PackageSpecs,
-    ..Utils, ..EnvCaches
+    ..Utils, ..EnvCaches, ..Contexts
 
 ## ordering of UUIDs ##
 
@@ -118,30 +118,6 @@ Base.@kwdef struct Artifact
     platform::Union{Platform,Nothing} = nothing
 end
 
-Base.@kwdef struct RegCache
-    uuids::Dict{String,Vector{UUID}} = Dict{String,Vector{UUID}}()
-    paths::Dict{UUID,Vector{String}} = Dict{UUID,Vector{String}}()
-    names::Dict{UUID,Vector{String}} = Dict{UUID,Vector{String}}()
-end
-
-# ENV variables to set some of these defaults?
-Base.@kwdef mutable struct Context
-    env::EnvCache = EnvCache()
-    reg::RegCache = RegCache()
-    io::IO = stderr
-    preview::Bool = false
-    use_libgit2_for_all_downloads::Bool = false
-    use_only_tarballs_for_downloads::Bool = false
-    # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
-    # the future. It currently stands as an unofficial workaround for issue #795.
-    num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
-    graph_verbose::Bool = false
-    stdlibs::Dict{UUID,String} = stdlib()
-    # Remove next field when support for Pkg2 CI scripts is removed
-    currently_running_target::Bool = false
-    old_pkg2_clone_name::String = ""
-end
-
 project_uuid(ctx::Context) = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid
 collides_with_project(ctx::Context, pkg::PackageSpec) =
     is_project_name(ctx, pkg.name) || is_project_uuid(ctx, pkg.uuid)
@@ -149,19 +125,6 @@ is_project(ctx::Context, pkg::PackageSpec) = is_project_uuid(ctx, pkg.uuid)
 is_project_name(ctx::Context, name::String) =
     ctx.env.pkg !== nothing && ctx.env.pkg.name == name
 is_project_uuid(ctx::Context, uuid::UUID) = project_uuid(ctx) == uuid
-
-###########
-# Context #
-###########
-Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
-    Context!(Context(); kw_context...)
-function Context!(ctx::Context; kwargs...)
-    for (k, v) in kwargs
-        setfield!(ctx, k, v)
-    end
-    return ctx
-end
-
 Utils.is_stdlib(ctx::Context, uuid::UUID) = uuid in keys(ctx.stdlibs)
 
 # target === nothing : main dependencies
@@ -1077,20 +1040,6 @@ function registered_info(ctx::Context, uuid::UUID, key::String)
         push!(values, (path, value))
     end
     return values
-end
-
-# Find package by UUID in the manifest file
-manifest_info(ctx::Context, uuid::Nothing) = nothing
-function manifest_info(ctx::Context, uuid::UUID)::Union{PackageEntry,Nothing}
-    #any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
-    return get(ctx.env.manifest, uuid, nothing)
-end
-
-function printpkgstyle(ctx::Context, cmd::Symbol, text::String, ignore_indent::Bool=false)
-    indent = textwidth(string(:Downloaded))
-    ignore_indent && (indent = 0)
-    printstyled(ctx.io, lpad(string(cmd), indent), color=:green, bold=true)
-    println(ctx.io, " ", text)
 end
 
 function Projects.write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
