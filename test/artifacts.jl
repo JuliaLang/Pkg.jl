@@ -78,11 +78,11 @@ end
         # Test that some things raise warnings
         bad_meta = copy(meta)
         delete!(bad_meta, "os")
-        @test_logs (:error, r"Invalid Artifacts.toml") unpack_platform(bad_meta, "foo", "")
+        @test_logs (:error, r"Invalid artifacts file") unpack_platform(bad_meta, "foo", "")
 
         bad_meta = copy(meta)
         delete!(bad_meta, "arch")
-        @test_logs (:error, r"Invalid Artifacts.toml") unpack_platform(bad_meta, "foo", "")
+        @test_logs (:error, r"Invalid artifacts file") unpack_platform(bad_meta, "foo", "")
     end
 end
 
@@ -153,7 +153,7 @@ end
     for (creator, known_hash) in creators
         # Create artifact
         hash = create_artifact_chmod(creator)
-        
+
         # Ensure it hashes to the correct gitsha:
         @test hash.bytes == hex2bytes(known_hash)
 
@@ -405,7 +405,7 @@ end
         artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
         bind_artifact!(artifacts_toml, "live", live_hash)
         bind_artifact!(artifacts_toml, "die", die_hash)
-        
+
         # Now test that the usage file exists, and contains our Artifacts.toml
         usage = Pkg.TOML.parse(String(read(usage_path)))
         @test any(x -> startswith(x, artifacts_toml), keys(usage))
@@ -485,7 +485,7 @@ end
             @test create_artifact_chmod(make_baz) == baz_hash
         end
 
-        # Next, set up our depot path, with `depot1` as the "innermost" depot. 
+        # Next, set up our depot path, with `depot1` as the "innermost" depot.
         old_depot_path = DEPOT_PATH
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, [depot1, depot2, depot3])
@@ -543,7 +543,7 @@ end
                 using ArtifactOverrideLoading
                 arty_path, barty_path
             end)
-        
+
             @test arty_path == artifact_path(bar_hash)
             @test barty_path == barty_override_path
         end

@@ -8,7 +8,13 @@ This mechanism is also used to provide the binary dependencies for packages buil
 
 `Pkg` provides an API for working with artifacts, as well as a TOML file format for recording artifact usage in your packages, and to automate downloading of artifacts at package install time.
 Artifacts can always be referred to by content hash, but are typically accessed by a name that is bound to a content hash in an `Artifacts.toml` file that lives in a project's source tree.
-An example `Artifacts.toml` file is shown here as an example:
+
+!!! note
+    It is possible to use the alternate name `JuliaArtifacts.toml`, similar
+    to how it is possible to use `JuliaProject.toml` and `JuliaManifest.toml`
+    instead of `Project.toml` and `Manifest.toml`, respectively.
+
+An example `Artifacts.toml` file is shown here:
 
 ```TOML
 # Example Artifacts.toml file
