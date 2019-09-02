@@ -10,7 +10,7 @@ import REPL
 using REPL.TerminalMenus
 using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
-import ..Artifacts: ensure_all_artifacts_installed
+import ..Artifacts: ensure_all_artifacts_installed, artifact_names
 using ..BinaryPlatforms
 import ..Pkg
 
@@ -560,11 +560,14 @@ function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
                             platform::Platform=platform_key_abi())
     for pkg in pkgs
         path = source_path(pkg)
-        # Check to see if this package has an Artifacts.toml
-        artifacts_toml = joinpath(path, "Artifacts.toml")
-        if isfile(artifacts_toml)
-            ensure_all_artifacts_installed(artifacts_toml; platform=platform)
-            write_env_usage(artifacts_toml, "artifact_usage.toml")
+        # Check to see if this package has an (Julia)Artifacts.toml
+        for f in artifact_names
+            artifacts_toml = joinpath(path, f)
+            if isfile(artifacts_toml)
+                ensure_all_artifacts_installed(artifacts_toml; platform=platform)
+                write_env_usage(artifacts_toml, "artifact_usage.toml")
+                break
+            end
         end
     end
 end
@@ -980,7 +983,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     # TODO is it still necessary to prune? I don't think so..
     new_apply = download_source(ctx, pkgs)
 
-    # After downloading resolutionary packages, search for Artifacts.toml files
+    # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
     download_artifacts(ctx, pkgs; platform=platform)
 
