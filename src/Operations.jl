@@ -425,7 +425,9 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
     for uuid in uuids
         uuid == uuid_julia && continue
         if !haskey(uuid_to_name, uuid)
-            uuid_to_name[uuid] = registered_name(ctx, uuid)
+            name = registered_name(ctx, uuid)
+            name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
+            uuid_to_name[uuid] = name
             entry = manifest_info(ctx, uuid)
             entry ≡ nothing && continue
             uuid_to_name[uuid] = entry.name
