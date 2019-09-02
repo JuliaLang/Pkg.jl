@@ -9,7 +9,7 @@ using Dates
 import LibGit2
 
 import ..depots, ..depots1, ..logdir, ..devdir
-import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
+import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..GitOps
 using ..Types, ..TOML
 using Pkg.PackageSpecs: _VersionTypes
 using ..BinaryPlatforms
@@ -77,7 +77,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 
     preview_info(ctx)
 
-    new_git = handle_repos_develop!(ctx, pkgs, shared)
+    new_git = Operations.handle_repos_develop!(ctx, pkgs, shared)
 
     any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
         pkgerror("Cannot `develop` package with the same name or uuid as the project")
@@ -111,7 +111,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
     Types.update_registries(ctx)
 
     repo_pkgs = [pkg for pkg in pkgs if (pkg.repo.url !== nothing || pkg.repo.rev !== nothing)]
-    new_git = handle_repos_add!(ctx, repo_pkgs)
+    new_git = Operations.handle_repos_add!(ctx, repo_pkgs)
     # repo + unpinned -> name, uuid, repo.rev, repo.url, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
@@ -757,8 +757,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         isdir(sourcepath) && continue
         # download repo at tree hash
         push!(new_git, pkg.uuid)
-        clonepath = Types.clone_path!(ctx, pkg.repo.url)
-        tmp_source = Types.repo_checkout(ctx, clonepath, string(pkg.tree_hash))
+        clonepath = GitOps.clone_path!(ctx, pkg.repo.url)
+        tmp_source = GitOps.repo_checkout(ctx, clonepath, string(pkg.tree_hash))
         mkpath(sourcepath)
         mv(tmp_source, sourcepath; force=true)
     end

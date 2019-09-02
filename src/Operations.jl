@@ -8,8 +8,9 @@ import LibGit2
 
 import REPL
 using REPL.TerminalMenus
-using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display
-import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
+using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display, ..Utils
+import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry, ..RegistryOps,
+       ..PackageResolve, ..GitOps, ..GitRepos
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names
 import ..EnvCaches: write_env_usage
 using ..BinaryPlatforms
@@ -346,10 +347,10 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
 
             # Collect deps + compat for stdlib
             if uuid in keys(ctx.stdlibs)
-                path = Types.stdlib_path(ctx.stdlibs[uuid])
+                path = stdlib_path(ctx.stdlibs[uuid])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file != nothing
-                proj = Types.read_package(proj_file)
+                proj = read_package(proj_file)
 
                 v = something(proj.version, VERSION)
                 push!(all_versions_u, v)
@@ -995,7 +996,7 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
     if entry.repo.url !== nothing # repo packages have a version but are treated special
         pkg.repo = entry.repo
         if level == UPLEVEL_MAJOR
-            new = instantiate_pkg_repo!(ctx, pkg)
+            new = GitOps.instantiate_pkg_repo!(ctx, pkg)
             pkg.version = entry.version
             if pkg.tree_hash != entry.tree_hash
                 # TODO parse find_installed and set new version
@@ -1338,6 +1339,209 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
         dependencies = collect(values(entry.deps)),
     )
     return info
+end
+
+###
+### Repos
+###
+function read_package(f::String)
+    _throw_package_err(x) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
+
+    project = read_project(f)
+    project.name === nothing && _throw_package_err("name")
+    project.uuid === nothing && _throw_package_err("uuid")
+    name = project.name
+    if !isfile(joinpath(dirname(f), "src", "$name.jl"))
+        pkgerror("expected the file `src/$name.jl` to exist for package $name at $(dirname(f))")
+    end
+    return project
+end
+
+const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
+
+function parse_package!(ctx, pkg, project_path)
+    env = ctx.env
+    project_file = projectfile_path(project_path; strict=true)
+    if project_file !== nothing
+        project_data = read_package(project_file)
+        pkg.uuid = project_data.uuid # TODO check no overwrite
+        pkg.name = project_data.name # TODO check no overwrite
+    else
+        if !isempty(ctx.old_pkg2_clone_name) # remove when legacy CI script support is removed
+            pkg.name = ctx.old_pkg2_clone_name
+        else
+            # This is an old style package, if not set, get the name from src/PackageName
+            if !has_name(pkg)
+                if isdir_windows_workaround(pkg.repo.url)
+                    m = match(reg_pkg, abspath(pkg.repo.url))
+                else
+                    m = match(reg_pkg, pkg.repo.url)
+                end
+                m === nothing && pkgerror("cannot determine package name from URL or path: $(pkg.repo.url), provide a name argument to `PackageSpec`")
+                pkg.name = m.captures[1]
+            end
+        end
+        reg_uuids = registered_uuids(ctx, pkg.name)
+        is_registered = !isempty(reg_uuids)
+        if !is_registered
+            # This is an unregistered old style package, give it a UUID and a version
+            if !has_uuid(pkg)
+                uuid_unreg_pkg = UUID(0xa9a2672e746f11e833ef119c5b888869)
+                pkg.uuid = uuid5(uuid_unreg_pkg, pkg.name)
+                println(ctx.io, "Assigning UUID $(pkg.uuid) to $(pkg.name)")
+            end
+        else
+            @assert length(reg_uuids) == 1
+            pkg.uuid = reg_uuids[1]
+        end
+    end
+end
+
+###
+### Develop Repos
+###
+
+function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, shared::Bool)
+    new_uuids = UUID[]
+    for pkg in pkgs
+        pkg.special_action = PKGSPEC_DEVELOPED
+        if pkg.repo.url !== nothing && isdir_windows_workaround(pkg.repo.url)
+            explicit_dev_path(ctx, pkg)
+        elseif pkg.name !== nothing
+            canonical_dev_path!(ctx, pkg, shared)
+        end
+        if pkg.path === nothing
+            new_uuid = remote_dev_path!(ctx, pkg, shared)
+            push!(new_uuids, new_uuid)
+        end
+        @assert pkg.path !== nothing
+        @assert has_uuid(pkg)
+        pkg.repo = GitRepos.GitRepo() # clear repo field, no longer needed
+    end
+    return new_uuids
+end
+
+# Developing a local package, just point `pkg.path` to it
+# - Absolute paths should stay absolute
+# - Relative paths are given relative pwd() so we
+#   translate that to be relative the project instead.
+function explicit_dev_path(ctx::Context, pkg::PackageSpec)
+    path = pkg.repo.url
+    pkg.path = isabspath(path) ? path : relative_project_path(ctx, path)
+    parse_package!(ctx, pkg, path)
+end
+
+function canonical_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool; default=nothing)
+    dev_dir = shared ? devdir() : joinpath(dirname(ctx.env.project_file), "dev")
+    dev_path = joinpath(dev_dir, pkg.name)
+
+    if casesensitive_isdir(dev_path)
+        if !isfile(joinpath(dev_path, "src", pkg.name * ".jl"))
+            pkgerror("Path `$(dev_path)` exists but it does not contain `src/$(pkg.name).jl")
+        end
+        println(ctx.io,
+                "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
+        default !== nothing && Base.rm(default; force=true, recursive=true)
+        pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
+        parse_package!(ctx, pkg, dev_path)
+    elseif default !== nothing
+        mkpath(dev_dir)
+        mv(default, dev_path)
+        # Save the path as relative if it is a --local dev, otherwise put in the absolute path.
+        pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
+    end
+end
+
+function relative_project_path(ctx::Context, path::String)
+    # compute path relative the project
+    # realpath needed to expand symlinks before taking the relative path
+    return relpath(safe_realpath(abspath(path)),
+                   safe_realpath(dirname(ctx.env.project_file)))
+end
+
+function dev_resolve_pkg!(ctx::Context, pkg::PackageSpec)
+    if pkg.uuid === nothing # have to resolve UUID
+        uuid = get(ctx.env.project.deps, pkg.name, nothing)
+        if uuid !== nothing # try to resolve with manifest
+            entry = manifest_info(ctx, uuid)
+            if entry.repo.url !== nothing
+                @debug "Resolving dev repo against manifest."
+                pkg.repo = entry.repo
+                return nothing # no need to continue, found pkg info
+            end
+        end
+        registry_resolve!(ctx, pkg)
+        if pkg.uuid === nothing
+            pkgerror("Package `$pkg.name` could not be found in the manifest ",
+                     "or in a regsitry.")
+        end
+    end
+    paths = registered_paths(ctx, pkg.uuid)
+    isempty(paths) && pkgerror("Package with UUID `$(pkg.uuid)` could not be found in a registry.")
+    _, pkg.repo.url = Types.registered_info(ctx, pkg.uuid, "repo")[1] #TODO look into [1]
+end
+
+function remote_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool)
+    # Only update the registry in case of developing a non-local package
+    RegistryOps.update_registries(ctx)
+    # We save the repo in case another environement wants to develop from the same repo,
+    # this avoids having to reclone it from scratch.
+    if pkg.repo.url === nothing # specified by name or uuid
+        dev_resolve_pkg!(ctx, pkg)
+    end
+    temp_clone = GitOps.fresh_clone(ctx, pkg)
+    # parse repo to determine dev path
+    parse_package!(ctx, pkg, temp_clone)
+    canonical_dev_path!(ctx, pkg, shared; default=temp_clone)
+    return pkg.uuid
+end
+
+###
+### Add Repos
+###
+
+"""
+Ensure repo specified by `repo` exists at version path for package
+Set tree_hash
+"""
+function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
+    new_uuids = UUID[]
+    for pkg in pkgs
+        handle_repo_add!(ctx, pkg) && push!(new_uuids, pkg.uuid)
+    end
+    return new_uuids
+end
+
+function handle_repo_add!(ctx::Context, pkg::PackageSpec)
+    cached_repo = resolve_repo_add!(ctx, pkg)
+    # if pinned, return early
+    entry = manifest_info(ctx, pkg.uuid)
+    if (entry !== nothing && entry.pinned)
+        cached_repo !== nothing && Base.rm(cached_repo; recursive=true, force=true)
+        pkg.tree_hash = entry.tree_hash
+        return false
+    end
+    # instantiate repo
+    return GitOps.instantiate_pkg_repo!(ctx, pkg, cached_repo)
+end
+
+# partial PackageSpec -> PackageSpec with all the relevant fields filled out
+function resolve_repo_add!(ctx::Context, pkg::PackageSpec)
+    cached_repo = nothing
+    if pkg.repo.url !== nothing
+        clone_path = GitOps.clone_path!(ctx, pkg.repo.url)
+        pkg.repo.rev = something(pkg.repo.rev, GitOps.guess_rev(ctx, clone_path))
+        cached_repo = GitOps.repo_checkout(ctx, clone_path, pkg.repo.rev)
+        package = parse_package!(ctx, pkg, cached_repo)
+    elseif pkg.name !== nothing || pkg.uuid !== nothing
+        pkg.repo.rev === nothing && pkgerror("Rev must be specified")
+        PackageResolve.registry_resolve!(ctx, pkg)
+        PackageResolve.ensure_resolved(ctx, [pkg]; registry=true)
+        _, pkg.repo.url = RegistryOps.registered_info(ctx, pkg.uuid, "repo")[1]
+    else
+        @assert false "Package should be specified by name, URL, or UUID" # TODO
+    end
+    return cached_repo
 end
 
 end # module
