@@ -632,7 +632,8 @@ function backwards_compat_for_build(ctx::Context, pkg::PackageSpec, build_file::
         ```
     run_build = () -> begin
         ok = open(log_file, "w") do log
-            success(pipeline(cmd, stdout = verbose ? stdout : log, stderr = verbose ? stderr : log))
+            std = verbose ? ctx.io : log
+            success(pipeline(cmd, stdout=std, stderr=std))
         end
         if !ok
             n_lines = isinteractive() ? 100 : 5000
