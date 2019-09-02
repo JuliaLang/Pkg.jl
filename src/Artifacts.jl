@@ -13,6 +13,9 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
        find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact
 
+# keep in sync with Base.project_names and Base.manifest_names
+const artifact_names = ("JuliaArtifacts.toml", "Artifacts.toml")
+
 const ARTIFACTS_DIR_OVERRIDE = Ref{Union{String,Nothing}}(nothing)
 """
     with_artifacts_directory(f::Function, artifacts_dir::String)
@@ -370,12 +373,12 @@ returns the `Platform` object that this entry specifies.  Returns `nothing` on e
 """
 function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
     if !haskey(entry, "os")
-        @error("Invalid Artifacts.toml at '$(artifacts_toml)': platform-specific artifact entry '$name' missing 'os' key")
+        @error("Invalid artifacts file at '$(artifacts_toml)': platform-specific artifact entry '$name' missing 'os' key")
         return nothing
     end
 
     if !haskey(entry, "arch")
-        @error("Invalid Artifacts.toml at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
+        @error("Invalid artifacts file at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
         return nothing
     end
 
@@ -439,7 +442,7 @@ end
     load_artifacts_toml(artifacts_toml::String;
                         pkg_uuid::Union{UUID,Nothing}=nothing)
 
-Loads an `Artifacts.toml` file from disk.  If `pkg_uuid` is set to the `UUID` of the
+Loads an `(Julia)Artifacts.toml` file from disk.  If `pkg_uuid` is set to the `UUID` of the
 owning package, UUID/name overrides stored in a depot `Overrides.toml` will be resolved.
 """
 function load_artifacts_toml(artifacts_toml::String;
@@ -480,7 +483,7 @@ end
                   pkg_uuid::Union{Base.UUID,Nothing}=nothing)
 
 Get metadata about a given artifact (identified by name) stored within the given
-`Artifacts.toml` file.  If the artifact is platform-specific, use `platform` to choose the
+`(Julia)Artifacts.toml` file.  If the artifact is platform-specific, use `platform` to choose the
 most appropriate mapping.  If none is found, return `nothing`.
 """
 function artifact_meta(name::String, artifacts_toml::String;
@@ -508,13 +511,13 @@ function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String
         meta = select_platform(dl_dict, platform)
     # If it's NOT a dict, complain
     elseif !isa(meta, Dict)
-        @error("Invalid Artifacts.toml at $(artifacts_toml): artifact '$name' malformed, must be array or dict!")
+        @error("Invalid artifacts file at $(artifacts_toml): artifact '$name' malformed, must be array or dict!")
         return nothing
     end
 
     # This is such a no-no, we are going to call it out right here, right now.
     if meta != nothing && !haskey(meta, "git-tree-sha1")
-        @error("Invalid Artifacts.toml at $(artifacts_toml): artifact '$name' contains no `git-tree-sha1`!")
+        @error("Invalid artifacts file at $(artifacts_toml): artifact '$name' contains no `git-tree-sha1`!")
         return nothing
     end
 
@@ -546,7 +549,7 @@ end
                    lazy::Bool = false,
                    force::Bool = false)
 
-Writes a mapping of `name` -> `hash` within the given `Artifacts.toml` file.  If
+Writes a mapping of `name` -> `hash` within the given `(Julia)Artifacts.toml` file. If
 `platform` is not `nothing`, this artifact is marked as platform-specific, and will be
 a multi-mapping.  It is valid to bind multiple artifacts with the same name, but
 different `platform`s and `hash`'es within the same `artifacts_toml`.  If `force` is set
@@ -566,7 +569,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
     # First, check to see if this artifact is already bound:
     if isfile(artifacts_toml)
         artifact_dict = parse_toml(artifacts_toml)
-    
+
         if !force && haskey(artifact_dict, name)
             meta = artifact_dict[name]
             if !isa(meta, Array)
@@ -633,8 +636,8 @@ end
 """
     unbind_artifact!(artifacts_toml::String, name::String; platform = nothing)
 
-Unbind the given `name` from an `Artifacts.toml` file.  Silently fails if no such binding
-exists within the file.
+Unbind the given `name` from an `(Julia)Artifacts.toml` file.
+Silently fails if no such binding exists within the file.
 """
 function unbind_artifact!(artifacts_toml::String, name::String;
                          platform::Union{Platform,Nothing} = nothing)
@@ -730,7 +733,7 @@ end
     find_artifacts_toml(path::String)
 
 Given the path to a `.jl` file, (such as the one returned by `__source__.file` in a macro
-context), find the `Artifacts.toml` that is contained within the containing project (if it
+context), find the `(Julia)Artifacts.toml` that is contained within the containing project (if it
 exists), otherwise return `nothing`.
 """
 function find_artifacts_toml(path::String)
@@ -740,25 +743,22 @@ function find_artifacts_toml(path::String)
 
     # Run until we hit the root directory.
     while dirname(path) != path
-        # Also check for `JuliaArtifacts.toml`, preferring that as it's more specific
-        artifacts_toml_path = joinpath(path, "JuliaArtifacts.toml")
-        if isfile(artifacts_toml_path)
-            return abspath(artifacts_toml_path)
+        for f in artifact_names
+            artifacts_toml_path = joinpath(path, f)
+            if isfile(artifacts_toml_path)
+                return abspath(artifacts_toml_path)
+            end
         end
 
-        # Does this `Artifacts.toml` exist?
-        artifacts_toml_path = joinpath(path, "Artifacts.toml")
-        if isfile(artifacts_toml_path)
-            return abspath(artifacts_toml_path)
-        end
-
-        # Does a `Project.toml` file exist here, in the absence of an Artifacts.toml?
+        # Does a `(Julia)Project.toml` file exist here, in the absence of an Artifacts.toml?
         # If so, stop the search as we've probably hit the top-level of this package,
         # and we don't want to escape out into the larger filesystem.
-        if isfile(joinpath(path, "Project.toml"))
-            return nothing
+        for f in Base.project_names
+            if isfile(joinpath(path, f))
+                return nothing
+            end
         end
-        
+
         # Move up a directory
         path = dirname(path)
     end
@@ -796,7 +796,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         if !haskey(meta, "download")
             error("Cannot automatically install '$(name)'; no download section in '$(artifacts_toml)'")
         end
-    
+
         # Attempt to download from all sources
         for entry in meta["download"]
             url = entry["url"]
@@ -818,7 +818,7 @@ end
                                    pkg_uuid = nothing,
                                    include_lazy = false)
 
-Installs all non-lazy artifacts from a given `Artifacts.toml` file.  `package_uuid` must
+Installs all non-lazy artifacts from a given `(Julia)Artifacts.toml` file. `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
 
 If `include_lazy` is set to `true`, then lazy packages will be installed as well.
@@ -855,14 +855,14 @@ end
 
 Macro that is used to automatically ensure an artifact is installed, and return its
 location on-disk.  Automatically looks the artifact up by name in the project's
-`Artifacts.toml` file.  Throws an error on inability to install the requested artifact.
+`(Julia)Artifacts.toml` file.  Throws an error on inability to install the requested artifact.
 """
 macro artifact_str(name)
     return quote
         local artifacts_toml = $(find_artifacts_toml)($(string(__source__.file)))
         if artifacts_toml === nothing
             error(string(
-                "Cannot locate 'Artifacts.toml' file when attempting to use artifact '",
+                "Cannot locate '(Julia)Artifacts.toml' file when attempting to use artifact '",
                 $(esc(name)),
                 "' in '",
                 $(esc(__module__)),
