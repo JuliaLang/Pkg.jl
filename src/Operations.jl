@@ -19,31 +19,6 @@ import ..Pkg
 #########
 # Utils #
 #########
-function find_installed(name::String, uuid::UUID, sha1::SHA1)
-    slug_default = Base.version_slug(uuid, sha1)
-    # 4 used to be the default so look there first
-    for slug in (Base.version_slug(uuid, sha1, 4), slug_default)
-        for depot in depots()
-            path = abspath(depot, "packages", name, slug)
-            ispath(path) && return path
-        end
-    end
-    return abspath(depots1(), "packages", name, slug_default)
-end
-
-# more accurate name is `should_be_tracking_registered_version`
-# the only way to know for sure is to key into the registries
-tracking_registered_version(pkg) =
-    !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.url === nothing
-
-function source_path(pkg::PackageSpec)
-    return is_stdlib(pkg.uuid)    ? Types.stdlib_path(pkg.name) :
-        pkg.path      !== nothing ? pkg.path :
-        pkg.repo.url  !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        nothing
-end
-
 is_dep(ctx::Context, pkg::PackageSpec) =
     any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
 
@@ -155,7 +130,7 @@ end
 
 function load_tree_hashes!(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
-        tracking_registered_version(pkg) || continue
+        is_tracking_registered_version(pkg) || continue
         pkg.tree_hash = load_tree_hash(ctx, pkg)
     end
 end
@@ -180,7 +155,7 @@ function set_maximum_version_registry!(ctx::Context, pkg::PackageSpec)
 end
 
 function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
-    if tracking_registered_version(pkg)
+    if is_tracking_registered_version(pkg)
         for path in registered_paths(ctx, pkg.uuid)
             data = load_package_data(UUID, joinpath(path, "Deps.toml"), pkg.version)
             data !== nothing && return data
@@ -243,8 +218,6 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
     return true
 end
 
-is_fixed(pkg::PackageSpec) = pkg.path !== nothing || pkg.repo.url !== nothing
-
 function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     fix_deps_map = Dict{UUID,Vector{PackageSpec}}()
     for pkg in pkgs
@@ -293,7 +266,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
 
     # construct data structures for resolver and call it
     # this also sets pkg.version for fixed packages
-    fixed = collect_fixed!(ctx, filter(is_fixed, pkgs), names)
+    fixed = collect_fixed!(ctx, filter(is_tracking_unregistered, pkgs), names)
 
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
@@ -578,7 +551,7 @@ end
 
 # install & update manifest
 function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
-    pkgs = filter(tracking_registered_version, pkgs)
+    pkgs = filter(is_tracking_registered_version, pkgs)
     urls = load_urls(ctx, pkgs)
     return download_source(ctx, pkgs, urls; readonly=readonly)
 end
@@ -937,7 +910,7 @@ function update_package_add(pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
 end
 
 function check_registered(ctx::Context, pkgs::Vector{PackageSpec})
-    pkgs = filter(tracking_registered_version, pkgs)
+    pkgs = filter(is_tracking_registered_version, pkgs)
     find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     for pkg in pkgs
         isempty(registered_paths(ctx, pkg.uuid)) || continue

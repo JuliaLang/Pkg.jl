@@ -30,10 +30,13 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED, PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED,
     printpkgstyle,
     projectfile_path, manifestfile_path,
-    RegistrySpec
+    RegistrySpec,
+    is_tracking_registered_version, is_tracking_unregistered, find_installed, source_path
 
 using ..PkgErrors, ..GitRepos, ..VersionTypes, ..Manifests, ..Projects, ..PackageSpecs,
-    ..Utils, ..EnvCaches, ..Contexts, ..RegistrySpecs, ..ResolverTypes, ..PackageResolve
+    ..Utils, ..EnvCaches, ..Contexts, ..RegistrySpecs, ..ResolverTypes, ..PackageResolve,
+    ..PkgSpecUtils
+import ..PkgSpecUtils: find_installed
 import ..Infos: ProjectInfo, PackageInfo
 import ..RegistryOps: clone_or_cp_registries, remove_registries, update_registries, find_installed_registries,
     clone_default_registries, populate_known_registries_with_urls!, find_registered!, registered_uuids,
@@ -120,19 +123,6 @@ get_deps(ctx::Context, target::Union{Nothing,String}=nothing) =
 function project_compatibility(ctx::Context, name::String)
     compat = get(ctx.env.project.compat, name, nothing)
     return compat === nothing ? VersionSpec() : VersionSpec(semver_spec(compat))
-end
-
-function read_package(f::String)
-    _throw_package_err(x) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
-
-    project = read_project(f)
-    project.name === nothing && _throw_package_err("name")
-    project.uuid === nothing && _throw_package_err("uuid")
-    name = project.name
-    if !isfile(joinpath(dirname(f), "src", "$name.jl"))
-        pkgerror("expected the file `src/$name.jl` to exist for package $name at $(dirname(f))")
-    end
-    return project
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
@@ -346,7 +336,7 @@ function instantiate_pkg_repo!(ctx::Context, pkg::PackageSpec, cached_repo::Unio
     pkg.special_action = PKGSPEC_REPO_ADDED
     clone = clone_path!(ctx, pkg.repo.url)
     pkg.tree_hash = tree_hash(ctx, clone, pkg.repo.rev)
-    version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.tree_hash)
+    version_path = find_installed(pkg.name, pkg.uuid, pkg.tree_hash)
     if cached_repo === nothing
         cached_repo = repo_checkout(ctx, clone, string(pkg.tree_hash))
     end
@@ -398,6 +388,19 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
         handle_repo_add!(ctx, pkg) && push!(new_uuids, pkg.uuid)
     end
     return new_uuids
+end
+
+function read_package(f::String)
+    _throw_package_err(x) = pkgerror("expected a `$x` entry in project file at $(abspath(f))")
+
+    project = read_project(f)
+    project.name === nothing && _throw_package_err("name")
+    project.uuid === nothing && _throw_package_err("uuid")
+    name = project.name
+    if !isfile(joinpath(dirname(f), "src", "$name.jl"))
+        pkgerror("expected the file `src/$name.jl` to exist for package $name at $(dirname(f))")
+    end
+    return project
 end
 
 function parse_package!(ctx, pkg, project_path)
