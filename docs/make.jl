@@ -16,6 +16,9 @@ if "pdf" in ARGS
     push!(formats, LaTeX(platform = "docker"))
 end
 
+# setup for doctesting
+DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Pkg.BinaryPlatforms); recursive=true)
+
 makedocs(
     format = formats,
     modules = [Pkg],
