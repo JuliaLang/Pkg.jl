@@ -4,7 +4,7 @@ export find_registered!, registered_paths
 
 import LibGit2
 using  UUIDs
-import ..UPDATED_REGISTRY_THIS_SESSION, ..depots1, ..GitTools
+import ..UPDATED_REGISTRY_THIS_SESSION, ..depots1, ..GitOps
 using  ..Contexts, ..RegistrySpecs, ..PkgErrors, ..Utils
 
 ###
@@ -37,7 +37,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             cp(reg.path, tmp; force=true)
         elseif reg.url !== nothing # clone from url
             Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(GitTools.clone(ctx, reg.url, tmp; header = "registry from $(repr(reg.url))",
+                LibGit2.with(GitOps.clone(ctx, reg.url, tmp; header = "registry from $(repr(reg.url))",
                     credentials = creds)) do repo
                 end
             end
@@ -125,7 +125,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                 end
                 branch = LibGit2.headname(repo)
                 try
-                    GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
+                    GitOps.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                 catch e
                     e isa PkgError || rethrow()
                     push!(errors, (reg.path, "failed to fetch from repo"))

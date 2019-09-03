@@ -2,7 +2,8 @@ module Artifacts
 
 import Base: get, SHA1
 import ..depots1, ..depots
-import ..GitTools: tree_hash, set_readonly
+import ..GitTools: tree_hash
+import ..Utils: set_readonly
 using ..BinaryPlatforms
 import ..TOML
 import ..Types: parse_toml

@@ -2,12 +2,10 @@
 
 module GitTools
 
-using ..Pkg
-using SHA
-import Base: SHA1
 import LibGit2
-using Printf
-export set_readonly
+import Base: SHA1
+using  SHA, Printf
+using  ..Pkg
 
 Base.@kwdef mutable struct MiniProgressBar
     max::Float64 = 1.0
@@ -103,70 +101,6 @@ function normalize_url(url::AbstractString)
         "$proto://$user$host/$path"
     end
 end
-
-ensure_clone(ctx, target_path, url; kwargs...) =
-    ispath(target_path) ? LibGit2.GitRepo(target_path) : GitTools.clone(ctx, url, target_path; kwargs...)
-
-function clone(ctx, url, source_path; header=nothing, kwargs...)
-    @assert !isdir(source_path) || isempty(readdir(source_path))
-    url = normalize_url(url)
-    Pkg.Types.printpkgstyle(ctx, :Cloning, header == nothing ? "git-repo `$url`" : header)
-    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    callbacks = LibGit2.Callbacks(
-        :transfer_progress => (
-            @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
-            transfer_payload,
-        )
-    )
-    print(stdout, "\e[?25l") # disable cursor
-    try
-        return LibGit2.clone(url, source_path; callbacks=callbacks, kwargs...)
-    catch err
-        rm(source_path; force=true, recursive=true)
-        err isa LibGit2.GitError || rethrow()
-        if (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
-           (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
-            Pkg.Types.pkgerror("Git repository not found at '$(url)'")
-        else
-            Pkg.Types.pkgerror("failed to clone from $(url), error: $err")
-        end
-    finally
-        print(stdout, "\033[2K") # clear line
-        print(stdout, "\e[?25h") # put back cursor
-    end
-end
-
-function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
-    if remoteurl === nothing
-        remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
-            LibGit2.url(remote)
-        end
-    end
-    remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(ctx, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
-    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    callbacks = LibGit2.Callbacks(
-        :transfer_progress => (
-            @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
-            transfer_payload,
-        )
-    )
-    print(stdout, "\e[?25l") # disable cursor
-    try
-        return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
-    catch err
-        err isa LibGit2.GitError || rethrow()
-        if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
-            Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)'")
-        else
-            Pkg.Types.pkgerror("failed to fetch from $(remoteurl), error: $err")
-        end
-    finally
-        print(stdout, "\033[2K") # clear line
-        print(stdout, "\e[?25h") # put back cursor
-    end
-end
-
 
 # This code gratefully adapted from https://github.com/simonbyrne/GitX.jl
 @enum GitMode mode_dir=0o040000 mode_normal=0o100644 mode_executable=0o100755 mode_symlink=0o120000 mode_submodule=0o160000
@@ -274,20 +208,6 @@ function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
         SHA.update!(ctx, hash)
     end
     return SHA.digest!(ctx)
-end
-
-function set_readonly(path)
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            filepath = joinpath(root, file)
-            fmode = filemode(filepath)
-            try
-                chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
-            catch
-            end
-        end
-    end
-    return nothing
 end
 
 end # module

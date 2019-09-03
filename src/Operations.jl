@@ -496,9 +496,9 @@ function install_git(
             clones_dir = joinpath(depots1(), "clones")
             ispath(clones_dir) || mkpath(clones_dir)
             repo_path = joinpath(clones_dir, string(uuid))
-            repo = GitTools.ensure_clone(ctx, repo_path, urls[1]; isbare=true,
-                                         header = "[$uuid] $name from $(urls[1])",
-                                         credentials=creds)
+            repo = GitOps.gitrepo(ctx, repo_path, urls[1]; isbare=true,
+                                  header = "[$uuid] $name from $(urls[1])",
+                                  credentials=creds)
             git_hash = LibGit2.GitHash(hash.bytes)
             for url in urls
                 try LibGit2.with(LibGit2.GitObject, repo, git_hash) do g

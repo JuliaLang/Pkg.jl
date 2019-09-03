@@ -1,7 +1,7 @@
 module Utils
 
-export parse_toml, safe_realpath, isdir_windows_workaround, casesensitive_isdir, pathrepr,
-    projectfile_path, manifestfile_path, find_project_file, stdlib, is_stdlib, stdlib_dir, stdlib_path
+export parse_toml, set_readonly, safe_realpath, isdir_windows_workaround, casesensitive_isdir, pathrepr,
+       projectfile_path, manifestfile_path, find_project_file, stdlib, is_stdlib, stdlib_dir, stdlib_path
 
 using  UUIDs
 import ..TOML
@@ -14,6 +14,20 @@ end
 ###
 ### Filesystem
 ###
+function set_readonly(path::String)
+    for (root, dirs, files) in walkdir(path)
+        for file in files
+            filepath = joinpath(root, file)
+            fmode = filemode(filepath)
+            try
+                chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
+            catch
+            end
+        end
+    end
+    return nothing
+end
+
 # try to call realpath on as much as possible
 function safe_realpath(path)
     ispath(path) && return realpath(path)

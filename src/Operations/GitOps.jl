@@ -3,20 +3,26 @@ module GitOps
 import LibGit2
 import Base: SHA1
 using  UUIDs
-import ..GitRepos, ..PackageResolve, ..RegistryOps, ..GitTools, ..depots1, ..devdir
-using  ..PackageSpecs, ..Contexts, ..PkgErrors, ..Utils
-import ..PkgSpecUtils: find_installed # TODO use `source_path` instead
+import ..PkgSpecUtils, ..GitTools, ..depots1
+using  ..Contexts, ..PackageSpecs, ..PkgErrors, ..Utils
+
+clonedir() = joinpath(depots1(), "clones")
+clonepath(url) = joinpath(clonedir(), string(hash(url)))
+
+function gitrepo(ctx::Context, target_path::String, url::String; kwargs...)
+    ispath(target_path) && return LibGit2.GitRepo(target_path)
+    return clone(ctx, url, target_path; kwargs...)
+end
 
 function fresh_clone(ctx::Context, pkg::PackageSpec)
-    clone_path = joinpath(depots1(), "clones")
-    mkpath(clone_path)
-    repo_path = joinpath(clone_path, string(hash(pkg.repo.url), "_full"))
+    mkpath(clonedir())
+    repo_path = joinpath(clonepath(pkg.repo.url), "_full")
     # make sure you have a fresh clone
     repo = nothing
     try
-        repo = GitTools.ensure_clone(ctx, repo_path, pkg.repo.url)
+        repo = gitrepo(ctx, repo_path, pkg.repo.url)
         Base.shred!(LibGit2.CachedCredentials()) do creds
-            GitTools.fetch(ctx, repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
+            fetch(ctx, repo, pkg.repo.url; refspecs=refspecs, credentials=creds)
         end
     finally
         repo isa LibGit2.GitRepo && LibGit2.close(repo)
@@ -32,8 +38,7 @@ function instantiate_pkg_repo!(ctx::Context, pkg::PackageSpec, cached_repo::Unio
     pkg.special_action = PKGSPEC_REPO_ADDED
     clone = clone_path!(ctx, pkg.repo.url)
     pkg.tree_hash = tree_hash(ctx, clone, pkg.repo.rev)
-    # TODO change to `source_path`
-    version_path = find_installed(pkg.name, pkg.uuid, pkg.tree_hash)
+    version_path = PkgSpecUtils.source_path(pkg)
     if cached_repo === nothing
         cached_repo = repo_checkout(ctx, clone, string(pkg.tree_hash))
     end
@@ -43,7 +48,7 @@ function instantiate_pkg_repo!(ctx::Context, pkg::PackageSpec, cached_repo::Unio
     return true
 end
 
-function guess_rev(ctx::Context, repo_path)::String
+function guess_rev(ctx::Context, repo_path::String)::String
     rev = nothing
     LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
         rev = LibGit2.isattached(repo) ?
@@ -62,20 +67,19 @@ end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 
-clone_path(url) = joinpath(depots1(), "clones", string(hash(url)))
 # TODO refactor this into `clone_to_path`
-function clone_path!(ctx::Context, url)
-    clone = clone_path(url)
-    mkpath(dirname(clone))
+function clone_path!(ctx::Context, url::String)
+    mkpath(clonedir())
+    clone_path = clonepath(url)
     Base.shred!(LibGit2.CachedCredentials()) do creds
-        LibGit2.with(GitTools.ensure_clone(ctx, clone, url; isbare=true, credentials=creds)) do repo
-            GitTools.fetch(ctx, repo; refspecs=refspecs, credentials=creds)
+        LibGit2.with(gitrepo(ctx, clone_path, url; isbare=true, credentials=creds)) do repo
+            fetch(ctx, repo; refspecs=refspecs, credentials=creds)
         end
     end
-    return clone
+    return clone_path
 end
 
-function repo_checkout(ctx::Context, repo_path, rev)
+function repo_checkout(ctx::Context, repo_path::String, rev::String)
     project_path = mktempdir()
     with_git_tree(ctx, repo_path, rev) do repo, git_tree
         _project_path = project_path # https://github.com/JuliaLang/julia/issues/30048
@@ -105,7 +109,7 @@ function with_git_tree(fn, ctx::Context, repo_path::String, rev::String)
     end
 end
 
-function tree_hash(ctx::Context, repo_path, rev)
+function tree_hash(ctx::Context, repo_path::String, rev::String)
     with_git_tree(ctx, repo_path, rev) do git_tree
         return SHA1(string(LibGit2.GitHash(git_tree))) # TODO can it be just SHA1?
     end
@@ -134,10 +138,7 @@ function git_checkout_latest!(ctx::Context, repo_path::AbstractString)
     end
 end
 
-get_object_branch(ctx::Context, repo, rev::SHA1, creds) =
-    get_object_branch(ctx, repo, string(rev), creds)
-
-function get_object_branch(ctx::Context, repo, rev, creds)
+function get_object_branch(ctx::Context, repo::LibGit2.GitRepo, rev::String, creds)
     gitobject = nothing
     isbranch = false
     try
@@ -151,7 +152,7 @@ function get_object_branch(ctx::Context, repo, rev, creds)
             gitobject = LibGit2.GitObject(repo, rev)
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
-            GitTools.fetch(ctx, repo; refspecs=refspecs, credentials=creds)
+            fetch(ctx, repo; refspecs=refspecs, credentials=creds)
             try
                 gitobject = LibGit2.GitObject(repo, rev)
             catch err
@@ -161,6 +162,66 @@ function get_object_branch(ctx::Context, repo, rev, creds)
         end
     end
     return gitobject, isbranch
+end
+
+function clone(ctx::Context, url::String, source_path::String; header=nothing, kwargs...)
+    @assert !isdir(source_path) || isempty(readdir(source_path))
+    url = GitTools.normalize_url(url)
+    printpkgstyle(ctx, :Cloning, header == nothing ? "git-repo `$url`" : header)
+    transfer_payload = GitTools.MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    callbacks = LibGit2.Callbacks(
+        :transfer_progress => (
+            @cfunction(GitTools.transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
+            transfer_payload,
+        )
+    )
+    print(stdout, "\e[?25l") # disable cursor
+    try
+        return LibGit2.clone(url, source_path; callbacks=callbacks, kwargs...)
+    catch err
+        rm(source_path; force=true, recursive=true)
+        err isa LibGit2.GitError || rethrow()
+        if (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
+           (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
+            pkgerror("Git repository not found at '$(url)'")
+        else
+            pkgerror("failed to clone from $(url), error: $err")
+        end
+    finally
+        print(stdout, "\033[2K") # clear line
+        print(stdout, "\e[?25h") # put back cursor
+    end
+end
+
+function fetch(ctx::Context, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
+    if remoteurl === nothing
+        remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
+            LibGit2.url(remote)
+        end
+    end
+    remoteurl = GitTools.normalize_url(remoteurl)
+    printpkgstyle(ctx, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
+    transfer_payload = GitTools.MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    callbacks = LibGit2.Callbacks(
+        :transfer_progress => (
+            @cfunction(GitTools.transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
+            transfer_payload,
+        )
+    )
+    print(stdout, "\e[?25l") # disable cursor
+    try
+        return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
+    catch err
+        err isa LibGit2.GitError || rethrow()
+        if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
+            pkgerror("Git repository not found at '$(remoteurl)'")
+        else
+            pkgerror("failed to fetch from $(remoteurl), error: $err")
+        end
+    finally
+        print(stdout, "\033[2K") # clear line
+        print(stdout, "\e[?25h") # put back cursor
+    end
 end
 
 end #module
