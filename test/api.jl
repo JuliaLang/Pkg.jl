@@ -3,7 +3,8 @@
 module APITests
 
 using Pkg, Test
-import Pkg.Types.PkgError, Pkg.Types.ResolverError
+using Pkg.PkgErrors: PkgError
+using Pkg.ResolverTypes: ResolverError
 
 include("utils.jl")
 
@@ -21,9 +22,9 @@ end
     temp_pkg_dir() do tmp
         copy_test_package(tmp, "BasicCompat")
         Pkg.activate(joinpath(tmp, "BasicCompat"))
-        @test haskey(Pkg.Types.Context().env.project.compat, "Example")
+        @test haskey(Pkg.Contexts.Context().env.project.compat, "Example")
         Pkg.rm("Example")
-        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
+        @test !haskey(Pkg.Contexts.Context().env.project.compat, "Example")
     end
 end
 
@@ -78,7 +79,7 @@ end
         @test_deprecated Pkg.status(PKGMODE_MANIFEST)
         # issue #1183: Test exist in manifest but not in project
         Pkg.status("Test"; mode=PKGMODE_MANIFEST)
-        @test_throws PkgError Pkg.status("Test"; mode=Pkg.Types.PKGMODE_COMBINED)
+        @test_throws PkgError Pkg.status("Test"; mode=Pkg.PackageSpecs.PKGMODE_COMBINED)
         @test_throws PkgError Pkg.status("Test"; mode=PKGMODE_PROJECT)
         # diff option
         @test_logs (:warn, r"diff option only available") Pkg.status(diff=true)
@@ -101,7 +102,7 @@ end
             cd(env_path) do
                 uuids = Pkg.generate("Foo")
                 Pkg.develop(PackageSpec(;path="Foo"))
-                manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
+                manifest = Pkg.Manifests.read_manifest(joinpath(env_path, "Manifest.toml"))
                 entry = manifest[uuids["Foo"]]
             end
             @test entry.path == "Foo"
@@ -114,7 +115,7 @@ end
                 uuids = Pkg.generate("Foo")
                 absolute_path = abspath(joinpath(temp_dir, "Foo"))
                 Pkg.develop(PackageSpec(;path=absolute_path))
-                manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
+                manifest = Pkg.Manifests.read_manifest(joinpath(env_path, "Manifest.toml"))
                 entry = manifest[uuids["Foo"]]
                 @test entry.name == "Foo"
                 @test entry.path == absolute_path
@@ -124,7 +125,7 @@ end
         # name
         with_temp_env() do env_path
             Pkg.develop("Example")
-            manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
+            manifest = Pkg.Manifests.read_manifest(joinpath(env_path, "Manifest.toml"))
             for (uuid, entry) in manifest
                 if entry.name == "Example"
                     @test entry.path == joinpath(Pkg.depots1(), "dev", "Example")
@@ -135,17 +136,17 @@ end
         # name + uuid
         with_temp_env() do env_path
             Pkg.develop(PackageSpec(name = "Example", uuid = exuuid))
-            @test Pkg.Types.Context().env.manifest[exuuid].version > v"0.5"
+            @test Pkg.Contexts.Context().env.manifest[exuuid].version > v"0.5"
         end
         # uuid
         with_temp_env() do env_path
             Pkg.develop(PackageSpec(uuid = exuuid))
-            @test Pkg.Types.Context().env.manifest[exuuid].version > v"0.5"
+            @test Pkg.Contexts.Context().env.manifest[exuuid].version > v"0.5"
         end
         # name + local
         with_temp_env() do env_path
             Pkg.develop("Example"; shared=false)
-            manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
+            manifest = Pkg.Manifests.read_manifest(joinpath(env_path, "Manifest.toml"))
             for (uuid, entry) in manifest
                 if entry.name == "Example"
                     @test entry.path == joinpath("dev", "Example")
@@ -157,7 +158,7 @@ end
         with_temp_env() do env_path
             url = "https://github.com/JuliaLang/Example.jl"
             Pkg.develop(PackageSpec(;url=url))
-            manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
+            manifest = Pkg.Manifests.read_manifest(joinpath(env_path, "Manifest.toml"))
             for (uuid, entry) in manifest
                 if entry.name == "Example"
                     @test entry.path == joinpath(Pkg.depots1(), "dev", "Example")
@@ -169,7 +170,7 @@ end
         with_temp_env() do env_path
             url = "https://github.com/00vareladavid/Unregistered.jl"
             Pkg.develop(PackageSpec(;url=url))
-            manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
+            manifest = Pkg.Manifests.read_manifest(joinpath(env_path, "Manifest.toml"))
             for (uuid, entry) in manifest
                 if entry.name == "Unregistered"
                     @test uuid == UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
@@ -191,8 +192,8 @@ end
     temp_pkg_dir() do project_path; with_temp_env() do env_path
         Pkg.add(Pkg.PackageSpec(;name="Example", rev="master"))
         Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
-        @test Pkg.Types.Context().env.manifest[exuuid].version == v"0.3.0"
-        @test Pkg.Types.Context().env.manifest[exuuid].repo == Pkg.Types.GitRepo()
+        @test Pkg.Contexts.Context().env.manifest[exuuid].version == v"0.3.0"
+        @test Pkg.Contexts.Context().env.manifest[exuuid].repo == Pkg.GitRepos.GitRepo()
     end end
     # Add by version should override add by repo, even for indirect dependencies
     temp_pkg_dir() do project_path; mktempdir() do tempdir; with_temp_env() do
@@ -203,16 +204,16 @@ end
         # Now `Example` should be tracking a repo and it is in the dep graph
         # But `Example` is *not* a direct dependency
         Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
-        @test Pkg.Types.Context().env.manifest[exuuid].version == v"0.3.0"
-        @test Pkg.Types.Context().env.manifest[exuuid].repo == Pkg.Types.GitRepo()
+        @test Pkg.Contexts.Context().env.manifest[exuuid].version == v"0.3.0"
+        @test Pkg.Contexts.Context().env.manifest[exuuid].repo == Pkg.GitRepos.GitRepo()
     end end end
     # Add by URL should not override pin
     temp_pkg_dir() do project_path; with_temp_env() do env_path
         Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
         Pkg.pin(Pkg.PackageSpec(;name="Example"))
-        a = deepcopy(Pkg.Types.EnvCache().manifest)
+        a = deepcopy(Pkg.EnvCaches.EnvCache().manifest)
         Pkg.add(Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl"))
-        b = Pkg.Types.EnvCache().manifest
+        b = Pkg.EnvCaches.EnvCache().manifest
         for (uuid, x) in a
             y = b[uuid]
             for property in propertynames(x)
@@ -224,14 +225,14 @@ end
     temp_pkg_dir() do project_path; with_temp_env() do env_path
         Pkg.add(Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl"))
         t1, t2 = nothing, nothing
-        for (uuid, entry) in Pkg.Types.EnvCache().manifest
+        for (uuid, entry) in Pkg.EnvCaches.EnvCache().manifest
             entry.name == "Example" || continue
-            t1 = mtime(Pkg.Operations.find_installed(entry.name, uuid, entry.tree_hash))
+            t1 = mtime(Pkg.PkgSpecUtils.find_installed(entry.name, uuid, entry.tree_hash))
         end
         Pkg.add(Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl"))
-        for (uuid, entry) in Pkg.Types.EnvCache().manifest
+        for (uuid, entry) in Pkg.EnvCaches.EnvCache().manifest
             entry.name == "Example" || continue
-            t2 = mtime(Pkg.Operations.find_installed(entry.name, uuid, entry.tree_hash))
+            t2 = mtime(Pkg.PkgSpecUtils.find_installed(entry.name, uuid, entry.tree_hash))
         end
         @test t1 == t2
     end end
@@ -250,10 +251,10 @@ end
         with_temp_env() do
             exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID of Example.jl
             Pkg.add(Pkg.PackageSpec(name = "Example", rev="c37b675")) # same commit as release v0.5.1
-            @test Pkg.Types.Context().env.manifest[exuuid].repo.rev == "c37b675"
+            @test Pkg.Contexts.Context().env.manifest[exuuid].repo.rev == "c37b675"
             Pkg.free("Example") # should not throw, see issue #1142
-            @test Pkg.Types.Context().env.manifest[exuuid].repo.rev == nothing
-            @test Pkg.Types.Context().env.manifest[exuuid].version > v"0.5"
+            @test Pkg.Contexts.Context().env.manifest[exuuid].repo.rev == nothing
+            @test Pkg.Contexts.Context().env.manifest[exuuid].version > v"0.5"
         end
         # Can not free an unregistered package
         with_temp_env() do;

@@ -2,19 +2,19 @@
 
 module API
 
-using UUIDs
-using Printf
-import Random
-using Dates
 import LibGit2
-
-import ..depots, ..depots1, ..logdir, ..devdir
-import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..GitOps
-using ..Types, ..TOML
-using Pkg.PackageSpecs: _VersionTypes
-using ..BinaryPlatforms
-using ..Artifacts: artifact_paths
-
+import Base: SHA1
+using  UUIDs: UUID, uuid4
+using  Dates: now, Day, Period, DateTime
+using  Printf: @sprintf
+import ..Pkg
+import ..RegistryOps, ..GitRepos, ..Operations, ..depots, ..logdir, ..TOML, ..GitTools,
+       ..Projects, ..GitOps
+using  ..Artifacts: artifact_paths
+using  ..VersionTypes: VersionSpec
+using  ..PackageSpecs: _VersionTypes
+using  ..BinaryPlatforms: Platform, platform_key_abi
+using  ..PackageResolve, ..Contexts, ..PackageSpecs, ..PkgErrors, ..Utils, ..Infos
 
 function preview_info(ctx::Context)
     if ctx.preview
@@ -28,7 +28,7 @@ dependencies() = dependencies(Context())
 function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
     pkgs = PackageSpec[]
     Operations.load_all_deps!(ctx, pkgs)
-    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
+    RegistryOps.find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
 end
 
@@ -108,7 +108,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
     end
 
     preview_info(ctx)
-    Types.update_registries(ctx)
+    RegistryOps.update_registries(ctx)
 
     repo_pkgs = [pkg for pkg in pkgs if (pkg.repo.url !== nothing || pkg.repo.rev !== nothing)]
     new_git = Operations.handle_repos_add!(ctx, repo_pkgs)
@@ -173,8 +173,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     Context!(ctx; kwargs...)
     preview_info(ctx)
     if update_registry
-        Types.clone_default_registries(ctx)
-        Types.update_registries(ctx; force=true)
+        RegistryOps.clone_default_registries(ctx)
+        RegistryOps.update_registries(ctx; force=true)
     end
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT
@@ -246,7 +246,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     manifest_resolve!(ctx, pkgs)
     ensure_resolved(ctx, pkgs)
 
-    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
+    RegistryOps.find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     Operations.free(ctx, pkgs)
     return
 end
@@ -429,7 +429,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
             paths = process_func(index_file)
             if paths != nothing
                 # Print the path of this beautiful, extant file to the user
-                println("        $(Types.pathrepr(index_file))")
+                println("        $(pathrepr(index_file))")
                 append!(marked_paths, paths)
             end
         end
@@ -593,7 +593,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
                 @warn "Failed to delete $path"
             end
         end
-        printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" * pretty_byte_str(path_size) * ")")
+        printpkgstyle(ctx, :Deleted, pathrepr(path) * " (" * pretty_byte_str(path_size) * ")")
         return path_size
     end
 
@@ -746,7 +746,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Finally, run `Pkg.instantiate()` again.")
     end
     Operations.is_instantiated(ctx) && return
-    Types.update_registries(ctx)
+    RegistryOps.update_registries(ctx)
     pkgs = PackageSpec[]
     Operations.load_all_deps!(ctx, pkgs)
     Operations.check_registered(ctx, pkgs)
@@ -818,7 +818,7 @@ function activate(path::AbstractString; shared::Bool=false)
         # 1. if path exists, activate that
         # 2. if path exists in deps, and the dep is deved, activate that path (`devpath` above)
         # 3. activate the non-existing directory (e.g. as in `pkg> activate .` for initing a new env)
-        if Types.isdir_windows_workaround(path)
+        if isdir_windows_workaround(path)
             fullpath = abspath(path)
         else
             fullpath = _activate_dep(path)
@@ -880,7 +880,7 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
         pkgerror("cannot specify both a path and url")
     url !== nothing && version !== nothing &&
         pkgerror("`version` can not be given with `url`, use `rev` instead")
-    repo = Types.GitRepo(rev = rev, url = url !== nothing ? url : path)
+    repo = GitRepos.GitRepo(rev = rev, url = url !== nothing ? url : path)
     version = version === nothing ? VersionSpec() : VersionSpec(version)
     uuid isa String && (uuid = UUID(uuid))
     PackageSpec(;name=name, uuid=uuid, version=version, mode=mode, path=nothing,

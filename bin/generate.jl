@@ -2,7 +2,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 import Pkg.Compress
-import Pkg.Types: compress_versions
+import Pkg.VersionTypes: compress_versions
 
 prefix = joinpath(homedir(), ".julia", "registries", "General")
 

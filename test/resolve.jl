@@ -2,13 +2,12 @@
 
 module ResolveTest
 
-using Test
-using Pkg.Types
+using Test, UUIDs
 using Pkg.GraphType
-using Pkg.Types: VersionBound
+using Pkg.VersionTypes, Pkg.ResolverTypes
 using Pkg.Resolve
 using Pkg.Resolve.VersionWeights
-import Pkg.Types: uuid5, uuid_package
+import Pkg.Utils: uuid5, uuid_package, uuid_julia
 
 # print info, stats etc.
 const VERBOSE = false
@@ -38,7 +37,7 @@ end
 # auxiliary functions
 pkguuid(p::String) = uuid5(uuid_package, p)
 function storeuuid(p::String, uuid_to_name::Dict{UUID,String})
-    uuid = p == "julia" ? Types.uuid_julia : pkguuid(p)
+    uuid = p == "julia" ? uuid_julia : pkguuid(p)
     if haskey(uuid_to_name, uuid)
         @assert uuid_to_name[uuid] == p
     else
@@ -49,7 +48,7 @@ end
 wantuuids(want_data) = Dict{UUID,VersionNumber}(pkguuid(p) => v for (p,v) in want_data)
 
 function load_package_data_raw(T::Type, input::String)
-    toml = Types.TOML.parse(input)
+    toml = Pkg.TOML.parse(input)
     data = Dict{VersionRange,Dict{String,T}}()
     for (v, d) in toml, (key, value) in d
         vr = VersionRange(v)
@@ -92,10 +91,10 @@ function gen_versionranges(dict::Dict{K,Set{VersionNumber}}, srtvers::Vector{Ver
     return vranges, allvranges
 end
 
-function graph_from_data(deps_data, uuid_to_name = Dict{UUID,String}(Types.uuid_julia=>"julia"))
+function graph_from_data(deps_data, uuid_to_name = Dict{UUID,String}(uuid_julia=>"julia"))
     uuid(p) = storeuuid(p, uuid_to_name)
     # deps = DepsGraph(uuid_to_name)
-    fixed = Dict(Types.uuid_julia => Fixed(VERSION))
+    fixed = Dict(uuid_julia => Fixed(VERSION))
     all_versions = Dict{UUID,Set{VersionNumber}}(fp => Set([fx.version]) for (fp,fx) in fixed)
     all_deps = Dict{UUID,Dict{VersionRange,Dict{String,UUID}}}(fp => Dict(VersionRange(fx.version)=>Dict()) for (fp,fx) in fixed)
     all_compat = Dict{UUID,Dict{VersionRange,Dict{String,VersionSpec}}}(fp => Dict(VersionRange(fx.version)=>Dict()) for (fp,fx) in fixed)
@@ -124,7 +123,7 @@ function graph_from_data(deps_data, uuid_to_name = Dict{UUID,String}(Types.uuid_
             push!(get!(deps_pkgs, rp, Set{VersionNumber}()), vn)
         end
         vranges, allvranges = gen_versionranges(deps_pkgs, srtvers)
-        all_deps[u] = Dict{VersionRange,Dict{String,UUID}}(VersionRange()=>Dict{String,UUID}("julia"=>Types.uuid_julia))
+        all_deps[u] = Dict{VersionRange,Dict{String,UUID}}(VersionRange()=>Dict{String,UUID}("julia"=>uuid_julia))
         for vrng in allvranges
             all_deps[u][vrng] = Dict{String,UUID}()
             for (rp,vvr) in vranges

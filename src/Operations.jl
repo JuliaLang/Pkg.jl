@@ -2,20 +2,17 @@
 
 module Operations
 
-using UUIDs
-using Random: randstring
 import LibGit2
-
-import REPL
-using REPL.TerminalMenus
-using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display, ..Utils
-import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry, ..RegistryOps,
-       ..PackageResolve, ..GitOps, ..GitRepos, ..Projects, ..Manifests
+import Base: SHA1
+using  UUIDs, SHA
+using  Random: randstring
+import ..Pkg, ..Pkg2, ..GitOps, ..VersionTypes, ..RegistryOps, ..PkgSpecUtils, ..PackageResolve,
+       ..GitRepos, ..depots1, ..devdir, ..Artifacts, ..EnvCaches
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names
-import ..EnvCaches: write_env_usage
-using ..BinaryPlatforms
-import ..Pkg
-
+using  ..Contexts, ..Projects, ..Manifests, ..PackageSpecs, ..PkgErrors,
+       ..BinaryPlatforms, ..PkgSpecUtils, ..Utils, ..VersionTypes, ..GraphType, ..Resolve,
+       ..PlatformEngines, ..Infos, ..Artifacts
+using  ..ResolverTypes: Fixed, Requires
 
 #########
 # Utils #
@@ -31,7 +28,7 @@ Utils.is_stdlib(ctx::Context, uuid::UUID) = uuid in keys(ctx.stdlibs)
 
 function project_compatibility(ctx::Context, name::String)
     compat = get(ctx.env.project.compat, name, nothing)
-    return compat === nothing ? VersionSpec() : VersionSpec(Types.semver_spec(compat))
+    return compat === nothing ? VersionSpec() : VersionSpec(VersionTypes.semver_spec(compat))
 end
 
 is_dep(ctx::Context, pkg::PackageSpec) =
@@ -80,7 +77,7 @@ end
 function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
     manifest = ctx.env.manifest
     empty!(manifest)
-    #find_registered!(ctx.env, [pkg.uuid for pkg in pkgs]) # Is this necessary? its for `load_deps`...
+    #RegistryOps.find_registered!(ctx.env, [pkg.uuid for pkg in pkgs]) # Is this necessary? its for `load_deps`...
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
                              tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo)
@@ -119,7 +116,7 @@ end
 
 function write_env(ctx::Context; display_diff=true)
     env = ctx.env
-    old_env = EnvCache(env.env) # load old environment for comparison
+    old_env = EnvCaches.EnvCache(env.env) # load old environment for comparison
     Projects.write_project(env.project, env, old_env, ctx; display_diff=display_diff)
     Manifests.write_manifest(env.manifest, env, old_env, ctx; display_diff=display_diff)
 end
@@ -167,7 +164,7 @@ end
 
 function load_tree_hash(ctx::Context, pkg::PackageSpec)
     hashes = SHA1[]
-    for path in registered_paths(ctx, pkg.uuid)
+    for path in RegistryOps.registered_paths(ctx, pkg.uuid)
         vers = load_versions(path; include_yanked = true)
         hash = get(vers, pkg.version, nothing)
         hash !== nothing && push!(hashes, hash)
@@ -191,7 +188,7 @@ include("backwards_compatible_isolation.jl")
 
 function set_maximum_version_registry!(ctx::Context, pkg::PackageSpec)
     pkgversions = Set{VersionNumber}()
-    for path in registered_paths(ctx, pkg.uuid)
+    for path in RegistryOps.registered_paths(ctx, pkg.uuid)
         pathvers = keys(load_versions(path; include_yanked = false))
         union!(pkgversions, pathvers)
     end
@@ -205,7 +202,7 @@ end
 
 function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
     if is_tracking_registered_version(pkg)
-        for path in registered_paths(ctx, pkg.uuid)
+        for path in RegistryOps.registered_paths(ctx, pkg.uuid)
             data = load_package_data(UUID, joinpath(path, "Deps.toml"), pkg.version)
             data !== nothing && return data
         end
@@ -231,9 +228,9 @@ function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
                     r isa Pkg2.Reqs.Requirement || continue
                     push!(dep_pkgs, PackageSpec(name=r.package))
                 end
-                registry_resolve!(ctx, dep_pkgs)
-                project_deps_resolve!(ctx, dep_pkgs)
-                ensure_resolved(ctx, dep_pkgs; registry=true)
+                PackageResolve.registry_resolve!(ctx, dep_pkgs)
+                PackageResolve.project_deps_resolve!(ctx, dep_pkgs)
+                PackageResolve.ensure_resolved(ctx, dep_pkgs; registry=true)
             end
             for dep_pkg in dep_pkgs
                 dep_pkg.name == "julia" && continue
@@ -250,11 +247,11 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
     (project_file === nothing) && return false
     project = read_package(project_file)
     compat = project.compat
-    if haskey(compat, "julia") && !(VERSION in Types.semver_spec(compat["julia"]))
+    if haskey(compat, "julia") && !(VERSION in VersionTypes.semver_spec(compat["julia"]))
         @warn("julia version requirement for package $(pkg.name) not satisfied")
     end
     for (deppkg_name, uuid) in project.deps
-        vspec = haskey(compat, deppkg_name) ? Types.semver_spec(compat[deppkg_name]) : VersionSpec()
+        vspec = haskey(compat, deppkg_name) ? VersionTypes.semver_spec(compat[deppkg_name]) : VersionSpec()
         deppkg = PackageSpec(deppkg_name, uuid, vspec)
         push!(fix_deps_map[pkg.uuid], deppkg)
     end
@@ -344,7 +341,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     simplify_graph!(graph)
     vers = resolve(graph)
 
-    find_registered!(ctx, collect(keys(vers)))
+    RegistryOps.find_registered!(ctx, collect(keys(vers)))
     # update vector of package versions
     for (uuid, ver) in vers
         pkg = pkgs[uuid]
@@ -352,7 +349,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
-            name = (uuid in keys(ctx.stdlibs)) ? ctx.stdlibs[uuid] : registered_name(ctx, uuid)
+            name = (uuid in keys(ctx.stdlibs)) ? ctx.stdlibs[uuid] : RegistryOps.registered_name(ctx, uuid)
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
@@ -416,7 +413,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
                     all_compat_u_vr[name] = VersionSpec()
                 end
             else
-                for path in registered_paths(ctx, uuid)
+                for path in RegistryOps.registered_paths(ctx, uuid)
                     version_info = load_versions(path; include_yanked = false)
                     versions = sort!(collect(keys(version_info)))
                     deps_data = load_package_data_raw(UUID, joinpath(path, "Deps.toml"))
@@ -442,13 +439,13 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
                 end
             end
         end
-        find_registered!(ctx, uuids)
+        RegistryOps.find_registered!(ctx, uuids)
     end
 
     for uuid in uuids
         uuid == uuid_julia && continue
         if !haskey(uuid_to_name, uuid)
-            name = registered_name(ctx, uuid)
+            name = RegistryOps.registered_name(ctx, uuid)
             name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
             uuid_to_name[uuid] = name
             entry = manifest_info(ctx, uuid)
@@ -466,7 +463,7 @@ function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
         uuid = pkg.uuid
         ver = pkg.version::VersionNumber
         urls[uuid] = String[]
-        for path in registered_paths(ctx, uuid)
+        for path in RegistryOps.registered_paths(ctx, uuid)
             info = parse_toml(path, "Package.toml")
             repo = info["repo"]
             repo in urls[uuid] || push!(urls[uuid], repo)
@@ -590,8 +587,8 @@ function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
         for f in artifact_names
             artifacts_toml = joinpath(path, f)
             if isfile(artifacts_toml)
-                ensure_all_artifacts_installed(artifacts_toml; platform=platform)
-                write_env_usage(artifacts_toml, "artifact_usage.toml")
+                Artifacts.ensure_all_artifacts_installed(artifacts_toml; platform=platform)
+                EnvCaches.write_env_usage(artifacts_toml, "artifact_usage.toml")
                 break
             end
         end
@@ -811,7 +808,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             entry = manifest_info(ctx, uuid)
             name = entry.name
             if entry.tree_hash !== nothing
-                path = find_installed(name, uuid, entry.tree_hash)
+                path = PkgSpecUtils.find_installed(name, uuid, entry.tree_hash)
             elseif entry.path !== nothing
                 path = project_rel_path(ctx, entry.path)
             else
@@ -839,7 +836,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
 
         log_file = splitext(build_file)[1] * ".log"
         printpkgstyle(ctx, :Building,
-                      rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
+                      rpad(name * " ", max_name + 1, "─") * "→ " * pathrepr(log_file))
 
         sandbox(ctx, pkg, source_path, builddir(source_path)) do
             ok = open(log_file, "w") do log
@@ -960,9 +957,9 @@ end
 
 function check_registered(ctx::Context, pkgs::Vector{PackageSpec})
     pkgs = filter(is_tracking_registered_version, pkgs)
-    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
+    RegistryOps.find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     for pkg in pkgs
-        isempty(registered_paths(ctx, pkg.uuid)) || continue
+        isempty(RegistryOps.registered_paths(ctx, pkg.uuid)) || continue
         pkgerror("Package $(pkg.name) [$(pkg.uuid)] not found in a registry.")
     end
 end
@@ -1129,7 +1126,7 @@ function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry
         if entry.repo.url !== nothing || entry.path !== nothing
             # A pin in this case includes an implicit `free` to switch to tracking registered versions
             # First, make sure the package is registered so we have something to free to
-            if isempty(registered_paths(ctx, pkg.uuid))
+            if isempty(RegistryOps.registered_paths(ctx, pkg.uuid))
                 pkgerror("Unable to pin `$(pkg.name)` to an arbitrary version since it could not be found in a registry.")
             end
         end
@@ -1166,7 +1163,7 @@ function update_package_free!(ctx::Context, pkg::PackageSpec, entry::PackageEntr
     end
     if entry.repo !== nothing # tracking a repo
         # make sure the package is registered so we have something to free to
-        if isempty(registered_paths(ctx, pkg.uuid))
+        if isempty(RegistryOps.registered_paths(ctx, pkg.uuid))
             pkgerror("cannot free package $(something(pkg.name, "")) since it is not found in a registry")
         end
         return
@@ -1182,7 +1179,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
         # TODO what happens if I remove this?
         for pkg in filter(pkg -> pkg.version == VersionSpec(), pkgs)
-            isempty(registered_paths(ctx, pkg.uuid)) &&
+            isempty(RegistryOps.registered_paths(ctx, pkg.uuid)) &&
                 pkgerror("cannot free a `dev`ed package that does not exist in a registry")
         end
         load_direct_deps!(ctx, pkgs)
@@ -1278,11 +1275,11 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         end
         with_temp_env(tmp) do
             try
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=target_path)); strict=true)
+                Pkg.API.develop(PackageSpec(;repo=GitRepos.GitRepo(;url=target_path)); strict=true)
                 @debug "Using _parent_ dep graph"
-            catch # TODO
+            catch err
                 Base.rm(tmp_manifest) # retry with a clean dependency graph
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=target_path)))
+                Pkg.API.develop(PackageSpec(;repo=GitRepos.GitRepo(;url=target_path)))
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code
@@ -1350,7 +1347,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         sandbox(ctx, pkg, source_path, testdir(source_path)) do
             println(ctx.io, "Running sandbox")
             test_fn !== nothing && test_fn()
-            Display.status(Context(), mode=PKGMODE_PROJECT)
+            Pkg.Display.status(Context(), mode=PKGMODE_PROJECT)
             try
                 run(gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args))
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
@@ -1429,7 +1426,7 @@ function parse_package!(ctx, pkg, project_path)
                 pkg.name = m.captures[1]
             end
         end
-        reg_uuids = registered_uuids(ctx, pkg.name)
+        reg_uuids = RegistryOps.registered_uuids(ctx, pkg.name)
         is_registered = !isempty(reg_uuids)
         if !is_registered
             # This is an unregistered old style package, give it a UUID and a version
@@ -1518,15 +1515,15 @@ function dev_resolve_pkg!(ctx::Context, pkg::PackageSpec)
                 return nothing # no need to continue, found pkg info
             end
         end
-        registry_resolve!(ctx, pkg)
+        PackageResolve.registry_resolve!(ctx, pkg)
         if pkg.uuid === nothing
             pkgerror("Package `$pkg.name` could not be found in the manifest ",
                      "or in a regsitry.")
         end
     end
-    paths = registered_paths(ctx, pkg.uuid)
+    paths = RegistryOps.registered_paths(ctx, pkg.uuid)
     isempty(paths) && pkgerror("Package with UUID `$(pkg.uuid)` could not be found in a registry.")
-    _, pkg.repo.url = Types.registered_info(ctx, pkg.uuid, "repo")[1] #TODO look into [1]
+    _, pkg.repo.url = RegistryOps.registered_info(ctx, pkg.uuid, "repo")[1] #TODO look into [1]
 end
 
 function remote_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool)

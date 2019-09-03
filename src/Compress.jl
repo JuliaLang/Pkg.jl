@@ -1,7 +1,7 @@
 module Compress
 
 import Pkg.TOML
-import Pkg.Types: VersionSpec, compress_versions
+import Pkg.VersionTypes: VersionSpec, compress_versions
 
 function load_versions(path::String)
     versions_file = joinpath(dirname(path), "Versions.toml")

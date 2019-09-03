@@ -2,14 +2,12 @@
 
 module REPLMode
 
-using Markdown
-using UUIDs
-
 import REPL
 import REPL: LineEdit, REPLCompletions
-
-import ..Types.casesensitive_isdir
-using ..Types, ..Display, ..Operations, ..API, ..Registry
+using  Markdown, UUIDs
+import ..GitRepos, ..Contexts, ..RegistrySpecs, ..EnvCaches, ..Projects
+using  ..Display, ..Operations, ..API, ..Registry, ..Utils, ..PackageSpecs, ..PkgErrors
+using  ..VersionTypes: VersionRange, VersionSpec
 
 #########################
 # Specification Structs #
@@ -313,7 +311,7 @@ function APIOptions(options::Vector{Option},
     end
     return api_options
 end
-Context!(ctx::APIOptions)::Context = Types.Context!(collect(ctx))
+Context!(ctx::APIOptions)= Contexts.Context!(collect(ctx))
 
 #---------#
 # Command #
@@ -569,7 +567,7 @@ prev_prefix = ""
 function promptf()
     global prev_project_timestamp, prev_prefix, prev_project_file
     project_file = try
-        Types.find_project_file()
+        find_project_file()
     catch
         nothing
     end
@@ -579,7 +577,7 @@ function promptf()
             prefix = prev_prefix
         else
             project = try
-                Types.read_project(project_file)
+                Projects.read_project(project_file)
             catch
                 nothing
             end

@@ -5,8 +5,7 @@ using Base: thispatch, thisminor, nextpatch, nextminor
 import LinearAlgebra: checksquare
 import UUIDs
 import Pkg
-using Pkg.Types
-using Pkg.Types: uuid_package, uuid_registry, uuid5
+using  Pkg.Utils: uuid_package, uuid_registry, uuid5
 import Pkg.Pkg2.Reqs: Reqs, Requirement
 import Pkg.Pkg2.Pkg2Types: VersionInterval, VersionSet
 

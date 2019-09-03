@@ -35,7 +35,7 @@ function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Noth
     uuid, name, version, path, special_action, repo = pkg.uuid, pkg.name, pkg.version, pkg.path, pkg.special_action, pkg.repo
     hash === nothing && @assert (path != nothing || pkg.uuid in keys(ctx.stdlibs) || pkg.repo.url != nothing)
     # TODO I think ^ assertion is wrong, add-repo should have a hash
-    entry = get!(env.manifest, uuid, Types.PackageEntry())
+    entry = get!(env.manifest, uuid, PackageEntry())
     entry.name = name
     is_stdlib = uuid in keys(ctx.stdlibs)
     if !is_stdlib
@@ -58,17 +58,17 @@ function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Noth
         elseif special_action == PKGSPEC_REPO_ADDED
             entry.repo.url = repo.url
             entry.repo.rev = repo.rev
-            path = find_installed(name, uuid, hash)
+            path = PkgSpecUtils.find_installed(name, uuid, hash)
         end
         if entry.repo.url !== nothing
-            path = find_installed(name, uuid, hash)
+            path = PkgSpecUtils.find_installed(name, uuid, hash)
         end
     end
 
     empty!(entry.deps)
     if path !== nothing || is_stdlib
         if is_stdlib
-            path = Types.stdlib_path(name)
+            path = stdlib_path(name)
         else
             path = joinpath(dirname(ctx.env.project_file), path)
         end
@@ -105,7 +105,7 @@ function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Noth
         end
         entry.deps = deps
     else
-        for path in registered_paths(ctx, uuid)
+        for path in RegistryOps.registered_paths(ctx, uuid)
             data = load_package_data(UUID, joinpath(path, "Deps.toml"), version)
             if data !== nothing
                 entry.deps = data
@@ -179,7 +179,7 @@ function _resolve_versions!(
 
     simplify_graph!(graph)
     vers = resolve(graph)
-    find_registered!(ctx, collect(keys(vers)))
+    RegistryOps.find_registered!(ctx, collect(keys(vers)))
     # update vector of package versions
     for pkg in pkgs
         # Fixed packages are not returned by resolve (they already have their version set)
@@ -188,7 +188,7 @@ function _resolve_versions!(
     uuids = UUID[pkg.uuid for pkg in pkgs]
     for (uuid, ver) in vers
         uuid in uuids && continue
-        name = (uuid in keys(ctx.stdlibs)) ? ctx.stdlibs[uuid] : registered_name(ctx, uuid)
+        name = (uuid in keys(ctx.stdlibs)) ? ctx.stdlibs[uuid] : RegistryOps.registered_name(ctx, uuid)
         push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
     end
     return vers
@@ -208,11 +208,11 @@ function _collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::
             path = pkg.path
         elseif pkg.special_action == PKGSPEC_REPO_ADDED
             @assert pkg.tree_hash !== nothing
-            path = find_installed(pkg.name, pkg.uuid, pkg.tree_hash)
+            path = PkgSpecUtils.find_installed(pkg.name, pkg.uuid, pkg.tree_hash)
         elseif entry !== nothing && entry.path !== nothing
             path = pkg.path = entry.path
         elseif entry !== nothing && entry.repo.url !== nothing
-            path = find_installed(pkg.name, pkg.uuid, entry.tree_hash)
+            path = PkgSpecUtils.find_installed(pkg.name, pkg.uuid, entry.tree_hash)
             pkg.repo = entry.repo
             pkg.tree_hash = entry.tree_hash
         else
@@ -262,7 +262,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
         !is_stdlib(ctx, pkg.uuid) || continue
         pkg.path === nothing || continue
         pkg.repo.url === nothing || continue
-        path = find_installed(pkg.name, pkg.uuid, hashes[pkg.uuid])
+        path = PkgSpecUtils.find_installed(pkg.name, pkg.uuid, hashes[pkg.uuid])
         if !ispath(path)
             push!(pkgs_to_install, (pkg, path))
             push!(new_versions, pkg.uuid)
@@ -393,7 +393,7 @@ function _version_data!(ctx::Context, pkgs::Vector{PackageSpec})
         uuid = pkg.uuid
         ver = pkg.version::VersionNumber
         clones[uuid] = String[]
-        for path in registered_paths(ctx, uuid)
+        for path in RegistryOps.registered_paths(ctx, uuid)
             info = parse_toml(path, "Package.toml")
             repo = info["repo"]
             repo in clones[uuid] || push!(clones[uuid], repo)
@@ -420,14 +420,14 @@ function collect_target_deps!(
 )
     # Find the path to the package
     if pkg.uuid in keys(ctx.stdlibs)
-        path = Types.stdlib_path(pkg.name)
+        path = stdlib_path(pkg.name)
     elseif is_project_uuid(ctx, pkg.uuid)
         path = dirname(ctx.env.project_file)
     else
         entry = manifest_info(ctx, pkg.uuid)
         path = (entry.path !== nothing) ?
             project_rel_path(ctx, entry.path) :
-            find_installed(pkg.name, pkg.uuid, entry.tree_hash)
+            PkgSpecUtils.find_installed(pkg.name, pkg.uuid, entry.tree_hash)
     end
 
     project_path = nothing
@@ -521,7 +521,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         foreach(k->setfield!(localctx.env.project, k, nothing), (:name, :uuid, :version))
         localctx.env.pkg = nothing
         localctx.env.project.deps[pkg.name] = pkg.uuid
-        localctx.env.manifest[pkg.uuid] = Types.PackageEntry(
+        localctx.env.manifest[pkg.uuid] = PackageEntry(
             name=pkg.name,
             deps=get_deps(mainctx, target),
             path=dirname(localctx.env.project_file),
@@ -553,7 +553,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
             # Rewrite paths in Manifest since relative paths won't work here due to the temporary environment
             for (uuid, entry) in manifest
                 if uuid in keys(localctx.stdlibs)
-                    entry.path = Types.stdlib_path(entry.name)
+                    entry.path = stdlib_path(entry.name)
                 end
                 if entry.path !== nothing
                     entry.path = project_rel_path(mainctx, entry.path)
@@ -639,7 +639,7 @@ function backwards_compatibility_for_test(
     end
     with_dependencies_loadable_at_toplevel(ctx, pkg; might_need_to_resolve=true) do localctx
         if !is_project_uuid(ctx, pkg.uuid)
-            Display.status(localctx, mode=PKGMODE_MANIFEST)
+            Pkg.Display.status(localctx, mode=PKGMODE_MANIFEST)
         end
 
         run_test()
@@ -650,7 +650,7 @@ function backwards_compat_for_build(ctx::Context, pkg::PackageSpec, build_file::
                                     might_need_to_resolve::Bool, max_name::Int)
     log_file = splitext(build_file)[1] * ".log"
     printpkgstyle(ctx, :Building,
-        rpad(pkg.name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
+        rpad(pkg.name * " ", max_name + 1, "─") * "→ " * pathrepr(log_file))
     code = """
         $(Base.load_path_setup_code(false))
         cd($(repr(dirname(build_file))))

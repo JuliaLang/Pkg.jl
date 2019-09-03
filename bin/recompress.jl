@@ -1,5 +1,5 @@
 import Pkg: TOML, Compress
-import Pkg.Types: VersionSpec, compress_versions
+import Pkg.VersionTypes: VersionSpec, compress_versions
 
 const registry_path = joinpath(DEPOT_PATH[1], "registries", "General")
 const registry_file = joinpath(registry_path, "Registry.toml")

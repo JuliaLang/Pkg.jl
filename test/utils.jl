@@ -10,12 +10,12 @@ function temp_pkg_dir(fn::Function;rm=true)
     local old_general_registry_url
     try
         # Clone the registry only once
-        old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
+        old_general_registry_url = Pkg.RegistryOps.DEFAULT_REGISTRIES[1].url
         generaldir = joinpath(@__DIR__, "registries", "General")
         if !isdir(generaldir)
             mkpath(generaldir)
             Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
+                LibGit2.with(Pkg.GitTools.clone(Pkg.Contexts.Context(),
                                                 "https://github.com/JuliaRegistries/General.git",
                     generaldir, credentials = creds)) do repo
                 end
@@ -30,7 +30,7 @@ function temp_pkg_dir(fn::Function;rm=true)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
+        Pkg.RegistryOps.DEFAULT_REGISTRIES[1].url = generaldir
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
@@ -57,7 +57,7 @@ function temp_pkg_dir(fn::Function;rm=true)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.RegistryOps.DEFAULT_REGISTRIES[1].url = old_general_registry_url
     end
 end
 
@@ -159,7 +159,7 @@ function copy_test_package(tmpdir::String, name::String)
 end
 function add_test_package(name::String, uuid::UUID)
     test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
-    spec = Pkg.Types.PackageSpec(
+    spec = Pkg.PackageSpecs.PackageSpec(
         name=name,
         uuid=uuid,
         path=test_pkg_dir,
@@ -170,7 +170,7 @@ end
 function add_this_pkg()
     pkg_dir = dirname(@__DIR__)
     pkg_uuid = Pkg.TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
-    spec = Pkg.Types.PackageSpec(
+    spec = Pkg.PackageSpecs.PackageSpec(
         name="Pkg",
         uuid=UUID(pkg_uuid),
         path=pkg_dir,

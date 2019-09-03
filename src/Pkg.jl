@@ -14,7 +14,7 @@ export Registry, RegistrySpec
 depots() = Base.DEPOT_PATH
 function depots1()
     d = depots()
-    isempty(d) && Pkg.Types.pkgerror("no depots found in DEPOT_PATH")
+    isempty(d) && Pkg.PkgErrors.pkgerror("no depots found in DEPOT_PATH")
     return d[1]
 end
 
@@ -46,7 +46,6 @@ include(joinpath("Operations", "PkgSpecUtils.jl"))
 include(joinpath("Operations", "GitOps.jl"))
 include(joinpath("Operations", "RegistryOps.jl"))
 include(joinpath("Operations", "PackageResolve.jl"))
-include("Types.jl")
 include("Compress.jl")
 include("Display.jl")
 include("Pkg2/Pkg2.jl")
@@ -59,8 +58,8 @@ include("Registry.jl")
 include("REPLMode.jl")
 
 import .REPLMode: @pkg_str
-import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
-import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
+import .PackageSpecs: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
+import .PackageSpecs: PKGMODE_MANIFEST, PKGMODE_PROJECT
 # legacy CI script support
 import .API: clone, dir
 
@@ -79,7 +78,7 @@ An enum with the instances
 Determines if operations should be made on a project or manifest level.
 Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.rm`](@ref).
 """
-const PackageMode = Types.PackageMode
+const PackageMode = PackageSpecs.PackageMode
 
 
 """
@@ -95,7 +94,7 @@ An enum with the instances
 Determines how much a package is allowed to be updated.
 Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.update`](@ref).
 """
-const UpgradeLevel = Types.UpgradeLevel
+const UpgradeLevel = PackageSpecs.UpgradeLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
@@ -476,7 +475,7 @@ Below is a comparison between the REPL version and the API version:
 | `local/path`         | `RegistrySpec(path="local/path")`               |
 | `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`        |
 """
-const RegistrySpec = Types.RegistrySpec
+const RegistrySpec = RegistrySpecs.RegistrySpec
 
 
 function __init__()
@@ -492,7 +491,7 @@ function __init__()
     end
 end
 
-METADATA_compatible_uuid(pkg::String) = Utils.uuid5(Types.uuid_package, pkg)
+METADATA_compatible_uuid(pkg::String) = Utils.uuid5(Utils.uuid_package, pkg)
 
 ##################
 # Precompilation #

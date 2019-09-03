@@ -48,14 +48,14 @@ function project(ctx::Context, pkg::String, dir::String)
 
     authors = ["$name " * (email == nothing ? "" : "<$email>")]
 
-    uuid = UUIDs.uuid4()
+    uuid = uuid4()
     genfile(ctx, pkg, dir, "Project.toml") do io
         toml = Dict("authors" => authors,
                     "name" => pkg,
                     "uuid" => string(uuid),
                     "version" => "0.1.0",
                     )
-        TOML.print(io, toml, sorted=true, by=key -> (Types.Projects.project_key_order(key), key))
+        TOML.print(io, toml, sorted=true, by=key -> (Projects.project_key_order(key), key))
     end
     return uuid
 end

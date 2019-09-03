@@ -2,12 +2,11 @@
 
 module Display
 
-using UUIDs
-import LibGit2
-
-using ..Types
-
-const PackageEntry = Types.PackageEntry
+import LibGit2 # TODO move to GitTools
+import UUIDs: UUID
+import Base: SHA1
+import ..GitRepos
+using  ..Contexts, ..EnvCaches, ..PackageSpecs, ..Utils
 
 const colors = Dict(
     ' ' => :white,
@@ -142,7 +141,7 @@ struct VerInfo
     path::Union{String,Nothing}
     ver::Union{VersionNumber,Nothing}
     pinned::Bool
-    repo::Union{Types.GitRepo, Nothing}
+    repo::Union{GitRepos.GitRepo, Nothing}
 end
 
 revstring(str::String) = occursin(r"\b([a-f0-9]{40})\b", str) ? str[1:7] : str
@@ -235,7 +234,7 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry}, status=false)
 end
 print_diff(ctx::Context, diff::Vector{DiffEntry}, status=false) = print_diff(ctx.io, ctx, diff, status)
 
-function name_ver_info(entry::PackageEntry)
+function name_ver_info(entry)
     entry.name, VerInfo(
         entry.tree_hash,
         entry.path,

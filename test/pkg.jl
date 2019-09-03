@@ -2,24 +2,16 @@
 
 module OperationsTest
 
-import Random: randstring
 import LibGit2
-using Test
-using UUIDs
-using Dates
-
-using Pkg
-using Pkg.Types
-
 import Random: randstring
-import LibGit2
+using  Test, UUIDs, Dates, Pkg
+using  Pkg.VersionTypes
+using  Pkg.PkgErrors: PkgError
 
 include("utils.jl")
 
 const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
-const PackageSpec = Pkg.Types.PackageSpec
 
-import Pkg.Types: semver_spec, VersionSpec
 @testset "semver notation" begin
     @test semver_spec("^1.2.3") == VersionSpec("1.2.3-1")
     @test semver_spec("^1.2")   == VersionSpec("1.2.0-1")
@@ -91,8 +83,8 @@ import Pkg.Types: semver_spec, VersionSpec
     @test_throws ErrorException semver_spec("^^0.2.3.4")
     @test_throws ErrorException semver_spec("0.0.0")
 
-    @test Pkg.Types.VersionTypes.isjoinable(Pkg.Types.VersionBound((1,5)), Pkg.Types.VersionBound((1,6)))
-    @test !(Pkg.Types.VersionTypes.isjoinable(Pkg.Types.VersionBound((1,5)), Pkg.Types.VersionBound((1,6,0))))
+    @test Pkg.VersionTypes.isjoinable(VersionBound((1,5)), VersionBound((1,6)))
+    @test !(Pkg.VersionTypes.isjoinable(VersionBound((1,5)), VersionBound((1,6,0))))
 end
 
 # TODO: Should rewrite these tests not to rely on internals like field names
@@ -112,11 +104,11 @@ end
     unified_vr = union!([VersionRange("1.5-2.2"), VersionRange("2.5-3")])[2]
     @test unified_vr.lower.t == (UInt32(2), UInt32(5), UInt32(0))
     @test unified_vr.upper.t == (UInt32(3), UInt32(0), UInt32(0))
-    unified_vb = Types.VersionBound(union!([v"1.5", v"1.6"])[1])
+    unified_vb = VersionBound(union!([v"1.5", v"1.6"])[1])
     @test unified_vb.t == (UInt32(1), UInt32(5), UInt32(0))
-    unified_vb = Types.VersionBound(union!([v"1.5", v"1.6"])[2])
+    unified_vb = VersionBound(union!([v"1.5", v"1.6"])[2])
     @test unified_vb.t == (UInt32(1), UInt32(6), UInt32(0))
-    unified_vb = Types.VersionBound(union!([v"1.5", v"1.5"])[1])
+    unified_vb = VersionBound(union!([v"1.5", v"1.5"])[1])
     @test unified_vb.t == (UInt32(1), UInt32(5), UInt32(0))
 end
 
@@ -145,19 +137,19 @@ temp_pkg_dir() do project_path
     end
 
     @testset "package with wrong UUID" begin
-        @test_throws PkgError Pkg.add(PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
+        @test_throws PkgError Pkg.add(Pkg.PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
     end
 
     @testset "adding and upgrading different versions" begin
         # VersionNumber
-        Pkg.add(PackageSpec(TEST_PKG.name, v"0.3"))
+        Pkg.add(Pkg.PackageSpecs.PackageSpec(TEST_PKG.name, v"0.3"))
         @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3"
-        Pkg.add(PackageSpec(TEST_PKG.name, v"0.3.1"))
+        Pkg.add(Pkg.PackageSpecs.PackageSpec(TEST_PKG.name, v"0.3.1"))
         @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3.1"
         Pkg.rm(TEST_PKG.name)
 
         # VersionRange
-        Pkg.add(PackageSpec(TEST_PKG.name, VersionSpec(VersionRange("0.3.0-0.3.2"))))
+        Pkg.add(Pkg.PackageSpecs.PackageSpec(TEST_PKG.name, VersionSpec(VersionRange("0.3.0-0.3.2"))))
         @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3.2"
         # Check that adding another packages doesn't upgrade other packages
         Pkg.add("Test")
@@ -182,7 +174,7 @@ temp_pkg_dir() do project_path
     @testset "pinning / freeing" begin
         Pkg.add(TEST_PKG.name)
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
-        Pkg.pin(PackageSpec(TEST_PKG.name, v"0.2"))
+        Pkg.pin(Pkg.PackageSpecs.PackageSpec(TEST_PKG.name, v"0.2"))
         @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
         Pkg.update(TEST_PKG.name)
         @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
@@ -248,7 +240,7 @@ temp_pkg_dir() do project_path
 
     @testset "package name in resolver errors" begin
         try
-            Pkg.add(PackageSpec(;name = TEST_PKG.name, version = v"55"))
+            Pkg.add(Pkg.PackageSpecs.PackageSpec(;name = TEST_PKG.name, version = v"55"))
         catch e
             @test occursin(TEST_PKG.name, sprint(showerror, e))
         end
@@ -302,7 +294,7 @@ temp_pkg_dir() do project_path
 
     @testset "check logging" begin
         usage = Pkg.TOML.parse(String(read(joinpath(Pkg.logdir(), "manifest_usage.toml"))))
-        manifest = Types.safe_realpath(joinpath(project_path, "Manifest.toml"))
+        manifest = Pkg.Utils.safe_realpath(joinpath(project_path, "Manifest.toml"))
         @test any(x -> startswith(x, manifest), keys(usage))
     end
 
@@ -536,13 +528,13 @@ end
 end
 
 @testset "printing of stdlib paths, issue #605" begin
-    path = Pkg.Types.stdlib_path("Test")
-    @test Pkg.Types.pathrepr(path) == "`@stdlib/Test`"
+    path = Pkg.Utils.stdlib_path("Test")
+    @test Pkg.Utils.pathrepr(path) == "`@stdlib/Test`"
 end
 
 @testset "Set download concurrency" begin
     withenv("JULIA_PKG_CONCURRENCY" => 1) do
-        ctx = Pkg.Types.Context()
+        ctx = Pkg.Contexts.Context()
         @test ctx.num_concurrent_downloads == 1
     end
 end
@@ -550,7 +542,7 @@ end
 temp_pkg_dir() do project_path
     @testset "Pkg.add should not mutate" begin
         package_names = ["JSON"]
-        packages = PackageSpec.(package_names)
+        packages = Pkg.PackageSpec.(package_names)
         Pkg.add(packages)
         @test [p.name for p in packages] == package_names
     end
@@ -560,9 +552,9 @@ end
     manifestdir = joinpath(@__DIR__, "manifest", "good")
     temp = joinpath(mktempdir(), "x.toml")
     for testfile in joinpath.(manifestdir, readdir(manifestdir))
-        a = Types.read_manifest(testfile)
-        Types.write_manifest(a, temp)
-        b = Types.read_manifest(temp)
+        a = Pkg.Manifests.read_manifest(testfile)
+        Pkg.Manifests.write_manifest(a, temp)
+        b = Pkg.Manifests.read_manifest(temp)
         for (uuid, x) in a
             y = b[uuid]
             for property in propertynames(x)
@@ -574,7 +566,7 @@ end
         end
     end
     rm(dirname(temp); recursive = true, force = true)
-    @test_throws PkgError Types.read_manifest(
+    @test_throws PkgError Pkg.Manifests.read_manifest(
         joinpath(@__DIR__, "manifest", "bad", "parse_error.toml"))
 end
 
@@ -582,27 +574,27 @@ end
     projectdir = joinpath(@__DIR__, "project", "good")
     temp = joinpath(mktempdir(), "x.toml")
     for testfile in joinpath.(projectdir, readdir(projectdir))
-        a = Types.read_project(testfile)
-        Types.write_project(a, temp)
-        b = Types.read_project(temp)
+        a = Pkg.Projects.read_project(testfile)
+        Pkg.Projects.write_project(a, temp)
+        b = Pkg.Projects.read_project(temp)
         for property in propertynames(a)
             @test getproperty(a, property) == getproperty(b, property)
         end
     end
     rm(dirname(temp); recursive = true, force = true)
-    @test_throws PkgError Types.read_project(
+    @test_throws PkgError Pkg.Projects.read_project(
         joinpath(@__DIR__, "project", "bad", "parse_error.toml"))
 end
 
 @testset "stdlib_resolve!" begin
-    a = Pkg.Types.PackageSpec(name="Markdown")
-    b = Pkg.Types.PackageSpec(uuid=UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
-    Pkg.Types.stdlib_resolve!(Types.Context(), [a, b])
+    a = Pkg.PackageSpec(name="Markdown")
+    b = Pkg.PackageSpec(uuid=UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
+    Pkg.PackageResolve.stdlib_resolve!(Pkg.Contexts.Context(), [a, b])
     @test a.uuid == UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
     @test b.name == "Profile"
 
-    x = Pkg.Types.PackageSpec(name="Markdown", uuid=UUID("d6f4376e-aef5-505a-96c1-9c027394607a"))
-    Pkg.Types.stdlib_resolve!(Types.Context(), [x])
+    x = Pkg.PackageSpec(name="Markdown", uuid=UUID("d6f4376e-aef5-505a-96c1-9c027394607a"))
+    Pkg.PackageResolve.stdlib_resolve!(Pkg.Contexts.Context(), [x])
     @test x.name == "Markdown"
     @test x.uuid == UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
 end
@@ -646,25 +638,25 @@ end
 @testset "targets should survive add/rm" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
         cp(joinpath(@__DIR__, "project", "good", "pkg.toml"), "Project.toml")
-        targets = deepcopy(Pkg.Types.read_project("Project.toml").targets)
+        targets = deepcopy(Pkg.Projects.read_project("Project.toml").targets)
         Pkg.activate(".")
         Pkg.add("Example")
         Pkg.rm("Example")
-        @test targets == Pkg.Types.read_project("Project.toml").targets
+        @test targets == Pkg.Projects.read_project("Project.toml").targets
     end end
 end
 
 @testset "reading corrupted project files" begin
     dir = joinpath(@__DIR__, "project", "bad")
     for bad_project in joinpath.(dir, readdir(dir))
-        @test_throws PkgError Pkg.Types.read_project(bad_project)
+        @test_throws PkgError Pkg.Projects.read_project(bad_project)
     end
 end
 
 @testset "reading corrupted manifest files" begin
     dir = joinpath(@__DIR__, "manifest", "bad")
     for bad_manifest in joinpath.(dir, readdir(dir))
-        @test_throws PkgError Pkg.Types.read_manifest(bad_manifest)
+        @test_throws PkgError Pkg.Manifests.read_manifest(bad_manifest)
     end
 end
 
@@ -685,10 +677,10 @@ end
             uuid = "824dc81a-29a7-11e9-3958-fba342a32644"
             version = "0.1.0"
             """)
-        manifest = Pkg.Types.read_manifest("Manifest.toml")
+        manifest = Pkg.Manifests.read_manifest("Manifest.toml")
         package = manifest[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
         @test package.path == (Sys.iswindows() ? "bar\\Foo" : "bar/Foo")
-        Pkg.Types.write_manifest(manifest, "Manifest.toml")
+        Pkg.Manifests.write_manifest(manifest, "Manifest.toml")
         @test occursin("path = \"bar/Foo\"", read("Manifest.toml", String))
     end end
 end
@@ -717,9 +709,9 @@ end
             git_init_and_commit("A")
         end
         Pkg.generate("B")
-        project = Pkg.Types.read_project("A/Project.toml")
+        project = Pkg.Projects.read_project("A/Project.toml")
         project.name = "B"
-        Pkg.Types.write_project(project, "B/Project.toml")
+        Pkg.Projects.write_project(project, "B/Project.toml")
         git_init_and_commit("B")
         Pkg.develop(Pkg.PackageSpec(path = abspath("A")))
         # package with same name but different uuid exist in project
@@ -754,9 +746,9 @@ end
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "NotUpdated")
         Pkg.activate(joinpath(tmp, "NotUpdated"))
-        hash = Pkg.Types.Context().env.manifest[TEST_PKG.uuid].tree_hash
+        hash = Pkg.Contexts.Context().env.manifest[TEST_PKG.uuid].tree_hash
         Pkg.instantiate()
-        @test hash == Pkg.Types.Context().env.manifest[TEST_PKG.uuid].tree_hash
+        @test hash == Pkg.Contexts.Context().env.manifest[TEST_PKG.uuid].tree_hash
     end end
 end
 
@@ -783,7 +775,7 @@ end
         copy_test_package(tmp, "Unpruned")
         Pkg.activate(joinpath(tmp, "Unpruned"))
         Pkg.update()
-        manifest = Pkg.Types.Context().env.manifest
+        manifest = Pkg.Contexts.Context().env.manifest
         package_example = get(manifest, example_uuid, nothing)
         @test package_example !== nothing
         @test package_example.version > v"0.4.0"

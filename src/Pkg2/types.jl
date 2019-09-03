@@ -5,7 +5,7 @@ module Pkg2Types
 export VersionInterval, VersionSet
 import Base: show, isempty, in, intersect, union!, union, ==, hash, copy
 
-import ...Types: VersionBound, VersionRange
+import ...VersionTypes: VersionBound, VersionRange
 
 const _inf_versionnumber = typemax(VersionNumber)
 const _inf_versionbound = VersionBound("*")

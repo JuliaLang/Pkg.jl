@@ -6,7 +6,7 @@ using Random
 
 include("FieldValues.jl")
 
-using .FieldValues, ..VersionWeights, ...Types, ...GraphType
+using .FieldValues, ..VersionWeights, ...GraphType, ...ResolverTypes
 
 export UnsatError, Messages, maxsum
 

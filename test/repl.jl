@@ -2,12 +2,10 @@
 
 module REPLTests
 
-using Pkg
-using Pkg.Types: manifest_info, EnvCache, Context
-import Pkg.Types.PkgError
-using UUIDs
-using Test
 import LibGit2
+using  Pkg, UUIDs, Test
+using  Pkg.PkgErrors: PkgError
+using  Pkg.Contexts
 
 include("utils.jl")
 
@@ -75,10 +73,10 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"add Example#master"
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)
-    entry = Pkg.Types.manifest_info(Context(), TEST_PKG.uuid)
+    entry = manifest_info(Context(), TEST_PKG.uuid)
     @test entry.repo.rev == "master"
     pkg"up --fixed"
-    entry = Pkg.Types.manifest_info(Context(), TEST_PKG.uuid)
+    entry = manifest_info(Context(), TEST_PKG.uuid)
     @test entry.repo.rev == "master"
 
     pkg"test Example"
@@ -182,7 +180,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     @test Base.find_package("UnregisteredWithProject") == joinpath(p1_new_path, "src", "UnregisteredWithProject.jl")
                     @test Base.find_package("UnregisteredWithoutProject") == joinpath(p2_new_path, "src", "UnregisteredWithoutProject.jl")
                     @test Pkg.dependencies()[UUID("58262bb0-2073-11e8-3727-4fe182c12249")].version == v"0.1.0"
-                    @test Pkg.dependencies()[Pkg.Types.Context().env.project.deps["UnregisteredWithoutProject"]].version == v"0.0.0"
+                    @test Pkg.dependencies()[Pkg.Contexts.Context().env.project.deps["UnregisteredWithoutProject"]].version == v"0.0.0"
                     Pkg.test("UnregisteredWithoutProject")
                     Pkg.test("UnregisteredWithProject")
                 end
@@ -208,7 +206,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     @test Pkg.dependencies()[uuid1].version == v"0.1.0"
                     @test Pkg.dependencies()[uuid2].version == v"0.1.0"
                     # make sure paths to SubModule1 and SubModule2 are relative
-                    manifest = Pkg.Types.Context().env.manifest
+                    manifest = Pkg.Contexts.Context().env.manifest
                     @test manifest[uuid1].path == "SubModule1"
                     @test manifest[uuid2].path == "SubModule2"
                 end
@@ -233,10 +231,10 @@ temp_pkg_dir() do project_path
         pkg"activate ."
         @test Base.active_project() == joinpath(path, "Project.toml")
         # tests illegal names for shared environments
-        @test_throws Pkg.Types.PkgError pkg"activate --shared ."
-        @test_throws Pkg.Types.PkgError pkg"activate --shared ./Foo"
-        @test_throws Pkg.Types.PkgError pkg"activate --shared Foo/Bar"
-        @test_throws Pkg.Types.PkgError pkg"activate --shared ../Bar"
+        @test_throws PkgError pkg"activate --shared ."
+        @test_throws PkgError pkg"activate --shared ./Foo"
+        @test_throws PkgError pkg"activate --shared Foo/Bar"
+        @test_throws PkgError pkg"activate --shared ../Bar"
         # check that those didn't change te enviroment
         @test Base.active_project() == joinpath(path, "Project.toml")
         mkdir("Foo")
@@ -294,7 +292,7 @@ cd_tempdir() do tmp
     pkg"develop ../SubModule"
     @test Pkg.dependencies()[uuid1].version == v"0.1.0"
     @test Pkg.dependencies()[uuid2].version == v"0.1.0"
-    manifest = Pkg.Types.Context().env.manifest
+    manifest = Pkg.Contexts.Context().env.manifest
     @test manifest[uuid1].path == ".."
     @test manifest[uuid2].path == joinpath("..", "SubModule")
 end
@@ -326,7 +324,7 @@ temp_pkg_dir() do depot; cd_tempdir() do tmp
     # this dev should not error even if NonExistent/Project.toml file is non-existent
     @test !isdir("NonExistent")
     pkg"dev Foo"
-    manifest = Pkg.Types.Context().env.manifest
+    manifest = Pkg.Contexts.Context().env.manifest
     @test manifest[uuid].path == joinpath("..", "Foo")
 end end
 
@@ -605,7 +603,7 @@ end end
 
 @testset "parse package url win" begin
     @test typeof(Pkg.REPLMode.parse_package_identifier("https://github.com/abc/ABC.jl";
-                                                       add_or_develop=true)) == Pkg.Types.PackageSpec
+                                                       add_or_develop=true)) == Pkg.PackageSpecs.PackageSpec
 end
 
 @testset "unit test for REPLMode.promptf" begin
@@ -838,12 +836,12 @@ end
 
 @testset "tests for api opts" begin
     specs = Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[
-        [:name => "project", :short_name => "p", :api => :mode => Pkg.Types.PKGMODE_PROJECT],
-        [:name => "manifest", :short_name => "m", :api => :mode => Pkg.Types.PKGMODE_MANIFEST],
-        [:name => "major", :api => :level => Pkg.Types.UPLEVEL_MAJOR],
-        [:name => "minor", :api => :level => Pkg.Types.UPLEVEL_MINOR],
-        [:name => "patch", :api => :level => Pkg.Types.UPLEVEL_PATCH],
-        [:name => "fixed", :api => :level => Pkg.Types.UPLEVEL_FIXED],
+        [:name => "project", :short_name => "p", :api => :mode => Pkg.PackageSpecs.PKGMODE_PROJECT],
+        [:name => "manifest", :short_name => "m", :api => :mode => Pkg.PackageSpecs.PKGMODE_MANIFEST],
+        [:name => "major", :api => :level => Pkg.PackageSpecs.UPLEVEL_MAJOR],
+        [:name => "minor", :api => :level => Pkg.PackageSpecs.UPLEVEL_MINOR],
+        [:name => "patch", :api => :level => Pkg.PackageSpecs.UPLEVEL_PATCH],
+        [:name => "fixed", :api => :level => Pkg.PackageSpecs.UPLEVEL_FIXED],
         [:name => "rawnum", :takes_arg => true, :api => :num => identity],
         [:name => "plus", :takes_arg => true, :api => :num => x->parse(Int,x)+1],
     ])
@@ -855,8 +853,8 @@ end
     ], specs)
 
     @test get(api_opts,:foo,nothing) === nothing
-    @test get(api_opts,:mode,nothing) == Pkg.Types.PKGMODE_MANIFEST
-    @test get(api_opts,:level,nothing) == Pkg.Types.UPLEVEL_PATCH
+    @test get(api_opts,:mode,nothing) == Pkg.PackageSpecs.PKGMODE_MANIFEST
+    @test get(api_opts,:level,nothing) == Pkg.PackageSpecs.UPLEVEL_PATCH
     @test get(api_opts,:num,nothing) == "5"
 
     api_opts = Pkg.REPLMode.APIOptions([
@@ -865,8 +863,8 @@ end
         Pkg.REPLMode.Option("plus", "5"),
     ], specs)
 
-    @test get(api_opts,:mode,nothing) == Pkg.Types.PKGMODE_PROJECT
-    @test get(api_opts,:level,nothing) == Pkg.Types.UPLEVEL_PATCH
+    @test get(api_opts,:mode,nothing) == Pkg.PackageSpecs.PKGMODE_PROJECT
+    @test get(api_opts,:level,nothing) == Pkg.PackageSpecs.UPLEVEL_PATCH
     @test get(api_opts,:num,nothing) == 6
 end
 

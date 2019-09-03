@@ -44,9 +44,9 @@ function collect_require!(ctx::Context, pkg::PackageSpec, path::String,
         end
 
         # Packages from REQUIRE files need to get their UUID from the registry
-        registry_resolve!(ctx, fix_deps)
-        project_deps_resolve!(ctx, fix_deps)
-        ensure_resolved(ctx, fix_deps; registry=true)
+        PackageResolve.registry_resolve!(ctx, fix_deps)
+        PackageResolve.project_deps_resolve!(ctx, fix_deps)
+        PackageResolve.ensure_resolved(ctx, fix_deps; registry=true)
     end
 
     # And collect the stdlibs
@@ -70,9 +70,9 @@ function pkg2_test_target_compatibility!(ctx, path, pkgs)
             pkg_name == "julia" && continue
             push!(pkgs, PackageSpec(pkg_name, vspec))
         end
-        registry_resolve!(ctx, pkgs)
-        project_deps_resolve!(ctx, pkgs)
-        ensure_resolved(ctx, pkgs; registry=true)
+        PackageResolve.registry_resolve!(ctx, pkgs)
+        PackageResolve.project_deps_resolve!(ctx, pkgs)
+        PackageResolve.ensure_resolved(ctx, pkgs; registry=true)
     end
     return nothing
 end

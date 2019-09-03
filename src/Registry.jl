@@ -1,8 +1,9 @@
 module Registry
 
-import ..Pkg, ..Types, ..API
-using ..Pkg: depots1
-using ..Types: RegistrySpec, Context, Context!
+import ..Pkg, ..API, ..RegistryOps
+using  ..Pkg: depots1
+using  ..Contexts: Context, Context!, printpkgstyle
+using  ..RegistrySpecs
 
 
 """
@@ -26,7 +27,7 @@ add(regs::Vector{String}; kwargs...) = add([RegistrySpec(name = name) for name i
 add(regs::Vector{RegistrySpec}; kwargs...) = add(Context(), regs; kwargs...)
 function add(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
     Context!(ctx; kwargs...)
-    Types.clone_or_cp_registries(ctx, regs)
+    RegistryOps.clone_or_cp_registries(ctx, regs)
 end
 
 """
@@ -49,7 +50,7 @@ rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in 
 rm(regs::Vector{RegistrySpec}; kwargs...) = rm(Context(), regs; kwargs...)
 function rm(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
     Context!(ctx; kwargs...)
-    Types.remove_registries(ctx, regs)
+    RegistryOps.remove_registries(ctx, regs)
 end
 
 """
@@ -72,13 +73,13 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-update(regs::Vector{RegistrySpec} = Types.collect_registries(depots1()); kwargs...) =
+update(regs::Vector{RegistrySpec} = collect_registries(depots1()); kwargs...) =
     update(Context(), regs; kwargs...)
 function update(ctx::Context,
-                regs::Vector{RegistrySpec} = Types.collect_registries(depots1());
+                regs::Vector{RegistrySpec} = collect_registries(depots1());
                 kwargs...)
     Context!(ctx; kwargs...)
-    Types.update_registries(ctx, regs; force=true)
+    RegistryOps.update_registries(ctx, regs; force=true)
 end
 
 """
@@ -97,9 +98,9 @@ Pkg.Registry.status()
 status(; kwargs...) = status(Context(); kwargs...)
 function status(ctx::Context; io::IO=stdout, kwargs...)
     Context!(ctx; io=io, kwargs...)
-    regs = Types.collect_registries()
+    regs = collect_registries()
     regs = unique(r -> r.uuid, regs) # Maybe not?
-    Types.printpkgstyle(ctx, Symbol("Registry Status"), "")
+    printpkgstyle(ctx, Symbol("Registry Status"), "")
     if isempty(regs)
         println(ctx.io, "  (no registries found)")
     else

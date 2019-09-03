@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 import Pkg
-import Pkg.Types: VersionSpec, VersionRange, VersionBound, semver_spec
+import Pkg.VersionTypes: VersionSpec, VersionRange, VersionBound, semver_spec
 import Base: thismajor, thisminor, thispatch, nextmajor, nextminor, nextpatch
 
 const STDLIBS = [
@@ -158,6 +158,6 @@ for arg in ARGS
     open(project_file, "w") do io
         Pkg.TOML.print(io, project, sorted=true)
     end
-    project = Pkg.Types.read_project(project_file)
-    Pkg.Types.write_project(project, project_file)
+    project = Pkg.Projects.read_project(project_file)
+    Pkg.Projects.write_project(project, project_file)
 end

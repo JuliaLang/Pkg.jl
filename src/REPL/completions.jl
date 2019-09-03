@@ -30,8 +30,8 @@ end
 function complete_remote_package(partial)
     cmp = String[]
     julia_version = VERSION
-    for reg in Types.collect_registries()
-        data = Types.read_registry(joinpath(reg.path, "Registry.toml"))
+    for reg in RegistrySpecs.collect_registries()
+        data = RegistrySpecs.read_registry(joinpath(reg.path, "Registry.toml"))
         for (uuid, pkginfo) in data["packages"]
             name = pkginfo["name"]
             if startswith(name, partial)
@@ -65,7 +65,7 @@ function complete_help(options, partial)
 end
 
 function complete_installed_packages(options, partial)
-    env = try EnvCache()
+    env = try EnvCaches.EnvCache()
     catch err
         err isa PkgError || rethrow()
         return String[]
@@ -83,7 +83,7 @@ function complete_add_dev(options, partial, i1, i2)
     end
     comps = vcat(comps, complete_remote_package(partial))
     comps = vcat(comps, filter(x->startswith(x,partial) && !(x in comps),
-                               collect(values(Types.stdlib()))))
+                               collect(values(stdlib()))))
     return comps, idx, !isempty(comps)
 end
 

@@ -77,7 +77,7 @@ function parse_package_identifier(word::AbstractString; add_or_develop=false)::P
         if !occursin(Base.Filesystem.path_separator_re, word)
             @info "resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
         end
-        return PackageSpec(repo=Types.GitRepo(url=expanduser(word)))
+        return PackageSpec(repo=GitRepos.GitRepo(url=expanduser(word)))
     elseif occursin(uuid_re, word)
         return PackageSpec(uuid=UUID(word))
     elseif occursin(name_re, word)
@@ -87,7 +87,7 @@ function parse_package_identifier(word::AbstractString; add_or_develop=false)::P
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
     elseif add_or_develop
         # Guess it is a url then
-        return PackageSpec(repo=Types.GitRepo(url=word))
+        return PackageSpec(repo=GitRepos.GitRepo(url=word))
     else
         pkgerror("`$word` cannot be parsed as a package")
     end
@@ -97,17 +97,17 @@ end
 # RegistrySpec #
 ################
 function parse_registry(raw_args::Vector{QString}; add=false)
-    regs = RegistrySpec[]
+    regs = RegistrySpecs.RegistrySpec[]
     foreach(x -> push!(regs, parse_registry(x; add=add)), unwrap(raw_args))
     return regs
 end
 
 # Registries can be identified through: uuid, name, or name+uuid
 # when updating/removing. When adding we can accept a local path or url.
-function parse_registry(word::AbstractString; add=false)::RegistrySpec
+function parse_registry(word::AbstractString; add=false)::RegistrySpecs.RegistrySpec
     word = replace(word, "~" => homedir())
-    registry = RegistrySpec()
-    if add && Types.isdir_windows_workaround(word) # TODO: Should be casesensitive_isdir
+    registry = RegistrySpecs.RegistrySpec()
+    if add && isdir_windows_workaround(word) # TODO: Should be casesensitive_isdir
         if isdir(joinpath(word, ".git")) # add path as url and clone it from there
             registry.url = abspath(word)
         else # put the path

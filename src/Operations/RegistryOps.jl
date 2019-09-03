@@ -307,6 +307,23 @@ function registered_names(ctx::Context, uuid::UUID)::Vector{String}
     return ctx.reg.names[uuid]
 end
 
+# Determine current name for a given package UUID
+function registered_name(ctx::Context, uuid::UUID)::Union{Nothing,String}
+    names = RegistryOps.registered_names(ctx, uuid)
+    length(names) == 0 && return nothing
+    length(names) == 1 && return names[1]
+    infos = registered_info(ctx, uuid, "name")
+    first_found_name = nothing
+    for (path, name) in infos
+        first_found_name === nothing && (first_found_name = name)
+        if first_found_name != name
+            pkgerror("Inconsistent registry information. ",
+                     "Package `$uuid` has multiple registered names: `$first_found_name`, `$name`.")
+        end
+    end
+    return name
+end
+
 # Return most current package info for a registered UUID
 function registered_info(ctx::Context, uuid::UUID, key::String)
     haskey(ctx.reg.paths, uuid) || find_registered!(ctx, uuid)

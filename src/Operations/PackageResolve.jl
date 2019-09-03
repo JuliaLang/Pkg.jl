@@ -127,23 +127,6 @@ function registered_uuid(ctx::Context, name::String)::Union{Nothing,UUID}
     end
 end
 
-# Determine current name for a given package UUID
-function registered_name(ctx::Context, uuid::UUID)::Union{Nothing,String}
-    names = RegistryOps.registered_names(ctx, uuid)
-    length(names) == 0 && return nothing
-    length(names) == 1 && return names[1]
-    infos = registered_info(ctx, uuid, "name")
-    first_found_name = nothing
-    for (path, name) in infos
-        first_found_name === nothing && (first_found_name = name)
-        if first_found_name != name
-            pkgerror("Inconsistent registry information. ",
-                     "Package `$uuid` has multiple registered names: `$first_found_name`, `$name`.")
-        end
-    end
-    return name
-end
-
 # Ensure that all packages are fully resolved
 function ensure_resolved(ctx::Context,
     pkgs::AbstractVector{PackageSpec};
