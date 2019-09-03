@@ -35,24 +35,11 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
 
 using ..PkgErrors, ..GitRepos, ..VersionTypes, ..Manifests, ..Projects, ..PackageSpecs,
     ..Utils, ..EnvCaches, ..Contexts, ..RegistrySpecs, ..ResolverTypes, ..PackageResolve,
-    ..PkgSpecUtils
+    ..PkgSpecUtils, ..ArtifactType
 import ..PkgSpecUtils: find_installed
 import ..Infos: ProjectInfo, PackageInfo
 import ..RegistryOps: clone_or_cp_registries, remove_registries, update_registries, find_installed_registries,
     clone_default_registries, populate_known_registries_with_urls!, find_registered!, registered_uuids,
     registered_paths, registered_names, registered_info, DEFAULT_REGISTRIES
-
-############
-# Artifact #
-############
-Base.@kwdef struct Artifact
-    name::Union{String,Nothing} = nothing
-    url::Union{String,Nothing} = nothing
-    tree_hash::Union{SHA1,Nothing} = nothing
-    tarball_hash::Union{Vector{UInt8},Nothing} = nothing
-    extract::Bool = false
-    filename::Union{String,Nothing} = nothing
-    platform::Union{Platform,Nothing} = nothing
-end
 
 end # module
