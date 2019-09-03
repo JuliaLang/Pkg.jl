@@ -491,7 +491,7 @@ function __init__()
     end
 end
 
-METADATA_compatible_uuid(pkg::String) = Types.uuid5(Types.uuid_package, pkg)
+METADATA_compatible_uuid(pkg::String) = Utils.uuid5(Types.uuid_package, pkg)
 
 ##################
 # Precompilation #

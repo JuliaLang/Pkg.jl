@@ -5,8 +5,7 @@ module Resolve
 include("resolve/VersionWeights.jl")
 include("resolve/MaxSum.jl")
 
-using ..Types, ..GraphType, ..Resolve.MaxSum
-import ..Types: uuid_julia
+using  ..Types, ..GraphType, ..Resolve.MaxSum, ..Utils
 import ..GraphType: is_julia, check_constraints, log_event_global!, log_event_greedysolved!, log_event_maxsumsolved!, log_event_maxsumtrace!
 
 using Printf

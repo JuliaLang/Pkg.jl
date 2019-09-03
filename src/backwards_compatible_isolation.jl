@@ -1,3 +1,35 @@
+# target === nothing : main dependencies
+# target === "*"     : main + all extras
+# target === "name"  : named target deps
+function deps_names(project, target::Union{Nothing,String}=nothing)::Vector{String}
+    deps = collect(keys(project.deps))
+    if target === nothing
+        x = String[]
+    elseif target == "*"
+        x = collect(keys(project.extras))
+    else
+        x = haskey(project.targets, target) ?
+            collect(values(project.targets[target])) :
+            String[]
+    end
+    return sort!(union!(deps, x))
+end
+
+function get_deps(project, target::Union{Nothing,String}=nothing)
+    names = deps_names(project, target)
+    deps = filter(((dep, _),) -> dep in names, project.deps)
+    extras = project.extras
+    for name in names
+        haskey(deps, name) && continue
+        haskey(extras, name) ||
+            pkgerror("target `$target` has unlisted dependency `$name`")
+        deps[name] = extras[name]
+    end
+    return deps
+end
+get_deps(ctx::Context, target::Union{Nothing,String}=nothing) =
+    get_deps(ctx.env.project, target)
+
 function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothing})
     env = ctx.env
     uuid, name, version, path, special_action, repo = pkg.uuid, pkg.name, pkg.version, pkg.path, pkg.special_action, pkg.repo
@@ -122,14 +154,14 @@ function _resolve_versions!(
     fixed = _collect_fixed!(ctx, pkgs, uuid_to_name)
 
     # compatibility
-    proj_compat = Types.project_compatibility(ctx, "julia")
+    proj_compat = project_compatibility(ctx, "julia")
     v = intersect(VERSION, proj_compat)
     if isempty(v)
         @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
     end
 
     for pkg in pkgs
-        proj_compat = Types.project_compatibility(ctx, pkg.name)
+        proj_compat = project_compatibility(ctx, pkg.name)
         v = intersect(pkg.version, proj_compat)
         if isempty(v)
             pkgerror(string("empty intersection between $(pkg.name)@$(pkg.version) and project ",
@@ -389,7 +421,7 @@ function collect_target_deps!(
     # Find the path to the package
     if pkg.uuid in keys(ctx.stdlibs)
         path = Types.stdlib_path(pkg.name)
-    elseif Types.is_project_uuid(ctx, pkg.uuid)
+    elseif is_project_uuid(ctx, pkg.uuid)
         path = dirname(ctx.env.project_file)
     else
         entry = manifest_info(ctx, pkg.uuid)
@@ -445,7 +477,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
     # unless we already have resolved for the current environment, which the calleer indicates
     # with `might_need_to_resolve`
     need_to_resolve = false
-    is_project = Types.is_project(localctx, pkg)
+    isproject = is_project(localctx, pkg)
 
     target = nothing
     if pkg.special_action == PKGSPEC_TESTED
@@ -481,7 +513,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         end
     end
 
-    if is_project # testing the project itself
+    if isproject # testing the project itself
         # the project might have changes made to it so need to resolve
         need_to_resolve = true
         # Since we will create a temp environment in another place we need to extract the project
@@ -606,7 +638,7 @@ function backwards_compatibility_for_test(
         end
     end
     with_dependencies_loadable_at_toplevel(ctx, pkg; might_need_to_resolve=true) do localctx
-        if !Types.is_project_uuid(ctx, pkg.uuid)
+        if !is_project_uuid(ctx, pkg.uuid)
             Display.status(localctx, mode=PKGMODE_MANIFEST)
         end
 

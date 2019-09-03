@@ -79,7 +79,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 
     new_git = Operations.handle_repos_develop!(ctx, pkgs, shared)
 
-    any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
+    any(pkg -> Operations.collides_with_project(ctx, pkg), pkgs) &&
         pkgerror("Cannot `develop` package with the same name or uuid as the project")
 
     Operations.develop(ctx, pkgs, new_git; strict=strict, platform=platform)
@@ -120,7 +120,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
     stdlib_resolve!(ctx, pkgs)
     ensure_resolved(ctx, pkgs, registry=true)
 
-    any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
+    any(pkg -> Operations.collides_with_project(ctx, pkg), pkgs) &&
         pkgerror("Cannot add package with the same name or uuid as the project")
 
     Operations.add(ctx, pkgs, new_git; strict=strict, platform=platform)

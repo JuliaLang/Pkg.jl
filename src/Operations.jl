@@ -10,7 +10,7 @@ import REPL
 using REPL.TerminalMenus
 using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display, ..Utils
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry, ..RegistryOps,
-       ..PackageResolve, ..GitOps, ..GitRepos
+       ..PackageResolve, ..GitOps, ..GitRepos, ..Projects, ..Manifests
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names
 import ..EnvCaches: write_env_usage
 using ..BinaryPlatforms
@@ -20,6 +20,20 @@ import ..Pkg
 #########
 # Utils #
 #########
+project_uuid(ctx::Context) = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid
+collides_with_project(ctx::Context, pkg::PackageSpec) =
+    is_project_name(ctx, pkg.name) || is_project_uuid(ctx, pkg.uuid)
+is_project(ctx::Context, pkg::PackageSpec) = is_project_uuid(ctx, pkg.uuid)
+is_project_name(ctx::Context, name::String) =
+    ctx.env.pkg !== nothing && ctx.env.pkg.name == name
+is_project_uuid(ctx::Context, uuid::UUID) = project_uuid(ctx) == uuid
+Utils.is_stdlib(ctx::Context, uuid::UUID) = uuid in keys(ctx.stdlibs)
+
+function project_compatibility(ctx::Context, name::String)
+    compat = get(ctx.env.project.compat, name, nothing)
+    return compat === nothing ? VersionSpec() : VersionSpec(Types.semver_spec(compat))
+end
+
 is_dep(ctx::Context, pkg::PackageSpec) =
     any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
 
@@ -74,6 +88,40 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
         entry.deps = load_deps(ctx, pkg)
         ctx.env.manifest[pkg.uuid] = entry
     end
+end
+
+###
+### Write env
+###
+function Projects.write_project(project::Projects.Project, env, old_env, ctx::Context; display_diff=true)
+    project = Projects.destructure(ctx.env.project)
+    if !isempty(project) || ispath(env.project_file)
+        if display_diff && !(ctx.currently_running_target)
+            printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
+            Pkg.Display.print_project_diff(ctx, old_env, env)
+        end
+        if !ctx.preview
+            mkpath(dirname(env.project_file))
+            Projects.write_project(project, env.project_file)
+        end
+    end
+end
+
+function Manifests.write_manifest(manifest::Manifests.Manifest, env, old_env, ctx::Context; display_diff=true)
+    isempty(manifest) && !ispath(env.manifest_file) && return
+
+    if display_diff && !(ctx.currently_running_target)
+        printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
+        Pkg.Display.print_manifest_diff(ctx, old_env, env)
+    end
+    !ctx.preview && Manifests.write_manifest(manifest, env.manifest_file)
+end
+
+function write_env(ctx::Context; display_diff=true)
+    env = ctx.env
+    old_env = EnvCache(env.env) # load old environment for comparison
+    Projects.write_project(env.project, env, old_env, ctx; display_diff=display_diff)
+    Manifests.write_manifest(env.manifest, env, old_env, ctx; display_diff=display_diff)
 end
 
 ####################
@@ -255,7 +303,7 @@ end
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     printpkgstyle(ctx, :Resolving, "package versions...")
     # compatibility
-    proj_compat = Types.project_compatibility(ctx, "julia")
+    proj_compat = project_compatibility(ctx, "julia")
     v = intersect(VERSION, proj_compat)
     if isempty(v)
         @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
@@ -275,7 +323,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
 
     # check compat
     for pkg in pkgs
-        proj_compat = Types.project_compatibility(ctx, pkg.name)
+        proj_compat = project_compatibility(ctx, pkg.name)
         v = intersect(pkg.version, proj_compat)
         if isempty(v)
             pkgerror(string("empty intersection between $(pkg.name)@$(pkg.version) and project ",
@@ -685,7 +733,7 @@ function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}
         pkg.uuid in keys(ctx.stdlibs) && continue
         pkg.uuid in uuids && continue
         push!(uuids, pkg.uuid)
-        if Types.is_project(ctx, pkg)
+        if is_project(ctx, pkg)
             pkgs = [PackageSpec(name, uuid) for (name, uuid) in ctx.env.project.deps]
         else
             info = manifest_info(ctx, pkg.uuid)
@@ -718,7 +766,7 @@ function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,In
             return @warn("Dependency graph not a DAG, linearizing anyway")
         haskey(order, uuid) && return
         push!(seen, uuid)
-        if Types.is_project_uuid(ctx, uuid)
+        if is_project_uuid(ctx, uuid)
             deps = values(ctx.env.project.deps)
         else
             entry = manifest_info(ctx, uuid)
@@ -755,7 +803,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
         uuid in keys(ctx.stdlibs) && continue
-        if Types.is_project_uuid(ctx, uuid)
+        if is_project_uuid(ctx, uuid)
             path = dirname(ctx.env.project_file)
             name = ctx.env.pkg.name
             version = ctx.env.pkg.version
@@ -1192,7 +1240,7 @@ end
 function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::String)
     env = deepcopy(ctx.env)
     # load target deps
-    keep = Types.is_project(ctx, target) ? collect(values(env.project.deps)) : [target.uuid]
+    keep = is_project(ctx, target) ? collect(values(env.project.deps)) : [target.uuid]
     # preserve test deps
     project = read_project(test_project)
     project !== nothing && append!(keep, collect(values(project.deps)))
@@ -1225,8 +1273,8 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             @debug "Active Manifest detected"
             # copy over preserved subgraph
             # abspath! to maintain location of all deved nodes
-            Types.write_manifest(abspath!(ctx, sandbox_preserve(ctx, target, tmp_project)),
-                                 tmp_manifest)
+            Manifests.write_manifest(abspath!(ctx, sandbox_preserve(ctx, target, tmp_project)),
+                                     tmp_manifest)
         end
         with_temp_env(tmp) do
             try
@@ -1262,7 +1310,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 
     # load manifest data
     for pkg in pkgs
-        if Types.is_project_uuid(ctx, pkg.uuid)
+        if is_project_uuid(ctx, pkg.uuid)
             pkg.path = dirname(ctx.env.project_file)
             pkg.version = ctx.env.pkg.version
         else
@@ -1387,7 +1435,7 @@ function parse_package!(ctx, pkg, project_path)
             # This is an unregistered old style package, give it a UUID and a version
             if !has_uuid(pkg)
                 uuid_unreg_pkg = UUID(0xa9a2672e746f11e833ef119c5b888869)
-                pkg.uuid = uuid5(uuid_unreg_pkg, pkg.name)
+                pkg.uuid = Utils.uuid5(uuid_unreg_pkg, pkg.name)
                 println(ctx.io, "Assigning UUID $(pkg.uuid) to $(pkg.name)")
             end
         else

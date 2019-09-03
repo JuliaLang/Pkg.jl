@@ -2,11 +2,10 @@
 
 module GraphType
 
-using ..Types
-import ..Types.uuid_julia
-
 export Graph, ResolveLog, add_reqs!, add_fixed!, simplify_graph!, simplify_graph_soft!,
        get_resolve_log, showlog, push_snapshot!, pop_snapshot!, wipe_snapshots!
+
+using ..Types, ..Utils
 
 # The ResolveLog is used to keep track of events that take place during the
 # resolution process. We use one ResolveLogEntry per package, and record all events

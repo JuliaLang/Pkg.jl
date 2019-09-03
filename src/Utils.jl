@@ -1,15 +1,42 @@
 module Utils
 
-export parse_toml, set_readonly, safe_realpath, isdir_windows_workaround, casesensitive_isdir, pathrepr,
+export uuid5, uuid_julia,
+       parse_toml, set_readonly, safe_realpath, isdir_windows_workaround, casesensitive_isdir, pathrepr,
        projectfile_path, manifestfile_path, find_project_file, stdlib, is_stdlib, stdlib_dir, stdlib_path
 
-using  UUIDs
+import Base: SHA1
+using  UUIDs, SHA
 import ..TOML
 
 function parse_toml(path::String...; fakeit::Bool=false)
     p = joinpath(path...)
     !fakeit || isfile(p) ? TOML.parsefile(p) : Dict{String,Any}()
 end
+
+###
+### UUID
+###
+
+## ordering of UUIDs ##
+if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
+    Base.isless(a::UUID, b::UUID) = a.value < b.value
+end
+
+## Computing UUID5 values from (namespace, key) pairs ##
+function uuid5(namespace::UUID, key::String)
+    data = [reinterpret(UInt8, [namespace.value]); codeunits(key)]
+    u = reinterpret(UInt128, sha1(data)[1:16])[1]
+    u &= 0xffffffffffff0fff3fffffffffffffff
+    u |= 0x00000000000050008000000000000000
+    return UUID(u)
+end
+uuid5(namespace::UUID, key::AbstractString) = uuid5(namespace, String(key))
+
+const uuid_dns = UUID(0x6ba7b810_9dad_11d1_80b4_00c04fd430c8)
+const uuid_julia_project = uuid5(uuid_dns, "julialang.org")
+const uuid_package = uuid5(uuid_julia_project, "package")
+const uuid_registry = uuid5(uuid_julia_project, "registry")
+const uuid_julia = uuid5(uuid_package, "julia")
 
 ###
 ### Filesystem
