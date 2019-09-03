@@ -18,6 +18,9 @@ The format of the version specifier is described in detail below.
 !!! info
     There is currently no way to give compatibility from the Pkg REPL mode so for now, one has to manually edit the project file.
 
+!!! info
+    The rules below apply to the `Project.toml` file; for registries, see [Registry Compat.toml](@ref).
+
 ## Version specifier format
 
 Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver).
