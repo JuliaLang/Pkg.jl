@@ -123,6 +123,8 @@ from that local repo are pulled when packages are updated.
 Note that changes to files in the local package repository will not immediately be reflected when loading that package.
 The changes would have to be committed and the packages updated in order to pull in the changes.
 
+In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing Packages](@ref) for an example. 
+
 ### Developing packages
 
 By only using `add` your Manifest will always have a "reproducible state", in other words, as long as the repositories and registries used are still accessible
@@ -179,6 +181,16 @@ knowing the exact content of all the packages that are tracking a path.
 Note that if you add a dependency to a package that tracks a local path, the Manifest (which contains the whole dependency graph) will become
 out of sync with the actual dependency graph. This means that the package will not be able to load that dependency since it is not recorded
 in the Manifest. To synchronize the Manifest, use the REPL command `resolve`.
+
+Similarly with `add`, `dev` can track packages with a path relative to the `Manifest.toml` file. This is done by giving a relative path to `add` or `dev`. Notice that due to the way Julia handles relative paths, when you *give* the path, it is always assumed to be with respect to the current working directory, `pwd()`. However, when the package is loaded its path is indeed resolved with respect to the `Manifest.toml` file. To be on the safe side, you can always change path to the `Manifest.toml` file before adding the relative path. For example:
+```
+julia> cd("path/to/manifest"); # This is the project's folder
+
+(v1.0) pkg> activate .
+
+(SomeProject) pkg> dev src/ExamplePackage # similarly for add
+```
+
 
 ## Removing packages
 
