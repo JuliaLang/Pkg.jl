@@ -4,10 +4,8 @@
 """
 Parser for PackageSpec objects.
 """
-function parse_package(args::Vector{QString}; valid=[], add_or_dev=false)::Vector{PackageSpec}
+function parse_package(args::Vector{QString}; add_or_dev=false)::Vector{PackageSpec}
     args::Vector{PackageToken} = map(PackageToken, package_lex(args))
-    push!(valid, String) # always want at least PkgSpec identifiers
-    all(x->typeof(x) in valid, args) || pkgerror("invalid token") # allow only valid tokens
     return parse_package_args(args; add_or_dev=add_or_dev)
 end
 
@@ -57,8 +55,8 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
         # Modifiers without a corresponding package identifier -- this is a user error
         else
             arg isa VersionRange ?
-                pkgerror("package name/uuid must precede version spec `@$arg`") :
-                pkgerror("package name/uuid must precede rev spec `#$(arg.rev)`")
+                pkgerror("Package name/uuid must precede version specifier `@$arg`.") :
+                pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.")
         end
     end
     return pkgs
@@ -75,7 +73,7 @@ end
 function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
     if add_or_develop && casesensitive_isdir(expanduser(word))
         if !occursin(Base.Filesystem.path_separator_re, word)
-            @info "resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
+            @info "Resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
         end
         return PackageSpec(repo=Types.GitRepo(url=expanduser(word)))
     elseif occursin(uuid_re, word)
@@ -86,10 +84,11 @@ function parse_package_identifier(word::AbstractString; add_or_develop=false)::P
         m = match(name_uuid_re, word)
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
     elseif add_or_develop
+        @info "Resolving package identifier `$word` as a URL."
         # Guess it is a url then
         return PackageSpec(repo=Types.GitRepo(url=word))
     else
-        pkgerror("`$word` cannot be parsed as a package")
+        pkgerror("Unable to parse `$word` as a package.")
     end
 end
 

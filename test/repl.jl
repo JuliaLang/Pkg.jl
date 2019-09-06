@@ -934,4 +934,62 @@ end
     end
 end
 
+@testset "REPL API: packagespec token order" begin
+    temp_pkg_dir() do project_path; with_temp_env() do;
+        @test_throws PkgError Pkg.REPLMode.pkgstr("add JSON Example#foobar#foobar LazyJSON")
+        @test_throws PkgError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
+        @test_throws PkgError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
+        @test_throws PkgError Pkg.REPLMode.pkgstr("up #foobar")
+        @test_throws PkgError Pkg.REPLMode.pkgstr("add @0.0.1")
+    end end
+end
+
+@testset "REPL API `develop`" begin
+    # errors
+    temp_pkg_dir() do project_path; with_temp_env() do;
+        @test_throws PkgError pkg"dev Example#master#master"
+        @test_throws PkgError pkg"develop Example#master"
+        @test_throws PkgError pkg"develop Example@0.5.0"
+        @test_throws PkgError pkg"develop JSON Example@0.5.0 LazyJSON"
+        @test_throws PkgError pkg"develop julia"
+        @test_throws PkgError pkg"develop julia#master"
+    end end
+end
+
+@testset "REPL API `remove`" begin
+    # errors
+    temp_pkg_dir() do project_path; with_temp_env() do;
+        Pkg.add("Example")
+        @test_throws PkgError pkg"remove Example#master"
+        @test_throws PkgError pkg"rm Example#master"
+        @test_throws PkgError pkg"remove Example@0.5.0"
+        @test_throws PkgError pkg"rm --project --manifest"
+    end end
+end
+
+@testset "REPL API `free`" begin
+    # errors
+    temp_pkg_dir() do project_path; with_temp_env() do;
+        Pkg.add("Example")
+        Pkg.pin("Example")
+        @test_throws PkgError pkg"free Example#master"
+        @test_throws PkgError pkg"free Example@0.5.0"
+    end end
+end
+
+@testset "REPL API `generate`" begin
+    # errors
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
+        @test_throws PkgError pkg"generate"
+        @test_throws PkgError pkg"generate Example Example2"
+    end end
+end
+
+@testset "REPL API `up`" begin
+    # errors
+    temp_pkg_dir() do project_path; with_temp_env() do;
+        @test_throws PkgError Pkg.REPLMode.pkgstr("up --major --minor")
+    end end
+end
+
 end # module
