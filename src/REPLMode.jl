@@ -11,6 +11,8 @@ import REPL: LineEdit, REPLCompletions
 import ..Types.casesensitive_isdir
 using ..Types, ..Display, ..Operations, ..API, ..Registry
 
+const SPECS = Ref{Union{Nothing,Dict}}(nothing)
+
 #########################
 # Specification Structs #
 #########################
@@ -62,15 +64,8 @@ end
 #----------#
 # Commands #
 #----------#
-@enum(CommandKind, CMD_HELP, CMD_RM, CMD_ADD, CMD_DEVELOP, CMD_UP,
-                   CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
-                   CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
-                   CMD_INSTANTIATE, CMD_ACTIVATE, CMD_PREVIEW,
-                   CMD_REGISTRY_ADD, CMD_REGISTRY_RM, CMD_REGISTRY_UP, CMD_REGISTRY_STATUS,
-                   )
 const CommandDeclaration = Vector{Pair{Symbol,Any}}
 struct CommandSpec
-    kind::CommandKind
     canonical_name::String
     short_name::Union{Nothing,String}
     handler::Union{Nothing,Function}
@@ -81,8 +76,7 @@ struct CommandSpec
     help::Union{Nothing,Markdown.MD}
 end
 
-function CommandSpec(;kind::Union{Nothing,CommandKind}      = nothing,
-                     name::Union{Nothing,String}            = nothing,
+function CommandSpec(;name::Union{Nothing,String}           = nothing,
                      short_name::Union{Nothing,String}      = nothing,
                      handler::Union{Nothing,Function}       = nothing,
                      option_spec::Vector{OptionDeclaration} = OptionDeclaration[],
@@ -92,11 +86,10 @@ function CommandSpec(;kind::Union{Nothing,CommandKind}      = nothing,
                      arg_count::Pair                        = (0=>0),
                      arg_parser::Function                   = unwrap,
                      )::CommandSpec
-    @assert kind !== nothing "Register and specify a `CommandKind`"
     @assert name !== nothing "Supply a canonical name"
     @assert description !== nothing "Supply a description"
     # TODO assert isapplicable completions dict, string
-    return CommandSpec(kind, name, short_name, handler, ArgSpec(arg_count, arg_parser),
+    return CommandSpec(name, short_name, handler, ArgSpec(arg_count, arg_parser),
                        OptionSpecs(option_spec), completions, description, help)
 end
 
@@ -114,15 +107,14 @@ function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,Com
     return specs
 end
 
-function SuperSpecs(compound_commands)::Dict{String,Dict{String,CommandSpec}}
-    super_specs = Dict()
-    for x in compound_commands
-        name = x.first
-        spec = CommandSpecs(x.second)
-        @assert !haskey(super_specs, name) "duplicate super spec entry"
-        super_specs[name] = spec
+function CompoundSpecs(compound_declarations)::Dict{String,Dict{String,CommandSpec}}
+    compound_specs = Dict()
+    for (name, command_declarations) in compound_declarations
+        specs = CommandSpecs(command_declarations)
+        @assert !haskey(compound_specs, name) "duplicate super spec entry"
+        compound_specs[name] = specs
     end
-    return super_specs
+    return compound_specs
 end
 
 ###########
@@ -261,14 +253,14 @@ function core_parse(words::Vector{QString}; only_cmd=false)
         word = QString("?", false)
     end
     # determine command
-    super = get(super_specs, word.raw, nothing)
+    super = get(SPECS[], word.raw, nothing)
     if super !== nothing # explicit
         statement.super = word.raw
         next_word!() || return statement, word.raw
         command = get(super, word.raw, nothing)
         command !== nothing || return statement, word.raw
     else # try implicit package
-        super = super_specs["package"]
+        super = SPECS[]["package"]
         command = get(super, word.raw, nothing)
         command !== nothing || return statement, word.raw
     end
@@ -404,7 +396,7 @@ function do_cmd!(command::Command, repl)
     context = Dict{Symbol,Any}(:preview => command.preview)
 
     # REPL specific commands
-    command.spec.kind == CMD_HELP && return Base.invokelatest(do_help!, command, repl)
+    command.spec === SPECS[]["package"]["help"] && return Base.invokelatest(do_help!, command, repl)
 
     # API commands
     # TODO is invokelatest still needed?
@@ -434,7 +426,7 @@ function do_help!(command::Command, repl::REPL.AbstractREPL)
     cmd = parse_command(command.arguments)
     if cmd isa String
         # gather all helps for super spec `cmd`
-        all_specs = sort!(unique(values(super_specs[cmd]));
+        all_specs = sort!(unique(values(SPECS[][cmd]));
                           by=(spec->spec.canonical_name))
         for spec in all_specs
             isempty(help_md.content) || push!(help_md.content, md"---")
@@ -679,17 +671,17 @@ end
 include(joinpath("REPL", "completions.jl"))
 include(joinpath("REPL", "argument_parsers.jl"))
 include(joinpath("REPL", "command_declarations.jl"))
-super_specs = SuperSpecs(command_declarations)
+SPECS[] = CompoundSpecs(compound_declarations)
 
 ########
 # HELP #
 ########
 function canonical_names()
     # add "package" commands
-    xs = [(spec.canonical_name => spec) for spec in unique(values(super_specs["package"]))]
+    xs = [(spec.canonical_name => spec) for spec in unique(values(SPECS[]["package"]))]
     sort!(xs, by=first)
     # add other super commands, e.g. "registry"
-    for (super, specs) in super_specs
+    for (super, specs) in SPECS[]
         super != "package" || continue # skip "package"
         temp = [(join([super, spec.canonical_name], " ") => spec) for spec in unique(values(specs))]
         append!(xs, sort!(temp, by=first))
