@@ -272,6 +272,8 @@ end
         bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=Windows(:i686))
         @test artifact_hash("foo_txt", artifacts_toml; platform=Linux(:x86_64)) == hash2
         @test artifact_hash("foo_txt", artifacts_toml; platform=Windows(:i686)) == hash
+        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=Linux(:x86_64)) == artifact_path(hash2)
+        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=Windows(:i686)) == artifact_path(hash)
 
         # Next, check that we can get the download_info properly:
         meta = artifact_meta("foo_txt", artifacts_toml; platform=Windows(:i686))

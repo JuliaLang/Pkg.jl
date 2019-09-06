@@ -778,7 +778,7 @@ Ensures an artifact is installed, downloading it via the download information st
 function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
                                    pkg_uuid::Union{Base.UUID,Nothing}=nothing)
-    meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid)
+    meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
     end
