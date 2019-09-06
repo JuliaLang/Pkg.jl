@@ -215,7 +215,14 @@ function manifestfile_path(env_path::String; strict=false)
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
-    return strict ? nothing : joinpath(env_path, "Manifest.toml")
+    if strict
+        return nothing
+    else
+        project = basename(projectfile_path(env_path))
+        idx = findfirst(x -> x == project, Base.project_names)
+        @assert idx !== nothing
+        return joinpath(env_path, Base.manifest_names[idx])
+    end
 end
 
 function find_project_file(env::Union{Nothing,String}=nothing)
@@ -1136,7 +1143,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
             # Using LibGit2.with here crashes julia when running the
             # tests for PkgDev wiht "Unreachable reached".
             # This seems to work around it.
-            local repo
+            repo = nothing
             try
                 repo = LibGit2.GitRepo(reg.path)
                 if LibGit2.isdirty(repo)
@@ -1177,7 +1184,9 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                 end
                 @label done
             finally
-                close(repo)
+                if repo isa LibGit2.GitRepo
+                    close(repo)
+                end
             end
         end
     end

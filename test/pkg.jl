@@ -791,6 +791,23 @@ end
     end end
 end
 
+@testset "create manifest file similar to project file" begin
+    cd_tempdir() do dir
+        touch(joinpath(dir, "Project.toml"))
+        Pkg.activate(".")
+        Pkg.add("Example")
+        @test isfile(joinpath(dir, "Manifest.toml"))
+        @test !isfile(joinpath(dir, "JuliaManifest.toml"))
+    end
+    cd_tempdir() do dir
+        touch(joinpath(dir, "JuliaProject.toml"))
+        Pkg.activate(".")
+        Pkg.add("Example")
+        @test !isfile(joinpath(dir, "Manifest.toml"))
+        @test isfile(joinpath(dir, "JuliaManifest.toml"))
+    end
+end
+
 include("repl.jl")
 include("api.jl")
 include("registry.jl")

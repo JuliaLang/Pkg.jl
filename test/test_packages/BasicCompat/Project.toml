@@ -1,0 +1,9 @@
+name = "BasicCompat"
+uuid = "02d2db24-ca84-11e9-2b8f-0dc1ce28a7da"
+version = "0.1.0"
+
+[deps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+
+[compat]
+Example = "= 0.5.2"
