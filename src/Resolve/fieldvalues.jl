@@ -1,11 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module FieldValues
-
-using ...VersionWeights
-
-export FieldValue, Field, validmax, secondmax
-
 # FieldValue is a hierarchical numeric type with 5 levels.
 # When summing two FieldValues, the levels are summed independently.
 # When comparing them, lower levels take precedence.
@@ -107,5 +101,3 @@ end
 
 # Support broadcasting like a scalar by default
 Base.Broadcast.broadcastable(a::FieldValue) = Ref(a)
-
-end

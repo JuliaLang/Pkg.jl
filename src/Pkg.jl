@@ -26,19 +26,18 @@ const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 # load snapshotted dependencies
 include("../ext/TOML/src/TOML.jl")
 
+include("utils.jl")
 include("GitTools.jl")
 include("PlatformEngines.jl")
 include("BinaryPlatforms.jl")
 include("Types.jl")
-include("Compress.jl")
 include("Display.jl")
-include("GraphType.jl")
-include("Resolve.jl")
+include("Resolve/Resolve.jl")
 include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
 include("Registry.jl")
-include("REPLMode.jl")
+include("REPLMode/REPLMode.jl")
 
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED

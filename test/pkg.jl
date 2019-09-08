@@ -95,32 +95,6 @@ import Pkg.Types: semver_spec, VersionSpec
     @test !(Pkg.Types.isjoinable(Pkg.Types.VersionBound((1,5)), Pkg.Types.VersionBound((1,6,0))))
 end
 
-@testset "compress_versions()" begin
-    # Test exact version matching
-    vs = [v"1.1.0", v"1.1.1", v"1.1.2"]
-    @test Pkg.Types.compress_versions(vs, [vs[2]]) == Pkg.Types.VersionSpec("1.1.1")
-    
-    # Test holes
-    vs = [v"1.1.0", v"1.1.1", v"1.1.4"]
-    @test Pkg.Types.compress_versions(vs, [vs[2]]) == Pkg.Types.VersionSpec("1.1.1")
-    
-    # Test patch variation with length(subset) > 1
-    vs = [v"1.1.0", v"1.1.1", v"1.1.2", v"1.1.3", v"1.2.0"]
-    @test Pkg.Types.compress_versions(vs, [vs[2], vs[3]]) == Pkg.Types.VersionSpec("1.1.1-1.1.2")
-    
-    # Test minor variation
-    vs = [v"1.1.0", v"1.1.1", v"1.2.0"]
-    @test Pkg.Types.compress_versions(vs, [vs[2]]) == Pkg.Types.VersionSpec("1.1.1-1.1")
-   
-    # Test major variation
-    vs = [v"1.1.0", v"1.1.1", v"1.2.0", v"2.0.0"]
-    @test Pkg.Types.compress_versions(vs, [vs[2], vs[3]]) == Pkg.Types.VersionSpec("1.1.1-1")
-
-    # Test build numbers and prerelease values are ignored
-    vs = [v"1.1.0-alpha", v"1.1.0+0", v"1.1.0+1"]
-    @test Pkg.Types.compress_versions(vs, [vs[2]]) == Pkg.Types.VersionSpec("1")
-end
-
 # TODO: Should rewrite these tests not to rely on internals like field names
 @testset "union, isjoinable" begin
     @test sprint(print, VersionRange("0-0.3.2")) == "0-0.3.2"

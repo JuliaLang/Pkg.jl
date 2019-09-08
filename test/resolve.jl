@@ -4,10 +4,9 @@ module ResolveTest
 
 using Test
 using Pkg.Types
-using Pkg.GraphType
 using Pkg.Types: VersionBound
 using Pkg.Resolve
-using Pkg.Resolve.VersionWeights
+import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!
 import Pkg.Types: uuid5, uuid_package
 
 # print info, stats etc.

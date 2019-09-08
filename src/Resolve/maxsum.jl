@@ -1,15 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module MaxSum
-
-using Random
-
-include("FieldValues.jl")
-
-using .FieldValues, ..VersionWeights, ...Types, ...GraphType
-
-export UnsatError, Messages, maxsum
-
 # An exception type used internally to signal that an unsatisfiable
 # constraint was detected
 struct UnsatError <: Exception
@@ -475,6 +465,4 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
 
     # keep going, with one possible state less...
     return converge!(graph, msgs, strace, perm, params)
-end
-
 end
