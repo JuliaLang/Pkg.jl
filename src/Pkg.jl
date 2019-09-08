@@ -32,7 +32,6 @@ include("BinaryPlatforms.jl")
 include("Types.jl")
 include("Compress.jl")
 include("Display.jl")
-include("Pkg2/Pkg2.jl")
 include("GraphType.jl")
 include("Resolve.jl")
 include("Artifacts.jl")
@@ -44,8 +43,6 @@ include("REPLMode.jl")
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
-# legacy CI script support
-import .API: clone, dir
 
 # Import artifacts API
 using .Artifacts, .PlatformEngines

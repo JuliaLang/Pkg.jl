@@ -249,10 +249,10 @@ end
         # Can free a registered package that is tracking a repo
         with_temp_env() do
             exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID of Example.jl
-            Pkg.add(Pkg.PackageSpec(name = "Example", rev="c37b675")) # same commit as release v0.5.1
-            @test Pkg.Types.Context().env.manifest[exuuid].repo.rev == "c37b675"
+            Pkg.add(Pkg.PackageSpec(name = "Example", rev="495a9f2166177b4")) # same commit as release v0.5.3
+            @test Pkg.Types.Context().env.manifest[exuuid].repo.rev == "495a9f2166177b4"
             Pkg.free("Example") # should not throw, see issue #1142
-            @test Pkg.Types.Context().env.manifest[exuuid].repo.rev == nothing
+            @test Pkg.Types.Context().env.manifest[exuuid].repo.rev === nothing
             @test Pkg.Types.Context().env.manifest[exuuid].version > v"0.5"
         end
         # Can not free an unregistered package

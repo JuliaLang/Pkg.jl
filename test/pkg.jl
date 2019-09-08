@@ -314,21 +314,6 @@ temp_pkg_dir() do project_path
 
     Pkg.rm(TEST_PKG.name)
 
-    @testset "legacy CI script" begin
-        mktempdir() do dir
-            LibGit2.with(LibGit2.clone("https://github.com/JuliaLang/Example.jl", joinpath(dir, "Example.jl"))) do r
-                cd(joinpath(dir, "Example.jl")) do
-                    let Pkg = Pkg
-                        Pkg.clone(pwd())
-                        Pkg.build("Example")
-                        Pkg.test("Example"; coverage=true)
-                        @test isfile(Pkg.dir("Example", "src", "Example.jl"))
-                    end
-                end
-            end
-        end
-    end
-
     @testset "add julia" begin
         @test_throws PkgError Pkg.add("julia")
     end

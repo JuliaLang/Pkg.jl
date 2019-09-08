@@ -670,27 +670,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     preview_info(ctx)
 end
 
-#####################################
-# Backwards compatibility with Pkg2 #
-#####################################
-function clone(url::String, name::String = "")
-    @warn "Pkg.clone is only kept for legacy CI script reasons, please use `add`" maxlog=1
-    ctx = Context()
-    if !isempty(name)
-        ctx.old_pkg2_clone_name = name
-    end
-    develop(ctx, [Pkg.REPLMode.parse_package_identifier(url; add_or_develop=true)])
-end
-
-function dir(pkg::String, paths::AbstractString...)
-    @warn "`Pkg.dir(pkgname, paths...)` is deprecated; instead, do `import $pkg; joinpath(dirname(pathof($pkg)), \"..\", paths...)`." maxlog=1
-    pkgid = Base.identify_package(pkg)
-    pkgid === nothing && return nothing
-    path = Base.locate_package(pkgid)
-    path === nothing && return nothing
-    return abspath(path, "..", "..", paths...)
-end
-
 precompile() = precompile(Context())
 function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")

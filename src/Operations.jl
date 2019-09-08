@@ -8,7 +8,7 @@ import LibGit2
 
 import REPL
 using REPL.TerminalMenus
-using ..Types, ..GraphType, ..Resolve, ..Pkg2, ..PlatformEngines, ..GitTools, ..Display
+using ..Types, ..GraphType, ..Resolve, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names
 using ..BinaryPlatforms
@@ -188,34 +188,9 @@ function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
     else
         path = project_rel_path(ctx, source_path(pkg))
         project_file = projectfile_path(path; strict=true)
-        if project_file !== nothing
-            project = read_project(project_file)
-            return project.deps
-        else
-            # Check in REQUIRE file
-            # Remove when packages uses Project files properly
-            deps = Dict{String,UUID}()
-            dep_pkgs = PackageSpec[]
-            stdlib_deps = find_stdlib_deps(ctx, path)
-            for (uuid, name) in stdlib_deps
-                push!(dep_pkgs, PackageSpec(name, uuid))
-            end
-            reqfile = joinpath(path, "REQUIRE")
-            if isfile(reqfile)
-                for r in Pkg2.Reqs.read(reqfile)
-                    r isa Pkg2.Reqs.Requirement || continue
-                    push!(dep_pkgs, PackageSpec(name=r.package))
-                end
-                registry_resolve!(ctx, dep_pkgs)
-                project_deps_resolve!(ctx, dep_pkgs)
-                ensure_resolved(ctx, dep_pkgs; registry=true)
-            end
-            for dep_pkg in dep_pkgs
-                dep_pkg.name == "julia" && continue
-                deps[dep_pkg.name] = dep_pkg.uuid
-            end
-        end
-        return deps
+        project_file === nothing && pkgerror("could not find Project file for package $(pkg.name)")
+        project = read_project(project_file)
+        return project.deps
     end
 end
 
@@ -254,7 +229,7 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
 
         found_project = collect_project!(ctx, pkg, path, fix_deps_map)
         if !found_project
-            collect_require!(ctx, pkg, path, fix_deps_map)
+            pkgerror("could not find project file for $(pkg.name)")
         end
     end
 
@@ -335,8 +310,6 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     end
     load_tree_hashes!(ctx, pkgs)
 end
-
-include("require.jl")
 
 get_or_make(::Type{T}, d::Dict{K}, k::K) where {T,K} = haskey(d, k) ? convert(T, d[k]) : T()
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end

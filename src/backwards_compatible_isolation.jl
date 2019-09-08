@@ -45,33 +45,9 @@ function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Noth
 
         # Check for deps in project file
         project_file = projectfile_path(path; strict=true)
-        if nothing !== project_file
-            project = read_project(project_file)
-            deps = project.deps
-        else
-            # Check in REQUIRE file
-            # Remove when packages uses Project files properly
-            dep_pkgs = PackageSpec[]
-            stdlib_deps = find_stdlib_deps(ctx, path)
-            for (uuid, name) in stdlib_deps
-                push!(dep_pkgs, PackageSpec(name, uuid))
-            end
-            reqfile = joinpath(path, "REQUIRE")
-            if isfile(reqfile)
-                for r in Pkg2.Reqs.read(reqfile)
-                    r isa Pkg2.Reqs.Requirement || continue
-                    push!(dep_pkgs, PackageSpec(name=r.package))
-                end
-                registry_resolve!(ctx, dep_pkgs)
-                project_deps_resolve!(ctx, dep_pkgs)
-                ensure_resolved(ctx, dep_pkgs; registry=true)
-            end
-            for dep_pkg in dep_pkgs
-                dep_pkg.name == "julia" && continue
-                deps[dep_pkg.name] = dep_pkg.uuid
-            end
-        end
-        entry.deps = deps
+        project_file === nothing && pkgerror("could not find project file for $(pkg.name)")
+        project = read_project(project_file)
+        entry.deps = project.deps
     else
         for path in registered_paths(ctx, uuid)
             data = load_package_data(UUID, joinpath(path, "Deps.toml"), version)
@@ -196,7 +172,7 @@ function _collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::
         uuid_to_name[pkg.uuid] = pkg.name
         found_project = collect_project!(ctx, pkg, path, fix_deps_map)
         if !found_project
-            collect_require!(ctx, pkg, path, fix_deps_map)
+            pkgerror("could not find project file for $(pkg.name)")
         end
     end
 
@@ -411,16 +387,6 @@ function collect_target_deps!(
         project = read_package(project_path)
     end
 
-    # Pkg2 compatibiity with test/REQUIRE
-    has_project_test_target = false
-    if project !== nothing && !isempty(project.targets)
-        has_project_test_target = true
-    end
-    if target == "test" && !has_project_test_target
-        pkg2_test_target_compatibility!(ctx, path, pkgs)
-        return
-    end
-
     # Collect target deps from Project
     if project !== nothing
         targets = project.targets
@@ -435,8 +401,7 @@ end
 
 # When testing or building a dependency, we want that dependency to be able to load its own dependencies
 # at top level. Therefore we would like to execute the build or testing of a dependency using its own Project file as
-# the current environment. Being backwards compatible with REQUIRE file complicates the story a bit since these packages
-# do not have any Project files.
+# the current environment.
 function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::PackageSpec; might_need_to_resolve=false)
     # localctx is the context for the temporary environment we run the testing / building in
     localctx = deepcopy(mainctx)
@@ -655,4 +620,3 @@ function backwards_compat_for_build(ctx::Context, pkg::PackageSpec, build_file::
         run_build()
     end
 end
-
