@@ -54,12 +54,18 @@ function check_package_name(x::AbstractString, mode=nothing)
     return PackageSpec(x)
 end
 
-develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = develop([pkg]; kwargs...)
-develop(pkgs::Vector{<:AbstractString}; kwargs...) =
-    develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
-develop(pkgs::Vector{PackageSpec}; kwargs...)      = develop(Context(), pkgs; kwargs...)
+# Provide some convenience calls
+for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
+    @eval begin
+        $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
+        $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+        $f(pkgs::Vector{PackageSpec}; kwargs...)               = $f(Context(), pkgs; kwargs...)
+    end
+end
+
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(), kwargs...)
+    foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -103,12 +109,9 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     return
 end
 
-add(pkg::Union{AbstractString, PackageSpec}; kwargs...) = add([pkg]; kwargs...)
-add(pkgs::Vector{<:AbstractString}; kwargs...) =
-    add([check_package_name(pkg, :add) for pkg in pkgs]; kwargs...)
-add(pkgs::Vector{PackageSpec}; kwargs...)      = add(Context(), pkgs; kwargs...)
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
              platform::Platform=platform_key_abi(), kwargs...)
+    foreach(pkg -> check_package_name(pkg.name, :add), pkgs)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -160,10 +163,6 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     return
 end
 
-rm(pkg::Union{AbstractString, PackageSpec}; kwargs...) = rm([pkg]; kwargs...)
-rm(pkgs::Vector{<:AbstractString}; kwargs...)          = rm([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-rm(pkgs::Vector{PackageSpec}; kwargs...)               = rm(Context(), pkgs; kwargs...)
-
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     foreach(pkg -> pkg.mode = mode, pkgs)
@@ -189,12 +188,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     return
 end
 
-up(ctx::Context; kwargs...)                            = up(ctx, PackageSpec[]; kwargs...)
 up(; kwargs...)                                        = up(PackageSpec[]; kwargs...)
-up(pkg::Union{AbstractString, PackageSpec}; kwargs...) = up([pkg]; kwargs...)
-up(pkgs::Vector{<:AbstractString}; kwargs...)          = up([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-up(pkgs::Vector{PackageSpec}; kwargs...)               = up(Context(), pkgs; kwargs...)
-
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
@@ -231,9 +225,6 @@ function resolve(ctx::Context; kwargs...)
     return nothing
 end
 
-pin(pkg::Union{AbstractString, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
-pin(pkgs::Vector{<:AbstractString}; kwargs...)          = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-pin(pkgs::Vector{PackageSpec}; kwargs...)               = pin(Context(), pkgs; kwargs...)
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -262,11 +253,6 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     return
 end
 
-
-free(pkg::Union{AbstractString, PackageSpec}; kwargs...) = free([pkg]; kwargs...)
-free(pkgs::Vector{<:AbstractString}; kwargs...)          = free([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-free(pkgs::Vector{PackageSpec}; kwargs...)               = free(Context(), pkgs; kwargs...)
-
 function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -292,9 +278,6 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
 end
 
 test(;kwargs...)                                         = test(PackageSpec[]; kwargs...)
-test(pkg::Union{AbstractString, PackageSpec}; kwargs...) = test([pkg]; kwargs...)
-test(pkgs::Vector{<:AbstractString}; kwargs...)          = test([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-test(pkgs::Vector{PackageSpec}; kwargs...)               = test(Context(), pkgs; kwargs...)
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, test_fn=nothing,
               julia_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
@@ -674,10 +657,6 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     return
 end
 
-build(pkgs...; kwargs...) = build([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-build(pkg::Array{Union{}, 1}; kwargs...) = build(PackageSpec[]; kwargs...)
-build(pkg::PackageSpec; kwargs...) = build([pkg]; kwargs...)
-build(pkgs::Vector{PackageSpec}; kwargs...) = build(Context(), pkgs; kwargs...)
 function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -825,10 +804,6 @@ end
 @deprecate status(mode::PackageMode) status(mode=mode)
 
 status(; kwargs...) = status(PackageSpec[]; kwargs...)
-status(pkg::Union{AbstractString,PackageSpec}; kwargs...) = status([pkg]; kwargs...)
-status(pkgs::Vector{<:AbstractString}; kwargs...) =
-    status([check_package_name(pkg) for pkg in pkgs]; kwargs...)
-status(pkgs::Vector{PackageSpec}; kwargs...) = status(Context(), pkgs; kwargs...)
 function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
                 io::IO=stdout, kwargs...)
     Context!(ctx; io=io, kwargs...)
