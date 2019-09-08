@@ -314,4 +314,24 @@ end
     end
 end
 
+@testset "archive url support in registry" begin
+    temp_pkg_dir() do depot
+        Pkg.Registry.add(RegistrySpec(url="https://github.com/fredrikekre/TarballRegistry"))
+        # TestTarballDownload=19d1f5b7-b1ff-446b-ac17-ba0051fb903c hosted on GitHub
+        for v in ["1.0.0", "1.1.0", "1.2.0", "1.3.0"]
+            ps = PackageSpec(name="TestTarballDownload",
+                             uuid="19d1f5b7-b1ff-446b-ac17-ba0051fb903c",
+                             version = v)
+            Pkg.add(ps; use_only_tarballs_for_downloads=true)
+        end
+        # TODO: TestTarballDownload=19d1f5b7-b1ff-446b-ac17-ba0051fb903c hosted on GitLab
+        # for v in ["1.0.0", "1.1.0", "1.2.0", "1.3.0"]
+        #     ps = PackageSpec(name="TestTarballDownload",
+        #                      uuid="19d1f5b7-b1ff-446b-ac17-ba0051fb903c",
+        #                      version = v)
+        #     Pkg.add(ps; use_only_tarballs_for_downloads=true)
+        # end
+    end
+end
+
 end # module
