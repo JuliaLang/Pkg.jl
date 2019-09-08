@@ -262,7 +262,12 @@ subset of the pool of available versions, this function computes a `VersionSpec`
 includes all versions in `subset` and none of the versions in its complement.
 """
 function compress_versions(pool::Vector{VersionNumber}, subset::Vector{VersionNumber})
-    subset = sort(subset) # must copy, we mutate this
+    # Explicitly drop prerelease/build numbers, as those can confuse this.
+    # TODO: Rewrite all this to use VersionNumbers instead of VersionBounds
+    drop_build_prerelease(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch)
+    pool = drop_build_prerelease.(pool)
+    subset = sort!(drop_build_prerelease.(subset))
+
     complement = sort!(setdiff(pool, subset))
     ranges = VersionRange[]
     @label again
