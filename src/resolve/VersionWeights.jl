@@ -1,9 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module VersionWeights
-
-export VersionWeight
-
 # The numeric type used to determine how the different
 # versions of a package should be weighed
 struct VersionWeight
@@ -52,6 +48,4 @@ function Base.show(io::IO, a::VersionWeight)
     print(io, ".", a.patch)
     @label done
     print(io, ")")
-end
-
 end

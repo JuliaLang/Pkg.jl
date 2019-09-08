@@ -1,13 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module GraphType
-
-using ..Types
-import ..Types.uuid_julia
-
-export Graph, ResolveLog, add_reqs!, add_fixed!, simplify_graph!, simplify_graph_soft!,
-       get_resolve_log, showlog, push_snapshot!, pop_snapshot!, wipe_snapshots!
-
 # The ResolveLog is used to keep track of events that take place during the
 # resolution process. We use one ResolveLogEntry per package, and record all events
 # associated with that package. An event consists of two items: another
@@ -1474,5 +1466,3 @@ function simplify_graph_soft!(graph::Graph, sources::Set{Int} = Set{Int}(); log_
     update_ignored!(graph)
     return graph
 end
-
-end # module
