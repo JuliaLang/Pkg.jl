@@ -464,8 +464,16 @@ function install_archive(
         # 7z on Win might create this spurious file
         filter!(x -> x != "pax_global_header", dirs)
         @assert length(dirs) == 1
+        # Assert that the tarball unpacked to the tree sha we wanted
+        unpacked = joinpath(dir, dirs[1])
+        if SHA1(GitTools.tree_hash(unpacked)) != hash
+            @warn "tarball content does not match git-tree-sha1"
+            url_success = false
+        end
+        url_success || continue
+        # Move content to version path
         !isdir(version_path) && mkpath(version_path)
-        mv(joinpath(dir, dirs[1]), version_path; force=true)
+        mv(unpacked, version_path; force=true)
         Base.rm(path; force = true)
         Base.rm(dir; force = true)
         return true
