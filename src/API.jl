@@ -703,7 +703,8 @@ end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
-                     update_registry::Bool=true, verbose::Bool=false, kwargs...)
+                     update_registry::Bool=true, verbose::Bool=false,
+                     platform::Platform=platform_key_abi(), kwargs...)
     Context!(ctx; kwargs...)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
@@ -733,7 +734,10 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
                  " Finally, run `Pkg.instantiate()` again.")
     end
+    # Download artifacts for this here package before fast-exiting
+    Operations.download_artifacts([dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     Operations.is_instantiated(ctx) && return
+
     Types.update_registries(ctx)
     pkgs = Operations.load_all_deps(ctx)
     Operations.check_registered(ctx, pkgs)
@@ -749,6 +753,10 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         mkpath(sourcepath)
         mv(tmp_source, sourcepath; force=true)
     end
+
+    # Ensure artifacts are installed for the dependent packages, and finally this overall project
+    Operations.download_artifacts(pkgs; platform=platform, verbose=verbose)
+
     new_apply = Operations.download_source(ctx, pkgs)
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
 end
