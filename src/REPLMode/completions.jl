@@ -17,13 +17,26 @@ function complete_activate(options, partial, i1, i2)
 end
 
 function complete_local_dir(s, i1, i2)
+    expanded_user = false
     if !isempty(s) && s[1] == '~'
-        return String[expanduser(s)], i1:i2, true
+        expanded_user = true
+        s = expanduser(s)
+        oldi2 = i2
+        i2 += textwidth(homedir()) - 1
     end
 
     cmp = REPL.REPLCompletions.complete_path(s, i2)
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
     completions = filter!(x -> isdir(s[1:prevind(s, first(cmp[2])-i1+1)]*x), completions)
+    if expanded_user
+        if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
+            completions = [joinpath(s, "")]
+        else
+            completions = [joinpath(homedir(), x) for x in completions]
+        end
+        return completions, i1:oldi2, true
+    end
+
     return completions, cmp[2], !isempty(completions)
 end
 
