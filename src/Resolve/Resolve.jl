@@ -2,16 +2,18 @@
 
 module Resolve
 
-include("resolve/VersionWeights.jl")
-include("resolve/MaxSum.jl")
-
-using ..Types, ..GraphType, ..Resolve.MaxSum
+using ..Types
 import ..Types: uuid_julia
-import ..GraphType: is_julia, check_constraints, log_event_global!, log_event_greedysolved!, log_event_maxsumsolved!, log_event_maxsumtrace!
 
 using Printf
+using Random
 
-export resolve, sanity_check
+export resolve, sanity_check, Graph
+
+include("graphtype.jl")
+include("versionweights.jl")
+include("fieldvalues.jl")
+include("maxsum.jl")
 
 "Resolve package dependencies."
 function resolve(graph::Graph)

@@ -668,9 +668,9 @@ end
 ########
 # SPEC #
 ########
-include(joinpath("REPL", "completions.jl"))
-include(joinpath("REPL", "argument_parsers.jl"))
-include(joinpath("REPL", "command_declarations.jl"))
+include("completions.jl")
+include("argument_parsers.jl")
+include("command_declarations.jl")
 SPECS[] = CompoundSpecs(compound_declarations)
 
 ########

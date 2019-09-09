@@ -120,8 +120,8 @@ function _resolve_versions!(
     reqs = Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
     fixed[uuid_julia] = Fixed(VERSION)
     graph = deps_graph(ctx, uuid_to_name, reqs, fixed)
+    Resolve.simplify_graph!(graph)
 
-    simplify_graph!(graph)
     vers = resolve(graph)
     find_registered!(ctx, collect(keys(vers)))
     # update vector of package versions

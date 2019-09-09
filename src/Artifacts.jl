@@ -1,8 +1,8 @@
 module Artifacts
 
 import Base: get, SHA1
-import ..depots1, ..depots
-import ..GitTools: tree_hash, set_readonly
+import ..depots1, ..depots, ..set_readonly
+import ..GitTools
 using ..BinaryPlatforms
 import ..TOML
 import ..Types: parse_toml, write_env_usage
@@ -210,7 +210,7 @@ function create_artifact(f::Function)
         f(temp_dir)
 
         # Calculate the tree hash for this temporary directory
-        artifact_hash = SHA1(tree_hash(temp_dir))
+        artifact_hash = SHA1(GitTools.tree_hash(temp_dir))
 
         # If we created a dupe, just let the temp directory get destroyed. It's got the
         # same contents as whatever already exists after all, so it doesn't matter.  Only
@@ -332,7 +332,7 @@ function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
     end
 
     # Otherwise actually run the verification
-    return hash.bytes == tree_hash(artifact_path(hash))
+    return hash.bytes == GitTools.tree_hash(artifact_path(hash))
 end
 
 """

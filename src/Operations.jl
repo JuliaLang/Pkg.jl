@@ -8,8 +8,8 @@ import LibGit2
 
 import REPL
 using REPL.TerminalMenus
-using ..Types, ..GraphType, ..Resolve, ..PlatformEngines, ..GitTools, ..Display
-import ..depots, ..depots1, ..devdir, ..Types.uuid_julia, ..Types.PackageEntry
+using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..Display
+import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.uuid_julia, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names
 using ..BinaryPlatforms
 import ..Pkg
@@ -289,8 +289,8 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     reqs = Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
     fixed[uuid_julia] = Fixed(VERSION)
     graph = deps_graph(ctx, names, reqs, fixed)
-    simplify_graph!(graph)
-    vers = resolve(graph)
+    Resolve.simplify_graph!(graph)
+    vers = Resolve.resolve(graph)
 
     find_registered!(ctx, collect(keys(vers)))
     # update vector of package versions
@@ -403,7 +403,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
         end
     end
 
-    return Graph(all_versions, all_deps, all_compat, uuid_to_name, reqs, fixed, #=verbose=# ctx.graph_verbose)
+    return Resolve.Graph(all_versions, all_deps, all_compat, uuid_to_name, reqs, fixed, #=verbose=# ctx.graph_verbose)
 end
 
 function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
