@@ -197,7 +197,7 @@ end
 function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps_map::Dict{UUID,Vector{PackageSpec}})
     fix_deps_map[pkg.uuid] = valtype(fix_deps_map)()
     project_file = projectfile_path(path; strict=true)
-    (project_file === nothing) && return false
+    (project_file === nothing) && pkgerror("could not find project file for $(pkg.name) at $(path)")
     project = read_package(project_file)
     compat = project.compat
     if haskey(compat, "julia") && !(VERSION in Types.semver_spec(compat["julia"]))
@@ -214,7 +214,7 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
         # @warn "project file for $(pkg.name) is missing a `version` entry"
         set_maximum_version_registry!(ctx, pkg)
     end
-    return true
+    return
 end
 
 is_fixed(pkg::PackageSpec) = pkg.path !== nothing || pkg.repo.url !== nothing
@@ -226,11 +226,7 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
         if !isdir(path)
             pkgerror("path $(path) for package $(pkg.name) no longer exists. Remove the package or `develop` it at a new path")
         end
-
-        found_project = collect_project!(ctx, pkg, path, fix_deps_map)
-        if !found_project
-            pkgerror("could not find project file for $(pkg.name)")
-        end
+        collect_project!(ctx, pkg, path, fix_deps_map)
     end
 
     fixed = Dict{UUID,Fixed}()

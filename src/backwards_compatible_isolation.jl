@@ -170,10 +170,7 @@ function _collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::
 
         uuid_to_pkg[pkg.uuid] = pkg
         uuid_to_name[pkg.uuid] = pkg.name
-        found_project = collect_project!(ctx, pkg, path, fix_deps_map)
-        if !found_project
-            pkgerror("could not find project file for $(pkg.name)")
-        end
+        collect_project!(ctx, pkg, path, fix_deps_map)
     end
 
     fixed = Dict{UUID,Fixed}()
