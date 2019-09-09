@@ -338,6 +338,38 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("rm Exam")
         @test isempty(c)
 
+        Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithDependency"))")
+
+        c, r = test_complete("rm PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm -p PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm --project PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm Exam")
+        @test isempty(c)
+        c, r = test_complete("rm -p Exam")
+        @test isempty(c)
+        c, r = test_complete("rm --project Exam")
+        @test isempty(c)
+
+        c, r = test_complete("rm -m PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm --manifest PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm -m Exam")
+        @test "Example" in c
+        c, r = test_complete("rm --manifest Exam")
+        @test "Example" in c
+
+        c, r = test_complete("rm PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm Exam")
+        @test isempty(c)
+        c, r = test_complete("rm -m Exam")
+        c, r = test_complete("rm -m Exam")
+        @test "Example" in c
+
         pkg"add Example"
         c, r = test_complete("rm Exam")
         @test "Example" in c
