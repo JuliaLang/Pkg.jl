@@ -30,14 +30,6 @@ temp_pkg_dir() do project_path
         pkg"generate HelloWorld"
         LibGit2.close((LibGit2.init(".")))
         cd("HelloWorld")
-        with_current_env() do
-            pkg"st"
-            @eval using HelloWorld
-            Base.invokelatest(HelloWorld.greet)
-            @test isfile("Project.toml")
-            Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithBuildSpecificTestDeps"))")
-            Pkg.test("PackageWithBuildSpecificTestDeps")
-        end
 
         @test_throws PkgError pkg"dev Example#blergh"
 
@@ -84,12 +76,6 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"test Example"
     @test isinstalled(TEST_PKG)
     @test Pkg.dependencies()[TEST_PKG.uuid].version > v
-    pkg = "UnregisteredWithoutProject"
-    p = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg"))
-    Pkg.REPLMode.pkgstr("add $p; precompile")
-    @eval import $(Symbol(pkg))
-    @test first([info for (uuid, info) in Pkg.dependencies() if info.name == pkg]).version == v"0.0"
-    Pkg.test("UnregisteredWithoutProject")
 
     pkg2 = "UnregisteredWithProject"
     pkg2_uuid = UUID("58262bb0-2073-11e8-3727-4fe182c12249")
@@ -171,19 +157,12 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 withenv("JULIA_PKG_DEVDIR" => tmp) do
                     # Test an unregistered package
                     p1_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithProject")
-                    p2_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithoutProject")
                     p1_new_path = joinpath(tmp, "UnregisteredWithProject")
-                    p2_new_path = joinpath(tmp, "UnregisteredWithoutProject")
                     cp(p1_path, p1_new_path)
-                    cp(p2_path, p2_new_path)
                     Pkg.REPLMode.pkgstr("develop $(p1_new_path)")
-                    Pkg.REPLMode.pkgstr("develop $(p2_new_path)")
                     Pkg.REPLMode.pkgstr("build; precompile")
                     @test Base.find_package("UnregisteredWithProject") == joinpath(p1_new_path, "src", "UnregisteredWithProject.jl")
-                    @test Base.find_package("UnregisteredWithoutProject") == joinpath(p2_new_path, "src", "UnregisteredWithoutProject.jl")
                     @test Pkg.dependencies()[UUID("58262bb0-2073-11e8-3727-4fe182c12249")].version == v"0.1.0"
-                    @test Pkg.dependencies()[Pkg.Types.Context().env.project.deps["UnregisteredWithoutProject"]].version == v"0.0.0"
-                    Pkg.test("UnregisteredWithoutProject")
                     Pkg.test("UnregisteredWithProject")
                 end
             finally
@@ -358,14 +337,15 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "Example" in c
         c, r = test_complete("rm Exam")
         @test isempty(c)
-        Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "RequireDependency"))")
 
-        c, r = test_complete("rm RequireDep")
-        @test "RequireDependency" in c
-        c, r = test_complete("rm -p RequireDep")
-        @test "RequireDependency" in c
-        c, r = test_complete("rm --project RequireDep")
-        @test "RequireDependency" in c
+        Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithDependency"))")
+
+        c, r = test_complete("rm PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm -p PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm --project PackageWithDep")
+        @test "PackageWithDependency" in c
         c, r = test_complete("rm Exam")
         @test isempty(c)
         c, r = test_complete("rm -p Exam")
@@ -373,17 +353,17 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("rm --project Exam")
         @test isempty(c)
 
-        c, r = test_complete("rm -m RequireDep")
-        @test "RequireDependency" in c
-        c, r = test_complete("rm --manifest RequireDep")
-        @test "RequireDependency" in c
+        c, r = test_complete("rm -m PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm --manifest PackageWithDep")
+        @test "PackageWithDependency" in c
         c, r = test_complete("rm -m Exam")
         @test "Example" in c
         c, r = test_complete("rm --manifest Exam")
         @test "Example" in c
 
-        c, r = test_complete("rm RequireDep")
-        @test "RequireDependency" in c
+        c, r = test_complete("rm PackageWithDep")
+        @test "PackageWithDependency" in c
         c, r = test_complete("rm Exam")
         @test isempty(c)
         c, r = test_complete("rm -m Exam")

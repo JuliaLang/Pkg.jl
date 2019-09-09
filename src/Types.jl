@@ -325,9 +325,7 @@ Base.@kwdef mutable struct Context
     num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
     graph_verbose::Bool = false
     stdlibs::Dict{UUID,String} = stdlib()
-    # Remove next field when support for Pkg2 CI scripts is removed
     currently_running_target::Bool = false
-    old_pkg2_clone_name::String = ""
 end
 
 include("project.jl")
@@ -775,38 +773,12 @@ end
 function parse_package!(ctx, pkg, project_path)
     env = ctx.env
     project_file = projectfile_path(project_path; strict=true)
+    project_file === nothing && pkgerror(string("could not find project file in pacakge at ",
+                                                pkg.repo.url !== nothing ? pkg.repo.url : (pkg.path)))
     if project_file !== nothing
         project_data = read_package(project_file)
         pkg.uuid = project_data.uuid # TODO check no overwrite
         pkg.name = project_data.name # TODO check no overwrite
-    else
-        if !isempty(ctx.old_pkg2_clone_name) # remove when legacy CI script support is removed
-            pkg.name = ctx.old_pkg2_clone_name
-        else
-            # This is an old style package, if not set, get the name from src/PackageName
-            if !has_name(pkg)
-                if isdir_windows_workaround(pkg.repo.url)
-                    m = match(reg_pkg, abspath(pkg.repo.url))
-                else
-                    m = match(reg_pkg, pkg.repo.url)
-                end
-                m === nothing && pkgerror("cannot determine package name from URL or path: $(pkg.repo.url), provide a name argument to `PackageSpec`")
-                pkg.name = m.captures[1]
-            end
-        end
-        reg_uuids = registered_uuids(ctx, pkg.name)
-        is_registered = !isempty(reg_uuids)
-        if !is_registered
-            # This is an unregistered old style package, give it a UUID and a version
-            if !has_uuid(pkg)
-                uuid_unreg_pkg = UUID(0xa9a2672e746f11e833ef119c5b888869)
-                pkg.uuid = uuid5(uuid_unreg_pkg, pkg.name)
-                println(ctx.io, "Assigning UUID $(pkg.uuid) to $(pkg.name)")
-            end
-        else
-            @assert length(reg_uuids) == 1
-            pkg.uuid = reg_uuids[1]
-        end
     end
 end
 
