@@ -761,6 +761,24 @@ end
     end end
 end
 
+@testset "instantiate of lonely manifest" begin
+    temp_pkg_dir() do project_path
+       # noproject_dir =
+       manifest_dir = joinpath(@__DIR__, "manifest", "noproject")
+        cd(manifest_dir) do
+            try
+                Pkg.activate(".")
+                Pkg.instantiate()
+                @test Base.active_project() == abspath("Project.toml")
+                @test isinstalled("Example")
+                @test isinstalled("x1")
+            finally
+                rm("Project.toml"; force=true)
+            end
+        end
+    end
+end
+
 @testset "up should prune manifest" begin
     example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")

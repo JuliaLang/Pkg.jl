@@ -709,6 +709,19 @@ instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
+    if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
+        _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
+        deps = Dict()
+        for (uuid, pkg) in _manifest
+            if pkg.name in keys(deps)
+                # TODO, query what package to put in Project when in interactive mode?
+                pkgerror("cannot instantiate a manifest without project file when the manifest has multiple packages with the same name ($(pkg.name))")
+            end
+            deps[pkg.name] = string(uuid)
+        end
+        Types.write_project(Dict("deps" => deps), ctx.env.project_file)
+        return instantiate(Context(); manifest=manifest, update_registry=update_registry, verbose=verbose, kwargs...)
+    end
     if (!isfile(ctx.env.manifest_file) && manifest == nothing) || manifest == false
         up(ctx; update_registry=update_registry)
         return
