@@ -777,7 +777,8 @@ Ensures an artifact is installed, downloading it via the download information st
 """
 function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
-                                   pkg_uuid::Union{Base.UUID,Nothing}=nothing)
+                                   pkg_uuid::Union{Base.UUID,Nothing}=nothing,
+                                   verbose::Bool = false)
     meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
@@ -787,7 +788,8 @@ function ensure_artifact_installed(name::String, artifacts_toml::String;
 end
 
 function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::String;
-                                   platform::Platform = platform_key_abi())
+                                   platform::Platform = platform_key_abi(),
+                                   verbose::Bool = false)
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
@@ -801,7 +803,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         for entry in meta["download"]
             url = entry["url"]
             tarball_hash = entry["sha256"]
-            if download_artifact(hash, url, tarball_hash)
+            if download_artifact(hash, url, tarball_hash; verbose=verbose)
                 return artifact_path(hash)
             end
         end
@@ -816,7 +818,8 @@ end
     ensure_all_artifacts_installed(artifacts_toml::String;
                                    platform = platform_key_abi(),
                                    pkg_uuid = nothing,
-                                   include_lazy = false)
+                                   include_lazy = false,
+                                   verbose = false)
 
 Installs all non-lazy artifacts from a given `(Julia)Artifacts.toml` file. `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
@@ -826,7 +829,8 @@ If `include_lazy` is set to `true`, then lazy packages will be installed as well
 function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::Platform = platform_key_abi(),
                                         pkg_uuid::Union{Nothing,Base.UUID} = nothing,
-                                        include_lazy::Bool = false)
+                                        include_lazy::Bool = false,
+                                        verbose::Bool = false)
     if !isfile(artifacts_toml)
         return
     end
@@ -845,7 +849,7 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
         end
 
         # Otherwise, let's try and install it!
-        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform)
+        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform, verbose=verbose)
     end
 end
 
