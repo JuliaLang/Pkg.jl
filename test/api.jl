@@ -235,6 +235,46 @@ end
         end
         @test t1 == t2
     end end
+    # Resolve tiers
+    temp_pkg_dir() do tmp
+        # All
+        copy_test_package(tmp, "ShouldPreserveAll"; use_pkg=false)
+        Pkg.activate(joinpath(tmp, "ShouldPreserveAll"))
+        parsers_uuid = UUID("69de0a69-1ddd-5017-9359-2bf0b02dc9f0")
+        original_parsers_version = Pkg.dependencies()[parsers_uuid].version
+        Pkg.add(Pkg.PackageSpec(;name="Example", version="0.5.0"))
+        @test Pkg.dependencies()[parsers_uuid].version == original_parsers_version
+        # Direct
+        copy_test_package(tmp, "ShouldPreserveDirect"; use_pkg=false)
+        Pkg.activate(joinpath(tmp, "ShouldPreserveDirect"))
+        ordered_collections = UUID("bac558e1-5e72-5ebc-8fee-abe8a469f55d")
+        Pkg.add(Pkg.PackageSpec(;uuid=ordered_collections, version="1.0.1"))
+        lazy_json = UUID("fc18253b-5e1b-504c-a4a2-9ece4944c004")
+        data_structures = UUID("864edb3b-99cc-5e75-8d2d-829cb0a9cfe8")
+        @test Pkg.dependencies()[lazy_json].version == v"0.1.0" # stayed the same
+        @test Pkg.dependencies()[data_structures].version == v"0.16.1" # forced to change
+        @test Pkg.dependencies()[ordered_collections].version == v"1.0.1" # sanity check
+        # SEMVER
+        copy_test_package(tmp, "ShouldPreserveSemver"; use_pkg=false)
+        Pkg.activate(joinpath(tmp, "ShouldPreserveSemver"))
+        light_graphs = UUID("093fc24a-ae57-5d10-9952-331d41423f4d")
+        meta_graphs = UUID("626554b9-1ddb-594c-aa3c-2596fe9399a5")
+        light_graphs_version = Pkg.dependencies()[light_graphs].version
+        Pkg.add(Pkg.PackageSpec(;uuid=meta_graphs, version="0.6.4"))
+        @test Pkg.dependencies()[meta_graphs].version == v"0.6.4" # sanity check
+        # did not break semver
+        @test Pkg.dependencies()[light_graphs].version in Pkg.Types.semver_spec("$(light_graphs_version)") 
+        # did change version
+        @test Pkg.dependencies()[light_graphs].version != light_graphs_version
+        # NONE
+        copy_test_package(tmp, "ShouldPreserveNone"; use_pkg=false)
+        Pkg.activate(joinpath(tmp, "ShouldPreserveNone"))
+        array_interface = UUID("4fba245c-0d91-5ea0-9b3e-6abc04ee57a9")
+        diff_eq_diff_tools = UUID("01453d9d-ee7c-5054-8395-0335cb756afa")
+        Pkg.add(Pkg.PackageSpec(;uuid=diff_eq_diff_tools, version="1.0.0"))
+        @test Pkg.dependencies()[diff_eq_diff_tools].version == v"1.0.0" # sanity check
+        @test Pkg.dependencies()[array_interface].version in Pkg.Types.semver_spec("1") # had to make breaking change
+    end
 end
 
 @testset "Pkg.free" begin

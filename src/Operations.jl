@@ -46,8 +46,24 @@ end
 is_dep(ctx::Context, pkg::PackageSpec) =
     any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
 
-function load_direct_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Bool=true)
-    # load rest of deps normally
+#TODO rename
+function load_version(version, fixed, preserve::PreserveLevel)
+    if version === nothing
+        return VersionSpec() # stdlibs dont have a version
+    elseif fixed
+        return version # dont change state if a package is fixed
+    elseif preserve == PRESERVE_ALL || preserve == PRESERVE_DIRECT
+        return something(version, VersionSpec())
+    elseif preserve == PRESERVE_SEMVER && version != VersionSpec()
+        return Types.semver_spec("$(version.major).$(version.minor).$(version.patch)")
+    elseif preserve == PRESERVE_NONE
+        return VersionSpec()
+    end
+end
+
+function load_direct_deps(ctx::Context, pkgs::Vector{PackageSpec};
+                          preserve::PreserveLevel=PRESERVE_DIRECT)
+    pkgs = copy(pkgs)
     for (name::String, uuid::UUID) in ctx.env.project.deps
         pkgs[uuid] === nothing || continue # do not duplicate packages
         entry = manifest_info(ctx, uuid)
@@ -58,26 +74,35 @@ function load_direct_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Boo
                 name      = name,
                 path      = entry.path,
                 repo      = entry.repo,
-                tree_hash = entry.tree_hash,
                 pinned    = entry.pinned,
-                version   = version ? something(entry.version, VersionSpec()) : VersionSpec()))
+                tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
+                version   = load_version(entry.version, isfixed(entry), preserve),
+              ))
     end
+    return pkgs
 end
 
-function load_all_deps!(ctx::Context, pkgs::Vector{PackageSpec}; version::Bool=true)
+function load_all_deps(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
+                        preserve::PreserveLevel=PRESERVE_ALL)
+    pkgs = copy(pkgs)
     for (uuid, entry) in ctx.env.manifest
         pkgs[uuid] === nothing || continue # do not duplicate packages
-        push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, path=entry.path,
-                                version = version ? something(entry.version, VersionSpec()) : VersionSpec(),
-                                repo=entry.repo, tree_hash=entry.tree_hash))
+        push!(pkgs, PackageSpec(
+            uuid      = uuid,
+            name      = entry.name,
+            path      = entry.path,
+            pinned    = entry.pinned,
+            repo      = entry.repo,
+            tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
+            version   = load_version(entry.version, isfixed(entry), preserve),
+        ))
     end
-    load_direct_deps!(ctx, pkgs; version=version)
+    return load_direct_deps(ctx, pkgs; preserve=preserve)
 end
 
 function is_instantiated(ctx::Context)::Bool
     # Load everything
-    pkgs = PackageSpec[]
-    Operations.load_all_deps!(ctx, pkgs)
+    pkgs = load_all_deps(ctx)
     # Make sure all paths exist
     for pkg in pkgs
         sourcepath = Operations.source_path(pkg)
@@ -217,7 +242,8 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
     return
 end
 
-is_fixed(pkg::PackageSpec) = pkg.path !== nothing || pkg.repo.url !== nothing
+istracking(pkg) = pkg.path !== nothing || pkg.repo.url !== nothing
+isfixed(pkg) = istracking(pkg) || pkg.pinned
 
 function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     fix_deps_map = Dict{UUID,Vector{PackageSpec}}()
@@ -249,7 +275,6 @@ end
 # adds any other packages which may be in the dependency graph
 # all versioned packges should have a `tree_hash`
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
-    printpkgstyle(ctx, :Resolving, "package versions...")
     # compatibility
     proj_compat = Types.project_compatibility(ctx, "julia")
     v = intersect(VERSION, proj_compat)
@@ -263,7 +288,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
 
     # construct data structures for resolver and call it
     # this also sets pkg.version for fixed packages
-    fixed = collect_fixed!(ctx, filter(is_fixed, pkgs), names)
+    fixed = collect_fixed!(ctx, filter(istracking, pkgs), names)
 
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
@@ -941,8 +966,49 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
+function tiered_resolve(ctx::Context, pkgs::Vector{PackageSpec})
+    try # do not modify existing subgraph
+        return targeted_resolve(ctx, pkgs, PRESERVE_ALL)
+    catch err
+        err isa ResolverError || rethrow()
+    end
+    try # do not modify existing direct deps
+        return targeted_resolve(ctx, pkgs, PRESERVE_DIRECT)
+    catch err
+        err isa ResolverError || rethrow()
+    end
+    try
+        return targeted_resolve(ctx, pkgs, PRESERVE_SEMVER)
+    catch err
+        err isa ResolverError || rethrow()
+    end
+    return targeted_resolve(ctx, pkgs, PRESERVE_NONE)
+end
+
+function targeted_resolve(ctx::Context, pkgs::Vector{PackageSpec}, preserve::PreserveLevel)
+    if preserve == PRESERVE_ALL
+        pkgs = load_all_deps(ctx, pkgs)
+    elseif preserve == PRESERVE_DIRECT
+        pkgs = load_direct_deps(ctx, pkgs)
+    elseif preserve == PRESERVE_SEMVER
+        pkgs = load_direct_deps(ctx, pkgs; preserve=preserve)
+    elseif preserve == PRESERVE_NONE
+        pkgs = load_direct_deps(ctx, pkgs; preserve=preserve)
+    end
+    check_registered(ctx, pkgs)
+    resolve_versions!(ctx, pkgs)
+    return pkgs
+end
+
+function _resolve(ctx::Context, pkgs::Vector{PackageSpec}, preserve::PreserveLevel)
+    printpkgstyle(ctx, :Resolving, "package versions...")
+    return preserve == PRESERVE_TIERED ?
+        tiered_resolve(ctx, pkgs) :
+        targeted_resolve(ctx, pkgs, preserve)
+end
+
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
-             strict::Bool=false, platform::Platform=platform_key_abi())
+             preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi())
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -950,12 +1016,9 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
         pkgs[i] = update_package_add(pkg, entry, is_dep(ctx, pkg))
     end
     foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
-    # load dep graph
-    strict ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs)
-    check_registered(ctx, pkgs)
-    resolve_versions!(ctx, pkgs)
+    # resolve
+    pkgs = _resolve(ctx, pkgs, preserve)
     update_manifest!(ctx, pkgs)
-    # TODO is it still necessary to prune? I don't think so..
     new_apply = download_source(ctx, pkgs)
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
@@ -974,7 +1037,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     for pkg in pkgs
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
-    strict ? load_all_deps!(ctx, pkgs) : load_direct_deps!(ctx, pkgs)
+    pkgs = strict ? load_all_deps(ctx, pkgs) : load_direct_deps(ctx, pkgs)
     check_registered(ctx, pkgs)
 
     # resolve & apply package versions
@@ -1040,7 +1103,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     for pkg in pkgs
         up_load_manifest_info!(pkg, manifest_info(ctx, pkg.uuid))
     end
-    load_direct_deps!(ctx, pkgs) # make sure to include at least direct deps
+    pkgs = load_direct_deps(ctx, pkgs) # make sure to include at least direct deps
     check_registered(ctx, pkgs)
     resolve_versions!(ctx, pkgs)
     prune_manifest(ctx)
@@ -1089,7 +1152,7 @@ end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_pin!(ctx, pkg, manifest_info(ctx, pkg.uuid)), pkgs)
-    load_direct_deps!(ctx, pkgs)
+    pkgs = load_direct_deps(ctx, pkgs)
     check_registered(ctx, pkgs)
 
     resolve_versions!(ctx, pkgs)
@@ -1136,7 +1199,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
             isempty(registered_paths(ctx, pkg.uuid)) &&
                 pkgerror("cannot free a `dev`ed package that does not exist in a registry")
         end
-        load_direct_deps!(ctx, pkgs)
+        pkgs = load_direct_deps(ctx, pkgs)
         check_registered(ctx, pkgs)
         resolve_versions!(ctx, pkgs)
         update_manifest!(ctx, pkgs)
