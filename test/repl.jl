@@ -417,6 +417,10 @@ temp_pkg_dir() do project_path; cd(project_path) do
         pkg"activate ."
         c, r = test_complete("activate --shared ")
         @test "FooBar" in c
+
+        # invalid options
+        c, r = test_complete("rm -rf ")
+        @test isempty(c)
     end # testset
 end end
 
