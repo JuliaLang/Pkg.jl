@@ -131,12 +131,12 @@ function _completions(input, final, offset, index)
     statement, partial = core_parse(words)
     final && (partial = "") # last token is finalized -> no partial
     # number of tokens which specify the command
-    command_size = count([statement.preview, statement.super !== nothing, true])
+    command_size = count([statement.super !== nothing, true])
     command_is_focused() = !((word_count == command_size && final) || word_count > command_size)
 
     if statement.spec === nothing # spec not determined -> complete command
         !command_is_focused() && return String[], 0:-1, false
-        x = complete_command(statement, final, word_count == (statement.preview ? 3 : 2))
+        x = complete_command(statement, final, word_count == 2)
     else
         command_is_focused() && return String[], 0:-1, false
 

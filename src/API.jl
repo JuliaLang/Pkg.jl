@@ -15,13 +15,6 @@ using Pkg.Types: VersionTypes
 using ..BinaryPlatforms
 using ..Artifacts: artifact_paths
 
-
-function preview_info(ctx::Context)
-    if ctx.preview
-        printstyled(ctx.io, "───── Preview mode ─────\n"; color=Base.info_color(), bold=true)
-    end
-end
-
 include("generate.jl")
 
 dependencies() = dependencies(Context())
@@ -75,15 +68,12 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
             pkgerror("Can not specify version when tracking a repo.")
     end
 
-    preview_info(ctx)
-
     new_git = handle_repos_develop!(ctx, pkgs, shared)
 
     any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
         pkgerror("Cannot `develop` package with the same name or uuid as the project")
 
     Operations.develop(ctx, pkgs, new_git; strict=strict, platform=platform)
-    preview_info(ctx)
     return
 end
 
@@ -107,7 +97,6 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
         end
     end
 
-    preview_info(ctx)
     Types.update_registries(ctx)
 
     repo_pkgs = [pkg for pkg in pkgs if (pkg.repo.url !== nothing || pkg.repo.rev !== nothing)]
@@ -124,7 +113,6 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; strict::Bool=false,
         pkgerror("Cannot add package with the same name or uuid as the project")
 
     Operations.add(ctx, pkgs, new_git; strict=strict, platform=platform)
-    preview_info(ctx)
     return
 end
 
@@ -147,14 +135,12 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     end
 
     Context!(ctx; kwargs...)
-    preview_info(ctx)
 
     project_deps_resolve!(ctx, pkgs)
     manifest_resolve!(ctx, pkgs)
     ensure_resolved(ctx, pkgs)
 
     Operations.rm(ctx, pkgs)
-    preview_info(ctx)
     return
 end
 
@@ -171,7 +157,6 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     foreach(pkg -> pkg.mode = mode, pkgs)
 
     Context!(ctx; kwargs...)
-    preview_info(ctx)
     if update_registry
         Types.clone_default_registries(ctx)
         Types.update_registries(ctx; force=true)
@@ -192,7 +177,6 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         ensure_resolved(ctx, pkgs)
     end
     Operations.up(ctx, pkgs, level)
-    preview_info(ctx)
     return
 end
 
@@ -206,7 +190,6 @@ pin(pkgs::Vector{PackageSpec}; kwargs...)               = pin(Context(), pkgs; k
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
-    preview_info(ctx)
 
     for pkg in pkgs
         pkg.name !== nothing || pkg.uuid !== nothing ||
@@ -230,7 +213,6 @@ free(pkgs::Vector{PackageSpec}; kwargs...)               = free(Context(), pkgs;
 function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
-    preview_info(ctx)
 
     for pkg in pkgs
         pkg.name !== nothing || pkg.uuid !== nothing ||
@@ -264,7 +246,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     test_args = Cmd(test_args)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
-    preview_info(ctx)
     if isempty(pkgs)
         ctx.env.pkg === nothing && pkgerror("trying to test unnamed project") #TODO Allow this?
         push!(pkgs, ctx.env.pkg)
@@ -289,7 +270,6 @@ for a period of `collect_delay`; which defaults to thirty days.
 """
 function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
     Context!(ctx; kwargs...)
-    preview_info(ctx)
     env = ctx.env
 
     # First, we load in our `manifest_usage.toml` files which will tell us when our
@@ -349,27 +329,25 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
     all_index_files = Set(filter(isfile, all_index_files))
 
     # Immediately write this back as condensed manifest_usage.toml files
-    if !ctx.preview
-        function write_condensed_usage(usage_by_depot, fname)
-            for (depot, usage) in usage_by_depot
-                # Keep only the keys of the files that are still extant
-                usage = filter(p -> p[1] in all_index_files, usage)
+    function write_condensed_usage(usage_by_depot, fname)
+        for (depot, usage) in usage_by_depot
+            # Keep only the keys of the files that are still extant
+            usage = filter(p -> p[1] in all_index_files, usage)
 
-                # Expand it back into a dict of arrays-of-dicts
-                usage = Dict(k => [Dict("time" => v)] for (k, v) in usage)
+            # Expand it back into a dict of arrays-of-dicts
+            usage = Dict(k => [Dict("time" => v)] for (k, v) in usage)
 
-                # Write it out to disk within this depot
-                usage_path = joinpath(logdir(depot), fname)
-                if !isempty(usage) || isfile(usage_path)
-                    open(usage_path, "w") do io
-                        TOML.print(io, usage, sorted=true)
-                    end
+            # Write it out to disk within this depot
+            usage_path = joinpath(logdir(depot), fname)
+            if !isempty(usage) || isfile(usage_path)
+                open(usage_path, "w") do io
+                    TOML.print(io, usage, sorted=true)
                 end
             end
         end
-        write_condensed_usage(manifest_usage_by_depot, "manifest_usage.toml")
-        write_condensed_usage(artifact_usage_by_depot, "artifact_usage.toml")
     end
+    write_condensed_usage(manifest_usage_by_depot, "manifest_usage.toml")
+    write_condensed_usage(artifact_usage_by_depot, "artifact_usage.toml")
 
     # Next, we will process the manifest.toml and artifacts.toml files separately,
     # extracting from them the paths of the packages and artifacts that they reference.
@@ -553,8 +531,8 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
         merge_orphanages!(new_orphanage, depot_orphaned_packages, packages_to_delete, old_orphanage)
         merge_orphanages!(new_orphanage, depot_orphaned_artifacts, artifacts_to_delete, old_orphanage)
 
-        # Write out the `new_orphanage` for this depot, if we're not in preview mode.
-        if !ctx.preview && (!isempty(new_orphanage) || isfile(orphanage_file))
+        # Write out the `new_orphanage` for this depot
+        if !isempty(new_orphanage) || isfile(orphanage_file)
             mkpath(dirname(orphanage_file))
             open(orphanage_file, "w") do io
                 TOML.print(io, new_orphanage, sorted=true)
@@ -586,12 +564,10 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
     # Delete paths for unreachable package versions and artifacts, and computing size saved
     function delete_path(path)
         path_size = recursive_dir_size(path)
-        if !ctx.preview
-            try
-                Base.rm(path; recursive=true)
-            catch
-                @warn "Failed to delete $path"
-            end
+        try
+            Base.rm(path; recursive=true)
+        catch
+            @warn "Failed to delete $path"
         end
         printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" * pretty_byte_str(path_size) * ")")
         return path_size
@@ -607,18 +583,16 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
     end
 
     # Prune package paths that are now empty
-    if !ctx.preview
-        for depot in depots()
-            packagedir = abspath(depot, "packages")
-            !isdir(packagedir) && continue
+    for depot in depots()
+        packagedir = abspath(depot, "packages")
+        !isdir(packagedir) && continue
 
-            for name in readdir(packagedir)
-                name_path = joinpath(packagedir, name)
-                !isdir(name_path) && continue
-                !isempty(readdir(name_path)) && continue
+        for name in readdir(packagedir)
+            name_path = joinpath(packagedir, name)
+            !isdir(name_path) && continue
+            !isempty(readdir(name_path)) && continue
 
-                Base.rm(name_path)
-            end
+            Base.rm(name_path)
         end
     end
 
@@ -639,8 +613,6 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
         printpkgstyle(ctx, :Deleted, "no artifacts or packages")
     end
 
-    preview_info(ctx)
-
     return
 end
 
@@ -652,7 +624,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
-    preview_info(ctx)
     if isempty(pkgs)
         if ctx.env.pkg !== nothing
             push!(pkgs, ctx.env.pkg)
@@ -667,7 +638,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     manifest_resolve!(ctx, pkgs)
     ensure_resolved(ctx, pkgs)
     Operations.build(ctx, pkgs, verbose)
-    preview_info(ctx)
 end
 
 precompile() = precompile(Context())

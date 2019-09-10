@@ -317,7 +317,6 @@ end
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
     io::IO = stderr
-    preview::Bool = false
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
@@ -1004,10 +1003,6 @@ end
 clone_or_cp_registries(regs::Vector{RegistrySpec}, depot::String=depots1()) =
     clone_or_cp_registries(Context(), regs, depot)
 function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot::String=depots1())
-    if ctx.preview
-        println(ctx.io, "Skipping adding registries in preview mode")
-        return nothing
-    end
     populate_known_registries_with_urls!(regs)
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
@@ -1119,10 +1114,6 @@ end
 
 # entry point for `registry rm`
 function remove_registries(ctx::Context, regs::Vector{RegistrySpec})
-    if ctx.preview
-        println(ctx.io, "skipping removing registries in preview mode")
-        return nothing
-    end
     for registry in find_installed_registries(ctx, regs)
         printpkgstyle(ctx, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         rm(registry.path; force=true, recursive=true)
@@ -1135,10 +1126,6 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                            force::Bool=false)
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
-    if ctx.preview
-        println(ctx.io, "skipping updating registries in preview mode")
-        return nothing
-    end
     for reg in unique(r -> r.uuid, find_installed_registries(ctx, regs))
         if isdir(joinpath(reg.path, ".git"))
             regpath = pathrepr(reg.path)

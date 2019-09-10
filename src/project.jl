@@ -182,9 +182,7 @@ function write_project(project::Project, env, old_env, ctx::Context; display_dif
             printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
             Pkg.Display.print_project_diff(ctx, old_env, env)
         end
-        if !ctx.preview
-            mkpath(dirname(env.project_file))
-            write_project(project, env.project_file)
-        end
+        mkpath(dirname(env.project_file))
+        write_project(project, env.project_file)
     end
 end

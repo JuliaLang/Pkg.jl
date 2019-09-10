@@ -581,10 +581,6 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
     for i in 1:ctx.num_concurrent_downloads
         @async begin
             for (pkg, path) in jobs
-                if ctx.preview
-                    put!(results, (pkg, true, path))
-                    continue
-                end
                 if ctx.use_libgit2_for_all_downloads
                     put!(results, (pkg, false, path))
                     continue
@@ -624,10 +620,8 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
     ##################################################
     for (pkg, path) in missed_packages
         uuid = pkg.uuid
-        if !ctx.preview
-            install_git(ctx, pkg.uuid, pkg.name, pkg.tree_hash, urls[uuid], pkg.version::VersionNumber, path)
-            readonly && set_readonly(path)
-        end
+        install_git(ctx, pkg.uuid, pkg.name, pkg.tree_hash, urls[uuid], pkg.version::VersionNumber, path)
+        readonly && set_readonly(path)
         vstr = pkg.version != nothing ? "v$(pkg.version)" : "[$h]"
         printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
@@ -694,7 +688,7 @@ function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}
 end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}, verbose::Bool)
-    if !ctx.preview && (any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file))
+    if any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file)
         Pkg.instantiate(ctx)
     end
     uuids = UUID[]
@@ -745,7 +739,6 @@ builddir(source_path::String) = joinpath(source_path, "deps")
 buildfile(source_path::String) = joinpath(builddir(source_path), "build.jl")
 function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve=false, verbose=false)
     # collect builds for UUIDs with `deps/build.jl` files
-    ctx.preview && (printpkgstyle(ctx, :Building, "skipping building in preview mode"); return)
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
         uuid in keys(ctx.stdlibs) && continue
@@ -1252,7 +1245,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         coverage=false, test_fn=nothing,
         julia_args::Cmd=``,
         test_args::Cmd=``)
-    ctx.preview || Pkg.instantiate(ctx)
+    Pkg.instantiate(ctx)
 
     # load manifest data
     for pkg in pkgs
@@ -1289,10 +1282,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         end
 
         printpkgstyle(ctx, :Testing, pkg.name)
-        if ctx.preview
-            println(ctx.io, "In preview mode, skipping tests for $(pkg.name)")
-            continue
-        end
         sandbox(ctx, pkg, source_path, testdir(source_path)) do
             println(ctx.io, "Running sandbox")
             test_fn !== nothing && test_fn()

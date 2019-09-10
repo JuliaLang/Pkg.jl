@@ -235,5 +235,5 @@ function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_
         printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
         Pkg.Display.print_manifest_diff(ctx, old_env, env)
     end
-    !ctx.preview && write_manifest(manifest, env.manifest_file)
+    write_manifest(manifest, env.manifest_file)
 end
