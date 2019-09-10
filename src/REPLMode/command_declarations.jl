@@ -304,17 +304,6 @@ the output to the difference as compared to the last git commit.
 
 Deletes packages that cannot be reached from any existing environment.
 """,
-],[ # preview is not a regular command.
-    # this is here so that preview appears as a registered command to users
-    :name => "preview",
-    :description => "previews a subsequent command without affecting the current state",
-    :help => md"""
-    preview cmd
-
-Runs the command `cmd` in preview mode. This is defined such that no side effects
-will take place i.e. no packages are downloaded and neither the project nor manifest
-is modified.
-""",
 ],
 ], #package
 "registry" => CommandDeclaration[

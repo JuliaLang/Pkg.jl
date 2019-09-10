@@ -227,10 +227,6 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
     for i in 1:ctx.num_concurrent_downloads
         @async begin
             for (pkg, path) in jobs
-                if ctx.preview
-                    put!(results, (pkg, true, path))
-                    continue
-                end
                 if ctx.use_libgit2_for_all_downloads
                     put!(results, (pkg, false, path))
                     continue
@@ -270,11 +266,9 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
     ##################################################
     for (pkg, path) in missed_packages
         uuid = pkg.uuid
-        if !ctx.preview
-            install_git(ctx, pkg.uuid, pkg.name, hashes[uuid], urls[uuid], pkg.version::VersionNumber, path)
-            if mode == :add
-                set_readonly(path)
-            end
+        install_git(ctx, pkg.uuid, pkg.name, hashes[uuid], urls[uuid], pkg.version::VersionNumber, path)
+        if mode == :add
+            set_readonly(path)
         end
         vstr = pkg.version != nothing ? "v$(pkg.version)" : "[$h]"
         printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
@@ -537,10 +531,6 @@ function backwards_compatibility_for_test(
     coverage; julia_args=``, test_args=``
 )
     printpkgstyle(ctx, :Testing, pkg.name)
-    if ctx.preview
-        @info("In preview mode, skipping tests for $(pkg.name)")
-        return
-    end
     code = """
         $(Base.load_path_setup_code(false))
         cd($(repr(dirname(testfile))))

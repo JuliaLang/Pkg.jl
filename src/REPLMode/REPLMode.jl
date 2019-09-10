@@ -158,7 +158,6 @@ Base.@kwdef mutable struct Statement
     spec::Union{Nothing,CommandSpec}              = nothing
     options::Union{Vector{Option},Vector{String}} = String[]
     arguments::Vector{QString}                    = QString[]
-    preview::Bool                                 = false
 end
 
 function lex(cmd::String)::Vector{QString}
@@ -242,10 +241,6 @@ function core_parse(words::Vector{QString}; only_cmd=false)
 
     # begin parsing
     next_word!() || return statement, ((word === nothing) ? nothing : word.raw)
-    if word.raw == "preview"
-        statement.preview = true
-        next_word!() || return statement, word.raw
-    end
     # handle `?` alias for help
     # It is special in that it requires no space between command and args
     if word.raw[1]=='?' && !word.isquoted
@@ -314,7 +309,6 @@ Base.@kwdef struct Command
     spec::Union{Nothing,CommandSpec} = nothing
     options::APIOptions              = APIOptions()
     arguments::Vector                = []
-    preview::Bool                    = false
 end
 
 function enforce_option(option::Option, specs::Dict{String,OptionSpec})
@@ -369,7 +363,7 @@ function Command(statement::Statement)::Command
     opt_spec = statement.spec.option_specs
     enforce_option(statement.options, opt_spec)
     options = APIOptions(statement.options, opt_spec)
-    return Command(statement.spec, options, arguments, statement.preview)
+    return Command(statement.spec, options, arguments)
 end
 
 #############
@@ -393,7 +387,7 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
 end
 
 function do_cmd!(command::Command, repl)
-    context = Dict{Symbol,Any}(:preview => command.preview)
+    context = Dict{Symbol,Any}()
 
     # REPL specific commands
     command.spec === SPECS[]["package"]["help"] && return Base.invokelatest(do_help!, command, repl)

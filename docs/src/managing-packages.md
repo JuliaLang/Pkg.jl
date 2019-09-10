@@ -123,7 +123,7 @@ from that local repo are pulled when packages are updated.
 Note that changes to files in the local package repository will not immediately be reflected when loading that package.
 The changes would have to be committed and the packages updated in order to pull in the changes.
 
-In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing Packages](@ref) for an example. 
+In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing Packages](@ref) for an example.
 
 ### Developing packages
 
@@ -300,22 +300,3 @@ To run a typical garbage collection with default arguments, simply use the `gc` 
 ```
 
 Note that only packages in `~/.julia/packages` are deleted.
-
-
-## Preview mode
-
-If you just want to see the effects of running a command, but not change your state you can `preview` a command.
-For example:
-
-```
-(HelloWorld) pkg> preview add Plots
-```
-
-or
-
-```
-(HelloWorld) pkg> preview up
-```
-
-will show you the effects that `add Plots`, or `up`, respectively, would have on your project.
-However, nothing will be installed and your `Project.toml` and `Manifest.toml` files will remain untouched.

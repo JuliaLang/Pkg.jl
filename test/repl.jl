@@ -380,12 +380,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test apply_completion("rm E") == "rm Example"
         @test apply_completion("add Exampl") == "add Example"
 
-        c, r = test_complete("preview r")
-        @test "remove" in c
-        c, r = test_complete("help r")
-        @test "remove" in c
-        @test !("rm" in c)
-
         # stdlibs
         c, r = test_complete("add Stat")
         @test "Statistics" in c
@@ -661,55 +655,42 @@ end
     @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["up"]
     @test isempty(statement.options)
     @test isempty(statement.arguments)
-    @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example")[1]
     @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["develop"]
     @test isempty(statement.options)
     @test statement.arguments == [QString("Example", false)]
-    @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
     @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["develop"]
     @test isempty(statement.options)
     @test statement.arguments == [QString("Example#foo", false),
                                   QString("#bar", false)]
-    @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
     @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["develop"]
     @test isempty(statement.options)
     @test statement.arguments == [QString("Example#foo", false),
                                   QString("Example@v0.0.1", false)]
-    @test statement.preview == false
 
     statement = Pkg.REPLMode.parse("add --first --second arg1")[1]
     @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["add"]
     @test statement.options == map(Pkg.REPLMode.parse_option, ["--first", "--second"])
     @test statement.arguments == [QString("arg1", false)]
-    @test statement.preview == false
 
-    statements = Pkg.REPLMode.parse("preview add --first -o arg1; pin -x -a arg0 Example")
-    @test statements[1].spec == Pkg.REPLMode.SPECS[]["package"]["add"]
-    @test statements[1].preview == true
-    @test statements[1].options == map(Pkg.REPLMode.parse_option, ["--first", "-o"])
-    @test statements[1].arguments == [QString("arg1", false)]
-    @test statements[2].spec == Pkg.REPLMode.SPECS[]["package"]["pin"]
-    @test statements[2].preview == false
-    @test statements[2].options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
-    @test statements[2].arguments == [QString("arg0", false), QString("Example", false)]
+    statement = Pkg.REPLMode.parse("pin -x -a arg0 Example")[1]
+    @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["pin"]
+    @test statement.options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
+    @test statement.arguments == [QString("arg0", false), QString("Example", false)]
 
     statements = Pkg.REPLMode.parse("up; pin --first; dev")
     @test statements[1].spec == Pkg.REPLMode.SPECS[]["package"]["up"]
-    @test statements[1].preview == false
     @test isempty(statements[1].options)
     @test isempty(statements[1].arguments)
     @test statements[2].spec == Pkg.REPLMode.SPECS[]["package"]["pin"]
-    @test statements[2].preview == false
     @test statements[2].options == map(Pkg.REPLMode.parse_option, ["--first"])
     @test isempty(statements[2].arguments)
     @test statements[3].spec == Pkg.REPLMode.SPECS[]["package"]["develop"]
-    @test statements[3].preview == false
     @test isempty(statements[3].options)
     @test isempty(statements[3].arguments)
 end
@@ -888,17 +869,6 @@ end
         Pkg.REPLMode.pkg"package add Example"
         @test isinstalled(TEST_PKG)
         Pkg.REPLMode.pkg"package rm Example"
-        @test !isinstalled(TEST_PKG)
-    end end end
-end
-
-@testset "preview" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        pkg"add Example"
-        pkg"preview rm Example"
-        @test isinstalled(TEST_PKG)
-        pkg"rm Example"
-        pkg"preview add Example"
         @test !isinstalled(TEST_PKG)
     end end end
 end

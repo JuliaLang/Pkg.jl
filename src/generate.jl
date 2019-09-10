@@ -3,21 +3,18 @@
 generate(path::String; kwargs...) = generate(Context(), path; kwargs...)
 function generate(ctx::Context, path::String; kwargs...)
     Context!(ctx; kwargs...)
-    preview_info(ctx)
     dir, pkg = dirname(path), basename(path)
     Base.isidentifier(pkg) || pkgerror("$(repr(pkg)) is not a valid package name")
     isdir(path) && pkgerror("$(abspath(path)) already exists")
     printpkgstyle(ctx, :Generating, " project $pkg:")
     uuid = project(ctx, pkg, dir)
     entrypoint(ctx, pkg, dir)
-    preview_info(ctx)
     return Dict(pkg => uuid)
 end
 
 function genfile(f::Function, ctx::Context, pkg::String, dir::String, file::String)
     path = joinpath(dir, pkg, file)
     println(ctx.io, "    $path")
-    ctx.preview && return
     mkpath(dirname(path))
     open(f, path, "w")
     return
