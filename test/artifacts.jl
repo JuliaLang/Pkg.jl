@@ -354,6 +354,19 @@ end
         end)
     end
 
+    # Ensure that `instantiate()` installs artifacts:
+    temp_pkg_dir() do project_path
+        copy_test_package(project_path, "ArtifactInstallation")
+        Pkg.activate(joinpath(project_path, "ArtifactInstallation"))
+        add_this_pkg()
+        Pkg.instantiate()
+
+        # Manual test that artifact is installed by instantiate()
+        artifacts_toml = joinpath(project_path, "ArtifactInstallation", "Artifacts.toml")
+        c_simple_hash = artifact_hash("c_simple", artifacts_toml)
+        @test artifact_exists(c_simple_hash)
+    end
+
     # Ensure that porous platform coverage works with ensure_all_installed()
     temp_pkg_dir() do project_path
         copy_test_package(project_path, "ArtifactInstallation")

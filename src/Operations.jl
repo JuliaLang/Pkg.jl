@@ -529,14 +529,20 @@ function install_git(
 end
 
 function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
-                            platform::Platform=platform_key_abi())
-    for pkg in pkgs
-        path = source_path(pkg)
+                            platform::Platform=platform_key_abi(),
+                            verbose::Bool=false)
+    return download_artifacts(ctx, source_path.(pkgs); platform=platform, verbose=verbose)
+end
+
+function download_artifacts(ctx::Context, pkg_roots::Vector{String};
+                            platform::Platform=platform_key_abi(),
+                            verbose::Bool=false)
+    for path in pkg_roots
         # Check to see if this package has an (Julia)Artifacts.toml
         for f in artifact_names
             artifacts_toml = joinpath(path, f)
             if isfile(artifacts_toml)
-                ensure_all_artifacts_installed(artifacts_toml; platform=platform)
+                ensure_all_artifacts_installed(artifacts_toml; platform=platform, verbose=verbose)
                 write_env_usage(artifacts_toml, "artifact_usage.toml")
                 break
             end
