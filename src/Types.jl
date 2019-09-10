@@ -375,6 +375,7 @@ collides_with_project(ctx::Context, pkg::PackageSpec) =
 is_project(ctx::Context, pkg::PackageSpec) = is_project_uuid(ctx, pkg.uuid)
 is_project_name(ctx::Context, name::String) =
     ctx.env.pkg !== nothing && ctx.env.pkg.name == name
+is_project_name(ctx::Context, name::Nothing) = false
 is_project_uuid(ctx::Context, uuid::UUID) = project_uuid(ctx) == uuid
 
 ###########
@@ -898,31 +899,42 @@ end
 
 # Ensure that all packages are fully resolved
 function ensure_resolved(ctx::Context,
-    pkgs::AbstractVector{PackageSpec};
-    registry::Bool=false,)::Nothing
-    unresolved = Dict{String,Vector{UUID}}()
+        pkgs::AbstractVector{PackageSpec};
+        registry::Bool=false,)::Nothing
+        unresolved_uuids = Dict{String,Vector{UUID}}()
     for name in [pkg.name for pkg in pkgs if !has_uuid(pkg)]
         uuids = [uuid for (uuid, entry) in ctx.env.manifest if entry.name == name]
         sort!(uuids, by=uuid -> uuid.value)
-        unresolved[name] = uuids
+        unresolved_uuids[name] = uuids
     end
-    isempty(unresolved) && return
+    unresolved_names = UUID[]
+    for uuid in [pkg.uuid for pkg in pkgs if !has_name(pkg)]
+        push!(unresolved_names, uuid)
+    end
+    isempty(unresolved_uuids) && isempty(unresolved_names) && return
     msg = sprint() do io
-        println(io, "The following package names could not be resolved:")
-        for (name, uuids) in sort!(collect(unresolved), by=lowercase ∘ first)
-        print(io, " * $name (")
-        if length(uuids) == 0
-            what = ["project", "manifest"]
-            registry && push!(what, "registry")
-            print(io, "not found in ")
-            join(io, what, ", ", " or ")
-        else
-            join(io, uuids, ", ", " or ")
-            print(io, " in manifest but not in project")
+        if !isempty(unresolved_uuids)
+            println(io, "The following package names could not be resolved:")
+            for (name, uuids) in sort!(collect(unresolved_uuids), by=lowercase ∘ first)
+                print(io, " * $name (")
+                if length(uuids) == 0
+                    what = ["project", "manifest"]
+                    registry && push!(what, "registry")
+                    print(io, "not found in ")
+                    join(io, what, ", ", " or ")
+                else
+                    join(io, uuids, ", ", " or ")
+                    print(io, " in manifest but not in project")
+                end
+                println(io, ")")
+            end
         end
-        println(io, ")")
-    end
-        print(io, "Please specify by known `name=uuid`.")
+        if !isempty(unresolved_names)
+            println(io, "The following package uuids could not be resolved:")
+            for uuid in unresolved_names
+                println(io, " * $uuid")
+            end
+        end
     end
     pkgerror(msg)
 end
