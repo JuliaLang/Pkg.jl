@@ -228,10 +228,10 @@ function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     open(f -> write(f, seekstart(io)), manifest_file; truncate=true)
 end
 
-function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)
+function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_output=true)
     isempty(manifest) && !ispath(env.manifest_file) && return
 
-    if display_diff && !(ctx.currently_running_target)
+    if display_output && !(ctx.currently_running_target)
         printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
         Pkg.Display.print_manifest_diff(ctx, old_env, env)
     end

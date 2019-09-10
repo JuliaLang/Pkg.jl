@@ -522,7 +522,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         not_loadable = setdiff(should_be_in_manifest, should_be_in_project)
         Pkg.API.rm(localctx, [PackageSpec(uuid = uuid) for uuid in not_loadable])
 
-        write_env(localctx, display_diff = false)
+        write_env(localctx, display_output = false)
         will_resolve && build_versions(localctx, new)
 
         sep = Sys.iswindows() ? ';' : ':'

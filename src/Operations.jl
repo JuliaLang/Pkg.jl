@@ -35,11 +35,13 @@ end
 tracking_registered_version(pkg) =
     !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.url === nothing
 
-function source_path(pkg::PackageSpec)
-    return is_stdlib(pkg.uuid)    ? Types.stdlib_path(pkg.name) :
-        pkg.path      !== nothing ? pkg.path :
-        pkg.repo.url  !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
+source_path(uuid::UUID, pkg::PackageEntry) = source_path(uuid, pkg.path, pkg.repo, pkg.name, pkg.tree_hash)
+source_path(pkg::PackageSpec) = source_path(pkg.uuid, pkg.path, pkg.repo, pkg.name, pkg.tree_hash)
+function source_path(uuid, path, repo, name, tree_hash)
+    return is_stdlib(uuid)    ? Types.stdlib_path(name) :
+        path      !== nothing ? path :
+        repo.url  !== nothing ? find_installed(name, uuid, tree_hash) :
+        tree_hash !== nothing ? find_installed(name, uuid, tree_hash) :
         nothing
 end
 

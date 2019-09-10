@@ -175,10 +175,10 @@ function write_project(project::Dict, project_file::AbstractString)
     TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
     open(f -> write(f, seekstart(io)), project_file; truncate=true)
 end
-function write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
+function write_project(project::Project, env, old_env, ctx::Context; display_output=true)
     project = destructure(ctx.env.project)
     if !isempty(project) || ispath(env.project_file)
-        if display_diff && !(ctx.currently_running_target)
+        if display_output && !(ctx.currently_running_target)
             printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
             Pkg.Display.print_project_diff(ctx, old_env, env)
         end

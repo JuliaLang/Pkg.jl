@@ -1365,11 +1365,51 @@ function pathrepr(path::String)
     return "`" * Base.contractuser(path) * "`"
 end
 
-function write_env(ctx::Context; display_diff=true)
+function write_env(ctx::Context; display_output=true)
     env = ctx.env
     old_env = EnvCache(env.env) # load old environment for comparison
-    write_project(env.project, env, old_env, ctx; display_diff=display_diff)
-    write_manifest(env.manifest, env, old_env, ctx; display_diff=display_diff)
+    display_output && (updated_but_imported = warn_update_loaded_pkgs(ctx, old_env))
+    write_project(env.project, env, old_env, ctx; display_output=display_output)
+    write_manifest(env.manifest, env, old_env, ctx; display_output=display_output)
+    if display_output
+        if !isempty(updated_but_imported)
+            @warn """The following packages have been updated but were already imported:
+            $(join(" - " .* updated_but_imported, '\n'))
+            Restart Julia to use the updated versions."""  _module=nothing _file=nothing
+        end
+    end
+end
+
+const warned_uuids = Set{UUID}()
+function warn_update_loaded_pkgs(ctx::Context, old_env::EnvCache)
+    old_path = Dict{Base.PkgId, String}()
+    new_path = Dict{Base.PkgId, String}()
+
+    # if loaded & path not same as before --> warn
+    for (uuid, pkg) in ctx.env.manifest
+        path = Pkg.Operations.source_path(uuid, pkg)
+        path !== nothing && (new_path[Base.PkgId(uuid, pkg.name)] = path)
+    end
+    for (uuid, pkg) in old_env.manifest
+        path = Pkg.Operations.source_path(uuid, pkg)
+        path !== nothing && (old_path[Base.PkgId(uuid, pkg.name)] = path)
+    end
+
+    updated_but_imported = String[]
+    for (pkg, path) in new_path
+        is_stdlib(pkg.uuid) && continue
+        if pkg in keys(Base.loaded_modules)
+            if haskey(old_path, pkg)
+                if old_path[pkg] != path
+                   if !(pkg.uuid in warned_uuids)
+                        push!(warned_uuids, pkg.uuid)
+                        push!(updated_but_imported, pkg.name)
+                    end
+                end
+            end
+        end
+    end
+    return updated_but_imported
 end
 
 ###
