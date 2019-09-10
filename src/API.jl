@@ -48,6 +48,14 @@ function check_package_name(x::AbstractString, mode=nothing)
     return PackageSpec(x)
 end
 
+function err_rep(pkg::PackageSpec)
+    x = pkg.name !== nothing && pkg.uuid !== nothing ? x = "$name [$(string(pkg.uuid)[1:8])]" :
+        pkg.name !== nothing ? pkg.name :
+        pkg.uuid !== nothing ? string(pkg.uuid)[1:8] :
+        pkg.repo.url
+    return "`$x`"
+end
+
 develop(pkg::Union{AbstractString, PackageSpec}; kwargs...) = develop([pkg]; kwargs...)
 develop(pkgs::Vector{<:AbstractString}; kwargs...) =
     develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
@@ -59,12 +67,20 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 
     for pkg in pkgs
         # if julia is passed as a package the solver gets tricked
-        pkg.name != "julia" || pkgerror("Trying to develop julia as a package")
-        pkg.repo.rev === nothing || pkgerror("git revision can not be given to `develop`")
-        pkg.name !== nothing || pkg.uuid !== nothing || pkg.repo.url !== nothing ||
-            pkgerror("A package must be specified by `name`, `uuid`, `url`, or `path`.")
-        pkg.version == VersionSpec() ||
-            pkgerror("Can not specify version when tracking a repo.")
+        if pkg.name == "julia"
+            pkgerror("`julia` is not a valid package name.")
+        end
+        if pkg.name === nothing && pkg.uuid === nothing && pkg.repo.url === nothing
+            pkgerror("When calling `develop`, packages must be specified by name, UUID, URL, or filesystem path.")
+        end
+        if pkg.repo.rev !== nothing
+            pkgerror("It is invalid to specify a git revision when calling `develop`:",
+                     " `$(pkg.repo.rev)` given for package $(err_rep(pkg)).")
+        end
+        if pkg.version != VersionSpec()
+            pkgerror("It is invalid to specify a version when calling `develop`:",
+                     " `$(pkg.version)` given for package $(err_rep(pkg)).")
+        end
     end
 
     new_git = handle_repos_develop!(ctx, pkgs, shared)
@@ -87,9 +103,12 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
 
     for pkg in pkgs
         # if julia is passed as a package the solver gets tricked; this catches the error early on
-        pkg.name == "julia" && pkgerror("Trying to add julia as a package")
-        pkg.name !== nothing || pkg.uuid !== nothing || pkg.repo.url !== nothing ||
-            pkgerror("A package must be specified by `name`, `uuid`, `url`, or `path`.")
+        if pkg.name == "julia"
+            pkgerror("`julia` is not a valid package name.")
+        end
+        if pkg.name === nothing && pkg.uuid === nothing && pkg.repo.url === nothing
+            pkgerror("When calling `add`, packages must be specified by name, UUID, URL, or filesystem path.")
+        end
         if (pkg.repo.url !== nothing || pkg.repo.rev !== nothing)
             pkg.version == VersionSpec() ||
                 pkgerror("Can not specify version when tracking a repo.")
@@ -124,12 +143,13 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     foreach(pkg -> pkg.mode = mode, pkgs)
 
     for pkg in pkgs
-        pkg.name !== nothing || pkg.uuid !== nothing ||
-            pkgerror("Must specify package by either `name` or `uuid`.")
+        if pkg.name === nothing && pkg.uuid === nothing
+            pkgerror("When calling `rm`, packages must be specified by name or UUID.")
+        end
         if !(pkg.version == VersionSpec() && pkg.pinned == false &&
              pkg.tree_hash === nothing && pkg.repo.url === nothing &&
              pkg.repo.rev === nothing && pkg.path === nothing)
-            pkgerror("Package may only be specified by either `name` or `uuid`")
+            pkgerror("When calling `rm`, packages may only be specified by name or UUID.")
         end
     end
 
@@ -185,16 +205,22 @@ resolve(ctx::Context=Context()) =
 pin(pkg::Union{AbstractString, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
 pin(pkgs::Vector{<:AbstractString}; kwargs...)          = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 pin(pkgs::Vector{PackageSpec}; kwargs...)               = pin(Context(), pkgs; kwargs...)
-
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
-        pkg.name !== nothing || pkg.uuid !== nothing ||
-            pkgerror("Must specify package by either `name` or `uuid`.")
-        pkg.repo.url === nothing || pkgerror("Can not specify `repo` url")
-        pkg.repo.rev === nothing || pkgerror("Can not specify `repo` rev")
+        if pkg.name === nothing && pkg.uuid === nothing
+            pkgerror("When calling `pin`, packages must be specified by name or UUID.")
+        end
+        if pkg.repo.url !== nothing
+            pkgerror("It is invalid to specify a repo location when calling `pin`:",
+                     " `$(pkg.repo.url)` given for package $(err_rep(pkg)).")
+        end
+        if pkg.repo.rev !== nothing
+            pkgerror("It is invalid to specify a git revision when calling `pin`:",
+                     " `$(pkg.repo.rev)` given for package $(err_rep(pkg)).")
+        end
     end
 
     foreach(pkg -> pkg.mode = PKGMODE_PROJECT, pkgs)
@@ -214,12 +240,13 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
-        pkg.name !== nothing || pkg.uuid !== nothing ||
-            pkgerror("Must specify package by either `name` or `uuid`.")
+        if pkg.name === nothing && pkg.uuid === nothing
+            pkgerror("When calling `free`, packages must be specified by name or UUID.")
+        end
         if !(pkg.version == VersionSpec() && pkg.pinned == false &&
              pkg.tree_hash === nothing && pkg.repo.url === nothing &&
              pkg.repo.rev === nothing && pkg.path === nothing)
-            pkgerror("Package may only be specified by either `name` or `uuid`")
+            pkgerror("When calling `free`, packages may only be specified by name or UUID.")
         end
     end
 
@@ -823,10 +850,13 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
                  uuid::Union{Nothing,String,UUID} = nothing,
                  version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
                  url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT)
-    path !== nothing && url !== nothing &&
-        pkgerror("cannot specify both a path and url")
-    url !== nothing && version !== nothing &&
-        pkgerror("`version` can not be given with `url`, use `rev` instead")
+    if path !== nothing && url !== nothing
+        pkgerror("It is invalid to specify both `path` and `url`.")
+    end
+    if url !== nothing && version !== nothing
+        pkgerror("It is invalid to specify both `version` and `url`.",
+                 "Hint: `rev` may have been intended instead of `version.")
+    end
     repo = Types.GitRepo(rev = rev, url = url !== nothing ? url : path)
     version = version === nothing ? VersionSpec() : VersionSpec(version)
     uuid isa String && (uuid = UUID(uuid))
