@@ -411,6 +411,21 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("add RE")
         @test !("README.md" in c)
 
+        # Expand homedir and
+        if !Sys.iswindows()
+            dirname = "JuliaPkgTest744a757c-d313-11e9-1cac-118368d5977a"
+            tildepath = "~/$dirname"
+            try
+                mkdir(expanduser(tildepath))
+                c, r = test_complete("dev ~/JuliaPkgTest744a75")
+                @test joinpath(homedir(), dirname, "") in c
+            finally
+                rm(expanduser(tildepath); force = true)
+            end
+            c, r = test_complete("dev ~")
+            @test joinpath(homedir(), "") in c
+        end
+
         # activate
         pkg"activate --shared FooBar"
         pkg"add Example"
