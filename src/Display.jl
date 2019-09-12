@@ -116,6 +116,18 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
     return mdiff
 end
 
+# Needs to be called before the environment have been written to disc
+function print_env_diff(ctx)
+    env = ctx.env
+    old_env = EnvCache(env.env) # load old environment for comparison
+    if !ctx.currently_running_target
+        printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
+        print_project_diff(ctx, old_env, env)
+        printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
+        print_manifest_diff(ctx, old_env, env)
+    end
+end
+
 function print_project_diff(ctx::Context, env0::EnvCache, env1::EnvCache)
     pm0 = Dict(uuid => entry for (uuid, entry) in env0.manifest if (uuid in values(env0.project.deps)))
     pm1 = Dict(uuid => entry for (uuid, entry) in env1.manifest if (uuid in values(env1.project.deps)))

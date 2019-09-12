@@ -908,7 +908,8 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     # only keep reachable manifest entires
     prune_manifest(ctx)
     # update project & manifest
-    write_env(ctx)
+    Display.print_env_diff(ctx)
+    write_env(ctx.env)
 end
 
 update_package_add(pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
@@ -1025,7 +1026,8 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     # and ensure they are all downloaded and unpacked as well:
     download_artifacts(ctx, pkgs; platform=platform)
 
-    write_env(ctx) # write env before building
+    Display.print_env_diff(ctx)
+    write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
@@ -1046,7 +1048,8 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     new_apply = download_source(ctx, pkgs; readonly=false)
     download_artifacts(ctx, pkgs; platform=platform)
 
-    write_env(ctx) # write env before building
+    Display.print_env_diff(ctx)
+    write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
@@ -1110,7 +1113,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
     download_artifacts(ctx, pkgs)
-    write_env(ctx) # write env before building
+
+    Display.print_env_diff(ctx)
+    write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
     # TODO what to do about repo packages?
 end
@@ -1160,7 +1165,9 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
 
     new = download_source(ctx, pkgs)
     download_artifacts(ctx, pkgs)
-    write_env(ctx) # write env before building
+
+    Display.print_env_diff(ctx)
+    write_env(ctx.env) # write env before building
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
 
@@ -1205,11 +1212,13 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
         download_artifacts(ctx, new)
-        write_env(ctx) # write env before building
+        Display.print_env_diff(ctx)
+        write_env(ctx.env) # write env before building
         build_versions(ctx, UUID[pkg.uuid for pkg in new])
     else
         foreach(pkg -> manifest_info(ctx, pkg.uuid).pinned = false, pkgs)
-        write_env(ctx)
+        Display.print_env_diff(ctx)
+        write_env(ctx.env)
     end
 end
 

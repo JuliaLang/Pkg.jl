@@ -1354,11 +1354,9 @@ function pathrepr(path::String)
     return "`" * Base.contractuser(path) * "`"
 end
 
-function write_env(ctx::Context; display_diff=true)
-    env = ctx.env
-    old_env = EnvCache(env.env) # load old environment for comparison
-    write_project(env.project, env, old_env, ctx; display_diff=display_diff)
-    write_manifest(env.manifest, env, old_env, ctx; display_diff=display_diff)
+function write_env(env::EnvCache)
+    write_project(env)
+    write_manifest(env)
 end
 
 ###
