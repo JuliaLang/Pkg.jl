@@ -31,6 +31,29 @@ Example = "1.2, 2"
 ```
 will result in `[1.2.0, 3.0.0)`.
 
+### Pre-1.0 behavior
+
+While the semver specification says that all versions with a major version of 0 (versions before 1.0.0) are incompatible
+with each other, we have decided to only apply that for when both the major and minor versions are zero. In other words,
+0.0.1 and 0.0.2 are considered incompatible. When the minor version is not zero, versions with the same minor versions
+are considered compatible, i.e. the two versions 0.2.1 and 0.2.3 are considered compatible. Versions with a major version
+of 0 and different minor versions are not considered compatible, so the version 0.3.0 might have breaking changes from
+0.2.0. To that end, the `[compat]` entry:
+
+```julia
+[compat]
+Example = "0.0.1"
+```
+
+results in a versionbound on `Example` as [0.0.1, 0.02) (which is equivalent to only the version 0.0.1), while the `[compat]` entry:
+
+```julia
+[compat]
+Example = "0.2"
+```
+
+results in a versionbound on Example as [0.2.0, 0.3.0), (which is equivalent to all versions starting with 0.2).
+
 ### Caret specifiers
 
 A caret specifier allows upgrade that would be compatible according to semver.
@@ -48,9 +71,6 @@ PkgE = "^0.0.3" # [0.0.3, 0.0.4)
 PkgF = "^0.0"   # [0.0.0, 0.1.0)
 PkgG = "^0"     # [0.0.0, 1.0.0)
 ```
-
-While the semver specification says that all versions with a major version of 0 are incompatible with each other, we have made that choice that
-a version given as `0.a.b` is considered compatible with `0.a.c` if `a != 0` and  `c >= b`.
 
 ### Tilde specifiers
 
