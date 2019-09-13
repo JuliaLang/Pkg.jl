@@ -220,20 +220,15 @@ function destructure(manifest::Manifest)::Dict
     return raw
 end
 
-function write_manifest(manifest::Manifest, manifest_file::AbstractString)
-    raw = destructure(manifest)
+function write_manifest(env)
+    mkpath(dirname(env.manifest_file))
+    write_manifest(env.manifest, env.manifest_file)
+end
+write_manifest(manifest::Manifest, manifest_file::AbstractString) =
+    write_manifest(destructure(manifest), manifest_file)
+function write_manifest(manifest::Dict, manifest_file::AbstractString)
     io = IOBuffer()
     print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-    TOML.print(io, raw, sorted=true)
+    TOML.print(io, manifest, sorted=true)
     open(f -> write(f, seekstart(io)), manifest_file; truncate=true)
-end
-
-function write_manifest(manifest::Manifest, env, old_env, ctx::Context; display_diff=true)
-    isempty(manifest) && !ispath(env.manifest_file) && return
-
-    if display_diff && !(ctx.currently_running_target)
-        printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
-        Pkg.Display.print_manifest_diff(ctx, old_env, env)
-    end
-    write_manifest(manifest, env.manifest_file)
 end

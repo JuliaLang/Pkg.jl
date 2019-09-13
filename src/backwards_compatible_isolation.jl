@@ -314,7 +314,8 @@ function _add_or_develop(ctx::Context, pkgs::Vector{PackageSpec}; new_git = UUID
     # resolve & apply package versions
     _resolve_versions!(ctx, pkgs)
     new_apply = apply_versions(ctx, pkgs; mode=mode)
-    write_env(ctx) # write env before building
+    Display.print_env_diff(ctx)
+    write_env(ctx.env) # write env before building
     build_versions(ctx, union(new_apply, new_git))
 end
 # Find repos and hashes for each package UUID & version
@@ -516,7 +517,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         not_loadable = setdiff(should_be_in_manifest, should_be_in_project)
         Pkg.API.rm(localctx, [PackageSpec(uuid = uuid) for uuid in not_loadable])
 
-        write_env(localctx, display_diff = false)
+        write_env(localctx.env)
         will_resolve && build_versions(localctx, new)
 
         sep = Sys.iswindows() ? ';' : ':'

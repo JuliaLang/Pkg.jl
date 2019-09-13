@@ -168,6 +168,10 @@ _project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "co
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
+function write_project(env)
+    mkpath(dirname(env.project_file))
+    write_project(env.project, env.project_file)
+end
 write_project(project::Project, project_file::AbstractString) =
     write_project(destructure(project), project_file)
 function write_project(project::Dict, project_file::AbstractString)
@@ -175,14 +179,4 @@ function write_project(project::Dict, project_file::AbstractString)
     TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
     open(f -> write(f, seekstart(io)), project_file; truncate=true)
 end
-function write_project(project::Project, env, old_env, ctx::Context; display_diff=true)
-    project = destructure(ctx.env.project)
-    if !isempty(project) || ispath(env.project_file)
-        if display_diff && !(ctx.currently_running_target)
-            printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
-            Pkg.Display.print_project_diff(ctx, old_env, env)
-        end
-        mkpath(dirname(env.project_file))
-        write_project(project, env.project_file)
-    end
-end
+
