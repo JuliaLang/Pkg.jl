@@ -149,11 +149,6 @@ function Base.show(io::IO, pkg::PackageSpec)
     print(io, ")")
 end
 
-function Base.getindex(pkgs::Vector{PackageSpec}, uuid::UUID)
-    index = findfirst(pkg -> pkg.uuid == uuid, pkgs)
-    return index === nothing ? nothing : pkgs[index]
-end
-
 ############
 # EnvCache #
 ############

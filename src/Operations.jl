@@ -65,7 +65,7 @@ function load_direct_deps(ctx::Context, pkgs::Vector{PackageSpec};
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs = copy(pkgs)
     for (name::String, uuid::UUID) in ctx.env.project.deps
-        pkgs[uuid] === nothing || continue # do not duplicate packages
+        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         entry = manifest_info(ctx, uuid)
         push!(pkgs, entry === nothing ?
               PackageSpec(;uuid=uuid, name=name) :
@@ -86,7 +86,7 @@ function load_all_deps(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
                         preserve::PreserveLevel=PRESERVE_ALL)
     pkgs = copy(pkgs)
     for (uuid, entry) in ctx.env.manifest
-        pkgs[uuid] === nothing || continue # do not duplicate packages
+        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         push!(pkgs, PackageSpec(
             uuid      = uuid,
             name      = entry.name,
@@ -259,7 +259,8 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
     fixed = Dict{UUID,Resolve.Fixed}()
     # Collect the dependencies for the fixed packages
     for (uuid, deps) in fix_deps_map
-        fix_pkg = pkgs[uuid]
+        idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
+        fix_pkg = pkgs[idx]
         q = Dict{UUID, VersionSpec}()
         for dep in deps
             names[dep.uuid] = dep.name
@@ -321,8 +322,9 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     find_registered!(ctx, collect(keys(vers)))
     # update vector of package versions
     for (uuid, ver) in vers
-        pkg = pkgs[uuid]
-        if pkg !== nothing
+        idx = findfirst(p -> p.uuid == uuid, pkgs)
+        if idx !== nothing
+            pkg = pkgs[idx]
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
