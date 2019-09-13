@@ -142,6 +142,8 @@ temp_pkg_dir() do project_path
 
     @testset "package with wrong UUID" begin
         @test_throws PkgError Pkg.add(PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
+        # Missing uuid
+        @test_throws PkgError Pkg.add(PackageSpec(uuid = uuid4()))
     end
 
     @testset "adding and upgrading different versions" begin
@@ -748,6 +750,24 @@ end
         Pkg.activate(joinpath(tmp, "ExtraDirectDep"))
         @test_throws PkgError Pkg.instantiate()
     end end
+end
+
+@testset "instantiate of lonely manifest" begin
+    temp_pkg_dir() do project_path
+       # noproject_dir =
+       manifest_dir = joinpath(@__DIR__, "manifest", "noproject")
+        cd(manifest_dir) do
+            try
+                Pkg.activate(".")
+                Pkg.instantiate()
+                @test Base.active_project() == abspath("Project.toml")
+                @test isinstalled("Example")
+                @test isinstalled("x1")
+            finally
+                rm("Project.toml"; force=true)
+            end
+        end
+    end
 end
 
 @testset "up should prune manifest" begin
