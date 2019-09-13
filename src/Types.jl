@@ -56,7 +56,6 @@ const uuid_julia_project = uuid5(uuid_dns, "julialang.org")
 const uuid_package = uuid5(uuid_julia_project, "package")
 const uuid_registry = uuid5(uuid_julia_project, "registry")
 const uuid_julia = uuid5(uuid_package, "julia")
-
 ## user-friendly representation of package IDs ##
 function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
     name = get(uuid_to_name, p, "(unknown)")
@@ -453,29 +452,12 @@ end
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
 
-# Windows sometimes throw on `isdir`...
-function isdir_windows_workaround(path::String)
-    try isdir(path)
-    catch e
-        false
-    end
-end
-
-# try to call realpath on as much as possible
-function safe_realpath(path)
-    ispath(path) && return realpath(path)
-    a, b = splitdir(path)
-    return joinpath(safe_realpath(a), b)
-end
 function relative_project_path(ctx::Context, path::String)
     # compute path relative the project
     # realpath needed to expand symlinks before taking the relative path
-    return relpath(safe_realpath(abspath(path)),
-                   safe_realpath(dirname(ctx.env.project_file)))
+    return relpath(Pkg.safe_realpath(abspath(path)),
+                   Pkg.safe_realpath(dirname(ctx.env.project_file)))
 end
-
-casesensitive_isdir(dir::String) =
-    isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
 
 function git_checkout_latest!(ctx::Context, repo_path::AbstractString)
     LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
@@ -514,7 +496,7 @@ function canonical_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool; defau
     dev_dir = shared ? Pkg.devdir() : joinpath(dirname(ctx.env.project_file), "dev")
     dev_path = joinpath(dev_dir, pkg.name)
 
-    if casesensitive_isdir(dev_path)
+    if Pkg.casesensitive_isdir(dev_path)
         if !isfile(joinpath(dev_path, "src", pkg.name * ".jl"))
             pkgerror("Path `$(dev_path)` exists but it does not contain `src/$(pkg.name).jl")
         end
@@ -593,7 +575,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
     new_uuids = UUID[]
     for pkg in pkgs
         pkg.special_action = PKGSPEC_DEVELOPED
-        if pkg.repo.url !== nothing && isdir_windows_workaround(pkg.repo.url)
+        if pkg.repo.url !== nothing && Pkg.isdir_windows_workaround(pkg.repo.url)
             explicit_dev_path(ctx, pkg)
         elseif pkg.name !== nothing
             canonical_dev_path!(ctx, pkg, shared)
@@ -1007,7 +989,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
         # slug = Base.package_slug(UUID(registry["uuid"]))
         regpath = joinpath(depot, "registries", registry["name"]#=, slug=#)
         ispath(dirname(regpath)) || mkpath(dirname(regpath))
-        if isdir_windows_workaround(regpath)
+        if Pkg.isdir_windows_workaround(regpath)
             existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
             if registry["uuid"] == existing_registry["uuid"]
                 println(ctx.io,

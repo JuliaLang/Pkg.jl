@@ -8,7 +8,7 @@ using UUIDs
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..Types.casesensitive_isdir
+import ..casesensitive_isdir
 using ..Types, ..Display, ..Operations, ..API, ..Registry, .. Resolve
 
 const SPECS = Ref{Union{Nothing,Dict}}(nothing)
