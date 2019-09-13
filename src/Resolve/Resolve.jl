@@ -10,6 +10,47 @@ using Random
 
 export resolve, sanity_check, Graph
 
+####################
+# Requires / Fixed #
+####################
+const Requires = Dict{UUID,VersionSpec}
+
+struct Fixed
+    version::VersionNumber
+    requires::Requires
+end
+Fixed(v::VersionNumber) = Fixed(v, Requires())
+
+Base.:(==)(a::Fixed, b::Fixed) = a.version == b.version && a.requires == b.requires
+Base.hash(f::Fixed, h::UInt) = hash((f.version, f.requires), h + (0x68628b809fd417ca % UInt))
+
+Base.show(io::IO, f::Fixed) = isempty(f.requires) ?
+    print(io, "Fixed(", repr(f.version), ")") :
+    print(io, "Fixed(", repr(f.version), ",", f.requires, ")")
+
+
+struct ResolverError <: Exception
+    msg::AbstractString
+    ex::Union{Exception,Nothing}
+end
+ResolverError(msg::AbstractString) = ResolverError(msg, nothing)
+
+function Base.showerror(io::IO, pkgerr::ResolverError)
+    print(io, pkgerr.msg)
+    if pkgerr.ex !== nothing
+        pkgex = pkgerr.ex
+        if isa(pkgex, CompositeException)
+            for cex in pkgex
+                print(io, "\n=> ")
+                showerror(io, cex)
+            end
+        else
+            print(io, "\n")
+            showerror(io, pkgex)
+        end
+    end
+end
+
 include("graphtype.jl")
 include("versionweights.jl")
 include("fieldvalues.jl")

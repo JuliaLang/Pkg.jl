@@ -4,7 +4,7 @@ module APITests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, Test
-import Pkg.Types.PkgError, Pkg.Types.ResolverError
+import Pkg.Types.PkgError, Pkg.Resolve.ResolverError
 using UUIDs
 
 using ..Utils

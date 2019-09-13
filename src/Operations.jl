@@ -256,7 +256,7 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
         collect_project!(ctx, pkg, path, fix_deps_map)
     end
 
-    fixed = Dict{UUID,Fixed}()
+    fixed = Dict{UUID,Resolve.Fixed}()
     # Collect the dependencies for the fixed packages
     for (uuid, deps) in fix_deps_map
         fix_pkg = pkgs[uuid]
@@ -265,7 +265,7 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
             names[dep.uuid] = dep.name
             q[dep.uuid] = dep.version
         end
-        fixed[uuid] = Fixed(fix_pkg.version, q)
+        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q)
     end
     return fixed
 end
@@ -312,8 +312,8 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
         names[pkg.uuid] = pkg.name
     end
-    reqs = Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
-    fixed[uuid_julia] = Fixed(VERSION)
+    reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
+    fixed[uuid_julia] = Resolve.Fixed(VERSION)
     graph = deps_graph(ctx, names, reqs, fixed)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
@@ -336,7 +336,7 @@ end
 get_or_make(::Type{T}, d::Dict{K}, k::K) where {T,K} = haskey(d, k) ? convert(T, d[k]) : T()
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
-function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Requires, fixed::Dict{UUID,Fixed})
+function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed})
     uuids = collect(union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...))
     seen = UUID[]
 
@@ -998,17 +998,17 @@ function tiered_resolve(ctx::Context, pkgs::Vector{PackageSpec})
     try # do not modify existing subgraph
         return targeted_resolve(ctx, pkgs, PRESERVE_ALL)
     catch err
-        err isa ResolverError || rethrow()
+        err isa Resolve.ResolverError || rethrow()
     end
     try # do not modify existing direct deps
         return targeted_resolve(ctx, pkgs, PRESERVE_DIRECT)
     catch err
-        err isa ResolverError || rethrow()
+        err isa Resolve.ResolverError || rethrow()
     end
     try
         return targeted_resolve(ctx, pkgs, PRESERVE_SEMVER)
     catch err
-        err isa ResolverError || rethrow()
+        err isa Resolve.ResolverError || rethrow()
     end
     return targeted_resolve(ctx, pkgs, PRESERVE_NONE)
 end

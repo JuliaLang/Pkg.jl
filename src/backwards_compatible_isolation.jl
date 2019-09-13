@@ -117,8 +117,8 @@ function _resolve_versions!(
         end
     end
 
-    reqs = Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
-    fixed[uuid_julia] = Fixed(VERSION)
+    reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
+    fixed[uuid_julia] = Resolve.Fixed(VERSION)
     graph = deps_graph(ctx, uuid_to_name, reqs, fixed)
     Resolve.simplify_graph!(graph)
 
@@ -173,7 +173,7 @@ function _collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::
         collect_project!(ctx, pkg, path, fix_deps_map)
     end
 
-    fixed = Dict{UUID,Fixed}()
+    fixed = Dict{UUID,Resolve.Fixed}()
     # Collect the dependencies for the fixed packages
     for (uuid, fixed_pkgs) in fix_deps_map
         fix_pkg = uuid_to_pkg[uuid]
@@ -183,7 +183,7 @@ function _collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::
             uuid_to_name[deppkg.uuid] = deppkg.name
             q[deppkg.uuid] = deppkg.version
         end
-        fixed[uuid] = Fixed(fix_pkg.version, q)
+        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q)
     end
     return fixed
 end
