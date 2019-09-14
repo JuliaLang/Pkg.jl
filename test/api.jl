@@ -119,7 +119,7 @@ end
                 manifest = Pkg.Types.read_manifest(joinpath(env_path, "Manifest.toml"))
                 entry = manifest[uuids["Foo"]]
                 @test entry.name == "Foo"
-                @test entry.path == absolute_path
+                @test realpath(entry.path) == realpath(absolute_path)
                 @test isdir(entry.path)
             end
         end

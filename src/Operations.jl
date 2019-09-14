@@ -33,13 +33,13 @@ end
 # more accurate name is `should_be_tracking_registered_version`
 # the only way to know for sure is to key into the registries
 tracking_registered_version(pkg) =
-    !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.url === nothing
+    !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.source === nothing
 
 function source_path(pkg::PackageSpec)
     return is_stdlib(pkg.uuid)    ? Types.stdlib_path(pkg.name) :
-        pkg.path      !== nothing ? pkg.path :
-        pkg.repo.url  !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
+        pkg.path        !== nothing ? pkg.path :
+        pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
+        pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         nothing
 end
 
@@ -243,7 +243,7 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String, fix_deps
     return
 end
 
-istracking(pkg) = pkg.path !== nothing || pkg.repo.url !== nothing
+istracking(pkg) = pkg.path !== nothing || pkg.repo.source !== nothing
 isfixed(pkg) = istracking(pkg) || pkg.pinned
 
 function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
@@ -941,7 +941,7 @@ function update_package_add(pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
         return PackageSpec(; uuid=pkg.uuid, name=pkg.name, pinned=true,
                            version=entry.version, tree_hash=entry.tree_hash)
     end
-    if entry.path !== nothing || entry.repo.url !== nothing || pkg.repo.url !== nothing
+    if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
         return pkg # overwrite everything, nothing to copy over
     end
     if is_stdlib(pkg.uuid)
@@ -1079,7 +1079,10 @@ end
 up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, level::UpgradeLevel) = false
 function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, level::UpgradeLevel)
     entry.version !== nothing || return false # no version to set
-    if entry.repo.url !== nothing # repo packages have a version but are treated special
+    if entry.pinned || level == UPLEVEL_FIXED
+        pkg.version = entry.version
+        pkg.tree_hash = entry.tree_hash
+    elseif entry.repo.source !== nothing # repo packages have a version but are treated special
         pkg.repo = entry.repo
         if level == UPLEVEL_MAJOR
             new = instantiate_pkg_repo!(ctx, pkg)
@@ -1092,9 +1095,6 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
             pkg.version = entry.version
             pkg.tree_hash = entry.tree_hash
         end
-    elseif entry.pinned || level == UPLEVEL_FIXED
-        pkg.version = entry.version
-        pkg.tree_hash = entry.tree_hash
     else
         ver = entry.version
         r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
@@ -1166,7 +1166,7 @@ function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry
         pkg.tree_hash = entry.tree_hash
         pkg.path = entry.path
     else # given explicit registered version
-        if entry.repo.url !== nothing || entry.path !== nothing
+        if entry.repo.source !== nothing || entry.path !== nothing
             # A pin in this case includes an implicit `free` to switch to tracking registered versions
             # First, make sure the package is registered so we have something to free to
             if isempty(registered_paths(ctx, pkg.uuid))
@@ -1205,7 +1205,7 @@ function update_package_free!(ctx::Context, pkg::PackageSpec, entry::PackageEntr
     if entry.path !== nothing # deved
         return # -> name, uuid
     end
-    if entry.repo !== nothing # tracking a repo
+    if entry.repo.source !== nothing # tracking a repo
         # make sure the package is registered so we have something to free to
         if isempty(registered_paths(ctx, pkg.uuid))
             pkgerror("cannot free package $(something(pkg.name, "")) since it is not found in a registry")
@@ -1321,11 +1321,12 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         end
         with_temp_env(tmp) do
             try
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=target_path)); strict=true)
+                Pkg.API.develop(PackageSpec(;repo=GitRepo(;source=target_path)); strict=true)
                 @debug "Using _parent_ dep graph"
-            catch # TODO
-                Base.rm(tmp_manifest) # retry with a clean dependency graph
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;url=target_path)))
+            catch err# TODO
+                @error err
+                isfile(tmp_manifest) && Base.rm(tmp_manifest) # retry with a clean dependency graph
+                Pkg.API.develop(PackageSpec(;repo=GitRepo(;source=target_path)))
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code

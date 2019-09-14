@@ -6,7 +6,7 @@ import ..Pkg
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
-       git_init_package, add_test_package, add_this_pkg, TEST_SIG, TEST_PKG
+       git_init_package, add_this_pkg, TEST_SIG, TEST_PKG
 
 function temp_pkg_dir(fn::Function;rm=true)
     old_load_path = copy(LOAD_PATH)
@@ -160,20 +160,11 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
         end
     end
 end
-function add_test_package(name::String, uuid::UUID)
-    test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
-    spec = Pkg.Types.PackageSpec(
-        name=name,
-        uuid=uuid,
-        path=test_pkg_dir,
-    )
-    Pkg.add(spec)
-end
 
 function add_this_pkg()
     pkg_dir = dirname(@__DIR__)
     pkg_uuid = Pkg.TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
-    spec = Pkg.Types.PackageSpec(
+    spec = Pkg.PackageSpec(
         name="Pkg",
         uuid=UUID(pkg_uuid),
         path=pkg_dir,
