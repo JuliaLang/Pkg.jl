@@ -133,13 +133,13 @@ function Manifest(raw::Dict)::Manifest
         uuid = nothing
         deps = nothing
         try
-            uuid           = read_field("uuid",          nothing, info, safe_uuid)
-            entry.pinned   = read_pinned(get(info, "pinned", nothing))
-            entry.version  = read_field("version",       nothing, info, safe_version)
-            entry.path     = read_field("path",          nothing, info, safe_path)
-            entry.repo.url = read_field("repo-url",      nothing, info, identity)
-            entry.repo.rev = read_field("repo-rev",      nothing, info, identity)
-            entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
+            entry.pinned      = read_pinned(get(info, "pinned", nothing))
+            uuid              = read_field("uuid",          nothing, info, safe_uuid)
+            entry.version     = read_field("version",       nothing, info, safe_version)
+            entry.path        = read_field("path",          nothing, info, safe_path)
+            entry.repo.source = read_field("repo-url",      nothing, info, identity)
+            entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
+            entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
             deps = read_deps(get(info, "deps", nothing))
         catch
             @error "Could not parse entry for `$name`"
@@ -201,7 +201,7 @@ function destructure(manifest::Manifest)::Dict
             path = join(splitpath(path), "/")
         end
         entry!(new_entry, "path", path)
-        entry!(new_entry, "repo-url", entry.repo.url)
+        entry!(new_entry, "repo-url", entry.repo.source)
         entry!(new_entry, "repo-rev", entry.repo.rev)
         if isempty(entry.deps)
             delete!(new_entry, "deps")

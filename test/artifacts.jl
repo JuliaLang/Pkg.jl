@@ -327,6 +327,7 @@ end
     end
 end
 
+#=
 @testset "Artifact Usage" begin
     # Do a quick little install of our ArtifactTOMLSearch example
     include(joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch", "pkg.jl"))
@@ -619,5 +620,6 @@ end
         append!(DEPOT_PATH, old_depot_path)
     end
 end
+=#
 
 end # module
