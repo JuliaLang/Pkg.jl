@@ -4,33 +4,16 @@ import Pkg
 function temp_pkg_dir(fn::Function;rm=true)
     local env_dir
     local old_load_path
-    local old_depot_path
     local old_home_project
     local old_active_project
     local old_general_registry_url
     try
-        # Clone the registry only once
-        old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
-        generaldir = joinpath(@__DIR__, "registries", "General")
-        if !isdir(generaldir)
-            mkpath(generaldir)
-            Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
-                                                "https://github.com/JuliaRegistries/General.git",
-                    generaldir, credentials = creds)) do repo
-                end
-            end
-        end
-
         old_load_path = copy(LOAD_PATH)
-        old_depot_path = copy(DEPOT_PATH)
         old_home_project = Base.HOME_PROJECT[]
         old_active_project = Base.ACTIVE_PROJECT[]
         empty!(LOAD_PATH)
-        empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
@@ -38,12 +21,10 @@ function temp_pkg_dir(fn::Function;rm=true)
             depot_dir = mktempdir()
             try
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
-                push!(DEPOT_PATH, depot_dir)
                 fn(env_dir)
             finally
                 try
                     rm && Base.rm(env_dir; force=true, recursive=true)
-                    rm && Base.rm(depot_dir; force=true, recursive=true)
                 catch err
                     # Avoid raising an exception here as it will mask the original exception
                     println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
@@ -52,12 +33,9 @@ function temp_pkg_dir(fn::Function;rm=true)
         end
     finally
         empty!(LOAD_PATH)
-        empty!(DEPOT_PATH)
         append!(LOAD_PATH, old_load_path)
-        append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
     end
 end
 
