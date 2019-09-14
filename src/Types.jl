@@ -11,7 +11,8 @@ import Base.string
 using REPL.TerminalMenus
 
 using ..TOML
-import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
+using TimerOutputs
+import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..to
 import Pkg: GitTools, depots, depots1, logdir
 import ..BinaryPlatforms: Platform
 
@@ -1136,7 +1137,7 @@ function remove_registries(ctx::Context, regs::Vector{RegistrySpec})
 end
 
 # entry point for `registry up`
-function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_registries(depots1());
+@timeit to function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_registries(depots1());
                            force::Bool=false)
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]

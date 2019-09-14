@@ -1,5 +1,6 @@
 module SandboxTests
 
+import ..@testsection
 using Test
 using UUIDs
 using Pkg
@@ -8,7 +9,7 @@ include("utils.jl")
 test_test(fn, name; kwargs...) = Pkg.test(name; test_fn=fn, kwargs...)
 test_test(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
 
-@testset "Basic `test` sandboxing" begin
+@testsection "Basic `test` sandboxing" begin
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "BasicSandbox")
         Pkg.activate(joinpath(tmp, "BasicSandbox"))
@@ -48,7 +49,7 @@ test_test(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
     end end
 end
 
-@testset "Basic `build` sandbox" begin
+@testsection "Basic `build` sandbox" begin
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "BasicSandbox")
         Pkg.activate(joinpath(tmp, "BasicSandbox"))

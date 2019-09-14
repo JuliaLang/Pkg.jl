@@ -2,12 +2,13 @@
 
 module APITests
 
+import ..@testsection
 using Pkg, Test
 import Pkg.Types.PkgError, Pkg.Types.ResolverError
 
 include("utils.jl")
 
-@testset "API should accept `AbstractString` arguments" begin
+@testsection "API should accept `AbstractString` arguments" begin
     temp_pkg_dir() do project_path
         with_temp_env() do
             Pkg.add(strip("  Example  "))
@@ -16,7 +17,7 @@ include("utils.jl")
     end
 end
 
-@testset "Pkg.rm" begin
+@testsection "Pkg.rm" begin
     # rm should remove compat entries
     temp_pkg_dir() do tmp
         copy_test_package(tmp, "BasicCompat")
@@ -27,7 +28,7 @@ end
     end
 end
 
-@testset "Pkg.activate" begin
+@testsection "Pkg.activate" begin
     temp_pkg_dir() do project_path
         cd_tempdir() do tmp
             path = pwd()
@@ -63,7 +64,7 @@ end
     end
 end
 
-@testset "Pkg.status" begin
+@testsection "Pkg.status" begin
     temp_pkg_dir() do project_path
         Pkg.add(PackageSpec(name="Example", version="0.5.1"))
         Pkg.add("Random")
@@ -87,7 +88,7 @@ end
     end
 end
 
-@testset "Pkg.develop" begin
+@testsection "Pkg.develop" begin
     # develop tries to resolve from the manifest
     temp_pkg_dir() do project_path; with_temp_env() do env_path;
         Pkg.add(Pkg.PackageSpec(url="https://github.com/00vareladavid/Unregistered.jl"))
@@ -185,7 +186,7 @@ end
     end end
 end
 
-@testset "Pkg.add" begin
+@testsection "Pkg.add" begin
     exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID of Example.jl
     # Add by version should override add by repo
     temp_pkg_dir() do project_path; with_temp_env() do env_path
@@ -263,7 +264,7 @@ end
         Pkg.add(Pkg.PackageSpec(;uuid=meta_graphs, version="0.6.4"))
         @test Pkg.dependencies()[meta_graphs].version == v"0.6.4" # sanity check
         # did not break semver
-        @test Pkg.dependencies()[light_graphs].version in Pkg.Types.semver_spec("$(light_graphs_version)") 
+        @test Pkg.dependencies()[light_graphs].version in Pkg.Types.semver_spec("$(light_graphs_version)")
         # did change version
         @test Pkg.dependencies()[light_graphs].version != light_graphs_version
         # NONE
@@ -277,7 +278,7 @@ end
     end
 end
 
-@testset "Pkg.free" begin
+@testsection "Pkg.free" begin
     temp_pkg_dir() do project_path
         # Assumes that `TOML` is a registered package name
         # Can not free an un-`dev`ed un-`pin`ed package
@@ -303,7 +304,7 @@ end
     end
 end
 
-@testset "Pkg.pin" begin
+@testsection "Pkg.pin" begin
     # `pin` should detect unregistered packages
     temp_pkg_dir() do project_path; with_temp_env() do env_path
         Pkg.add(Pkg.PackageSpec(;url="https://github.com/00vareladavid/Unregistered.jl"))
@@ -321,7 +322,7 @@ end
     end end
 end
 
-@testset "Pkg.test" begin
+@testsection "Pkg.test" begin
     temp_pkg_dir() do tmp
         copy_test_package(tmp, "TestArguments")
         Pkg.activate(joinpath(tmp, "TestArguments"))

@@ -2,6 +2,7 @@
 
 module REPLTests
 
+import ..@testsection
 using Pkg
 using Pkg.Types: manifest_info, EnvCache, Context
 import Pkg.Types.PkgError
@@ -11,7 +12,7 @@ import LibGit2
 
 include("utils.jl")
 
-@testset "help" begin
+@testsection "help" begin
     pkg"?"
     pkg"?  "
     pkg"?add"
@@ -21,7 +22,7 @@ include("utils.jl")
     @test_throws PkgError pkg"helpadd"
 end
 
-@testset "generate args" begin
+@testsection "generate args" begin
     @test_throws PkgError pkg"generate"
 end
 
@@ -309,7 +310,7 @@ temp_pkg_dir() do depot; cd_tempdir() do tmp
     @test manifest[uuid].path == joinpath("..", "Foo")
 end end
 
-@testset "develop with `--shared` and `--local" begin
+@testsection "develop with `--shared` and `--local" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmp
         uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
         pkg"activate ."
@@ -330,7 +331,7 @@ end
 
 # Autocompletions
 temp_pkg_dir() do project_path; cd(project_path) do
-    @testset "tab completion" begin
+    @testsection "tab completion" begin
         pkg"registry add General" # instantiate the `General` registry to complete remote package names
         pkg"activate ."
         c, r = test_complete("add Exam")
@@ -487,7 +488,7 @@ end; end
 
 temp_pkg_dir() do project_path
     cd(project_path) do
-        @testset "add/remove using quoted local path" begin
+        @testsection "add/remove using quoted local path" begin
             # utils
             setup_package(parent_dir, pkg_name) = begin
                 mkdir(parent_dir)
@@ -564,7 +565,7 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "unit test `parse_package_identifier`" begin; cd(mktempdir()) do
+@testsection "unit test `parse_package_identifier`" begin; cd(mktempdir()) do
     name = "FooBar"
     uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
     url = "https://github.com/JuliaLang/Example.jl"
@@ -596,12 +597,12 @@ end
     @test_throws PkgError Pkg.REPLMode.parse_package_identifier(path)
 end end
 
-@testset "parse package url win" begin
+@testsection "parse package url win" begin
     @test typeof(Pkg.REPLMode.parse_package_identifier("https://github.com/abc/ABC.jl";
                                                        add_or_develop=true)) == Pkg.Types.PackageSpec
 end
 
-@testset "unit test for REPLMode.promptf" begin
+@testsection "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
         sleep(1.1)
         project = Pkg.TOML.parsefile(projfile_path)
@@ -637,7 +638,7 @@ end
     end
 end
 
-@testset "Argument order" begin
+@testsection "Argument order" begin
     with_temp_env() do
         @test_throws PkgError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
         @test_throws PkgError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
@@ -647,14 +648,14 @@ end
     end
 end
 
-@testset "`do_generate!` error paths" begin
+@testsection "`do_generate!` error paths" begin
     with_temp_env() do
         @test_throws PkgError Pkg.REPLMode.pkgstr("generate Example Example2")
         @test_throws PkgError Pkg.REPLMode.pkgstr("generate")
     end
 end
 
-@testset "`parse_option` unit tests" begin
+@testsection "`parse_option` unit tests" begin
     opt = Pkg.REPLMode.parse_option("-x")
     @test opt.val == "x"
     @test opt.argument === nothing
@@ -666,7 +667,7 @@ end
     @test opt.argument == "some"
 end
 
-@testset "`parse` integration tests" begin
+@testsection "`parse` integration tests" begin
     QString = Pkg.REPLMode.QString
     @test isempty(Pkg.REPLMode.parse(""))
 
@@ -714,7 +715,7 @@ end
     @test isempty(statements[3].arguments)
 end
 
-@testset "argument count errors" begin
+@testsection "argument count errors" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("activate one two")
         @test_throws PkgError Pkg.REPLMode.pkgstr("activate one two three")
@@ -724,7 +725,7 @@ end
     end
 end
 
-@testset "invalid options" begin
+@testsection "invalid options" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("rm --minor Example")
         @test_throws PkgError Pkg.REPLMode.pkgstr("pin --project Example")
@@ -733,7 +734,7 @@ end
     end
 end
 
-@testset "Argument order" begin
+@testsection "Argument order" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
         @test_throws PkgError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
@@ -745,7 +746,7 @@ end
     end
 end
 
-@testset "conflicting options" begin
+@testsection "conflicting options" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("up --major --minor")
         @test_throws PkgError Pkg.REPLMode.pkgstr("rm --project --manifest")
@@ -754,7 +755,7 @@ end
     end
 end
 
-@testset "gc" begin
+@testsection "gc" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("gc --project")
         @test_throws PkgError Pkg.REPLMode.pkgstr("gc --minor")
@@ -765,7 +766,7 @@ end
     end
 end
 
-@testset "precompile" begin
+@testsection "precompile" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("precompile --project")
         @test_throws PkgError Pkg.REPLMode.pkgstr("precompile Example")
@@ -776,7 +777,7 @@ end
     end
 end
 
-@testset "generate" begin
+@testsection "generate" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("generate --major Example")
         @test_throws PkgError Pkg.REPLMode.pkgstr("generate --foobar Example")
@@ -787,7 +788,7 @@ end
     end
 end
 
-@testset "test" begin
+@testsection "test" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         Pkg.add("Example")
         @test_throws PkgError Pkg.REPLMode.pkgstr("test --project Example")
@@ -798,7 +799,7 @@ end
     end
 end
 
-@testset "build" begin
+@testsection "build" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("build --project")
         @test_throws PkgError Pkg.REPLMode.pkgstr("build --minor")
@@ -807,7 +808,7 @@ end
     end
 end
 
-@testset "free" begin
+@testsection "free" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError Pkg.REPLMode.pkgstr("free --project")
         @test_throws PkgError Pkg.REPLMode.pkgstr("free --major")
@@ -816,7 +817,7 @@ end
     end
 end
 
-@testset "tests for api opts" begin
+@testsection "tests for api opts" begin
     specs = Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[
         [:name => "project", :short_name => "p", :api => :mode => Pkg.Types.PKGMODE_PROJECT],
         [:name => "manifest", :short_name => "m", :api => :mode => Pkg.Types.PKGMODE_MANIFEST],
@@ -850,7 +851,7 @@ end
     @test get(api_opts,:num,nothing) == 6
 end
 
-@testset "activate" begin
+@testsection "activate" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         mkdir("Foo")
         pkg"activate"
@@ -862,7 +863,7 @@ end
     end end end
 end
 
-@testset "status" begin
+@testsection "status" begin
     temp_pkg_dir() do project_path
         pkg"""
         add Example Random
@@ -883,7 +884,7 @@ end
     end
 end
 
-@testset "subcommands" begin
+@testsection "subcommands" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do
         Pkg.REPLMode.pkg"package add Example"
         @test isinstalled(TEST_PKG)
@@ -892,7 +893,7 @@ end
     end end end
 end
 
-@testset "`lex` unit tests" begin
+@testsection "`lex` unit tests" begin
     qwords = Pkg.REPLMode.lex("\"Don't\" forget to '\"test\"'")
     @test  qwords[1].isquoted
     @test  qwords[1].raw == "Don't"
@@ -906,7 +907,7 @@ end
     @test_throws PkgError Pkg.REPLMode.lex("Unterminated \"quot")
 end
 
-@testset "argument kinds" begin
+@testsection "argument kinds" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         @test_throws PkgError pkg"pin Example#foo"
         @test_throws PkgError pkg"test Example#foo"
@@ -914,7 +915,7 @@ end
     end end end
 end
 
-@testset "smoke test `instantiate --verbose`" begin
+@testsection "smoke test `instantiate --verbose`" begin
     temp_pkg_dir() do project_path
         Pkg.activate(project_path)
         Pkg.instantiate(verbose=true)

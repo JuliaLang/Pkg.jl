@@ -8,6 +8,7 @@ import LibGit2
 
 import REPL
 using REPL.TerminalMenus
+using TimerOutputs
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.uuid_julia, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names
@@ -274,7 +275,8 @@ end
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
 # all versioned packges should have a `tree_hash`
-function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
+@timeit to function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
+    printpkgstyle(ctx, :Resolving, "package versions...")
     # compatibility
     proj_compat = Types.project_compatibility(ctx, "julia")
     v = intersect(VERSION, proj_compat)

@@ -108,10 +108,10 @@ macro success(s...)
     end
 end
 
-@testset "TOML" begin
-@testset "Parser" begin
+@testsection "TOML" begin
+@testsection "Parser" begin
 
-    @testset "Parser internal functions" begin
+    @testsection "Parser internal functions" begin
         test = """
    #[test]\r
    [test]
@@ -130,9 +130,9 @@ end
     end
 
 
-    @testset "Lookups" begin
+    @testsection "Lookups" begin
         p = Parser("""hello."world\\t".a.0.'escaped'.value""")
-        @testset for (p, s) in zip(TOML.lookup(p), ["hello"; "world\t"; "a"; "0"; "escaped"; "value"])
+        @testsection for (p, s) in zip(TOML.lookup(p), ["hello"; "world\t"; "a"; "0"; "escaped"; "value"])
             @test p == s
         end
 
@@ -147,7 +147,7 @@ end
 
     end
 
-    @testset "New line" begin
+    @testsection "New line" begin
         @success("""
 [project.A]\r
 name = \"splay2\"\r
@@ -223,7 +223,7 @@ bbb = \"aaa\"\r
 
     end
 
-    @testset "Offset->(Line, Col) " begin
+    @testsection "Offset->(Line, Col) " begin
         p = Parser("ab\ncde\nf")
         @test linecol(p, 0) == (1,0)
         @test linecol(p, 1) == (1,1)
@@ -233,7 +233,7 @@ bbb = \"aaa\"\r
         @test linecol(p, 9) == (3,0)
     end
 
-    @testset "Strings" begin
+    @testsection "Strings" begin
         p = Parser("""
 bar = "\\U00000000"
 key1 = "One\\nTwo"
@@ -302,7 +302,7 @@ trimmed in raw strings.
 
     end
 
-    @testset "Numbers" begin
+    @testsection "Numbers" begin
         @fail("a = 00")
         @fail("a = -00")
         @fail("a = +00")
@@ -348,7 +348,7 @@ trimmed in raw strings.
 
     end
 
-    @testset "Booleans" begin
+    @testsection "Booleans" begin
 
         @testval("true", true)
         @testval("false", false)
@@ -360,7 +360,7 @@ trimmed in raw strings.
 
     end
 
-    @testset "Datetime" begin
+    @testsection "Datetime" begin
 
         @testval("2016-09-09T09:09:09Z", DateTime(2016,9,9,9,9,9))
         @testval("2016-09-09T09:09:09.0Z", DateTime(2016,9,9,9,9,9))
@@ -380,7 +380,7 @@ trimmed in raw strings.
     end
 
 
-    @testset "Keys" begin
+    @testsection "Keys" begin
 
         p = Parser("
             foo = 3
@@ -422,7 +422,7 @@ trimmed in raw strings.
     end
 
 
-    @testset "Tables" begin
+    @testsection "Tables" begin
 
         @fail("[]")
         @fail("[.]")
@@ -458,7 +458,7 @@ trimmed in raw strings.
         @test haskey(TOML.parse(Parser("[foo]")), "foo")
 
 
-        @testset "Inline Tables" begin
+        @testsection "Inline Tables" begin
 
             @success("a = {}")
             @success("a = {b=1}")
@@ -477,7 +477,7 @@ trimmed in raw strings.
         end
 
 
-        @testset "Redefinition" begin
+        @testsection "Redefinition" begin
             @fail("
                 [a]
                 foo=\"bar\"
@@ -510,7 +510,7 @@ trimmed in raw strings.
             ", "redefinition of table `a`")
         end
 
-        @testset "Nesting" begin
+        @testsection "Nesting" begin
             @fail("
                 a = [2]
                 [[a]]
@@ -541,7 +541,7 @@ trimmed in raw strings.
         end
     end
 
-    @testset "Arrays" begin
+    @testsection "Arrays" begin
 
         p = Parser("""
 [[foo]]
@@ -631,7 +631,7 @@ color = "gray"
 
 end
 
-@testset "Printer" begin
+@testsection "Printer" begin
     res1 = TOML.parse("""
 title = "TOML Example"
 [owner]

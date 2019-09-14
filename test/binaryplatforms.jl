@@ -1,14 +1,15 @@
 module BinaryPlatformTests
 
+import ..@testsection
 using Test, Pkg.BinaryPlatforms
 import Pkg.BinaryPlatforms: gcc_version, platform_name
 
 # The platform we're running on
 const platform = platform_key_abi()
 
-@testset "PlatformNames" begin
+@testsection "PlatformNames" begin
     # Ensure the platform type constructors are well behaved
-    @testset "Platform constructors" begin
+    @testsection "Platform constructors" begin
         @test_throws ArgumentError Linux(:not_a_platform)
         @test_throws ArgumentError Linux(:x86_64; libc=:crazy_libc)
         @test_throws ArgumentError Linux(:x86_64; libc=:glibc, call_abi=:crazy_abi)
@@ -47,7 +48,7 @@ const platform = platform_key_abi()
         @test UnknownPlatform(:riscv; libc=:fuschia_libc) == UnknownPlatform()
     end
 
-    @testset "Platform properties" begin
+    @testsection "Platform properties" begin
         # Test that we can get the name of various platforms
         for T in (Linux, MacOS, Windows, FreeBSD, UnknownPlatform)
             @test endswith(string(T), platform_name(T(:x86_64)))
@@ -95,7 +96,7 @@ const platform = platform_key_abi()
         @test repr(CompilerABI(;libgfortran_version=v"4", libstdcxx_version=v"3.4.24", cxxstring_abi=:cxx11)) == "CompilerABI(libgfortran_version=v\"4.0.0\", libstdcxx_version=v\"3.4.24\", cxxstring_abi=:cxx11)"
     end
 
-    @testset "Valid DL paths" begin
+    @testsection "Valid DL paths" begin
         # Test some valid dynamic library paths
         @test valid_dl_path("libfoo.so.1.2.3", Linux(:x86_64))
         @test valid_dl_path("libfoo.1.2.3.so", Linux(:x86_64))
@@ -108,7 +109,7 @@ const platform = platform_key_abi()
         @test !valid_dl_path("libfoo.so.1.2a.3", Linux(:x86_64))
     end
 
-    @testset "platform_key_abi parsing" begin
+    @testsection "platform_key_abi parsing" begin
         # Make sure the platform_key_abi() with explicit triplet works
         @test platform_key_abi("x86_64-linux-gnu") == Linux(:x86_64)
         @test platform_key_abi("x86_64-linux-musl") == Linux(:x86_64, libc=:musl)
@@ -148,7 +149,7 @@ const platform = platform_key_abi()
         test_bad_platform("x86_64-w32-mingw64")
     end
 
-    @testset "platforms_match()" begin
+    @testsection "platforms_match()" begin
         # Explicitly test our `gcc_version()` helper function
         GCC_versions = [
             v"4.8.5",
@@ -221,7 +222,7 @@ const platform = platform_key_abi()
         end
     end
 
-    @testset "DL name/version parsing" begin
+    @testsection "DL name/version parsing" begin
         # Make sure our version parsing code is working
         @test parse_dl_name_version("libgfortran.dll", Windows(:x86_64)) == ("libgfortran", nothing)
         @test parse_dl_name_version("libgfortran-3.dll", Windows(:x86_64)) == ("libgfortran", v"3")
@@ -240,7 +241,7 @@ const platform = platform_key_abi()
         @test_throws ArgumentError parse_dl_name_version("libgfortran", Linux(:x86_64))
     end
 
-    @testset "Sys.is* overloading" begin
+    @testsection "Sys.is* overloading" begin
         # Test that we can indeed ask if something is linux or windows, etc...
         @test Sys.islinux(Linux(:aarch64))
         @test !Sys.islinux(Windows(:x86_64))
@@ -253,7 +254,7 @@ const platform = platform_key_abi()
         @test !Sys.isbsd(Linux(:powerpc64le; libc=:musl))
     end
 
-    @testset "Compiler ABI detection" begin
+    @testsection "Compiler ABI detection" begin
         @test detect_libgfortran_version("libgfortran.so.5", Linux(:x86_64)) == v"5"
         @test detect_libgfortran_version("libgfortran.4.dylib", MacOS()) == v"4"
         @test detect_libgfortran_version("libgfortran-3.dll", Windows(:x86_64)) == v"3"
@@ -271,7 +272,7 @@ const platform = platform_key_abi()
     end
 end
 
-@testset "select_platform" begin
+@testsection "select_platform" begin
     platforms = Dict(
         # Typical binning test
         Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"3")) => "linux4",

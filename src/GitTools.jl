@@ -6,6 +6,8 @@ using ..Pkg
 using SHA
 import Base: SHA1
 import LibGit2
+using TimerOutputs
+import ..to
 using Printf
 
 Base.@kwdef mutable struct MiniProgressBar
@@ -106,7 +108,7 @@ end
 ensure_clone(ctx, target_path, url; kwargs...) =
     ispath(target_path) ? LibGit2.GitRepo(target_path) : GitTools.clone(ctx, url, target_path; kwargs...)
 
-function clone(ctx, url, source_path; header=nothing, kwargs...)
+@timeit to function clone(ctx, url, source_path; header=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     Pkg.Types.printpkgstyle(ctx, :Cloning, header == nothing ? "git-repo `$url`" : header)
@@ -135,7 +137,7 @@ function clone(ctx, url, source_path; header=nothing, kwargs...)
     end
 end
 
-function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
+@timeit function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)

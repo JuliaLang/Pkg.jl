@@ -1,5 +1,6 @@
 module ArtifactTests
 
+import ..@testsection
 using Test, Random, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed
 using Pkg.TOML, Dates
@@ -23,7 +24,7 @@ function create_artifact_chmod(f::Function)
     end
 end
 
-@testset "Serialization Tools" begin
+@testsection "Serialization Tools" begin
     # First, some basic tests
     meta = Dict()
     pack_platform!(meta, Linux(:i686))
@@ -86,7 +87,7 @@ end
     end
 end
 
-@testset "Artifact Creation" begin
+@testsection "Artifact Creation" begin
     # We're going to ensure that our artifact creation does in fact give git-tree-sha1's.
     creators = [
         # First we will test creating a single file
@@ -172,7 +173,7 @@ end
     @test_throws ArgumentError create_artifact(x -> nothing)
 end
 
-@testset "with_artifacts_directory()" begin
+@testsection "with_artifacts_directory()" begin
     mktempdir() do art_dir
         with_artifacts_directory(art_dir) do
             hash = create_artifact() do path
@@ -183,7 +184,7 @@ end
     end
 end
 
-@testset "Artifacts.toml Utilities" begin
+@testsection "Artifacts.toml Utilities" begin
     # First, let's test our ability to find Artifacts.toml files;
     ATS = joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch")
     test_modules = [
@@ -311,7 +312,7 @@ end
 end
 
 
-@testset "Artifact archival" begin
+@testsection "Artifact archival" begin
     mktempdir() do art_dir
         with_artifacts_directory(art_dir) do
             hash = create_artifact(p -> touch(joinpath(p, "foo")))
@@ -326,7 +327,7 @@ end
     end
 end
 
-@testset "Artifact Usage" begin
+@testsection "Artifact Usage" begin
     # Do a quick little install of our ArtifactTOMLSearch example
     include(joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch", "pkg.jl"))
     @test ATSMod.do_test()
@@ -377,7 +378,7 @@ end
     end
 end
 
-@testset "Artifact GC collect delay" begin
+@testsection "Artifact GC collect delay" begin
     temp_pkg_dir() do tmpdir
         live_hash = create_artifact_chmod() do path
             open(joinpath(path, "README.md"), "w") do io
@@ -455,7 +456,7 @@ end
     end
 end
 
-@testset "Override.toml" begin
+@testsection "Override.toml" begin
     # We are going to test artifact overrides by creating an overlapping set of depots,
     # each with some artifacts installed within, then checking via things like
     # `artifact_path()` to ensure that our overrides are actually working.

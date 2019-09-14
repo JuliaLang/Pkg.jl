@@ -2,6 +2,7 @@
 
 module OperationsTest
 
+import ..@testsection
 import Random: randstring
 import LibGit2
 using Test
@@ -20,7 +21,7 @@ const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-2369062
 const PackageSpec = Pkg.Types.PackageSpec
 
 import Pkg.Types: semver_spec, VersionSpec
-@testset "semver notation" begin
+@testsection "semver notation" begin
     @test semver_spec("^1.2.3") == VersionSpec("1.2.3-1")
     @test semver_spec("^1.2")   == VersionSpec("1.2.0-1")
     @test semver_spec("^1")     == VersionSpec("1.0.0-1")
@@ -96,7 +97,7 @@ import Pkg.Types: semver_spec, VersionSpec
 end
 
 # TODO: Should rewrite these tests not to rely on internals like field names
-@testset "union, isjoinable" begin
+@testsection "union, isjoinable" begin
     @test sprint(print, VersionRange("0-0.3.2")) == "0-0.3.2"
     # test missing paths on union! and isjoinable
     # there's no == for VersionBound or VersionRange
@@ -121,7 +122,7 @@ end
 end
 
 temp_pkg_dir() do project_path
-    @testset "simple add, remove and gc" begin
+    @testsection "simple add, remove and gc" begin
         Pkg.activate(project_path)
         Pkg.add(TEST_PKG.name)
         @test isinstalled(TEST_PKG)
@@ -140,13 +141,13 @@ temp_pkg_dir() do project_path
         @test isempty(readdir(pkgdir))
     end
 
-    @testset "package with wrong UUID" begin
+    @testsection "package with wrong UUID" begin
         @test_throws PkgError Pkg.add(PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
         # Missing uuid
         @test_throws PkgError Pkg.add(PackageSpec(uuid = uuid4()))
     end
 
-    @testset "adding and upgrading different versions" begin
+    @testsection "adding and upgrading different versions" begin
         # VersionNumber
         Pkg.add(PackageSpec(TEST_PKG.name, v"0.3"))
         @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3"
@@ -167,7 +168,7 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
     end
 
-    @testset "testing" begin
+    @testsection "testing" begin
         Pkg.add(TEST_PKG.name)
         Pkg.test(TEST_PKG.name; coverage=true)
         pkgdir = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
@@ -176,7 +177,7 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
     end
 
-    @testset "pinning / freeing" begin
+    @testsection "pinning / freeing" begin
         Pkg.add(TEST_PKG.name)
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
         Pkg.pin(PackageSpec(TEST_PKG.name, v"0.2"))
@@ -189,7 +190,7 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
     end
 
-    @testset "develop / freeing" begin
+    @testsection "develop / freeing" begin
         Pkg.add(TEST_PKG.name)
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
         Pkg.rm(TEST_PKG.name)
@@ -229,11 +230,11 @@ temp_pkg_dir() do project_path
         end
     end
 
-    @testset "invalid pkg name" begin
+    @testsection "invalid pkg name" begin
         @test_throws PkgError Pkg.add(",sa..,--")
     end
 
-    @testset "stdlibs as direct dependency" begin
+    @testsection "stdlibs as direct dependency" begin
         uuid_pkg = (name = "CRC32c", uuid = UUID("8bf52ea8-c179-5cab-976a-9e18b702a9bc"))
         Pkg.add("CRC32c")
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
@@ -243,7 +244,7 @@ temp_pkg_dir() do project_path
         Pkg.rm("CRC32c")
     end
 
-    @testset "package name in resolver errors" begin
+    @testsection "package name in resolver errors" begin
         try
             Pkg.add(PackageSpec(;name = TEST_PKG.name, version = v"55"))
         catch e
@@ -251,7 +252,7 @@ temp_pkg_dir() do project_path
         end
     end
 
-    @testset "protocols" begin
+    @testsection "protocols" begin
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
                 try
@@ -297,7 +298,7 @@ temp_pkg_dir() do project_path
         end
     end
 
-    @testset "check logging" begin
+    @testsection "check logging" begin
         usage = Pkg.TOML.parse(String(read(joinpath(Pkg.logdir(), "manifest_usage.toml"))))
         manifest = Types.safe_realpath(joinpath(project_path, "Manifest.toml"))
         @show keys(usage)
@@ -306,7 +307,7 @@ temp_pkg_dir() do project_path
         @test any(x -> startswith(x, manifest), keys(usage))
     end
 
-    @testset "adding nonexisting packages" begin
+    @testsection "adding nonexisting packages" begin
         nonexisting_pkg = randstring(14)
         @test_throws PkgError Pkg.add(nonexisting_pkg)
         @test_throws PkgError Pkg.update(nonexisting_pkg)
@@ -314,13 +315,13 @@ temp_pkg_dir() do project_path
 
     Pkg.rm(TEST_PKG.name)
 
-    @testset "add julia" begin
+    @testsection "add julia" begin
         @test_throws PkgError Pkg.add("julia")
     end
 end
 
 temp_pkg_dir() do project_path
-    @testset "libgit2 downloads" begin
+    @testsection "libgit2 downloads" begin
         Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         @eval import $(Symbol(TEST_PKG.name))
@@ -328,7 +329,7 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
     end
 
-    @testset "up in Project without manifest" begin
+    @testsection "up in Project without manifest" begin
         mktempdir() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
             cd(joinpath(dir, "UnregisteredWithProject")) do
@@ -342,12 +343,12 @@ temp_pkg_dir() do project_path
 end
 
 temp_pkg_dir() do project_path
-    @testset "libgit2 downloads" begin
+    @testsection "libgit2 downloads" begin
         Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         Pkg.rm(TEST_PKG.name)
     end
-    @testset "tarball downloads" begin
+    @testsection "tarball downloads" begin
         Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
         @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
         Pkg.rm("JSON")
@@ -355,7 +356,7 @@ temp_pkg_dir() do project_path
 end
 
 temp_pkg_dir() do project_path
-    @testset "test should instantiate" begin
+    @testsection "test should instantiate" begin
         mktempdir() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
             cd(joinpath(dir, "UnregisteredWithProject")) do
@@ -369,7 +370,7 @@ temp_pkg_dir() do project_path
 end
 
 temp_pkg_dir() do project_path
-    @testset "valid project file names" begin
+    @testsection "valid project file names" begin
         extract_uuid(toml_path) = begin
             uuid = ""
             for line in eachline(toml_path)
@@ -407,11 +408,11 @@ temp_pkg_dir() do project_path
             Pkg.rm("FooBar")
             @test !isinstalled((name="FooBar", uuid=UUID(uuid)))
         end # cd project_path
-    end # @testset
+    end # @testsection
 end
 
 temp_pkg_dir() do project_path
-    @testset "invalid repo url" begin
+    @testsection "invalid repo url" begin
         cd(project_path) do
             @test_throws PkgError Pkg.add("https://github.com")
             Pkg.generate("FooBar")
@@ -424,7 +425,7 @@ temp_pkg_dir() do project_path
     # pkg assumes `Example.jl` is still a git repo, it will try to fetch on `update`
     # `fetch` should warn that it is no longer a git repo
     with_temp_env() do
-        @testset "inconsistent repo state" begin
+        @testsection "inconsistent repo state" begin
             package_path = joinpath(project_path, "Example")
             LibGit2.with(LibGit2.clone("https://github.com/JuliaLang/Example.jl", package_path)) do repo
                 Pkg.add(Pkg.PackageSpec(path=package_path))
@@ -439,7 +440,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
     tmp = mktempdir()
     depo1 = mktempdir()
     depo2 = mktempdir()
-    cd(tmp) do; @testset "instantiating updated repo" begin
+    cd(tmp) do; @testsection "instantiating updated repo" begin
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo1)
         LibGit2.close(LibGit2.clone("https://github.com/JuliaLang/Example.jl", "Example.jl"))
@@ -494,14 +495,14 @@ temp_pkg_dir() do project_path
         """
         write("Project.toml", project)
         Pkg.activate(".")
-        @testset "resolve ignores extras" begin
+        @testsection "resolve ignores extras" begin
             Pkg.resolve()
             @test !(occursin("[[Test]]", read("Manifest.toml", String)))
         end
     end
 end
 
-@testset "dependency of test dependency (#567)" begin
+@testsection "dependency of test dependency (#567)" begin
     temp_pkg_dir() do project_path; cd_tempdir(;rm=false) do tmpdir; with_temp_env(;rm=false) do
         for x in ["x1", "x2", "x3"]
             cp(joinpath(@__DIR__, "test_packages/$x"), joinpath(tmpdir, "$x"))
@@ -511,12 +512,12 @@ end
     end end end
 end
 
-@testset "printing of stdlib paths, issue #605" begin
+@testsection "printing of stdlib paths, issue #605" begin
     path = Pkg.Types.stdlib_path("Test")
     @test Pkg.Types.pathrepr(path) == "`@stdlib/Test`"
 end
 
-@testset "Set download concurrency" begin
+@testsection "Set download concurrency" begin
     withenv("JULIA_PKG_CONCURRENCY" => 1) do
         ctx = Pkg.Types.Context()
         @test ctx.num_concurrent_downloads == 1
@@ -524,7 +525,7 @@ end
 end
 
 temp_pkg_dir() do project_path
-    @testset "Pkg.add should not mutate" begin
+    @testsection "Pkg.add should not mutate" begin
         package_names = ["JSON"]
         packages = PackageSpec.(package_names)
         Pkg.add(packages)
@@ -532,7 +533,7 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "manifest read/write unit tests" begin
+@testsection "manifest read/write unit tests" begin
     manifestdir = joinpath(@__DIR__, "manifest", "good")
     temp = joinpath(mktempdir(), "x.toml")
     for testfile in joinpath.(manifestdir, readdir(manifestdir))
@@ -554,7 +555,7 @@ end
         joinpath(@__DIR__, "manifest", "bad", "parse_error.toml"))
 end
 
-@testset "project read/write unit tests" begin
+@testsection "project read/write unit tests" begin
     projectdir = joinpath(@__DIR__, "project", "good")
     temp = joinpath(mktempdir(), "x.toml")
     for testfile in joinpath.(projectdir, readdir(projectdir))
@@ -570,7 +571,7 @@ end
         joinpath(@__DIR__, "project", "bad", "parse_error.toml"))
 end
 
-@testset "stdlib_resolve!" begin
+@testsection "stdlib_resolve!" begin
     a = Pkg.Types.PackageSpec(name="Markdown")
     b = Pkg.Types.PackageSpec(uuid=UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
     Pkg.Types.stdlib_resolve!(Types.Context(), [a, b])
@@ -583,7 +584,7 @@ end
     @test x.uuid == UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
 end
 
-@testset "issue #913" begin
+@testsection "issue #913" begin
     temp_pkg_dir() do project_path
         Pkg.activate(project_path)
         Pkg.add(Pkg.PackageSpec(name="Example", rev = "master"))
@@ -594,7 +595,7 @@ end
     end
 end
 
-@testset "issue #1077" begin
+@testsection "issue #1077" begin
     temp_pkg_dir() do project_path
         Pkg.add("UUIDs")
         # the following should not error
@@ -605,7 +606,7 @@ end
 end
 
 #issue #975
-@testset "Pkg.gc" begin
+@testsection "Pkg.gc" begin
     temp_pkg_dir() do project_path
         with_temp_env() do
             Pkg.add("Example")
@@ -619,7 +620,7 @@ end
 end
 
 #issue #876
-@testset "targets should survive add/rm" begin
+@testsection "targets should survive add/rm" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
         cp(joinpath(@__DIR__, "project", "good", "pkg.toml"), "Project.toml")
         targets = deepcopy(Pkg.Types.read_project("Project.toml").targets)
@@ -630,21 +631,21 @@ end
     end end
 end
 
-@testset "reading corrupted project files" begin
+@testsection "reading corrupted project files" begin
     dir = joinpath(@__DIR__, "project", "bad")
     for bad_project in joinpath.(dir, readdir(dir))
         @test_throws PkgError Pkg.Types.read_project(bad_project)
     end
 end
 
-@testset "reading corrupted manifest files" begin
+@testsection "reading corrupted manifest files" begin
     dir = joinpath(@__DIR__, "manifest", "bad")
     for bad_manifest in joinpath.(dir, readdir(dir))
         @test_throws PkgError Pkg.Types.read_manifest(bad_manifest)
     end
 end
 
-@testset "Unregistered UUID in manifest" begin
+@testsection "Unregistered UUID in manifest" begin
     temp_pkg_dir() do project_path; with_temp_env() do; cd_tempdir() do tmpdir
         cp(joinpath(@__DIR__, "test_packages", "UnregisteredUUID"), "UnregisteredUUID")
         Pkg.activate("UnregisteredUUID")
@@ -652,7 +653,7 @@ end
     end end end
 end
 
-@testset "canonicalized relative paths in manifest" begin
+@testsection "canonicalized relative paths in manifest" begin
     mktempdir() do tmp; cd(tmp) do
         write("Manifest.toml",
             """
@@ -669,7 +670,7 @@ end
     end end
 end
 
-@testset "building project should fix version of deps" begin
+@testsection "building project should fix version of deps" begin
     temp_pkg_dir() do project_path
         dep_pkg = joinpath(@__DIR__, "test_packages", "BuildProjectFixedDeps")
         Pkg.activate(dep_pkg)
@@ -678,13 +679,13 @@ end
     end
 end
 
-@testset "PkgError printing" begin
+@testsection "PkgError printing" begin
     err = PkgError("foobar")
     @test occursin("PkgError(\"foobar\")", sprint(show, err))
     @test sprint(showerror, err) == "foobar"
 end
 
-@testset "issue #1066: package with colliding name/uuid exists in project" begin
+@testsection "issue #1066: package with colliding name/uuid exists in project" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
         Pkg.activate(".")
         Pkg.generate("A")
@@ -707,7 +708,7 @@ end
     end end
 end
 
-@testset "issue #1180: broken toml-files in HEAD" begin
+@testsection "issue #1180: broken toml-files in HEAD" begin
     temp_pkg_dir() do dir; cd(dir) do
         write("Project.toml", "[deps]\nExample = \n")
         git_init_and_commit(dir)
@@ -718,7 +719,7 @@ end
 end
 
 import Markdown
-@testset "REPL command doc generation" begin
+@testsection "REPL command doc generation" begin
     # test that the way doc building extracts
     # docstrings for Pkg REPL commands work
     d = Dict(Pkg.REPLMode.canonical_names())
@@ -726,7 +727,7 @@ import Markdown
     @test d["registry add"].help isa Markdown.MD
 end
 
-@testset "instantiate should respect tree hash" begin
+@testsection "instantiate should respect tree hash" begin
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "NotUpdated")
         Pkg.activate(joinpath(tmp, "NotUpdated"))
@@ -736,7 +737,7 @@ end
     end end
 end
 
-@testset "Issue 1124 code path" begin
+@testsection "Issue 1124 code path" begin
     temp_pkg_dir() do project_path; with_temp_env() do
         pkg"add Example#master"
         pkg"add Unicode"
@@ -744,7 +745,7 @@ end
     end end
 end
 
-@testset "instantiate checks for consistent dependency graph" begin
+@testsection "instantiate checks for consistent dependency graph" begin
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "ExtraDirectDep")
         Pkg.activate(joinpath(tmp, "ExtraDirectDep"))
@@ -770,7 +771,7 @@ end
     end
 end
 
-@testset "up should prune manifest" begin
+@testsection "up should prune manifest" begin
     example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
     temp_pkg_dir() do project_path; mktempdir() do tmp

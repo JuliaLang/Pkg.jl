@@ -1,5 +1,6 @@
 module RegistryTests
 
+import ..@testsection
 using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
@@ -68,7 +69,7 @@ function with_depot2(f)
 end
 
 
-@testset "registries" begin
+@testsection "registries" begin
     temp_pkg_dir() do depot; mktempdir() do depot2
         insert!(Base.DEPOT_PATH, 2, depot2)
         # set up registries
@@ -256,7 +257,7 @@ end
         @test length(Pkg.Types.collect_registries()) == 1
     end end
 
-    @testset "yanking" begin
+    @testsection "yanking" begin
         uuid = Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
         # Tests that Example@0.5.1 does not get installed
         temp_pkg_dir() do env

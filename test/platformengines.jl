@@ -1,12 +1,13 @@
 module PlatformEngineTests
 
+import ..@testsection
 using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
 
 # Explicitly probe platform engines in verbose mode to get coverage and make
 # CI debugging easier
 probe_platform_engines!(;verbose=true)
 
-@testset "Tarball listing parsing" begin
+@testsection "Tarball listing parsing" begin
     fake_7z_output = """
 	7-Zip [64] 9.20  Copyright (c) 1999-2010 Igor Pavlov  2010-11-18
 	p7zip Version 9.20 (locale=en_US.UTF-8,Utf16=on,HugeFiles=on,4 CPUs)
@@ -31,7 +32,7 @@ probe_platform_engines!(;verbose=true)
 	@test parse_tar_list(fake_tar_output) == normpath.(["bin/socrates"])
 end
 
-@testset "Packaging" begin
+@testsection "Packaging" begin
     # Gotta set this guy up beforehand
     tarball_path = nothing
     tarball_hash = nothing
@@ -73,7 +74,7 @@ end
 end
 
 
-@testset "Verification" begin
+@testsection "Verification" begin
     mktempdir() do prefix
         foo_path = joinpath(prefix, "foo")
         open(foo_path, "w") do file
@@ -156,7 +157,7 @@ const socrates_urls = [
 ]
 const socrates_hash = "adcbcf15674eafe8905093183d9ab997cbfba9056fc7dde8bfa5a22dfcfb4967"
 
-@testset "Downloading" begin
+@testsection "Downloading" begin
     for (url, hash) in socrates_urls
         mktempdir() do prefix
             tarball_path = joinpath(prefix, "download_target.tar$(splitext(url)[2])")
@@ -186,7 +187,7 @@ end
 
 const collapse_url = "https://github.com/staticfloat/small_bin/raw/master/collapse_the_symlink/collapse_the_symlink.tar.gz"
 const collapse_hash = "956c1201405f64d3465cc28cb0dec9d63c11a08cad28c381e13bb22e1fc469d3"
-@testset "Copyderef unpacking" begin
+@testsection "Copyderef unpacking" begin
     withenv("BINARYPROVIDER_COPYDEREF" => "true") do
         mktempdir() do prefix
             target_dir = joinpath(prefix, "target")
@@ -207,7 +208,7 @@ const collapse_hash = "956c1201405f64d3465cc28cb0dec9d63c11a08cad28c381e13bb22e1
     end
 end
 
-@testset "Download GitHub API #88" begin
+@testsection "Download GitHub API #88" begin
     mktempdir() do tmp
         PlatformEngines.download("https://api.github.com/repos/JuliaPackaging/BinaryProvider.jl/tarball/c2a4fc38f29eb81d66e3322e585d0199722e5d71", joinpath(tmp, "BinaryProvider"); verbose=true)
         @test isfile(joinpath(tmp, "BinaryProvider"))

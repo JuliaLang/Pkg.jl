@@ -2,6 +2,7 @@
 
 module ResolveTest
 
+import ..@testsection
 using Test
 using Pkg.Types
 using Pkg.Types: VersionBound
@@ -197,7 +198,7 @@ function resolve_tst(deps_data, reqs_data, want_data = nothing; clean_graph = fa
     return want == wantuuids(want_data)
 end
 
-@testset "schemes" begin
+@testsection "schemes" begin
     VERBOSE && @info("SCHEME 1")
     ## DEPENDENCY SCHEME 1: TWO PACKAGES, DAG
     deps_data = Any[
@@ -558,7 +559,7 @@ end
     @test resolve_tst(deps_data, reqs_data, want_data)
 end
 
-@testset "realistic" begin
+@testsection "realistic" begin
     VERBOSE && @info("SCHEME REALISTIC")
     ## DEPENDENCY SCHEME 11: A REALISTIC EXAMPLE
     ## ref Julia issue #21485
@@ -569,7 +570,7 @@ end
     @test resolve_tst(ResolveData.deps_data, ResolveData.reqs_data, ResolveData.want_data)
 end
 
-@testset "nasty" begin
+@testsection "nasty" begin
     VERBOSE && @info("SCHEME NASTY")
     ## DEPENDENCY SCHEME 12: A NASTY CASE
 
