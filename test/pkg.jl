@@ -320,14 +320,6 @@ temp_pkg_dir() do project_path
 end
 
 temp_pkg_dir() do project_path
-    @testset "libgit2 downloads" begin
-        Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
-        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        @eval import $(Symbol(TEST_PKG.name))
-        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
-        Pkg.rm(TEST_PKG.name)
-    end
-
     @testset "up in Project without manifest" begin
         mktempdir() do dir
             cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
@@ -343,11 +335,15 @@ end
 
 temp_pkg_dir() do project_path
     @testset "libgit2 downloads" begin
+        # TODO: Clear TEST_PKG from DEPOT
         Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+        @test ispath(find_package(TEST_PKG.name))
+        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
         Pkg.rm(TEST_PKG.name)
     end
     @testset "tarball downloads" begin
+        # TODO: Clear out TEST_PKG from DEPOT
         Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
         @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
         Pkg.rm("JSON")
