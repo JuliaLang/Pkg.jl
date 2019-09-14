@@ -71,7 +71,7 @@ function _resolve_versions!(
     uuids = UUID[pkg.uuid for pkg in pkgs]
     uuid_to_name = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
 
-    for (name::String, uuid::UUID) in get_deps(ctx, target)
+    for (name::String, uuid::UUID) in get_deps(ctx.env, target)
         uuid_to_name[uuid] = name
 
         uuid_idx = findfirst(isequal(uuid), uuids)
@@ -446,7 +446,7 @@ function with_dependencies_loadable_at_toplevel(f, mainctx::Context, pkg::Packag
         localctx.env.project.deps[pkg.name] = pkg.uuid
         localctx.env.manifest[pkg.uuid] = Types.PackageEntry(
             name=pkg.name,
-            deps=get_deps(mainctx, target),
+            deps=get_deps(mainctx.env, target),
             path=dirname(localctx.env.project_file),
             version=pkg.version,
         )

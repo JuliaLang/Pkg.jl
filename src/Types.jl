@@ -390,8 +390,6 @@ function get_deps(project::Project, target::Union{Nothing,String}=nothing)
 end
 get_deps(env::EnvCache, target::Union{Nothing,String}=nothing) =
     get_deps(env.project, target)
-get_deps(ctx::Context, target::Union{Nothing,String}=nothing) =
-    get_deps(ctx.env, target)
 
 function project_compatibility(ctx::Context, name::String)
     compat = get(ctx.env.project.compat, name, nothing)
