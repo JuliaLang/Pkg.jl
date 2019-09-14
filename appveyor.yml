@@ -13,12 +13,6 @@ platform:
 #   allow_failures:
 #   - julia_version: latest
 
-branches:
-  only:
-    - staging
-    - trying
-    - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
-
 notifications:
   - provider: Email
     on_build_success: false
@@ -27,6 +21,7 @@ notifications:
 
 install:
   - ps: iex ((new-object net.webclient).DownloadString("https://raw.githubusercontent.com/JuliaCI/Appveyor.jl/version-1/bin/install.ps1"))
+  - ps: C:\projects\pkg-jl\check_defender.ps1
 
 build_script:
   - C:\julia\bin\julia -e "using InteractiveUtils; versioninfo();
