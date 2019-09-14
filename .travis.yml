@@ -15,13 +15,17 @@ notifications:
 
 before_script:
   - export PATH=$HOME/.local/bin:$PATH
-
-branches:
-  only:
-    - master
-    - staging
-    - trying
-    - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
+  - >-
+    if [[ "$TRAVIS_OS_NAME" == "windows" ]];
+    then
+        # https://travis-ci.community/t/yarn-network-troubles/333/7
+        powershell Start-Process -PassThru -Wait PowerShell -ArgumentList \
+                "'-Command Set-MpPreference -DisableArchiveScanning \$true'";
+        powershell Start-Process -PassThru -Wait PowerShell -ArgumentList \
+                "'-Command Set-MpPreference -DisableBehaviorMonitoring \$true'";
+        powershell Start-Process -PassThru -Wait PowerShell -ArgumentList \
+                "'-Command Set-MpPreference -DisableRealtimeMonitoring \$true'";
+    fi
 
 stages:
   - name: test
