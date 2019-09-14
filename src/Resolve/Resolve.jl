@@ -3,7 +3,6 @@
 module Resolve
 
 using ..Types
-import ..Types: uuid_julia
 
 using Printf
 using Random
@@ -50,6 +49,8 @@ function Base.showerror(io::IO, pkgerr::ResolverError)
         end
     end
 end
+
+const uuid_julia = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 
 include("graphtype.jl")
 include("versionweights.jl")

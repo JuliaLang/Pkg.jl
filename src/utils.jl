@@ -29,3 +29,8 @@ end
 
 casesensitive_isdir(dir::String) =
     isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
+
+## ordering of UUIDs ##
+if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
+    Base.isless(a::UUID, b::UUID) = a.value < b.value
+end

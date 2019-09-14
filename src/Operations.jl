@@ -9,7 +9,7 @@ import LibGit2
 import REPL
 using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..Display
-import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.uuid_julia, ..Types.PackageEntry
+import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
 using ..BinaryPlatforms
 import ..Pkg
@@ -286,7 +286,6 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
 
     # anything not mentioned is fixed
     names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
-    names[uuid_julia] = "julia"
 
     # construct data structures for resolver and call it
     # this also sets pkg.version for fixed packages
@@ -313,8 +312,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
         names[pkg.uuid] = pkg.name
     end
-    reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
-    fixed[uuid_julia] = Resolve.Fixed(VERSION)
+    reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs)
     graph = deps_graph(ctx, names, reqs, fixed)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
@@ -335,7 +333,6 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     load_tree_hashes!(ctx, pkgs)
 end
 
-get_or_make(::Type{T}, d::Dict{K}, k::K) where {T,K} = haskey(d, k) ? convert(T, d[k]) : T()
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed})
@@ -361,11 +358,6 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
             all_versions_u = get_or_make!(all_versions, uuid)
             all_deps_u     = get_or_make!(all_deps,     uuid)
             all_compat_u   = get_or_make!(all_compat,   uuid)
-            # make sure all versions of all packages know about julia uuid
-            if uuid ≠ uuid_julia
-                deps_u_allvers = get_or_make!(all_deps_u, VersionRange())
-                deps_u_allvers["julia"] = uuid_julia
-            end
 
             # Collect deps + compat for stdlib
             if uuid in keys(ctx.stdlibs)
@@ -420,7 +412,6 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
     end
 
     for uuid in uuids
-        uuid == uuid_julia && continue
         if !haskey(uuid_to_name, uuid)
             name = registered_name(ctx, uuid)
             name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")

@@ -70,7 +70,6 @@ function _resolve_versions!(
     # anything not mentioned is fixed
     uuids = UUID[pkg.uuid for pkg in pkgs]
     uuid_to_name = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
-    uuid_to_name[uuid_julia] = "julia"
 
     for (name::String, uuid::UUID) in get_deps(ctx, target)
         uuid_to_name[uuid] = name
@@ -117,8 +116,7 @@ function _resolve_versions!(
         end
     end
 
-    reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
-    fixed[uuid_julia] = Resolve.Fixed(VERSION)
+    reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs)
     graph = deps_graph(ctx, uuid_to_name, reqs, fixed)
     Resolve.simplify_graph!(graph)
 

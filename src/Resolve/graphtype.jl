@@ -236,10 +236,21 @@ mutable struct Graph
             deps::Dict{UUID,Dict{VersionRange,Dict{String,UUID}}},
             compat::Dict{UUID,Dict{VersionRange,Dict{String,VersionSpec}}},
             uuid_to_name::Dict{UUID,String},
-            reqs::Requires = Requires(),
-            fixed::Dict{UUID,Fixed} = Dict{UUID,Fixed}(uuid_julia=>Fixed(VERSION)),
+            reqs::Requires,
+            fixed::Dict{UUID,Fixed},
             verbose::Bool = false
         )
+        # make sure all versions of all packages know about julia uuid
+        for (uuid, _) in deps
+            deps[uuid][VersionRange()] = Dict("julia" => uuid_julia)
+        end
+
+        # Tell the resolver about julia itself
+        fixed[uuid_julia] = Fixed(VERSION)
+        uuid_to_name[uuid_julia] = "julia"
+        versions[uuid_julia] = Set([VERSION])
+        deps[uuid_julia] = Dict()
+        compat[uuid_julia] = Dict()
 
         extra_uuids = union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...)
         extra_uuids ⊆ keys(versions) || error("unknown UUID found in reqs/fixed") # TODO?
@@ -258,7 +269,7 @@ mutable struct Graph
             vn = pvers[p0][v0]
             for (vr,vrmap) in deps[pkgs[p0]]
                 vn ∈ vr || continue
-                for (name,uuid) in vrmap
+                for (name, uuid) in vrmap
                     # check conflicts ??
                     n2u[name] = uuid
                 end
