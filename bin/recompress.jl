@@ -7,7 +7,6 @@ const registry_path = joinpath(DEPOT_PATH[1], "registries", "General")
 const registry_file = joinpath(registry_path, "Registry.toml")
 const packages = TOML.parsefile(registry_file)["packages"]
 
-const julia_uuid = "1222c4b2-2114-5bfd-aeef-88e4692bbb3e"
 const version_map = Dict{String,Vector{VersionNumber}}()
 
 for (uuid, info) in packages
@@ -30,7 +29,6 @@ for (_, info) in packages
     compat = Compress.load(compat_file)
     for (ver, data) in compat
         for (dep, spec) in data
-            uuid = dep == "julia" ? julia_uuid : deps[ver][dep]
             ranges = VersionSpec(spec).ranges
             compat[ver][dep] =
                 length(ranges) == 1 ? string(ranges[1]) : map(string, ranges)
