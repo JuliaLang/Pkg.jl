@@ -427,7 +427,6 @@ function read_package(f::String)
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
-const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
 
 function relative_project_path(ctx::Context, path::String)
     # compute path relative the project
