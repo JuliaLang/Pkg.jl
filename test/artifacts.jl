@@ -334,7 +334,7 @@ end
     # Don't use `temp_pkg_dir()` here because we need `Pkg.test()` to run in the
     # same package context as the one we're running in right now.  Yes, this pollutes
     # the global artifact namespace and package list, but it should be harmless.
-    temp_pkg_dir() do project_path
+    mktempdir() do project_path
         copy_test_package(project_path, "ArtifactInstallation")
         Pkg.activate(joinpath(project_path))
         add_this_pkg()
