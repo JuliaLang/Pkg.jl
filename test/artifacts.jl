@@ -1,11 +1,12 @@
 module ArtifactTests
+import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Random, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed
 using Pkg.TOML, Dates
 import Base: SHA1
 
-include("utils.jl")
+using ..Utils
 
 # Helper function to create an artifact, then chmod() the whole thing to 0o755.  This is
 # important to keep hashes stable across platforms that have different umasks, changing

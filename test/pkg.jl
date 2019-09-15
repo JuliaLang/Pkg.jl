@@ -1,6 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 module OperationsTest
+import ..Pkg # ensure we are using the correct Pkg
 
 import Random: randstring
 import LibGit2
@@ -14,7 +15,7 @@ using Pkg.Types
 import Random: randstring
 import LibGit2
 
-include("utils.jl")
+using ..Utils
 
 const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
 const PackageSpec = Pkg.Types.PackageSpec
@@ -813,10 +814,5 @@ end
         @test xs[TEST_PKG.uuid].ispinned == false
     end end
 end
-
-include("repl.jl")
-include("api.jl")
-include("registry.jl")
-include("artifacts.jl")
 
 end # module

@@ -1,6 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 module REPLTests
+import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg
 using Pkg.Types: manifest_info, EnvCache, Context
@@ -9,7 +10,7 @@ using UUIDs
 using Test
 import LibGit2
 
-include("utils.jl")
+using ..Utils
 
 @testset "help" begin
     pkg"?"

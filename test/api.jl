@@ -1,11 +1,13 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 module APITests
+import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, Test
 import Pkg.Types.PkgError, Pkg.Types.ResolverError
+using UUIDs
 
-include("utils.jl")
+using ..Utils
 
 @testset "API should accept `AbstractString` arguments" begin
     temp_pkg_dir() do project_path
@@ -263,7 +265,7 @@ end
         Pkg.add(Pkg.PackageSpec(;uuid=meta_graphs, version="0.6.4"))
         @test Pkg.dependencies()[meta_graphs].version == v"0.6.4" # sanity check
         # did not break semver
-        @test Pkg.dependencies()[light_graphs].version in Pkg.Types.semver_spec("$(light_graphs_version)") 
+        @test Pkg.dependencies()[light_graphs].version in Pkg.Types.semver_spec("$(light_graphs_version)")
         # did change version
         @test Pkg.dependencies()[light_graphs].version != light_graphs_version
         # NONE

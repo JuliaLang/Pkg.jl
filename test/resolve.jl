@@ -1,6 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 module ResolveTest
+import ..Pkg # ensure we are using the correct Pkg
 
 using Test
 using Pkg.Types
