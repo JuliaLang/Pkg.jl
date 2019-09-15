@@ -1,10 +1,11 @@
 module SandboxTests
+import ..Pkg # ensure we are using the correct Pkg
 
 using Test
 using UUIDs
 using Pkg
 
-include("utils.jl")
+using ..Utils
 test_test(fn, name; kwargs...) = Pkg.test(name; test_fn=fn, kwargs...)
 test_test(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
 

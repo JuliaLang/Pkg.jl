@@ -1,4 +1,5 @@
 module PlatformEngineTests
+import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
 

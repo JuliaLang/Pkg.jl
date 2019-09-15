@@ -1,11 +1,12 @@
 module RegistryTests
+import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
 using Pkg.Types: PkgError, Context, manifest_info, PackageSpec
 
-include("utils.jl")
+using ..Utils
 
 
 function setup_test_registries(dir = pwd())

@@ -1,16 +1,21 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
-import Pkg
+
+module Utils
+
+import ..Pkg
+
+export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
+       with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
+       git_init_package, add_test_package, add_this_pkg, TEST_SIG, TEST_PKG
 
 function temp_pkg_dir(fn::Function;rm=true)
-    local env_dir
-    local old_load_path
-    local old_depot_path
-    local old_home_project
-    local old_active_project
-    local old_general_registry_url
+    old_load_path = copy(LOAD_PATH)
+    old_depot_path = copy(DEPOT_PATH)
+    old_home_project = Base.HOME_PROJECT[]
+    old_active_project = Base.ACTIVE_PROJECT[]
+    old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
     try
         # Clone the registry only once
-        old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
         generaldir = joinpath(@__DIR__, "registries", "General")
         if !isdir(generaldir)
             mkpath(generaldir)
@@ -21,11 +26,6 @@ function temp_pkg_dir(fn::Function;rm=true)
                 end
             end
         end
-
-        old_load_path = copy(LOAD_PATH)
-        old_depot_path = copy(DEPOT_PATH)
-        old_home_project = Base.HOME_PROJECT[]
-        old_active_project = Base.ACTIVE_PROJECT[]
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
@@ -179,4 +179,6 @@ function add_this_pkg()
         path=pkg_dir,
     )
     Pkg.develop(spec)
+end
+
 end

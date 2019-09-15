@@ -1,4 +1,5 @@
 module BinaryPlatformTests
+import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Pkg.BinaryPlatforms
 import Pkg.BinaryPlatforms: gcc_version, platform_name
