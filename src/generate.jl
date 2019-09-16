@@ -7,45 +7,20 @@ function generate(ctx::Context, path::String; kwargs...)
     Base.isidentifier(pkg) || pkgerror("$(repr(pkg)) is not a valid package name")
     isdir(path) && pkgerror("$(abspath(path)) already exists")
     printpkgstyle(ctx, :Generating, " project $pkg:")
-    uuid = project(ctx, pkg, dir)
-    entrypoint(ctx, pkg, dir)
+    uuid = genproject(ctx, pkg, dir)
+    genentrypoint(ctx, pkg, dir)
     return Dict(pkg => uuid)
 end
 
-function genfile(f::Function, ctx::Context, pkg::String, dir::String, file::String)
-    path = joinpath(dir, pkg, file)
-    println(ctx.io, "    $path")
-    mkpath(dirname(path))
-    open(f, path, "w")
-    return
-end
-
-function project(ctx::Context, pkg::String, dir::String)
-    name = email = nothing
-    gitname = LibGit2.getconfig("user.name", "")
-    isempty(gitname) || (name = gitname)
-    gitmail = LibGit2.getconfig("user.email", "")
-    isempty(gitmail) || (email = gitmail)
-
-    if name == nothing
-        for env in ["GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "USER", "USERNAME", "NAME"]
-            name = get(ENV, env, nothing)
-            name != nothing && break
-        end
-    end
-
+function genproject(ctx::Context, pkg::String, dir::String)
+    name = _git_value("user.name")
+    name == nothing && (name = _env_value(["GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "USER", "USERNAME", "NAME"]))
     name == nothing && (name = "Unknown")
-
-    if email == nothing
-        for env in ["GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL", "EMAIL"];
-            email = get(ENV, env, nothing)
-            email != nothing && break
-        end
-    end
-
+    email = _git_value("user.email")
+    email == nothing && (email = _env_value(["GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL", "EMAIL"]))
     authors = ["$name " * (email == nothing ? "" : "<$email>")]
-
     uuid = UUIDs.uuid4()
+
     genfile(ctx, pkg, dir, "Project.toml") do io
         toml = Dict("authors" => authors,
                     "name" => pkg,
@@ -57,8 +32,8 @@ function project(ctx::Context, pkg::String, dir::String)
     return uuid
 end
 
-function entrypoint(ctx::Context, pkg::String, dir)
-    genfile(ctx, pkg, dir, "src/$pkg.jl") do io
+function genentrypoint(ctx::Context, pkg::String, dir)
+    genfile(ctx, pkg, dir, joinpath(src, "$pkg.jl")) do io
         print(io,
            """
             module $pkg
@@ -69,4 +44,27 @@ function entrypoint(ctx::Context, pkg::String, dir)
             """
         )
     end
+end
+
+function genfile(f::Function, ctx::Context, pkg::String, dir::String, file::String)
+    path = joinpath(dir, pkg, file)
+    println(ctx.io, "    $path")
+    mkpath(dirname(path))
+    open(f, path, "w")
+    return
+end
+
+
+function _git_value(k)
+    v = LibGit2.getconfig(k, "")
+    isempty(v) ? nothing : v
+end
+
+function _env_value(ks)
+    v = nothing
+    for k in ks
+        v = get(ENV, k, nothing)
+        v != nothing && break
+    end
+    v
 end
