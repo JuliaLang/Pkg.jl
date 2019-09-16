@@ -1045,7 +1045,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     # resolve & apply package versions
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
-    new_apply = download_source(ctx, pkgs; readonly=false)
+    new_apply = download_source(ctx, pkgs; readonly=true)
     download_artifacts(ctx, pkgs; platform=platform)
 
     Display.print_env_diff(ctx)
