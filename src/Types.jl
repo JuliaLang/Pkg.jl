@@ -705,6 +705,7 @@ function instantiate_pkg_repo!(pkg::PackageSpec, cached_repo::Union{Nothing,Stri
     isdir(version_path) && return false
     mkpath(version_path)
     mv(cached_repo, version_path; force=true)
+    GitTools.set_readonly(version_path)
     return true
 end
 
