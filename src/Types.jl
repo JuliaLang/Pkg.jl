@@ -12,7 +12,7 @@ using REPL.TerminalMenus
 
 using ..TOML
 import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
-import Pkg: GitTools, depots, depots1, logdir
+import Pkg: GitTools, depots, depots1, logdir, set_readonly
 import ..BinaryPlatforms: Platform
 
 import Base: SHA1
@@ -725,6 +725,7 @@ function instantiate_pkg_repo!(ctx::Context, pkg::PackageSpec, cached_repo::Unio
     isdir(version_path) && return false
     mkpath(version_path)
     mv(cached_repo, version_path; force=true)
+    set_readonly(version_path)
     return true
 end
 
