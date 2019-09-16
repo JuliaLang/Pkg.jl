@@ -807,7 +807,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
         pkg = PackageSpec(;uuid=uuid, name=name, version=version)
         build_file = buildfile(source_path)
 
-        if !isfile(projectfile_path(testdir(source_path)))
+        if !isfile(projectfile_path(builddir(source_path)))
             backwards_compat_for_build(ctx, pkg, build_file,
                                        verbose, might_need_to_resolve, max_name)
             continue
