@@ -336,23 +336,25 @@ end
     # same package context as the one we're running in right now.  Yes, this pollutes
     # the global artifact namespace and package list, but it should be harmless.
     mktempdir() do project_path
-        copy_test_package(project_path, "ArtifactInstallation")
-        Pkg.activate(joinpath(project_path))
-        add_this_pkg()
-        Pkg.add(Pkg.Types.PackageSpec(
-            name="ArtifactInstallation",
-            uuid=Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"),
-            path=joinpath(project_path, "ArtifactInstallation"),
-        ))
+        with_pkg_env(project_path) do
+            copy_test_package(project_path, "ArtifactInstallation")
+            Pkg.activate(joinpath(project_path))
+            add_this_pkg()
+            Pkg.add(Pkg.Types.PackageSpec(
+                name="ArtifactInstallation",
+                uuid=Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"),
+                path=joinpath(project_path, "ArtifactInstallation"),
+            ))
 
-        # Run test harness
-        Pkg.test("ArtifactInstallation")
+            # Run test harness
+            Pkg.test("ArtifactInstallation")
 
-        # Also manually do it
-        Core.eval(Module(:__anon__), quote
-            using ArtifactInstallation
-            do_test()
-        end)
+            # Also manually do it
+            Core.eval(Module(:__anon__), quote
+                using ArtifactInstallation
+                do_test()
+            end)
+        end
     end
 
     # Ensure that porous platform coverage works with ensure_all_installed()
