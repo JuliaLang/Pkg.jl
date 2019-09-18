@@ -71,11 +71,11 @@ end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
-    if add_or_develop && casesensitive_isdir(expanduser(word))
+    if add_or_develop && (casesensitive_isdir(expanduser(word)) || word == "." || word == "..")
         if !occursin(Base.Filesystem.path_separator_re, word)
             @info "Resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
         end
-        return PackageSpec(repo=Types.GitRepo(url=expanduser(word)))
+        return PackageSpec(repo=Types.GitRepo(source=expanduser(word)))
     elseif occursin(uuid_re, word)
         return PackageSpec(uuid=UUID(word))
     elseif occursin(name_re, word)
@@ -84,9 +84,8 @@ function parse_package_identifier(word::AbstractString; add_or_develop=false)::P
         m = match(name_uuid_re, word)
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
     elseif add_or_develop
-        @info "Resolving package identifier `$word` as a URL."
         # Guess it is a url then
-        return PackageSpec(repo=Types.GitRepo(url=word))
+        return PackageSpec(repo=Types.GitRepo(source=word))
     else
         pkgerror("Unable to parse `$word` as a package.")
     end

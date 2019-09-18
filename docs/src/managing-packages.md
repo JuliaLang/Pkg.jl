@@ -3,7 +3,7 @@
 ## Adding packages
 
 There are two ways of adding packages, either using the `add` command or the `dev` command.
-The most frequently used one is `add` and its usage is described first.
+The most frequently used is `add` and its usage is described first.
 
 ### Adding registered packages
 
@@ -97,7 +97,7 @@ To go back to tracking the registry version of `Example`, the command `free` is 
 
 ### Adding unregistered packages
 
-If a package is not in a registry, it can still be added by instead of the package name giving the URL to the repository to `add`:
+If a package is not in a registry, it can be added by specifying a URL to the repository:
 
 ```
 (v1.0) pkg> add https://github.com/fredrikekre/ImportMacros.jl
@@ -118,9 +118,10 @@ For unregistered packages we could have given a branch name (or commit SHA1) to 
 ### Adding a local package
 
 Instead of giving a URL of a git repo to `add` we could instead have given a local path to a git repo.
-This works similarly to adding a URL. The local repository will be tracked (at some branch) and updates
+This works similar to adding a URL. The local repository will be tracked (at some branch) and updates
 from that local repo are pulled when packages are updated.
-Note that changes to files in the local package repository will not immediately be reflected when loading that package.
+Note tracking a package through `add` is distinct from `develop`:
+changes to files in the local package repository will not immediately be reflected when loading that package.
 The changes would have to be committed and the packages updated in order to pull in the changes.
 
 In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing Packages](@ref) for an example.
@@ -147,7 +148,7 @@ Let's try to `dev` a registered package:
 The `dev` command fetches a full clone of the package to `~/.julia/dev/` (the path can be changed by setting the environment variable `JULIA_PKG_DEVDIR`).
 When importing `Example` julia will now import it from `~/.julia/dev/Example` and whatever local changes have been made to the files in that path are consequently
 reflected in the code loaded. When we used `add` we said that we tracked the package repository, we here say that we track the path itself.
-Note that the package manager will never touch any of the files at a tracked path. It is therefore up to you to pull updates, change branches etc.
+Note the package manager will never touch any of the files at a tracked path. It is therefore up to you to pull updates, change branches etc.
 If we try to `dev` a package at some branch that already exists at `~/.julia/dev/` the package manager we will simply use the existing path.
 For example:
 
@@ -157,8 +158,8 @@ For example:
 [ Info: Path `/Users/kristoffer/.julia/dev/Example` exists and looks like the correct package, using existing path instead of cloning
 ```
 
-Note the info message saying that it is using the existing path. As a general rule, the package manager will
-never touch files that are tracking a path.
+Note the info message saying that it is using the existing path.
+When tracking a path, the package manager will never modify the files at that path.
 
 If `dev` is used on a local path, that path to that package is recorded and used when loading that package.
 The path will be recorded relative to the project file, unless it is given as an absolute path.
@@ -182,15 +183,12 @@ Note that if you add a dependency to a package that tracks a local path, the Man
 out of sync with the actual dependency graph. This means that the package will not be able to load that dependency since it is not recorded
 in the Manifest. To synchronize the Manifest, use the REPL command `resolve`.
 
-Similarly with `add`, `dev` can track packages with a path relative to the `Manifest.toml` file. This is done by giving a relative path to `add` or `dev`. Notice that due to the way Julia handles relative paths, when you *give* the path, it is always assumed to be with respect to the current working directory, `pwd()`. However, when the package is loaded its path is indeed resolved with respect to the `Manifest.toml` file. To be on the safe side, you can always change path to the `Manifest.toml` file before adding the relative path. For example:
-```
-julia> cd("path/to/manifest"); # This is the project's folder
-
-(v1.0) pkg> activate .
-
-(SomeProject) pkg> dev src/ExamplePackage # similarly for add
-```
-
+In addition to absolute paths, `add` and `dev` can accept relative paths to packages.
+In this case, the relative path from the active project to the package is stored.
+This approach is useful when the relative location of tracked dependencies is more important than their absolute location.
+For example, the tracked dependencies can be stored inside of the active project directory.
+The whole directory can be moved and `Pkg` will still be able to find the dependencies
+because their path relative to the active project is preserved even though their absolute path has changed.
 
 ## Removing packages
 

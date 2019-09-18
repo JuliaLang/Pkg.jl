@@ -162,7 +162,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     cp(p1_path, p1_new_path)
                     Pkg.REPLMode.pkgstr("develop $(p1_new_path)")
                     Pkg.REPLMode.pkgstr("build; precompile")
-                    @test Base.find_package("UnregisteredWithProject") == joinpath(p1_new_path, "src", "UnregisteredWithProject.jl")
+                    @test realpath(Base.find_package("UnregisteredWithProject")) == realpath(joinpath(p1_new_path, "src", "UnregisteredWithProject.jl"))
                     @test Pkg.dependencies()[UUID("58262bb0-2073-11e8-3727-4fe182c12249")].version == v"0.1.0"
                     Pkg.test("UnregisteredWithProject")
                 end
@@ -264,7 +264,7 @@ temp_pkg_dir() do project_path
 end
 
 # test relative dev paths (#490)
-cd_tempdir() do tmp
+temp_pkg_dir() do depot; cd_tempdir() do tmp
     uuid1 = Pkg.generate("HelloWorld")["HelloWorld"]
     cd("HelloWorld")
     uuid2 = Pkg.generate("SubModule")["SubModule"]
@@ -277,7 +277,7 @@ cd_tempdir() do tmp
     manifest = Pkg.Types.Context().env.manifest
     @test manifest[uuid1].path == ".."
     @test manifest[uuid2].path == joinpath("..", "SubModule")
-end
+end end
 
 # path should not be relative when devdir() happens to be in project
 # unless user used dev --local.
@@ -578,16 +578,16 @@ end
     pkg = Pkg.REPLMode.parse_package_identifier("$name=$uuid")
     @test (pkg.name == name) && (pkg.uuid == UUID(uuid))
     pkg = Pkg.REPLMode.parse_package_identifier(url; add_or_develop=true)
-    @test pkg.repo.url == url
+    @test pkg.repo.source == url
     pkg = Pkg.REPLMode.parse_package_identifier(path; add_or_develop=true)
-    @test pkg.repo.url == path
+    @test pkg.repo.source == path
     # expansion of ~
     if !Sys.iswindows()
         tildepath = "~/Foobaz"
         try
             mkdir(expanduser(tildepath))
             pkg = Pkg.REPLMode.parse_package_identifier(tildepath; add_or_develop=true)
-            @test pkg.repo.url == expanduser(tildepath)
+            @test pkg.repo.source == expanduser(tildepath)
         finally
             rm(expanduser(tildepath); force = true)
         end

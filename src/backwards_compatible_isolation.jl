@@ -1,7 +1,7 @@
 function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothing})
     env = ctx.env
     uuid, name, version, path, special_action, repo = pkg.uuid, pkg.name, pkg.version, pkg.path, pkg.special_action, pkg.repo
-    hash === nothing && @assert (path != nothing || pkg.uuid in keys(ctx.stdlibs) || pkg.repo.url != nothing)
+    hash === nothing && @assert (path != nothing || pkg.uuid in keys(ctx.stdlibs) || pkg.repo.source != nothing)
     # TODO I think ^ assertion is wrong, add-repo should have a hash
     entry = get!(env.manifest, uuid, Types.PackageEntry())
     entry.name = name
@@ -12,23 +12,23 @@ function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Noth
         entry.path = path
         if special_action == PKGSPEC_DEVELOPED
             entry.pinned = false
-            entry.repo.url = nothing
+            entry.repo.source = nothing
             entry.repo.rev = nothing
         elseif special_action == PKGSPEC_FREED
             if entry.pinned
                 entry.pinned = false
             else
-                entry.repo.url = nothing
+                entry.repo.source = nothing
                 entry.repo.rev = nothing
             end
         elseif special_action == PKGSPEC_PINNED
             entry.pinned = true
         elseif special_action == PKGSPEC_REPO_ADDED
-            entry.repo.url = repo.url
+            entry.repo.source = repo.source
             entry.repo.rev = repo.rev
             path = find_installed(name, uuid, hash)
         end
-        if entry.repo.url !== nothing
+        if entry.repo.source !== nothing
             path = find_installed(name, uuid, hash)
         end
     end
@@ -155,7 +155,7 @@ function _collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, uuid_to_name::
             path = find_installed(pkg.name, pkg.uuid, pkg.tree_hash)
         elseif entry !== nothing && entry.path !== nothing
             path = pkg.path = entry.path
-        elseif entry !== nothing && entry.repo.url !== nothing
+        elseif entry !== nothing && entry.repo.source !== nothing
             path = find_installed(pkg.name, pkg.uuid, entry.tree_hash)
             pkg.repo = entry.repo
             pkg.tree_hash = entry.tree_hash
@@ -202,7 +202,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
     for pkg in pkgs
         !is_stdlib(ctx, pkg.uuid) || continue
         pkg.path === nothing || continue
-        pkg.repo.url === nothing || continue
+        pkg.repo.source === nothing || continue
         path = find_installed(pkg.name, pkg.uuid, hashes[pkg.uuid])
         if !ispath(path)
             push!(pkgs_to_install, (pkg, path))
@@ -282,7 +282,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
             uuid = pkg.uuid
             if pkg.path !== nothing || uuid in keys(ctx.stdlibs)
                 hash = nothing
-            elseif pkg.repo.url !== nothing
+            elseif pkg.repo.source !== nothing
                 hash = pkg.tree_hash
             else
                 hash = hashes[uuid]
@@ -324,7 +324,7 @@ function _version_data!(ctx::Context, pkgs::Vector{PackageSpec})
     clones = Dict{UUID,Vector{String}}()
     for pkg in pkgs
         !is_stdlib(pkg.uuid) || continue
-        pkg.repo.url === nothing || continue
+        pkg.repo.source === nothing || continue
         pkg.path === nothing || continue
         uuid = pkg.uuid
         ver = pkg.version::VersionNumber
