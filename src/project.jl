@@ -168,7 +168,7 @@ _project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "co
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
-function write_project(env)
+function write_project(env::EnvCache)
     mkpath(dirname(env.project_file))
     write_project(env.project, env.project_file)
 end

@@ -309,28 +309,15 @@ mutable struct EnvCache
     project::Project
     manifest::Manifest
 
+    # What these where at creation of the EnvCache
+    original_project::Project
+    original_manifest::Manifest
+
     # registered package info:
     uuids::Dict{String,Vector{UUID}}
     paths::Dict{UUID,Vector{String}}
     names::Dict{UUID,Vector{String}}
 end
-
-# ENV variables to set some of these defaults?
-Base.@kwdef mutable struct Context
-    env::EnvCache = EnvCache()
-    io::IO = stderr
-    use_libgit2_for_all_downloads::Bool = false
-    use_only_tarballs_for_downloads::Bool = false
-    # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
-    # the future. It currently stands as an unofficial workaround for issue #795.
-    num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
-    graph_verbose::Bool = false
-    stdlibs::Dict{UUID,String} = stdlib()
-    currently_running_target::Bool = false
-end
-
-include("project.jl")
-include("manifest.jl")
 
 function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
@@ -365,9 +352,28 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         project_package,
         project,
         manifest,
+        deepcopy(project),
+        deepcopy(manifest),
         uuids,
         paths,
         names,)
+end
+
+include("project.jl")
+include("manifest.jl")
+
+# ENV variables to set some of these defaults?
+Base.@kwdef mutable struct Context
+    env::EnvCache = EnvCache()
+    io::IO = stderr
+    use_libgit2_for_all_downloads::Bool = false
+    use_only_tarballs_for_downloads::Bool = false
+    # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
+    # the future. It currently stands as an unofficial workaround for issue #795.
+    num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
+    graph_verbose::Bool = false
+    stdlibs::Dict{UUID,String} = stdlib()
+    currently_running_target::Bool = false
 end
 
 project_uuid(ctx::Context) = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid
