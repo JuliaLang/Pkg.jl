@@ -220,7 +220,7 @@ function destructure(manifest::Manifest)::Dict
     return raw
 end
 
-function write_manifest(env)
+function write_manifest(env::EnvCache)
     mkpath(dirname(env.manifest_file))
     write_manifest(env.manifest, env.manifest_file)
 end

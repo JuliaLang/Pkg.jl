@@ -116,31 +116,24 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
     return mdiff
 end
 
-# Needs to be called before the environment have been written to disc
 function print_env_diff(ctx)
+    ctx.currently_running_target && return
     env = ctx.env
-    old_env = EnvCache(env.env) # load old environment for comparison
-    if !ctx.currently_running_target
-        printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
-        print_project_diff(ctx, old_env, env)
-        printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
-        print_manifest_diff(ctx, old_env, env)
-    end
-end
 
-function print_project_diff(ctx::Context, env0::EnvCache, env1::EnvCache)
-    pm0 = Dict(uuid => entry for (uuid, entry) in env0.manifest if (uuid in values(env0.project.deps)))
-    pm1 = Dict(uuid => entry for (uuid, entry) in env1.manifest if (uuid in values(env1.project.deps)))
+    # Project diff
+    printpkgstyle(ctx, :Updating, pathrepr(env.project_file))
+    pm0 = Dict(uuid => entry for (uuid, entry) in env.original_manifest if (uuid in values(env.original_project.deps)))
+    pm1 = Dict(uuid => entry for (uuid, entry) in env.manifest          if (uuid in values(env.project.deps)))
     diff = filter!(x->x.old != x.new, manifest_diff(ctx, pm0, pm1))
     if isempty(diff)
         printstyled(ctx.io, color = color_dark, " [no changes]\n")
     else
         print_diff(ctx, diff)
     end
-end
 
-function print_manifest_diff(ctx::Context, env₀::EnvCache, env₁::EnvCache)
-    diff = manifest_diff(ctx, env₀.manifest, env₁.manifest)
+    # Manifest diff
+    printpkgstyle(ctx, :Updating, pathrepr(env.manifest_file))
+    diff = manifest_diff(ctx, env.original_manifest, env.manifest)
     diff = filter!(x->x.old != x.new, diff)
     if isempty(diff)
         printstyled(ctx.io, color = color_dark, " [no changes]\n")
