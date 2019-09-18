@@ -13,12 +13,6 @@ platform:
 #   allow_failures:
 #   - julia_version: latest
 
-branches:
-  only:
-    - staging
-    - trying
-    - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
-
 notifications:
   - provider: Email
     on_build_success: false
