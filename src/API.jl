@@ -788,6 +788,7 @@ function activate()
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
+    add_snapshot_to_undo()
     return nothing
 end
 function _activate_dep(dep_name::AbstractString)
@@ -844,6 +845,7 @@ function activate(path::AbstractString; shared::Bool=false)
         n = ispath(p) ? "" : "new "
         printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
     end
+    add_snapshot_to_undo()
     return nothing
 end
 function activate(f::Function, new_project::AbstractString)
@@ -855,6 +857,55 @@ function activate(f::Function, new_project::AbstractString)
         Base.ACTIVE_PROJECT[] = old
     end
 end
+
+########
+# Undo #
+########
+
+struct UndoSnapshot
+    date::DateTime
+    project::Types.Project
+    manifest::Types.Manifest
+end
+mutable struct UndoState
+    idx::Int
+    entries::Vector{UndoSnapshot}
+end
+UndoState() = UndoState(0, UndoState[])
+const undo_entries = Dict{String, UndoState}()
+const max_undo_limit = 50
+
+function add_snapshot_to_undo(env = EnvCache())
+    state = get!(undo_entries, env.project_file) do
+        UndoState()
+    end
+    # Is the current state the same as the previous one, do nothing
+    if !isempty(state.entries) && env.project == env.original_project && env.manifest == env.original_manifest
+        return
+    end
+    snapshot = UndoSnapshot(now(), env.project, env.manifest)
+    deleteat!(state.entries, 1:(state.idx-1))
+    pushfirst!(state.entries, snapshot)
+    state.idx = 1
+
+    resize!(state.entries, min(length(state.entries), max_undo_limit))
+end
+
+undo(ctx = Context()) = redo_undo(ctx, :undo,  1)
+redo(ctx = Context()) = redo_undo(ctx, :redo, -1)
+function redo_undo(ctx, mode::Symbol, direction::Int)
+    @assert direction == 1 || direction == -1
+    state = get(undo_entries, ctx.env.project_file, nothing)
+    state === nothing && pkgerror("no undo state for current project")
+    state.idx == (mode == :redo ? 1 : length(state.entries)) && pkgerror("$mode: no more states left")
+
+    state.idx += direction
+    snapshot = state.entries[state.idx]
+    ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
+    Pkg.Display.print_env_diff(ctx)
+    write_env(ctx.env; update_undo=false)
+end
+
 
 function setprotocol!(;
     domain::AbstractString="github.com",

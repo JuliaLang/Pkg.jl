@@ -301,9 +301,6 @@ temp_pkg_dir() do project_path
     @testset "check logging" begin
         usage = Pkg.TOML.parse(String(read(joinpath(Pkg.logdir(), "manifest_usage.toml"))))
         manifest = Pkg.safe_realpath(joinpath(project_path, "Manifest.toml"))
-        @show keys(usage)
-        @show manifest
-        @show usage
         @test any(x -> startswith(x, manifest), keys(usage))
     end
 
@@ -812,6 +809,61 @@ end
         xs = Dict(uuid => pkg for (uuid, pkg) in Pkg.dependencies() if pkg.isdeveloped)
         @test length(xs) == 1
         @test xs[TEST_PKG.uuid].ispinned == false
+    end end
+end
+
+@testset "undo redo functionality" begin
+    unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
+    temp_pkg_dir() do project_path; with_temp_env() do
+        # Example
+        Pkg.add(TEST_PKG.name)
+        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+        # 
+        Pkg.undo()
+        @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+        # Example
+        Pkg.redo()
+        # Example, Unicode
+        Pkg.add("Unicode")
+        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+        # Example
+        Pkg.undo()
+        @test !haskey(Pkg.dependencies(), unicode_uuid)
+        #
+        Pkg.undo()
+        @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+        # Example, Unicode
+        Pkg.redo()
+        Pkg.redo()
+        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+        @test haskey(Pkg.dependencies(), unicode_uuid)
+        # Should not add states since they are nops
+        Pkg.add("Unicode")
+        Pkg.add("Unicode")
+        # Example
+        Pkg.undo()
+        @test !haskey(Pkg.dependencies(), unicode_uuid)
+        # Example, Unicode
+        Pkg.redo()
+        @test haskey(Pkg.dependencies(), unicode_uuid)
+        
+        # Example
+        Pkg.undo()
+
+        prev_project = Base.active_project()
+        mktempdir() do tmp
+            Pkg.activate(tmp)
+            Pkg.add("Example")
+            Pkg.undo()
+            @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+        end
+        Pkg.activate(prev_project)
+
+        # Check that undo state persists after swapping projects
+        # Example, Unicode
+        Pkg.redo()
+        @test haskey(Pkg.dependencies(), unicode_uuid)
+
     end end
 end
 

@@ -34,6 +34,8 @@ Pkg.precompile
 Pkg.setprotocol!
 Pkg.dependencies
 Pkg.project
+Pkg.undo
+Pkg.redo
 ```
 
 

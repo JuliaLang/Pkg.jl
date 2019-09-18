@@ -318,6 +318,25 @@ the output to the difference as compared to the last git commit.
 
 Deletes packages that cannot be reached from any existing environment.
 """,
+],[ :name => "undo",
+    :short_name => "u",
+    :handler => do_undo!,
+    :description => "undo the latest change to the active project",
+    :help => md"""
+    undo
+
+Undoes the latest change to the active project. 
+""",
+],
+[ :name => "redo",
+  :short_name => "r",
+  :handler => do_redo!,
+  :description => "redo the latest change to the active project",
+  :help => md"""
+    redo
+
+Redoes the changes from the latest [`undo`](@ref).
+""",
 ],
 ], #package
 "registry" => CommandDeclaration[

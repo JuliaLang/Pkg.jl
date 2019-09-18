@@ -488,6 +488,9 @@ function do_pin!(ctx::APIOptions, args::Vector, api_opts::APIOptions)
     API.pin(Context!(ctx), args; collect(api_opts)...)
 end
 
+do_undo!(ctx::APIOptions, args::Vector, api_opts::APIOptions) = API.undo(Context!(ctx))
+do_redo!(ctx::APIOptions, args::Vector, api_opts::APIOptions) = API.redo(Context!(ctx))
+
 function do_preserve(x::String)
     x == "all"    && return Types.PRESERVE_ALL
     x == "direct" && return Types.PRESERVE_DIRECT

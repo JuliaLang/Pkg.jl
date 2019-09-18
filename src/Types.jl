@@ -195,6 +195,9 @@ Base.@kwdef mutable struct Project
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
 end
+Base.:(==)(t1::Project, t2::Project) = all([getfield(t1, x) == getfield(t2, x) for x in fieldnames(Project)])
+Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
+
 
 Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
@@ -206,6 +209,8 @@ Base.@kwdef mutable struct PackageEntry
     deps::Dict{String,UUID} = Dict{String,UUID}()
     other::Union{Dict,Nothing} = nothing
 end
+Base.:(==)(t1::PackageEntry, t2::PackageEntry) = all([getfield(t1, x) == getfield(t2, x) for x in filter!(!=(:other), collect(fieldnames(PackageEntry)))])
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [getfield(t, x) for x in filter!(!=(:other), collect(fieldnames(PackageEntry)))], init=h)
 const Manifest = Dict{UUID,PackageEntry}
 
 function Base.show(io::IO, pkg::PackageEntry)
@@ -1285,9 +1290,10 @@ function pathrepr(path::String)
     return "`" * Base.contractuser(path) * "`"
 end
 
-function write_env(env::EnvCache)
+function write_env(env::EnvCache; update_undo=true)
     write_project(env)
     write_manifest(env)
+    update_undo && Pkg.API.add_snapshot_to_undo(env)
 end
 
 ###
