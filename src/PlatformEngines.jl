@@ -578,7 +578,7 @@ function download(url::AbstractString, dest::AbstractString;
         @info("Downloading $(url) to $(dest)...")
     end
     try
-        run(download_cmd, (devnull, devnull, devnull))
+        run(download_cmd, (devnull, verbose ? stdout : devnull, verbose ? stderr : devnull))
     catch e
         if isa(e, InterruptException)
             rethrow()
@@ -849,7 +849,16 @@ function download_verify_unpack(url::AbstractString,
             ext = "gz"
         end
 
+        # Work around windows limitations regarding tempname()
         tarball_path = "$(tempname())-download.$(ext)"
+        tries = 0
+        while isfile(tarball_path) && tries < 100
+            tarball_path = "$(tempname())-download.$(ext)"
+            tries += 1
+        end
+        if tries >= 100
+            error("Unable to generate unused tempname! Clean up your temporary folder $(dirname(tempname())) and try again.")
+        end
     end
 
     # Download the tarball; if it already existed and we needed to remove it
