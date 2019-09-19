@@ -33,7 +33,7 @@ function genproject(ctx::Context, pkg::String, dir::String)
 end
 
 function genentrypoint(ctx::Context, pkg::String, dir)
-    genfile(ctx, pkg, dir, joinpath(src, "$pkg.jl")) do io
+    genfile(ctx, pkg, dir, joinpath("src", "$pkg.jl")) do io
         print(io,
            """
             module $pkg
