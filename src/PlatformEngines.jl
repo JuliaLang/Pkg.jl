@@ -197,13 +197,13 @@ function probe_platform_engines!(;verbose::Bool = false)
     # the correct 7z given the path to the executable:
     unpack_7z = (exe7z) -> begin
         return (tarball_path, out_path, excludelist = nothing) ->
-        pipeline(`$exe7z x $(tarball_path) -y -so`,
-                 `$exe7z x -si -y -ttar -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`)
+            pipeline(pipeline(`$exe7z x $(tarball_path) -y -so`,
+                     `$exe7z x -si -y -ttar -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`), stdout=Base.DevNull())
     end
     package_7z = (exe7z) -> begin
         return (in_path, tarball_path) ->
-            pipeline(`$exe7z a -ttar -so a.tar "$(joinpath(".",in_path,"*"))"`,
-                     `$exe7z a -si $(tarball_path)`)
+            pipeline(pipeline(`$exe7z a -ttar -so a.tar "$(joinpath(".",in_path,"*"))"`,
+                     `$exe7z a -si $(tarball_path)`), stdout=Base.DevNull())
     end
     list_7z = (exe7z) -> begin
         return (path; verbose = false) ->
