@@ -18,7 +18,7 @@ function genproject(ctx::Context, pkg::String, dir::String)
     name == nothing && (name = "Unknown")
     email = _git_value("user.email")
     email == nothing && (email = _env_value(["GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL", "EMAIL"]))
-    authors = ["$name " * (email == nothing ? "" : "<$email>")]
+    authors = [email===nothing ? name : "$name <$email>"]
     uuid = UUIDs.uuid4()
 
     genfile(ctx, pkg, dir, "Project.toml") do io
