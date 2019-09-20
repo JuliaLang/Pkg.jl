@@ -197,8 +197,12 @@ function probe_platform_engines!(;verbose::Bool = false)
     # the correct 7z given the path to the executable:
     unpack_7z = (exe7z) -> begin
         return (tarball_path, out_path, excludelist = nothing) ->
-        pipeline(`$exe7z x $(tarball_path) -y -so`,
+        if endswith(tarball_path, ".zip")
+            return `$exe7z x $(tarball_path) -y -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`
+        else
+            return pipeline(`$exe7z x $(tarball_path) -y -so`,
                  `$exe7z x -si -y -ttar -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`)
+        end
     end
     package_7z = (exe7z) -> begin
         return (in_path, tarball_path) ->
@@ -845,7 +849,7 @@ function download_verify_unpack(url::AbstractString,
 
         # If extension of url contains a recognized extension, use it, otherwise use ".gz"
         ext = url_ext(url)
-        if !(ext in ["tar", "gz", "tgz", "bz2", "xz"])
+        if !(ext in ["tar", "gz", "tgz", "bz2", "xz", "zip"])
             ext = "gz"
         end
 
