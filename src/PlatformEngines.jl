@@ -352,7 +352,7 @@ function probe_platform_engines!(;verbose::Bool = false)
     rm(tmpfile, force = true)
 
     # For windows, we need to tweak a few things, as the tools available differ
-    @static if Sys.iswindows()
+    if Sys.iswindows()
         # For download engines, we will most likely want to use powershell.
         # Let's generate a functor to return the necessary powershell magics
         # to download a file, given a path to the powershell executable
@@ -380,14 +380,14 @@ function probe_platform_engines!(;verbose::Bool = false)
         prepend!(download_engines, [
             (`powershell -Command ""`, psh_download(`powershell`))
         ])
-
-        # We greatly prefer `7z` as a compression engine on Windows
-        prepend!(compression_engines, [(`7z --help`, gen_7z("7z")...)])
-
-        # On windows, we bundle 7z with Julia, so try invoking that directly
-        exe7z = joinpath(Sys.BINDIR, "7z.exe")
-        prepend!(compression_engines, [(`$exe7z --help`, gen_7z(exe7z)...)])
     end
+
+    # We now bundle 7z on all platforms, so check for that first:
+    exe7z = joinpath(Sys.BINDIR, "..", "libexec", Sys.iswindows() ? "7z.exe" : "7z")
+    prepend!(compression_engines, [(`$exe7z --help`, gen_7z(exe7z)...)])
+
+    # Also check for a `7z` laying around on the user's computer
+    prepend!(compression_engines, [(`7z --help`, gen_7z("7z")...)])
 
     # Allow environment override
     if haskey(ENV, "BINARYPROVIDER_DOWNLOAD_ENGINE")
