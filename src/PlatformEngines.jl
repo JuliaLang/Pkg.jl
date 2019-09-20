@@ -198,12 +198,12 @@ function probe_platform_engines!(;verbose::Bool = false)
     unpack_7z = (exe7z) -> begin
         return (tarball_path, out_path, excludelist = nothing) ->
             pipeline(pipeline(`$exe7z x $(tarball_path) -y -so`,
-                     `$exe7z x -si -y -ttar -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`), stdout=Base.DevNull())
+                     `$exe7z x -si -y -ttar -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`), stdout=devnull)
     end
     package_7z = (exe7z) -> begin
         return (in_path, tarball_path) ->
             pipeline(pipeline(`$exe7z a -ttar -so a.tar "$(joinpath(".",in_path,"*"))"`,
-                     `$exe7z a -si $(tarball_path)`), stdout=Base.DevNull())
+                     `$exe7z a -si $(tarball_path)`), stdout=devnull)
     end
     list_7z = (exe7z) -> begin
         return (path; verbose = false) ->
