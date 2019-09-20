@@ -917,8 +917,10 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         println(ctx.io, "No changes")
         return
     end
+    # only declare `compat` for direct dependencies
+    # `julia` is always an implicit direct dependency
     filter!(ctx.env.project.compat) do (name, _)
-        name in keys(ctx.env.project.deps)
+        name == "julia" || name in keys(ctx.env.project.deps)
     end
     deps_names = append!(collect(keys(ctx.env.project.deps)),
                          collect(keys(ctx.env.project.extras)))
