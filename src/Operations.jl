@@ -488,7 +488,9 @@ function install_archive(
         url_success || continue
         dirs = readdir(dir)
         # 7z on Win might create this spurious file
+        @show dirs
         filter!(x -> x != "pax_global_header", dirs)
+        @show dirs
         @assert length(dirs) == 1
         # Assert that the tarball unpacked to the tree sha we wanted
         # TODO: Enable on Windows when tree_hash handles
