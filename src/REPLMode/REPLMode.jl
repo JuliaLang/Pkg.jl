@@ -12,6 +12,7 @@ import ..casesensitive_isdir
 using ..Types, ..Display, ..Operations, ..API, ..Registry, .. Resolve
 
 const SPECS = Ref{Union{Nothing,Dict}}(nothing)
+const TEST_MODE = Ref{Bool}(false)
 
 #########################
 # Specification Structs #
@@ -68,7 +69,8 @@ const CommandDeclaration = Vector{Pair{Symbol,Any}}
 struct CommandSpec
     canonical_name::String
     short_name::Union{Nothing,String}
-    handler::Union{Nothing,Function}
+    api::Function
+    should_splat::Bool
     argument_spec::ArgSpec
     option_specs::Dict{String,OptionSpec}
     completions::Union{Nothing,Function}
@@ -78,7 +80,8 @@ end
 
 function CommandSpec(;name::Union{Nothing,String}           = nothing,
                      short_name::Union{Nothing,String}      = nothing,
-                     handler::Union{Nothing,Function}       = nothing,
+                     api::Union{Nothing,Function}           = nothing,
+                     should_splat::Bool                     = true,
                      option_spec::Vector{OptionDeclaration} = OptionDeclaration[],
                      help::Union{Nothing,Markdown.MD}       = nothing,
                      description::Union{Nothing,String}     = nothing,
@@ -88,8 +91,9 @@ function CommandSpec(;name::Union{Nothing,String}           = nothing,
                      )::CommandSpec
     @assert name !== nothing "Supply a canonical name"
     @assert description !== nothing "Supply a description"
+    @assert api !== nothing "Supply API dispatch function for `$(name)`"
     # TODO assert isapplicable completions dict, string
-    return CommandSpec(name, short_name, handler, ArgSpec(arg_count, arg_parser),
+    return CommandSpec(name, short_name, api, should_splat, ArgSpec(arg_count, arg_parser),
                        OptionSpecs(option_spec), completions, description, help)
 end
 
@@ -373,9 +377,11 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     try
         statements = parse(input)
         commands   = map(Command, statements)
+        xs = []
         for command in commands
-            do_cmd!(command, repl)
+            push!(xs, do_cmd!(command, repl))
         end
+        return TEST_MODE[] ? xs : nothing
     catch err
         do_rethrow && rethrow()
         if err isa PkgError || err isa Resolve.ResolverError
@@ -387,17 +393,15 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
 end
 
 function do_cmd!(command::Command, repl)
-    context = Dict{Symbol,Any}()
-
     # REPL specific commands
     command.spec === SPECS[]["package"]["help"] && return Base.invokelatest(do_help!, command, repl)
-
     # API commands
-    # TODO is invokelatest still needed?
-    if applicable(command.spec.handler, context, command.arguments, command.options)
-        Base.invokelatest(command.spec.handler, context, command.arguments, command.options)
+    if command.spec.should_splat
+        TEST_MODE[] && return command.spec.api, command.arguments..., command.options
+        command.spec.api(command.arguments...; collect(command.options)...) # TODO is invokelatest still needed?
     else
-        Base.invokelatest(command.spec.handler, command.arguments, command.options)
+        TEST_MODE[] && return command.spec.api, command.arguments, command.options
+        command.spec.api(command.arguments; collect(command.options)...)
     end
 end
 
@@ -431,98 +435,6 @@ function do_help!(command::Command, repl::REPL.AbstractREPL)
     end
     !isempty(command.arguments) && @warn "More than one command specified, only rendering help for first"
     Base.display(disp, help_md)
-end
-
-function do_activate!(args::Vector, api_opts::APIOptions)
-    if isempty(args)
-        return API.activate()
-    else
-        return API.activate(expanduser(args[1]); collect(api_opts)...)
-    end
-end
-
-# TODO set default Display.status keyword: mode = PKGMODE_COMBINED
-do_status!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.status(Context!(ctx), args, diff=get(api_opts, :diff, false), mode=get(api_opts, :mode, PKGMODE_COMBINED))
-
-# TODO , test recursive dependencies as on option.
-function do_test!(ctx::APIOptions, args::Vector, api_opts::APIOptions)
-    foreach(arg -> arg.mode = PKGMODE_MANIFEST, args)
-    API.test(Context!(ctx), args; collect(api_opts)...)
-end
-
-do_precompile!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.precompile(Context!(ctx))
-
-do_resolve!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.resolve(Context!(ctx))
-
-do_gc!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.gc(Context!(ctx); collect(api_opts)...)
-
-do_instantiate!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.instantiate(Context!(ctx); collect(api_opts)...)
-
-do_generate!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.generate(Context!(ctx), args[1])
-
-do_build!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.build(Context!(ctx), args; collect(api_opts)...)
-
-do_rm!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.rm(Context!(ctx), args; collect(api_opts)...)
-
-do_free!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.free(Context!(ctx), args; collect(api_opts)...)
-
-do_up!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.up(Context!(ctx), args; collect(api_opts)...)
-
-function do_pin!(ctx::APIOptions, args::Vector, api_opts::APIOptions)
-    for arg in args
-        # TODO not sure this is correct
-        if arg.version.ranges[1].lower != arg.version.ranges[1].upper
-            pkgerror("pinning a package requires a single version, not a versionrange")
-        end
-    end
-    API.pin(Context!(ctx), args; collect(api_opts)...)
-end
-
-do_undo!(ctx::APIOptions, args::Vector, api_opts::APIOptions) = API.undo(Context!(ctx))
-do_redo!(ctx::APIOptions, args::Vector, api_opts::APIOptions) = API.redo(Context!(ctx))
-
-function do_preserve(x::String)
-    x == "all"    && return Types.PRESERVE_ALL
-    x == "direct" && return Types.PRESERVE_DIRECT
-    x == "semver" && return Types.PRESERVE_SEMVER
-    x == "none"   && return Types.PRESERVE_NONE
-    x == "tiered" && return Types.PRESERVE_TIERED
-    pkgerror("`$x` is not a valid argument for `--preserve`.")
-end
-
-do_add!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.add(Context!(ctx), args; collect(api_opts)...)
-
-do_develop!(ctx::APIOptions, args::Vector, api_opts::APIOptions) =
-    API.develop(Context!(ctx), args; collect(api_opts)...)
-
-# registry commands
-function do_registry_add!(ctx::APIOptions, args::Vector, api_opts::APIOptions)
-    Registry.add(Context!(ctx), args)
-end
-
-function do_registry_rm!(ctx::APIOptions, args::Vector, api_opts::APIOptions)
-    Registry.rm(Context!(ctx), args)
-end
-
-function do_registry_up!(ctx::APIOptions, args::Vector, api_opts::APIOptions)
-    isempty(args) ?
-        Registry.update(Context!(ctx)) :
-        Registry.update(Context!(ctx), args)
-end
-
-function do_registry_status!(#=ctx::APIOptions,=# args::Vector, api_opts::APIOptions)
-    Registry.status()
 end
 
 ######################
