@@ -1239,10 +1239,22 @@ end
 Base.@kwdef struct PackageInfo
     name::String
     version::Union{Nothing,VersionNumber}
+    tree_hash::Union{Nothing,String}
     ispinned::Bool
     isdeveloped::Bool
+    is_tracking_registry::Bool
+    git_revision::Union{Nothing,String}
+    git_source::Union{Nothing,String}
     source::String
-    dependencies::Vector{UUID}
+    dependencies::Dict{String,UUID}
+end
+
+function Base.:(==)(a::PackageInfo, b::PackageInfo)
+    return a.name == b.name && a.version == b.version && a.tree_hash == b.tree_hash &&
+        a.ispinned == b.ispinned && a.isdeveloped == b.isdeveloped &&
+        a.is_tracking_registry == b.is_tracking_registry &&
+        a.git_revision == b.git_revision && a.git_source == b.git_source &&
+        a.source == b.source && a.dependencies == b.dependencies
 end
 
 ###
@@ -1250,9 +1262,10 @@ end
 ###
 
 Base.@kwdef struct ProjectInfo
-    name::String
-    uuid::UUID
-    version::VersionNumber
+    name::Union{Nothing,String}
+    uuid::Union{Nothing,UUID}
+    version::Union{Nothing,VersionNumber}
+    ispackage::Bool
     dependencies::Dict{String,UUID}
     path::String
 end

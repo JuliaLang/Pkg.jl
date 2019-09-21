@@ -20,17 +20,17 @@ include("generate.jl")
 dependencies() = dependencies(Context())
 function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
     pkgs = Operations.load_all_deps(ctx)
-    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
 end
+dependencies(fn::Function, uuid::UUID) = fn(dependencies()[uuid])
 
 project() = project(Context())
-function project(ctx::Context)
-    ctx.env.pkg !== nothing || pkgerror("Active environment is not a project.")
+function project(ctx::Context)::ProjectInfo
     return ProjectInfo(
-        name         = ctx.env.pkg.name,
-        uuid         = ctx.env.pkg.uuid,
-        version      = ctx.env.pkg.version,
+        name         = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.name,
+        uuid         = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid,
+        version      = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.version,
+        ispackage    = ctx.env.pkg !== nothing,
         dependencies = ctx.env.project.deps,
         path         = ctx.env.project_file
     )

@@ -1410,12 +1410,16 @@ end
 
 function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
     info = PackageInfo(
-        name         = pkg.name,
-        version      = pkg.version != VersionSpec() ? pkg.version : nothing,
-        ispinned     = pkg.pinned,
-        isdeveloped  = pkg.path !== nothing,
-        source       = project_rel_path(ctx, source_path(pkg)),
-        dependencies = collect(values(entry.deps)),
+        name                 = pkg.name,
+        version              = pkg.version != VersionSpec() ? pkg.version : nothing,
+        tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
+        ispinned             = pkg.pinned,
+        is_tracking_registry = pkg.repo.source === nothing && pkg.path === nothing,
+        isdeveloped          = pkg.path !== nothing,
+        git_revision         = pkg.repo.rev,
+        git_source           = pkg.repo.source,
+        source               = project_rel_path(ctx, source_path(pkg)),
+        dependencies         = copy(entry.deps), #TODO is copy needed?
     )
     return info
 end
