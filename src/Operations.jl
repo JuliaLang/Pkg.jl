@@ -464,10 +464,13 @@ function install_archive(
     hash::SHA1,
     version_path::String
 )::Bool
+    tmp_objects = String[]
+    url_success = false
     for url in urls
         archive_url = get_archive_url_for_version(url, hash)
         archive_url !== nothing || continue
         path = tempname() * randstring(6) * ".tar.gz"
+        push!(tmp_objects, path) # for cleanup
         url_success = true
         try
             PlatformEngines.download(archive_url, path; verbose=false)
@@ -477,6 +480,7 @@ function install_archive(
         end
         url_success || continue
         dir = joinpath(tempdir(), randstring(12))
+        push!(tmp_objects, dir) # for cleanup
         # Might fail to extract an archive (Pkg#190)
         try
             unpack(path, dir; verbose=false)
@@ -504,11 +508,11 @@ function install_archive(
         # Move content to version path
         !isdir(version_path) && mkpath(version_path)
         mv(unpacked, version_path; force=true)
-        Base.rm(path; force = true)
-        Base.rm(dir; force = true)
-        return true
+        break # successful install
     end
-    return false
+    # Clean up and exit
+    foreach(x -> Base.rm(x; force=true, recursive=true), tmp_objects)
+    return url_success
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
