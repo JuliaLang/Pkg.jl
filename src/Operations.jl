@@ -511,7 +511,7 @@ function install_archive(
         break # successful install
     end
     # Clean up and exit
-    foreach(x -> Base.rm(x; force=true), tmp_objects)
+    foreach(x -> Base.rm(x; force=true, recursive=true), tmp_objects)
     return url_success
 end
 
