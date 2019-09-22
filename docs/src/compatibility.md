@@ -98,14 +98,67 @@ PkgG = "~0"     # [0.0.0, 1.0.0)
 
 For all versions with a major version of 0 the tilde and caret specifiers are equivalent.
 
+### Equality specifier
+
+Equality can be used to specify an exact version:
+
+```toml
+[compat]
+PkgA = "= 1.2.3"  # [1.2.3, 1.2.3]
+```
+
 ### Inequality specifiers
 
 Inequalities can also be used to specify version ranges:
 
 ```toml
 [compat]
-PkgA = ">= 1.2.3" # [1.2.3,  ∞)
-PkgB = "≥ 1.2.3"  # [1.2.3,  ∞)
-PkgC = "= 1.2.3"  # [1.2.3, 1.2.3]
-PkgD = "< 1.2.3"  # [0.0.0, 1.2.2]
+PkgB = ">= 1.2.3" # [1.2.3,  ∞)
+PkgC = "≥ 1.2.3"  # [1.2.3,  ∞)
+PkgD = "< 1.2.3"  # [0.0.0, 1.2.3) = [0.0.0, 1.2.2]
+```
+
+### Hyphen specifiers
+
+!!! compat "Julia 1.4"
+    Hyphen specifiers requires at least Julia 1.4, so it is recomended to also add
+    ```toml
+    [compat]
+    julia = "1.4"
+    ```
+    to the project file when using them.
+Hyphen syntax can also be used to specify version ranges. Make sure that you have a space on both sides of the hyphen.
+
+```toml
+[compat]
+PkgA = "1.2.3 - 4.5.6" # [1.2.3, 4.5.6]
+PkgA = "0.2.3 - 4.5.6" # [0.2.3, 4.5.6]
+```
+
+Any unspecified trailing numbers in the first end-point are considered to be zero:
+
+```toml
+[compat]
+PkgA = "1.2 - 4.5.6"   # [1.2.0, 4.5.6]
+PkgA = "1 - 4.5.6"     # [1.0.0, 4.5.6]
+PkgA = "0.2 - 4.5.6"   # [0.2.0, 4.5.6]
+PkgA = "0.2 - 0.5.6"   # [0.2.0, 0.5.6]
+```
+
+Any unspecified trailing numbers in the second end-point will be considered to be wildcards:
+
+```toml
+[compat]
+PkgA = "1.2.3 - 4.5"   # 1.2.3 - 4.5.* = [1.2.3, 4.6.0)
+PkgA = "1.2.3 - 4"     # 1.2.3 - 4.*.* = [1.2.3, 5.0.0)
+PkgA = "1.2 - 4.5"     # 1.2.0 - 4.5.* = [1.2.0, 4.6.0)
+PkgA = "1.2 - 4"       # 1.2.0 - 4.*.* = [1.2.0, 5.0.0)
+PkgA = "1 - 4.5"       # 1.0.0 - 4.5.* = [1.0.0, 4.6.0)
+PkgA = "1 - 4"         # 1.0.0 - 4.*.* = [1.0.0, 5.0.0)
+PkgA = "0.2.3 - 4.5"   # 0.2.3 - 4.5.* = [0.2.3, 4.6.0)
+PkgA = "0.2.3 - 4"     # 0.2.3 - 4.*.* = [0.2.3, 5.0.0)
+PkgA = "0.2 - 4.5"     # 0.2.0 - 4.5.* = [0.2.0, 4.6.0)
+PkgA = "0.2 - 4"       # 0.2.0 - 4.*.* = [0.2.0, 5.0.0)
+PkgA = "0.2 - 0.5"     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
+PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```

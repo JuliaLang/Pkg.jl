@@ -256,7 +256,9 @@ Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
 ###################
 
 function semver_spec(s::String)
-    s = replace(s, " " => "")
+    s = replace(s, r"\s-\s" => "→") # replace " - " with "→"
+    s = replace(s, " " => "") # remove all spaces
+    s = replace(s, "→" => " - ") # replace "→" with " - "
     ranges = VersionRange[]
     for ver in split(s, ',')
         range = nothing
@@ -343,9 +345,36 @@ function inequality_interval(m::RegexMatch)
     end
 end
 
+function hyphen_interval(m::RegexMatch)
+    @assert length(m.captures) == 6
+    _lower_major, _lower_minor, _lower_patch, _upper_major, _upper_minor, _upper_patch = m.captures
+    if isnothing(_lower_minor)
+        lower_bound = VersionBound(parse(Int, _lower_major))
+    elseif isnothing(_lower_patch)
+        lower_bound = VersionBound(parse(Int, _lower_major),
+                                   parse(Int, _lower_minor))
+    else
+        lower_bound = VersionBound(parse(Int, _lower_major),
+                                   parse(Int, _lower_minor),
+                                   parse(Int, _lower_patch))
+    end
+    if isnothing(_upper_minor)
+        upper_bound = VersionBound(parse(Int, _upper_major))
+    elseif isnothing(_upper_patch)
+        upper_bound = VersionBound(parse(Int, _upper_major),
+                                   parse(Int, _upper_minor))
+    else
+        upper_bound = VersionBound(parse(Int, _upper_major),
+                                   parse(Int, _upper_minor),
+                                   parse(Int, _upper_patch))
+    end
+    return VersionRange(lower_bound, upper_bound)
+end
+
 const version = "v?([0-9]+?)(?:\\.([0-9]+?))?(?:\\.([0-9]+?))?"
 const ver_regs =
 [
     Regex("^([~^]?)?$version\$") => semver_interval, # 0.5 ^0.4 ~0.3.2
     Regex("^((?:≥)|(?:>=)|(?:=)|(?:<)|(?:=))v?$version\$")  => inequality_interval,# < 0.2 >= 0.5,2
+    Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
 ]
