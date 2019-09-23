@@ -266,7 +266,7 @@ end
             @test manifest_info(Context(), uuid).version == v"0.5.0"
             Pkg.update() # should not update Example
             @test manifest_info(Context(), uuid).version == v"0.5.0"
-            @test_throws Pkg.Types.ResolverError Pkg.add(PackageSpec(name="Example", version=v"0.5.1"))
+            @test_throws Pkg.Resolve.ResolverError Pkg.add(PackageSpec(name="Example", version=v"0.5.1"))
             Pkg.rm("Example")
             Pkg.add("JSON") # depends on Example
             @test manifest_info(Context(), uuid).version == v"0.5.0"

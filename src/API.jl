@@ -813,7 +813,7 @@ function activate(path::AbstractString; shared::Bool=false)
         # 1. if path exists, activate that
         # 2. if path exists in deps, and the dep is deved, activate that path (`devpath` above)
         # 3. activate the non-existing directory (e.g. as in `pkg> activate .` for initing a new env)
-        if Types.isdir_windows_workaround(path)
+        if Pkg.isdir_windows_workaround(path)
             fullpath = abspath(path)
         else
             fullpath = _activate_dep(path)

@@ -35,74 +35,11 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
 
 include("versions.jl")
 
-## ordering of UUIDs ##
-
-if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
-    Base.isless(a::UUID, b::UUID) = a.value < b.value
-end
-
-## Computing UUID5 values from (namespace, key) pairs ##
-function uuid5(namespace::UUID, key::String)
-    data = [reinterpret(UInt8, [namespace.value]); codeunits(key)]
-    u = reinterpret(UInt128, sha1(data)[1:16])[1]
-    u &= 0xffffffffffff0fff3fffffffffffffff
-    u |= 0x00000000000050008000000000000000
-    return UUID(u)
-end
-uuid5(namespace::UUID, key::AbstractString) = uuid5(namespace, String(key))
-
-const uuid_dns = UUID(0x6ba7b810_9dad_11d1_80b4_00c04fd430c8)
-const uuid_julia_project = uuid5(uuid_dns, "julialang.org")
-const uuid_package = uuid5(uuid_julia_project, "package")
-const uuid_registry = uuid5(uuid_julia_project, "registry")
-const uuid_julia = uuid5(uuid_package, "julia")
-
 ## user-friendly representation of package IDs ##
 function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
     name = get(uuid_to_name, p, "(unknown)")
     uuid_short = string(p)[1:8]
     return "$name [$uuid_short]"
-end
-
-####################
-# Requires / Fixed #
-####################
-const Requires = Dict{UUID,VersionSpec}
-
-struct Fixed
-    version::VersionNumber
-    requires::Requires
-end
-Fixed(v::VersionNumber) = Fixed(v, Requires())
-
-Base.:(==)(a::Fixed, b::Fixed) = a.version == b.version && a.requires == b.requires
-Base.hash(f::Fixed, h::UInt) = hash((f.version, f.requires), h + (0x68628b809fd417ca % UInt))
-
-Base.show(io::IO, f::Fixed) = isempty(f.requires) ?
-    print(io, "Fixed(", repr(f.version), ")") :
-    print(io, "Fixed(", repr(f.version), ",", f.requires, ")")
-
-
-struct ResolverError <: Exception
-    msg::AbstractString
-    ex::Union{Exception,Nothing}
-end
-ResolverError(msg::AbstractString) = ResolverError(msg, nothing)
-
-function Base.showerror(io::IO, pkgerr::ResolverError)
-    print(io, pkgerr.msg)
-    if pkgerr.ex !== nothing
-        pkgex = pkgerr.ex
-        if isa(pkgex, CompositeException)
-            for cex in pkgex
-                print(io, "\n=> ")
-                showerror(io, cex)
-            end
-        else
-            print(io, "\n")
-            showerror(io, pkgex)
-        end
-    end
 end
 
 #################
@@ -190,11 +127,6 @@ function Base.show(io::IO, pkg::PackageSpec)
     print(io, ")")
 end
 
-function Base.getindex(pkgs::Vector{PackageSpec}, uuid::UUID)
-    index = findfirst(pkg -> pkg.uuid == uuid, pkgs)
-    return index === nothing ? nothing : pkgs[index]
-end
-
 ############
 # EnvCache #
 ############
@@ -247,7 +179,7 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     @assert project_file isa String &&
         (isfile(project_file) || !ispath(project_file) ||
          isdir(project_file) && isempty(readdir(project_file)))
-    return safe_realpath(project_file)
+    return Pkg.safe_realpath(project_file)
 end
 
 Base.@kwdef mutable struct Project
@@ -458,8 +390,6 @@ function get_deps(project::Project, target::Union{Nothing,String}=nothing)
 end
 get_deps(env::EnvCache, target::Union{Nothing,String}=nothing) =
     get_deps(env.project, target)
-get_deps(ctx::Context, target::Union{Nothing,String}=nothing) =
-    get_deps(ctx.env, target)
 
 function project_compatibility(ctx::Context, name::String)
     compat = get(ctx.env.project.compat, name, nothing)
@@ -497,31 +427,13 @@ function read_package(f::String)
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
-const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
 
-# Windows sometimes throw on `isdir`...
-function isdir_windows_workaround(path::String)
-    try isdir(path)
-    catch e
-        false
-    end
-end
-
-# try to call realpath on as much as possible
-function safe_realpath(path)
-    ispath(path) && return realpath(path)
-    a, b = splitdir(path)
-    return joinpath(safe_realpath(a), b)
-end
 function relative_project_path(ctx::Context, path::String)
     # compute path relative the project
     # realpath needed to expand symlinks before taking the relative path
-    return relpath(safe_realpath(abspath(path)),
-                   safe_realpath(dirname(ctx.env.project_file)))
+    return relpath(Pkg.safe_realpath(abspath(path)),
+                   Pkg.safe_realpath(dirname(ctx.env.project_file)))
 end
-
-casesensitive_isdir(dir::String) =
-    isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
 
 function git_checkout_latest!(ctx::Context, repo_path::AbstractString)
     LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
@@ -560,7 +472,7 @@ function canonical_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool; defau
     dev_dir = shared ? Pkg.devdir() : joinpath(dirname(ctx.env.project_file), "dev")
     dev_path = joinpath(dev_dir, pkg.name)
 
-    if casesensitive_isdir(dev_path)
+    if Pkg.casesensitive_isdir(dev_path)
         if !isfile(joinpath(dev_path, "src", pkg.name * ".jl"))
             pkgerror("Path `$(dev_path)` exists but it does not contain `src/$(pkg.name).jl")
         end
@@ -639,7 +551,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
     new_uuids = UUID[]
     for pkg in pkgs
         pkg.special_action = PKGSPEC_DEVELOPED
-        if pkg.repo.url !== nothing && isdir_windows_workaround(pkg.repo.url)
+        if pkg.repo.url !== nothing && Pkg.isdir_windows_workaround(pkg.repo.url)
             explicit_dev_path(ctx, pkg)
         elseif pkg.name !== nothing
             canonical_dev_path!(ctx, pkg, shared)
@@ -1053,7 +965,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
         # slug = Base.package_slug(UUID(registry["uuid"]))
         regpath = joinpath(depot, "registries", registry["name"]#=, slug=#)
         ispath(dirname(regpath)) || mkpath(dirname(regpath))
-        if isdir_windows_workaround(regpath)
+        if Pkg.isdir_windows_workaround(regpath)
             existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
             if registry["uuid"] == existing_registry["uuid"]
                 println(ctx.io,

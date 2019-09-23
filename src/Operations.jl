@@ -9,7 +9,7 @@ import LibGit2
 import REPL
 using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..Display
-import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.uuid_julia, ..Types.PackageEntry
+import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
 using ..BinaryPlatforms
 import ..Pkg
@@ -65,7 +65,7 @@ function load_direct_deps(ctx::Context, pkgs::Vector{PackageSpec};
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs = copy(pkgs)
     for (name::String, uuid::UUID) in ctx.env.project.deps
-        pkgs[uuid] === nothing || continue # do not duplicate packages
+        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         entry = manifest_info(ctx, uuid)
         push!(pkgs, entry === nothing ?
               PackageSpec(;uuid=uuid, name=name) :
@@ -86,7 +86,7 @@ function load_all_deps(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
                         preserve::PreserveLevel=PRESERVE_ALL)
     pkgs = copy(pkgs)
     for (uuid, entry) in ctx.env.manifest
-        pkgs[uuid] === nothing || continue # do not duplicate packages
+        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         push!(pkgs, PackageSpec(
             uuid      = uuid,
             name      = entry.name,
@@ -256,16 +256,17 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
         collect_project!(ctx, pkg, path, fix_deps_map)
     end
 
-    fixed = Dict{UUID,Fixed}()
+    fixed = Dict{UUID,Resolve.Fixed}()
     # Collect the dependencies for the fixed packages
     for (uuid, deps) in fix_deps_map
-        fix_pkg = pkgs[uuid]
+        idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
+        fix_pkg = pkgs[idx]
         q = Dict{UUID, VersionSpec}()
         for dep in deps
             names[dep.uuid] = dep.name
             q[dep.uuid] = dep.version
         end
-        fixed[uuid] = Fixed(fix_pkg.version, q)
+        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q)
     end
     return fixed
 end
@@ -285,7 +286,6 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
 
     # anything not mentioned is fixed
     names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
-    names[uuid_julia] = "julia"
 
     # construct data structures for resolver and call it
     # this also sets pkg.version for fixed packages
@@ -312,8 +312,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
         names[pkg.uuid] = pkg.name
     end
-    reqs = Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs if pkg.uuid ≠ uuid_julia)
-    fixed[uuid_julia] = Fixed(VERSION)
+    reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs)
     graph = deps_graph(ctx, names, reqs, fixed)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
@@ -321,8 +320,9 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     find_registered!(ctx, collect(keys(vers)))
     # update vector of package versions
     for (uuid, ver) in vers
-        pkg = pkgs[uuid]
-        if pkg !== nothing
+        idx = findfirst(p -> p.uuid == uuid, pkgs)
+        if idx !== nothing
+            pkg = pkgs[idx]
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
@@ -333,10 +333,9 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     load_tree_hashes!(ctx, pkgs)
 end
 
-get_or_make(::Type{T}, d::Dict{K}, k::K) where {T,K} = haskey(d, k) ? convert(T, d[k]) : T()
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
-function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Requires, fixed::Dict{UUID,Fixed})
+function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed})
     uuids = collect(union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...))
     seen = UUID[]
 
@@ -359,11 +358,6 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
             all_versions_u = get_or_make!(all_versions, uuid)
             all_deps_u     = get_or_make!(all_deps,     uuid)
             all_compat_u   = get_or_make!(all_compat,   uuid)
-            # make sure all versions of all packages know about julia uuid
-            if uuid ≠ uuid_julia
-                deps_u_allvers = get_or_make!(all_deps_u, VersionRange())
-                deps_u_allvers["julia"] = uuid_julia
-            end
 
             # Collect deps + compat for stdlib
             if uuid in keys(ctx.stdlibs)
@@ -418,7 +412,6 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Require
     end
 
     for uuid in uuids
-        uuid == uuid_julia && continue
         if !haskey(uuid_to_name, uuid)
             name = registered_name(ctx, uuid)
             name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
@@ -998,17 +991,17 @@ function tiered_resolve(ctx::Context, pkgs::Vector{PackageSpec})
     try # do not modify existing subgraph
         return targeted_resolve(ctx, pkgs, PRESERVE_ALL)
     catch err
-        err isa ResolverError || rethrow()
+        err isa Resolve.ResolverError || rethrow()
     end
     try # do not modify existing direct deps
         return targeted_resolve(ctx, pkgs, PRESERVE_DIRECT)
     catch err
-        err isa ResolverError || rethrow()
+        err isa Resolve.ResolverError || rethrow()
     end
     try
         return targeted_resolve(ctx, pkgs, PRESERVE_SEMVER)
     catch err
-        err isa ResolverError || rethrow()
+        err isa Resolve.ResolverError || rethrow()
     end
     return targeted_resolve(ctx, pkgs, PRESERVE_NONE)
 end

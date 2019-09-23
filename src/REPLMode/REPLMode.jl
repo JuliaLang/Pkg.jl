@@ -8,8 +8,8 @@ using UUIDs
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..Types.casesensitive_isdir
-using ..Types, ..Display, ..Operations, ..API, ..Registry
+import ..casesensitive_isdir
+using ..Types, ..Display, ..Operations, ..API, ..Registry, .. Resolve
 
 const SPECS = Ref{Union{Nothing,Dict}}(nothing)
 
@@ -378,7 +378,7 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
         end
     catch err
         do_rethrow && rethrow()
-        if err isa PkgError || err isa ResolverError
+        if err isa PkgError || err isa Resolve.ResolverError
             Base.display_error(repl.t.err_stream, ErrorException(sprint(showerror, err)), Ptr{Nothing}[])
         else
             Base.display_error(repl.t.err_stream, err, Base.catch_backtrace())
