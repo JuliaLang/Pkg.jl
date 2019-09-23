@@ -144,7 +144,7 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
         err isa LibGit2.GitError || rethrow()
         if (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
            (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
-            Pkg.Types.pkgerror("Git repository not found at '$(url)'")
+            Pkg.Types.pkgerror("git repository not found at `$(url)`")
         else
             Pkg.Types.pkgerror("failed to clone from $(url), error: $err")
         end
