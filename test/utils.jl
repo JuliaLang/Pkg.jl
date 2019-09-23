@@ -85,22 +85,24 @@ function write_build(path, content)
 end
 
 function with_current_env(f)
+    prev_active = Base.ACTIVE_PROJECT[] 
     Pkg.activate(".")
     try
         f()
     finally
-        Pkg.activate()
+        Base.ACTIVE_PROJECT[] = prev_active
     end
 end
 
 function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
+    prev_active = Base.ACTIVE_PROJECT[] 
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
     try
         applicable(f, env_path) ? f(env_path) : f()
     finally
-        Pkg.activate()
+        Base.ACTIVE_PROJECT[] = prev_active
         try
             rm && Base.rm(env_path; force = true, recursive = true)
         catch err
@@ -111,6 +113,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
 end
 
 function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
+    prev_active = Base.ACTIVE_PROJECT[] 
     Pkg.activate(path)
     try
         if change_dir
@@ -119,7 +122,7 @@ function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
             fn()
         end
     finally
-        Pkg.activate()
+        Base.ACTIVE_PROJECT[] = prev_active
     end
 end
 
