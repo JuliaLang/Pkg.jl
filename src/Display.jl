@@ -156,7 +156,7 @@ vstring(ctx::Context, a::VerInfo) =
     string((a.ver == nothing && a.hash != nothing) ? "[$(string(a.hash)[1:16])]" : "",
            a.ver != nothing ? "v$(a.ver)" : "",
            a.path != nothing ? " [$(pathrepr(a.path))]" : "",
-           a.repo != nothing ? " #$(revstring(a.repo.rev)) ($(a.repo.url))" : "",
+           a.repo != nothing ? " #$(revstring(a.repo.rev)) ($(a.repo.source))" : "",
            a.pinned == true ? " ⚲" : "",
            )
 
@@ -246,7 +246,7 @@ function name_ver_info(entry::PackageEntry)
         entry.path,
         entry.version,
         entry.pinned,
-        entry.repo.url === nothing ? nothing : entry.repo, # TODO
+        entry.repo.source === nothing ? nothing : entry.repo, # TODO
         )
 end
 

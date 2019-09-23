@@ -136,7 +136,7 @@ temp_pkg_dir() do project_path
         Pkg.gc(;collect_delay=Day(1000))
         @test !isempty(readdir(pkgdir))
 
-        # Setting collect_delay to zero causes it to be reaped immediately, howeveage
+        # Setting collect_delay to zero causes it to be reaped immediately, however
         Pkg.gc(;collect_delay=Second(0))
         @test isempty(readdir(pkgdir))
     end
@@ -506,7 +506,7 @@ end
     temp_pkg_dir() do project_path; cd_tempdir(;rm=false) do tmpdir; with_temp_env(;rm=false) do
         for x in ["x1", "x2", "x3"]
             cp(joinpath(@__DIR__, "test_packages/$x"), joinpath(tmpdir, "$x"))
-            Pkg.develop(Pkg.PackageSpec(url = joinpath(tmpdir, x)))
+            Pkg.develop(Pkg.PackageSpec(path = joinpath(tmpdir, x)))
         end
         Pkg.test("x3")
     end end end
@@ -787,19 +787,21 @@ end
 end
 
 @testset "create manifest file similar to project file" begin
-    cd_tempdir() do dir
-        touch(joinpath(dir, "Project.toml"))
-        Pkg.activate(".")
-        Pkg.add("Example")
-        @test isfile(joinpath(dir, "Manifest.toml"))
-        @test !isfile(joinpath(dir, "JuliaManifest.toml"))
-    end
-    cd_tempdir() do dir
-        touch(joinpath(dir, "JuliaProject.toml"))
-        Pkg.activate(".")
-        Pkg.add("Example")
-        @test !isfile(joinpath(dir, "Manifest.toml"))
-        @test isfile(joinpath(dir, "JuliaManifest.toml"))
+    temp_pkg_dir() do project_path
+        cd_tempdir() do dir
+            touch(joinpath(dir, "Project.toml"))
+            Pkg.activate(".")
+            Pkg.add("Example")
+            @test isfile(joinpath(dir, "Manifest.toml"))
+            @test !isfile(joinpath(dir, "JuliaManifest.toml"))
+        end
+        cd_tempdir() do dir
+            touch(joinpath(dir, "JuliaProject.toml"))
+            Pkg.activate(".")
+            Pkg.add("Example")
+            @test !isfile(joinpath(dir, "Manifest.toml"))
+            @test isfile(joinpath(dir, "JuliaManifest.toml"))
+        end
     end
 end
 
