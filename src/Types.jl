@@ -105,6 +105,12 @@ PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uui
 PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
 PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
 
+function Base.:(==)(a::PackageSpec, b::PackageSpec)
+    return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
+    a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
+    a.pinned == b.pinned && a.special_action == b.special_action && a.mode == b.mode
+end
+
 function err_rep(pkg::PackageSpec)
     x = pkg.name !== nothing && pkg.uuid !== nothing ? x = "$(pkg.name) [$(string(pkg.uuid)[1:8])]" :
         pkg.name !== nothing ? pkg.name :
