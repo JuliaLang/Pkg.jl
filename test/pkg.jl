@@ -180,7 +180,7 @@ temp_pkg_dir() do project_path
     @testset "pinning / freeing" begin
         Pkg.add(TEST_PKG.name)
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
-        Pkg.pin(PackageSpec(TEST_PKG.name, v"0.2"))
+        Pkg.pin(Pkg.PackageSpec(;name=TEST_PKG.name, version=v"0.2"))
         @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
         Pkg.update(TEST_PKG.name)
         @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
@@ -228,10 +228,6 @@ temp_pkg_dir() do project_path
                 @test Pkg.dependencies()[TEST_PKG.uuid].version == old_v
             end
         end
-    end
-
-    @testset "invalid pkg name" begin
-        @test_throws PkgError Pkg.add(",sa..,--")
     end
 
     @testset "stdlibs as direct dependency" begin
@@ -418,21 +414,6 @@ temp_pkg_dir() do project_path
     end
 end
 
-temp_pkg_dir() do project_path
-    # pkg assumes `Example.jl` is still a git repo, it will try to fetch on `update`
-    # `fetch` should warn that it is no longer a git repo
-    with_temp_env() do
-        @testset "inconsistent repo state" begin
-            package_path = joinpath(project_path, "Example")
-            LibGit2.with(LibGit2.clone("https://github.com/JuliaLang/Example.jl", package_path)) do repo
-                Pkg.add(Pkg.PackageSpec(path=package_path))
-            end
-            rm(joinpath(package_path, ".git"); force=true, recursive=true)
-            @test_throws PkgError Pkg.update()
-        end
-    end
-end
-
 temp_pkg_dir() do project_path; cd(project_path) do
     tmp = mktempdir()
     depo1 = mktempdir()
@@ -477,28 +458,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
     Base.rm.([tmp, depo1, depo2]; force = true, recursive = true)
 end end
 
-temp_pkg_dir() do project_path
-    cd(project_path) do
-        project = """
-        [deps]
-        UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
-
-        [extras]
-        Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
-        Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-        [targets]
-        test = ["Markdown", "Test"]
-        """
-        write("Project.toml", project)
-        Pkg.activate(".")
-        @testset "resolve ignores extras" begin
-            Pkg.resolve()
-            @test !(occursin("[[Test]]", read("Manifest.toml", String)))
-        end
-    end
-end
-
 @testset "dependency of test dependency (#567)" begin
     temp_pkg_dir() do project_path; cd_tempdir(;rm=false) do tmpdir; with_temp_env(;rm=false) do
         for x in ["x1", "x2", "x3"]
@@ -519,53 +478,6 @@ end
         ctx = Pkg.Types.Context()
         @test ctx.num_concurrent_downloads == 1
     end
-end
-
-temp_pkg_dir() do project_path
-    @testset "Pkg.add should not mutate" begin
-        package_names = ["JSON"]
-        packages = PackageSpec.(package_names)
-        Pkg.add(packages)
-        @test [p.name for p in packages] == package_names
-    end
-end
-
-@testset "manifest read/write unit tests" begin
-    manifestdir = joinpath(@__DIR__, "manifest", "good")
-    temp = joinpath(mktempdir(), "x.toml")
-    for testfile in joinpath.(manifestdir, readdir(manifestdir))
-        a = Types.read_manifest(testfile)
-        Types.write_manifest(a, temp)
-        b = Types.read_manifest(temp)
-        for (uuid, x) in a
-            y = b[uuid]
-            for property in propertynames(x)
-                # `other` caches the *whole* input dictionary. its ok to mutate the fields of
-                # the input dictionary if that field will eventually be overwriten on `write_manifest`
-                property == :other && continue
-                @test getproperty(x, property) == getproperty(y, property)
-            end
-        end
-    end
-    rm(dirname(temp); recursive = true, force = true)
-    @test_throws PkgError Types.read_manifest(
-        joinpath(@__DIR__, "manifest", "bad", "parse_error.toml"))
-end
-
-@testset "project read/write unit tests" begin
-    projectdir = joinpath(@__DIR__, "project", "good")
-    temp = joinpath(mktempdir(), "x.toml")
-    for testfile in joinpath.(projectdir, readdir(projectdir))
-        a = Types.read_project(testfile)
-        Types.write_project(a, temp)
-        b = Types.read_project(temp)
-        for property in propertynames(a)
-            @test getproperty(a, property) == getproperty(b, property)
-        end
-    end
-    rm(dirname(temp); recursive = true, force = true)
-    @test_throws PkgError Types.read_project(
-        joinpath(@__DIR__, "project", "bad", "parse_error.toml"))
 end
 
 @testset "stdlib_resolve!" begin
@@ -589,16 +501,6 @@ end
         rm.(joinpath.(project_path, ["Project.toml","Manifest.toml"]))
         Pkg.add(Pkg.PackageSpec(name="Example", rev = "master")) # should not fail
         @test isinstalled(TEST_PKG)
-    end
-end
-
-@testset "issue #1077" begin
-    temp_pkg_dir() do project_path
-        Pkg.add("UUIDs")
-        # the following should not error
-        Pkg.add("UUIDs")
-        Pkg.test("UUIDs")
-        @test_throws PkgError("`pin` can not be applied to `UUIDs` because it is a stdlib.") Pkg.pin("UUIDs")
     end
 end
 
@@ -626,28 +528,6 @@ end
         Pkg.rm("Example")
         @test targets == Pkg.Types.read_project("Project.toml").targets
     end end
-end
-
-@testset "reading corrupted project files" begin
-    dir = joinpath(@__DIR__, "project", "bad")
-    for bad_project in joinpath.(dir, readdir(dir))
-        @test_throws PkgError Pkg.Types.read_project(bad_project)
-    end
-end
-
-@testset "reading corrupted manifest files" begin
-    dir = joinpath(@__DIR__, "manifest", "bad")
-    for bad_manifest in joinpath.(dir, readdir(dir))
-        @test_throws PkgError Pkg.Types.read_manifest(bad_manifest)
-    end
-end
-
-@testset "Unregistered UUID in manifest" begin
-    temp_pkg_dir() do project_path; with_temp_env() do; cd_tempdir() do tmpdir
-        cp(joinpath(@__DIR__, "test_packages", "UnregisteredUUID"), "UnregisteredUUID")
-        Pkg.activate("UnregisteredUUID")
-        @test_throws PkgError Pkg.update()
-    end end end
 end
 
 @testset "canonicalized relative paths in manifest" begin
@@ -724,50 +604,6 @@ import Markdown
     @test d["registry add"].help isa Markdown.MD
 end
 
-@testset "instantiate should respect tree hash" begin
-    temp_pkg_dir() do project_path; mktempdir() do tmp
-        copy_test_package(tmp, "NotUpdated")
-        Pkg.activate(joinpath(tmp, "NotUpdated"))
-        hash = Pkg.Types.Context().env.manifest[TEST_PKG.uuid].tree_hash
-        Pkg.instantiate()
-        @test hash == Pkg.Types.Context().env.manifest[TEST_PKG.uuid].tree_hash
-    end end
-end
-
-@testset "Issue 1124 code path" begin
-    temp_pkg_dir() do project_path; with_temp_env() do
-        pkg"add Example#master"
-        pkg"add Unicode"
-        pkg"up Unicode"
-    end end
-end
-
-@testset "instantiate checks for consistent dependency graph" begin
-    temp_pkg_dir() do project_path; mktempdir() do tmp
-        copy_test_package(tmp, "ExtraDirectDep")
-        Pkg.activate(joinpath(tmp, "ExtraDirectDep"))
-        @test_throws PkgError Pkg.instantiate()
-    end end
-end
-
-@testset "instantiate of lonely manifest" begin
-    temp_pkg_dir() do project_path
-       # noproject_dir =
-       manifest_dir = joinpath(@__DIR__, "manifest", "noproject")
-        cd(manifest_dir) do
-            try
-                Pkg.activate(".")
-                Pkg.instantiate()
-                @test Base.active_project() == abspath("Project.toml")
-                @test isinstalled("Example")
-                @test isinstalled("x1")
-            finally
-                rm("Project.toml"; force=true)
-            end
-        end
-    end
-end
-
 @testset "up should prune manifest" begin
     example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
@@ -780,37 +616,6 @@ end
         @test package_example !== nothing
         @test package_example.version > v"0.4.0"
         @test get(manifest, unicode_uuid, nothing) === nothing
-    end end
-end
-
-@testset "create manifest file similar to project file" begin
-    temp_pkg_dir() do project_path
-        cd_tempdir() do dir
-            touch(joinpath(dir, "Project.toml"))
-            Pkg.activate(".")
-            Pkg.add("Example")
-            @test isfile(joinpath(dir, "Manifest.toml"))
-            @test !isfile(joinpath(dir, "JuliaManifest.toml"))
-        end
-        cd_tempdir() do dir
-            touch(joinpath(dir, "JuliaProject.toml"))
-            Pkg.activate(".")
-            Pkg.add("Example")
-            @test !isfile(joinpath(dir, "Manifest.toml"))
-            @test isfile(joinpath(dir, "JuliaManifest.toml"))
-        end
-    end
-end
-
-@testset "query interface basic tests" begin
-    temp_pkg_dir() do project_path; with_temp_env() do
-        Pkg.develop("Example")
-        Pkg.add("Unicode")
-        Pkg.add("Markdown")
-        @test length(Pkg.project().dependencies) == 3
-        xs = Dict(uuid => pkg for (uuid, pkg) in Pkg.dependencies() if pkg.isdeveloped)
-        @test length(xs) == 1
-        @test xs[TEST_PKG.uuid].ispinned == false
     end end
 end
 

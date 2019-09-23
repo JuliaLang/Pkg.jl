@@ -543,7 +543,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     end
     ensure_resolved(ctx, [pkg]; registry=true)
     # We might have been given a name / uuid combo that does not have an entry in the registry
-    repo_info = Types.registered_info(ctx, pkg.uuid, "repo")
+    repo_info = registered_info(ctx, pkg.uuid, "repo")
     if isempty(repo_info)
         pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
     end
@@ -573,18 +573,20 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     @assert pkg.repo.source !== nothing
 
     # We now have the source of the package repo, check if it is a local path and if that exists
+    repo_source = pkg.repo.source
     if !isurl(pkg.repo.source)
         if isdir(pkg.repo.source)
             if !isdir(joinpath(pkg.repo.source, ".git"))
                 pkgerror("Did not find a git repository at `$(pkg.repo.source)`")
             end
-            pkg.repo.source = isabspath(pkg.repo.source) ? abspath(pkg.repo.source) : safe_realpath(pkg.repo.source)
+            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx, pkg.repo.source)
+            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
         else
             pkgerror("Path `$(pkg.repo.source)` does not exist.")
         end
     end
 
-    LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(pkg.repo.source), pkg.repo.source; isbare=true)) do repo
+    LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
         # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
         if pkg.repo.rev == nothing
             pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
@@ -594,7 +596,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         fetched = false
         if obj_branch === nothing
             fetched = true
-            GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=refspecs)
+            GitTools.fetch(ctx, repo, repo_source; refspecs=refspecs)
             obj_branch = get_object_or_branch(repo, pkg.repo.rev)
             if obj_branch === nothing
                 pkgerror("Did not find rev $(pkg.repo.rev) in repository")
@@ -606,7 +608,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         entry = manifest_info(ctx, pkg.uuid)
         ispinned = entry !== nothing && entry.pinned
         if isbranch && !fetched && !ispinned
-            GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=refspecs)
+            GitTools.fetch(ctx, repo, repo_source; refspecs=refspecs)
             gitobject, isbranch = get_object_or_branch(repo, pkg.repo.rev)
         end
 

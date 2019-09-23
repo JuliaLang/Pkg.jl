@@ -1390,6 +1390,9 @@ function package_info(ctx::Context, pkg::PackageSpec)::PackageInfo
 end
 
 function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
+    git_source = pkg.repo.source === nothing ? nothing :
+        isurl(pkg.repo.source) ? pkg.repo.source :
+        project_rel_path(ctx, pkg.repo.source)
     info = PackageInfo(
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
@@ -1398,7 +1401,7 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
         is_tracking_registry = pkg.repo.source === nothing && pkg.path === nothing,
         isdeveloped          = pkg.path !== nothing,
         git_revision         = pkg.repo.rev,
-        git_source           = pkg.repo.source,
+        git_source           = git_source,
         source               = project_rel_path(ctx, source_path(pkg)),
         dependencies         = copy(entry.deps), #TODO is copy needed?
     )
