@@ -301,9 +301,6 @@ temp_pkg_dir() do project_path
     @testset "check logging" begin
         usage = Pkg.TOML.parse(String(read(joinpath(Pkg.logdir(), "manifest_usage.toml"))))
         manifest = Types.safe_realpath(joinpath(project_path, "Manifest.toml"))
-        @show keys(usage)
-        @show manifest
-        @show usage
         @test any(x -> startswith(x, manifest), keys(usage))
     end
 

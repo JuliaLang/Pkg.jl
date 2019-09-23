@@ -178,6 +178,7 @@ end
 
 has_name(pkg::PackageSpec) = pkg.name !== nothing
 has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
+isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
@@ -508,7 +509,6 @@ function read_package(f::String)
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
-const reg_pkg = r"(?:^|[\/\\])(\w+?)(?:\.jl)?(?:\.git)?(?:[\/\\])?$"
 
 # Windows sometimes throw on `isdir`...
 function isdir_windows_workaround(path::String)
@@ -535,48 +535,22 @@ end
 casesensitive_isdir(dir::String) =
     isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
 
-function git_checkout_latest!(ctx::Context, repo_path::AbstractString)
-    LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
-        rev = LibGit2.isattached(repo) ?
-            LibGit2.branch(repo) :
-            string(LibGit2.GitHash(LibGit2.head(repo)))
-        gitobject, isbranch = nothing, nothing
-        Base.shred!(LibGit2.CachedCredentials()) do creds
-            gitobject, isbranch = get_object_branch(ctx, repo, rev, creds)
-        end
-        try
-            LibGit2.transact(repo) do r
-                if isbranch
-                    LibGit2.branch!(r, rev, track=LibGit2.Consts.REMOTE_ORIGIN)
-                else
-                    LibGit2.checkout!(r, string(LibGit2.GitHash(gitobject)))
-                end
-            end
-        finally
-            close(gitobject)
-        end
-    end
-end
-
-function fresh_clone(ctx::Context, url::String)
-    clone_path = joinpath(depots1(), "clones")
-    mkpath(clone_path)
-    repo_path = joinpath(clone_path, string(hash(url), "_full"))
-    # make sure you have a fresh clone
-    repo = nothing
+function git_checkout_latest!(ctx::Context, repo::LibGit2.GitRepo)
+    rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
+    gitobject, isbranch = nothing, nothing
+    gitobject, isbranch = get_object_or_branch(ctx, repo, rev)
     try
-        repo = GitTools.ensure_clone(ctx, repo_path, url)
-        Base.shred!(LibGit2.CachedCredentials()) do creds
-            GitTools.fetch(ctx, repo, url; refspecs=refspecs, credentials=creds)
+        # TODOKC: This is useless
+        LibGit2.transact(repo) do r
+            if isbranch
+                LibGit2.branch!(r, rev, track=LibGit2.Consts.REMOTE_ORIGIN)
+            else
+                LibGit2.checkout!(r, string(LibGit2.GitHash(gitobject)))
+            end
         end
     finally
-        repo isa LibGit2.GitRepo && LibGit2.close(repo)
+        close(gitobject)
     end
-    # Copy the repo to a temporary place and check out the rev
-    temp_repo = mktempdir()
-    cp(repo_path, temp_repo; force=true)
-    git_checkout_latest!(ctx, temp_repo)
-    return temp_repo
 end
 
 function devpath(ctx::Context, name::String, shared::Bool)
@@ -584,74 +558,57 @@ function devpath(ctx::Context, name::String, shared::Bool)
     return joinpath(dev_dir, name)
 end
 
-function is_tracking_repo(ctx::Context, name::String)::Bool
-    uuid = get(ctx.env.project.deps, name, nothing)
-    uuid === nothing && return false
-    entry = manifest_info(ctx, uuid)
-    entry === nothing && return false
-    return entry.repo.source !== nothing
-end
+function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
+    pkg.special_action = PKGSPEC_DEVELOPED
 
-# The return value says wether we are using a new clone
-function move_to_dev_path!(ctx::Context, pkg::PackageSpec, shared::Bool, temp_clone::String)::Bool
-    new = false
-    parse_package!(ctx, pkg, temp_clone)
+    # First, check if we can compute the path easily (which requires a given local path or name)
+    is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
+    if is_local_path || pkg.name !== nothing
+        dev_path = is_local_path ? pkg.repo.source : devpath(ctx, pkg.name, shared)
+        # If given an explicit local path, that needs to exist
+        if pkg.repo.source !== nothing && !isdir(dev_path)
+            pkgerror("Dev path `$(pkg.repo.source)` does not exist")
+        end
+        # Could potentially get the dev path from the manifest...
+        if isdir(dev_path)
+            resolve_projectfile!(ctx, pkg, dev_path)
+            println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
+            pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
+            return false
+        else
+            # If we dev by name and it is in the Project + tracking a repo in the source we can get the repo from 
+            if pkg.name !== nothing && pkg.uuid === nothing
+                uuid = get(ctx.env.project.deps, pkg.name, nothing)
+                if uuid !== nothing
+                    entry = manifest_info(ctx, uuid)
+                    if entry !== nothing 
+                        pkg.repo.source = entry.repo.source
+                    end
+                end
+            end
+        end
+    end
+    
+    # Still didn't find the source, try get it from the registry
+    if pkg.repo.source === nothing
+        set_repo_source_from_registry(ctx, pkg)
+    end
+    @assert pkg.repo.source !== nothing
+
+    repo_path = dev_repo_cache_path(pkg.repo.source)
+    repo = GitTools.ensure_clone(ctx, repo_path, pkg.repo.source)
+    # TODO! Should reset --hard to latest commit here
+    resolve_projectfile!(ctx, pkg, repo_path)
     dev_path = devpath(ctx, pkg.name, shared)
     if isdir(dev_path)
-        parse_package!(ctx, pkg, dev_path)
         println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
-        rm(temp_clone; recursive=true)
+        new = false
     else
         mkpath(dirname(dev_path))
-        mv(temp_clone, dev_path)
+        cp(repo_path, dev_path)
         new = true
     end
     pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
-    return new
-end
-
-function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
-    new = false
-    pkg.special_action = PKGSPEC_DEVELOPED
-    if pkg.repo.source !== nothing && !isurl(pkg.repo.source) # explicit path
-        given_abspath = isabspath(pkg.repo.source)
-        pkg.repo.source = try
-            realpath(pkg.repo.source)
-        catch
-            pkgerror("Dev path `$(pkg.repo.source)` does not exist")
-        end
-        parse_package!(ctx, pkg, pkg.repo.source)
-        pkg.path = given_abspath ? pkg.repo.source : relative_project_path(ctx, pkg.repo.source)
-    elseif pkg.name !== nothing && isdir(devpath(ctx, pkg.name, shared)) # existing dev path
-        dev_path = devpath(ctx, pkg.name, shared)
-        parse_package!(ctx, pkg, dev_path)
-        println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
-        pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
-    elseif pkg.repo.source !== nothing # explicit URL
-        temp_clone = fresh_clone(ctx, pkg.repo.source)
-        new = move_to_dev_path!(ctx, pkg, shared, temp_clone)
-    elseif pkg.uuid === nothing && is_tracking_repo(ctx, pkg.name)
-        entry = manifest_info(ctx, ctx.env.project.deps[pkg.name])
-        dev_path = devpath(ctx, entry.name, shared)
-        if isdir(dev_path)
-            parse_package!(ctx, pkg, dev_path)
-            println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
-        end
-        # TODO check this, I might have deleted an else :|
-        temp_clone = fresh_clone(ctx, entry.repo.source)
-        new = move_to_dev_path!(ctx, pkg, shared, temp_clone)
-    else # resolve against registry
-        update_registries(ctx)
-        registry_resolve!(ctx, pkg)
-        if pkg.name === nothing || pkg.uuid === nothing
-            pkgerror("Package $(err_rep(pkg)) could not be found in a registry.") # TODO test this
-        end
-        paths = registered_paths(ctx, pkg.uuid)
-        isempty(paths) && pkgerror("Package $(err_rep(pkg)) could not be found in a registry.")
-        _, location = Types.registered_info(ctx, pkg.uuid, "repo")[1] #TODO look into [1]
-        temp_clone = fresh_clone(ctx, location)
-        new = move_to_dev_path!(ctx, pkg, shared, temp_clone)
-    end
     return new
 end
 
@@ -659,7 +616,7 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
     new_uuids = UUID[]
     for pkg in pkgs
         new = handle_repo_develop!(ctx, pkg, shared)
-        new  && push!(new_uuids, pkg.uuid)
+        new && push!(new_uuids, pkg.uuid)
         @assert pkg.path !== nothing
         @assert has_uuid(pkg)
         pkg.repo = GitRepo() # clear repo field, no longer needed
@@ -667,161 +624,109 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
     return new_uuids
 end
 
-clone_path(url::String) = joinpath(depots1(), "clones", string(hash(url)))
-function clone_path!(ctx::Context, url::String)
-    clone = clone_path(url)
-    mkpath(dirname(clone))
-    Base.shred!(LibGit2.CachedCredentials()) do creds
-        LibGit2.with(GitTools.ensure_clone(ctx, clone, url; isbare=true, credentials=creds)) do repo
-            GitTools.fetch(ctx, repo; refspecs=refspecs, credentials=creds)
-        end
+add_repo_cache_path(url::String) = joinpath(depots1(), "clones", string(hash(url)))
+dev_repo_cache_path(url::String) = add_repo_cache_path(url) * "_full"
+
+function set_repo_source_from_registry!(ctx, pkg)
+    registry_resolve!(ctx, pkg)
+    # Didn't find the package in the registry, but maybe it exists in the updated registry
+    if !isresolved(pkg)
+        update_registries(ctx)
+        registry_resolve!(ctx, pkg)
     end
-    return clone
+    ensure_resolved(ctx, [pkg]; registry=true)
+    # We might have been given a name / uuid combo that does not have an entry in the registry
+    repo_info = Types.registered_info(ctx, pkg.uuid, "repo")
+    if isempty(repo_info)
+        pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
+    end
+    _, repo_source = repo_info[1] # Just take the first repo we found
+    pkg.repo.source = repo_source
 end
 
-function guess_rev(ctx::Context, repo_path)::String
-    rev = nothing
-    LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
-        rev = LibGit2.isattached(repo) ?
-            LibGit2.branch(repo) :
-            string(LibGit2.GitHash(LibGit2.head(repo)))
-        gitobject, isbranch = nothing, nothing
-        Base.shred!(LibGit2.CachedCredentials()) do creds
-            gitobject, isbranch = get_object_branch(ctx, repo, rev, creds)
-        end
-        LibGit2.with(gitobject) do object
-            rev = isbranch ? rev : string(LibGit2.GitHash(gitobject))
-        end
-    end
-    return rev
-end
-
-function with_git_tree(fn, ctx::Context, repo_path::String, rev::String)
-    gitobject = nothing
-    Base.shred!(LibGit2.CachedCredentials()) do creds
-        LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
-            gitobject, isbranch = get_object_branch(ctx, repo, rev, creds)
-            LibGit2.with(LibGit2.peel(LibGit2.GitTree, gitobject)) do git_tree
-                @assert git_tree isa LibGit2.GitTree
-                return applicable(fn, repo, git_tree) ?
-                    fn(repo, git_tree) :
-                    fn(git_tree)
-            end
-        end
-    end
-end
-
-function repo_checkout(ctx::Context, repo_path, rev)
-    project_path = mktempdir()
-    with_git_tree(ctx, repo_path, rev) do repo, git_tree
-        _project_path = project_path # https://github.com/JuliaLang/julia/issues/30048
-        GC.@preserve _project_path begin
-            opts = LibGit2.CheckoutOptions(
-                checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
-                target_directory = Base.unsafe_convert(Cstring, _project_path),
-            )
-            LibGit2.checkout_tree(repo, git_tree, options=opts)
-        end
-    end
-    return project_path
-end
-
-function tree_hash(ctx::Context, repo_path, rev)
-    with_git_tree(ctx, repo_path, rev) do git_tree
-        return SHA1(string(LibGit2.GitHash(git_tree))) # TODO can it be just SHA1?
-    end
-end
-
-function instantiate_pkg_repo!(ctx::Context, pkg::PackageSpec, cached_repo::Union{Nothing,String}=nothing)
-    pkg.special_action = PKGSPEC_REPO_ADDED
-    clone = clone_path!(ctx, pkg.repo.source)
-    pkg.tree_hash = tree_hash(ctx, clone, pkg.repo.rev)
-    version_path = Pkg.Operations.find_installed(pkg.name, pkg.uuid, pkg.tree_hash)
-    if cached_repo === nothing
-        cached_repo = repo_checkout(ctx, clone, string(pkg.tree_hash))
-    end
-    isdir(version_path) && return false
-    mkpath(version_path)
-    mv(cached_repo, version_path; force=true)
-    set_readonly(version_path)
-    return true
-end
 
 function handle_repo_add!(ctx::Context, pkg::PackageSpec)
-    given_abspath = nothing
+    pkg.special_action = PKGSPEC_REPO_ADDED
+    # The first goal is to populate pkg.repo.source if that wasn't given explicitly
     if pkg.repo.source === nothing
         @assert pkg.repo.rev !== nothing
-        # First, we try resolving against the manifest to avoid updating registries if at all possible.
+        # First, we try resolving against the manifest and current registry to avoid updating registries if at all possible.
         # This also handles the case where we _only_ wish to switch the tracking branch for a package.
         manifest_resolve!(ctx, [pkg]; force=true)
-        # If we could not resolve against manifest, resolve against the registry.
-        if pkg.name === nothing || pkg.uuid === nothing
-            @goto reg_resolve
+        if isresolved(pkg)
+            entry = manifest_info(ctx, pkg.uuid)
+            if entry !== nothing && entry.repo.source !== nothing # reuse source in manifest
+                pkg.repo.source = entry.repo.source
+            end
         end
-        entry = manifest_info(ctx, pkg.uuid)
-        # We still have to check this case, recall that name and UUID could both be given explicitly.
-        entry !== nothing || @goto reg_resolve 
-        if entry.pinned
-            pkg.tree_hash = entry.tree_hash # TODO why do we need this?
-            return false
-        elseif entry.repo.source !== nothing # reuse source in manifest
-            # TODO check consistency with entry
-            pkg.repo.source = entry.repo.source
-            @goto do_clone
+        if pkg.repo.source === nothing
+            set_repo_source_from_registry!(ctx, pkg)
         end
-        @label reg_resolve
-        update_registries(ctx) # If the information not in manifest, we have no choice but to update the registry.
-        registry_resolve!(ctx, pkg)
-        if pkg.name === nothing || pkg.uuid === nothing
-            pkgerror("Package $(err_rep(pkg)) could not be found in a registry or a manifest.")
-        end
-        paths = registered_paths(ctx, pkg.uuid)
-        # We still have to check this case, both name/UUID can be given explicitly.
-        if isempty(paths)
-            pkgerror("Package with UUID `$(pkg.uuid)` could not be found in a registry.")
-        end
-        _, pkg.repo.source = Types.registered_info(ctx, pkg.uuid, "repo")[1]
     end
-    @label do_clone
     @assert pkg.repo.source !== nothing
+
+    # We now have the source of the package repo, check if it is a local path and if that exists
     if !isurl(pkg.repo.source)
-        given_abspath = isabspath(pkg.repo.source)
-        pkg.repo.source = try
-            realpath(pkg.repo.source)
-        catch
+        if ispath(pkg.repo.source)
+            pkg.repo.source = safe_realpath(pkg.repo.source)
+        else
             pkgerror("Path `$(pkg.repo.source)` does not exist.")
         end
     end
-    clone_path   = clone_path!(ctx, pkg.repo.source)
-    pkg.repo.rev = something(pkg.repo.rev, guess_rev(ctx, clone_path))
-    cached_repo  = repo_checkout(ctx, clone_path, pkg.repo.rev)
-    package      = parse_package!(ctx, pkg, cached_repo)
-    if given_abspath !== nothing && !given_abspath
-        pkg.repo.source = relative_project_path(ctx, pkg.repo.source)
+
+    LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(pkg.repo.source), pkg.repo.source; isbare=true)) do repo
+        # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
+        if pkg.repo.rev == nothing
+            pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
+        end
+
+        obj_branch = get_object_or_branch(ctx, repo, pkg.repo.rev)
+        fetched = false
+        if obj_branch === nothing
+            fetched = true
+            GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=refspecs)
+            obj_branch = get_object_or_branch(ctx, repo, pkg.repo.rev)
+            if obj_branch === nothing
+                pkgerror("Did not find rev $(pkg.repo.rev) in repository")
+            end
+        end
+        gitobject, isbranch = obj_branch
+
+        # If we are tracking a branch and are not pinned we want to update the repo if we haven't done that yet
+        entry = manifest_info(ctx, pkg.uuid)
+        ispinned = entry !== nothing && entry.pinned
+        if isbranch && !fetched && !ispinned
+            GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=refspecs)
+            gitobject, isbranch = get_object_or_branch(ctx, repo, pkg.repo.rev)
+        end
+
+        # Now we have the gitobject for our ref, time to find the tree hash for it
+        tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
+        pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
+
+        # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
+        if has_uuid(pkg)
+            version_path = Pkg.Operations.source_path(pkg)
+            isdir(version_path) && return false
+        end
+
+        temp_path = mktempdir()
+        GitTools.checkout_tree_to_path(repo, tree_hash_object, temp_path)
+        package = resolve_projectfile!(ctx, pkg, temp_path)
+
+        # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
+        # check to see if the package exists at its canonical path.
+        version_path = Pkg.Operations.source_path(pkg)
+        isdir(version_path) && return false
+        
+        # Otherwise, move the temporary path into its correct place and set read only
+        mkpath(version_path)
+        mv(temp_path, version_path; force=true)
+        set_readonly(version_path)
+        return true
     end
-    @assert pkg.name !== nothing && pkg.uuid !== nothing &&
-        pkg.repo.source !== nothing && pkg.repo.rev !== nothing
-    # Check for pinned entry again.
-    entry = manifest_info(ctx, pkg.uuid)
-    if entry !== nothing && entry.pinned
-        rm(cached_repo; recursive=true, force=true)
-        pkg.tree_hash = entry.tree_hash
-        return false
-    end
-    pkg.tree_hash = tree_hash(ctx, clone_path, pkg.repo.rev)
-    # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
-    # check to see if the package exists at its canonical path.
-    version_path = Pkg.Operations.source_path(pkg)
-    isdir(version_path) && return false
-    mkpath(version_path)
-    mv(cached_repo, version_path; force=true)
-    return true
 end
 
-"""
-Ensure repo specified by `repo` exists at version path for package
-Set tree_hash
-"""
 function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     new_uuids = UUID[]
     for pkg in pkgs
@@ -831,45 +736,39 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     return new_uuids
 end
 
-function parse_package!(ctx, pkg, project_path)
+function resolve_projectfile!(ctx, pkg, project_path)
     env = ctx.env
     project_file = projectfile_path(project_path; strict=true)
-    project_file === nothing && pkgerror(string("could not find project file in pacakge at ",
+    project_file === nothing && pkgerror(string("could not find project file in package at ",
                                                 pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)))
-    if project_file !== nothing
-        project_data = read_package(project_file)
-        pkg.uuid = project_data.uuid # TODO check no overwrite
-        pkg.name = project_data.name # TODO check no overwrite
-    end
+    project_data = read_package(project_file)
+    pkg.uuid = project_data.uuid # TODO check no overwrite
+    pkg.name = project_data.name # TODO check no overwrite
 end
 
-get_object_branch(ctx::Context, repo, rev::SHA1, creds) =
-    get_object_branch(ctx, repo, string(rev), creds)
+get_object_or_branch(ctx::Context, repo, rev::SHA1) =
+    get_object_or_branch(ctx, repo, string(rev))
 
-function get_object_branch(ctx::Context, repo, rev, creds)
+# Returns nothing if rev could not be found in repo
+function get_object_or_branch(ctx::Context, repo, rev)
     gitobject = nothing
     isbranch = false
+    # Try get it as a remote branch
     try
         gitobject = LibGit2.GitObject(repo, "remotes/cache/heads/" * rev)
-        isbranch = true
+        return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     if gitobject == nothing
         try
             gitobject = LibGit2.GitObject(repo, rev)
+            return gitobject, false
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
-            GitTools.fetch(ctx, repo; refspecs=refspecs, credentials=creds)
-            try
-                gitobject = LibGit2.GitObject(repo, rev)
-            catch err
-                err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
-                pkgerror("git object $(rev) could not be found")
-            end
         end
     end
-    return gitobject, isbranch
+    return nothing
 end
 
 ########################################
@@ -1087,10 +986,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             printpkgstyle(ctx, :Copying, "registry from `$(Base.contractuser(reg.path))`")
             cp(reg.path, tmp; force=true)
         elseif reg.url !== nothing # clone from url
-            Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(GitTools.clone(ctx, reg.url, tmp; header = "registry from $(repr(reg.url))",
-                    credentials = creds)) do repo
-                end
+            LibGit2.with(GitTools.clone(ctx, reg.url, tmp; header = "registry from $(repr(reg.url))")) do repo
             end
         else
             pkgerror("no path or url specified for registry")

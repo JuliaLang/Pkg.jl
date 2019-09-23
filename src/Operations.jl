@@ -552,13 +552,7 @@ function install_git(
         tree isa LibGit2.GitTree ||
             error("$name: git object $(string(hash)) should be a tree, not $(typeof(tree))")
         mkpath(version_path)
-        GC.@preserve version_path begin
-            opts = LibGit2.CheckoutOptions(
-                checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
-                target_directory = Base.unsafe_convert(Cstring, version_path)
-            )
-            LibGit2.checkout_tree(repo, tree, options=opts)
-        end
+        GitTools.checkout_tree_to_path(repo, tree, path)
         return
     finally
         repo !== nothing && LibGit2.close(repo)
@@ -1085,7 +1079,8 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
     elseif entry.repo.source !== nothing # repo packages have a version but are treated special
         pkg.repo = entry.repo
         if level == UPLEVEL_MAJOR
-            new = instantiate_pkg_repo!(ctx, pkg)
+            # Updating a repo package is equivalent to adding it
+            new = Types.handle_repo_add!(ctx, pkg)
             pkg.version = entry.version
             if pkg.tree_hash != entry.tree_hash
                 # TODO parse find_installed and set new version

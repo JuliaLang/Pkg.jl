@@ -695,17 +695,13 @@ function precompile(ctx::Context)
     nothing
 end
 
-function tree_hash_exists(repo_path::String, tree_hash::String)
-    isdir(repo_path) || return false
-    LibGit2.with(LibGit2.GitRepo(repo_path)) do repo
-        try
-            LibGit2.GitObject(repo, tree_hash)
-            return true
-        catch err
-            err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
-        end
-        return false
+function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
+    try
+        return LibGit2.GitObject(repo, tree_hash)
+    catch err
+        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
+    return nothing
 end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
@@ -761,21 +757,24 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         else
             repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
         end
-        clonepath = Types.clone_path(repo_source)
-        # We try to avoid updating the clone if the target already exists
-        if tree_hash_exists(clonepath, string(pkg.tree_hash))
-            tmp_source = Types.repo_checkout(ctx, clonepath, string(pkg.tree_hash))
-        else
-            if !isurl(repo_source) && !isdir(repo_source)
-                pkgerror("Expected $(err_rep(pkg)) to exist at `$(repo_source)`, but no such directory.")
-            end
-            Types.clone_path!(ctx, repo_source) # TODO a more direct way of updating a clone
-            tmp_source = Types.repo_checkout(ctx, clonepath, string(pkg.tree_hash))
+        if !isurl(repo_source) && !isdir(repo_source)
+            pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
         end
-        # Finally move the checked out tree to the correct location
-        mkpath(sourcepath)
-        mv(tmp_source, sourcepath; force=true)
-        push!(new_git, pkg.uuid)
+        repo_path = Types.add_repo_cache_path(repo_source)
+        LibGit2.with(GitTools.ensure_clone(ctx, repo_path, pkg.repo.source; isbare=true)) do repo
+            # We only update the clone if the tree hash can't be found
+            tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
+            if tree_hash_object === nothing
+                GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=refspecs)
+                tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
+            end
+            if tree_hash_object === nothing
+                 pkgerror("Did not find tree_hash $(pkg.tree_hash) for $(err_rep(pkg))")
+            end
+            mkpath(sourcepath)
+            GitTools.checkout_tree_to_path(repo, tree_hash_object, sourcepath)
+            push!(new_git, pkg.uuid)
+        end
     end
 
     # Ensure artifacts are installed for the dependent packages, and finally this overall project

@@ -19,11 +19,9 @@ function temp_pkg_dir(fn::Function;rm=true)
         generaldir = joinpath(@__DIR__, "registries", "General")
         if !isdir(generaldir)
             mkpath(generaldir)
-            Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
-                                                "https://github.com/JuliaRegistries/General.git",
-                    generaldir, credentials = creds)) do repo
-                end
+            LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
+                                            "https://github.com/JuliaRegistries/General.git",
+                generaldir, credentials = creds)) do repo
             end
         end
         empty!(LOAD_PATH)
