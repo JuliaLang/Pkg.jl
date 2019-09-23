@@ -197,13 +197,14 @@ function probe_platform_engines!(;verbose::Bool = false)
     # the correct 7z given the path to the executable:
     unpack_7z = (exe7z) -> begin
         return (tarball_path, out_path, excludelist = nothing) ->
-        pipeline(`$exe7z x $(tarball_path) -y -so`,
-                 `$exe7z x -si -y -ttar -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`)
+        pipeline(pipeline(`$exe7z x $(tarball_path) -y -so`,
+                 `$exe7z x -si -y -ttar -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`);
+                 stdout=devnull, stderr=devnull)
     end
     package_7z = (exe7z) -> begin
         return (in_path, tarball_path) ->
-            pipeline(`$exe7z a -ttar -so a.tar "$(joinpath(".",in_path,"*"))"`,
-                     `$exe7z a -si $(tarball_path)`)
+            pipeline(pipeline(`$exe7z a -ttar -so a.tar "$(joinpath(".",in_path,"*"))"`,
+                     `$exe7z a -si $(tarball_path)`); stdout=devnull, stderr=devnull)
     end
     list_7z = (exe7z) -> begin
         return (path; verbose = false) ->
@@ -578,7 +579,7 @@ function download(url::AbstractString, dest::AbstractString;
         @info("Downloading $(url) to $(dest)...")
     end
     try
-        run(download_cmd, (devnull, devnull, devnull))
+        run(download_cmd, (devnull, verbose ? stdout : devnull, verbose ? stderr : devnull))
     catch e
         if isa(e, InterruptException)
             rethrow()
@@ -849,7 +850,16 @@ function download_verify_unpack(url::AbstractString,
             ext = "gz"
         end
 
+        # Work around windows limitations regarding tempname()
         tarball_path = "$(tempname())-download.$(ext)"
+        tries = 0
+        while isfile(tarball_path) && tries < 100
+            tarball_path = "$(tempname())-download.$(ext)"
+            tries += 1
+        end
+        if tries >= 100
+            error("Unable to generate unused tempname! Clean up your temporary folder $(dirname(tempname())) and try again.")
+        end
     end
 
     # Download the tarball; if it already existed and we needed to remove it

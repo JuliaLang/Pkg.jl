@@ -18,17 +18,14 @@ before_script:
 branches:
   only:
     - master
-    - staging
-    - trying
+    - /^release-.*/
     - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
 
 stages:
   - name: test
-    # test only on bors trying and bors staging, and run master with linux/nightly for coverage
-    if: branch IN (trying, staging) OR (branch = master AND os = linux AND env(TRAVIS_JULIA_VERSION) = nightly)
   - name: docs
-    # build docs on bors trying, bors staging, master and for tags
-    if: branch IN (trying, staging) OR (branch = master AND type = push) OR tag IS present
+    # build docs on master and for tags
+    if: (branch = master AND type = push) OR tag IS present
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
@@ -45,10 +42,10 @@ jobs:
         - julia --project -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
         - julia --project=docs --color=yes docs/make.jl pdf
       after_success: skip
-    - name: TOML (Julia 1.0)
+    - name: TOML (Julia 1.3)
       stage: test
       os: linux
-      julia: 1.0
+      julia: 1.3
       script:
         - julia --project=ext/TOML -e 'using Pkg; Pkg.test()'
       after_success: skip

@@ -22,8 +22,10 @@ end
         copy_test_package(tmp, "BasicCompat")
         Pkg.activate(joinpath(tmp, "BasicCompat"))
         @test haskey(Pkg.Types.Context().env.project.compat, "Example")
+        @test haskey(Pkg.Types.Context().env.project.compat, "julia")
         Pkg.rm("Example")
         @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
+        @test haskey(Pkg.Types.Context().env.project.compat, "julia")
     end
 end
 
