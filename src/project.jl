@@ -179,4 +179,3 @@ function write_project(project::Dict, project_file::AbstractString)
     TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
     open(f -> write(f, seekstart(io)), project_file; truncate=true)
 end
-

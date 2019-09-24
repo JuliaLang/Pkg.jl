@@ -129,7 +129,7 @@ function Manifest(raw::Dict)::Manifest
     for (name, infos) in raw, info in infos
         # TODO is name guaranteed to be a string?
         entry = PackageEntry()
-        entry.name     = name
+        entry.name = name
         uuid = nothing
         deps = nothing
         try
