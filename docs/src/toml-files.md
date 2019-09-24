@@ -59,6 +59,9 @@ should follow SemVer. The basic rules are:
   `Base` or other packages.
 See also the section on [Compatibility](@ref).
 
+Note that pre-1.0.0 rule is where Pkg.jl deviates from SemVer specification.  See
+[Pre-1.0 behavior](@ref) for more details.
+
 
 ### The `[deps]` section
 
