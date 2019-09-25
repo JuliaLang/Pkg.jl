@@ -572,11 +572,12 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             if !isdir(joinpath(pkg.repo.source, ".git"))
                 pkgerror("Did not find a git repository at `$(pkg.repo.source)`")
             end
-            pkg.repo.source = safe_realpath(pkg.repo.source)
+            pkg.repo.source = isabspath(pkg.repo.source) ? abspath(pkg.repo.source) : safe_realpath(pkg.repo.source)
         else
             pkgerror("Path `$(pkg.repo.source)` does not exist.")
         end
     end
+
     LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(pkg.repo.source), pkg.repo.source; isbare=true)) do repo
         # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
         if pkg.repo.rev == nothing
