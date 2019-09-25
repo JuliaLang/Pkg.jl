@@ -56,6 +56,9 @@ Example = "0.2.1"
 
 results in a versionbound on Example as `[0.2.1, 0.3.0)`.
 
+In particular, a package may set `version = "0.2.4"` when it has feature additions compared to 0.2.3 as long as it
+remains backward compatible with 0.2.0.  See also [The `version` field](@ref).
+
 ### Caret specifiers
 
 A caret specifier allows upgrade that would be compatible according to semver.
