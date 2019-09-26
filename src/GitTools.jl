@@ -111,7 +111,17 @@ function ensure_clone(ctx, target_path, url; kwargs...)
     end
 end
 
-function clone(ctx, url, source_path; header=nothing, kwargs...)
+function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, path::String)
+    GC.@preserve path begin
+        opts = LibGit2.CheckoutOptions(
+            checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
+            target_directory = Base.unsafe_convert(Cstring, path)
+        )
+        LibGit2.checkout_tree(repo, tree, options=opts)
+    end
+end
+
+function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     Pkg.Types.printpkgstyle(ctx, :Cloning, header == nothing ? "git-repo `$url`" : header)
@@ -123,8 +133,12 @@ function clone(ctx, url, source_path; header=nothing, kwargs...)
         )
     )
     print(stdout, "\e[?25l") # disable cursor
+    if credentials == nothing
+        credentials = LibGit2.CachedCredentials()
+    end
+    mkpath(source_path)
     try
-        return LibGit2.clone(url, source_path; callbacks=callbacks, kwargs...)
+        return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
     catch err
         rm(source_path; force=true, recursive=true)
         err isa LibGit2.GitError || rethrow()
@@ -135,12 +149,13 @@ function clone(ctx, url, source_path; header=nothing, kwargs...)
             Pkg.Types.pkgerror("failed to clone from $(url), error: $err")
         end
     finally
+        Base.shred!(credentials)
         print(stdout, "\033[2K") # clear line
         print(stdout, "\e[?25h") # put back cursor
     end
 end
 
-function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
+function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
@@ -156,6 +171,9 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kw
         )
     )
     print(stdout, "\e[?25l") # disable cursor
+    if credentials == nothing
+        credentials = LibGit2.CachedCredentials()
+    end
     try
         return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
     catch err
@@ -166,6 +184,7 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kw
             Pkg.Types.pkgerror("failed to fetch from $(remoteurl), error: $err")
         end
     finally
+        Base.shred!(credentials)
         print(stdout, "\033[2K") # clear line
         print(stdout, "\e[?25h") # put back cursor
     end
