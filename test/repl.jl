@@ -22,10 +22,6 @@ using ..Utils
     @test_throws PkgError pkg"helpadd"
 end
 
-@testset "generate args" begin
-    @test_throws PkgError pkg"generate"
-end
-
 temp_pkg_dir() do project_path
     with_pkg_env(project_path; change_dir=true) do;
         pkg"generate HelloWorld"
@@ -39,6 +35,7 @@ temp_pkg_dir() do project_path
         pkg"dev Foo"
         mv(joinpath("Foo", "src", "Foo.jl"), joinpath("Foo", "src", "Foo2.jl"))
         @test_throws PkgError pkg"dev Foo"
+        ###
         mv(joinpath("Foo", "src", "Foo2.jl"), joinpath("Foo", "src", "Foo.jl"))
         write(joinpath("Foo", "Project.toml"), """
             name = "Foo"
@@ -263,22 +260,6 @@ temp_pkg_dir() do project_path
     end
 end
 
-# test relative dev paths (#490)
-temp_pkg_dir() do depot; cd_tempdir() do tmp
-    uuid1 = Pkg.generate("HelloWorld")["HelloWorld"]
-    cd("HelloWorld")
-    uuid2 = Pkg.generate("SubModule")["SubModule"]
-    cd(mkdir("tests"))
-    pkg"activate ."
-    pkg"develop .." # HelloWorld
-    pkg"develop ../SubModule"
-    @test Pkg.dependencies()[uuid1].version == v"0.1.0"
-    @test Pkg.dependencies()[uuid2].version == v"0.1.0"
-    manifest = Pkg.Types.Context().env.manifest
-    @test manifest[uuid1].path == ".."
-    @test manifest[uuid2].path == joinpath("..", "SubModule")
-end end
-
 # path should not be relative when devdir() happens to be in project
 # unless user used dev --local.
 temp_pkg_dir() do depot
@@ -294,33 +275,6 @@ temp_pkg_dir() do depot
             @test manifest_info(Context(), uuid).path == joinpath("dev", "Example")
         end
     end
-end
-
-# test relative dev paths (#490) without existing Project.toml
-temp_pkg_dir() do depot; cd_tempdir() do tmp
-    pkg"activate NonExistent"
-    uuid= nothing
-    withenv("USER" => "Test User") do
-        uuid = Pkg.generate("Foo")["Foo"]
-    end
-    # this dev should not error even if NonExistent/Project.toml file is non-existent
-    @test !isdir("NonExistent")
-    pkg"dev Foo"
-    manifest = Pkg.Types.Context().env.manifest
-    @test manifest[uuid].path == joinpath("..", "Foo")
-end end
-
-@testset "develop with `--shared` and `--local" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmp
-        uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
-        pkg"activate ."
-        pkg"develop Example" # test default
-        @test manifest_info(Context(), uuid).path == joinpath(Pkg.devdir(), "Example")
-        pkg"develop --shared Example"
-        @test manifest_info(Context(), uuid).path == joinpath(Pkg.devdir(), "Example")
-        pkg"develop --local Example"
-        @test manifest_info(Context(), uuid).path == joinpath("dev", "Example")
-    end end
 end
 
 test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))
@@ -565,38 +519,6 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "unit test `parse_package_identifier`" begin; cd(mktempdir()) do
-    name = "FooBar"
-    uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
-    url = "https://github.com/JuliaLang/Example.jl"
-    path = "./Foobar"; mkdir("Foobar")
-    # valid input
-    pkg = Pkg.REPLMode.parse_package_identifier(name)
-    @test pkg.name == name
-    pkg = Pkg.REPLMode.parse_package_identifier(uuid)
-    @test pkg.uuid == UUID(uuid)
-    pkg = Pkg.REPLMode.parse_package_identifier("$name=$uuid")
-    @test (pkg.name == name) && (pkg.uuid == UUID(uuid))
-    pkg = Pkg.REPLMode.parse_package_identifier(url; add_or_develop=true)
-    @test pkg.repo.source == url
-    pkg = Pkg.REPLMode.parse_package_identifier(path; add_or_develop=true)
-    @test pkg.repo.source == path
-    # expansion of ~
-    if !Sys.iswindows()
-        tildepath = "~/Foobaz"
-        try
-            mkdir(expanduser(tildepath))
-            pkg = Pkg.REPLMode.parse_package_identifier(tildepath; add_or_develop=true)
-            @test pkg.repo.source == expanduser(tildepath)
-        finally
-            rm(expanduser(tildepath); force = true)
-        end
-    end
-    # errors
-    @test_throws PkgError Pkg.REPLMode.parse_package_identifier(url)
-    @test_throws PkgError Pkg.REPLMode.parse_package_identifier(path)
-end end
-
 @testset "parse package url win" begin
     @test typeof(Pkg.REPLMode.parse_package_identifier("https://github.com/abc/ABC.jl";
                                                        add_or_develop=true)) == Pkg.Types.PackageSpec
@@ -638,156 +560,6 @@ end
     end
 end
 
-@testset "Argument order" begin
-    with_temp_env() do
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up #foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add @0.0.1")
-    end
-end
-
-@testset "`do_generate!` error paths" begin
-    with_temp_env() do
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate Example Example2")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate")
-    end
-end
-
-@testset "`parse_option` unit tests" begin
-    opt = Pkg.REPLMode.parse_option("-x")
-    @test opt.val == "x"
-    @test opt.argument === nothing
-    opt = Pkg.REPLMode.parse_option("--hello")
-    @test opt.val == "hello"
-    @test opt.argument === nothing
-    opt = Pkg.REPLMode.parse_option("--env=some")
-    @test opt.val == "env"
-    @test opt.argument == "some"
-end
-
-@testset "`parse` integration tests" begin
-    QString = Pkg.REPLMode.QString
-    @test isempty(Pkg.REPLMode.parse(""))
-
-    statement = Pkg.REPLMode.parse("up")[1]
-    @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["up"]
-    @test isempty(statement.options)
-    @test isempty(statement.arguments)
-
-    statement = Pkg.REPLMode.parse("dev Example")[1]
-    @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["develop"]
-    @test isempty(statement.options)
-    @test statement.arguments == [QString("Example", false)]
-
-    statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
-    @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["develop"]
-    @test isempty(statement.options)
-    @test statement.arguments == [QString("Example#foo", false),
-                                  QString("#bar", false)]
-
-    statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
-    @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["develop"]
-    @test isempty(statement.options)
-    @test statement.arguments == [QString("Example#foo", false),
-                                  QString("Example@v0.0.1", false)]
-
-    statement = Pkg.REPLMode.parse("add --first --second arg1")[1]
-    @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["add"]
-    @test statement.options == map(Pkg.REPLMode.parse_option, ["--first", "--second"])
-    @test statement.arguments == [QString("arg1", false)]
-
-    statement = Pkg.REPLMode.parse("pin -x -a arg0 Example")[1]
-    @test statement.spec == Pkg.REPLMode.SPECS[]["package"]["pin"]
-    @test statement.options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
-    @test statement.arguments == [QString("arg0", false), QString("Example", false)]
-
-    statements = Pkg.REPLMode.parse("up; pin --first; dev")
-    @test statements[1].spec == Pkg.REPLMode.SPECS[]["package"]["up"]
-    @test isempty(statements[1].options)
-    @test isempty(statements[1].arguments)
-    @test statements[2].spec == Pkg.REPLMode.SPECS[]["package"]["pin"]
-    @test statements[2].options == map(Pkg.REPLMode.parse_option, ["--first"])
-    @test isempty(statements[2].arguments)
-    @test statements[3].spec == Pkg.REPLMode.SPECS[]["package"]["develop"]
-    @test isempty(statements[3].options)
-    @test isempty(statements[3].arguments)
-end
-
-@testset "argument count errors" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("activate one two")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("activate one two three")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("precompile Example")
-    end
-    end
-    end
-end
-
-@testset "invalid options" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("rm --minor Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("pin --project Example")
-    end
-    end
-    end
-end
-
-@testset "Argument order" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up #foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add @0.0.1")
-    end
-    end
-    end
-end
-
-@testset "conflicting options" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up --major --minor")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("rm --project --manifest")
-    end
-    end
-    end
-end
-
-@testset "gc" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("gc --project")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("gc --minor")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("gc Example")
-        Pkg.REPLMode.pkgstr("gc")
-    end
-    end
-    end
-end
-
-@testset "precompile" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("precompile --project")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("precompile Example")
-        Pkg.REPLMode.pkgstr("precompile")
-        Pkg.precompile()
-    end
-    end
-    end
-end
-
-@testset "generate" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate --major Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate --foobar Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate Example1 Example2")
-        Pkg.REPLMode.pkgstr("generate Example")
-    end
-    end
-    end
-end
-
 @testset "test" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         Pkg.add("Example")
@@ -797,58 +569,6 @@ end
     end
     end
     end
-end
-
-@testset "build" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("build --project")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("build --minor")
-    end
-    end
-    end
-end
-
-@testset "free" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("free --project")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("free --major")
-    end
-    end
-    end
-end
-
-@testset "tests for api opts" begin
-    specs = Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[
-        [:name => "project", :short_name => "p", :api => :mode => Pkg.Types.PKGMODE_PROJECT],
-        [:name => "manifest", :short_name => "m", :api => :mode => Pkg.Types.PKGMODE_MANIFEST],
-        [:name => "major", :api => :level => Pkg.Types.UPLEVEL_MAJOR],
-        [:name => "minor", :api => :level => Pkg.Types.UPLEVEL_MINOR],
-        [:name => "patch", :api => :level => Pkg.Types.UPLEVEL_PATCH],
-        [:name => "fixed", :api => :level => Pkg.Types.UPLEVEL_FIXED],
-        [:name => "rawnum", :takes_arg => true, :api => :num => identity],
-        [:name => "plus", :takes_arg => true, :api => :num => x->parse(Int,x)+1],
-    ])
-
-    api_opts = Pkg.REPLMode.APIOptions([
-        Pkg.REPLMode.Option("manifest"),
-        Pkg.REPLMode.Option("patch"),
-        Pkg.REPLMode.Option("rawnum", "5"),
-    ], specs)
-
-    @test get(api_opts,:foo,nothing) === nothing
-    @test get(api_opts,:mode,nothing) == Pkg.Types.PKGMODE_MANIFEST
-    @test get(api_opts,:level,nothing) == Pkg.Types.UPLEVEL_PATCH
-    @test get(api_opts,:num,nothing) == "5"
-
-    api_opts = Pkg.REPLMode.APIOptions([
-        Pkg.REPLMode.Option("project"),
-        Pkg.REPLMode.Option("patch"),
-        Pkg.REPLMode.Option("plus", "5"),
-    ], specs)
-
-    @test get(api_opts,:mode,nothing) == Pkg.Types.PKGMODE_PROJECT
-    @test get(api_opts,:level,nothing) == Pkg.Types.UPLEVEL_PATCH
-    @test get(api_opts,:num,nothing) == 6
 end
 
 @testset "activate" begin
@@ -891,88 +611,6 @@ end
         Pkg.REPLMode.pkg"package rm Example"
         @test !isinstalled(TEST_PKG)
     end end end
-end
-
-@testset "`lex` unit tests" begin
-    qwords = Pkg.REPLMode.lex("\"Don't\" forget to '\"test\"'")
-    @test  qwords[1].isquoted
-    @test  qwords[1].raw == "Don't"
-    @test !qwords[2].isquoted
-    @test  qwords[2].raw == "forget"
-    @test !qwords[3].isquoted
-    @test  qwords[3].raw == "to"
-    @test  qwords[4].isquoted
-    @test  qwords[4].raw == "\"test\""
-    @test_throws PkgError Pkg.REPLMode.lex("Don't")
-    @test_throws PkgError Pkg.REPLMode.lex("Unterminated \"quot")
-end
-
-@testset "argument kinds" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError pkg"pin Example#foo"
-        @test_throws PkgError pkg"test Example#foo"
-        @test_throws PkgError pkg"test Example@v0.0.1"
-    end end end
-end
-
-@testset "smoke test `instantiate --verbose`" begin
-    temp_pkg_dir() do project_path
-        Pkg.activate(project_path)
-        Pkg.instantiate(verbose=true)
-        pkg"instantiate --verbose"
-        pkg"instantiate -v"
-    end
-end
-
-@testset "REPL API: packagespec token order" begin
-    temp_pkg_dir() do project_path; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add JSON Example#foobar#foobar LazyJSON")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up #foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add @0.0.1")
-    end end
-end
-
-@testset "REPL API `develop`" begin
-    # errors
-    temp_pkg_dir() do project_path; with_temp_env() do;
-        @test_throws PkgError pkg"dev Example#master#master"
-        @test_throws PkgError pkg"develop Example#master"
-        @test_throws PkgError pkg"develop Example@0.5.0"
-        @test_throws PkgError pkg"develop JSON Example@0.5.0 LazyJSON"
-        @test_throws PkgError pkg"develop julia"
-        @test_throws PkgError pkg"develop julia#master"
-    end end
-end
-
-@testset "REPL API `remove`" begin
-    # errors
-    temp_pkg_dir() do project_path; with_temp_env() do;
-        Pkg.add("Example")
-        @test_throws PkgError pkg"remove Example#master"
-        @test_throws PkgError pkg"rm Example#master"
-        @test_throws PkgError pkg"remove Example@0.5.0"
-        @test_throws PkgError pkg"rm --project --manifest"
-    end end
-end
-
-@testset "REPL API `free`" begin
-    # errors
-    temp_pkg_dir() do project_path; with_temp_env() do;
-        Pkg.add("Example")
-        Pkg.pin("Example")
-        @test_throws PkgError pkg"free Example#master"
-        @test_throws PkgError pkg"free Example@0.5.0"
-    end end
-end
-
-@testset "REPL API `generate`" begin
-    # errors
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
-        @test_throws PkgError pkg"generate"
-        @test_throws PkgError pkg"generate Example Example2"
-    end end
 end
 
 @testset "REPL API `up`" begin

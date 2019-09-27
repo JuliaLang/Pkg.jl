@@ -11,7 +11,7 @@ import Base.string
 using REPL.TerminalMenus
 
 using ..TOML
-import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
+import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
 import Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath
 import ..BinaryPlatforms: Platform
 
@@ -104,6 +104,12 @@ PackageSpec(name::AbstractString) = PackageSpec(;name=name)
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
 PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
 PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
+
+function Base.:(==)(a::PackageSpec, b::PackageSpec)
+    return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
+    a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
+    a.pinned == b.pinned && a.special_action == b.special_action && a.mode == b.mode
+end
 
 function err_rep(pkg::PackageSpec)
     x = pkg.name !== nothing && pkg.uuid !== nothing ? x = "$(pkg.name) [$(string(pkg.uuid)[1:8])]" :
@@ -314,7 +320,7 @@ include("manifest.jl")
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
-    io::IO = stderr
+    io::IO = DEFAULT_IO[] === nothing ? stderr : DEFAULT_IO[]
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
@@ -537,7 +543,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     end
     ensure_resolved(ctx, [pkg]; registry=true)
     # We might have been given a name / uuid combo that does not have an entry in the registry
-    repo_info = Types.registered_info(ctx, pkg.uuid, "repo")
+    repo_info = registered_info(ctx, pkg.uuid, "repo")
     if isempty(repo_info)
         pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
     end
@@ -567,18 +573,20 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     @assert pkg.repo.source !== nothing
 
     # We now have the source of the package repo, check if it is a local path and if that exists
+    repo_source = pkg.repo.source
     if !isurl(pkg.repo.source)
         if isdir(pkg.repo.source)
             if !isdir(joinpath(pkg.repo.source, ".git"))
                 pkgerror("Did not find a git repository at `$(pkg.repo.source)`")
             end
-            pkg.repo.source = isabspath(pkg.repo.source) ? abspath(pkg.repo.source) : safe_realpath(pkg.repo.source)
+            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx, pkg.repo.source)
+            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
         else
             pkgerror("Path `$(pkg.repo.source)` does not exist.")
         end
     end
 
-    LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(pkg.repo.source), pkg.repo.source; isbare=true)) do repo
+    LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
         # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
         if pkg.repo.rev == nothing
             pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
@@ -588,7 +596,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         fetched = false
         if obj_branch === nothing
             fetched = true
-            GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=refspecs)
+            GitTools.fetch(ctx, repo, repo_source; refspecs=refspecs)
             obj_branch = get_object_or_branch(repo, pkg.repo.rev)
             if obj_branch === nothing
                 pkgerror("Did not find rev $(pkg.repo.rev) in repository")
@@ -600,7 +608,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         entry = manifest_info(ctx, pkg.uuid)
         ispinned = entry !== nothing && entry.pinned
         if isbranch && !fetched && !ispinned
-            GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=refspecs)
+            GitTools.fetch(ctx, repo, repo_source; refspecs=refspecs)
             gitobject, isbranch = get_object_or_branch(repo, pkg.repo.rev)
         end
 
@@ -1239,10 +1247,22 @@ end
 Base.@kwdef struct PackageInfo
     name::String
     version::Union{Nothing,VersionNumber}
+    tree_hash::Union{Nothing,String}
     ispinned::Bool
     isdeveloped::Bool
+    is_tracking_registry::Bool
+    git_revision::Union{Nothing,String}
+    git_source::Union{Nothing,String}
     source::String
-    dependencies::Vector{UUID}
+    dependencies::Dict{String,UUID}
+end
+
+function Base.:(==)(a::PackageInfo, b::PackageInfo)
+    return a.name == b.name && a.version == b.version && a.tree_hash == b.tree_hash &&
+        a.ispinned == b.ispinned && a.isdeveloped == b.isdeveloped &&
+        a.is_tracking_registry == b.is_tracking_registry &&
+        a.git_revision == b.git_revision && a.git_source == b.git_source &&
+        a.source == b.source && a.dependencies == b.dependencies
 end
 
 ###
@@ -1250,9 +1270,10 @@ end
 ###
 
 Base.@kwdef struct ProjectInfo
-    name::String
-    uuid::UUID
-    version::VersionNumber
+    name::Union{Nothing,String}
+    uuid::Union{Nothing,UUID}
+    version::Union{Nothing,VersionNumber}
+    ispackage::Bool
     dependencies::Dict{String,UUID}
     path::String
 end

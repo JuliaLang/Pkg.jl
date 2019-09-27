@@ -20,17 +20,17 @@ include("generate.jl")
 dependencies() = dependencies(Context())
 function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
     pkgs = Operations.load_all_deps(ctx)
-    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
 end
+dependencies(fn::Function, uuid::UUID) = fn(dependencies()[uuid])
 
 project() = project(Context())
-function project(ctx::Context)
-    ctx.env.pkg !== nothing || pkgerror("Active environment is not a project.")
+function project(ctx::Context)::ProjectInfo
     return ProjectInfo(
-        name         = ctx.env.pkg.name,
-        uuid         = ctx.env.pkg.uuid,
-        version      = ctx.env.pkg.version,
+        name         = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.name,
+        uuid         = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid,
+        version      = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.version,
+        ispackage    = ctx.env.pkg !== nothing,
         dependencies = ctx.env.project.deps,
         path         = ctx.env.project_file
     )
@@ -38,7 +38,7 @@ end
 
 function check_package_name(x::AbstractString, mode=nothing)
     if !Base.isidentifier(x)
-        message = "`$x` is not a valid package name."
+        message = "`$x` is not a valid package name"
         if mode !== nothing && any(occursin.(['\\','/'], x)) # maybe a url or a path
             message *= "\nThe argument appears to be a URL or path, perhaps you meant " *
                 "`Pkg.$mode(PackageSpec(url=\"...\"))` or `Pkg.$mode(PackageSpec(path=\"...\"))`."
@@ -58,27 +58,30 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
-        # if julia is passed as a package the solver gets tricked
-        if pkg.name == "julia"
-            pkgerror("`julia` is not a valid package name.")
+        if pkg.name == "julia" # if julia is passed as a package the solver gets tricked
+            pkgerror("`julia` is not a valid package name")
         end
+        pkg.name === nothing || check_package_name(pkg.name, "develop")
         if pkg.name === nothing && pkg.uuid === nothing && pkg.repo.source === nothing
-            pkgerror("When calling `develop`, packages must be specified by name, UUID, URL, or filesystem path.")
+            pkgerror("name, UUID, URL, or filesystem path specification required when calling `develop`")
         end
         if pkg.repo.rev !== nothing
-            pkgerror("It is invalid to specify a git revision when calling `develop`:",
-                     " `$(pkg.repo.rev)` given for package $(err_rep(pkg)).")
+            pkgerror("git revision specification invalid when calling `develop`:",
+                     " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))")
         end
         if pkg.version != VersionSpec()
-            pkgerror("It is invalid to specify a version when calling `develop`:",
-                     " `$(pkg.version)` given for package $(err_rep(pkg)).")
+            pkgerror("version specification invalid when calling `develop`:",
+                     " `$(pkg.version)` specified for package $(err_rep(pkg))")
         end
     end
 
     new_git = handle_repos_develop!(ctx, pkgs, shared)
 
-    any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
-        pkgerror("Cannot `develop` package with the same name or uuid as the project")
+    for pkg in pkgs
+        if Types.collides_with_project(ctx, pkg)
+            pkgerror("package $(err_rep(pkg)) has the same name or UUID as the active project")
+        end
+    end
 
     Operations.develop(ctx, pkgs, new_git; strict=strict, platform=platform)
     return
@@ -94,17 +97,17 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
-        # if julia is passed as a package the solver gets tricked; this catches the error early on
-        if pkg.name == "julia"
-            pkgerror("`julia` is not a valid package name.")
+        if pkg.name == "julia" # if julia is passed as a package the solver gets tricked
+            pkgerror("`julia` is not a valid package name")
         end
         if pkg.name === nothing && pkg.uuid === nothing && pkg.repo.source === nothing
-            pkgerror("When calling `add`, packages must be specified by name, UUID, URL, or filesystem path.")
+            pkgerror("name, UUID, URL, or filesystem path specification required when calling `add`")
         end
+        pkg.name === nothing || check_package_name(pkg.name, "add")
         if pkg.repo.source !== nothing || pkg.repo.rev !== nothing
             if pkg.version != VersionSpec()
-                pkgerror("It is invalid to specify a version when tracking a git repository:",
-                         " `$(pkg.version)` given for package $(err_rep(pkg)).")
+                pkgerror("version specification invalid when tracking a repository:",
+                         " `$(pkg.version)` specified for package $(err_rep(pkg))")
             end
         end
     end
@@ -121,8 +124,11 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     stdlib_resolve!(ctx, pkgs)
     ensure_resolved(ctx, pkgs, registry=true)
 
-    any(pkg -> Types.collides_with_project(ctx, pkg), pkgs) &&
-        pkgerror("Cannot add package with the same name or uuid as the project")
+    for pkg in pkgs
+        if Types.collides_with_project(ctx, pkg)
+            pkgerror("package $(err_rep(pkg)) has same name or UUID as the active project")
+        end
+    end
 
     Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform)
     return
@@ -138,12 +144,12 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
-            pkgerror("When calling `rm`, packages must be specified by name or UUID.")
+            pkgerror("name or UUID specification required when calling `rm`")
         end
         if !(pkg.version == VersionSpec() && pkg.pinned == false &&
              pkg.tree_hash === nothing && pkg.repo.source === nothing &&
              pkg.repo.rev === nothing && pkg.path === nothing)
-            pkgerror("When calling `rm`, packages may only be specified by name or UUID.")
+            pkgerror("packages may only be specified by name or UUID when calling `rm`")
         end
     end
 
@@ -205,15 +211,18 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
-            pkgerror("When calling `pin`, packages must be specified by name or UUID.")
+            pkgerror("name or UUID specification required when calling `pin`")
         end
         if pkg.repo.source !== nothing
-            pkgerror("It is invalid to specify a repo location when calling `pin`:",
-                     " `$(pkg.repo.source)` given for package $(err_rep(pkg)).")
+            pkgerror("repository specification invalid when calling `pin`:",
+                     " `$(pkg.repo.source)` specified for package $(err_rep(pkg))")
         end
         if pkg.repo.rev !== nothing
-            pkgerror("It is invalid to specify a git revision when calling `pin`:",
-                     " `$(pkg.repo.rev)` given for package $(err_rep(pkg)).")
+            pkgerror("git revision specification invalid when calling `pin`:",
+                     " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))")
+        end
+        if pkg.version.ranges[1].lower != pkg.version.ranges[1].upper # TODO test this
+            pkgerror("pinning a package requires a single version, not a versionrange")
         end
     end
 
@@ -235,12 +244,12 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
-            pkgerror("When calling `free`, packages must be specified by name or UUID.")
+            pkgerror("name or UUID specification required when calling `free`")
         end
         if !(pkg.version == VersionSpec() && pkg.pinned == false &&
              pkg.tree_hash === nothing && pkg.repo.source === nothing &&
              pkg.repo.rev === nothing && pkg.path === nothing)
-            pkgerror("When calling `free`, packages may only be specified by name or UUID.")
+            pkgerror("packages may only be specified by name or UUID when calling `free`")
         end
     end
 
@@ -727,7 +736,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
-        pkgerror("manifest at $(ctx.env.manifest_file) does not exist")
+        pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
     Operations.prune_manifest(ctx)
     for (name, uuid) in ctx.env.project.deps
@@ -946,15 +955,11 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
                  version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
                  url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT)
     if path !== nothing && url !== nothing
-        pkgerror("It is invalid to specify both a path and url.")
-    end
-    if url !== nothing && version !== nothing
-        pkgerror("It is invalid to specify both `version` and `url`.",
-                 "Hint: `rev` may have been intended instead of `version.")
+        pkgerror("`path` and `url` are conflicting specifications")
     end
     repo = Types.GitRepo(rev = rev, source = url !== nothing ? url : path)
     version = version === nothing ? VersionSpec() : VersionSpec(version)
-    uuid isa String && (uuid = UUID(uuid))
+    uuid = uuid isa String ? UUID(uuid) : uuid
     PackageSpec(;name=name, uuid=uuid, version=version, mode=mode, path=nothing,
                 special_action=PKGSPEC_NOTHING, repo=repo, tree_hash=nothing)
 end

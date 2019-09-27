@@ -724,7 +724,7 @@ function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}
         else
             info = manifest_info(ctx, pkg.uuid)
             if info === nothing
-                pkgerror("could not find manifest info for package with uuid: $(pkg.uuid)")
+                pkgerror("could not find manifest entry for package $(err_rep(pkg))")
             end
             pkgs = [PackageSpec(name, uuid) for (name, uuid) in info.deps]
         end
@@ -923,11 +923,12 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     write_env(ctx.env)
 end
 
-update_package_add(pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
-function update_package_add(pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
+update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
+function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.pinned
-        pkg.version == VersionSpec() ||
-            @warn "`$(pkg.name)` is pinned at `v$(entry.version)`. Maintaining pinned version."
+        if pkg.version == VersionSpec()
+            println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
+        end
         return PackageSpec(; uuid=pkg.uuid, name=pkg.name, pinned=true,
                            version=entry.version, tree_hash=entry.tree_hash)
     end
@@ -951,7 +952,7 @@ function check_registered(ctx::Context, pkgs::Vector{PackageSpec})
     find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     for pkg in pkgs
         isempty(registered_paths(ctx, pkg.uuid)) || continue
-        pkgerror("Package $(pkg.name) [$(pkg.uuid)] not found in a registry.")
+        pkgerror("expected package $(err_rep(pkg)) to be registered")
     end
 end
 
@@ -961,20 +962,20 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
         @assert pkg.name !== nothing && pkg.uuid !== nothing
         # package with the same name exist in the project: assert that they have the same uuid
         get(ctx.env.project.deps, pkg.name, pkg.uuid) == pkg.uuid ||
-            pkgerror("cannot add package `$(pkg.name) = \"$(pkg.uuid)\"` ",
-                     "since package `$(pkg.name) = \"$(get(ctx.env.project.deps, pkg.name, pkg.uuid))\"` ",
-                     "already exists as a direct dependency.")
+            pkgerror("refusing to add package $(err_rep(pkg)):",
+                     " package `$(pkg.name) = \"$(get(ctx.env.project.deps, pkg.name, pkg.uuid))\"` ",
+                     "already exists as a direct dependency")
         # package with the same uuid exist in the project: assert they have the same name
         name = findfirst(==(pkg.uuid), ctx.env.project.deps)
         (name === nothing || name == pkg.name) ||
-            pkgerror("cannot add package `$(pkg.name) = \"$(pkg.uuid)\"` ",
-                     "since package `$(pkg.name) = \"$(ctx.env.project.deps[name])\"` ",
-                     "already exists as a direct dependency.")
+            pkgerror("refusing to add package $(err_rep(pkg)):",
+                     " package `$(pkg.name) = \"$(ctx.env.project.deps[name])\"` ",
+                     "already exists as a direct dependency")
         # package with the same uuid exist in the manifest: assert they have the same name
         haskey(ctx.env.manifest, pkg.uuid) && (ctx.env.manifest[pkg.uuid].name != pkg.name) &&
-            pkgerror("cannot add package `$(pkg.name) = \"$(pkg.uuid)\"` ",
-                     "since package `$(ctx.env.manifest[pkg.uuid].name) = \"$(pkg.uuid)\"` ",
-                     "already exists in the manifest.")
+            pkgerror("refusing to add package $(err_rep(pkg)):",
+                     " package `$(ctx.env.manifest[pkg.uuid].name) = \"$(pkg.uuid)\"` ",
+                     "already exists in the manifest")
     end
 end
 
@@ -1025,7 +1026,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     # load manifest data
     for (i, pkg) in pairs(pkgs)
         entry = manifest_info(ctx, pkg.uuid)
-        pkgs[i] = update_package_add(pkg, entry, is_dep(ctx, pkg))
+        pkgs[i] = update_package_add(ctx, pkg, entry, is_dep(ctx, pkg))
     end
     foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
     # resolve
@@ -1132,26 +1133,15 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     # TODO what to do about repo packages?
 end
 
-function update_package_pin!(ctx::Context, pkg::PackageSpec, ::Nothing)
-    if pkg.version == VersionSpec() # no version to pin
-        pkgerror("Can not `pin` a package which does not exist in the manifest")
-    end
-    if is_stdlib(pkg.uuid)
-        pkgerror("`pin` can not be applied to `$(pkg.name)` because it is a stdlib.")
-    end
-    pkg.pinned = true
-end
-
 function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
-    if is_stdlib(pkg.uuid)
-        pkgerror("`pin` can not be applied to `$(pkg.name)` because it is a stdlib.")
-    end
     if entry.pinned && pkg.version == VersionSpec()
-        pkgerror("`$(entry.name)` is already pinned. Use `free` to remove a pin.")
+        println(ctx.io, "package $(err_rep(pkg)) already pinned")
     end
     # update pinned package
     pkg.pinned = true
-    if pkg.version == VersionSpec()
+    if is_stdlib(pkg.uuid)
+        return nothing # nothing left to do
+    elseif pkg.version == VersionSpec()
         pkg.version = entry.version # pin at current version
         pkg.repo = entry.repo
         pkg.tree_hash = entry.tree_hash
@@ -1161,7 +1151,7 @@ function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry
             # A pin in this case includes an implicit `free` to switch to tracking registered versions
             # First, make sure the package is registered so we have something to free to
             if isempty(registered_paths(ctx, pkg.uuid))
-                pkgerror("Unable to pin `$(pkg.name)` to an arbitrary version since it could not be found in a registry.")
+                pkgerror("unable to pin unregistered package $(err_rep(pkg)) to an arbritrary version")
             end
         end
     end
@@ -1182,28 +1172,24 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
 
-update_package_free!(ctx::Context, pkg::PackageSpec, ::Nothing) =
-    pkgerror("Trying to free a package which does not exist in the manifest")
 function update_package_free!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
-    # TODO check that `pin` and `path` do not occur in same node when reading manifest
     if entry.pinned
         pkg.pinned = false
+        is_stdlib(pkg.uuid) && return # nothing left to do
         pkg.version = entry.version
         pkg.repo = entry.repo
         pkg.tree_hash = entry.tree_hash
         return
     end
-    if entry.path !== nothing # deved
-        return # -> name, uuid
-    end
-    if entry.repo.source !== nothing # tracking a repo
+    if entry.path !== nothing || entry.repo.source !== nothing
         # make sure the package is registered so we have something to free to
         if isempty(registered_paths(ctx, pkg.uuid))
-            pkgerror("cannot free package $(something(pkg.name, "")) since it is not found in a registry")
+            pkgerror("unable to free unregistered package $(err_rep(pkg))")
         end
-        return
+        return # -> name, uuid
     end
-    pkgerror("`free` is only a valid operation for packages that are `pin`ed, `dev`ed or tracking a repo.")
+    pkgerror("expected package $(err_rep(pkg)) to be pinned, tracking a path,",
+             " or tracking a repository")
 end
 
 # TODO: this is two techinically different operations with the same name
@@ -1212,11 +1198,6 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_free!(ctx, pkg, manifest_info(ctx, pkg.uuid)), pkgs)
 
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
-        # TODO what happens if I remove this?
-        for pkg in filter(pkg -> pkg.version == VersionSpec(), pkgs)
-            isempty(registered_paths(ctx, pkg.uuid)) &&
-                pkgerror("cannot free a `dev`ed package that does not exist in a registry")
-        end
         pkgs = load_direct_deps(ctx, pkgs)
         check_registered(ctx, pkgs)
         resolve_versions!(ctx, pkgs)
@@ -1402,20 +1383,27 @@ end
 function package_info(ctx::Context, pkg::PackageSpec)::PackageInfo
     entry = manifest_info(ctx, pkg.uuid)
     if entry === nothing
-        pkgerror("Can not query `$(pkg.name)` because it does not exist in the manifest.",
-                 " Use `Pkg.resolve()` to populate the manifest.")
+        pkgerror("expected package $(err_rep(pkg)) to exist in the manifest",
+                 " (use `resolve` to populate the manifest)")
     end
     package_info(ctx, pkg, entry)
 end
 
 function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
+    git_source = pkg.repo.source === nothing ? nothing :
+        isurl(pkg.repo.source) ? pkg.repo.source :
+        project_rel_path(ctx, pkg.repo.source)
     info = PackageInfo(
-        name         = pkg.name,
-        version      = pkg.version != VersionSpec() ? pkg.version : nothing,
-        ispinned     = pkg.pinned,
-        isdeveloped  = pkg.path !== nothing,
-        source       = project_rel_path(ctx, source_path(pkg)),
-        dependencies = collect(values(entry.deps)),
+        name                 = pkg.name,
+        version              = pkg.version != VersionSpec() ? pkg.version : nothing,
+        tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
+        ispinned             = pkg.pinned,
+        is_tracking_registry = pkg.repo.source === nothing && pkg.path === nothing,
+        isdeveloped          = pkg.path !== nothing,
+        git_revision         = pkg.repo.rev,
+        git_source           = git_source,
+        source               = project_rel_path(ctx, source_path(pkg)),
+        dependencies         = copy(entry.deps), #TODO is copy needed?
     )
     return info
 end

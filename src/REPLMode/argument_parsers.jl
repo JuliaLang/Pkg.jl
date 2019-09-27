@@ -128,3 +128,22 @@ function parse_registry(word::AbstractString; add=false)::RegistrySpec
     end
     return registry
 end
+
+#
+# # Other
+#
+function parse_activate(args::Vector{QString})::Vector{String}
+    return [(x.isquoted ? x.raw : expanduser(x.raw)) for x in args]
+end
+
+#
+# # Option Maps
+#
+function do_preserve(x::String)
+    x == "all"    && return Types.PRESERVE_ALL
+    x == "direct" && return Types.PRESERVE_DIRECT
+    x == "semver" && return Types.PRESERVE_SEMVER
+    x == "none"   && return Types.PRESERVE_NONE
+    x == "tiered" && return Types.PRESERVE_TIERED
+    pkgerror("`$x` is not a valid argument for `--preserve`.")
+end

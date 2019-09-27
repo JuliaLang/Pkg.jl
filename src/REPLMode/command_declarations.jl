@@ -1,7 +1,8 @@
 compound_declarations = [
 "package" => CommandDeclaration[
 [   :name => "test",
-    :handler => do_test!,
+    :api => API.test,
+    :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
     :option_spec => OptionDeclaration[
@@ -19,6 +20,7 @@ julia is started with `--startup-file=yes`.
 """,
 ],[ :name => "help",
     :short_name => "?",
+    :api => identity, # dummy API function
     :arg_count => 0 => Inf,
     :arg_parser => identity,
     :completions => complete_help,
@@ -34,7 +36,7 @@ If `cmd` is a partial command, display help for all subcommands.
 If `cmd` is a full command, display help for `cmd`.
 """,
 ],[ :name => "instantiate",
-    :handler => do_instantiate!,
+    :api => API.instantiate,
     :option_spec => OptionDeclaration[
         [:name => "project", :short_name => "p", :api => :manifest => false],
         [:name => "manifest", :short_name => "m", :api => :manifest => true],
@@ -51,7 +53,8 @@ If no manifest exists or the `--project` option is given, resolve and download t
 """,
 ],[ :name => "remove",
     :short_name => "rm",
-    :handler => do_rm!,
+    :api => API.rm,
+    :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => parse_package,
     :option_spec => OptionDeclaration[
@@ -80,7 +83,8 @@ from the manifest forces the removal of all packages that depend on it, as well
 as any no-longer-necessary manifest packages due to project package removals.
 """,
 ],[ :name => "add",
-    :handler => do_add!,
+    :api => API.add,
+    :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_package(x; add_or_dev=true)),
     :option_spec => OptionDeclaration[
@@ -128,7 +132,8 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 """,
 ],[ :name => "develop",
     :short_name => "dev",
-    :handler => do_develop!,
+    :api => API.develop,
+    :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_package(x; add_or_dev=true)),
     :option_spec => OptionDeclaration[
@@ -157,7 +162,8 @@ pkg> develop --local Example
 ```
 """,
 ],[ :name => "free",
-    :handler => do_free!,
+    :api => API.free,
+    :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => parse_package,
     :completions => complete_installed_packages,
@@ -169,7 +175,8 @@ Free a pinned package `pkg`, which allows it to be upgraded or downgraded again.
 makes the package no longer being checked out.
 """,
 ],[ :name => "pin",
-    :handler => do_pin!,
+    :api => API.pin,
+    :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => parse_package,
     :completions => complete_installed_packages,
@@ -188,7 +195,8 @@ pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
 ```
 """,
 ],[ :name => "build",
-    :handler => do_build!,
+    :api => API.build,
+    :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
     :option_spec => OptionDeclaration[
@@ -205,7 +213,7 @@ The `-v`/`--verbose` option redirects build output to `stdout`/`stderr` instead 
 The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
 """,
 ],[ :name => "resolve",
-    :handler => do_resolve!,
+    :api => API.resolve,
     :description => "resolves to update the manifest from changes in dependencies of developed packages",
     :help => md"""
     resolve
@@ -214,8 +222,9 @@ Resolve the project i.e. run package resolution and update the Manifest. This is
 packages have changed causing the current Manifest to be out of sync.
 """,
 ],[ :name => "activate",
-    :handler => do_activate!,
+    :api => API.activate,
     :arg_count => 0 => 1,
+    :arg_parser => parse_activate,
     :option_spec => OptionDeclaration[
         [:name => "shared", :api => :shared => true],
     ],
@@ -233,7 +242,8 @@ it will be placed in the first depot of the stack.
 """ ,
 ],[ :name => "update",
     :short_name => "up",
-    :handler => do_up!,
+    :api => API.up,
+    :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
     :option_spec => OptionDeclaration[
@@ -262,7 +272,7 @@ patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
 """,
 ],[ :name => "generate",
-    :handler => do_generate!,
+    :api => API.generate,
     :arg_count => 1 => 1,
     :description => "generate files for a new project",
     :help => md"""
@@ -271,7 +281,7 @@ packages will not be upgraded at all.
 Create a project called `pkgname` in the current folder.
 """,
 ],[ :name => "precompile",
-    :handler => do_precompile!,
+    :api => API.precompile,
     :description => "precompile all the project dependencies",
     :help => md"""
     precompile
@@ -281,7 +291,8 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
 """,
 ],[ :name => "status",
     :short_name => "st",
-    :handler => do_status!,
+    :api => API.status,
+    :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
     :option_spec => OptionDeclaration[
@@ -311,7 +322,7 @@ the output to the difference as compared to the last git commit.
     is the default for environments in git repositories.
 """,
 ],[ :name => "gc",
-    :handler => do_gc!,
+    :api => API.gc,
     :description => "garbage collect packages not used for a significant time",
     :help => md"""
     gc
@@ -320,7 +331,7 @@ Deletes packages that cannot be reached from any existing environment.
 """,
 ],[ :name => "undo",
     :short_name => "u",
-    :handler => do_undo!,
+    :api => API.undo,
     :description => "undo the latest change to the active project",
     :help => md"""
     undo
@@ -330,7 +341,7 @@ Undoes the latest change to the active project.
 ],
 [ :name => "redo",
   :short_name => "r",
-  :handler => do_redo!,
+  :api => API.redo,
   :description => "redo the latest change to the active project",
   :help => md"""
     redo
@@ -341,7 +352,8 @@ Redoes the changes from the latest [`undo`](@ref).
 ], #package
 "registry" => CommandDeclaration[
 [   :name => "add",
-    :handler => do_registry_add!,
+    :api => Registry.add,
+    :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => (x -> parse_registry(x; add = true)),
     :description => "add package registries",
@@ -361,7 +373,8 @@ pkg> registry add https://www.my-custom-registry.com
 """,
 ],[ :name => "remove",
     :short_name => "rm",
-    :handler => do_registry_rm!,
+    :api => Registry.rm,
+    :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => parse_registry,
     :description => "remove package registries",
@@ -380,7 +393,8 @@ pkg> registry rm General
 """,
 ],[ :name => "update",
     :short_name => "up",
-    :handler => do_registry_up!,
+    :api => Registry.update,
+    :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_registry,
     :description => "update package registries",
@@ -402,9 +416,7 @@ pkg> registry up General
 """,
 ],[ :name => "status",
     :short_name => "st",
-    :handler => do_registry_status!,
-    :arg_count => 0 => Inf,
-    :arg_parser => parse_registry,
+    :api => Registry.status,
     :description => "information about installed registries",
     :help => md"""
     registry status

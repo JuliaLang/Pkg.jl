@@ -1,0 +1,7 @@
+name = "SimplePackage"
+uuid = "fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be"
+version = "0.2.0"
+
+[deps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"

@@ -23,6 +23,7 @@ logdir(depot = depots1()) = joinpath(depot, "logs")
 devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
+const DEFAULT_IO = Ref{Union{Nothing,IO}}(nothing)
 
 # load snapshotted dependencies
 include("../ext/TOML/src/TOML.jl")

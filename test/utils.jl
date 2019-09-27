@@ -6,7 +6,69 @@ import ..Pkg
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
-       git_init_package, add_this_pkg, TEST_SIG, TEST_PKG
+       git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT
+
+const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
+
+function isolate(fn::Function; kwargs...)
+    old_load_path = copy(LOAD_PATH)
+    old_depot_path = copy(DEPOT_PATH)
+    old_home_project = Base.HOME_PROJECT[]
+    old_active_project = Base.ACTIVE_PROJECT[]
+    old_working_directory = pwd()
+    old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
+    try
+        # Clone the registry only once
+        generaldir = joinpath(@__DIR__, "registries", "General")
+        if !isdir(generaldir)
+            mkpath(generaldir)
+            Base.shred!(LibGit2.CachedCredentials()) do creds
+                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
+                                                "https://github.com/JuliaRegistries/General.git",
+                    generaldir, credentials = creds)) do repo
+                end
+            end
+        end
+
+        empty!(LOAD_PATH)
+        empty!(DEPOT_PATH)
+        Base.HOME_PROJECT[] = nothing
+        Base.ACTIVE_PROJECT[] = nothing
+        Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
+        Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
+        Pkg.REPLMode.TEST_MODE[] = false
+        withenv("JULIA_PROJECT" => nothing,
+                "JULIA_LOAD_PATH" => nothing,
+                "JULIA_PKG_DEVDIR" => nothing) do
+            target_depot = nothing
+            try
+                target_depot = mktempdir()
+                push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
+                push!(DEPOT_PATH, target_depot)
+                push!(DEPOT_PATH, LOADED_DEPOT)
+                fn()
+            finally
+                if target_depot !== nothing && isdir(target_depot)
+                    try
+                        Base.rm(target_depot; force=true, recursive=true)
+                    catch err
+                        @show err
+                    end
+                end
+            end
+        end
+    finally
+        empty!(LOAD_PATH)
+        empty!(DEPOT_PATH)
+        append!(LOAD_PATH, old_load_path)
+        append!(DEPOT_PATH, old_depot_path)
+        Base.HOME_PROJECT[] = old_home_project
+        Base.ACTIVE_PROJECT[] = old_active_project
+        cd(old_working_directory)
+        Pkg.REPLMode.TEST_MODE[] = false # reset unconditionally
+        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+    end
+end
 
 function temp_pkg_dir(fn::Function;rm=true)
     old_load_path = copy(LOAD_PATH)
@@ -145,8 +207,9 @@ function git_init_package(tmp, path)
 end
 
 function copy_test_package(tmpdir::String, name::String; use_pkg=true)
-    cp(joinpath(@__DIR__, "test_packages", name), joinpath(tmpdir, name))
-    use_pkg || return
+    target = joinpath(tmpdir, name)
+    cp(joinpath(@__DIR__, "test_packages", name), target)
+    use_pkg || return target
 
     # The known Pkg UUID, and whatever UUID we're currently using for testing
     known_pkg_uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
@@ -160,6 +223,7 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
             write(fpath, replace(read(fpath, String), known_pkg_uuid => pkg_uuid))
         end
     end
+    return target
 end
 
 function add_this_pkg()
