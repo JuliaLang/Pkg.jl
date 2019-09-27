@@ -10,23 +10,6 @@ test_test(fn, name; kwargs...) = Pkg.test(name; test_fn=fn, kwargs...)
 test_test(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
 
 @testset "Basic `test` sandboxing" begin
-    temp_pkg_dir() do project_path; mktempdir() do tmp
-        copy_test_package(tmp, "BasicSandbox")
-        Pkg.activate(joinpath(tmp, "BasicSandbox"))
-        test_test() do
-            @test true
-        end
-    end end
-    # try to use subgraph from active env
-    temp_pkg_dir() do project_path; mktempdir() do tmp
-        copy_test_package(tmp, "TransferSubgraph")
-        Pkg.activate(joinpath(tmp, "TransferSubgraph"))
-        test_test("Unregistered") do
-            json = get(Pkg.Types.Context().env.manifest, UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6"), nothing)
-            @test json !== nothing
-            @test json.version == v"0.19.0"
-        end
-    end end
     # also indirectly checks that test `compat` is obeyed
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "SandboxFallback2")

@@ -22,7 +22,13 @@ function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
     pkgs = Operations.load_all_deps(ctx)
     return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
 end
-dependencies(fn::Function, uuid::UUID) = fn(dependencies()[uuid])
+function dependencies(fn::Function, uuid::UUID)
+    dep = get(dependencies(), uuid, nothing)
+    if dep === nothing
+        pkgerror("depenendency with UUID `$uuid` does not exist")
+    end
+    fn(dep)
+end
 
 project() = project(Context())
 function project(ctx::Context)::ProjectInfo

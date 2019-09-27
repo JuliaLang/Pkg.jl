@@ -510,16 +510,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
     Base.rm.([tmp, depo1, depo2]; force = true, recursive = true)
 end end
 
-@testset "dependency of test dependency (#567)" begin
-    temp_pkg_dir() do project_path; cd_tempdir(;rm=false) do tmpdir; with_temp_env(;rm=false) do
-        for x in ["x1", "x2", "x3"]
-            cp(joinpath(@__DIR__, "test_packages/$x"), joinpath(tmpdir, "$x"))
-            Pkg.develop(Pkg.PackageSpec(path = joinpath(tmpdir, x)))
-        end
-        Pkg.test("x3")
-    end end end
-end
-
 @testset "printing of stdlib paths, issue #605" begin
     path = Pkg.Types.stdlib_path("Test")
     @test Pkg.Types.pathrepr(path) == "`@stdlib/Test`"

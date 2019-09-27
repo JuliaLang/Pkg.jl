@@ -134,6 +134,69 @@ simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 end
 
 #
+# ## Sandboxing
+#
+inside_test_sandbox(fn, name; kwargs...) = Pkg.test(name; test_fn=fn, kwargs...)
+inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
+
+@testset "test: sandboxing" begin
+    # Make sure that explicit test dependencies and the tested project are
+    # available within the test sandbox
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        foo_uuid = UUID("02250abe-2050-11e9-017e-b301a2b5bcc4")
+        path = copy_test_package(tempdir, "BasicSandbox")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            Pkg.dependencies(foo_uuid) do pkg
+                @test length(pkg.dependencies) == 1
+                @test haskey(pkg.dependencies, "Random")
+            end
+            @test haskey(Pkg.project().dependencies, "Test")
+            @test haskey(Pkg.project().dependencies, "Foo")
+        end
+    end end
+    # Here we check that the active subgraph is transfered to the
+    # test sandbox
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TransferSubgraph")
+        Pkg.activate(path)
+        active_json_version = Pkg.dependencies()[json_uuid].version
+        inside_test_sandbox("Unregistered") do
+            Pkg.dependencies(json_uuid) do pkg
+                @test pkg.version == active_json_version
+            end
+        end
+    end end
+end
+
+@testset "test: 'targets' based testing" begin
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        basic_test_target = UUID("50adb811-5a1f-4be4-8146-2725c7f5d900")
+        path = copy_test_package(tempdir, "BasicTestTarget")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            @test haskey(Pkg.project().dependencies, "Markdown")
+            @test haskey(Pkg.project().dependencies, "Test")
+            @test haskey(Pkg.project().dependencies, "BasicTestTarget")
+            Pkg.dependencies(basic_test_target) do pkg
+                @test pkg.isdeveloped == true
+                @test haskey(pkg.dependencies, "UUIDs")
+                @test !haskey(pkg.dependencies, "Markdown")
+                @test !haskey(pkg.dependencies, "Test")
+            end
+        end
+    end end
+    # dependency of test dependency (#567)" begin
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        for x in ["x1", "x2", "x3"]
+            path = copy_test_package(tempdir, x)
+            Pkg.develop(Pkg.PackageSpec(path = path))
+        end
+        Pkg.test("x3")
+    end end
+end
+
+#
 # # Add
 #
 
