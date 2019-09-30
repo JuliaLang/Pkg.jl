@@ -397,6 +397,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
     end # testset
 end end
 
+#=
 temp_pkg_dir() do project_path; cd(project_path) do
     mktempdir() do tmp
         cp(joinpath(@__DIR__, "test_packages", "BigProject"), joinpath(tmp, "BigProject"))
@@ -442,6 +443,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         end
     end
 end; end
+=#
 
 temp_pkg_dir() do project_path
     cd(project_path) do
