@@ -394,38 +394,6 @@ end
 
 is_stdlib(ctx::Context, uuid::UUID) = uuid in keys(ctx.stdlibs)
 
-# target === nothing : main dependencies
-# target === "*"     : main + all extras
-# target === "name"  : named target deps
-function deps_names(project::Project, target::Union{Nothing,String}=nothing)::Vector{String}
-    deps = collect(keys(project.deps))
-    if target === nothing
-        x = String[]
-    elseif target == "*"
-        x = collect(keys(project.extras))
-    else
-        x = haskey(project.targets, target) ?
-            collect(values(project.targets[target])) :
-            String[]
-    end
-    return sort!(union!(deps, x))
-end
-
-function get_deps(project::Project, target::Union{Nothing,String}=nothing)
-    names = deps_names(project, target)
-    deps = filter(((dep, _),) -> dep in names, project.deps)
-    extras = project.extras
-    for name in names
-        haskey(deps, name) && continue
-        haskey(extras, name) ||
-            pkgerror("target `$target` has unlisted dependency `$name`")
-        deps[name] = extras[name]
-    end
-    return deps
-end
-get_deps(env::EnvCache, target::Union{Nothing,String}=nothing) =
-    get_deps(env.project, target)
-
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
     !ispath(logdir()) && mkpath(logdir())
     usage_file = joinpath(logdir(), usage_filepath)

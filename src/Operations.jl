@@ -188,8 +188,6 @@ end
 #######################################
 # Dependency gathering and resolution #
 #######################################
-include("backwards_compatible_isolation.jl")
-
 function set_maximum_version_registry!(ctx::Context, pkg::PackageSpec)
     pkgversions = Set{VersionNumber}()
     for path in registered_paths(ctx, pkg.uuid)
