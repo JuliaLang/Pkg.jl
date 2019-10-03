@@ -827,6 +827,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
                       rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
 
         sandbox(ctx, pkg, source_path, builddir(source_path)) do
+            flush(stdout)
             ok = open(log_file, "w") do log
                 std = verbose ? ctx.io : log
                 success(pipeline(gen_build_code(buildfile(source_path)),
@@ -1363,6 +1364,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             println(ctx.io, "Running sandbox")
             test_fn !== nothing && test_fn()
             Display.status(Context(), mode=PKGMODE_PROJECT)
+            flush(stdout)
             try
                 run(gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args))
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")

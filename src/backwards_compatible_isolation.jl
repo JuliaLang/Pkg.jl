@@ -560,7 +560,7 @@ function backwards_compatibility_for_test(
         if !Types.is_project_uuid(ctx, pkg.uuid)
             Display.status(localctx, mode=PKGMODE_MANIFEST)
         end
-
+        flush(stdout)
         run_test()
     end
 end
@@ -603,6 +603,7 @@ function backwards_compat_for_build(ctx::Context, pkg::PackageSpec, build_file::
     end
     with_dependencies_loadable_at_toplevel(ctx, pkg;
                                            might_need_to_resolve=might_need_to_resolve) do localctx
+        flush(stdout)
         run_build()
     end
 end
