@@ -548,7 +548,7 @@ end
         Pkg.add(Pkg.PackageSpec(;uuid=meta_graphs, version="0.6.4"))
         @test Pkg.dependencies()[meta_graphs].version == v"0.6.4" # sanity check
         # did not break semver
-        @test Pkg.dependencies()[light_graphs].version in Pkg.Types.semver_spec("$(light_graphs_version)") 
+        @test Pkg.dependencies()[light_graphs].version in Pkg.Types.semver_spec("$(light_graphs_version)")
         # did change version
         @test Pkg.dependencies()[light_graphs].version != light_graphs_version
         # NONE
@@ -1535,6 +1535,17 @@ end
         @test api == Pkg.generate
         @test arg == "Foo"
         @test isempty(opts)
+        mktempdir() do dir
+            api, arg, opts = first(Pkg.REPLMode.pkgstr("generate $(joinpath(dir, "Foo"))"))
+            @test arg == joinpath(dir, "Foo")
+            # issue #1435
+            if !Sys.iswindows()
+                withenv("HOME" => dir) do
+                    api, arg, opts = first(Pkg.REPLMode.pkgstr("generate ~/Bar"))
+                    @test arg == joinpath(dir, "Bar")
+                end
+            end
+        end
     end
 end
 
