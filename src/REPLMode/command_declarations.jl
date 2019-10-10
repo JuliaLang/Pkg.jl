@@ -274,6 +274,7 @@ packages will not be upgraded at all.
 ],[ :name => "generate",
     :api => API.generate,
     :arg_count => 1 => 1,
+    :arg_parser => x -> map(expanduser, unwrap(x)),
     :description => "generate files for a new project",
     :help => md"""
     generate pkgname
@@ -336,7 +337,7 @@ Deletes packages that cannot be reached from any existing environment.
     :help => md"""
     undo
 
-Undoes the latest change to the active project. 
+Undoes the latest change to the active project.
 """,
 ],
 [ :name => "redo",

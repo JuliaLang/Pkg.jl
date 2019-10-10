@@ -14,7 +14,7 @@ end
 
 function genfile(f::Function, ctx::Context, pkg::String, dir::String, file::String)
     path = joinpath(dir, pkg, file)
-    println(ctx.io, "    $path")
+    println(ctx.io, "    $(Base.contractuser(path))")
     mkpath(dirname(path))
     open(f, path, "w")
     return
