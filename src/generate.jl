@@ -17,7 +17,7 @@ end
 
 function genfile(f::Function, pkg::String, dir::String, file::String; preview::Bool)
     path = joinpath(dir, pkg, file)
-    println(stdout, "    $path")
+    println(stdout, "    $(Base.contractuser(path))")
     preview && return
     mkpath(dirname(path))
     open(f, path, "w")

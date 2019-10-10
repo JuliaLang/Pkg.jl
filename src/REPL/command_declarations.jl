@@ -263,6 +263,7 @@ packages will not be upgraded at all.
     :name => "generate",
     :handler => do_generate!,
     :arg_count => 1 => 1,
+    :arg_parser => x -> map(expanduser, unwrap(x)),
     :description => "generate files for a new project",
     :help => md"""
     generate pkgname
