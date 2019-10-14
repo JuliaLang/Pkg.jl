@@ -907,7 +907,16 @@ UndoState() = UndoState(0, UndoState[])
 const undo_entries = Dict{String, UndoState}()
 const max_undo_limit = 50
 
-function add_snapshot_to_undo(env = EnvCache())
+function add_snapshot_to_undo(env=nothing)
+    # only attempt to take a snapshot if there is
+    # an active project to be found
+    if env === nothing
+        if Base.active_project() === nothing
+            return
+        else
+            env = EnvCache()
+        end
+    end
     state = get!(undo_entries, env.project_file) do
         UndoState()
     end
