@@ -671,25 +671,6 @@ end
         Pkg.redo()
         @test haskey(Pkg.dependencies(), unicode_uuid)
 
-        # add_snapshot_to_undo from __init__ should
-        # not throw in case of no active project
-        mktempdir() do tmp
-            # Copy just whats necessary from Pkg to a custom package directory
-            dir = joinpath(tmp, "Pkg"); mkdir(dir)
-            cp(joinpath(@__DIR__, "..", "Project.toml"), joinpath(dir, "Project.toml"))
-            cp(joinpath(@__DIR__, "..", "src"), joinpath(dir, "src"))
-            cp(joinpath(@__DIR__, "..", "ext"), joinpath(dir, "ext")) # for TOML
-            withenv("JULIA_LOAD_PATH" => tmp,
-                    "JULIA_PROJECT" => nothing) do
-                code = """
-                    @assert Base.active_project() === nothing
-                    using Pkg # should not error
-                    @assert isempty(Pkg.API.undo_entries)
-                    """
-                run(`$(Base.julia_cmd()) -e $(code)`)
-            end
-        end
-
     end end
 end
 

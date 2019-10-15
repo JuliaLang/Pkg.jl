@@ -300,7 +300,8 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     uuids = Dict{String,Vector{UUID}}()
     paths = Dict{UUID,Vector{String}}()
     names = Dict{UUID,Vector{String}}()
-    return EnvCache(env,
+
+    env′ = EnvCache(env,
         git,
         project_file,
         manifest_file,
@@ -312,6 +313,14 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         uuids,
         paths,
         names,)
+
+    # Save initial environment for undo/redo functionality
+    if !Pkg.API.saved_initial_snapshot[]
+        Pkg.API.add_snapshot_to_undo(env′)
+        Pkg.API.saved_initial_snapshot[] = true
+    end
+
+    return env′
 end
 
 include("project.jl")
@@ -490,12 +499,12 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         uuid = get(ctx.env.project.deps, pkg.name, nothing)
         if uuid !== nothing
             entry = manifest_info(ctx, uuid)
-            if entry !== nothing 
+            if entry !== nothing
                 pkg.repo.source = entry.repo.source
             end
         end
     end
-    
+
     # Still haven't found the source, try get it from the registry
     if pkg.repo.source === nothing
         set_repo_source_from_registry!(ctx, pkg)
@@ -630,7 +639,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         # check to see if the package exists at its canonical path.
         version_path = Pkg.Operations.source_path(pkg)
         isdir(version_path) && return false
-        
+
         # Otherwise, move the temporary path into its correct place and set read only
         mkpath(version_path)
         mv(temp_path, version_path; force=true)
