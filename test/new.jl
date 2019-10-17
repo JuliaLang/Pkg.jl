@@ -1740,6 +1740,20 @@ end
             @test isfile(joinpath(dir, "JuliaManifest.toml"))
         end
     end
+    # missing name/uuid for package project
+    isolate(loaded_depot=true) do; mktempdir() do tmp
+        project = joinpath(tmp, "Project.toml")
+        Base.ACTIVE_PROJECT[] = project
+        # missing name
+        write(project, "\"uuid\" = \"ed688b04-e580-4bf1-bc13-c3be32aba1f6\"")
+        @test_throws PkgError("project appears to be a package but has no name") Pkg.Types.EnvCache()
+        # missing uuid
+        write(project, "\"name\" = \"PackageName\"")
+        @test_throws PkgError("project appears to be a package but has no uuid") Pkg.Types.EnvCache()
+        # missing name and uuid
+        write(project, "\"version\" = \"1.0.0\"")
+        @test_throws PkgError("project appears to be a package but has no name") Pkg.Types.EnvCache()
+    end end
 end
 
 #
