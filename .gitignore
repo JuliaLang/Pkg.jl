@@ -9,3 +9,4 @@ docs/build
 /docs/src/repl.md
 .DS_Store
 /test/registries/*
+/test/loaded_depot/*
