@@ -531,6 +531,17 @@ const precompile_script = """
     ] add Te\t\t$CTRL_C
     ] st
     $CTRL_C
+    using Pkg.Artifacts
+    Pkg.Artifacts.with_artifacts_directory(joinpath(tmp, "artifacts")) do
+        foo_hash = create_artifact() do dir
+            open(joinpath(dir, "foo"), "w") do io
+                write(io, "test")
+            end
+        end
+        artifacts_toml = joinpath(tmp, "Artifacts.toml")
+        bind_artifact!(artifacts_toml, "foo", foo_hash; force=true)
+        ensure_artifact_installed("foo", artifacts_toml)
+    end
     rm(tmp; recursive=true)"""
 
 end # module
