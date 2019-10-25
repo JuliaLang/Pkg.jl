@@ -6,8 +6,8 @@ and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (he
 UUIDs etc.
 
 !!! note
-    The `Project.toml` and `Manifest.toml` files are not only used by the package manager,
-    they are also used by Julia's code loading, and determines e.g. what `using Example`
+    The `Project.toml` and `Manifest.toml` files are not only used by the package manager;
+    they are also used by Julia's code loading, and determine e.g. what `using Example`
     should do. For more details see the section about
     [Code Loading](https://docs.julialang.org/en/v1/manual/code-loading/)
     in the Julia manual.
@@ -74,7 +74,7 @@ Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ```
 
-Typically it is not needed to manually add entries to the `[deps]` section, this is instead
+Typically it is not needed to manually add entries to the `[deps]` section; this is instead
 handled by Pkg operations such as `add`.
 
 
@@ -105,10 +105,10 @@ julia = "1.1"
 ## `Manifest.toml`
 
 The manifest file is an absolute record of the state of the packages in the environment.
-It includes exact information about (direct and indirect) dependencies of the project, and
-given a `Project.toml` + `Manifest.toml` pair it is possible to instantiate the exact same
-package environment, which is very useful for reproducibility,
-see [`Pkg.instantiate`](@ref).
+It includes exact information about (direct and indirect) dependencies of the project. 
+Given a `Project.toml` + `Manifest.toml` pair, it is possible to instantiate the exact same
+package environment, which is very useful for reproducibility. 
+For the details, see [`Pkg.instantiate`](@ref).
 
 !!! note
     The `Manifest.toml` file is generated and maintained by Pkg and, in general, this file
@@ -118,7 +118,7 @@ see [`Pkg.instantiate`](@ref).
 ### `Manifest.toml` entries
 
 Each dependency has its own section in the manifest file, and its content varies depending
-on how the dependency was added to the environment, see the examples below. Every
+on how the dependency was added to the environment. Every
 dependency section includes a combination of the following entries:
 
 * `uuid`: the [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier)
@@ -207,7 +207,7 @@ source tree is directly reflected.
 
 #### Pinned package
 
-Pinned packages are also recorded in the manifest file, the resulting
+Pinned packages are also recorded in the manifest file; the resulting
 dependency section for e.g. `pkg> add Example; pin Example` looks like:
 
 ```toml
