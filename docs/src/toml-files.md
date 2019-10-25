@@ -6,8 +6,8 @@ and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (he
 UUIDs etc.
 
 !!! note
-    The `Project.toml` and `Manifest.toml` files are not only used by the package manager,
-    they are also used by Julia's code loading, and determines e.g. what `using Example`
+    The `Project.toml` and `Manifest.toml` files are not only used by the package manager;
+    they are also used by Julia's code loading, and determine e.g. what `using Example`
     should do. For more details see the section about
     [Code Loading](https://docs.julialang.org/en/v1/manual/code-loading/)
     in the Julia manual.
