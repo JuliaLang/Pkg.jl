@@ -302,7 +302,8 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     uuids = Dict{String,Vector{UUID}}()
     paths = Dict{UUID,Vector{String}}()
     names = Dict{UUID,Vector{String}}()
-    return EnvCache(env,
+
+    env′ = EnvCache(env,
         git,
         project_file,
         manifest_file,
@@ -314,6 +315,14 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         uuids,
         paths,
         names,)
+
+    # Save initial environment for undo/redo functionality
+    if !Pkg.API.saved_initial_snapshot[]
+        Pkg.API.add_snapshot_to_undo(env′)
+        Pkg.API.saved_initial_snapshot[] = true
+    end
+
+    return env′
 end
 
 include("project.jl")

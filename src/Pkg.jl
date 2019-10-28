@@ -507,7 +507,6 @@ function __init__()
             end
         end
     end
-    API.add_snapshot_to_undo()
 end
 
 ##################

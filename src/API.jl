@@ -906,6 +906,7 @@ end
 UndoState() = UndoState(0, UndoState[])
 const undo_entries = Dict{String, UndoState}()
 const max_undo_limit = 50
+const saved_initial_snapshot = Ref(false)
 
 function add_snapshot_to_undo(env=nothing)
     # only attempt to take a snapshot if there is
