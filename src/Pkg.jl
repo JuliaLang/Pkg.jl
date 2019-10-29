@@ -6,7 +6,7 @@ import Random
 import REPL
 
 export @pkg_str
-export PackageSpec
+export PackageSpec, packagespec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
 export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
@@ -400,8 +400,8 @@ const activate = API.activate
 
 
 """
-    PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
-    PackageSpec(; name, url, path, rev, version, mode, level)
+    packagespec(name::String, [uuid::UUID, version::VersionNumber])
+    packagespec(; name, url, path, rev, version, mode, level)
 
 A `PackageSpec` is a representation of a package with various metadata.
 This includes:
@@ -422,16 +422,16 @@ Below is a comparison between the REPL version and the API version:
 
 | `REPL`               | `API`                                                 |
 |:---------------------|:------------------------------------------------------|
-| `Package`            | `PackageSpec("Package")`                              |
-| `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
-| `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
-| `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
-| `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
-| `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
-| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
-| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
+| `Package`            | `packagespec("Package")`                              |
+| `Package@0.2`        | `packagespec(name="Package", version="0.2")`          |
+| `Package=a67d...`    | `packagespec(name="Package", uuid="a67d...")`         |
+| `Package#master`     | `packagespec(name="Package", rev="master")`           |
+| `local/path#feature` | `packagespec(path="local/path"; rev="feature")`       |
+| `www.mypkg.com`      | `packagespec(url="www.mypkg.com")`                    |
+| `--manifest Package` | `packagespec(name="Package", mode=PKGSPEC_MANIFEST)`  |
+| `--major Package`    | `packagespec(name="Package", version=PKGLEVEL_MAJOR)` |
 """
-const PackageSpec = API.Package
+const packagespec = API.packagespec
 
 """
     setprotocol!(;

@@ -958,9 +958,10 @@ function setprotocol!(;
 end
 
 @deprecate setprotocol!(proto::Union{Nothing, AbstractString}) setprotocol!(protocol = proto) false
+@deprecate Package(args...; kwargs...) packagespec(args...; kwargs...)
 
-# API constructor
-function Package(;name::Union{Nothing,AbstractString} = nothing,
+# API PackageSpec construction
+function packagespec(;name::Union{Nothing,AbstractString} = nothing,
                  uuid::Union{Nothing,String,UUID} = nothing,
                  version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
                  url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT)
@@ -973,8 +974,6 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
     PackageSpec(;name=name, uuid=uuid, version=version, mode=mode, path=nothing,
                 special_action=PKGSPEC_NOTHING, repo=repo, tree_hash=nothing)
 end
-Package(name::AbstractString) = PackageSpec(name)
-Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
-Package(name::AbstractString, uuid::UUID, version::VersionTypes) = PackageSpec(name, uuid, version)
+packagespec(args...) = PackageSpec(args...)
 
 end # module
