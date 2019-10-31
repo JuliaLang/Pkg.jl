@@ -196,6 +196,9 @@ end
 Creates a new artifact by running `f(artifact_path)`, hashing the result, and moving it
 to the artifact store (`~/.julia/artifacts` on a typical installation).  Returns the
 identifying tree hash of this artifact.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function create_artifact(f::Function)
     # Ensure the `artifacts` directory exists in our default depot
@@ -257,6 +260,9 @@ end
 
 Given an artifact (identified by SHA1 git tree hash), return its installation path.  If
 the artifact does not exist, returns the location it would be installed to.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function artifact_path(hash::SHA1; honor_overrides::Bool=true)
     # Get all possible paths (rooted in all depots)
@@ -279,6 +285,9 @@ end
 Returns whether or not the given artifact (identified by its sha1 git tree hash) exists
 on-disk.  Note that it is possible that the given artifact exists in multiple locations
 (e.g. within multiple depots).
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function artifact_exists(hash::SHA1; honor_overrides::Bool=true)
     return any(isdir.(artifact_paths(hash; honor_overrides=honor_overrides)))
@@ -295,6 +304,9 @@ will never attempt to remove an overridden artifact.
 In general, we recommend that you use `Pkg.gc()` to manage artifact installations and do
 not use `remove_artifact()` directly, as it can be difficult to know if an artifact is
 being used by another package.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function remove_artifact(hash::SHA1)
     if query_override(hash) != nothing
@@ -317,6 +329,9 @@ end
 Verifies that the given artifact (identified by its SHA1 git tree hash) is installed on-
 disk, and retains its integrity.  If the given artifact is overridden, skips the
 verification unless `honor_overrides` is set to `true`.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
     # Silently skip overridden artifacts unless we really ask for it
@@ -341,6 +356,9 @@ end
 Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256 of the
 resultant tarball as a hexidecimal string. Throws an error if the artifact does not
 exist.  If the artifact is overridden, throws an error unless `honor_overrides` is set.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
     if !honor_overrides
@@ -485,6 +503,9 @@ end
 Get metadata about a given artifact (identified by name) stored within the given
 `(Julia)Artifacts.toml` file.  If the artifact is platform-specific, use `platform` to choose the
 most appropriate mapping.  If none is found, return `nothing`.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function artifact_meta(name::String, artifacts_toml::String;
                        platform::Platform = platform_key_abi(),
@@ -530,6 +551,9 @@ end
 
 Thin wrapper around `artifact_meta()` to return the hash of the specified, platform-
 collapsed artifact.  Returns `nothing` if no mapping can be found.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function artifact_hash(name::String, artifacts_toml::String;
                        platform::Platform = platform_key_abi(),
@@ -560,6 +584,9 @@ URLs will be listed as possible locations where this artifact can be obtained.  
 is set to `true`, even if download information is available, this artifact will not be
 downloaded until it is accessed via the `artifact"name"` syntax, or
 `ensure_artifact_installed()` is called upon it.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         platform::Union{Platform,Nothing} = nothing,
@@ -638,6 +665,9 @@ end
 
 Unbind the given `name` from an `(Julia)Artifacts.toml` file.
 Silently fails if no such binding exists within the file.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function unbind_artifact!(artifacts_toml::String, name::String;
                          platform::Union{Platform,Nothing} = nothing)
@@ -666,6 +696,9 @@ end
                       verbose::Bool = false)
 
 Download/install an artifact into the artifact store.  Returns `true` on success.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
                            verbose::Bool = false)
@@ -735,6 +768,9 @@ end
 Given the path to a `.jl` file, (such as the one returned by `__source__.file` in a macro
 context), find the `(Julia)Artifacts.toml` that is contained within the containing project (if it
 exists), otherwise return `nothing`.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function find_artifacts_toml(path::String)
     if !isdir(path)
@@ -774,6 +810,9 @@ end
 
 Ensures an artifact is installed, downloading it via the download information stored in
 `artifacts_toml` if necessary.  Throws an error if unable to install.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
@@ -825,6 +864,9 @@ Installs all non-lazy artifacts from a given `(Julia)Artifacts.toml` file. `pack
 be provided to properly support overrides from `Overrides.toml` entries in depots.
 
 If `include_lazy` is set to `true`, then lazy packages will be installed as well.
+
+!!! compat "Julia 1.3"
+    This function requires at least Julia 1.3.
 """
 function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::Platform = platform_key_abi(),
@@ -901,6 +943,9 @@ end
 Macro that is used to automatically ensure an artifact is installed, and return its
 location on-disk.  Automatically looks the artifact up by name in the project's
 `(Julia)Artifacts.toml` file.  Throws an error on inability to install the requested artifact.
+
+!!! compat "Julia 1.3"
+    This macro requires at least Julia 1.3.
 """
 macro artifact_str(name)
     return quote

@@ -1,5 +1,8 @@
 # [**8.** Artifacts](@id Artifacts)
 
+!!! compat "Julia 1.3"
+    Pkg's artifacts functionality requires at least Julia 1.3.
+
 `Pkg` can install and manage containers of data that are not Julia packages.  These containers can contain platform-specific binaries, datasets, text, or any other kind of data that would be convenient to place within an immutable, life-cycled datastore.
 These containers, (called "Artifacts") can be created locally, hosted anywhere, and automatically downloaded and unpacked upon installation of your Julia package.
 This mechanism is also used to provide the binary dependencies for packages built with [`BinaryBuilder.jl`](https://github.com/JuliaPackaging/BinaryBuilder.jl).
