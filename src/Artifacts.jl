@@ -936,6 +936,26 @@ function extract_all_hashes(artifacts_toml::String;
     return hashes
 end
 
+function do_artifact_str(name, src_file, __module__)
+    local artifacts_toml = find_artifacts_toml(src_file)
+    if artifacts_toml === nothing
+        error(string(
+            "Cannot locate '(Julia)Artifacts.toml' file when attempting to use artifact '",
+            name,
+            "' in '",
+            __module__,
+            "'",
+        ))
+    end
+
+    local pkg_uuid = nothing
+    if haskey(Base.module_keys, __module__)
+        pkg_uuid = Base.module_keys[__module__].uuid
+    end
+
+    # This is the resultant value at the end of all things
+    ensure_artifact_installed(name, artifacts_toml; pkg_uuid=pkg_uuid)
+end
 
 """
     macro artifact_str(name)
@@ -949,24 +969,7 @@ location on-disk.  Automatically looks the artifact up by name in the project's
 """
 macro artifact_str(name)
     return quote
-        local artifacts_toml = $(find_artifacts_toml)($(string(__source__.file)))
-        if artifacts_toml === nothing
-            error(string(
-                "Cannot locate '(Julia)Artifacts.toml' file when attempting to use artifact '",
-                $(esc(name)),
-                "' in '",
-                $(esc(__module__)),
-                "'",
-            ))
-        end
-
-        local pkg_uuid = nothing
-        if haskey(Base.module_keys, $(__module__))
-            pkg_uuid = Base.module_keys[$(__module__)].uuid
-        end
-
-        # This is the resultant value at the end of all things
-        $(ensure_artifact_installed)($(esc(name)), artifacts_toml; pkg_uuid=pkg_uuid)
+        Base.invokelatest(do_artifact_str, $name, $(string(__source__.file)), $__module__)
     end
 end
 
