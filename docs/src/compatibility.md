@@ -46,7 +46,7 @@ minor versions are not considered compatible, so the version 0.3.0 might have br
 Example = "0.0.1"
 ```
 
-results in a versionbound on `Example` as `[0.0.1, 0.02)` (which is equivalent to only the version 0.0.1), while the
+results in a versionbound on `Example` as `[0.0.1, 0.0.2)` (which is equivalent to only the version 0.0.1), while the
 `[compat]` entry:
 
 ```julia
