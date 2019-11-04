@@ -153,10 +153,10 @@ end
 revstring(str::String) = occursin(r"\b([a-f0-9]{40})\b", str) ? str[1:7] : str
 
 vstring(ctx::Context, a::VerInfo) =
-    string((a.ver == nothing && a.hash != nothing) ? "[$(string(a.hash)[1:16])]" : "",
-           a.ver != nothing ? "v$(a.ver)" : "",
-           a.path != nothing ? " [$(pathrepr(a.path))]" : "",
-           a.repo != nothing ? " #$(revstring(a.repo.rev)) ($(a.repo.source))" : "",
+    string((a.ver === nothing && a.hash !== nothing) ? "[$(string(a.hash)[1:16])]" : "",
+           a.ver !== nothing ? "v$(a.ver)" : "",
+           a.path !== nothing ? " [$(pathrepr(a.path))]" : "",
+           a.repo !== nothing ? " #$(revstring(a.repo.rev)) ($(a.repo.source))" : "",
            a.pinned == true ? " ⚲" : "",
            )
 
@@ -165,9 +165,9 @@ Base.:(==)(a::VerInfo, b::VerInfo) =
     a.path == b.path
 
 ≈(a::VerInfo, b::VerInfo) = a.hash == b.hash &&
-    (a.ver == nothing || b.ver == nothing || a.ver == b.ver) &&
+    (a.ver === nothing || b.ver === nothing || a.ver == b.ver) &&
     (a.pinned == b.pinned) &&
-    (a.repo == nothing || b.repo == nothing || a.repo == b.repo) &&
+    (a.repo === nothing || b.repo === nothing || a.repo == b.repo) &&
     (a.path == b.path)
 
 struct DiffEntry
@@ -193,12 +193,12 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry}, status=false)
             else
                 if (x.old.hash === nothing || x.new.hash === nothing || x.old.hash != x.new.hash) &&
                     x.old.ver != x.new.ver
-                    verb = x.old.ver == nothing || x.new.ver == nothing ||
+                    verb = x.old.ver === nothing || x.new.ver === nothing ||
                            x.old.ver == x.new.ver ? '~' :
                            x.old.ver < x.new.ver  ? '↑' : '↓'
                 elseif x.old.ver == x.new.ver && x.old.pinned != x.new.pinned ||
                     x.old.path != x.new.path ||
-                    x.old.repo != nothing || x.new.repo != nothing
+                    x.old.repo !== nothing || x.new.repo !== nothing
                     verb = '~'
                 else
                     verb = '?'
@@ -208,10 +208,10 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry}, status=false)
                       vstring(ctx, x.new) :
                       vstring(ctx, x.old) * " ⇒ " * vstring(ctx, x.new)
             end
-        elseif x.new != nothing
+        elseif x.new !== nothing
             verb = '+'
             vstr = vstring(ctx, x.new)
-        elseif x.old != nothing
+        elseif x.old !== nothing
             verb = '-'
             vstr = vstring(ctx, x.old)
         else

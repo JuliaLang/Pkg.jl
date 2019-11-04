@@ -111,9 +111,9 @@ VersionRange(v::VersionNumber)               = VersionRange(VersionBound(v))
 
 function VersionRange(s::AbstractString)
     m = match(r"^\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*)(?:\s*-\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*))?\s*$", s)
-    m == nothing && throw(ArgumentError("invalid version range: $(repr(s))"))
+    m === nothing && throw(ArgumentError("invalid version range: $(repr(s))"))
     lower = VersionBound(m.captures[1])
-    upper = m.captures[2] != nothing ? VersionBound(m.captures[2]) : lower
+    upper = m.captures[2] !== nothing ? VersionBound(m.captures[2]) : lower
     return VersionRange(lower, upper)
 end
 
@@ -157,7 +157,7 @@ function Base.union!(ranges::Vector{<:VersionRange})
 
     k0 = 1
     ks = findfirst(!isempty, ranges)
-    ks == nothing && return empty!(ranges)
+    ks === nothing && return empty!(ranges)
 
     lo, up, k0 = ranges[ks].lower, ranges[ks].upper, 1
     for k = (ks + 1):l
@@ -287,7 +287,7 @@ function semver_interval(m::RegexMatch)
     # Default type is :caret
     vertyp = (typ == "" || typ == "^") ? :caret : :tilde
     v0 = VersionBound((major, minor, patch))
-    if vertyp == :caret
+    if vertyp === :caret
         if major != 0
             return VersionRange(v0, VersionBound((v0[1],)))
         elseif minor != 0

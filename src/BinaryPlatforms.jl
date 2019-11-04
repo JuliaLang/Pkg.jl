@@ -37,17 +37,17 @@ struct CompilerABI
     function CompilerABI(;libgfortran_version::Union{Nothing, VersionNumber} = nothing,
                          libstdcxx_version::Union{Nothing, VersionNumber} = nothing,
                          cxxstring_abi::Union{Nothing, Symbol} = nothing)
-        if libgfortran_version != nothing && (libgfortran_version < v"3" ||
+        if libgfortran_version !== nothing && (libgfortran_version < v"3" ||
                                               libgfortran_version >= v"6")
             throw(ArgumentError("Unsupported libgfortran '$libgfortran_version'"))
         end
 
-        if libstdcxx_version != nothing && (libstdcxx_version < v"3.4.0" ||
+        if libstdcxx_version !== nothing && (libstdcxx_version < v"3.4.0" ||
                                             libstdcxx_version >= v"3.5")
             throw(ArgumentError("Unsupported libstdc++ '$libstdcxx_version'"))
         end
 
-        if cxxstring_abi != nothing && !in(cxxstring_abi, [:cxx03, :cxx11])
+        if cxxstring_abi !== nothing && !in(cxxstring_abi, [:cxx03, :cxx11])
             throw(ArgumentError("Unsupported string ABI '$cxxstring_abi'"))
         end
 
@@ -71,13 +71,13 @@ cxxstring_abi(cabi::CompilerABI) = cabi.cxxstring_abi
 
 function show(io::IO, cabi::CompilerABI)
     args = String[]
-    if cabi.libgfortran_version != nothing
+    if cabi.libgfortran_version !== nothing
         push!(args, "libgfortran_version=$(repr(cabi.libgfortran_version))")
     end
-    if cabi.libstdcxx_version != nothing
+    if cabi.libstdcxx_version !== nothing
         push!(args, "libstdcxx_version=$(repr(cabi.libstdcxx_version))")
     end
-    if cabi.cxxstring_abi != nothing
+    if cabi.cxxstring_abi !== nothing
         push!(args, "cxxstring_abi=$(repr(cabi.cxxstring_abi))")
     end
     write(io, "CompilerABI($(join(args, ", ")))")
@@ -103,7 +103,7 @@ function gcc_version(cabi::CompilerABI, GCC_versions::Vector{VersionNumber})
     #  libgfortran3 -> GCC 4.X, 5.X, 6.X
     #  libgfortran4 -> GCC 7.x
     #  libgfortran5 -> GCC 8.X, 9.X
-    if cabi.libgfortran_version != nothing
+    if cabi.libgfortran_version !== nothing
         if cabi.libgfortran_version.major == 3
             GCC_versions = filt_gcc_majver(4,5,6)
         elseif cabi.libgfortran_version.major == 4
@@ -117,7 +117,7 @@ function gcc_version(cabi::CompilerABI, GCC_versions::Vector{VersionNumber})
     # mapping is conservative; it is often the case that we return a
     # version that is slightly lower than what is actually installed on
     # a system.
-    if cabi.libstdcxx_version != nothing
+    if cabi.libstdcxx_version !== nothing
         cxxvp = cabi.libstdcxx_version.patch
         # Is this platform so old that nothing is supported?
         if cxxvp < 19
@@ -148,7 +148,7 @@ function gcc_version(cabi::CompilerABI, GCC_versions::Vector{VersionNumber})
     # :cxx03 binaries on GCC 5+, (although increasingly rare) so the only
     # filtering we do is that if the platform is explicitly :cxx11, we
     # disallow running on < GCC 5.
-    if cabi.cxxstring_abi != nothing && cabi.cxxstring_abi == :cxx11
+    if cabi.cxxstring_abi !== nothing && cabi.cxxstring_abi === :cxx11
         GCC_versions = filter(v -> v >= v"5", GCC_versions)
     end
 
@@ -179,7 +179,7 @@ struct Linux <: Platform
         end
 
         # Auto-map the `call_abi` to be `eabihf` on armv7l
-        if call_abi === nothing && arch == :armv7l
+        if call_abi === nothing && arch === :armv7l
             call_abi = :eabihf
         end
 
@@ -188,11 +188,11 @@ struct Linux <: Platform
         end
 
         # If we're constructing for armv7l, we MUST have the eabihf abi
-        if arch == :armv7l && call_abi != :eabihf
+        if arch === :armv7l && call_abi !== :eabihf
             throw(ArgumentError("armv7l Linux must use eabihf, not '$call_abi'"))
         end
         # ...and vice-versa
-        if arch != :armv7l && call_abi == :eabihf
+        if arch !== :armv7l && call_abi === :eabihf
             throw(ArgumentError("eabihf Linux is only on armv7l, not '$arch'!"))
         end
 
@@ -280,7 +280,7 @@ struct FreeBSD <: Platform
         end
 
         # Auto-map the `call_abi` to be `eabihf` on armv7l
-        if call_abi === nothing && arch == :armv7l
+        if call_abi === nothing && arch === :armv7l
             call_abi = :eabihf
         end
 
@@ -289,11 +289,11 @@ struct FreeBSD <: Platform
         end
 
         # If we're constructing for armv7l, we MUST have the eabihf abi
-        if arch == :armv7l && call_abi != :eabihf
+        if arch === :armv7l && call_abi !== :eabihf
             throw(ArgumentError("armv7l FreeBSD must use eabihf, not '$call_abi'"))
         end
         # ...and vice-versa
-        if arch != :armv7l && call_abi == :eabihf
+        if arch !== :armv7l && call_abi === :eabihf
             throw(ArgumentError("eabihf FreeBSD is only on armv7l, not '$arch'!"))
         end
 
@@ -431,11 +431,11 @@ vendor_str(p::FreeBSD) = "-unknown-freebsd11.1"
 triplet(p::UnknownPlatform) = "unknown-unknown-unknown"
 
 # Helper functions for Linux and FreeBSD libc/abi mishmashes
-arch_str(p::Platform) = (arch(p) == :armv7l) ? "arm" : string(arch(p))
+arch_str(p::Platform) = (arch(p) === :armv7l) ? "arm" : string(arch(p))
 function libc_str(p::Platform)
     if libc(p) === nothing
         return ""
-    elseif libc(p) == :glibc
+    elseif libc(p) === :glibc
         return "-gnu"
     else
         return "-$(libc(p))"
@@ -444,15 +444,15 @@ end
 call_abi_str(p::Platform) = (call_abi(p) === nothing) ? "" : string(call_abi(p))
 function compiler_abi_str(cabi::CompilerABI)
     str = ""
-    if cabi.libgfortran_version != nothing
+    if cabi.libgfortran_version !== nothing
         str *= "-libgfortran$(cabi.libgfortran_version.major)"
     end
 
-    if cabi.libstdcxx_version != nothing
+    if cabi.libstdcxx_version !== nothing
         str *= "-libstdcxx$(libstdcxx_version(cabi).patch)"
     end
 
-    if cabi.cxxstring_abi != nothing
+    if cabi.cxxstring_abi !== nothing
         str *= "-$(cabi.cxxstring_abi)"
     end
     return str
@@ -529,12 +529,12 @@ function platform_key_abi(machine::AbstractString)
     ))
 
     m = match(triplet_regex, machine)
-    if m != nothing
+    if m !== nothing
         # Helper function to find the single named field within the giant regex
         # that is not `nothing` for each mapping we give it.
         get_field(m, mapping) = begin
             for k in keys(mapping)
-                if m[k] != nothing
+                if m[k] !== nothing
                     strk = string(k)
                     # Convert our sentinel `nothing` values to actual `nothing`
                     if endswith(strk, "_nothing")
@@ -589,10 +589,10 @@ end
 function show(io::IO, p::Platform)
     write(io, "$(platform_name(p))($(repr(arch(p)))")
 
-    if libc(p) != nothing
+    if libc(p) !== nothing
         write(io, ", libc=$(repr(libc(p)))")
     end
-    if call_abi(p) != nothing
+    if call_abi(p) !== nothing
         write(io, ", call_abi=$(repr(call_abi(p)))")
     end
     if compiler_abi(p) != CompilerABI()
@@ -724,7 +724,7 @@ function detect_libstdcxx_version()
     # Brute-force our way through GLIBCXX_* symbols to discover which version we're linked against
     hdl = Libdl.dlopen(first(libstdcxx_paths))
     for minor_version in 26:-1:18
-        if Libdl.dlsym(hdl, "GLIBCXX_3.4.$(minor_version)"; throw_error=false) != nothing
+        if Libdl.dlsym(hdl, "GLIBCXX_3.4.$(minor_version)"; throw_error=false) !== nothing
             Libdl.dlclose(hdl)
             return VersionNumber("3.4.$(minor_version)")
         end

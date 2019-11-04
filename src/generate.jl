@@ -27,23 +27,23 @@ function project(ctx::Context, pkg::String, dir::String)
     gitmail = LibGit2.getconfig("user.email", "")
     isempty(gitmail) || (email = gitmail)
 
-    if name == nothing
+    if name === nothing
         for env in ["GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "USER", "USERNAME", "NAME"]
             name = get(ENV, env, nothing)
-            name != nothing && break
+            name !== nothing && break
         end
     end
 
-    name == nothing && (name = "Unknown")
+    name === nothing && (name = "Unknown")
 
-    if email == nothing
+    if email === nothing
         for env in ["GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL", "EMAIL"];
             email = get(ENV, env, nothing)
-            email != nothing && break
+            email !== nothing && break
         end
     end
 
-    authors = ["$name " * (email == nothing ? "" : "<$email>")]
+    authors = ["$name " * (email === nothing ? "" : "<$email>")]
 
     uuid = UUIDs.uuid4()
     genfile(ctx, pkg, dir, "Project.toml") do io

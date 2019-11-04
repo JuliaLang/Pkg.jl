@@ -181,7 +181,7 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     project_file = nothing
     if env isa Nothing
         project_file = Base.active_project()
-        project_file == nothing && pkgerror("no active project")
+        project_file === nothing && pkgerror("no active project")
     elseif startswith(env, '@')
         project_file = Base.load_path_expand(env)
         project_file === nothing && pkgerror("package environment does not exist: $env")
@@ -599,7 +599,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
     LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
         # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
-        if pkg.repo.rev == nothing
+        if pkg.repo.rev === nothing
             pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
         end
 
@@ -1202,7 +1202,7 @@ function registered_name(ctx::Context, uuid::UUID)::Union{Nothing,String}
     values = registered_info(ctx, uuid, "name")
     name = nothing
     for value in values
-        name  == nothing && (name = value[2])
+        name  === nothing && (name = value[2])
         name != value[2] && pkgerror("package `$uuid` has multiple registered name values: $name, $(value[2])")
     end
     return name
