@@ -73,7 +73,7 @@ overriding to another artifact by its content-hash.
 """
 const ARTIFACT_OVERRIDES = Ref{Union{Dict,Nothing}}(nothing)
 function load_overrides(;force::Bool = false)
-    if ARTIFACT_OVERRIDES[] != nothing && !force
+    if ARTIFACT_OVERRIDES[] !== nothing && !force
         return ARTIFACT_OVERRIDES[]
     end
 
@@ -247,7 +247,7 @@ function artifact_paths(hash::SHA1; honor_overrides::Bool=true)
     # First, check to see if we've got an override:
     if honor_overrides
         override = query_override(hash)
-        if override != nothing
+        if override !== nothing
             return [override]
         end
     end
@@ -309,7 +309,7 @@ being used by another package.
     This function requires at least Julia 1.3.
 """
 function remove_artifact(hash::SHA1)
-    if query_override(hash) != nothing
+    if query_override(hash) !== nothing
         # We never remove overridden artifacts.
         return
     end
@@ -336,7 +336,7 @@ verification unless `honor_overrides` is set to `true`.
 function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
     # Silently skip overridden artifacts unless we really ask for it
     if !honor_overrides
-        if query_override(hash) != nothing
+        if query_override(hash) !== nothing
             return true
         end
     end
@@ -362,7 +362,7 @@ exist.  If the artifact is overridden, throws an error unless `honor_overrides` 
 """
 function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
     if !honor_overrides
-        if query_override(hash) != nothing
+        if query_override(hash) !== nothing
             error("Will not archive an overridden artifact unless `honor_overrides` is set!")
         end
     end
@@ -442,16 +442,16 @@ function pack_platform!(meta::Dict, p::Platform)
     )
     meta["os"] = os_map[typeof(p)]
     meta["arch"] = string(arch(p))
-    if libc(p) != nothing
+    if libc(p) !== nothing
         meta["libc"] = string(libc(p))
     end
-    if libgfortran_version(p) != nothing
+    if libgfortran_version(p) !== nothing
         meta["libgfortran_version"] = string(libgfortran_version(p))
     end
-    if libstdcxx_version(p) != nothing
+    if libstdcxx_version(p) !== nothing
         meta["libstdcxx_version"] = string(libstdcxx_version(p))
     end
-    if cxxstring_abi(p) != nothing
+    if cxxstring_abi(p) !== nothing
         meta["cxxstring_abi"] = string(cxxstring_abi(p))
     end
 end
@@ -470,7 +470,7 @@ function load_artifacts_toml(artifacts_toml::String;
     # Insert just-in-time hash overrides by looking up the names of anything we need to
     # override for this UUID, and inserting new overrides for those hashes.
     overrides = load_overrides()
-    if pkg_uuid != nothing && haskey(overrides[:UUID], pkg_uuid)
+    if pkg_uuid !== nothing && haskey(overrides[:UUID], pkg_uuid)
         pkg_overrides = overrides[:UUID][pkg_uuid]
 
         for name in keys(artifact_dict)
@@ -537,7 +537,7 @@ function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String
     end
 
     # This is such a no-no, we are going to call it out right here, right now.
-    if meta != nothing && !haskey(meta, "git-tree-sha1")
+    if meta !== nothing && !haskey(meta, "git-tree-sha1")
         @error("Invalid artifacts file at $(artifacts_toml): artifact '$name' contains no `git-tree-sha1`!")
         return nothing
     end
@@ -622,7 +622,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
     # Integrate download info, if it is given.  We represent the download info as a
     # vector of dicts, each with its own `url` and `sha256`, since different tarballs can
     # expand to the same tree hash.
-    if download_info != nothing
+    if download_info !== nothing
         meta["download"] = [
             Dict("url" => dl[1],
                  "sha256" => dl[2],
@@ -630,7 +630,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
         ]
     end
 
-    if platform == nothing
+    if platform === nothing
         artifact_dict[name] = meta
     else
         # Add platform-specific keys to our `meta` dict
@@ -676,7 +676,7 @@ function unbind_artifact!(artifacts_toml::String, name::String;
         return
     end
 
-    if platform == nothing
+    if platform === nothing
         delete!(artifact_dict, name)
     else
         artifact_dict[name] = filter(
