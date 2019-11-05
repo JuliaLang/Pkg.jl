@@ -1001,6 +1001,12 @@ macro artifact_str(name)
 
     local artifact_dict = load_artifacts_toml(artifacts_toml)
     return quote
+        # Invalidate .ji file if Artifacts.toml file changes
+        Base.include_dependency($(artifacts_toml))
+
+        # Use invokelatest() to introduce a compiler barrier, preventing many backedges from being added
+        # and slowing down not only compile time, but also `.ji` load time.  This is critical here, as
+        # artifact"" is used in other modules, so we don't want to be spreading backedges around everywhere.
         Base.invokelatest(do_artifact_str, $name, $(artifact_dict), $(artifacts_toml), $__module__)
     end
 end
