@@ -969,6 +969,9 @@ location on-disk.  Automatically looks the artifact up by name in the project's
 """
 macro artifact_str(name)
     return quote
+        # Use invokelatest() to introduce a compiler barrier, preventing many backedges from being added
+        # and slowing down not only compile time, but also `.ji` load time.  This is critical here, as
+        # artifact"" is used in other modules, so we don't want to be spreading backedges around everywhere.
         Base.invokelatest(do_artifact_str, $name, $(string(__source__.file)), $__module__)
     end
 end
