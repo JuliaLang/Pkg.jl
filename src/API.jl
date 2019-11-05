@@ -394,7 +394,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
 
         # Collect the locations of every package referred to in this manifest
         pkg_dir(uuid, entry) = Operations.find_installed(entry.name, uuid, entry.tree_hash)
-        return [pkg_dir(u, e) for (u, e) in manifest if e.tree_hash != nothing]
+        return [pkg_dir(u, e) for (u, e) in manifest if e.tree_hash !== nothing]
     end
 
     function process_artifacts_toml(path)
@@ -434,7 +434,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
         for index_file in index_files
             # Check to see if it's still alive
             paths = process_func(index_file)
-            if paths != nothing
+            if paths !== nothing
                 # Print the path of this beautiful, extant file to the user
                 println("        $(Types.pathrepr(index_file))")
                 append!(marked_paths, paths)
@@ -682,7 +682,7 @@ function precompile(ctx::Context)
     for pkg in pkgids
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
-        sourcepath == nothing && continue
+        sourcepath === nothing && continue
         # Heuristic for when precompilation is disabled
         occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String)) && continue
         stale = true
@@ -939,7 +939,7 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     @assert direction == 1 || direction == -1
     state = get(undo_entries, ctx.env.project_file, nothing)
     state === nothing && pkgerror("no undo state for current project")
-    state.idx == (mode == :redo ? 1 : length(state.entries)) && pkgerror("$mode: no more states left")
+    state.idx == (mode === :redo ? 1 : length(state.entries)) && pkgerror("$mode: no more states left")
 
     state.idx += direction
     snapshot = state.entries[state.idx]

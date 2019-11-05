@@ -616,7 +616,7 @@ function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
     id = pkgID(rp, rlog)
     msg = "restricted to versions $rvs by "
     if reason isa Symbol
-        @assert reason == :explicit_requirement
+        @assert reason === :explicit_requirement
         other_entry = nothing
         msg *= "an explicit requirement"
     else
@@ -749,10 +749,10 @@ function log_event_maxsumsolved!(graph::Graph, p0::Int, s0::Int, why::Symbol)
     p = pkgs[p0]
     id = pkgID(p, rlog)
     if s0 == spp[p0]
-        @assert why == :uninst
+        @assert why === :uninst
         msg = "determined to be unneeded by the solver"
     else
-        @assert why == :constr
+        @assert why === :constr
         if s0 == spp[p0] - 1
             msg = "set by the solver to its maximum version: $(pvers[p0][s0])"
         else
@@ -844,9 +844,9 @@ Show the full resolution log. The `view` keyword controls how the events are dis
 function showlog(io::IO, rlog::ResolveLog; view::Symbol = :plain)
     view ∈ [:plain, :tree, :chronological] || throw(ArgumentError("the view argument should be `:plain`, `:tree` or `:chronological`"))
     println(io, "Resolve log:")
-    view == :chronological && return showlogjournal(io, rlog)
+    view === :chronological && return showlogjournal(io, rlog)
     seen = IdDict()
-    recursive = (view == :tree)
+    recursive = (view === :tree)
     _show(io, rlog, rlog.globals, _logindent, seen, false)
     initentries = [event[1] for event in rlog.init.events]
     for entry in sort!(initentries, by=(entry->pkgID(entry.pkg, rlog)))
@@ -872,7 +872,7 @@ the same as for `showlog(io, rlog)`); the default is `:tree`.
 function showlog(io::IO, rlog::ResolveLog, p::UUID; view::Symbol = :tree)
     view ∈ [:plain, :tree] || throw(ArgumentError("the view argument should be `:plain` or `:tree`"))
     entry = rlog.pool[p]
-    if view == :tree
+    if view === :tree
         _show(io, rlog, entry, _logindent, IdDict(entry=>true), true)
     else
         entries = ResolveLogEntry[entry]

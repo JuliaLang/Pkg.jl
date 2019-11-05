@@ -198,7 +198,7 @@ function probe_platform_engines!(;verbose::Bool = false)
     unpack_7z = (exe7z) -> begin
         return (tarball_path, out_path, excludelist = nothing) ->
         pipeline(pipeline(`$exe7z x $(tarball_path) -y -so`,
-                 `$exe7z x -si -y -ttar -o$(out_path) $(excludelist == nothing ? [] : "-x@$(excludelist)")`);
+                 `$exe7z x -si -y -ttar -o$(out_path) $(excludelist === nothing ? [] : "-x@$(excludelist)")`);
                  stdout=devnull, stderr=devnull)
     end
     package_7z = (exe7z) -> begin
@@ -320,7 +320,7 @@ function probe_platform_engines!(;verbose::Bool = false)
             elseif endswith(tarball_path, ".bz2")
                 Jjz = "j"
             end
-            return `$tar_cmd -x$(Jjz)f $(tarball_path) -C$(out_path) $(excludelist == nothing ? [] : "-X$(excludelist)")`
+            return `$tar_cmd -x$(Jjz)f $(tarball_path) -C$(out_path) $(excludelist === nothing ? [] : "-X$(excludelist)")`
         end
         package_tar = (in_path, tarball_path) -> begin
             Jjz = "z"

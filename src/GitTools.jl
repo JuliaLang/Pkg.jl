@@ -124,7 +124,7 @@ end
 function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
-    Pkg.Types.printpkgstyle(ctx, :Cloning, header == nothing ? "git-repo `$url`" : header)
+    Pkg.Types.printpkgstyle(ctx, :Cloning, header === nothing ? "git-repo `$url`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
@@ -133,7 +133,7 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
         )
     )
     print(stdout, "\e[?25l") # disable cursor
-    if credentials == nothing
+    if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
     mkpath(source_path)
@@ -162,7 +162,7 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, cr
         end
     end
     remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(ctx, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
+    Pkg.Types.printpkgstyle(ctx, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
@@ -171,7 +171,7 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, cr
         )
     )
     print(stdout, "\e[?25l") # disable cursor
-    if credentials == nothing
+    if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
     try

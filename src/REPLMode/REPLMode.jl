@@ -141,7 +141,7 @@ struct Option
     Option(val::AbstractString) = new(val, nothing)
     Option(val::AbstractString, arg::Union{Nothing,String}) = new(val, arg)
 end
-Base.show(io::IO, opt::Option) = print(io, "--$(opt.val)", opt.argument == nothing ? "" : "=$(opt.argument)")
+Base.show(io::IO, opt::Option) = print(io, "--$(opt.val)", opt.argument === nothing ? "" : "=$(opt.argument)")
 wrap_option(option::String)  = length(option) == 1 ? "-$option" : "--$option"
 is_opt(word::AbstractString) = first(word) == '-' && word != "-"
 
@@ -542,7 +542,7 @@ function create_mode(repl, main)
     end
 
     repl_keymap = Dict()
-    if shell_mode != nothing
+    if shell_mode !== nothing
         repl_keymap[';'] = function (s,o...)
             if isempty(s) || position(LineEdit.buffer(s)) == 0
                 buf = copy(LineEdit.buffer(s))
