@@ -145,10 +145,17 @@ function complete_argument(spec::CommandSpec, options::Vector{String},
 end
 
 function _completions(input, final, offset, index)
-    words = tokenize(input)[end]
-    word_count = length(words)
-    statement, partial = core_parse(words)
-    final && (partial = "") # last token is finalized -> no partial
+    statement, word_count, partial = nothing, nothing, nothing
+    try
+        words = tokenize(input)[end]
+        word_count = length(words)
+        statement, partial = core_parse(words)
+        if final
+            partial = "" # last token is finalized -> no partial
+        end
+    catch
+        return String[], 0:-1, false
+    end
     # number of tokens which specify the command
     command_size = count([statement.super !== nothing, true])
     command_is_focused() = !((word_count == command_size && final) || word_count > command_size)
