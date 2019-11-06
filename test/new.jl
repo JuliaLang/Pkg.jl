@@ -266,6 +266,34 @@ end
 end
 
 #
+# # Activate
+#
+@testset "activate: repl" begin
+    isolate(loaded_depot=true) do
+        Pkg.REPLMode.TEST_MODE[] = true
+        # - activate shared env
+        api, args, opts = first(Pkg.pkg"activate --shared Foo")
+        @test api == Pkg.activate
+        @test args == "Foo"
+        @test opts == Dict(:shared => true)
+        # - activate shared env using special syntax
+        api, args, opts = first(Pkg.pkg"activate @Foo")
+        @test api == Pkg.activate
+        @test args == "Foo"
+        @test opts == Dict(:shared => true)
+        # - no arg activate
+        api, opts = first(Pkg.pkg"activate")
+        @test api == Pkg.activate
+        @test isempty(opts)
+        # - regular activate
+        api, args, opts = first(Pkg.pkg"activate FooBar")
+        @test api == Pkg.activate
+        @test args == "FooBar"
+        @test isempty(opts)
+    end
+end
+
+#
 # # Add
 #
 

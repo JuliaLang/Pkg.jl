@@ -6,7 +6,7 @@ import ..isdir_windows_workaround
 """
 Parser for PackageSpec objects.
 """
-function parse_package(args::Vector{QString}; add_or_dev=false)::Vector{PackageSpec}
+function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
     args::Vector{PackageToken} = map(PackageToken, package_lex(args))
     return parse_package_args(args; add_or_dev=add_or_dev)
 end
@@ -95,7 +95,7 @@ end
 ################
 # RegistrySpec #
 ################
-function parse_registry(raw_args::Vector{QString}; add=false)
+function parse_registry(raw_args::Vector{QString}, options; add=false)
     regs = RegistrySpec[]
     foreach(x -> push!(regs, parse_registry(x; add=add)), unwrap(raw_args))
     return regs
@@ -132,8 +132,22 @@ end
 #
 # # Other
 #
-function parse_activate(args::Vector{QString})::Vector{String}
-    return [(x.isquoted ? x.raw : expanduser(x.raw)) for x in args]
+function parse_activate(args::Vector{QString}, options)
+    isempty(args) && return [] # nothing to do
+    if length(args) == 1
+        x = first(args)
+        if x.isquoted
+            return [x.raw]
+        end
+        x = x.raw
+        if first(x) == '@'
+            options[:shared] = true
+            return [x[2:end]]
+        else
+            return [expanduser(x)]
+        end
+    end
+    return args # this is currently invalid input for "activate"
 end
 
 #

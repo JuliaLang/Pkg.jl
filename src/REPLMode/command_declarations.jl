@@ -22,7 +22,7 @@ julia is started with `--startup-file=yes`.
     :short_name => "?",
     :api => identity, # dummy API function
     :arg_count => 0 => Inf,
-    :arg_parser => identity,
+    :arg_parser => ((x,y) -> x),
     :completions => complete_help,
     :description => "show this message",
     :help => md"""
@@ -86,7 +86,7 @@ as any no-longer-necessary manifest packages due to project package removals.
     :api => API.add,
     :should_splat => false,
     :arg_count => 1 => Inf,
-    :arg_parser => (x -> parse_package(x; add_or_dev=true)),
+    :arg_parser => ((x,y) -> parse_package(x,y; add_or_dev=true)),
     :option_spec => OptionDeclaration[
         [:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
@@ -135,7 +135,7 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
     :api => API.develop,
     :should_splat => false,
     :arg_count => 1 => Inf,
-    :arg_parser => (x -> parse_package(x; add_or_dev=true)),
+    :arg_parser => ((x,y) -> parse_package(x,y; add_or_dev=true)),
     :option_spec => OptionDeclaration[
         [:name => "strict", :api => :strict => true],
         [:name => "local", :api => :shared => false],
@@ -274,7 +274,7 @@ packages will not be upgraded at all.
 ],[ :name => "generate",
     :api => API.generate,
     :arg_count => 1 => 1,
-    :arg_parser => x -> map(expanduser, unwrap(x)),
+    :arg_parser => ((x,y) -> map(expanduser, unwrap(x))),
     :description => "generate files for a new project",
     :help => md"""
     generate pkgname
@@ -356,7 +356,7 @@ Redoes the changes from the latest [`undo`](@ref).
     :api => Registry.add,
     :should_splat => false,
     :arg_count => 1 => Inf,
-    :arg_parser => (x -> parse_registry(x; add = true)),
+    :arg_parser => ((x,y) -> parse_registry(x,y; add = true)),
     :description => "add package registries",
     :help => md"""
     registry add reg...
