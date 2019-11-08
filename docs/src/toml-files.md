@@ -41,6 +41,9 @@ uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 ```
 The `uuid` field is mandatory for packages.
 
+!!! note
+    It is recommended that `UUIDs.uuid4()` is used to generate random UUIDs.
+
 
 ### The `version` field
 
