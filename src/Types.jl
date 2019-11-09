@@ -12,7 +12,7 @@ using REPL.TerminalMenus
 
 using ..TOML
 import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
-import Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath
 import ..BinaryPlatforms: Platform
 
 import Base: SHA1
