@@ -391,6 +391,9 @@ temp_pkg_dir() do project_path; cd(project_path) do
         # invalid options
         c, r = test_complete("rm -rf ")
         @test isempty(c)
+
+        # parse errors should not throw
+        _ = test_complete("add \"Foo")
     end # testset
 end end
 
