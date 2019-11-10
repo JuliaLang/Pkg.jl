@@ -182,8 +182,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     mkdir("tests")
                     cd("tests")
                     pkg"develop ../SubModule2"
-                    @test Pkg.dependencies()[uuid1].version == v"0.1.0"
-                    @test Pkg.dependencies()[uuid2].version == v"0.1.0"
+                    @test Pkg.dependencies()[uuid1].version == v"1.0.0"
+                    @test Pkg.dependencies()[uuid2].version == v"1.0.0"
                     # make sure paths to SubModule1 and SubModule2 are relative
                     manifest = Pkg.Types.Context().env.manifest
                     @test manifest[uuid1].path == "SubModule1"
