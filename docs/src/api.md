@@ -4,6 +4,16 @@ This section describes the function interface, or "API mode",
 for interacting with Pkg.jl. The function API is recommended
 for non-interactive usage, for example in scripts.
 
+## General API Reference
+
+Certain options are generally useful and can be specified in any API call.
+You can specify these options by setting keyword arguments.
+
+### Redirecting output
+
+Use the `io::IOBuffer` keyword argument to redirect Pkg output.
+For example, `Pkg.add("Example"; io=devnull)` will discard any output produced by the `add` call.
+
 ## Package API Reference
 
 In the REPL mode, packages (with associated version, UUID, URL etc) are parsed from strings,
