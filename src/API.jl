@@ -25,6 +25,20 @@ end
 dependencies(fn::Function, uuid::UUID) = fn(dependencies()[uuid])
 
 project() = project(Context())
+function project(path::String)
+    projfile = projectfile_path(path; strict=true)
+    if projfile === nothing
+        pkgerror("no project file found at path `$path`")
+    end
+    return project(Context(env=EnvCache(projfile)))
+end
+function project(_module::Module)
+    path = pathof(Base.moduleroot(_module))
+    if path === nothing
+        pkgerror("module `$(nameof(_module))` does not belong to a package")
+    end
+    return project(dirname(dirname(path)))
+end
 function project(ctx::Context)::ProjectInfo
     return ProjectInfo(
         name         = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.name,
