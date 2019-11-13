@@ -977,4 +977,25 @@ Package(name::AbstractString) = PackageSpec(name)
 Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
 Package(name::AbstractString, uuid::UUID, version::VersionTypes) = PackageSpec(name, uuid, version)
 
+
+"""
+    @__VERSION__ -> Union{VersionNumber, Nothing}
+
+Get the `VersionNumber` of the package which expands this macro. If executed outside of a
+package `nothing` will be returned.
+"""
+macro __VERSION__()
+    ctx = Types.Context()
+    pkg_id = Base.PkgId(__module__)
+    pkg_id.uuid === nothing && return nothing
+
+    pkg_info = if ctx.env.project.name == pkg_id.name
+        ctx.env.project
+    else
+        Pkg.Types.manifest_info(ctx, pkg_id.uuid)
+    end
+
+    return pkg_info.version
+end
+
 end # module

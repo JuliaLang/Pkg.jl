@@ -5,7 +5,7 @@ module Pkg
 import Random
 import REPL
 
-export @pkg_str
+export @pkg_str, @__VERSION__
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
 export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
@@ -41,6 +41,7 @@ include("API.jl")
 include("Registry.jl")
 include("REPLMode/REPLMode.jl")
 
+import .API: @__VERSION__
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
