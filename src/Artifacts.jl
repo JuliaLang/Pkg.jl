@@ -467,10 +467,26 @@ function load_artifacts_toml(artifacts_toml::String;
                              pkg_uuid::Union{Base.UUID,Nothing} = nothing)
     artifact_dict = parse_toml(artifacts_toml)
 
+    # Process overrides for this `pkg_uuid`
+    process_overrides(artifact_dict, pkg_uuid)
+    return artifact_dict
+end
+
+"""
+    process_overrides(artifact_dict::Dict, pkg_uuid::Base.UUID)
+
+When loading an `Artifacts.toml` file, we must check `Override.toml` files to see if any
+of the artifacts within it have been overridden by UUID.  If they have, we honor the
+overrides by inspecting the hashes of the targeted artifacts, then overriding them to
+point to the given override, punting the actual redirection off to the hash-based
+override system.  This does not modify the `artifact_dict` object, it merely dynamically
+adds more hash-based overrides as `Artifacts.toml` files that are overridden are loaded.
+"""
+function process_overrides(artifact_dict::Dict, pkg_uuid::Base.UUID)
     # Insert just-in-time hash overrides by looking up the names of anything we need to
     # override for this UUID, and inserting new overrides for those hashes.
     overrides = load_overrides()
-    if pkg_uuid !== nothing && haskey(overrides[:UUID], pkg_uuid)
+    if haskey(overrides[:UUID], pkg_uuid)
         pkg_overrides = overrides[:UUID][pkg_uuid]
 
         for name in keys(artifact_dict)
@@ -491,9 +507,11 @@ function load_artifacts_toml(artifacts_toml::String;
             end
         end
     end
-
     return artifact_dict
 end
+
+# If someone tries to call process_overrides() with `nothing`, do exactly that
+process_overrides(artifact_dict::Dict, pkg_uuid::Nothing) = nothing
 
 """
     artifact_meta(name::String, artifacts_toml::String;
@@ -936,6 +954,26 @@ function extract_all_hashes(artifacts_toml::String;
     return hashes
 end
 
+function do_artifact_str(name, artifact_dict, artifacts_toml, __module__)
+    local pkg_uuid = nothing
+    if haskey(Base.module_keys, __module__)
+        # Process overrides for this UUID, if we know what it is
+        process_overrides(artifact_dict, Base.module_keys[__module__].uuid)
+    end
+
+    # Get platform once to avoid extra work
+    platform = platform_key_abi()
+
+    # Get the metadata about this name for the requested platform
+    meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
+
+    if meta === nothing
+        error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
+    end
+
+    # This is the resultant value at the end of all things
+    return ensure_artifact_installed(name, meta, artifacts_toml; platform=platform)
+end
 
 """
     macro artifact_str(name)
@@ -948,25 +986,28 @@ location on-disk.  Automatically looks the artifact up by name in the project's
     This macro requires at least Julia 1.3.
 """
 macro artifact_str(name)
+    # Load Artifacts.toml at compile time, so that we don't have to use `__source__.file`
+    # at runtime, which gets stale if the `.ji` file is relocated.
+    local artifacts_toml = find_artifacts_toml(string(__source__.file))
+    if artifacts_toml === nothing
+        error(string(
+            "Cannot locate '(Julia)Artifacts.toml' file when attempting to use artifact '",
+            name,
+            "' in '",
+            __module__,
+            "'",
+        ))
+    end
+
+    local artifact_dict = load_artifacts_toml(artifacts_toml)
     return quote
-        local artifacts_toml = $(find_artifacts_toml)($(string(__source__.file)))
-        if artifacts_toml === nothing
-            error(string(
-                "Cannot locate '(Julia)Artifacts.toml' file when attempting to use artifact '",
-                $(esc(name)),
-                "' in '",
-                $(esc(__module__)),
-                "'",
-            ))
-        end
+        # Invalidate .ji file if Artifacts.toml file changes
+        Base.include_dependency($(artifacts_toml))
 
-        local pkg_uuid = nothing
-        if haskey(Base.module_keys, $(__module__))
-            pkg_uuid = Base.module_keys[$(__module__)].uuid
-        end
-
-        # This is the resultant value at the end of all things
-        $(ensure_artifact_installed)($(esc(name)), artifacts_toml; pkg_uuid=pkg_uuid)
+        # Use invokelatest() to introduce a compiler barrier, preventing many backedges from being added
+        # and slowing down not only compile time, but also `.ji` load time.  This is critical here, as
+        # artifact"" is used in other modules, so we don't want to be spreading backedges around everywhere.
+        Base.invokelatest(do_artifact_str, $name, $(artifact_dict), $(artifacts_toml), $__module__)
     end
 end
 
