@@ -8,7 +8,7 @@ import Random
 using Dates
 import LibGit2
 
-import ..depots, ..depots1, ..logdir, ..devdir
+import ..depots, ..depots1, ..logdir, ..devdir, ..pkgdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 using ..Types: VersionTypes
@@ -985,7 +985,7 @@ Get the `VersionNumber` of the package which expands this macro. If executed out
 package `nothing` will be returned.
 """
 macro __VERSION__()
-    pkg_dir = Base.pkgdir(__module__)
+    pkg_dir = pkgdir(__module__)
 
     if pkg_dir !== nothing
         project_data = TOML.parsefile(Types.projectfile_path(pkg_dir))

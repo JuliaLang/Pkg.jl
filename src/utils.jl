@@ -34,3 +34,12 @@ casesensitive_isdir(dir::String) =
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
     Base.isless(a::UUID, b::UUID) = a.value < b.value
 end
+
+if VERSION < v"1.4.0-DEV.397"  # Defined in Base as of #33128
+    function pkgdir(m::Module)
+        rootmodule = Base.moduleroot(m)
+        path = pathof(rootmodule)
+        path === nothing && return nothing
+        return dirname(dirname(path))
+    end
+end
