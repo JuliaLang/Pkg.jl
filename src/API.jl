@@ -988,7 +988,7 @@ macro __VERSION__()
     pkg_dir = Base.pkgdir(__module__)
 
     if pkg_dir !== nothing
-        project_data = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))
+        project_data = TOML.parsefile(Types.projectfile_path(pkg_dir))
         return VersionNumber(project_data["version"])
     else
         return nothing
