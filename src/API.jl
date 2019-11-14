@@ -985,17 +985,14 @@ Get the `VersionNumber` of the package which expands this macro. If executed out
 package `nothing` will be returned.
 """
 macro __VERSION__()
-    ctx = Types.Context()
-    pkg_id = Base.PkgId(__module__)
-    pkg_id.uuid === nothing && return nothing
+    pkg_dir = Base.pkgdir(__module__)
 
-    pkg_info = if ctx.env.project.name == pkg_id.name
-        ctx.env.project
+    if pkg_dir !== nothing
+        project_data = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))
+        return VersionNumber(project_data["version"])
     else
-        Pkg.Types.manifest_info(ctx, pkg_id.uuid)
+        return nothing
     end
-
-    return pkg_info.version
 end
 
 end # module
