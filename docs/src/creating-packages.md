@@ -20,14 +20,14 @@ This file is executed when the package is loaded.
 
 To generate files for a new package, use `pkg> generate`.
 
-```
+```julia-repl
 (v1.0) pkg> generate HelloWorld
 ```
 
 This creates a new project `HelloWorld` with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
 
-```jl
-shell> cd HelloWorld
+```julia-repl
+julia> cd("HelloWorld")
 
 shell> tree .
 .
@@ -51,7 +51,7 @@ author = ["Some One <someone@email.com>"]
 
 The content of `src/HelloWorld.jl` is:
 
-```jl
+```julia
 module HelloWorld
 
 greet() = print("Hello World!")
@@ -61,7 +61,7 @@ end # module
 
 We can now activate the project and load the package:
 
-```jl
+```julia-repl
 pkg> activate .
 
 julia> import HelloWorld
@@ -76,7 +76,7 @@ Let’s say we want to use the standard library package `Random` and the registe
 We simply `add` these packages (note how the prompt now shows the name of the newly generated project,
 since we `activate`d it):
 
-```
+```julia-repl
 (HelloWorld) pkg> add Random JSON
  Resolving package versions...
   Updating "~/Documents/HelloWorld/Project.toml"
@@ -94,7 +94,7 @@ The resolver has installed each package with the highest possible version, while
 
 We can now use both `Random` and `JSON` in our project. Changing `src/HelloWorld.jl` to
 
-```
+```julia
 module HelloWorld
 
 import Random
@@ -108,7 +108,7 @@ end # module
 
 and reloading the package, the new `greet_alien` function that uses `Random` can be called:
 
-```
+```julia-repl
 julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
@@ -118,22 +118,22 @@ Hello aT157rHV
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
 A package is built by executing the file `deps/build.jl`.
 
-```
-shell> cat deps/build.jl
+```julia-repl
+julia> print(read("deps/build.jl", String))
 println("I am being built...")
 
 (HelloWorld) pkg> build
   Building HelloWorld → `deps/build.log`
  Resolving package versions...
 
-shell> cat deps/build.log
+julia> print(read("deps/build.log", String))
 I am being built...
 ```
 
 If the build step fails, the output of the build step is printed to the console
 
-```
-shell> cat deps/build.jl
+```julia-repl
+julia> print(read("deps/build.jl", String))
 error("Ooops")
 
 (HelloWorld) pkg> build
@@ -157,8 +157,8 @@ error("Ooops")
 
 When a package is tested the file `test/runtests.jl` is executed:
 
-```
-shell> cat test/runtests.jl
+```julia-repl
+julia> print(read("test/runtests.jl", String))
 println("Testing...")
 
 (HelloWorld) pkg> test
@@ -196,7 +196,7 @@ it is thus enough to add this dependency to the `test/Project.toml` project. Thi
 done from the Pkg REPL by activating this environment, and then use `add` as one normally
 does. Lets add the `Test` standard library as a test dependency:
 
-```
+```julia-repl
 (HelloWorld) pkg> activate ./test
 [ Info: activating environment at `~/HelloWorld/test/Project.toml`.
 
@@ -210,8 +210,8 @@ does. Lets add the `Test` standard library as a test dependency:
 
 We can now use `Test` in the test script and we can see that it gets installed when testing:
 
-```
-shell> cat test/runtests.jl
+```julia-repl
+julia> print(read("test/runtests.jl", String))
 using Test
 @test 1 == 1
 
@@ -237,7 +237,7 @@ using Test
 In Julia 1.0 and Julia 1.1 test-specific dependencies are added to the main
 `Project.toml`. To add `Markdown` and `Test` as test-dependencies, add the following:
 
-```
+```toml
 [extras]
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

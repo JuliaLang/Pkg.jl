@@ -41,7 +41,7 @@ i.e., the versions 0.2.2 and 0.2.3 are compatible with 0.2.1 and 0.2.0. Versions
 minor versions are not considered compatible, so the version 0.3.0 might have breaking changes from 0.2.0. To that end, the
 `[compat]` entry:
 
-```julia
+```toml
 [compat]
 Example = "0.0.1"
 ```
@@ -49,7 +49,7 @@ Example = "0.0.1"
 results in a versionbound on `Example` as `[0.0.1, 0.0.2)` (which is equivalent to only the version 0.0.1), while the
 `[compat]` entry:
 
-```julia
+```toml
 [compat]
 Example = "0.2.1"
 ```
