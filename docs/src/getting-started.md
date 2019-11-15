@@ -16,13 +16,13 @@ To get back to the Julia REPL, press backspace or ^C.
 
 Upon entering the Pkg REPL, you should see a similar prompt:
 
-```
+```julia-repl
 (v1.1) pkg>
 ```
 
 To add a package, use `add`:
 
-```
+```julia-repl
 (v1.1) pkg> add Example
 ```
 
@@ -33,13 +33,13 @@ To add a package, use `add`:
 
 We can also specify multiple packages at once:
 
-```
+```julia-repl
 (v1.1) pkg> add JSON StaticArrays
 ```
 
 To remove packages, use `rm`:
 
-```
+```julia-repl
 (v1.1) pkg> rm JSON StaticArrays
 ```
 
@@ -47,25 +47,25 @@ So far, we have referred only to registered packages.
 Pkg also supports working with unregistered packages.
 To add an unregistered package, specify a URL:
 
-```
+```julia-repl
 (v1.1) pkg> add https://github.com/JuliaLang/Example.jl
 ```
 
 Use `rm` to remove this package by name:
 
-```
+```julia-repl
 (v1.1) pkg> rm Example
 ```
 
 Use `update` to update an installed package:
 
-```
+```julia-repl
 (v1.1) pkg> update Example
 ```
 
 To update all installed packages, use `update` without any arguments:
 
-```
+```julia-repl
 (v1.1) pkg> update
 ```
 
@@ -83,7 +83,7 @@ The active environment is the environment that will be modified by Pkg commands 
 Let's set up a new environment so we may experiment.
 To set the active environment, use `activate`:
 
-```
+```julia-repl
 (v1.1) pkg> activate tutorial
 [ Info: activating new environment at `/tmp/tutorial/Project.toml`.
 ```
@@ -94,13 +94,13 @@ will be stored in the `/tmp/tutorial` directory.
 Pkg has also updated the REPL prompt in order to reflect the new
 active environment:
 
-```
+```julia-repl
 (tutorial) pkg>
 ```
 
 We can ask for information about the active environment by using `status`:
 
-```
+```julia-repl
 (tutorial) pkg> status
     Status `/tmp/tutorial/Project.toml`
    (empty environment)
@@ -111,7 +111,7 @@ A project file is where Pkg stores metadata for an environment.
 Notice this new environment is empty.
 Let us add a package and observe:
 
-```
+```julia-repl
 (tutorial) pkg> add Example
 ...
 
@@ -128,7 +128,7 @@ Say we are working on `Example` and feel it needs new functionality.
 How can we modify the source code?
 We can use `develop` to set up a git clone of the `Example` package.
 
-```
+```julia-repl
 (tutorial) pkg> develop --local Example
 ...
 
@@ -155,13 +155,13 @@ Julia will load the source code contained in `tutorial/dev/Example`.
 Let's try it out.
 First we modify the file at `tutorial/dev/Example/src/Example.jl` and add a simple function:
 
-```jl
+```julia
 plusone(x::Int) = x + 1
 ```
 
 Now we can go back to the Julia REPL and load the package:
 
-```jl
+```julia-repl
 julia> import Example
 ```
 
@@ -174,7 +174,7 @@ julia> import Example
 
 Julia should load our new code. Let's test it:
 
-```jl
+```julia-repl
 julia> Example.plusone(1)
 2
 ```
@@ -183,14 +183,14 @@ Say we have a change of heart and decide the world is not ready for such elegant
 We can tell Pkg to stop using the local clone and use a registered version instead.
 We do this with `free`:
 
-```
+```julia-repl
 (tutorial) pkg> free Example
 ```
 
 When you are done experimenting with `tutorial`, you can return to the **default
 environment** by running `activate` with no arguments:
 
-```
+```julia-repl
 (tutorial) pkg> activate
 
 (v1.1) pkg>
@@ -200,14 +200,14 @@ environment** by running `activate` with no arguments:
 
 If you are ever stuck, you can ask `Pkg` for help:
 
-```
+```julia-repl
 (v1.1) pkg> ?
 ```
 
 You should see a list of available commands along with short descriptions.
 You can ask for more detailed help by specifying a command:
 
-```
+```julia-repl
 (v1.1) pkg> ?develop
 ```
 

@@ -6,10 +6,10 @@ So far we have added packages to the default project at `~/.julia/environments/v
 It should be pointed out that when two projects use the same package at the same version, the content of this package is not duplicated.
 In order to create a new project, create a directory for it and then activate that directory to make it the "active project", which package operations manipulate:
 
-```
-shell> mkdir MyProject
+```julia-repl
+julia> mkdir("MyProject")
 
-shell> cd MyProject
+julia> cd("MyProject")
 /Users/kristoffer/MyProject
 
 (v1.0) pkg> activate .
@@ -20,9 +20,9 @@ shell> cd MyProject
 
 Note that the REPL prompt changed when the new project is activated. Since this is a newly created project, the status command shows that it contains no packages, and in fact, it has no project or manifest file until we add a package to it:
 
-```
-shell> ls -l
-total 0
+```julia-repl
+julia> readdir()
+0-element Array{String,1}
 
 (MyProject) pkg> add Example
   Updating registry at `~/.julia/registries/General`
@@ -34,16 +34,16 @@ total 0
   [7876af07] + Example v0.5.1
   [8dfed614] + Test
 
-shell> ls -l
-total 8
--rw-r--r-- 1 stefan staff 207 Jul  3 16:35 Manifest.toml
--rw-r--r-- 1 stefan staff  56 Jul  3 16:35 Project.toml
+julia> readdir()
+2-element Array{String,1}:
+ "Manifest.toml"
+ "Project.toml"
 
-shell> cat Project.toml
+julia> print(read("Project.toml", String))
 [deps]
 Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 
-shell> cat Manifest.toml
+julia> print(read("Manifest.toml", String))
 [[Example]]
 deps = ["Test"]
 git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
@@ -61,7 +61,7 @@ This new environment is completely separate from the one we used earlier.
 
 The REPL command `precompile` can be used to precompile all the dependencies in the project. You can for example do
 
-```
+```julia-repl
 (HelloWorld) pkg> update; precompile
 ```
 
@@ -71,7 +71,7 @@ to update the dependencies and then precompile them.
 
 Simply clone their project using e.g. `git clone`, `cd` to the project directory and call
 
-```
+```julia-repl
 (v1.0) pkg> activate .
 
 (SomeProject) pkg> instantiate

@@ -9,7 +9,7 @@ The most frequently used is `add` and its usage is described first.
 
 In the Pkg REPL, packages can be added with the `add` command followed by the name of the package, for example:
 
-```
+```julia-repl
 (v1.0) pkg> add Example
    Cloning default registries into /Users/kristoffer/.julia/registries
    Cloning registry General from "https://github.com/JuliaRegistries/General.git"
@@ -30,7 +30,7 @@ The status update shows a short form of the package UUID to the left, then the p
 Since standard libraries (e.g. `Test`) are shipped with Julia, they do not have a version. The project status contains the packages
 you have added yourself, in this case, `Example`:
 
-```
+```julia-repl
 (v1.0) pkg> st
     Status `Project.toml`
   [7876af07] Example v0.5.1
@@ -38,7 +38,7 @@ you have added yourself, in this case, `Example`:
 
 The manifest status shows all the packages in the environment, including recursive dependencies:
 
-```
+```julia-repl
 (v1.0) pkg> st --manifest
     Status `Manifest.toml`
   [7876af07] Example v0.5.1
@@ -49,7 +49,7 @@ It is possible to add multiple packages in one command as `pkg> add A B C`.
 
 After a package is added to the project, it can be loaded in Julia:
 
-```
+```julia-repl
 julia> using Example
 
 julia> Example.hello("User")
@@ -58,7 +58,7 @@ julia> Example.hello("User")
 
 A specific version can be installed by appending a version after a `@` symbol, e.g. `@v0.4`, to the package name:
 
-```
+```julia-repl
 (v1.0) pkg> add Example@0.4
  Resolving package versions...
   Updating `~/.julia/environments/v1.0/Project.toml`
@@ -70,7 +70,7 @@ A specific version can be installed by appending a version after a `@` symbol, e
 If a branch (or a certain commit) of `Example` has a hotfix that is not yet included in a registered version,
 we can explicitly track that branch (or commit) by appending `#branchname` (or `#commitSHA1`) to the package name:
 
-```
+```julia-repl
 (v1.0) pkg> add Example#master
   Updating git-repo `https://github.com/JuliaLang/Example.jl.git`
  Resolving package versions...
@@ -85,7 +85,7 @@ When updating packages, we will pull updates from that branch.
 
 To go back to tracking the registry version of `Example`, the command `free` is used:
 
-```
+```julia-repl
 (v1.0) pkg> free Example
  Resolving package versions...
   Updating `~/.julia/environments/v1.0/Project.toml`
@@ -99,7 +99,7 @@ To go back to tracking the registry version of `Example`, the command `free` is 
 
 If a package is not in a registry, it can be added by specifying a URL to the repository:
 
-```
+```julia-repl
 (v1.0) pkg> add https://github.com/fredrikekre/ImportMacros.jl
   Updating git-repo `https://github.com/fredrikekre/ImportMacros.jl`
  Resolving package versions...
@@ -135,7 +135,7 @@ However, when you are developing a package, it is more convenient to load packag
 
 Let's try to `dev` a registered package:
 
-```
+```julia-repl
 (v1.0) pkg> dev Example
   Updating git-repo `https://github.com/JuliaLang/Example.jl.git`
  Resolving package versions...
@@ -152,7 +152,7 @@ Note the package manager will never touch any of the files at a tracked path. It
 If we try to `dev` a package at some branch that already exists at `~/.julia/dev/` the package manager we will simply use the existing path.
 For example:
 
-```
+```julia-repl
 (v1.0) pkg> dev Example
   Updating git-repo `https://github.com/JuliaLang/Example.jl.git`
 [ Info: Path `/Users/kristoffer/.julia/dev/Example` exists and looks like the correct package, using existing path instead of cloning
@@ -166,7 +166,7 @@ The path will be recorded relative to the project file, unless it is given as an
 
 To stop tracking a path and use the registered version again, use `free`:
 
-```
+```julia-repl
 (v1.0) pkg> free Example
  Resolving package versions...
   Updating `~/.julia/environments/v1.0/Project.toml`
@@ -202,13 +202,13 @@ Note that this will remove all packages that depend on `DepPackage`.
 When new versions of packages that the project is using are released, it is a good idea to update. Simply calling `up` will try to update *all* the dependencies of the project
 to the latest compatible version. Sometimes this is not what you want. You can specify a subset of the dependencies to upgrade by giving them as arguments to `up`, e.g:
 
-```
+```julia-repl
 (v1.0) pkg> up Example
 ```
 
 If `Example` has a dependency which is also a dependency for another explicitly added package, that dependency will not be updated. If you only want to update the minor version of packages, to reduce the risk that your project breaks, you can give the `--minor` flag, e.g:
 
-```
+```julia-repl
 (v1.0) pkg> up --minor Example
 ```
 
@@ -219,7 +219,7 @@ Packages that track a path are never touched by the package manager.
 
 A pinned package will never be updated. A package can be pinned using `pin`, for example:
 
-```
+```julia-repl
 (v1.0) pkg> pin Example
  Resolving package versions...
   Updating `~/.julia/environments/v1.0/Project.toml`
@@ -230,7 +230,7 @@ A pinned package will never be updated. A package can be pinned using `pin`, for
 
 Note the pin symbol `⚲` showing that the package is pinned. Removing the pin is done using `free`
 
-```
+```julia-repl
 (v1.0) pkg> free Example
   Updating `~/.julia/environments/v1.0/Project.toml`
   [7876af07] ~ Example v0.5.1 ⚲ ⇒ v0.5.1
@@ -242,7 +242,7 @@ Note the pin symbol `⚲` showing that the package is pinned. Removing the pin i
 
 The tests for a package can be run using `test`command:
 
-```
+```julia-repl
 (v1.0) pkg> test Example
    Testing Example
    Testing Example tests passed
@@ -254,11 +254,11 @@ The build step of a package is automatically run when a package is first install
 The output of the build process is directed to a file.
 To explicitly run the build step for a package, the `build` command is used:
 
-```
+```julia-repl
 (v1.0) pkg> build MbedTLS
   Building MbedTLS → `~/.julia/packages/MbedTLS/h1Vu/deps/build.log`
 
-shell> cat ~/.julia/packages/MbedTLS/h1Vu/deps/build.log
+julia> print(read("~/.julia/packages/MbedTLS/h1Vu/deps/build.log", String))
 ┌ Warning: `wait(t::Task)` is deprecated, use `fetch(t)` instead.
 │   caller = macro expansion at OutputCollector.jl:63 [inlined]
 └ @ Core OutputCollector.jl:63
@@ -278,7 +278,7 @@ A value of `0` will cause anything currently not in use immediately, skipping th
 If you are short on disk space and want to clean out as many unused packages and artifacts as possible, you may want to try this, but if you need these versions again, you will have to download them again.
 To run a typical garbage collection with default arguments, simply use the `gc` command at the `pkg>` REPL:
 
-```
+```julia-repl
 (v1.0) pkg> gc
     Active manifests at:
         `~/BinaryProvider/Manifest.toml`
