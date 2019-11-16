@@ -250,15 +250,13 @@ isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
 function collect_developed!(ctx::Context, pkg::PackageSpec, developed::Vector{PackageSpec})
     source = project_rel_path(ctx, source_path(pkg))
-    Pkg.activate(source) do
-        source_ctx = Context()
-        pkgs = load_all_deps(source_ctx)
-        for pkg in filter(is_tracking_path, pkgs)
-            # normalize path
-            pkg.path = project_rel_path(source_ctx, source_path(pkg))
-            push!(developed, pkg)
-            collect_developed!(ctx, pkg, developed)
-        end
+    source_ctx = Context(env = EnvCache(projectfile_path(source)))
+    pkgs = load_all_deps(source_ctx)
+    for pkg in filter(is_tracking_path, pkgs)
+        # normalize path
+        pkg.path = project_rel_path(source_ctx, source_path(pkg))
+        push!(developed, pkg)
+        collect_developed!(ctx, pkg, developed)
     end
 end
 
@@ -808,11 +806,10 @@ end
 
 function gen_build_project(ctx::Context, pkg::PackageSpec, source_path::String)
     build_project = Types.Project()
-    Pkg.activate(source_path) do
-        source_project = Context().env.project
-        build_project.deps = source_project.deps
-        build_project.compat = source_project.compat
-    end
+    source_ctx = Context(env = EnvCache(projectfile_path(source_path)))
+    source_project = source_ctx.env.project
+    build_project.deps = source_project.deps
+    build_project.compat = source_project.compat
     return build_project
 end
 
@@ -1389,24 +1386,23 @@ end
 function gen_test_project(ctx::Context, pkg::PackageSpec, source_path::String)
     test_project = Types.Project()
     # collect relevant info from source
-    Pkg.activate(source_path) do
-        source_env = Context().env
-        # collect regular dependencies
-        test_project.deps = source_env.project.deps
-        # collect test dependencies
-        for name in get(source_env.project.targets, "test", String[])
-            uuid = get(source_env.project.extras, name, nothing)
-            if uuid === nothing
-                pkgerror("`$name` declared as a `test` dependency, but no such entry in `extras`")
-            end
-            test_project.deps[name] = uuid
+    source_ctx = Context(env = EnvCache(projectfile_path(source_path)))
+    source_env = source_ctx.env
+    # collect regular dependencies
+    test_project.deps = source_env.project.deps
+    # collect test dependencies
+    for name in get(source_env.project.targets, "test", String[])
+        uuid = get(source_env.project.extras, name, nothing)
+        if uuid === nothing
+            pkgerror("`$name` declared as a `test` dependency, but no such entry in `extras`")
         end
-        # collect compat entries
-        for (name, uuid) in test_project.deps
-            compat = get(source_env.project.compat, name, nothing)
-            compat === nothing && continue
-            test_project.compat[name] = compat
-        end
+        test_project.deps[name] = uuid
+    end
+    # collect compat entries
+    for (name, uuid) in test_project.deps
+        compat = get(source_env.project.compat, name, nothing)
+        compat === nothing && continue
+        test_project.compat[name] = compat
     end
     return test_project
 end
