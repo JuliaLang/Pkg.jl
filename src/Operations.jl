@@ -251,10 +251,11 @@ isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 function collect_developed!(ctx::Context, pkg::PackageSpec, developed::Vector{PackageSpec})
     source = project_rel_path(ctx, source_path(pkg))
     Pkg.activate(source) do
-        pkgs = load_all_deps(Context())
+        source_ctx = Context()
+        pkgs = load_all_deps(source_ctx)
         for pkg in filter(is_tracking_path, pkgs)
             # normalize path
-            pkg.path = project_rel_path(Context(), source_path(pkg))
+            pkg.path = project_rel_path(source_ctx, source_path(pkg))
             push!(developed, pkg)
             collect_developed!(ctx, pkg, developed)
         end
@@ -263,8 +264,7 @@ end
 
 function collect_developed(ctx::Context, pkgs::Vector{PackageSpec})
     developed = PackageSpec[]
-    for pkg in pkgs
-        is_tracking_path(pkg) || continue
+    for pkg in filter(is_tracking_path, pkgs)
         collect_developed!(ctx, pkg, developed)
     end
     return developed
@@ -717,14 +717,15 @@ end
 # Manifest update and pruning #
 ################################
 project_rel_path(ctx::Context, path::String) =
-    normpath(joinpath(dirname(ctx.env.project_file), path))
+    project_rel_path(dirname(ctx.env.project_file), path)
+project_rel_path(project::String, path::String) = normpath(joinpath(project, path))
 
 function prune_manifest(ctx::Context)
     keep = collect(values(ctx.env.project.deps))
-    ctx.env.manifest = prune_manifest!(ctx.env.manifest, keep)
+    ctx.env.manifest = prune_manifest(ctx.env.manifest, keep)
 end
 
-function prune_manifest!(manifest::Dict, keep::Vector{UUID})
+function prune_manifest(manifest::Dict, keep::Vector{UUID})
     while !isempty(keep)
         clean = true
         for (uuid, entry) in manifest
@@ -1307,14 +1308,16 @@ function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::Strin
     project = read_project(test_project)
     project !== nothing && append!(keep, collect(values(project.deps)))
     # prune and return
-    graph = prune_manifest!(env.manifest, keep)
+    graph = prune_manifest(env.manifest, keep)
     return graph
 end
 
-function abspath!(ctx, manifest::Dict{UUID,PackageEntry})
+abspath!(ctx::Context, manifest::Dict{UUID,PackageEntry}) =
+    abspath!(dirname(ctx.env.project_file), manifest)
+function abspath!(project::String, manifest::Dict{UUID,PackageEntry})
     for (uuid, entry) in manifest
         entry.path !== nothing || continue
-        entry.path = project_rel_path(ctx, entry.path)
+        entry.path = project_rel_path(project, entry.path)
     end
     return manifest
 end
@@ -1335,14 +1338,28 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         elseif isfile(sandbox_project)
             cp(sandbox_project, tmp_project)
         end
-        if isfile(active_manifest)
-            @debug "Active Manifest detected"
-            # copy over preserved subgraph
-            # abspath! to maintain location of all deved nodes
-            Types.write_manifest(abspath!(ctx, sandbox_preserve(ctx, target, tmp_project)),
-                                 tmp_manifest)
+        # create merged manifest
+        # - copy over active subgraph
+        # - abspath! to maintain location of all deved nodes
+        working_manifest = abspath!(ctx, sandbox_preserve(ctx, target, tmp_project))
+        # - copy over fixed subgraphs from test subgraph
+        # really only need to copy over "special" nodes
+        sandbox_env = Types.EnvCache(projectfile_path(sandbox_path))
+        sandbox_manifest = abspath!(sandbox_path, sandbox_env.manifest)
+        for (name, uuid) in sandbox_env.project.deps
+            entry = get(sandbox_manifest, uuid, nothing)
+            if entry !== nothing && isfixed(entry)
+                subgraph = prune_manifest(sandbox_manifest, [uuid])
+                for (uuid, entry) in subgraph
+                    if haskey(working_manifest, uuid)
+                        pkgerror("can not merge projects")
+                    end
+                    working_manifest[uuid] = entry
+                end
+            end
         end
-        isfile(tmp_manifest) && Base.Filesystem.chmod(tmp_manifest, 0o600)
+        Types.write_manifest(working_manifest, tmp_manifest)
+        # sandbox
         with_temp_env(tmp) do
             try
                 Pkg.API.develop(PackageSpec(;repo=GitRepo(;source=target_path)); strict=true)

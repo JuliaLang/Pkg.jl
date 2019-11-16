@@ -167,6 +167,16 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
             end
         end
     end end
+    # test dependency tracking path
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestDepTrackingPath")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            Pkg.dependencies(unregistered_uuid) do pkg
+                @test pkg.isdeveloped
+            end
+        end
+    end end
 end
 
 @testset "test: 'targets' based testing" begin
