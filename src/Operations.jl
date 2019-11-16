@@ -903,7 +903,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         uuid ∉ drop
     end
     if length(ctx.env.project.deps) == n
-        println(ctx.io, "No changes to package dependencies")
+        println(ctx.io, "No dependencies have been removed")
         return
     end
     # only declare `compat` for direct dependencies
