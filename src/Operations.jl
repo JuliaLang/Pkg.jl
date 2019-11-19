@@ -1368,7 +1368,8 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code
-            withenv(fn, "JULIA_LOAD_PATH" => tmp)
+            path_sep = Sys.iswindows() ? ';' : ':'
+            withenv(fn, "JULIA_LOAD_PATH" => "@$(path_sep)$(tmp)")
         end
     end
 end
