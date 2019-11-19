@@ -18,8 +18,27 @@ PkgC = &quot;~1&quot;     # [1.0.0, 2.0.0)
 PkgD = &quot;~0.2.3&quot; # [0.2.3, 0.3.0)
 PkgE = &quot;~0.0.3&quot; # [0.0.3, 0.0.4)
 PkgF = &quot;~0.0&quot;   # [0.0.0, 0.1.0)
-PkgG = &quot;~0&quot;     # [0.0.0, 1.0.0)</code></pre><p>For all versions with a major version of 0 the tilde and caret specifiers are equivalent.</p><h3><a class="nav-anchor" id="Inequality-specifiers-1" href="#Inequality-specifiers-1">Inequality specifiers</a></h3><p>Inequalities can also be used to specify version ranges:</p><pre><code class="language-toml">[compat]
-PkgA = &quot;&gt;= 1.2.3&quot; # [1.2.3,  ∞)
-PkgB = &quot;≥ 1.2.3&quot;  # [1.2.3,  ∞)
-PkgC = &quot;= 1.2.3&quot;  # [1.2.3, 1.2.3]
-PkgD = &quot;&lt; 1.2.3&quot;  # [0.0.0, 1.2.2]</code></pre><footer><hr/><a class="previous" href="../creating-packages/"><span class="direction">Previous</span><span class="title"><strong>5.</strong> Creating Packages</span></a><a class="next" href="../registries/"><span class="direction">Next</span><span class="title"><strong>7.</strong> Registries</span></a></footer></article></body></html>
+PkgG = &quot;~0&quot;     # [0.0.0, 1.0.0)</code></pre><p>For all versions with a major version of 0 the tilde and caret specifiers are equivalent.</p><h3><a class="nav-anchor" id="Equality-specifier-1" href="#Equality-specifier-1">Equality specifier</a></h3><p>Equality can be used to specify an exact version:</p><pre><code class="language-toml">[compat]
+PkgA = &quot;= 1.2.3&quot;  # [1.2.3, 1.2.3]</code></pre><h3><a class="nav-anchor" id="Inequality-specifiers-1" href="#Inequality-specifiers-1">Inequality specifiers</a></h3><p>Inequalities can also be used to specify version ranges:</p><pre><code class="language-toml">[compat]
+PkgB = &quot;&gt;= 1.2.3&quot; # [1.2.3,  ∞)
+PkgC = &quot;≥ 1.2.3&quot;  # [1.2.3,  ∞)
+PkgD = &quot;&lt; 1.2.3&quot;  # [0.0.0, 1.2.3) = [0.0.0, 1.2.2]</code></pre><h3><a class="nav-anchor" id="Hyphen-specifiers-1" href="#Hyphen-specifiers-1">Hyphen specifiers</a></h3><div class="admonition compat"><div class="admonition-title">Julia 1.4</div><div class="admonition-text"><p>Hyphen specifiers requires at least Julia 1.4, so it is recomended to also add</p><pre><code class="language-toml">[compat]
+julia = &quot;1.4&quot;</code></pre><p>to the project file when using them.</p></div></div><p>Hyphen syntax can also be used to specify version ranges. Make sure that you have a space on both sides of the hyphen.</p><pre><code class="language-toml">[compat]
+PkgA = &quot;1.2.3 - 4.5.6&quot; # [1.2.3, 4.5.6]
+PkgA = &quot;0.2.3 - 4.5.6&quot; # [0.2.3, 4.5.6]</code></pre><p>Any unspecified trailing numbers in the first end-point are considered to be zero:</p><pre><code class="language-toml">[compat]
+PkgA = &quot;1.2 - 4.5.6&quot;   # [1.2.0, 4.5.6]
+PkgA = &quot;1 - 4.5.6&quot;     # [1.0.0, 4.5.6]
+PkgA = &quot;0.2 - 4.5.6&quot;   # [0.2.0, 4.5.6]
+PkgA = &quot;0.2 - 0.5.6&quot;   # [0.2.0, 0.5.6]</code></pre><p>Any unspecified trailing numbers in the second end-point will be considered to be wildcards:</p><pre><code class="language-toml">[compat]
+PkgA = &quot;1.2.3 - 4.5&quot;   # 1.2.3 - 4.5.* = [1.2.3, 4.6.0)
+PkgA = &quot;1.2.3 - 4&quot;     # 1.2.3 - 4.*.* = [1.2.3, 5.0.0)
+PkgA = &quot;1.2 - 4.5&quot;     # 1.2.0 - 4.5.* = [1.2.0, 4.6.0)
+PkgA = &quot;1.2 - 4&quot;       # 1.2.0 - 4.*.* = [1.2.0, 5.0.0)
+PkgA = &quot;1 - 4.5&quot;       # 1.0.0 - 4.5.* = [1.0.0, 4.6.0)
+PkgA = &quot;1 - 4&quot;         # 1.0.0 - 4.*.* = [1.0.0, 5.0.0)
+PkgA = &quot;0.2.3 - 4.5&quot;   # 0.2.3 - 4.5.* = [0.2.3, 4.6.0)
+PkgA = &quot;0.2.3 - 4&quot;     # 0.2.3 - 4.*.* = [0.2.3, 5.0.0)
+PkgA = &quot;0.2 - 4.5&quot;     # 0.2.0 - 4.5.* = [0.2.0, 4.6.0)
+PkgA = &quot;0.2 - 4&quot;       # 0.2.0 - 4.*.* = [0.2.0, 5.0.0)
+PkgA = &quot;0.2 - 0.5&quot;     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
+PkgA = &quot;0.2 - 0&quot;       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)</code></pre><footer><hr/><a class="previous" href="../creating-packages/"><span class="direction">Previous</span><span class="title"><strong>5.</strong> Creating Packages</span></a><a class="next" href="../registries/"><span class="direction">Next</span><span class="title"><strong>7.</strong> Registries</span></a></footer></article></body></html>
