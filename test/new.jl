@@ -167,6 +167,20 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
             end
         end
     end end
+    # Check that active subgraph is transfered to test sandbox, even when tracking paths
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestSubgraphTrackingPath")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            Pkg.dependencies(unregistered_uuid) do pkg
+                @test pkg.isdeveloped
+            end
+            Pkg.dependencies(exuuid) do pkg
+                @test pkg.isdeveloped
+            end
+        end
+    end end
+    # Check that subgraph is transfered even when
     # test dependency tracking path
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "TestDepTrackingPath")
