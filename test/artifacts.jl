@@ -351,6 +351,24 @@ end
             # Run test harness
             Pkg.test("ArtifactInstallation")
 
+            @show LOAD_PATH
+            @show Base.load_path()
+            for x in Base.load_path()
+                println("---")
+                @show x
+                project = Pkg.Types.projectfile_path(x; strict=true)
+                @show project
+                if project === nothing
+                    if isdir(x)
+                        @show readdir(x)
+                    else
+                        print(read(x,String))
+                    end
+                else
+                    print(read(project,String))
+                end
+            end
+
             # Also manually do it
             Core.eval(Module(:__anon__), quote
                 using ArtifactInstallation
