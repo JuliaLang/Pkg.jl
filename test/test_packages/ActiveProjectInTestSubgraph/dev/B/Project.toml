@@ -1,0 +1,6 @@
+name = "B"
+uuid = "33b2f45a-93bc-4aa1-9430-15314c8e16ac"
+version = "0.1.0"
+
+[deps]
+ActiveProjectInTestSubgraph = "c86f0f68-174e-41db-bd5e-b032223de205"

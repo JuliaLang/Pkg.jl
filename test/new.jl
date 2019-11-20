@@ -219,6 +219,15 @@ end
         end
         Pkg.test("x3")
     end end
+    # preserve root of active project if it is a dependency (#1423)
+    isolate(loaded_depot=false) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "ActiveProjectInTestSubgraph")
+        Pkg.activate(path)
+        inside_test_sandbox("B") do
+            deps = Pkg.dependencies()
+            @test deps[UUID("c86f0f68-174e-41db-bd5e-b032223de205")].version == v"1.2.3"
+        end
+    end end
 end
 
 #

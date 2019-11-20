@@ -1299,6 +1299,11 @@ end
 # pick out a set of subgraphs and preserve their versions
 function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::String)
     env = deepcopy(ctx.env)
+    # include root in manifest (in case any dependencies point back to it)
+    if env.pkg !== nothing
+        env.manifest[env.pkg.uuid] = PackageEntry(;name=env.pkg.name, path=dirname(env.project_file),
+                                                  deps=env.project.deps)
+    end
     # load target deps
     keep = Types.is_project(ctx, target) ? collect(values(env.project.deps)) : [target.uuid]
     # preserve test deps
