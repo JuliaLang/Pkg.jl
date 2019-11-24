@@ -228,6 +228,14 @@ end
             @test deps[UUID("c86f0f68-174e-41db-bd5e-b032223de205")].version == v"1.2.3"
         end
     end end
+    isolate(loaded_depot=false) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestTargetCompat")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            deps = Pkg.dependencies()
+            @test deps[exuuid].version == v"0.3.0"
+        end
+    end end
 end
 
 #
