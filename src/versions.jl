@@ -256,11 +256,8 @@ Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
 ###################
 
 function semver_spec(s::String)
-    s = replace(s, r"\s-\s" => "→") # replace " - " with "→"
-    s = replace(s, " " => "") # remove all spaces
-    s = replace(s, "→" => " - ") # replace "→" with " - "
     ranges = VersionRange[]
-    for ver in split(s, ',')
+    for ver in strip.(split(strip(s), ','))
         range = nothing
         found_match = false
         for (ver_reg, f) in ver_regs
@@ -324,7 +321,7 @@ function inequality_interval(m::RegexMatch)
         error("invalid version: 0.0.0")
     end
     v = VersionBound(major, minor, patch)
-    if typ == "<"
+    if occursin(r"^<\s*$", typ)
         nil = VersionBound(0, 0, 0)
         if v[3] == 0
             if v[2] == 0
@@ -336,9 +333,9 @@ function inequality_interval(m::RegexMatch)
             v1 = VersionBound(v[1], v[2], v[3]-1)
         end
         return VersionRange(nil, v1)
-    elseif typ == "="
+    elseif occursin(r"^=\s*$", typ)
         return VersionRange(v)
-    elseif typ == ">=" || typ == "≥"
+    elseif occursin(r"^>=\s*$", typ) || occursin(r"^≥\s*$", typ)
            return VersionRange(v, _inf)
     else
         error("invalid prefix $typ")
@@ -375,6 +372,6 @@ const version = "v?([0-9]+?)(?:\\.([0-9]+?))?(?:\\.([0-9]+?))?"
 const ver_regs =
 [
     Regex("^([~^]?)?$version\$") => semver_interval, # 0.5 ^0.4 ~0.3.2
-    Regex("^((?:≥)|(?:>=)|(?:=)|(?:<)|(?:=))v?$version\$")  => inequality_interval,# < 0.2 >= 0.5,2
+    Regex("^((?:≥\\s*)|(?:>=\\s*)|(?:=\\s*)|(?:<\\s*)|(?:=\\s*))v?$version\$")  => inequality_interval,# < 0.2 >= 0.5,2
     Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
 ]

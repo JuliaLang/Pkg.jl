@@ -143,6 +143,7 @@ import Pkg.Types: semver_spec, VersionSpec
     @test_throws ErrorException semver_spec("^^0.2.3")
     @test_throws ErrorException semver_spec("^^0.2.3.4")
     @test_throws ErrorException semver_spec("0.0.0")
+    @test_throws ErrorException semver_spec("0.7 1.0")
 
     @test Pkg.Types.isjoinable(Pkg.Types.VersionBound((1,5)), Pkg.Types.VersionBound((1,6)))
     @test !(Pkg.Types.isjoinable(Pkg.Types.VersionBound((1,5)), Pkg.Types.VersionBound((1,6,0))))
