@@ -11,9 +11,10 @@ import Base.string
 using REPL.TerminalMenus
 
 using ..TOML
-import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath
+import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
+import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
 import ..BinaryPlatforms: Platform
+import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
 
 import Base: SHA1
 using SHA
@@ -895,6 +896,31 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
     end
 end
 
+function pkg_server_registry_url(uuid::UUID)
+    server = pkg_server()
+    server === nothing && return nothing
+    probe_platform_engines!()
+    hash = nothing
+    try
+        mktemp() do tmp_path, io
+            download("$server/registries", tmp_path, verbose=false)
+            for line in eachline(io)
+                if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
+                    uuid == UUID(m.captures[1]) || continue
+                    hash = String(m.captures[2])
+                    break
+                end
+            end
+        end
+    catch err
+        @warn "could not download $server/registries"
+    end
+    hash === nothing ? nothing : "$server/registry/$uuid/$hash"
+end
+pkg_server_registry_url(::Nothing) = nothing
+
+pkg_server_url_hash(url::String) = split(url, '/')[end]
+
 # entry point for `registry add`
 clone_or_cp_registries(regs::Vector{RegistrySpec}, depot::String=depots1()) =
     clone_or_cp_registries(Context(), regs, depot)
@@ -905,43 +931,56 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             pkgerror("ambiguous registry specification; both url and path is set.")
         end
         # clone to tmpdir first
-        tmp = mktempdir()
-        if reg.path !== nothing # copy from local source
-            printpkgstyle(ctx, :Copying, "registry from `$(Base.contractuser(reg.path))`")
-            cp(reg.path, tmp; force=true)
-        elseif reg.url !== nothing # clone from url
-            LibGit2.with(GitTools.clone(ctx, reg.url, tmp; header = "registry from $(repr(reg.url))")) do repo
-            end
-        else
-            pkgerror("no path or url specified for registry")
-        end
-        # verify that the clone looks like a registry
-        if !isfile(joinpath(tmp, "Registry.toml"))
-            pkgerror("no `Registry.toml` file in cloned registry.")
-        end
-        registry = read_registry(joinpath(tmp, "Registry.toml"); cache=false) # don't cache this tmp registry
-        verify_registry(registry)
-        # copy to `depot`
-        # slug = Base.package_slug(UUID(registry["uuid"]))
-        regpath = joinpath(depot, "registries", registry["name"]#=, slug=#)
-        ispath(dirname(regpath)) || mkpath(dirname(regpath))
-        if Pkg.isdir_windows_workaround(regpath)
-            existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
-            if registry["uuid"] == existing_registry["uuid"]
-                println(ctx.io,
-                        "registry `$(registry["name"])` already exist in `$(Base.contractuser(regpath))`.")
+        mktempdir() do tmp
+            if (url = pkg_server_registry_url(reg.uuid)) !== nothing
+                # download from Pkg server
+                try
+                    download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                catch err
+                    pkgerror("could not download $url")
+                end
+                tree_info_file = joinpath(tmp, ".tree_info.toml")
+                ispath(tree_info_file) &&
+                    error("tree info file $tree_info_file already exists")
+                open(tree_info_file, write=true) do io
+                    hash = pkg_server_url_hash(url)
+                    println(io, "git-tree-sha1 = ", repr(hash))
+                end
+            elseif reg.path !== nothing # copy from local source
+                printpkgstyle(ctx, :Copying, "registry from `$(Base.contractuser(reg.path))`")
+                cp(reg.path, tmp; force=true)
+            elseif reg.url !== nothing # clone from url
+                LibGit2.with(GitTools.clone(ctx, reg.url, tmp; header = "registry from $(repr(reg.url))")) do repo
+                end
             else
-                throw(PkgError("registry `$(registry["name"])=\"$(registry["uuid"])\"` conflicts with " *
-                    "existing registry `$(existing_registry["name"])=\"$(existing_registry["uuid"])\"`. " *
-                    "To install it you can clone it manually into e.g. " *
-                    "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
+                pkgerror("no path or url specified for registry")
             end
-        else
-            cp(tmp, regpath)
-            printpkgstyle(ctx, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
+            # verify that the clone looks like a registry
+            if !isfile(joinpath(tmp, "Registry.toml"))
+                pkgerror("no `Registry.toml` file in cloned registry.")
+            end
+            registry = read_registry(joinpath(tmp, "Registry.toml"); cache=false) # don't cache this tmp registry
+            verify_registry(registry)
+            # copy to `depot`
+            # slug = Base.package_slug(UUID(registry["uuid"]))
+            regpath = joinpath(depot, "registries", registry["name"]#=, slug=#)
+            ispath(dirname(regpath)) || mkpath(dirname(regpath))
+            if Pkg.isdir_windows_workaround(regpath)
+                existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
+                if registry["uuid"] == existing_registry["uuid"]
+                    println(ctx.io,
+                            "registry `$(registry["name"])` already exist in `$(Base.contractuser(regpath))`.")
+                else
+                    throw(PkgError("registry `$(registry["name"])=\"$(registry["uuid"])\"` conflicts with " *
+                        "existing registry `$(existing_registry["name"])=\"$(existing_registry["uuid"])\"`. " *
+                        "To install it you can clone it manually into e.g. " *
+                        "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
+                end
+            else
+                cp(tmp, regpath)
+                printpkgstyle(ctx, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
+            end
         end
-        # Clean up
-        Base.rm(tmp; recursive=true, force=true)
     end
     return nothing
 end
@@ -1020,8 +1059,33 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
     for reg in unique(r -> r.uuid, find_installed_registries(ctx, regs))
-        if isdir(joinpath(reg.path, ".git"))
-            regpath = pathrepr(reg.path)
+        regpath = pathrepr(reg.path)
+        if isfile(joinpath(reg.path, ".tree_info.toml"))
+            printpkgstyle(ctx, :Updating, "registry at " * regpath)
+            tree_info = TOML.parsefile(joinpath(reg.path, ".tree_info.toml"))
+            old_hash = tree_info["git-tree-sha1"]
+            url = pkg_server_registry_url(reg.uuid)
+            if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
+                # TODO: update faster by using a diff, if available
+                mktempdir() do tmp
+                    try
+                        download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                    catch err
+                        @warn "could not download $url"
+                    end
+                    tree_info_file = joinpath(tmp, ".tree_info.toml")
+                    ispath(tree_info_file) &&
+                        error("tree info file $tree_info_file already exists")
+                    open(tree_info_file, write=true) do io
+                        println(io, "git-tree-sha1 = ", repr(new_hash))
+                    end
+                    registry_file = joinpath(tmp, "Registry.toml")
+                    registry = read_registry(registry_file; cache=false)
+                    verify_registry(registry)
+                    mv(tmp, reg.path, force=true)
+                end
+            end
+        elseif isdir(joinpath(reg.path, ".git"))
             printpkgstyle(ctx, :Updating, "registry at " * regpath)
             # Using LibGit2.with here crashes julia when running the
             # tests for PkgDev wiht "Unreachable reached".
