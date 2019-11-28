@@ -6,6 +6,7 @@ import ..GitTools
 using ..BinaryPlatforms
 import ..TOML
 import ..Types: parse_toml, write_env_usage
+import ...Pkg: pkg_server
 using ..PlatformEngines
 using SHA
 
@@ -718,8 +719,12 @@ Download/install an artifact into the artifact store.  Returns `true` on success
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3.
 """
-function download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
-                           verbose::Bool = false)
+function download_artifact(
+    tree_hash::SHA1,
+    tarball_url::String,
+    tarball_hash::Union{String, Nothing} = nothing;
+    verbose::Bool = false,
+)
     if artifact_exists(tree_hash)
         return true
     end
@@ -850,6 +855,15 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
+        # first try downloading from Pkg server
+        # TODO: only do this if Pkg server knows about this package
+        if (server = pkg_server()) !== nothing
+            url = "$server/artifact/$hash"
+            if download_artifact(hash, url)
+                return artifact_path(hash)
+            end
+        end
+
         # If this artifact does not exist on-disk already, ensure it has download
         # information, then download it!
         if !haskey(meta, "download")

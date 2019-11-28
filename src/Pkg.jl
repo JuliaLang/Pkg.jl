@@ -19,6 +19,13 @@ function depots1()
     return d[1]
 end
 
+function pkg_server()
+    server = get(ENV, "JULIA_PKG_SERVER", nothing)
+    server === nothing && return nothing
+    startswith(server, r"\w+://") || (server = "https://$server")
+    return server
+end
+
 logdir(depot = depots1()) = joinpath(depot, "logs")
 devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")

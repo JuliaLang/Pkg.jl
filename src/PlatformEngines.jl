@@ -593,7 +593,7 @@ function download(url::AbstractString, dest::AbstractString;
 end
 
 """
-    download_verify(url::AbstractString, hash::AbstractString,
+    download_verify(url::AbstractString, hash::Union{AbstractString, Nothing},
                     dest::AbstractString; verbose::Bool = false,
                     force::Bool = false, quiet_download::Bool = false)
 
@@ -614,7 +614,7 @@ set to `false`) the downloading process will be completely silent.  If
 `verbose` is set to `true`, messages about integrity verification will be
 printed in addition to messages regarding downloading.
 """
-function download_verify(url::AbstractString, hash::AbstractString,
+function download_verify(url::AbstractString, hash::Union{AbstractString, Nothing},
                          dest::AbstractString; verbose::Bool = false,
                          force::Bool = false, quiet_download::Bool = true)
     # Whether the file existed in the first place
@@ -628,7 +628,7 @@ function download_verify(url::AbstractString, hash::AbstractString,
 
         # verify download, if it passes, return happy.  If it fails, (and
         # `force` is `true`, re-download!)
-        if verify(dest, hash; verbose=verbose)
+        if hash !== nothing && verify(dest, hash; verbose=verbose)
             return true
         elseif !force
             error("Verification failed, not overwriting $(dest)")
@@ -640,7 +640,7 @@ function download_verify(url::AbstractString, hash::AbstractString,
 
     # Download the file, optionally continuing
     download(url, dest; verbose=verbose || !quiet_download)
-    if !verify(dest, hash; verbose=verbose)
+    if hash !== nothing && !verify(dest, hash; verbose=verbose)
         # If the file already existed, it's possible the initially downloaded chunk
         # was bad.  If verification fails after downloading, auto-delete the file
         # and start over from scratch.
@@ -652,7 +652,7 @@ function download_verify(url::AbstractString, hash::AbstractString,
 
             # Download and verify from scratch
             download(url, dest; verbose=verbose || !quiet_download)
-            if !verify(dest, hash; verbose=verbose)
+            if hash !== nothing && !verify(dest, hash; verbose=verbose)
                 error("Verification failed")
             end
         else
@@ -790,7 +790,7 @@ function package(src_dir::AbstractString, tarball_path::AbstractString)
 end
 
 """
-    download_verify_unpack(url::AbstractString, hash::AbstractString,
+    download_verify_unpack(url::AbstractString, hash::Union{AbstractString, Nothing},
                            dest::AbstractString; tarball_path = nothing,
                            verbose::Bool = false, ignore_existence::Bool = false,
                            force::Bool = false)
@@ -819,7 +819,7 @@ Returns `true` if a tarball was actually unpacked, `false` if nothing was
 changed in the destination prefix.
 """
 function download_verify_unpack(url::AbstractString,
-                                hash::AbstractString,
+                                hash::Union{AbstractString, Nothing},
                                 dest::AbstractString;
                                 tarball_path = nothing,
                                 ignore_existence::Bool = false,
