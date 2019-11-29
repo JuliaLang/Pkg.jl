@@ -90,7 +90,12 @@ end
 @testset "Artifact Creation" begin
     # We're going to ensure that our artifact creation does in fact give git-tree-sha1's.
     creators = [
-        # First we will test creating a single file
+        # First test the empty artifact
+        (path -> begin
+            # add no contents
+        end, "4b825dc642cb6eb9a060e54bf8d69288fbee4904"),
+
+        # Next test creating a single file
         (path -> begin
             open(joinpath(path, "foo"), "w") do io
                 print(io, "Hello, world!")
@@ -168,9 +173,6 @@ end
             @test verify_artifact(hash)
         end
     end
-
-    # Test that attempting to create an empty directory is an error:
-    @test_throws ArgumentError create_artifact(x -> nothing)
 end
 
 @testset "with_artifacts_directory()" begin
