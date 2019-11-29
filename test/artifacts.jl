@@ -636,4 +636,32 @@ end
     end
 end
 
+tree_hash(root::AbstractString) = bytes2hex(Pkg.GitTools.tree_hash(root))
+
+@testset "git tree hash computation" begin
+    mktempdir() do dir
+        # test "well known" empty tree hash
+        @test "4b825dc642cb6eb9a060e54bf8d69288fbee4904" == tree_hash(dir)
+        # create a text file
+        file = joinpath(dir, "hello.txt")
+        open(file, write=true) do io
+            println(io, "Hello, world.")
+        end
+        # reference hash generated with command-line git
+        @test "0a890bd10328d68f6d85efd2535e3a4c588ee8e6" == tree_hash(dir)
+        # test with various executable bits set
+        chmod(file, 0o645) # other x bit doesn't matter
+        @test "0a890bd10328d68f6d85efd2535e3a4c588ee8e6" == tree_hash(dir)
+        chmod(file, 0o654) # group x bit doesn't matter
+        @test "0a890bd10328d68f6d85efd2535e3a4c588ee8e6" == tree_hash(dir)
+        chmod(file, 0o744) # user x bit matters
+        if Sys.iswindows()
+            @test_broken "952cfce0fb589c02736482fa75f9f9bb492242f8" == tree_hash(dir)
+        else
+            @test "952cfce0fb589c02736482fa75f9f9bb492242f8" == tree_hash(dir)
+        end
+    end
+end
+
+
 end # module
