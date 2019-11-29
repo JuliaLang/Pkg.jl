@@ -233,7 +233,11 @@ end
 Calculate the git tree hash of a given path.  Note that attempting to take the
 tree hash of an empty directory will throw an error.
 """
-function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
+function tree_hash(
+    root::AbstractString,
+    names::Vector{String} = readdir(root);
+    HashType = SHA.SHA1_CTX,
+)
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
     for f in readdir(root)
         # Skip `.git` directories
@@ -244,27 +248,22 @@ function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
         filepath = abspath(root, f)
         mode = gitmode(filepath)
         if mode == mode_dir
-            try
-                hash = tree_hash(filepath)
-            catch e
-                if isa(e, ArgumentError)
-                    continue
-                end
-                rethrow(e)
-            end
+            names = readdir(filepath)
+            isempty(names) && continue
+            hash = tree_hash(filepath, names)
         else
             hash = blob_hash(filepath)
         end
-        push!(entries, (f, hash, gitmode(filepath)))
+        push!(entries, (f, hash, mode))
     end
 
     # Sort entries by name (with trailing slashes for directories)
     sort!(entries, by = ((name, hash, mode),) -> mode == mode_dir ? name*"/" : name)
 
-    if isempty(entries)
-        ArgumentError("Invalid to calculate tree hash of empty directory")
+    content_size = 0
+    for (n, h, m) in entries
+        content_size += ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + 20
     end
-    content_size = sum(((n, h, m),) -> ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + 20, entries)
 
     # Return the hash of these entries
     ctx = HashType()
