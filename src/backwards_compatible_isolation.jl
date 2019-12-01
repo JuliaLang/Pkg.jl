@@ -230,7 +230,8 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
                     continue
                 end
                 try
-                    success = install_archive(urls[pkg.uuid], hashes[pkg.uuid], path)
+                    archive_urls = [url => false for url in urls[pkg.uuid]]
+                    success = install_archive(archive_urls, hashes[pkg.uuid], path)
                     if success && mode === :add
                         set_readonly(path) # In add mode, files should be read-only
                     end
