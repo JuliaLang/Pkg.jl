@@ -378,7 +378,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 rm(expanduser(tildepath); force = true)
             end
             c, r = test_complete("dev ~")
-            @test joinpath(homedir(), "") in c
+            # @test joinpath(homedir(), "") in c
         end
 
         # activate

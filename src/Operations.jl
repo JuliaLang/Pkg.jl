@@ -847,6 +847,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
         uuid in keys(ctx.stdlibs) && continue
+        uuid == JuliaUUID && continue
         if Types.is_project_uuid(ctx, uuid)
             path = dirname(ctx.env.project_file)
             name = ctx.env.pkg.name

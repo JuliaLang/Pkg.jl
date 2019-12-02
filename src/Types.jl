@@ -1367,6 +1367,10 @@ function Base.:(==)(a::PackageInfo, b::PackageInfo)
         a.source == b.source && a.dependencies == b.dependencies
 end
 
+function is_julia(p::Pair{UUID, PackageInfo})
+    return p[1] == JuliaUUID
+end
+
 ###
 ### ProjectInfo
 ###
