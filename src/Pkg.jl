@@ -537,6 +537,12 @@ const precompile_script = """
     ] add Te\t\t$CTRL_C
     ] st
     $CTRL_C
+    # Create simple artifact, bind it, then use it:
+    foo_hash = Pkg.Artifacts.create_artifact(dir -> touch(joinpath(dir, "foo")))
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo", foo_hash)
+    # Because @artifact_str doesn't work at REPL-level, we JIT out a file that we can include()
+    open(io -> println(io, "Pkg.Artifacts.artifact\\\"foo\\\""), "load_artifact.jl", "w")
+    foo_path = include("load_artifact.jl")
     rm(tmp; recursive=true)"""
 
 end # module
