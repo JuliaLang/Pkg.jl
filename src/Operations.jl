@@ -1475,4 +1475,20 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
     return info
 end
 
+function package_info(ctx::Context, pkg::PackageSpec, entry::JuliaEntry)::PackageInfo
+    info = PackageInfo(
+        name                 = entry.name,
+        version              = entry.version,
+        tree_hash            = nothing,
+        ispinned             = false,
+        is_tracking_registry = false,
+        isdeveloped          = false,
+        git_revision         = nothing,
+        git_source           = nothing,
+        source               = "",
+        dependencies         = Dict{String,UUID}(),
+    )
+    return info
+end
+
 end # module

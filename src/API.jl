@@ -11,7 +11,7 @@ import LibGit2
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
-using ..Types: VersionTypes
+using ..Types: VersionTypes, is_julia
 using ..BinaryPlatforms
 using ..Artifacts: artifact_paths
 
@@ -20,7 +20,7 @@ include("generate.jl")
 dependencies() = dependencies(Context())
 function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
     pkgs = Operations.load_all_deps(ctx)
-    return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
+    return filter(!is_julia, Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs))
 end
 dependencies(fn::Function, uuid::UUID) = fn(dependencies()[uuid])
 
