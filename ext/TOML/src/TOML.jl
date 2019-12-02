@@ -12,7 +12,7 @@ module TOML
 
     "Convert `TOML.Table` to `Dict{String,Any}`"
     function table2dict(tbl::Union{Nothing,Table})
-        tbl == nothing && return Dict{String,Any}()
+        tbl === nothing && return Dict{String,Any}()
         return table2dict(get(tbl))
     end
 

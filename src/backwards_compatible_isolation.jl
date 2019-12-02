@@ -1,7 +1,7 @@
 function _update_manifest(ctx::Context, pkg::PackageSpec, hash::Union{SHA1, Nothing})
     env = ctx.env
     uuid, name, version, path, special_action, repo = pkg.uuid, pkg.name, pkg.version, pkg.path, pkg.special_action, pkg.repo
-    hash === nothing && @assert (path != nothing || pkg.uuid in keys(ctx.stdlibs) || pkg.repo.url != nothing)
+    hash === nothing && @assert (path !== nothing || pkg.uuid in keys(ctx.stdlibs) || pkg.repo.url !== nothing)
     # TODO I think ^ assertion is wrong, add-repo should have a hash
     entry = get!(env.manifest, uuid, Types.PackageEntry())
     entry.name = name
@@ -106,7 +106,7 @@ function _resolve_versions!(
         else
             ver = VersionSpec()
         end
-        if uuid_idx != nothing
+        if uuid_idx !== nothing
             pkg = pkgs[uuid_idx]
             if entry !== nothing && pkg.special_action != PKGSPEC_FREED && entry.pinned
                 # This is a pinned package, fix its version
@@ -264,7 +264,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
                 end
                 try
                     success = install_archive(urls[pkg.uuid], hashes[pkg.uuid], path)
-                    if success && mode == :add
+                    if success && mode === :add
                         set_readonly(path) # In add mode, files should be read-only
                     end
                     if ctx.use_only_tarballs_for_downloads && !success
@@ -285,7 +285,7 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
                                                  sprint(Base.showerror, exc_or_success, bt_or_path))
         success, path = exc_or_success, bt_or_path
         if success
-            vstr = pkg.version != nothing ? "v$(pkg.version)" : "[$h]"
+            vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
             printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
         else
             push!(missed_packages, (pkg, path))
@@ -299,11 +299,11 @@ function apply_versions(ctx::Context, pkgs::Vector{PackageSpec}, hashes::Dict{UU
         uuid = pkg.uuid
         if !ctx.preview
             install_git(ctx, pkg.uuid, pkg.name, hashes[uuid], urls[uuid], pkg.version::VersionNumber, path)
-            if mode == :add
+            if mode === :add
                 set_readonly(path)
             end
         end
-        vstr = pkg.version != nothing ? "v$(pkg.version)" : "[$h]"
+        vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
         printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
 

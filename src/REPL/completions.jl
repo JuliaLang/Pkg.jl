@@ -119,7 +119,13 @@ function complete_argument(spec::CommandSpec, options::Vector{String},
                            index::Int)
     spec.completions === nothing && return String[]
     # finish parsing opts
-    opts = APIOptions(map(parse_option, options), spec.option_specs)
+    local opts
+    try
+        opts = APIOptions(map(parse_option, options), spec.option_specs)
+    catch e
+        e isa PkgError && return String[]
+        rethrow()
+    end
     return applicable(spec.completions, opts, partial, offset, index) ?
         spec.completions(opts, partial, offset, index) :
         spec.completions(opts, partial)

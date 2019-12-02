@@ -229,7 +229,7 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     project_file = nothing
     if env isa Nothing
         project_file = Base.active_project()
-        project_file == nothing && pkgerror("no active project")
+        project_file === nothing && pkgerror("no active project")
     elseif startswith(env, '@')
         project_file = Base.load_path_expand(env)
         project_file === nothing && pkgerror("package environment does not exist: $env")
@@ -1320,7 +1320,7 @@ function registered_name(env::EnvCache, uuid::UUID)::Union{Nothing,String}
     values = registered_info(env, uuid, "name")
     name = nothing
     for value in values
-        name  == nothing && (name = value[2])
+        name  === nothing && (name = value[2])
         name != value[2] && pkgerror("package `$uuid` has multiple registered name values: $name, $(value[2])")
     end
     return name

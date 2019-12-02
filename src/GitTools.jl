@@ -110,7 +110,7 @@ ensure_clone(target_path, url; kwargs...) =
 function clone(url, source_path; header=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
-    Pkg.Types.printpkgstyle(stdout, :Cloning, header == nothing ? "git-repo `$url`" : header)
+    Pkg.Types.printpkgstyle(stdout, :Cloning, header === nothing ? "git-repo `$url`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
@@ -143,7 +143,7 @@ function fetch(repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs.
         end
     end
     remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(stdout, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
+    Pkg.Types.printpkgstyle(stdout, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
@@ -179,7 +179,7 @@ function gitmode(path::AbstractString)
     elseif isdir(path)
         return mode_dir
     # We cannot use `Sys.isexecutable()` because on Windows, that simply calls `isfile()`
-    elseif filemode(path) & 0o010 == 0o010
+    elseif !iszero(filemode(path) & 0o100)
         return mode_executable
     else
         return mode_normal
@@ -233,7 +233,11 @@ end
 Calculate the git tree hash of a given path.  Note that attempting to take the
 tree hash of an empty directory will throw an error.
 """
-function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
+function tree_hash(
+    root::AbstractString,
+    names::Vector{String} = readdir(root);
+    HashType = SHA.SHA1_CTX,
+)
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
     for f in readdir(root)
         # Skip `.git` directories
@@ -244,27 +248,22 @@ function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
         filepath = abspath(root, f)
         mode = gitmode(filepath)
         if mode == mode_dir
-            try
-                hash = tree_hash(filepath)
-            catch e
-                if isa(e, ArgumentError)
-                    continue
-                end
-                rethrow(e)
-            end
+            names = readdir(filepath)
+            isempty(names) && continue
+            hash = tree_hash(filepath, names)
         else
             hash = blob_hash(filepath)
         end
-        push!(entries, (f, hash, gitmode(filepath)))
+        push!(entries, (f, hash, mode))
     end
 
     # Sort entries by name (with trailing slashes for directories)
     sort!(entries, by = ((name, hash, mode),) -> mode == mode_dir ? name*"/" : name)
 
-    if isempty(entries)
-        ArgumentError("Invalid to calculate tree hash of empty directory")
+    content_size = 0
+    for (n, h, m) in entries
+        content_size += ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + 20
     end
-    content_size = sum(((n, h, m),) -> ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + 20, entries)
 
     # Return the hash of these entries
     ctx = HashType()
