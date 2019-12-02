@@ -230,7 +230,28 @@ Base.@kwdef mutable struct PackageEntry
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = all([getfield(t1, x) == getfield(t2, x) for x in filter!(!=(:other), collect(fieldnames(PackageEntry)))])
 Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [getfield(t, x) for x in filter!(!=(:other), collect(fieldnames(PackageEntry)))], init=h)
-const Manifest = Dict{UUID,PackageEntry}
+
+Base.@kwdef mutable struct JuliaEntry
+    name::Union{String,Nothing} = nothing
+    version::Union{VersionNumber,Nothing} = nothing
+    path::Union{String,Nothing} = nothing
+    pinned::Bool = false
+    repo::GitRepo = GitRepo()
+    tree_hash::Union{Nothing,SHA1} = nothing
+    deps::Dict{String,UUID} = Dict{String,UUID}()
+    other::Union{Dict,Nothing} = nothing
+end
+const JuliaName = "julia"
+const JuliaUUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
+const JuliaPkgId = Base.PkgId(JuliaUUID, JuliaName)
+function JuliaEntry(version::VersionNumber)
+    return JuliaEntry(name=JuliaName, version=version)
+end
+function is_julia(pkg::PackageSpec)
+    return pkg.name == JuliaName && pkg.uuid == JuliaUUID
+end
+
+const Manifest = Dict{UUID, Union{PackageEntry, JuliaEntry}}
 
 function Base.show(io::IO, pkg::PackageEntry)
     f = []
@@ -679,18 +700,21 @@ function get_object_or_branch(repo, rev)
         gitobject = LibGit2.GitObject(repo, "remotes/cache/heads/" * rev)
         return gitobject, true
     catch err
+        @debug("", exception=(err, Base.catch_backtrace()))
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
         gitobject = LibGit2.GitObject(repo, "remotes/origin/" * rev)
         return gitobject, true
     catch err
+        @debug("", exception=(err, Base.catch_backtrace()))
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
         gitobject = LibGit2.GitObject(repo, rev)
         return gitobject, false
     catch err
+        @debug("", exception=(err, Base.catch_backtrace()))
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     return nothing
@@ -1109,6 +1133,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                 try
                     GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                 catch e
+                    @debug("", exception=(e, Base.catch_backtrace()))
                     e isa PkgError || rethrow()
                     push!(errors, (reg.path, "failed to fetch from repo"))
                     @goto done
@@ -1116,6 +1141,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                 ff_succeeded = try
                     LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
                 catch e
+                    @debug("", exception=(e, Base.catch_backtrace()))
                     e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
                     push!(errors, (reg.path, "branch origin/$branch not found"))
                     @goto done
@@ -1124,6 +1150,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                 if !ff_succeeded
                     try LibGit2.rebase!(repo, "origin/$branch")
                     catch e
+                        @debug("", exception=(e, Base.catch_backtrace()))
                         e isa LibGit2.GitError || rethrow()
                         push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
                         @goto done
@@ -1288,7 +1315,7 @@ end
 
 # Find package by UUID in the manifest file
 manifest_info(ctx::Context, uuid::Nothing) = nothing
-function manifest_info(ctx::Context, uuid::UUID)::Union{PackageEntry,Nothing}
+function manifest_info(ctx::Context, uuid::UUID)::Union{JuliaEntry,PackageEntry,Nothing}
     #any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
     return get(ctx.env.manifest, uuid, nothing)
 end

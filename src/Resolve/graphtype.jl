@@ -1084,6 +1084,7 @@ function deep_clean!(graph::Graph)
             try
                 propagate_constraints!(graph, Set{Int}([p0]), log_events = false)
             catch err
+                @debug("", exception=(err, Base.catch_backtrace()))
                 err isa ResolverError || rethrow()
                 gconstr_msk[p0][v0] = false
             end

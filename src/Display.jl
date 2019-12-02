@@ -7,6 +7,8 @@ import LibGit2
 
 using ..Types
 
+const JuliaEntry = Types.JuliaEntry
+const JuliaPkgId = Types.JuliaPkgId
 const PackageEntry = Types.PackageEntry
 
 const colors = Dict(
@@ -183,6 +185,7 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry}, status=false)
     for x in diff
         pkgid = Base.PkgId(x.uuid, x.name)
         package_downloaded = pkgid in keys(Base.loaded_modules) ||
+                             pkgid == JuliaPkgId ||
                              Base.locate_package(pkgid) !== nothing
         # Package download detection doesnt work properly when runn running targets
         ctx.currently_running_target && (package_downloaded = true)
@@ -240,7 +243,7 @@ function print_diff(io::IO, ctx::Context, diff::Vector{DiffEntry}, status=false)
 end
 print_diff(ctx::Context, diff::Vector{DiffEntry}, status=false) = print_diff(ctx.io, ctx, diff, status)
 
-function name_ver_info(entry::PackageEntry)
+function name_ver_info(entry::Union{JuliaEntry, PackageEntry})
     entry.name, VerInfo(
         entry.tree_hash,
         entry.path,

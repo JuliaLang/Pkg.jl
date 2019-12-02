@@ -1,0 +1,8 @@
+# This file is machine-generated - editing it directly is not advised
+
+[[Base64]]
+uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[julia]]
+uuid = "1222c4b2-2114-5bfd-aeef-88e4692bbb3e"
+version = "0.0.1"

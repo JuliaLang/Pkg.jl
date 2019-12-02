@@ -75,7 +75,7 @@ end
 
 struct Stage1
     uuid::UUID
-    entry::PackageEntry
+    entry::Union{JuliaEntry, PackageEntry}
     deps::Union{AbstractVector{<:AbstractString}, Dict{String,UUID}}
 end
 
@@ -99,13 +99,13 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
     return final
 end
 
-function validate_manifest(stage1::Dict{String,Vector{Stage1}})
+function validate_manifest(stage1::Dict{String,Vector{Stage1}}; path=nothing)
     # expand vector format deps
     for (name, infos) in stage1, info in infos
         info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
     end
     # invariant: all dependencies are now normalized to Dict{String,UUID}
-    manifest = Dict{UUID, PackageEntry}()
+    manifest = Manifest()
     for (name, infos) in stage1, info in infos
         manifest[info.uuid] = info.entry
     end
@@ -121,14 +121,36 @@ function validate_manifest(stage1::Dict{String,Vector{Stage1}})
                      "but entry with UUID `$uuid` has name `$(dep_entry.name)`.")
         end
     end
+    validate_manifest_julia_version(manifest; path=path)
     return manifest
 end
 
-function Manifest(raw::Dict)::Manifest
+function validate_manifest_julia_version(manifest::Manifest; path=nothing)
+    current_julia_version = Base.VERSION
+    current_julia_entry = JuliaEntry(current_julia_version)
+    if haskey(manifest, JuliaUUID)
+        manifest_julia_entry = manifest[JuliaUUID]
+        manifest_julia_version = manifest_julia_entry.version
+        if manifest_julia_version != current_julia_version
+            @warn(string("The Julia version in ",
+                         "manifest $(something(path,"")) ",
+                         "is $(manifest_julia_version), ",
+                         "but the current Julia version is ",
+                         "$(current_julia_version)"))
+        end
+    end
+    return manifest
+end
+
+function Manifest(raw::Dict; path=nothing)::Manifest
     stage1 = Dict{String,Vector{Stage1}}()
     for (name, infos) in raw, info in infos
         # TODO is name guaranteed to be a string?
-        entry = PackageEntry()
+        if name == JuliaName
+            entry = JuliaEntry()
+        else
+            entry = PackageEntry()
+        end
         entry.name = name
         uuid = nothing
         deps = nothing
@@ -150,7 +172,7 @@ function Manifest(raw::Dict)::Manifest
     end
     # by this point, all the fields of the `PackageEntry`s have been type casted
     # but we have *not* verified the _graph_ structure of the manifest
-    return validate_manifest(stage1)
+    return validate_manifest(stage1; path=path)
 end
 
 function read_manifest(io::IO; path=nothing)
@@ -166,16 +188,16 @@ function read_manifest(io::IO; path=nothing)
             rethrow()
         end
     end
-    return Manifest(raw)
+    return Manifest(raw; path=path)
 end
 
 read_manifest(path::String)::Manifest =
-    isfile(path) ? open(io->read_manifest(io;path=path), path) : Dict{UUID,PackageEntry}()
+    isfile(path) ? open(io->read_manifest(io;path=path), path) : Manifest()
 
 ###########
 # WRITING #
 ###########
-function destructure(manifest::Manifest)::Dict
+function destructure(manifest::Manifest; path=nothing)::Dict
     function entry!(entry, key, value; default=nothing)
         if value == default
             delete!(entry, key)
@@ -225,7 +247,7 @@ function write_manifest(env::EnvCache)
     write_manifest(env.manifest, env.manifest_file)
 end
 write_manifest(manifest::Manifest, manifest_file::AbstractString) =
-    write_manifest(destructure(manifest), manifest_file)
+    write_manifest(destructure(manifest; path=manifest_file), manifest_file)
 function write_manifest(manifest::Dict, manifest_file::AbstractString)
     io = IOBuffer()
     print(io, "# This file is machine-generated - editing it directly is not advised\n\n")

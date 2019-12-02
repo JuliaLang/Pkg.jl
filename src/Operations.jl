@@ -10,6 +10,7 @@ import REPL
 using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..Display
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
+import ..Types.is_julia, ..Types.JuliaEntry, ..Types.JuliaName, ..Types.JuliaUUID, ..Types.Manifest
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
 using ..BinaryPlatforms
 import ...Pkg
@@ -105,24 +106,53 @@ function is_instantiated(ctx::Context)::Bool
     pkgs = load_all_deps(ctx)
     # Make sure all paths exist
     for pkg in pkgs
-        sourcepath = Operations.source_path(pkg)
-        isdir(sourcepath) || return false
-        check_artifacts_downloaded(sourcepath) || return false
+        if !is_julia(pkg)
+            sourcepath = Operations.source_path(pkg)
+            isdir(sourcepath) || return false
+            check_artifacts_downloaded(sourcepath) || return false
+        end
     end
     return true
 end
 
 function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
     manifest = ctx.env.manifest
+    original_manifest = ctx.env.original_manifest
+
     empty!(manifest)
+    update_manifest_julia_version!(manifest, original_manifest)
     #find_registered!(ctx.env, [pkg.uuid for pkg in pkgs]) # Is this necessary? its for `load_deps`...
     for pkg in pkgs
-        entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
-                             tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo)
-        is_stdlib(pkg.uuid) && (entry.version = nothing) # do not set version for stdlibs
-        entry.deps = load_deps(ctx, pkg)
-        ctx.env.manifest[pkg.uuid] = entry
+        if is_julia(pkg)
+            current_julia_version = Base.VERSION
+            current_julia_entry = JuliaEntry(current_julia_version)
+            ctx.env.manifest[JuliaUUID] = current_julia_entry
+        else
+            entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
+                                 tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo)
+            is_stdlib(pkg.uuid) && (entry.version = nothing) # do not set version for stdlibs
+            entry.deps = load_deps(ctx, pkg)
+            ctx.env.manifest[pkg.uuid] = entry
+        end
     end
+end
+
+function update_manifest_julia_version!(manifest::Manifest,
+                                        original_manifest::Manifest)
+    current_julia_version = Base.VERSION
+    current_julia_entry = JuliaEntry(current_julia_version)
+    manifest[JuliaUUID] = current_julia_entry
+    if haskey(original_manifest, JuliaUUID)
+        original_manifest_julia_entry = original_manifest[JuliaUUID]
+        original_manifest_julia_version = original_manifest_julia_entry.version
+        if original_manifest_julia_version != current_julia_version
+            @warn(string("Overwriting Julia version ",
+                         "$(original_manifest_julia_version) ",
+                         "in manifest with current Julia version ",
+                         "$(current_julia_version)"))
+        end
+    end
+    return manifest
 end
 
 ####################
@@ -313,6 +343,8 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
         names[pkg.uuid] = pkg.name
     end
     reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs)
+    delete!(reqs, JuliaUUID)
+    delete!(fixed, JuliaUUID)
     graph = deps_graph(ctx, names, reqs, fixed)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
@@ -428,13 +460,15 @@ end
 function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
     urls = Dict{UUID,Vector{String}}()
     for pkg in pkgs
-        uuid = pkg.uuid
-        ver = pkg.version::VersionNumber
-        urls[uuid] = String[]
-        for path in registered_paths(ctx, uuid)
-            info = parse_toml(path, "Package.toml")
-            repo = info["repo"]
-            repo in urls[uuid] || push!(urls[uuid], repo)
+        if !is_julia(pkg)
+            uuid = pkg.uuid
+            ver = pkg.version::VersionNumber
+            urls[uuid] = String[]
+            for path in registered_paths(ctx, uuid)
+                info = parse_toml(path, "Package.toml")
+                repo = info["repo"]
+                repo in urls[uuid] || push!(urls[uuid], repo)
+            end
         end
     end
     foreach(sort!, values(urls))
@@ -467,6 +501,7 @@ function install_archive(
         try
             PlatformEngines.download(url, path; verbose=false)
         catch e
+            @debug("", exception=(e, Base.catch_backtrace()))
             e isa InterruptException && rethrow()
             url_success = false
         end
@@ -477,6 +512,7 @@ function install_archive(
         try
             unpack(path, dir; verbose=false)
         catch e
+            @debug("", exception=(e, Base.catch_backtrace()))
             e isa InterruptException && rethrow()
             @warn "failed to extract archive downloaded from $(url)"
             url_success = false
@@ -536,6 +572,7 @@ function install_git(
                 end
                 break # object was found, we can stop
             catch err
+                @debug("", exception=(err, Base.catch_backtrace()))
                 err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
             end
             GitTools.fetch(ctx, repo, url, refspecs=refspecs)
@@ -543,6 +580,7 @@ function install_git(
         tree = try
             LibGit2.GitObject(repo, git_hash)
         catch err
+            @debug("", exception=(err, Base.catch_backtrace()))
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
             error("$name: git object $(string(hash)) could not be found")
         end
@@ -607,10 +645,12 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
 
     pkgs_to_install = Tuple{PackageSpec, String}[]
     for pkg in pkgs
-        path = source_path(pkg)
-        ispath(path) && continue
-        push!(pkgs_to_install, (pkg, path))
-        push!(new_pkgs, pkg)
+        if !is_julia(pkg)
+            path = source_path(pkg)
+            ispath(path) && continue
+            push!(pkgs_to_install, (pkg, path))
+            push!(new_pkgs, pkg)
+        end
     end
 
     widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
@@ -653,6 +693,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                     end
                     put!(results, (pkg, success, path))
                 catch err
+                    @debug("", exception=(err, Base.catch_backtrace()))
                     put!(results, (pkg, err, catch_backtrace()))
                 end
             end
@@ -698,11 +739,11 @@ function prune_manifest(ctx::Context)
     ctx.env.manifest = prune_manifest!(ctx.env.manifest, keep)
 end
 
-function prune_manifest!(manifest::Dict, keep::Vector{UUID})
+function prune_manifest!(manifest::Manifest, keep::Vector{UUID})::Manifest
     while !isempty(keep)
         clean = true
         for (uuid, entry) in manifest
-            uuid in keep || continue
+            (uuid in keep || uuid == JuliaUUID) || continue
             for dep in values(entry.deps)
                 dep in keep && continue
                 push!(keep, dep)
@@ -711,7 +752,13 @@ function prune_manifest!(manifest::Dict, keep::Vector{UUID})
         end
         clean && break
     end
-    return Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
+    new_manifest = Manifest()
+    for (uuid, entry) in manifest
+        if uuid in keep || uuid == JuliaUUID
+            new_manifest[uuid] = entry
+        end
+    end
+    return new_manifest
 end
 
 function any_package_not_installed(ctx)
@@ -996,16 +1043,19 @@ function tiered_resolve(ctx::Context, pkgs::Vector{PackageSpec})
     try # do not modify existing subgraph
         return targeted_resolve(ctx, pkgs, PRESERVE_ALL)
     catch err
+        @debug("", exception=(err, Base.catch_backtrace()))
         err isa Resolve.ResolverError || rethrow()
     end
     try # do not modify existing direct deps
         return targeted_resolve(ctx, pkgs, PRESERVE_DIRECT)
     catch err
+        @debug("", exception=(err, Base.catch_backtrace()))
         err isa Resolve.ResolverError || rethrow()
     end
     try
         return targeted_resolve(ctx, pkgs, PRESERVE_SEMVER)
     catch err
+        @debug("", exception=(err, Base.catch_backtrace()))
         err isa Resolve.ResolverError || rethrow()
     end
     return targeted_resolve(ctx, pkgs, PRESERVE_NONE)
@@ -1028,6 +1078,7 @@ end
 
 function _resolve(ctx::Context, pkgs::Vector{PackageSpec}, preserve::PreserveLevel)
     printpkgstyle(ctx, :Resolving, "package versions...")
+    pkgs = filter(!is_julia, pkgs)
     return preserve == PRESERVE_TIERED ?
         tiered_resolve(ctx, pkgs) :
         targeted_resolve(ctx, pkgs, preserve)
@@ -1081,6 +1132,7 @@ end
 # load version constraint
 # if version isa VersionNumber -> set tree_hash too
 up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, level::UpgradeLevel) = false
+up_load_versions!(ctx::Context, pkg::PackageSpec, ::JuliaEntry, level::UpgradeLevel) = false
 function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, level::UpgradeLevel)
     entry.version !== nothing || return false # no version to set
     if entry.pinned || level == UPLEVEL_FIXED
@@ -1112,6 +1164,7 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
 end
 
 up_load_manifest_info!(pkg::PackageSpec, ::Nothing) = nothing
+up_load_manifest_info!(pkg::PackageSpec, ::JuliaEntry) = nothing
 function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     pkg.name = entry.name # TODO check name is same
     pkg.repo = entry.repo # TODO check that repo is same
@@ -1277,7 +1330,7 @@ function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::Strin
     return graph
 end
 
-function abspath!(ctx, manifest::Dict{UUID,PackageEntry})
+function abspath!(ctx, manifest::Manifest)
     for (uuid, entry) in manifest
         entry.path !== nothing || continue
         entry.path = project_rel_path(ctx, entry.path)

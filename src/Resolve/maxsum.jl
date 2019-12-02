@@ -340,6 +340,7 @@ function try_simplify_graph_soft!(graph, sources)
     try
         simplify_graph_soft!(graph, sources, log_events = false)
     catch err
+        @debug("", exception=(err, Base.catch_backtrace()))
         err isa ResolverError || rethrow()
         return false
     end
@@ -363,6 +364,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
         try
             maxdiff = iterate!(graph, msgs, perm)
         catch err
+            @debug("", exception=(err, Base.catch_backtrace()))
             err isa UnsatError || rethrow()
             if is_best_sofar
                 p0 = err.p0
