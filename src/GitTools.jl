@@ -251,16 +251,29 @@ function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
 end
 
 """
+    contains_no_files(root::AbstractString)
+
+Helper function to determine whether a directory contains no files; e.g. it is
+either empty or contains only other directories that contain nothing but other
+directories.  This is used to exclude directories from tree hashing.
+"""
+function contains_no_files(root::AbstractString)
+    for (root, dirs, files) in walkdir(root)
+        if !isempty(files)
+            return false
+        end
+    end
+    return true
+end
+    
+
+"""
     tree_hash(root::AbstractString)
 
 Calculate the git tree hash of a given path.  Note that attempting to take the
 tree hash of an empty directory will throw an error.
 """
-function tree_hash(
-    root::AbstractString,
-    names::Vector{String} = readdir(root);
-    HashType = SHA.SHA1_CTX,
-)
+function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
     for f in readdir(root)
         # Skip `.git` directories
@@ -271,9 +284,11 @@ function tree_hash(
         filepath = abspath(root, f)
         mode = gitmode(filepath)
         if mode == mode_dir
-            names = readdir(filepath)
-            isempty(names) && continue
-            hash = tree_hash(filepath, names)
+            # If this directory contains no files, then skip it
+            contains_no_files(filepath) && continue
+
+            # Otherwise, hash it up!
+            hash = tree_hash(filepath)
         else
             hash = blob_hash(filepath)
         end
