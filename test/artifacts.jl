@@ -126,8 +126,11 @@ end
             end
 
             # Empty directories do nothing to effect the hash, so we create one with a
-            # random name to prove that it does not get hashed into the rest.
-            mkpath(joinpath(path, Random.randstring(8)))
+            # random name to prove that it does not get hashed into the rest.  Also, it
+            # turns out that life is cxomplex enough that we need to test the nested
+            # empty directories case as well.
+            rand_dir = joinpath(path, Random.randstring(8), "inner")
+            mkpath(rand_dir)
 
             # Symlinks are not followed, even if they point to directories
             symlink("foo3", joinpath(path, "foo3_link"))
@@ -148,7 +151,7 @@ end
                 cd(path) do
                     read(`git init .`)
                     read(`git add . `)
-                    read(`git commit -m "foo"`)
+                    read(`git commit --allow-empty -m "foo"`)
                     hash = chomp(String(read(`git log -1 --pretty='%T' HEAD`)))
                     println(hash)
                 end
