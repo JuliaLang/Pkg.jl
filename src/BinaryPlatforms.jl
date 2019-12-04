@@ -693,6 +693,30 @@ function detect_libgfortran_version(libgfortran_name::AbstractString, platform::
 end
 
 """
+    probe_dlopen_libgfortran()
+
+Attempts to `dlopen()` libgfortran by guessing its SONAME.
+"""
+function probe_dlopen_libgfortran(;platform::Platform = default_platkey,
+                                   versions::Vector = [3, 4, 5])
+    libgfortran_name(p::MacOS, ver)                = "libgfortran.$(ver).dylib"
+    libgfortran_name(p::Union{Linux,FreeBSD}, ver) = "libgfortran.so.$(ver)"
+    libgfortran_name(p::Windows, ver)              = "libgfortran-$(ver).dll"
+
+    # First, look ONLY in Base.LIBDIR; if that doesn't work, look globally.
+    for prefix in (Base.LIBDIR, "")
+        for version in versions
+            libgfortran_path = joinpath(prefix, libgfortran_name(platform, version))
+            hdl = dlopen(libgfortran_path; throw_error=false)
+            if hdl != nothing
+                return hdl
+            end
+        end
+    end
+    return nothing
+end
+
+"""
     detect_libgfortran_version()
 
 Inspects the current Julia process to determine the libgfortran version this Julia is
@@ -701,7 +725,18 @@ linked against (if any).
 function detect_libgfortran_version(;platform::Platform = default_platkey)
     libgfortran_paths = filter(x -> occursin("libgfortran", x), Libdl.dllist())
     if isempty(libgfortran_paths)
-        # One day, I hope to not be linking against libgfortran in base Julia
+        # Attempt to open `libgfortran`; if we don't find anything after a cursory look around,
+        # then perhaps we truly have stepped boldly into the future where libgfortran is not
+        # bundled with Julia (or we are just in an unusual configuration, such as using MKL
+        # as backing BLAS engine and without SuiteSparse/other libraries that typically load
+        # libgfortran unconditionally)
+        hdl = probe_dlopen_libgfortran(;platform=platform)
+        if hdl !== nothing
+            libgfortran_path = dlpath(hdl)
+            dlclose(hdl)
+            return detect_libgfortran_version(libgfortran_path, platform)
+        end
+
         return nothing
     end
     return detect_libgfortran_version(first(libgfortran_paths), platform)
