@@ -14,7 +14,7 @@ export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
 # and determine the most appropriate platform binaries to call.
 
 """
-    gen_download_cmd(url::AbstractString, out_path::AbstractString)
+    gen_download_cmd(url::AbstractString, out_path::AbstractString, hdrs::AbstractString...)
 
 Return a `Cmd` that will download resource located at `url` and store it at
 the location given by `out_path`.
@@ -22,7 +22,7 @@ the location given by `out_path`.
 This method is initialized by `probe_platform_engines()`, which should be
 automatically called upon first import of `BinaryProvider`.
 """
-gen_download_cmd = (url::AbstractString, out_path::AbstractString) ->
+gen_download_cmd = (url::AbstractString, out_path::AbstractString, hdrs::AbstractString...) ->
     error("Call `probe_platform_engines()` before `gen_download_cmd()`")
 
 """
@@ -185,11 +185,20 @@ function probe_platform_engines!(;verbose::Bool = false)
     # The probulator will check each of them by attempting to run `$test_cmd`,
     # and if that works, will set the global download functions appropriately.
     download_engines = [
-        (`curl --help`, (url, path) -> `curl -C - -\# -f -o $path -L $url`),
-        (`wget --help`, (url, path) -> `wget -c -O $path $url`),
-        (`fetch --help`, (url, path) -> `fetch -f $path $url`),
-        (`busybox wget --help`, (url, path) -> `busybox wget -c -O $path $url`),
+        (`curl --help`, (url, path, hdrs...) ->
+            `curl -H$hdrs -C - -\# -f -o $path -L $url`),
+        (`wget --help`, (url, path, hdrs...) ->
+            `wget --tries=5 --header=$hdrs -c -O $path $url`),
+        (`fetch --help`, (url, path, hdrs...) -> begin
+            isempty(hdrs) || error("`fetch` does not support passing headers")
+            `fetch -f $path $url`
+        end),
+        (`busybox wget --help`, (url, path, hdrs...) ->
+            `busybox wget --header=$hdrs -c -O $path $url`),
     ]
+    Sys.isapple() && pushfirst!(download_engines,
+        (`/usr/bin/curl --help`, (url, path, hdrs...) ->
+            `/usr/bin/curl -H$hdrs -C - -\# -f -o $path -L $url`))
 
     # 7z is rather intensely verbose.  We also want to try running not only
     # `7z` but also a direct path to the `7z.exe` bundled with Julia on
@@ -357,7 +366,7 @@ function probe_platform_engines!(;verbose::Bool = false)
         # Let's generate a functor to return the necessary powershell magics
         # to download a file, given a path to the powershell executable
         psh_download = (psh_path) -> begin
-            return (url, path) -> begin
+            return (url, path, hdrs...) -> begin
                 webclient_code = """
                 [System.Net.ServicePointManager]::SecurityProtocol =
                     [System.Net.SecurityProtocolType]::Tls12;
@@ -365,6 +374,14 @@ function probe_platform_engines!(;verbose::Bool = false)
                 \$webclient.UseDefaultCredentials = \$true;
                 \$webclient.Proxy.Credentials = \$webclient.Credentials;
                 \$webclient.Headers.Add("user-agent", \"Pkg.jl (https://github.com/JuliaLang/Pkg.jl)\");
+                """
+                for hdr in hdrs
+                    key, val = split(hdr, r":\s*", limit=2)
+                    webclient_code *= """
+                    \$webclient.Headers.Add($(repr(key)), $(repr(val)));
+                    """
+                end
+                webclient_code *= """
                 \$webclient.DownloadFile(\"$url\", \"$path\")
                 """
                 replace(webclient_code, "\n" => " ")
@@ -439,8 +456,10 @@ function probe_platform_engines!(;verbose::Bool = false)
     for (test, dl_func) in download_engines
         if probe_cmd(`$test`; verbose=verbose)
             # Set our download command generator
-            gen_download_cmd = (url, out_path) ->
-                dl_func(isdefined(Base, :download_url) ? Base.download_url(url) : url, out_path)
+            gen_download_cmd = (url, out_path, hdrs...) -> begin
+                isdefined(Base, :download_url) && (url = Base.download_url(url))
+                dl_func(url, out_path, hdrs...)
+            end
             download_found = true
 
             if verbose
@@ -570,15 +589,24 @@ function parse_tar_list(output::AbstractString)
 end
 
 """
-    download(url::AbstractString, dest::AbstractString;
-             verbose::Bool = false)
+    download(
+        url::AbstractString,
+        dest::AbstractString;
+        headers::Vector{Pair{String}} = Pair{String}[],
+        verbose::Bool = false,
+    )
 
 Download file located at `url`, store it at `dest`, continuing if `dest`
 already exists and the server and download engine support it.
 """
-function download(url::AbstractString, dest::AbstractString;
-                  verbose::Bool = false)
-    download_cmd = gen_download_cmd(url, dest)
+function download(
+    url::AbstractString,
+    dest::AbstractString;
+    headers::Vector{Pair{String}} = Pair{String}[],
+    verbose::Bool = false,
+)
+    hdrs = String["$key: $val" for (key, val) in headers]
+    download_cmd = gen_download_cmd(url, dest, hdrs...)
     if verbose
         @info("Downloading $(url) to $(dest)...")
     end
@@ -593,9 +621,15 @@ function download(url::AbstractString, dest::AbstractString;
 end
 
 """
-    download_verify(url::AbstractString, hash::Union{AbstractString, Nothing},
-                    dest::AbstractString; verbose::Bool = false,
-                    force::Bool = false, quiet_download::Bool = false)
+    download_verify(
+        url::AbstractString,
+        hash::Union{AbstractString, Nothing},
+        dest::AbstractString;
+        headers::Vector{Pair{String}} = Pair{String}[],
+        verbose::Bool = false,
+        force::Bool = false,
+        quiet_download::Bool = true,
+    )
 
 Download file located at `url`, verify it matches the given `hash`, and throw
 an error if anything goes wrong.  If `dest` already exists, just verify it. If
@@ -614,9 +648,15 @@ set to `false`) the downloading process will be completely silent.  If
 `verbose` is set to `true`, messages about integrity verification will be
 printed in addition to messages regarding downloading.
 """
-function download_verify(url::AbstractString, hash::Union{AbstractString, Nothing},
-                         dest::AbstractString; verbose::Bool = false,
-                         force::Bool = false, quiet_download::Bool = true)
+function download_verify(
+    url::AbstractString,
+    hash::Union{AbstractString, Nothing},
+    dest::AbstractString;
+    headers::Vector{Pair{String}} = Pair{String}[],
+    verbose::Bool = false,
+    force::Bool = false,
+    quiet_download::Bool = true,
+)
     # Whether the file existed in the first place
     file_existed = false
 
@@ -790,10 +830,16 @@ function package(src_dir::AbstractString, tarball_path::AbstractString)
 end
 
 """
-    download_verify_unpack(url::AbstractString, hash::Union{AbstractString, Nothing},
-                           dest::AbstractString; tarball_path = nothing,
-                           verbose::Bool = false, ignore_existence::Bool = false,
-                           force::Bool = false)
+    download_verify_unpack(
+        url::AbstractString,
+        hash::Union{AbstractString, Nothing},
+        dest::AbstractString;
+        headers::Vector{Pair{String}} = Pair{String}[],
+        tarball_path = nothing,
+        ignore_existence::Bool = false,
+        force::Bool = false,
+        verbose::Bool = false,
+    )
 
 Helper method to download tarball located at `url`, verify it matches the
 given `hash`, then unpack it into folder `dest`.  In general, the method
@@ -818,13 +864,16 @@ directory already exists.
 Returns `true` if a tarball was actually unpacked, `false` if nothing was
 changed in the destination prefix.
 """
-function download_verify_unpack(url::AbstractString,
-                                hash::Union{AbstractString, Nothing},
-                                dest::AbstractString;
-                                tarball_path = nothing,
-                                ignore_existence::Bool = false,
-                                force::Bool = false,
-                                verbose::Bool = false)
+function download_verify_unpack(
+    url::AbstractString,
+    hash::Union{AbstractString, Nothing},
+    dest::AbstractString;
+    headers::Vector{Pair{String}} = Pair{String}[],
+    tarball_path = nothing,
+    ignore_existence::Bool = false,
+    force::Bool = false,
+    verbose::Bool = false,
+)
     # First, determine whether we should keep this tarball around
     remove_tarball = false
     if tarball_path === nothing
