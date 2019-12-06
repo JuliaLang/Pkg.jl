@@ -44,8 +44,9 @@ that Julia natively understands them. In addition, Julia environments are
 “stackable”: you can overlay one environment with another and thereby have
 access to additional packages outside of the primary environment. This makes it
 easy to work on a project, which provides the primary environment, while still
-having access to all your usual dev tools like profilers, debuggers, and so on,
-just by having an environment including these dev tools later in the load path.
+having access from the REPL to all your usual dev tools like profilers,
+debuggers, and so on, just by having an environment including these dev tools
+later in the load path.
 
 Last but not least, Pkg is designed to support federated package registries.
 This means that it allows multiple registries managed by different parties to
