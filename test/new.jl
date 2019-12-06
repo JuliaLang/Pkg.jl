@@ -173,12 +173,34 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
             @test deps[exuuid].isdeveloped
         end
     end end
+    # the active dep graph is transfered to test sandbox, even when tracking unregistered repos
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestSubgraphTrackingRepo")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            Pkg.dependencies(unregistered_uuid) do pkg
+                @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+                @test !pkg.is_tracking_registry
+            end
+        end
+    end end
     # a test dependency can track a path
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "TestDepTrackingPath")
         Pkg.activate(path)
         inside_test_sandbox() do
             @test Pkg.dependencies()[unregistered_uuid].isdeveloped
+        end
+    end end
+    # a test dependency can track a repo
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestDepTrackingRepo")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            Pkg.dependencies(unregistered_uuid) do pkg
+                @test !pkg.is_tracking_registry
+                @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+            end
         end
     end end
     # `compat` for test dependencies is honored
@@ -228,6 +250,7 @@ end
             @test deps[UUID("c86f0f68-174e-41db-bd5e-b032223de205")].version == v"1.2.3"
         end
     end end
+    # test targets should also honor compat
     isolate(loaded_depot=false) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "TestTargetCompat")
         Pkg.activate(path)
@@ -823,6 +846,25 @@ end
         end
         @test haskey(Pkg.project().dependencies, "SimplePackage")
     end end
+    # recursive `dev`
+    isolate(loaded_depot=true) do
+        Pkg.develop(Pkg.PackageSpec(;path=joinpath(@__DIR__, "test_packages", "A")))
+        Pkg.dependencies(UUID("0829fd7c-1e7e-4927-9afa-b8c61d5e0e42")) do pkg # dep A
+            @test haskey(pkg.dependencies, "B")
+            @test haskey(pkg.dependencies, "C")
+            @test pkg.source == joinpath(@__DIR__, "test_packages", "A")
+        end
+        Pkg.dependencies(UUID("4ee78ca3-4e78-462f-a078-747ed543fa85")) do pkg # dep C
+            @test haskey(pkg.dependencies, "D")
+            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "C")
+        end
+        Pkg.dependencies(UUID("dd0d8fba-d7c4-4f8e-a2bb-3a090b3e34f1")) do pkg # dep B
+            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "B")
+        end
+        Pkg.dependencies(UUID("bf733257-898a-45a0-b2f2-c1c188bdd879")) do pkg # dep D
+            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "D")
+        end
+    end
 end
 
 @testset "develop: interaction with `JULIA_PKG_DEVDIR`" begin

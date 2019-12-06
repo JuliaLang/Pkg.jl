@@ -254,7 +254,7 @@ function collect_developed!(ctx::Context, pkg::PackageSpec, developed::Vector{Pa
     pkgs = load_all_deps(source_ctx)
     for pkg in filter(is_tracking_path, pkgs)
         # normalize path
-        pkg.path = project_rel_path(source_ctx, source_path(pkg))
+        pkg.path = Types.relative_project_path(ctx, project_rel_path(source_ctx, source_path(pkg)))
         push!(developed, pkg)
         collect_developed!(ctx, pkg, developed)
     end
