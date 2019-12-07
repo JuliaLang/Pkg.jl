@@ -1297,6 +1297,8 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
 
         # Copy env info over to temp env
         isfile(sandbox_project) && cp(sandbox_project, tmp_project)
+        touch(tmp_project)
+        chmod(tmp_project, 0o644)
         if isfile(active_manifest)
             @debug "Active Manifest detected"
             # copy over preserved subgraph
