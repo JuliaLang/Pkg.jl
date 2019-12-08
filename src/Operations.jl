@@ -1297,6 +1297,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
 
         # Copy env info over to temp env
         isfile(sandbox_project) && cp(sandbox_project, tmp_project)
+        isfile(tmp_project) && Base.Filesystem.chmod(tmp_project, 0o600)
         if isfile(active_manifest)
             @debug "Active Manifest detected"
             # copy over preserved subgraph
@@ -1304,6 +1305,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             Types.write_manifest(abspath!(ctx, sandbox_preserve(ctx, target, tmp_project)),
                                  tmp_manifest)
         end
+        isfile(tmp_manifest) && Base.Filesystem.chmod(tmp_manifest, 0o600)
         with_temp_env(tmp) do
             try
                 Pkg.API.develop(PackageSpec(;repo=GitRepo(;source=target_path)); strict=true)
