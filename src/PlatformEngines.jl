@@ -592,7 +592,6 @@ end
     download(
         url::AbstractString,
         dest::AbstractString;
-        headers::Vector{Pair{String}} = Pair{String}[],
         verbose::Bool = false,
     )
 
@@ -602,11 +601,9 @@ already exists and the server and download engine support it.
 function download(
     url::AbstractString,
     dest::AbstractString;
-    headers::Vector{Pair{String}} = Pair{String}[],
     verbose::Bool = false,
 )
-    hdrs = String["$key: $val" for (key, val) in headers]
-    download_cmd = gen_download_cmd(url, dest, hdrs...)
+    download_cmd = gen_download_cmd(url, dest)
     if verbose
         @info("Downloading $(url) to $(dest)...")
     end
@@ -625,7 +622,6 @@ end
         url::AbstractString,
         hash::Union{AbstractString, Nothing},
         dest::AbstractString;
-        headers::Vector{Pair{String}} = Pair{String}[],
         verbose::Bool = false,
         force::Bool = false,
         quiet_download::Bool = true,
@@ -652,7 +648,6 @@ function download_verify(
     url::AbstractString,
     hash::Union{AbstractString, Nothing},
     dest::AbstractString;
-    headers::Vector{Pair{String}} = Pair{String}[],
     verbose::Bool = false,
     force::Bool = false,
     quiet_download::Bool = true,
@@ -834,7 +829,6 @@ end
         url::AbstractString,
         hash::Union{AbstractString, Nothing},
         dest::AbstractString;
-        headers::Vector{Pair{String}} = Pair{String}[],
         tarball_path = nothing,
         ignore_existence::Bool = false,
         force::Bool = false,
@@ -868,7 +862,6 @@ function download_verify_unpack(
     url::AbstractString,
     hash::Union{AbstractString, Nothing},
     dest::AbstractString;
-    headers::Vector{Pair{String}} = Pair{String}[],
     tarball_path = nothing,
     ignore_existence::Bool = false,
     force::Bool = false,
