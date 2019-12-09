@@ -1339,6 +1339,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             Types.write_project(sandbox_project_override, tmp_project)
         elseif isfile(sandbox_project)
             cp(sandbox_project, tmp_project)
+            chmod(tmp_project, 0o600)
         end
         # create merged manifest
         # - copy over active subgraph

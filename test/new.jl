@@ -144,14 +144,16 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         foo_uuid = UUID("02250abe-2050-11e9-017e-b301a2b5bcc4")
         path = copy_test_package(tempdir, "BasicSandbox")
-        Pkg.activate(path)
-        inside_test_sandbox() do
+        # we set realonly here to simulate the premissions in the `$DEPOT/packages` directory
+        Pkg.Types.set_readonly(path)
+        Pkg.develop(Pkg.PackageSpec(;path=path))
+        inside_test_sandbox("BasicSandbox") do
             Pkg.dependencies(foo_uuid) do pkg
                 @test length(pkg.dependencies) == 1
                 @test haskey(pkg.dependencies, "Random")
             end
             @test haskey(Pkg.project().dependencies, "Test")
-            @test haskey(Pkg.project().dependencies, "Foo")
+            @test haskey(Pkg.project().dependencies, "BasicSandbox")
         end
     end end
     # the active dependency graph is transfered to the test sandbox
@@ -220,8 +222,10 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         basic_test_target = UUID("50adb811-5a1f-4be4-8146-2725c7f5d900")
         path = copy_test_package(tempdir, "BasicTestTarget")
-        Pkg.activate(path)
-        inside_test_sandbox() do
+        # we set realonly here to simulate the premissions in the `$DEPOT/packages` directory
+        Pkg.Types.set_readonly(path)
+        Pkg.develop(Pkg.PackageSpec(;path=path))
+        inside_test_sandbox("BasicTestTarget") do
             @test haskey(Pkg.project().dependencies, "Markdown")
             @test haskey(Pkg.project().dependencies, "Test")
             @test haskey(Pkg.project().dependencies, "BasicTestTarget")
