@@ -134,6 +134,138 @@ simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 end
 
 #
+# ## Sandboxing
+#
+inside_test_sandbox(fn, name; kwargs...) = Pkg.test(name; test_fn=fn, kwargs...)
+inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
+
+@testset "test: sandboxing" begin
+    # explicit test dependencies and the tested project are available within the test sandbox
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        foo_uuid = UUID("02250abe-2050-11e9-017e-b301a2b5bcc4")
+        path = copy_test_package(tempdir, "BasicSandbox")
+        # we set realonly here to simulate the premissions in the `$DEPOT/packages` directory
+        Pkg.Types.set_readonly(path)
+        Pkg.develop(Pkg.PackageSpec(;path=path))
+        inside_test_sandbox("BasicSandbox") do
+            Pkg.dependencies(foo_uuid) do pkg
+                @test length(pkg.dependencies) == 1
+                @test haskey(pkg.dependencies, "Random")
+            end
+            @test haskey(Pkg.project().dependencies, "Test")
+            @test haskey(Pkg.project().dependencies, "BasicSandbox")
+        end
+    end end
+    # the active dependency graph is transfered to the test sandbox
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TransferSubgraph")
+        Pkg.activate(path)
+        active_json_version = Pkg.dependencies()[json_uuid].version
+        inside_test_sandbox("Unregistered") do
+            @test Pkg.dependencies()[json_uuid].version == active_json_version
+        end
+    end end
+    # the active dep graph is transfered to test sandbox, even when tracking paths
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestSubgraphTrackingPath")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            deps = Pkg.dependencies()
+            @test deps[unregistered_uuid].isdeveloped
+            @test deps[exuuid].isdeveloped
+        end
+    end end
+    # the active dep graph is transfered to test sandbox, even when tracking unregistered repos
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestSubgraphTrackingRepo")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            Pkg.dependencies(unregistered_uuid) do pkg
+                @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+                @test !pkg.is_tracking_registry
+            end
+        end
+    end end
+    # a test dependency can track a path
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestDepTrackingPath")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            @test Pkg.dependencies()[unregistered_uuid].isdeveloped
+        end
+    end end
+    # a test dependency can track a repo
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestDepTrackingRepo")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            Pkg.dependencies(unregistered_uuid) do pkg
+                @test !pkg.is_tracking_registry
+                @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+            end
+        end
+    end end
+    # `compat` for test dependencies is honored
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestDepCompat")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            deps = Pkg.dependencies()
+            @test deps[exuuid].version == v"0.3.0"
+            @test deps[UUID("9cb9b0df-a8d1-4a6c-a371-7d2ae60a2f25")].version == v"0.1.0"
+        end
+    end end
+end
+
+# These tests cover the original "targets" API for specifying test dependencies
+@testset "test: 'targets' based testing" begin
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        basic_test_target = UUID("50adb811-5a1f-4be4-8146-2725c7f5d900")
+        path = copy_test_package(tempdir, "BasicTestTarget")
+        # we set realonly here to simulate the premissions in the `$DEPOT/packages` directory
+        Pkg.Types.set_readonly(path)
+        Pkg.develop(Pkg.PackageSpec(;path=path))
+        inside_test_sandbox("BasicTestTarget") do
+            @test haskey(Pkg.project().dependencies, "Markdown")
+            @test haskey(Pkg.project().dependencies, "Test")
+            @test haskey(Pkg.project().dependencies, "BasicTestTarget")
+            Pkg.dependencies(basic_test_target) do pkg
+                @test pkg.isdeveloped == true
+                @test haskey(pkg.dependencies, "UUIDs")
+                @test !haskey(pkg.dependencies, "Markdown")
+                @test !haskey(pkg.dependencies, "Test")
+            end
+        end
+    end end
+    # dependency of test dependency (#567)
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        for x in ["x1", "x2", "x3"]
+            path = copy_test_package(tempdir, x)
+            Pkg.develop(Pkg.PackageSpec(path = path))
+        end
+        Pkg.test("x3")
+    end end
+    # preserve root of active project if it is a dependency (#1423)
+    isolate(loaded_depot=false) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "ActiveProjectInTestSubgraph")
+        Pkg.activate(path)
+        inside_test_sandbox("B") do
+            deps = Pkg.dependencies()
+            @test deps[UUID("c86f0f68-174e-41db-bd5e-b032223de205")].version == v"1.2.3"
+        end
+    end end
+    # test targets should also honor compat
+    isolate(loaded_depot=false) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "TestTargetCompat")
+        Pkg.activate(path)
+        inside_test_sandbox() do
+            deps = Pkg.dependencies()
+            @test deps[exuuid].version == v"0.3.0"
+        end
+    end end
+end
+
+#
 # # Add
 #
 
@@ -718,6 +850,25 @@ end
         end
         @test haskey(Pkg.project().dependencies, "SimplePackage")
     end end
+    # recursive `dev`
+    isolate(loaded_depot=true) do
+        Pkg.develop(Pkg.PackageSpec(;path=joinpath(@__DIR__, "test_packages", "A")))
+        Pkg.dependencies(UUID("0829fd7c-1e7e-4927-9afa-b8c61d5e0e42")) do pkg # dep A
+            @test haskey(pkg.dependencies, "B")
+            @test haskey(pkg.dependencies, "C")
+            @test pkg.source == joinpath(@__DIR__, "test_packages", "A")
+        end
+        Pkg.dependencies(UUID("4ee78ca3-4e78-462f-a078-747ed543fa85")) do pkg # dep C
+            @test haskey(pkg.dependencies, "D")
+            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "C")
+        end
+        Pkg.dependencies(UUID("dd0d8fba-d7c4-4f8e-a2bb-3a090b3e34f1")) do pkg # dep B
+            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "B")
+        end
+        Pkg.dependencies(UUID("bf733257-898a-45a0-b2f2-c1c188bdd879")) do pkg # dep D
+            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "D")
+        end
+    end
 end
 
 @testset "develop: interaction with `JULIA_PKG_DEVDIR`" begin
