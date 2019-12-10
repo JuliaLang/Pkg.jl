@@ -302,6 +302,10 @@ end
         @test_throws PkgError Pkg.add(Pkg.PackageSpec("Example", UUID(UInt128(1))))
         # Missing UUID
         @test_throws PkgError Pkg.add(Pkg.PackageSpec(uuid = uuid4()))
+        # Two packages with the same name
+        @test_throws PkgError(
+            "it is invalid to specify multiple packages with the same name: `Example`"
+            ) Pkg.add([Pkg.PackageSpec(;name="Example"), Pkg.PackageSpec(;name="Example",version="0.5.0")])
     end
     # Unregistered UUID in manifest
     isolate(loaded_depot=true) do; mktempdir() do tempdir
@@ -789,6 +793,10 @@ end
         @test_throws PkgError Pkg.develop(Pkg.PackageSpec("Example", UUID(UInt128(1))))
         # Missing UUID
         @test_throws PkgError Pkg.develop(Pkg.PackageSpec(uuid = uuid4()))
+        # Two packages with the same name
+        @test_throws PkgError(
+            "it is invalid to specify multiple packages with the same UUID: `Example [7876af07]`"
+            ) Pkg.develop([Pkg.PackageSpec(;name="Example"), Pkg.PackageSpec(;uuid=exuuid)])
     end
 end
 

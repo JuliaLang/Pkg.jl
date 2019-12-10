@@ -79,6 +79,13 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
             pkgerror("version specification invalid when calling `develop`:",
                      " `$(pkg.version)` specified for package $(err_rep(pkg))")
         end
+        # not strictly necessary to check these fields early, but it is more efficient
+        if pkg.name !== nothing && (length(findall(x -> x.name == pkg.name, pkgs)) > 1)
+            pkgerror("it is invalid to specify multiple packages with the same name: $(err_rep(pkg))")
+        end
+        if pkg.uuid !== nothing && (length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1)
+            pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
+        end
     end
 
     new_git = handle_repos_develop!(ctx, pkgs, shared)
@@ -86,6 +93,9 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     for pkg in pkgs
         if Types.collides_with_project(ctx, pkg)
             pkgerror("package $(err_rep(pkg)) has the same name or UUID as the active project")
+        end
+        if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
+            pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
     end
 
@@ -116,6 +126,13 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
                          " `$(pkg.version)` specified for package $(err_rep(pkg))")
             end
         end
+        # not strictly necessary to check these fields early, but it is more efficient
+        if pkg.name !== nothing && (length(findall(x -> x.name == pkg.name, pkgs)) > 1)
+            pkgerror("it is invalid to specify multiple packages with the same name: $(err_rep(pkg))")
+        end
+        if pkg.uuid !== nothing && (length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1)
+            pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
+        end
     end
 
     repo_pkgs = [pkg for pkg in pkgs if (pkg.repo.source !== nothing || pkg.repo.rev !== nothing)]
@@ -133,6 +150,9 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     for pkg in pkgs
         if Types.collides_with_project(ctx, pkg)
             pkgerror("package $(err_rep(pkg)) has same name or UUID as the active project")
+        end
+        if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
+            pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
     end
 
