@@ -877,6 +877,15 @@ end
             @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "D")
         end
     end
+    # primary depot is a relative path
+    isolate() do; cd_tempdir() do dir
+        empty!(DEPOT_PATH)
+        push!(DEPOT_PATH, "temp")
+        Pkg.develop("JSON")
+        Pkg.dependencies(json_uuid) do pkg
+            @test pkg.source == abspath(joinpath("temp", "dev", "JSON"))
+        end
+    end end
 end
 
 @testset "develop: interaction with `JULIA_PKG_DEVDIR`" begin

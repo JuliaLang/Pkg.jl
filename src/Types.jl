@@ -436,7 +436,7 @@ function relative_project_path(ctx::Context, path::String)
 end
 
 function devpath(ctx::Context, name::String, shared::Bool)
-    dev_dir = shared ? Pkg.devdir() : joinpath(dirname(ctx.env.project_file), "dev")
+    dev_dir = shared ? abspath(Pkg.devdir()) : joinpath(dirname(ctx.env.project_file), "dev")
     return joinpath(dev_dir, name)
 end
 
