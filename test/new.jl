@@ -312,7 +312,16 @@ end
         package_path = copy_test_package(tempdir, "UnregisteredUUID")
         Pkg.activate(package_path)
         @test_throws PkgError("expected package `Example [142fd7e7]` to be registered") Pkg.add("JSON")
-
+    end end
+    # empty git repo (no commits)
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        close(LibGit2.init(tempdir))
+        try Pkg.add(Pkg.PackageSpec(;path=tempdir))
+            @assert false
+        catch err
+            @test err isa PkgError
+            @test match(r"^invalid git HEAD", err.msg) !== nothing
+        end
     end end
 end
 
