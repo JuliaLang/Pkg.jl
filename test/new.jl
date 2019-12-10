@@ -408,6 +408,15 @@ end
         @test haskey(Pkg.project().dependencies, "SimplePackage")
         @test length(Pkg.project().dependencies) == 1
     end end
+    # add when depot does not exist should create the default project in the correct location
+    isolate() do; mktempdir() do tempdir
+        empty!(DEPOT_PATH)
+        push!(DEPOT_PATH, tempdir)
+        rm(tempdir; force=true, recursive=true)
+        @test !isdir(first(DEPOT_PATH))
+        Pkg.add("JSON")
+        @test dirname(dirname(Pkg.project().path)) == realpath(joinpath(tempdir, "environments"))
+    end end
 end
 
 # Here we can use a loaded depot becuase we are only checking changes to the active project.
