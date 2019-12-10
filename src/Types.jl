@@ -631,8 +631,16 @@ function resolve_projectfile!(ctx, pkg, project_path)
     project_file === nothing && pkgerror(string("could not find project file in package at ",
                                                 pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)))
     project_data = read_package(project_file)
-    pkg.uuid = project_data.uuid # TODO check no overwrite
-    pkg.name = project_data.name # TODO check no overwrite
+    if pkg.uuid === nothing || pkg.uuid == project_data.uuid
+        pkg.uuid = project_data.uuid
+    else
+        pkgerror("UUID `$(project_data.uuid)` given by project file `$project_file` does not match given UUID `$(pkg.uuid)`")
+    end
+    if pkg.name === nothing || pkg.name == project_data.name
+        pkg.name = project_data.name
+    else
+        pkgerror("name `$(project_data.name)` given by project file `$project_file` does not match given name `$(pkg.name)`")
+    end
 end
 
 get_object_or_branch(repo, rev::SHA1) =
