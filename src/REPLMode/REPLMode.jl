@@ -78,6 +78,7 @@ struct CommandSpec
     help::Union{Nothing,Markdown.MD}
 end
 
+default_parser(xs, options) = unwrap(xs)
 function CommandSpec(;name::Union{Nothing,String}           = nothing,
                      short_name::Union{Nothing,String}      = nothing,
                      api::Union{Nothing,Function}           = nothing,
@@ -87,7 +88,7 @@ function CommandSpec(;name::Union{Nothing,String}           = nothing,
                      description::Union{Nothing,String}     = nothing,
                      completions::Union{Nothing,Function}   = nothing,
                      arg_count::Pair                        = (0=>0),
-                     arg_parser::Function                   = unwrap,
+                     arg_parser::Function                   = default_parser,
                      )::CommandSpec
     @assert name !== nothing "Supply a canonical name"
     @assert description !== nothing "Supply a description"
@@ -358,14 +359,14 @@ Final parsing (and checking) step.
 This step is distinct from `parse` in that it relies on the command specifications.
 """
 function Command(statement::Statement)::Command
+    # options
+    options = APIOptions(statement.options, statement.spec.option_specs)
     # arguments
     arg_spec = statement.spec.argument_spec
-    arguments = arg_spec.parser(statement.arguments)
+    arguments = arg_spec.parser(statement.arguments, options)
     if !(arg_spec.count.first <= length(arguments) <= arg_spec.count.second)
         pkgerror("Wrong number of arguments")
     end
-    # options
-    options = APIOptions(statement.options, statement.spec.option_specs)
     return Command(statement.spec, options, arguments)
 end
 
@@ -475,6 +476,26 @@ prev_project_file = nothing
 prev_project_timestamp = nothing
 prev_prefix = ""
 
+function projname(project_file::String)
+    project = try
+        Types.read_project(project_file)
+    catch
+        nothing
+    end
+    if project === nothing || project.name === nothing
+        name = basename(dirname(project_file))
+    else
+        name = project.name
+    end
+    for depot in Base.DEPOT_PATH
+        envdir = joinpath(depot, "environments")
+        if startswith(abspath(project_file), abspath(envdir))
+            return "@" * name
+        end
+    end
+    return name
+end
+
 function promptf()
     global prev_project_timestamp, prev_prefix, prev_project_file
     project_file = try
@@ -487,15 +508,9 @@ function promptf()
         if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)
             prefix = prev_prefix
         else
-            project = try
-                Types.read_project(project_file)
-            catch
-                nothing
-            end
-            if project !== nothing
-                projname = project.name
-                name = projname !== nothing ? projname : basename(dirname(project_file))
-                prefix = string("(", name, ") ")
+            project_name = projname(project_file)
+            if project_name !== nothing
+                prefix = string("(", project_name, ") ")
                 prev_prefix = prefix
                 prev_project_timestamp = mtime(project_file)
                 prev_project_file = project_file

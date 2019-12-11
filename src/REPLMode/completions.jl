@@ -1,16 +1,22 @@
 ########################
 # Completion Functions #
 ########################
-function complete_activate(options, partial, i1, i2)
+function _shared_envs()
     possible = String[]
+    for depot in Base.DEPOT_PATH
+        envdir = joinpath(depot, "environments")
+        isdir(envdir) || continue
+        append!(possible, readdir(envdir))
+    end
+    return possible
+end
+
+function complete_activate(options, partial, i1, i2)
     shared = get(options, :shared, false)
     if shared
-        for depot in Base.DEPOT_PATH
-            envdir = joinpath(depot, "environments")
-            isdir(envdir) || continue
-            append!(possible, readdir(envdir))
-        end
-        return possible
+        return _shared_envs()
+    elseif !isempty(partial) && first(partial) == '@'
+        return "@" .* _shared_envs()
     else
         return complete_local_dir(partial, i1, i2)
     end
