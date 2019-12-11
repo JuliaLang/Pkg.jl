@@ -302,13 +302,26 @@ end
         @test_throws PkgError Pkg.add(Pkg.PackageSpec("Example", UUID(UInt128(1))))
         # Missing UUID
         @test_throws PkgError Pkg.add(Pkg.PackageSpec(uuid = uuid4()))
+        # Two packages with the same name
+        @test_throws PkgError(
+            "it is invalid to specify multiple packages with the same name: `Example`"
+            ) Pkg.add([Pkg.PackageSpec(;name="Example"), Pkg.PackageSpec(;name="Example",version="0.5.0")])
     end
     # Unregistered UUID in manifest
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         package_path = copy_test_package(tempdir, "UnregisteredUUID")
         Pkg.activate(package_path)
         @test_throws PkgError("expected package `Example [142fd7e7]` to be registered") Pkg.add("JSON")
-
+    end end
+    # empty git repo (no commits)
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        close(LibGit2.init(tempdir))
+        try Pkg.add(Pkg.PackageSpec(;path=tempdir))
+            @assert false
+        catch err
+            @test err isa PkgError
+            @test match(r"^invalid git HEAD", err.msg) !== nothing
+        end
     end end
 end
 
@@ -403,6 +416,15 @@ end
         end
         @test haskey(Pkg.project().dependencies, "SimplePackage")
         @test length(Pkg.project().dependencies) == 1
+    end end
+    # add when depot does not exist should create the default project in the correct location
+    isolate() do; mktempdir() do tempdir
+        empty!(DEPOT_PATH)
+        push!(DEPOT_PATH, tempdir)
+        rm(tempdir; force=true, recursive=true)
+        @test !isdir(first(DEPOT_PATH))
+        Pkg.add("JSON")
+        @test dirname(dirname(Pkg.project().path)) == realpath(joinpath(tempdir, "environments"))
     end end
 end
 
@@ -789,6 +811,10 @@ end
         @test_throws PkgError Pkg.develop(Pkg.PackageSpec("Example", UUID(UInt128(1))))
         # Missing UUID
         @test_throws PkgError Pkg.develop(Pkg.PackageSpec(uuid = uuid4()))
+        # Two packages with the same name
+        @test_throws PkgError(
+            "it is invalid to specify multiple packages with the same UUID: `Example [7876af07]`"
+            ) Pkg.develop([Pkg.PackageSpec(;name="Example"), Pkg.PackageSpec(;uuid=exuuid)])
     end
 end
 
@@ -869,6 +895,15 @@ end
             @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "D")
         end
     end
+    # primary depot is a relative path
+    isolate() do; cd_tempdir() do dir
+        empty!(DEPOT_PATH)
+        push!(DEPOT_PATH, "temp")
+        Pkg.develop("JSON")
+        Pkg.dependencies(json_uuid) do pkg
+            @test pkg.source == abspath(joinpath("temp", "dev", "JSON"))
+        end
+    end end
 end
 
 @testset "develop: interaction with `JULIA_PKG_DEVDIR`" begin

@@ -296,6 +296,7 @@ function APIOptions(options::Vector{Option},
                     specs::Dict{String, OptionSpec},
                     )::APIOptions
     api_options = Dict{Symbol, Any}()
+    enforce_option(options, specs)
     for option in options
         spec = specs[option.val]
         api_options[spec.api.first] = spec.takes_arg ?
@@ -364,9 +365,7 @@ function Command(statement::Statement)::Command
         pkgerror("Wrong number of arguments")
     end
     # options
-    opt_spec = statement.spec.option_specs
-    enforce_option(statement.options, opt_spec)
-    options = APIOptions(statement.options, opt_spec)
+    options = APIOptions(statement.options, statement.spec.option_specs)
     return Command(statement.spec, options, arguments)
 end
 

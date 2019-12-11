@@ -313,4 +313,11 @@ function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
     return SHA.digest!(ctx)
 end
 
+function check_valid_HEAD(repo)
+    try LibGit2.head(repo)
+    catch err
+        Pkg.Types.pkgerror("invalid git HEAD ($(err.msg))")
+    end
+end
+
 end # module

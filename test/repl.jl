@@ -394,6 +394,9 @@ temp_pkg_dir() do project_path; cd(project_path) do
 
         # parse errors should not throw
         _ = test_complete("add \"Foo")
+        # invalid option should not throw
+        _ = test_complete("add -z Foo")
+        _ = test_complete("add --dontexist Foo")
     end # testset
 end end
 

@@ -436,7 +436,7 @@ function relative_project_path(ctx::Context, path::String)
 end
 
 function devpath(ctx::Context, name::String, shared::Bool)
-    dev_dir = shared ? Pkg.devdir() : joinpath(dirname(ctx.env.project_file), "dev")
+    dev_dir = shared ? abspath(Pkg.devdir()) : joinpath(dirname(ctx.env.project_file), "dev")
     return joinpath(dev_dir, name)
 end
 
@@ -556,6 +556,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             if !isdir(joinpath(pkg.repo.source, ".git"))
                 pkgerror("Did not find a git repository at `$(pkg.repo.source)`")
             end
+            LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
             pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx, pkg.repo.source)
             repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
         else
@@ -564,6 +565,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     end
 
     LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
+        GitTools.check_valid_HEAD(repo)
+
         # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
         if pkg.repo.rev === nothing
             pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
@@ -631,8 +634,16 @@ function resolve_projectfile!(ctx, pkg, project_path)
     project_file === nothing && pkgerror(string("could not find project file in package at ",
                                                 pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)))
     project_data = read_package(project_file)
-    pkg.uuid = project_data.uuid # TODO check no overwrite
-    pkg.name = project_data.name # TODO check no overwrite
+    if pkg.uuid === nothing || pkg.uuid == project_data.uuid
+        pkg.uuid = project_data.uuid
+    else
+        pkgerror("UUID `$(project_data.uuid)` given by project file `$project_file` does not match given UUID `$(pkg.uuid)`")
+    end
+    if pkg.name === nothing || pkg.name == project_data.name
+        pkg.name = project_data.name
+    else
+        pkgerror("name `$(project_data.name)` given by project file `$project_file` does not match given name `$(pkg.name)`")
+    end
 end
 
 get_object_or_branch(repo, rev::SHA1) =
