@@ -1,6 +1,6 @@
 module NewTests
 
-using  Test, UUIDs
+using  Test, UUIDs, Dates
 import Pkg, LibGit2
 using  Pkg.Types: PkgError
 using  Pkg.Resolve: ResolverError
@@ -1654,6 +1654,9 @@ end
         api, opts = first(Pkg.pkg"gc")
         @test api == Pkg.gc
         @test isempty(opts)
+        api, opts = first(Pkg.pkg"gc --all")
+        @test api == Pkg.gc
+        @test opts[:collect_delay] == Hour(0)
     end
 end
 

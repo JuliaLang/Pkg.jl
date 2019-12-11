@@ -324,11 +324,16 @@ the output to the difference as compared to the last git commit.
 """,
 ],[ :name => "gc",
     :api => API.gc,
+    :option_spec => OptionDeclaration[
+        [:name => "all", :api => :collect_delay => Hour(0)],
+    ],
     :description => "garbage collect packages not used for a significant time",
     :help => md"""
-    gc
+    gc [--all]
 
-Deletes packages that cannot be reached from any existing environment.
+Free disk space by garbage collecting packages not used for a significant time.
+The `--all` option will garbage collect all packages which can not be immediately
+reached from any existing project.
 """,
 ],[ :name => "undo",
     :short_name => "u",

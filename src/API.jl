@@ -303,7 +303,7 @@ finding artifacts and packages that are thereafter not used by any other project
 method will only remove package versions and artifacts that have been continually un-used
 for a period of `collect_delay`; which defaults to thirty days.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
+function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     Context!(ctx; kwargs...)
     env = ctx.env
 
