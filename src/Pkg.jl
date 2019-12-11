@@ -540,8 +540,13 @@ const precompile_script = """
     # Create simple artifact, bind it, then use it:
     foo_hash = Pkg.Artifacts.create_artifact(dir -> touch(joinpath(dir, "foo")))
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo", foo_hash)
+    # Also create multiple platform-specific ones because that's a codepath we need precompiled
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=platform_key_abi())
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Linux(:x86_64), force=true)
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Windows(:x86_64), force=true)
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=MacOS(:x86_64), force=true)
     # Because @artifact_str doesn't work at REPL-level, we JIT out a file that we can include()
-    open(io -> println(io, "Pkg.Artifacts.artifact\\\"foo\\\""), "load_artifact.jl", "w")
+    open(io -> println(io, "Pkg.Artifacts.artifact\\\"foo\\\"; Pkg.Artifacts.artifact\\\"foo_plat\\\""), "load_artifact.jl", "w")
     foo_path = include("load_artifact.jl")
     rm(tmp; recursive=true)"""
 
