@@ -488,6 +488,7 @@ function process_overrides(artifact_dict::Dict, pkg_uuid::Base.UUID)
     # override for this UUID, and inserting new overrides for those hashes.
     overrides = load_overrides()
     if haskey(overrides[:UUID], pkg_uuid)
+        Base.invokelatest(_process_overrides, artifact_dict, pkg_dict)
         pkg_overrides = overrides[:UUID][pkg_uuid]
 
         for name in keys(artifact_dict)
@@ -968,25 +969,12 @@ function extract_all_hashes(artifacts_toml::String;
     return hashes
 end
 
-function do_artifact_str(name, artifact_dict, artifacts_toml, __module__)
-    local pkg_uuid = nothing
-    if haskey(Base.module_keys, __module__)
-        # Process overrides for this UUID, if we know what it is
-        process_overrides(artifact_dict, Base.module_keys[__module__].uuid)
+function do_artifact_str(hash)
+    if !artifact_exists(hash)
+        error("beep")
+    else
+        return artifact_path(hash)
     end
-
-    # Get platform once to avoid extra work
-    platform = platform_key_abi()
-
-    # Get the metadata about this name for the requested platform
-    meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
-
-    if meta === nothing
-        error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
-    end
-
-    # This is the resultant value at the end of all things
-    return ensure_artifact_installed(name, meta, artifacts_toml; platform=platform)
 end
 
 """
@@ -1002,7 +990,11 @@ location on-disk.  Automatically looks the artifact up by name in the project's
 macro artifact_str(name)
     # Load Artifacts.toml at compile time, so that we don't have to use `__source__.file`
     # at runtime, which gets stale if the `.ji` file is relocated.
+    @show __source__
     local artifacts_toml = find_artifacts_toml(string(__source__.file))
+    # Get platform once to avoid extra work
+    platform = platform_key_abi()
+
     if artifacts_toml === nothing
         error(string(
             "Cannot locate '(Julia)Artifacts.toml' file when attempting to use artifact '",
@@ -1012,8 +1004,19 @@ macro artifact_str(name)
             "'",
         ))
     end
-
+    
     local artifact_dict = load_artifacts_toml(artifacts_toml)
+
+    # Get the metadata about this name for the requested platform
+    meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
+
+    if meta === nothing
+        error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
+    end
+
+    hash = SHA1(meta["git-tree-sha1"])
+
+
     return quote
         # Invalidate .ji file if Artifacts.toml file changes
         Base.include_dependency($(artifacts_toml))
@@ -1021,7 +1024,7 @@ macro artifact_str(name)
         # Use invokelatest() to introduce a compiler barrier, preventing many backedges from being added
         # and slowing down not only compile time, but also `.ji` load time.  This is critical here, as
         # artifact"" is used in other modules, so we don't want to be spreading backedges around everywhere.
-        Base.invokelatest(do_artifact_str, $name, $(artifact_dict), $(artifacts_toml), $__module__)
+        Base.invokelatest(do_artifact_str, $hash)
     end
 end
 
