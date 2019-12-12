@@ -3,8 +3,8 @@
 # Content in this file is extracted from BinaryProvider.jl, see LICENSE.method
 
 module PlatformEngines
-using SHA, Logging
-import ...Pkg: TOML, pkg_server, depots1
+using SHA, Logging, UUIDs, Random
+import ...Pkg: Pkg, TOML, pkg_server, depots1
 
 export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
        download_verify, unpack, package, download_verify_unpack,
@@ -592,18 +592,22 @@ end
 is_secure_url(url::AbstractString) =
     occursin(r"^(https://|\w+://(127\.0\.0\.1|localhost)(:\d+)?($|/))"i, url)
 
-function get_auth_header(url::AbstractString; verbose::Bool = false)
+function get_server_dir(url::AbstractString)
     server = pkg_server()
     server === nothing && return
     startswith(url, server) || return
-    # find and parse auth file
-    m = match(r"^(\w+)://([^\\/]+)$", server)
+    m = match(r"^\w+://([^\\/]+)$", server)
     if m === nothing
         @warn "malformed Pkg server value" server=server
         return
     end
-    proto, host = m.captures
-    auth_file = joinpath(depots1(), "servers", host, "auth.toml")
+    joinpath(depots1(), "servers", m.captures[1])
+end
+
+function get_auth_header(url::AbstractString; verbose::Bool = false)
+    server_dir = get_server_dir(url)
+    server_dir === nothing && return
+    auth_file = joinpath(server_dir, "auth.toml")
     isfile(auth_file) || return
     # TODO: check for insecure auth file permissions
     if !is_secure_url(url)
@@ -686,6 +690,107 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     return "Authorization: Bearer $(auth_info["access_token"])"
 end
 
+function hash_data(strs::AbstractString...)
+    ctx = SHA.SHA224_CTX()
+    for str in strs
+        data = Vector{UInt8}(str)
+        len = length(data)
+        while true
+            push!(data, len % UInt8)
+            len == 0 && break
+            len >>= 8
+        end
+        SHA.update!(ctx, data)
+    end
+    return bytes2hex(@view SHA.digest!(ctx)[1:20])
+end
+
+function load_telemetry_file(file::AbstractString)
+    if !ispath(file)
+        info, changed = Dict(), true
+    else
+        info, changed = try
+            TOML.parsefile(file), false
+        catch err
+            @warn "replacing malformed telemetry file" file=file err=err
+            Dict(), true
+        end
+    end
+    # bail early if fully opted out
+    get(info, "telemetry", true) == false && return info
+    # some validity checking helpers
+    is_valid_uuid(x) = false
+    is_valid_salt(x) = false
+    is_valid_uuid(x::Bool) = !x # false is valid, true is not
+    is_valid_salt(x::Bool) = !x # false is valid, true is not
+    is_valid_uuid(x::AbstractString) = occursin(Pkg.REPLMode.uuid_re, x)
+    is_valid_salt(x::AbstractString) = occursin(r"^[0-9a-zA-Z]+$", x)
+    # generate or fix system-specific info
+    if !haskey(info, "client_uuid") || !is_valid_uuid(info["client_uuid"])
+        info["client_uuid"] = string(uuid4())
+        changed = true
+    end
+    if !haskey(info, "secret_salt") || !is_valid_salt(info["secret_salt"])
+        info["secret_salt"] = randstring(36)
+        changed = true
+    end
+    if changed
+        mkpath(dirname(file))
+        open(file, write=true) do io
+            TOML.print(io, info, sorted=true)
+        end
+    end
+    return info
+end
+
+const CI_VARS = [
+    "APPVEYOR",
+    "CI",
+    "CIRCLECI",
+    "CONTINUOUS_INTEGRATION",
+    "GITHUB_ACTION",
+    "GITLAB_CI",
+    "JULIA_CI",
+    "TF_BUILD",
+    "TRAVIS",
+]
+
+function get_telemetry_headers(url::AbstractString)
+    headers = String[]
+    server_dir = get_server_dir(url)
+    server_dir === nothing && return headers
+    info = load_telemetry_file(joinpath(server_dir, "telemetry.toml"))
+    get(info, "telemetry", true) == false && return headers
+    # general system information
+    push!(headers, "Julia-Version: $VERSION")
+    push!(headers, "Julia-Commit: $(Base.GIT_VERSION_INFO.commit)")
+    system = Pkg.BinaryPlatforms.triplet(Pkg.BinaryPlatforms.platform_key_abi())
+    push!(headers, "Julia-System: $system")
+    # install-specific information
+    if info["client_uuid"] != false
+        push!(headers, "Julia-Client-UUID: $(info["client_uuid"])")
+        if info["secret_salt"] != false
+            salt_hash = hash_data("salt", info["client_uuid"], info["secret_salt"])
+            project_hash = hash_data("project", Base.active_project(), info["secret_salt"])
+            push!(headers, "Julia-Salt-Hash: $salt_hash")
+            push!(headers, "Julia-Project-Hash: $project_hash")
+        end
+    end
+    # CI indicator variables
+    if get(info, "ci_indicators", true) != false
+        ci_indicators = String[]
+        for var in CI_VARS
+            val = get(ENV, var, nothing)
+            state = val === nothing ? "n" :
+                lowercase(val) in ("true", "t", "1", "yes", "y") ? "t" :
+                lowercase(val) in ("false", "f", "0", "no", "n") ? "f" : "o"
+            push!(ci_indicators, "$var=$state")
+        end
+        push!(headers, "Julia-CI-Indicators: "*join(ci_indicators, ';'))
+    end
+    return headers
+end
+
 """
     download(
         url::AbstractString,
@@ -703,14 +808,17 @@ function download(
     verbose::Bool = false,
     auth_header::Union{AbstractString, Nothing} = nothing,
 )
+    headers = String[]
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
     end
-    if auth_header === nothing
-        download_cmd = gen_download_cmd(url, dest)
-    else
-        download_cmd = gen_download_cmd(url, dest, auth_header)
+    if auth_header !== nothing
+        push!(headers, auth_header)
     end
+    for header in get_telemetry_headers(url)
+        push!(headers, header)
+    end
+    download_cmd = gen_download_cmd(url, dest, headers...)
     if verbose
         @info("Downloading $(url) to $(dest)...")
     end
