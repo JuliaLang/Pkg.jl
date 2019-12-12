@@ -705,6 +705,18 @@ function hash_data(strs::AbstractString...)
     return bytes2hex(@view SHA.digest!(ctx)[1:20])
 end
 
+const CI_VARS = [
+    "APPVEYOR",
+    "CI",
+    "CIRCLECI",
+    "CONTINUOUS_INTEGRATION",
+    "GITHUB_ACTION",
+    "GITLAB_CI",
+    "JULIA_CI",
+    "TF_BUILD",
+    "TRAVIS",
+]
+
 function get_telemetry_headers(url::AbstractString)
     headers = String[]
     server_dir = get_server_dir(url)
@@ -761,6 +773,18 @@ function get_telemetry_headers(url::AbstractString)
             push!(headers, "Julia-Salt-Hash: $salt_hash")
             push!(headers, "Julia-Project-Hash: $project_hash")
         end
+    end
+    # CI indicator variables
+    if get(info, "ci_indicators", true) != false
+        ci_info = String[]
+        for var in CI_VARS
+            val = get(ENV, var, nothing)
+            state = val === nothing ? "n" :
+                lowercase(val) in ("true", "t", "1", "yes", "y") ? "t" :
+                lowercase(val) in ("false", "f", "0", "no", "n") ? "f" : "o"
+            push!(ci_info, "$var=$state")
+        end
+        push!(headers, "Julia-CI-Indicators: "*join(ci_info, ';'))
     end
     return headers
 end
