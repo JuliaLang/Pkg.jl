@@ -705,38 +705,19 @@ function hash_data(strs::AbstractString...)
     return bytes2hex(@view SHA.digest!(ctx)[1:20])
 end
 
-const CI_VARS = [
-    "APPVEYOR",
-    "CI",
-    "CIRCLECI",
-    "CONTINUOUS_INTEGRATION",
-    "GITHUB_ACTION",
-    "GITLAB_CI",
-    "JULIA_CI",
-    "TF_BUILD",
-    "TRAVIS",
-]
-
-function get_telemetry_headers(url::AbstractString)
-    headers = String[]
-    server_dir = get_server_dir(url)
-    server_dir === nothing && return headers
-    telemetry_file = joinpath(server_dir, "telemetry.toml")
-    # load telemetry file
-    if !ispath(telemetry_file)
+function load_telemetry_file(file::AbstractString)
+    if !ispath(file)
         info, changed = Dict(), true
     else
         info, changed = try
-            TOML.parsefile(telemetry_file), false
+            TOML.parsefile(file), false
         catch err
-            @warn "replacing malformed telemetry file" file=telemetry_file err=err
+            @warn "replacing malformed telemetry file" file=file err=err
             Dict(), true
         end
     end
     # bail early if fully opted out
-    if get(info, "telemetry", true) == false
-        return headers # no telemetry
-    end
+    get(info, "telemetry", true) == false && return info
     # some validity checking helpers
     is_valid_uuid(x) = false
     is_valid_salt(x) = false
@@ -754,17 +735,38 @@ function get_telemetry_headers(url::AbstractString)
         changed = true
     end
     if changed
-        mkpath(server_dir)
-        open(telemetry_file, write=true) do io
+        mkpath(dirname(file))
+        open(file, write=true) do io
             TOML.print(io, info, sorted=true)
         end
     end
+    return info
+end
+
+const CI_VARS = [
+    "APPVEYOR",
+    "CI",
+    "CIRCLECI",
+    "CONTINUOUS_INTEGRATION",
+    "GITHUB_ACTION",
+    "GITLAB_CI",
+    "JULIA_CI",
+    "TF_BUILD",
+    "TRAVIS",
+]
+
+function get_telemetry_headers(url::AbstractString)
+    headers = String[]
+    server_dir = get_server_dir(url)
+    server_dir === nothing && return headers
+    info = load_telemetry_file(joinpath(server_dir, "telemetry.toml"))
+    get(info, "telemetry", true) == false && return headers
     # general system information
     push!(headers, "Julia-Version: $VERSION")
     push!(headers, "Julia-Commit: $(Base.GIT_VERSION_INFO.commit)")
     system = Pkg.BinaryPlatforms.triplet(Pkg.BinaryPlatforms.platform_key_abi())
     push!(headers, "Julia-System: $system")
-    # system-specific information
+    # install-specific information
     if info["client_uuid"] != false
         push!(headers, "Julia-Client-UUID: $(info["client_uuid"])")
         if info["secret_salt"] != false
@@ -776,15 +778,15 @@ function get_telemetry_headers(url::AbstractString)
     end
     # CI indicator variables
     if get(info, "ci_indicators", true) != false
-        ci_info = String[]
+        ci_indicators = String[]
         for var in CI_VARS
             val = get(ENV, var, nothing)
             state = val === nothing ? "n" :
                 lowercase(val) in ("true", "t", "1", "yes", "y") ? "t" :
                 lowercase(val) in ("false", "f", "0", "no", "n") ? "f" : "o"
-            push!(ci_info, "$var=$state")
+            push!(ci_indicators, "$var=$state")
         end
-        push!(headers, "Julia-CI-Indicators: "*join(ci_info, ';'))
+        push!(headers, "Julia-CI-Indicators: "*join(ci_indicators, ';'))
     end
     return headers
 end
