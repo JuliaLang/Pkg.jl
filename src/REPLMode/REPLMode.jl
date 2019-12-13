@@ -2,8 +2,7 @@
 
 module REPLMode
 
-using Markdown
-using UUIDs
+using Markdown, UUIDs, Dates
 
 import REPL
 import REPL: LineEdit, REPLCompletions
