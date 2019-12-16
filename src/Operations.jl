@@ -666,7 +666,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                     end
                     for repo_url in urls[pkg.uuid]
                         url = get_archive_url_for_version(repo_url, pkg.tree_hash)
-                        push!(archive_urls, url => false)
+                        url !== nothing && push!(archive_urls, url => false)
                     end
                     success = install_archive(archive_urls, pkg.tree_hash, path)
                     if success && readonly
