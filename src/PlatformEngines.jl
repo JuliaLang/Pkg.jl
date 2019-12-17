@@ -763,7 +763,6 @@ function get_telemetry_headers(url::AbstractString)
     get(info, "telemetry", true) == false && return headers
     # general system information
     push!(headers, "Julia-Version: $VERSION")
-    push!(headers, "Julia-Commit: $(Base.GIT_VERSION_INFO.commit)")
     system = Pkg.BinaryPlatforms.triplet(Pkg.BinaryPlatforms.platform_key_abi())
     push!(headers, "Julia-System: $system")
     # install-specific information
