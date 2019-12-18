@@ -14,7 +14,13 @@ end
 
 # try to call realpath on as much as possible
 function safe_realpath(path)
-    ispath(path) && return realpath(path)
+    if ispath(path) 
+        try
+            return realpath(path)
+        catch
+            return path
+        end
+    end
     a, b = splitdir(path)
     return joinpath(safe_realpath(a), b)
 end
