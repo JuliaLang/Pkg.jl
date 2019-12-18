@@ -827,8 +827,14 @@ function platforms_match(a::Platform, b::Platform)
     return rigid_constraints(a, b) && flexible_constraints(a, b)
 end
 
-platforms_match(a::AbstractString, b::Platform) = platforms_match(platform_key_abi(a), b)
-platforms_match(a::Platform, b::AbstractString) = platforms_match(a, platform_key_abi(b))
+function platforms_match(a::AbstractString, b::Platform)
+    @nospecialize b
+    return platforms_match(platform_key_abi(a), b)
+end
+function platforms_match(a::Platform, b::AbstractString)
+    @nospecialize a
+    return platforms_match(a, platform_key_abi(b))
+end
 platforms_match(a::AbstractString, b::AbstractString) = platforms_match(platform_key_abi(a), platform_key_abi(b))
 
 """
@@ -843,6 +849,7 @@ match exactly, however attributes such as compiler ABI can have wildcards
 within them such as `nothing` which matches any version of GCC.
 """
 function select_platform(download_info::Dict, platform::Platform = platform_key_abi())
+    @nospecialize platform
     ps = collect(filter(p -> platforms_match(p, platform), keys(download_info)))
 
     if isempty(ps)
