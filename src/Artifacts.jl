@@ -406,16 +406,7 @@ function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
     nover(x::Nothing) = nothing
     nover(x) = VersionNumber(x)
 
-    # First, extract OS; we need to build a mapping here
-    os_map = Dict(
-        "windows" => Windows,
-        "macos" => MacOS,
-        "freebsd" => FreeBSD,
-        "linux" => Linux,
-    )
-    P = get(os_map, lowercase(entry["os"]), UnknownPlatform)
-
-    # Next, architecture, libc, libgfortran version and cxxabi (if given)
+    # Extract architecture, libc, libgfortran version and cxxabi (if given)
     arch = nosym(get(entry, "arch", nothing))
     libc = nosym(get(entry, "libc", nothing))
     libgfortran_version = nover(get(entry, "libgfortran_version", nothing))
@@ -423,17 +414,27 @@ function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
     cxxstring_abi = nosym(get(entry, "cxxstring_abi", nothing))
 
     # Construct the actual Platform object
-    return P(arch;
-        libc=libc,
-        compiler_abi=CompilerABI(
-            libgfortran_version=libgfortran_version,
-            libstdcxx_version=libstdcxx_version,
-            cxxstring_abi=cxxstring_abi
-        ),
+    os = lowercase(entry["os"])
+    compiler_abi=CompilerABI(
+        libgfortran_version=libgfortran_version,
+        libstdcxx_version=libstdcxx_version,
+        cxxstring_abi=cxxstring_abi
     )
+    if os == "linux"
+        return Linux(arch; libc=libc, compiler_abi=compiler_abi)
+    elseif os == "windows"
+        return Windows(arch; libc=libc, compiler_abi=compiler_abi)
+    elseif os == "macos"
+        return MacOS(arch; libc=libc, compiler_abi=compiler_abi)
+    elseif os == "freebsd"
+        return FreeBSD(arch; libc=libc, compiler_abi=compiler_abi)
+    else
+        return UnknownPlatform()
+    end
 end
 
 function pack_platform!(meta::Dict, p::Platform)
+    @nospecialize meta p
     os_map = Dict(
         Windows => "windows",
         MacOS => "macos",
@@ -528,6 +529,7 @@ most appropriate mapping.  If none is found, return `nothing`.
 function artifact_meta(name::String, artifacts_toml::String;
                        platform::Platform = platform_key_abi(),
                        pkg_uuid::Union{Base.UUID,Nothing}=nothing)
+    @nospecialize platform
     if !isfile(artifacts_toml)
         return nothing
     end
@@ -539,6 +541,7 @@ end
 
 function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String;
                        platform::Platform = platform_key_abi())
+    @nospecialize platform
     if !haskey(artifact_dict, name)
         return nothing
     end
@@ -546,7 +549,7 @@ function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String
 
     # If it's an array, find the entry that best matches our current platform
     if isa(meta, Array)
-        dl_dict = Dict(unpack_platform(x, name, artifacts_toml) => x for x in meta)
+        dl_dict = Dict{Platform,Dict{String,Any}}(unpack_platform(x, name, artifacts_toml) => x for x in meta)
         meta = select_platform(dl_dict, platform)
     # If it's NOT a dict, complain
     elseif !isa(meta, Dict)
@@ -576,6 +579,7 @@ collapsed artifact.  Returns `nothing` if no mapping can be found.
 function artifact_hash(name::String, artifacts_toml::String;
                        platform::Platform = platform_key_abi(),
                        pkg_uuid::Union{Base.UUID,Nothing}=nothing)
+    @nospecialize platform
     meta = artifact_meta(name, artifacts_toml; platform=platform)
     if meta === nothing
         return nothing
@@ -836,6 +840,7 @@ function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
                                    pkg_uuid::Union{Base.UUID,Nothing}=nothing,
                                    verbose::Bool = false)
+    @nospecialize platform
     meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
@@ -847,6 +852,7 @@ end
 function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
                                    verbose::Bool = false)
+    @nospecialize platform
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
@@ -891,6 +897,7 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
                                         pkg_uuid::Union{Nothing,Base.UUID} = nothing,
                                         include_lazy::Bool = false,
                                         verbose::Bool = false)
+    @nospecialize platform
     if !isfile(artifacts_toml)
         return
     end
@@ -928,6 +935,7 @@ function extract_all_hashes(artifacts_toml::String;
                             platform::Platform = platform_key_abi(),
                             pkg_uuid::Union{Nothing,Base.UUID} = nothing,
                             include_lazy::Bool = false)
+    @nospecialize platform
     hashes = Base.SHA1[]
     if !isfile(artifacts_toml)
         return hashes
