@@ -804,15 +804,6 @@ function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,In
     return order
 end
 
-function gen_build_project(ctx::Context, pkg::PackageSpec, source_path::String)
-    build_project = Types.Project()
-    source_ctx = Context(env = EnvCache(projectfile_path(source_path)))
-    source_project = source_ctx.env.project
-    build_project.deps = source_project.deps
-    build_project.compat = source_project.compat
-    return build_project
-end
-
 function gen_build_code(build_file::String)
     code = """
         $(Base.load_path_setup_code(false))
@@ -848,7 +839,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             else
                 pkgerror("Could not find either `git-tree-sha1` or `path` for package $name")
             end
-            version = v"0.0"
+            version = something(entry.version, v"0.0")
         end
         ispath(path) || error("Build path for $name does not exist: $path")
         ispath(buildfile(path)) && push!(builds, (uuid, name, path, version))
@@ -864,7 +855,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
         # compatibility shim
         build_project_override = isfile(projectfile_path(builddir(source_path))) ?
             nothing :
-            gen_build_project(ctx, pkg, source_path)
+            gen_target_project(ctx, pkg, source_path, "build")
 
         log_file = splitext(build_file)[1] * ".log"
         printpkgstyle(ctx, :Building,
@@ -1304,14 +1295,11 @@ function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::Strin
         env.manifest[env.pkg.uuid] = PackageEntry(;name=env.pkg.name, path=dirname(env.project_file),
                                                   deps=env.project.deps)
     end
-    # load target deps
-    keep = Types.is_project(ctx, target) ? collect(values(env.project.deps)) : [target.uuid]
-    # preserve test deps
-    project = read_project(test_project)
-    project !== nothing && append!(keep, collect(values(project.deps)))
+    # preserve important nodes
+    keep = [target.uuid]
+    append!(keep, collect(values(read_project(test_project).deps)))
     # prune and return
-    graph = prune_manifest(env.manifest, keep)
-    return graph
+    return prune_manifest(env.manifest, keep)
 end
 
 abspath!(ctx::Context, manifest::Dict{UUID,PackageEntry}) =
@@ -1364,13 +1352,16 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         Types.write_manifest(working_manifest, tmp_manifest)
         # sandbox
         with_temp_env(tmp) do
+            temp_ctx = Context()
+            temp_ctx.env.project.deps[target.name] = target.uuid
+            write_env(temp_ctx.env, update_undo = false)
             try
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;source=target_path)); strict=true)
+                Pkg.resolve()
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 @error err
-                isfile(tmp_manifest) && Base.rm(tmp_manifest) # retry with a clean dependency graph
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;source=target_path)))
+                temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
+                Pkg.resolve(temp_ctx)
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code
@@ -1389,19 +1380,24 @@ function update_package_test!(pkg::PackageSpec, entry::PackageEntry)
     pkg.pinned = entry.pinned
 end
 
-# "targets" based test deps -> "test/Project.toml" based test deps
-function gen_test_project(ctx::Context, pkg::PackageSpec, source_path::String)
+# "targets" based test deps -> "test/Project.toml" based deps
+function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String, target::String)
     test_project = Types.Project()
+    if projectfile_path(source_path; strict=true) === nothing
+        # no project file, assuming this is an old REQUIRE package
+        test_project.deps = ctx.env.manifest[pkg.uuid].deps
+        return test_project
+    end
     # collect relevant info from source
     source_ctx = Context(env = EnvCache(projectfile_path(source_path)))
     source_env = source_ctx.env
     # collect regular dependencies
     test_project.deps = source_env.project.deps
     # collect test dependencies
-    for name in get(source_env.project.targets, "test", String[])
+    for name in get(source_env.project.targets, target, String[])
         uuid = get(source_env.project.extras, name, nothing)
         if uuid === nothing
-            pkgerror("`$name` declared as a `test` dependency, but no such entry in `extras`")
+            pkgerror("`$name` declared as a `$target` dependency, but no such entry in `extras`")
         end
         test_project.deps[name] = uuid
     end
@@ -1452,7 +1448,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         # compatibility shim between "targets" and "test/Project.toml"
         test_project_override = isfile(projectfile_path(testdir(source_path))) ?
             nothing :
-            gen_test_project(ctx, pkg, source_path)
+            gen_target_project(ctx, pkg, source_path, "test")
         # now we sandbox
         printpkgstyle(ctx, :Testing, pkg.name)
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do

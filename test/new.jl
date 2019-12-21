@@ -265,6 +265,19 @@ end
     end end
 end
 
+@testset "test: fallback when no project file exists" begin
+    isolate(loaded_depot=true) do
+        Pkg.add(Pkg.PackageSpec(;name="Permutations", version="0.3.2"))
+        Pkg.test("Permutations")
+    end
+end
+
+@testset "build: fallback when no project file exists" begin
+    isolate() do
+        Pkg.add(Pkg.PackageSpec(;name="ZMQ", version="0.6.3"))
+    end
+end
+
 #
 # # Activate
 #
