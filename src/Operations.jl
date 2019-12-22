@@ -324,8 +324,8 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
         compat = project_compatibility(ctx, pkg.name)
         v = intersect(pkg.version, compat)
         if isempty(v)
-            pkgerror(string("empty intersection between $(pkg.name)@$(pkg.version) and project ",
-                            "compatibility $(compat)"))
+            throw(Resolve.ResolverError(
+                "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"))
         end
         # Work around not clobbering 0.x.y+ for checked out old type of packages
         if !(pkg.version isa VersionNumber)

@@ -567,6 +567,14 @@ end
             @test !haskey(pkg.dependencies, "Example")
         end
     end
+    # add should resolve the correct versions even when the manifest is out of sync with the project compat
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        Pkg.activate(copy_test_package(tempdir, "CompatOutOfSync"))
+        Pkg.add("Libdl")
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.version == v"0.3.0"
+        end
+    end end
     # Preserve syntax
     # These tests mostly check the REPL side correctness.
     # - Normal add should not change the existing version.
