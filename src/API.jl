@@ -144,7 +144,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
 
     project_deps_resolve!(ctx, pkgs)
     registry_resolve!(ctx, pkgs)
-    stdlib_resolve!(ctx, pkgs)
+    stdlib_resolve!(pkgs)
     ensure_resolved(ctx, pkgs, registry=true)
 
     for pkg in pkgs
@@ -699,7 +699,7 @@ precompile() = precompile(Context())
 function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
 
-    pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !(uuid in keys(ctx.stdlibs))]
+    pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !is_stdlib(uuid)]
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end

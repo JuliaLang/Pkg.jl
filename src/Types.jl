@@ -22,7 +22,7 @@ using SHA
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
     PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, get_deps, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, write_env, write_env_usage, parse_toml, find_registered!,
+    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
@@ -339,7 +339,6 @@ Base.@kwdef mutable struct Context
     # the future. It currently stands as an unofficial workaround for issue #795.
     num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
     graph_verbose::Bool = false
-    stdlibs::Dict{UUID,String} = stdlib()
     currently_running_target::Bool = false
 end
 
@@ -357,6 +356,7 @@ is_project_uuid(ctx::Context, uuid::UUID) = project_uuid(ctx) == uuid
 ###########
 stdlib_dir() = normpath(joinpath(Sys.BINDIR, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
 stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
+
 const STDLIB = Ref{Dict{UUID,String}}()
 function load_stdlib()
     stdlib = Dict{UUID,String}()
@@ -370,18 +370,14 @@ function load_stdlib()
     end
     return stdlib
 end
-function stdlib()
+
+function stdlibs()
     if !isassigned(STDLIB)
         STDLIB[] = load_stdlib()
     end
-    return deepcopy(STDLIB[])
+    return STDLIB[]
 end
-function is_stdlib(uuid::UUID)
-    if !isassigned(STDLIB)
-        STDLIB[] = load_stdlib()
-    end
-    return uuid in keys(STDLIB[])
-end
+is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
@@ -391,8 +387,6 @@ function Context!(ctx::Context; kwargs...)
     end
     return ctx
 end
-
-is_stdlib(ctx::Context, uuid::UUID) = uuid in keys(ctx.stdlibs)
 
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
     !ispath(logdir()) && mkpath(logdir())
@@ -742,16 +736,16 @@ function registry_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     return pkgs
 end
 
-function stdlib_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
+function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in ctx.stdlibs
+            for (uuid, name) in stdlibs()
                 name == pkg.name && (pkg.uuid = uuid)
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name = get(ctx.stdlibs, pkg.uuid, nothing)
+            name = get(stdlibs(), pkg.uuid, nothing)
             nothing !== name && (pkg.name = name)
         end
     end

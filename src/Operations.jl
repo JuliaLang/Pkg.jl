@@ -36,7 +36,7 @@ tracking_registered_version(pkg) =
     !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.source === nothing
 
 function source_path(pkg::PackageSpec)
-    return is_stdlib(pkg.uuid)    ? Types.stdlib_path(pkg.name) :
+    return is_stdlib(pkg.uuid)      ? Types.stdlib_path(pkg.name) :
         pkg.path        !== nothing ? pkg.path :
         pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
@@ -309,7 +309,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     if isempty(v)
         @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
     end
-    names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
+    names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
     # recursive search for packages which are tracking a path
     append!(pkgs, collect_developed(ctx, pkgs))
     # construct data structures for resolver and call it
@@ -350,7 +350,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
-            name = (uuid in keys(ctx.stdlibs)) ? ctx.stdlibs[uuid] : registered_name(ctx, uuid)
+            name = is_stdlib(uuid) ? stdlibs()[uuid] : registered_name(ctx, uuid)
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
@@ -384,8 +384,8 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
             all_compat_u   = get_or_make!(all_compat,   uuid)
 
             # Collect deps + compat for stdlib
-            if uuid in keys(ctx.stdlibs)
-                path = Types.stdlib_path(ctx.stdlibs[uuid])
+            if is_stdlib(uuid)
+                path = Types.stdlib_path(stdlibs()[uuid])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
                 proj = read_package(proj_file)
@@ -753,7 +753,7 @@ end
 #########
 function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID})
     for pkg in pkgs
-        pkg.uuid in keys(ctx.stdlibs) && continue
+        is_stdlib(pkg.uuid) && continue
         pkg.uuid in uuids && continue
         push!(uuids, pkg.uuid)
         if Types.is_project(ctx, pkg)
@@ -784,7 +784,7 @@ function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,In
     seen = UUID[]
     k = 0
     function visit(uuid::UUID)
-        uuid in keys(ctx.stdlibs) && return
+        is_stdlib(uuid) && return
         uuid in seen &&
             return @warn("Dependency graph not a DAG, linearizing anyway")
         haskey(order, uuid) && return
@@ -824,7 +824,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     # collect builds for UUIDs with `deps/build.jl` files
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
-        uuid in keys(ctx.stdlibs) && continue
+        is_stdlib(uuid) && continue
         if Types.is_project_uuid(ctx, uuid)
             path = dirname(ctx.env.project_file)
             name = ctx.env.pkg.name

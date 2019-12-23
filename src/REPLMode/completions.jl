@@ -102,7 +102,7 @@ function complete_add_dev(options, partial, i1, i2)
     end
     comps = vcat(comps, complete_remote_package(partial))
     comps = vcat(comps, filter(x->startswith(x,partial) && !(x in comps),
-                               collect(values(Types.stdlib()))))
+                               collect(values(Types.stdlibs()))))
     return comps, idx, !isempty(comps)
 end
 
