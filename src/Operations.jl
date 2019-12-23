@@ -1081,21 +1081,17 @@ end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
-                 strict::Bool=false, platform::Platform=platform_key_abi())
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi())
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
-    pkgs = strict ? load_all_deps(ctx, pkgs) : load_direct_deps(ctx, pkgs)
-    check_registered(ctx, pkgs)
-
     # resolve & apply package versions
-    resolve_versions!(ctx, pkgs)
+    pkgs = _resolve(ctx, pkgs, preserve)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=true)
     download_artifacts(pkgs; platform=platform)
-
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
