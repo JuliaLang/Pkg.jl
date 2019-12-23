@@ -303,14 +303,14 @@ The result is a `Dict` that maps a package UUID to a `PackageInfo` struct repres
 
 # `PackageInfo` fields
 
-| Field        | Description                                                |
-|:-------------|:-----------------------------------------------------------|
-| name         | The name of the package                                    |
-| version      | The version of the package (this is `Nothing` for stdlibs) |
-| isdeveloped  | Whether a package is directly tracking a directory         |
-| ispinned     | Whether a package is pinned                                |
-| source       | The directory containing the source code for that package  |
-| dependencies | The dependencies of that package as a vector of UUIDs      |
+| Field             | Description                                                |
+|:------------------|:-----------------------------------------------------------|
+| name              | The name of the package                                    |
+| version           | The version of the package (this is `Nothing` for stdlibs) |
+| is_tracking_path  | Whether a package is directly tracking a directory         |
+| is_pinned         | Whether a package is pinned                                |
+| source            | The directory containing the source code for that package  |
+| dependencies      | The dependencies of that package as a vector of UUIDs      |
 """
 const dependencies = API.dependencies
 
