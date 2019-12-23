@@ -996,7 +996,7 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
     version = version === nothing ? VersionSpec() : VersionSpec(version)
     uuid = uuid isa String ? UUID(uuid) : uuid
     PackageSpec(;name=name, uuid=uuid, version=version, mode=mode, path=nothing,
-                special_action=PKGSPEC_NOTHING, repo=repo, tree_hash=nothing)
+                repo=repo, tree_hash=nothing)
 end
 Package(name::AbstractString) = PackageSpec(name)
 Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)

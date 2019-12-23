@@ -21,7 +21,7 @@ using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
-    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, get_deps, err_rep,
+    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
@@ -29,7 +29,6 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
-    PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED, PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED,
     printpkgstyle, isurl,
     projectfile_path, manifestfile_path,
     RegistrySpec
@@ -75,8 +74,6 @@ end
 @enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
 @enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
 @enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
-@enum(PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED,
-                            PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
 
@@ -98,7 +95,6 @@ Base.@kwdef mutable struct PackageSpec
     repo::GitRepo = GitRepo()
     path::Union{Nothing,String} = nothing
     pinned::Bool = false
-    special_action::PackageSpecialAction = PKGSPEC_NOTHING # If the package is currently being pinned, freed etc
     mode::PackageMode = PKGMODE_PROJECT
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
@@ -109,7 +105,7 @@ PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-    a.pinned == b.pinned && a.special_action == b.special_action && a.mode == b.mode
+    a.pinned == b.pinned && a.mode == b.mode
 end
 
 function err_rep(pkg::PackageSpec)
@@ -435,8 +431,6 @@ function devpath(ctx::Context, name::String, shared::Bool)
 end
 
 function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
-    pkg.special_action = PKGSPEC_DEVELOPED
-
     # First, check if we can compute the path easily (which requires a given local path or name)
     is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
     if is_local_path || pkg.name !== nothing
@@ -524,7 +518,6 @@ end
 
 
 function handle_repo_add!(ctx::Context, pkg::PackageSpec)
-    pkg.special_action = PKGSPEC_REPO_ADDED
     # The first goal is to populate pkg.repo.source if that wasn't given explicitly
     if pkg.repo.source === nothing
         @assert pkg.repo.rev !== nothing

@@ -1431,7 +1431,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     missing_runtests = String[]
     source_paths     = String[]
     for pkg in pkgs
-        pkg.special_action = PKGSPEC_TESTED
         sourcepath = project_rel_path(ctx, source_path(pkg)) # TODO
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
         push!(source_paths, sourcepath)
