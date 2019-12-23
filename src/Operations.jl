@@ -1490,9 +1490,10 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
         tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
-        ispinned             = pkg.pinned,
+        is_pinned            = pkg.pinned,
+        is_tracking_path     = pkg.path !== nothing,
+        is_tracking_repo     = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,
         is_tracking_registry = is_tracking_registry(pkg),
-        isdeveloped          = pkg.path !== nothing,
         git_revision         = pkg.repo.rev,
         git_source           = git_source,
         source               = project_rel_path(ctx, source_path(pkg)),
