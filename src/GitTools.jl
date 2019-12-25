@@ -201,8 +201,7 @@ function gitmode(path::AbstractString)
         return mode_symlink
     elseif isdir(path)
         return mode_dir
-    # We cannot use `Sys.isexecutable()` because on Windows, that simply calls `isfile()`
-    elseif !iszero(filemode(path) & 0o100)
+    elseif Sys.isexecutable(path)
         return mode_executable
     else
         return mode_normal
