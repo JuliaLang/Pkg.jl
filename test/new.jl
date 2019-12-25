@@ -219,6 +219,16 @@ end
 
 # These tests cover the original "targets" API for specifying test dependencies
 @testset "test: 'targets' based testing" begin
+    # `Pkg.test` should work on dependency graphs with nodes sharing the same name but not the same UUID
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        Pkg.activate(joinpath(@__DIR__, "test_packages", "SameNameDifferentUUID"))
+        inside_test_sandbox("Example") do
+            Pkg.dependencies(UUID("6876af07-990d-54b4-ab0e-23690620f79a")) do pkg
+                @test pkg.name == "Example"
+                @test realpath(pkg.source) == realpath(joinpath(@__DIR__, "test_packages", "SameNameDifferentUUID", "dev", "Example"))
+            end
+        end
+    end end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         basic_test_target = UUID("50adb811-5a1f-4be4-8146-2725c7f5d900")
         path = copy_test_package(tempdir, "BasicTestTarget")
