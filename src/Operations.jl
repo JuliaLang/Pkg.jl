@@ -582,14 +582,14 @@ function install_git(
 end
 
 function download_artifacts(pkgs::Vector{PackageSpec}; platform::Platform=platform_key_abi(),
-                            verbose::Bool=false)
+                            verbose::Bool=true)
     # Filter out packages that have no source_path()
     pkg_roots = String[p for p in source_path.(pkgs) if p !== nothing]
     return download_artifacts(pkg_roots; platform=platform, verbose=verbose)
 end
 
 function download_artifacts(pkg_roots::Vector{String}; platform::Platform=platform_key_abi(),
-                            verbose::Bool=false)
+                            verbose::Bool=true)
     for path in pkg_roots
         # Check to see if this package has an (Julia)Artifacts.toml
         for f in artifact_names
