@@ -581,24 +581,34 @@ function install_git(
     end
 end
 
-function download_artifacts(pkgs::Vector{PackageSpec}; platform::Platform=platform_key_abi(),
-                            verbose::Bool=true)
+function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec}; platform::Platform=platform_key_abi(),
+                            verbose::Bool=false)
     # Filter out packages that have no source_path()
     pkg_roots = String[p for p in source_path.(pkgs) if p !== nothing]
-    return download_artifacts(pkg_roots; platform=platform, verbose=verbose)
+    return download_artifacts(ctx, pkg_roots; platform=platform, verbose=verbose)
 end
 
-function download_artifacts(pkg_roots::Vector{String}; platform::Platform=platform_key_abi(),
-                            verbose::Bool=true)
+function download_artifacts(ctx::Context, pkg_roots::Vector{String}; platform::Platform=platform_key_abi(),
+                            verbose::Bool=false)
+    # List of Artifacts.toml files that we're going to download from
+    artifacts_tomls = String[]
+
     for path in pkg_roots
         # Check to see if this package has an (Julia)Artifacts.toml
         for f in artifact_names
             artifacts_toml = joinpath(path, f)
             if isfile(artifacts_toml)
-                ensure_all_artifacts_installed(artifacts_toml; platform=platform, verbose=verbose)
-                write_env_usage(artifacts_toml, "artifact_usage.toml")
+                push!(artifacts_tomls, artifacts_toml)
                 break
             end
+        end
+    end
+
+    if !isempty(artifacts_tomls)
+        printpkgstyle(ctx, :Downloading, "artifacts...")
+        for artifacts_toml in artifacts_tomls
+            ensure_all_artifacts_installed(artifacts_toml; platform=platform, verbose=verbose, quiet_download=false)
+            write_env_usage(artifacts_toml, "artifact_usage.toml")
         end
     end
 end
@@ -1081,7 +1091,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
-    download_artifacts(pkgs; platform=platform)
+    download_artifacts(ctx, pkgs; platform=platform)
 
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
@@ -1103,7 +1113,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=true)
-    download_artifacts(pkgs; platform=platform)
+    download_artifacts(ctx, pkgs; platform=platform)
 
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
@@ -1171,7 +1181,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
 
-    download_artifacts(pkgs)
+    download_artifacts(ctx, pkgs)
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1211,7 +1221,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     update_manifest!(ctx, pkgs)
 
     new = download_source(ctx, pkgs)
-    download_artifacts(pkgs)
+    download_artifacts(ctx, pkgs)
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
@@ -1248,7 +1258,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         resolve_versions!(ctx, pkgs)
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
-        download_artifacts(new)
+        download_artifacts(ctx, new)
         Display.print_env_diff(ctx)
         write_env(ctx.env) # write env before building
         build_versions(ctx, UUID[pkg.uuid for pkg in new])
