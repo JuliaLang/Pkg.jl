@@ -1,6 +1,6 @@
 module NewTests
 
-using  Test, UUIDs
+using  Test, UUIDs, Dates
 import Pkg, LibGit2
 using  Pkg.Types: PkgError
 using  Pkg.Resolve: ResolverError
@@ -171,8 +171,8 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
         Pkg.activate(path)
         inside_test_sandbox() do
             deps = Pkg.dependencies()
-            @test deps[unregistered_uuid].isdeveloped
-            @test deps[exuuid].isdeveloped
+            @test deps[unregistered_uuid].is_tracking_path
+            @test deps[exuuid].is_tracking_path
         end
     end end
     # the active dep graph is transfered to test sandbox, even when tracking unregistered repos
@@ -191,7 +191,7 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
         path = copy_test_package(tempdir, "TestDepTrackingPath")
         Pkg.activate(path)
         inside_test_sandbox() do
-            @test Pkg.dependencies()[unregistered_uuid].isdeveloped
+            @test Pkg.dependencies()[unregistered_uuid].is_tracking_path
         end
     end end
     # a test dependency can track a repo
@@ -230,7 +230,7 @@ end
             @test haskey(Pkg.project().dependencies, "Test")
             @test haskey(Pkg.project().dependencies, "BasicTestTarget")
             Pkg.dependencies(basic_test_target) do pkg
-                @test pkg.isdeveloped == true
+                @test pkg.is_tracking_path == true
                 @test haskey(pkg.dependencies, "UUIDs")
                 @test !haskey(pkg.dependencies, "Markdown")
                 @test !haskey(pkg.dependencies, "Test")
@@ -263,6 +263,19 @@ end
             @test deps[exuuid].version == v"0.3.0"
         end
     end end
+end
+
+@testset "test: fallback when no project file exists" begin
+    isolate(loaded_depot=true) do
+        Pkg.add(Pkg.PackageSpec(;name="Permutations", version="0.3.2"))
+        Pkg.test("Permutations")
+    end
+end
+
+@testset "build: fallback when no project file exists" begin
+    isolate() do
+        Pkg.add(Pkg.PackageSpec(;name="ZMQ", version="0.6.3"))
+    end
 end
 
 #
@@ -489,14 +502,14 @@ end
         Pkg.dependencies(exuuid) do ex
             @test ex.version == v"0.3.0"
             @test ex.is_tracking_registry
-            @test ex.ispinned
+            @test ex.is_pinned
         end
         Pkg.add(Pkg.PackageSpec(;name="Example", version="0.5.0"))
         # We check that the package state is left unchanged.
         Pkg.dependencies(exuuid) do ex
             @test ex.version == v"0.3.0"
             @test ex.is_tracking_registry
-            @test ex.ispinned
+            @test ex.is_pinned
         end
     end
     # Add by version should override add by repo.
@@ -536,13 +549,13 @@ end
         Pkg.add(Pkg.PackageSpec(;name="Example", version="0.3.0"))
         Pkg.pin(Pkg.PackageSpec(;name="Example"))
         Pkg.dependencies(exuuid) do ex
-            @test ex.ispinned
+            @test ex.is_pinned
             @test ex.is_tracking_registry
             @test ex.version == v"0.3.0"
         end
         Pkg.add(Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl"))
         Pkg.dependencies(exuuid) do ex
-            @test ex.ispinned
+            @test ex.is_pinned
             @test ex.is_tracking_registry
             @test ex.version == v"0.3.0"
         end
@@ -567,6 +580,14 @@ end
             @test !haskey(pkg.dependencies, "Example")
         end
     end
+    # add should resolve the correct versions even when the manifest is out of sync with the project compat
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        Pkg.activate(copy_test_package(tempdir, "CompatOutOfSync"))
+        Pkg.add("Libdl")
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.version == v"0.3.0"
+        end
+    end end
     # Preserve syntax
     # These tests mostly check the REPL side correctness.
     # - Normal add should not change the existing version.
@@ -1023,7 +1044,7 @@ end
         Pkg.dependencies(simple_package_uuid) do pkg
             @test pkg.name == "SimplePackage"
             @test isdir(pkg.source)
-            @test pkg.isdeveloped
+            @test pkg.is_tracking_path
         end
     end end
     # ".." style path
@@ -1035,7 +1056,7 @@ end
         Pkg.dependencies(simple_package_uuid) do pkg
             @test pkg.name == "SimplePackage"
             @test isdir(pkg.source)
-            @test pkg.isdeveloped
+            @test pkg.is_tracking_path
         end
     end end
     # bare directory name
@@ -1047,7 +1068,7 @@ end
         Pkg.dependencies(simple_package_uuid) do pkg
             @test pkg.name == "SimplePackage"
             @test isdir(pkg.source)
-            @test pkg.isdeveloped
+            @test pkg.is_tracking_path
         end
     end end
 end
@@ -1342,13 +1363,13 @@ end
         Pkg.pin("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.ispinned
+            @test pkg.is_pinned
             @test pkg.version == v"0.3.0"
         end
         Pkg.update()
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.ispinned
+            @test pkg.is_pinned
             @test pkg.version == v"0.3.0"
         end
     end
@@ -1426,7 +1447,7 @@ end
         end
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.isdeveloped
+            @test pkg.is_tracking_path
         end
         Pkg.dependencies(json_uuid) do pkg
             @test pkg.name == "JSON"
@@ -1485,7 +1506,7 @@ end
         Pkg.pin("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.ispinned
+            @test pkg.is_pinned
         end
     end
     # packge tracking repo
@@ -1494,7 +1515,7 @@ end
         Pkg.pin("Unregistered")
         Pkg.dependencies(unregistered_uuid) do pkg
             @test !pkg.is_tracking_registry
-            @test pkg.ispinned
+            @test pkg.is_pinned
         end
     end
     # versioned pin
@@ -1503,7 +1524,7 @@ end
         Pkg.pin(Pkg.PackageSpec(; name="Example", version="0.5.1"))
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.ispinned
+            @test pkg.is_pinned
         end
     end
     # pin should check for a valid version number
@@ -1538,7 +1559,7 @@ end
         Pkg.free("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test !pkg.ispinned
+            @test !pkg.is_pinned
         end
     end
     # free package tracking repo
@@ -1717,6 +1738,9 @@ end
         api, opts = first(Pkg.pkg"gc")
         @test api == Pkg.gc
         @test isempty(opts)
+        api, opts = first(Pkg.pkg"gc --all")
+        @test api == Pkg.gc
+        @test opts[:collect_delay] == Hour(0)
     end
 end
 

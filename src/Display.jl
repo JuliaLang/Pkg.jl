@@ -265,7 +265,7 @@ function manifest_diff(ctx::Context, manifest0::Dict, manifest1::Dict)
             push!(diff, DiffEntry(uuid, name₁, nothing, v₁))
         end
     end
-    sort!(diff, by=x->(x.uuid in keys(ctx.stdlibs), x.name, x.uuid))
+    sort!(diff, by=x->(is_stdlib(x.uuid), x.name, x.uuid))
 end
 
 end # module

@@ -21,15 +21,14 @@ using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
-    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, get_deps, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, write_env, write_env_usage, parse_toml, find_registered!,
+    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, err_rep,
+    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
-    PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED, PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED,
     printpkgstyle, isurl,
     projectfile_path, manifestfile_path,
     RegistrySpec
@@ -75,8 +74,6 @@ end
 @enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
 @enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
 @enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
-@enum(PackageSpecialAction, PKGSPEC_NOTHING, PKGSPEC_PINNED, PKGSPEC_FREED,
-                            PKGSPEC_DEVELOPED, PKGSPEC_TESTED, PKGSPEC_REPO_ADDED)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
 
@@ -98,7 +95,6 @@ Base.@kwdef mutable struct PackageSpec
     repo::GitRepo = GitRepo()
     path::Union{Nothing,String} = nothing
     pinned::Bool = false
-    special_action::PackageSpecialAction = PKGSPEC_NOTHING # If the package is currently being pinned, freed etc
     mode::PackageMode = PKGMODE_PROJECT
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
@@ -109,7 +105,7 @@ PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-    a.pinned == b.pinned && a.special_action == b.special_action && a.mode == b.mode
+    a.pinned == b.pinned && a.mode == b.mode
 end
 
 function err_rep(pkg::PackageSpec)
@@ -339,7 +335,6 @@ Base.@kwdef mutable struct Context
     # the future. It currently stands as an unofficial workaround for issue #795.
     num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
     graph_verbose::Bool = false
-    stdlibs::Dict{UUID,String} = stdlib()
     currently_running_target::Bool = false
 end
 
@@ -357,6 +352,7 @@ is_project_uuid(ctx::Context, uuid::UUID) = project_uuid(ctx) == uuid
 ###########
 stdlib_dir() = normpath(joinpath(Sys.BINDIR, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
 stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
+
 const STDLIB = Ref{Dict{UUID,String}}()
 function load_stdlib()
     stdlib = Dict{UUID,String}()
@@ -370,18 +366,14 @@ function load_stdlib()
     end
     return stdlib
 end
-function stdlib()
+
+function stdlibs()
     if !isassigned(STDLIB)
         STDLIB[] = load_stdlib()
     end
-    return deepcopy(STDLIB[])
+    return STDLIB[]
 end
-function is_stdlib(uuid::UUID)
-    if !isassigned(STDLIB)
-        STDLIB[] = load_stdlib()
-    end
-    return uuid in keys(STDLIB[])
-end
+is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
@@ -391,8 +383,6 @@ function Context!(ctx::Context; kwargs...)
     end
     return ctx
 end
-
-is_stdlib(ctx::Context, uuid::UUID) = uuid in keys(ctx.stdlibs)
 
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
     !ispath(logdir()) && mkpath(logdir())
@@ -441,8 +431,6 @@ function devpath(ctx::Context, name::String, shared::Bool)
 end
 
 function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
-    pkg.special_action = PKGSPEC_DEVELOPED
-
     # First, check if we can compute the path easily (which requires a given local path or name)
     is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
     if is_local_path || pkg.name !== nothing
@@ -530,7 +518,6 @@ end
 
 
 function handle_repo_add!(ctx::Context, pkg::PackageSpec)
-    pkg.special_action = PKGSPEC_REPO_ADDED
     # The first goal is to populate pkg.repo.source if that wasn't given explicitly
     if pkg.repo.source === nothing
         @assert pkg.repo.rev !== nothing
@@ -742,16 +729,16 @@ function registry_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     return pkgs
 end
 
-function stdlib_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
+function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in ctx.stdlibs
+            for (uuid, name) in stdlibs()
                 name == pkg.name && (pkg.uuid = uuid)
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name = get(ctx.stdlibs, pkg.uuid, nothing)
+            name = get(stdlibs(), pkg.uuid, nothing)
             nothing !== name && (pkg.name = name)
         end
     end
@@ -1299,8 +1286,9 @@ Base.@kwdef struct PackageInfo
     name::String
     version::Union{Nothing,VersionNumber}
     tree_hash::Union{Nothing,String}
-    ispinned::Bool
-    isdeveloped::Bool
+    is_pinned::Bool
+    is_tracking_path::Bool
+    is_tracking_repo::Bool
     is_tracking_registry::Bool
     git_revision::Union{Nothing,String}
     git_source::Union{Nothing,String}
@@ -1310,7 +1298,8 @@ end
 
 function Base.:(==)(a::PackageInfo, b::PackageInfo)
     return a.name == b.name && a.version == b.version && a.tree_hash == b.tree_hash &&
-        a.ispinned == b.ispinned && a.isdeveloped == b.isdeveloped &&
+        a.is_pinned == b.is_pinned && a.is_tracking_path == b.is_tracking_path &&
+        a.is_tracking_repo == a.is_tracking_repo &&
         a.is_tracking_registry == b.is_tracking_registry &&
         a.git_revision == b.git_revision && a.git_source == b.git_source &&
         a.source == b.source && a.dependencies == b.dependencies

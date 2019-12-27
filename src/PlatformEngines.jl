@@ -330,7 +330,7 @@ function probe_platform_engines!(;verbose::Bool = false)
             elseif endswith(tarball_path, ".bz2")
                 Jjz = "j"
             end
-            return `$tar_cmd -mx$(Jjz)f $(tarball_path) -C$(out_path) $(excludelist === nothing ? [] : "-X$(excludelist)")`
+            return `$tar_cmd --no-same-owner -mx$(Jjz)f $(tarball_path) -C$(out_path) $(excludelist === nothing ? [] : "-X$(excludelist)")`
         end
         package_tar = (in_path, tarball_path) -> begin
             Jjz = "z"
@@ -763,7 +763,6 @@ function get_telemetry_headers(url::AbstractString)
     get(info, "telemetry", true) == false && return headers
     # general system information
     push!(headers, "Julia-Version: $VERSION")
-    push!(headers, "Julia-Commit: $(Base.GIT_VERSION_INFO.commit)")
     system = Pkg.BinaryPlatforms.triplet(Pkg.BinaryPlatforms.platform_key_abi())
     push!(headers, "Julia-System: $system")
     # install-specific information

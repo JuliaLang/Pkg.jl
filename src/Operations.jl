@@ -36,7 +36,7 @@ tracking_registered_version(pkg) =
     !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.source === nothing
 
 function source_path(pkg::PackageSpec)
-    return is_stdlib(pkg.uuid)    ? Types.stdlib_path(pkg.name) :
+    return is_stdlib(pkg.uuid)      ? Types.stdlib_path(pkg.name) :
         pkg.path        !== nothing ? pkg.path :
         pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
@@ -309,7 +309,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     if isempty(v)
         @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
     end
-    names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in ctx.stdlibs)
+    names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
     # recursive search for packages which are tracking a path
     append!(pkgs, collect_developed(ctx, pkgs))
     # construct data structures for resolver and call it
@@ -324,8 +324,8 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
         compat = project_compatibility(ctx, pkg.name)
         v = intersect(pkg.version, compat)
         if isempty(v)
-            pkgerror(string("empty intersection between $(pkg.name)@$(pkg.version) and project ",
-                            "compatibility $(compat)"))
+            throw(Resolve.ResolverError(
+                "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"))
         end
         # Work around not clobbering 0.x.y+ for checked out old type of packages
         if !(pkg.version isa VersionNumber)
@@ -350,7 +350,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
-            name = (uuid in keys(ctx.stdlibs)) ? ctx.stdlibs[uuid] : registered_name(ctx, uuid)
+            name = is_stdlib(uuid) ? stdlibs()[uuid] : registered_name(ctx, uuid)
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
@@ -384,8 +384,8 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
             all_compat_u   = get_or_make!(all_compat,   uuid)
 
             # Collect deps + compat for stdlib
-            if uuid in keys(ctx.stdlibs)
-                path = Types.stdlib_path(ctx.stdlibs[uuid])
+            if is_stdlib(uuid)
+                path = Types.stdlib_path(stdlibs()[uuid])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
                 proj = read_package(proj_file)
@@ -763,7 +763,7 @@ end
 #########
 function _get_deps!(ctx::Context, pkgs::Vector{PackageSpec}, uuids::Vector{UUID})
     for pkg in pkgs
-        pkg.uuid in keys(ctx.stdlibs) && continue
+        is_stdlib(pkg.uuid) && continue
         pkg.uuid in uuids && continue
         push!(uuids, pkg.uuid)
         if Types.is_project(ctx, pkg)
@@ -794,7 +794,7 @@ function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,In
     seen = UUID[]
     k = 0
     function visit(uuid::UUID)
-        uuid in keys(ctx.stdlibs) && return
+        is_stdlib(uuid) && return
         uuid in seen &&
             return @warn("Dependency graph not a DAG, linearizing anyway")
         haskey(order, uuid) && return
@@ -812,15 +812,6 @@ function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,In
     visit(uuid::String) = visit(UUID(uuid))
     foreach(visit, uuids)
     return order
-end
-
-function gen_build_project(ctx::Context, pkg::PackageSpec, source_path::String)
-    build_project = Types.Project()
-    source_ctx = Context(env = EnvCache(projectfile_path(source_path)))
-    source_project = source_ctx.env.project
-    build_project.deps = source_project.deps
-    build_project.compat = source_project.compat
-    return build_project
 end
 
 function gen_build_code(build_file::String)
@@ -843,7 +834,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     # collect builds for UUIDs with `deps/build.jl` files
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
-        uuid in keys(ctx.stdlibs) && continue
+        is_stdlib(uuid) && continue
         if Types.is_project_uuid(ctx, uuid)
             path = dirname(ctx.env.project_file)
             name = ctx.env.pkg.name
@@ -858,7 +849,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             else
                 pkgerror("Could not find either `git-tree-sha1` or `path` for package $name")
             end
-            version = v"0.0"
+            version = something(entry.version, v"0.0")
         end
         ispath(path) || error("Build path for $name does not exist: $path")
         ispath(buildfile(path)) && push!(builds, (uuid, name, path, version))
@@ -874,7 +865,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
         # compatibility shim
         build_project_override = isfile(projectfile_path(builddir(source_path))) ?
             nothing :
-            gen_build_project(ctx, pkg, source_path)
+            gen_target_project(ctx, pkg, source_path, "build")
 
         log_file = splitext(build_file)[1] * ".log"
         printpkgstyle(ctx, :Building,
@@ -1314,14 +1305,11 @@ function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::Strin
         env.manifest[env.pkg.uuid] = PackageEntry(;name=env.pkg.name, path=dirname(env.project_file),
                                                   deps=env.project.deps)
     end
-    # load target deps
-    keep = Types.is_project(ctx, target) ? collect(values(env.project.deps)) : [target.uuid]
-    # preserve test deps
-    project = read_project(test_project)
-    project !== nothing && append!(keep, collect(values(project.deps)))
+    # preserve important nodes
+    keep = [target.uuid]
+    append!(keep, collect(values(read_project(test_project).deps)))
     # prune and return
-    graph = prune_manifest(env.manifest, keep)
-    return graph
+    return prune_manifest(env.manifest, keep)
 end
 
 abspath!(ctx::Context, manifest::Dict{UUID,PackageEntry}) =
@@ -1374,13 +1362,16 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         Types.write_manifest(working_manifest, tmp_manifest)
         # sandbox
         with_temp_env(tmp) do
+            temp_ctx = Context()
+            temp_ctx.env.project.deps[target.name] = target.uuid
+            write_env(temp_ctx.env, update_undo = false)
             try
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;source=target_path)); strict=true)
+                Pkg.resolve()
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 @error err
-                isfile(tmp_manifest) && Base.rm(tmp_manifest) # retry with a clean dependency graph
-                Pkg.API.develop(PackageSpec(;repo=GitRepo(;source=target_path)))
+                temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
+                Pkg.resolve(temp_ctx)
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code
@@ -1399,19 +1390,24 @@ function update_package_test!(pkg::PackageSpec, entry::PackageEntry)
     pkg.pinned = entry.pinned
 end
 
-# "targets" based test deps -> "test/Project.toml" based test deps
-function gen_test_project(ctx::Context, pkg::PackageSpec, source_path::String)
+# "targets" based test deps -> "test/Project.toml" based deps
+function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String, target::String)
     test_project = Types.Project()
+    if projectfile_path(source_path; strict=true) === nothing
+        # no project file, assuming this is an old REQUIRE package
+        test_project.deps = ctx.env.manifest[pkg.uuid].deps
+        return test_project
+    end
     # collect relevant info from source
     source_ctx = Context(env = EnvCache(projectfile_path(source_path)))
     source_env = source_ctx.env
     # collect regular dependencies
     test_project.deps = source_env.project.deps
     # collect test dependencies
-    for name in get(source_env.project.targets, "test", String[])
+    for name in get(source_env.project.targets, target, String[])
         uuid = get(source_env.project.extras, name, nothing)
         if uuid === nothing
-            pkgerror("`$name` declared as a `test` dependency, but no such entry in `extras`")
+            pkgerror("`$name` declared as a `$target` dependency, but no such entry in `extras`")
         end
         test_project.deps[name] = uuid
     end
@@ -1445,7 +1441,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     missing_runtests = String[]
     source_paths     = String[]
     for pkg in pkgs
-        pkg.special_action = PKGSPEC_TESTED
         sourcepath = project_rel_path(ctx, source_path(pkg)) # TODO
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
         push!(source_paths, sourcepath)
@@ -1462,7 +1457,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         # compatibility shim between "targets" and "test/Project.toml"
         test_project_override = isfile(projectfile_path(testdir(source_path))) ?
             nothing :
-            gen_test_project(ctx, pkg, source_path)
+            gen_target_project(ctx, pkg, source_path, "test")
         # now we sandbox
         printpkgstyle(ctx, :Testing, pkg.name)
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
@@ -1505,9 +1500,10 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
         tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
-        ispinned             = pkg.pinned,
+        is_pinned            = pkg.pinned,
+        is_tracking_path     = pkg.path !== nothing,
+        is_tracking_repo     = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,
         is_tracking_registry = is_tracking_registry(pkg),
-        isdeveloped          = pkg.path !== nothing,
         git_revision         = pkg.repo.rev,
         git_source           = git_source,
         source               = project_rel_path(ctx, source_path(pkg)),

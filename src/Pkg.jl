@@ -303,14 +303,14 @@ The result is a `Dict` that maps a package UUID to a `PackageInfo` struct repres
 
 # `PackageInfo` fields
 
-| Field        | Description                                                |
-|:-------------|:-----------------------------------------------------------|
-| name         | The name of the package                                    |
-| version      | The version of the package (this is `Nothing` for stdlibs) |
-| isdeveloped  | Whether a package is directly tracking a directory         |
-| ispinned     | Whether a package is pinned                                |
-| source       | The directory containing the source code for that package  |
-| dependencies | The dependencies of that package as a vector of UUIDs      |
+| Field             | Description                                                |
+|:------------------|:-----------------------------------------------------------|
+| name              | The name of the package                                    |
+| version           | The version of the package (this is `Nothing` for stdlibs) |
+| is_tracking_path  | Whether a package is directly tracking a directory         |
+| is_pinned         | Whether a package is pinned                                |
+| source            | The directory containing the source code for that package  |
+| dependencies      | The dependencies of that package as a vector of UUIDs      |
 """
 const dependencies = API.dependencies
 
@@ -537,6 +537,17 @@ const precompile_script = """
     ] add Te\t\t$CTRL_C
     ] st
     $CTRL_C
+    # Create simple artifact, bind it, then use it:
+    foo_hash = Pkg.Artifacts.create_artifact(dir -> touch(joinpath(dir, "foo")))
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo", foo_hash)
+    # Also create multiple platform-specific ones because that's a codepath we need precompiled
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=platform_key_abi())
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Linux(:x86_64), force=true)
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Windows(:x86_64), force=true)
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=MacOS(:x86_64), force=true)
+    # Because @artifact_str doesn't work at REPL-level, we JIT out a file that we can include()
+    open(io -> println(io, "Pkg.Artifacts.artifact\\\"foo\\\"; Pkg.Artifacts.artifact\\\"foo_plat\\\""), "load_artifact.jl", "w")
+    foo_path = include("load_artifact.jl")
     rm(tmp; recursive=true)"""
 
 end # module

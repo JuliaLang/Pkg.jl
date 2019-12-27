@@ -144,7 +144,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
 
     project_deps_resolve!(ctx, pkgs)
     registry_resolve!(ctx, pkgs)
-    stdlib_resolve!(ctx, pkgs)
+    stdlib_resolve!(pkgs)
     ensure_resolved(ctx, pkgs, registry=true)
 
     for pkg in pkgs
@@ -315,15 +315,15 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 end
 
 """
-    gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
+    gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
 finding artifacts and packages that are thereafter not used by any other projects.  This
 method will only remove package versions and artifacts that have been continually un-used
-for a period of `collect_delay`; which defaults to thirty days.
+for a period of `collect_delay`; which defaults to seven days.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(30), kwargs...)
+function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     Context!(ctx; kwargs...)
     env = ctx.env
 
@@ -699,7 +699,7 @@ precompile() = precompile(Context())
 function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
 
-    pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !(uuid in keys(ctx.stdlibs))]
+    pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !is_stdlib(uuid)]
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
@@ -996,7 +996,7 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
     version = version === nothing ? VersionSpec() : VersionSpec(version)
     uuid = uuid isa String ? UUID(uuid) : uuid
     PackageSpec(;name=name, uuid=uuid, version=version, mode=mode, path=nothing,
-                special_action=PKGSPEC_NOTHING, repo=repo, tree_hash=nothing)
+                repo=repo, tree_hash=nothing)
 end
 Package(name::AbstractString) = PackageSpec(name)
 Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
