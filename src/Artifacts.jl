@@ -716,6 +716,65 @@ function unbind_artifact!(artifacts_toml::String, name::String;
     return
 end
 
+_permissions_blind_filesystem_cache = Dict{String,Bool}()
+"""
+    permissions_blind_filesystem(path::AbstractString)
+
+Determine whether the given directory is a permissions-blind filesystem,
+such as a FAT32 volume, or an NFS mount with permissions-modifications.
+This method assumes that `path` is a directory and that  we have write
+permissions on the given `path`.
+"""
+function permissions_blind_filesystem(path::AbstractString)
+    global _permissions_blind_filesystem_cache
+
+    # Immediately normalize `path`
+    path = realpath(path)
+    if !isdir(path)
+        error("Must provide a directory as `path`")
+    end
+
+    if haskey(_permissions_blind_filesystem_cache, path)
+        return _permissions_blind_filesystem_cache[path]
+    end
+
+    # Otherwise, check for the ability to give executable permissions
+    # as well as take them away:
+
+    try
+        blind = mktemp(path) do filepath, io
+            blind = false
+
+            # Set it as executable
+            chmod(filepath, 0o755)
+            blind |= Sys.isexecutable(filepath) != true
+
+            # Set it as non-executable
+            chmod(filepath, 0o644)
+            blind |= Sys.isexecutable(filepath) != false
+
+            # Set it back to executable, to be sure, just in case our default files are executable
+            chmod(filepath, 0o755)
+            blind |= Sys.isexecutable(filepath) != true
+
+            # cache this result
+            return blind
+        end
+
+        # Cache this result, then return it
+        _permissions_blind_filesystem_cache[path] = blind
+        return blind
+    catch e
+        if isa(e, InterruptException)
+            rethrow(e)
+        end
+
+        # In case we hit an error, default to permissions-blind, but don't cache it
+        # so we will try again in the future.
+        return true
+    end
+end
+
 """
     download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
                       verbose::Bool = false)
@@ -739,15 +798,17 @@ function download_artifact(
     # Ensure that we're ready to download things
     probe_platform_engines!()
 
-    if Sys.iswindows()
+    # Ensure the `artifacts` directory exists in our default depot
+    artifacts_dir = first(artifacts_dirs())
+    mkpath(artifacts_dir)
+    if permissions_blind_filesystem(artifacts_dir)
         # The destination directory we're hoping to fill:
         dest_dir = artifact_path(tree_hash; honor_overrides=false)
 
-        # On Windows, we have some issues around stat() and chmod() that make properly
-        # determining the git tree hash problematic; for this reason, we use the "unsafe"
-        # artifact unpacking method, which does not properly verify unpacked git tree
-        # hash.  This will be fixed in a future Julia release which will properly interrogate
-        # the filesystem ACLs for executable permissions, which git tree hashes care about.
+        # On permissions-blind filesystems, we are unable to check `isexecutable()` properly.
+        # This makes determining the git tree hash problematic; for this reason, we use the "unsafe"
+        # artifact unpacking method, downloading and unpacking directly into the appropriately-named
+        # `artifacts/<hash>` directory, but not properly verifying the unpacked git tree hash.
         try
             download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
                                    verbose=verbose, quiet_download=quiet_download)

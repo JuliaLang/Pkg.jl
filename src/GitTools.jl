@@ -206,6 +206,7 @@ function gitmode(path::AbstractString)
     elseif isdir(path)
         return mode_dir
     # We cannot use `Sys.isexecutable()` because on Windows, that simply calls `isfile()`
+    # This will change in Julia 1.5.
     elseif !iszero(filemode(path) & 0o100)
         return mode_executable
     else
