@@ -1180,13 +1180,23 @@ successfully.
 """
 function verify(path::AbstractString, hash::AbstractString; verbose::Bool = false,
                 report_cache_status::Bool = false, hash_path::AbstractString="$(path).sha256")
-    if length(hash) != 64
-        msg  = "Hash must be 256 bits (64 characters) long, "
-        msg *= "given hash is $(length(hash)) characters long"
+
+    # Check hash string format
+    if !occursin(r"^[0-9a-f]{64}$"i, hash)
+        msg = "Hash value must be 64 hexadecimal characters (256 bits), "
+        if !isascii(hash)
+            msg *= "given hash value is non-ASCII"
+        elseif occursin(r"^[0-9a-f]*$"i, hash)
+            msg *= "given hash value has the wrong length ($(length(hash)))"
+        else
+            msg *= "given hash value contains non-hexadecimal characters"
+        end
+        msg *= ": $(repr(hash))"
         error(msg)
     end
+    hash = lowercase(hash)
 
-    # First, check to see if the hash cache is consistent
+    # Check to see if the hash cache is consistent
     status = :hash_consistent
 
     # First, it must exist
@@ -1229,6 +1239,7 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
     calc_hash = open(path) do file
         bytes2hex(sha256(file))
     end
+    @assert occursin(r"^[0-9a-f]{64}$", calc_hash)
 
     if verbose
         @info("Calculated hash $calc_hash for file $path")
