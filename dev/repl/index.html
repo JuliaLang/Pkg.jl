@@ -22,7 +22,7 @@ pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre></div></sec
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">build [-v|verbose] pkg[=uuid] ...</code></pre><p>Run the build script in <code>deps/build.jl</code> for <code>pkg</code> and all of its dependencies in depth-first recursive order. If no packages are given, run the build scripts for all packages in the manifest. The <code>-v</code>/<code>--verbose</code> option redirects build output to <code>stdout</code>/<code>stderr</code> instead of the <code>build.log</code> file. The <code>startup.jl</code> file is disabled during building unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
+</div><div><pre><code class="language-none">build [-v|--verbose] pkg[=uuid] ...</code></pre><p>Run the build script in <code>deps/build.jl</code> for <code>pkg</code> and all of its dependencies in depth-first recursive order. If no packages are given, run the build scripts for all packages in the manifest. The <code>-v</code>/<code>--verbose</code> option redirects build output to <code>stdout</code>/<code>stderr</code> instead of the <code>build.log</code> file. The <code>startup.jl</code> file is disabled during building unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
 <div class="docstring-header">
     <a class="docstring-binding" id="repl-develop" href="#repl-develop">
         <code>develop</code>
