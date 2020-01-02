@@ -14,6 +14,14 @@ function do_test()
     end
     @test isfile(c_simple_exe)
 
+    # Test that we can use a variable, not just a literal:
+    c_simple = "c_simple"
+    c_simple_exe = joinpath(@artifact_str(c_simple), "bin", "c_simple")
+    if Sys.iswindows()                                                                                    
+        c_simple_exe = "$(c_simple_exe).exe"
+    end
+    @test isfile(c_simple_exe)
+
     # Test that we can dlopen and ccall libc_simple
     libc_simple_path = if Sys.iswindows()
         joinpath(artifact"c_simple", "bin", "libc_simple.dll")
