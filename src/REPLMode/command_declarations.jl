@@ -205,7 +205,7 @@ pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
     :completions => complete_installed_packages,
     :description => "run the build script for packages",
     :help => md"""
-    build [-v|verbose] pkg[=uuid] ...
+    build [-v|--verbose] pkg[=uuid] ...
 
 Run the build script in `deps/build.jl` for `pkg` and all of its dependencies in depth-first recursive order.
 If no packages are given, run the build scripts for all packages in the manifest.
