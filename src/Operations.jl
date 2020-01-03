@@ -1455,7 +1455,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
                 run(gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args))
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
             catch err
-                @show err
                 push!(pkgs_errored, pkg.name)
             end
         end
