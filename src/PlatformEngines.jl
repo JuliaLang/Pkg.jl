@@ -759,6 +759,7 @@ function get_telemetry_headers(url::AbstractString)
     headers = String[]
     server_dir = get_server_dir(url)
     server_dir === nothing && return headers
+    push!(headers, "Julia-Pkg-Protocol: 1.0")
     info = load_telemetry_file(joinpath(server_dir, "telemetry.toml"))
     get(info, "telemetry", true) == false && return headers
     # general system information
