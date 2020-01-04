@@ -728,6 +728,7 @@ function download_artifact(
     tarball_url::String,
     tarball_hash::Union{String, Nothing} = nothing;
     verbose::Bool = false,
+    quiet_download::Bool = false,
 )
     if artifact_exists(tree_hash)
         return true
@@ -746,7 +747,8 @@ function download_artifact(
         # hash.  This will be fixed in a future Julia release which will properly interrogate
         # the filesystem ACLs for executable permissions, which git tree hashes care about.
         try
-            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose)
+            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
+                                   verbose=verbose, quiet_download=quiet_download)
         catch e
             # Clean that destination directory out if something went wrong
             rm(dest_dir; force=true, recursive=true)
@@ -844,19 +846,22 @@ Ensures an artifact is installed, downloading it via the download information st
 function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
                                    pkg_uuid::Union{Base.UUID,Nothing}=nothing,
-                                   verbose::Bool = false)
+                                   verbose::Bool = false,
+                                   quiet_download::Bool = false)
     @nospecialize platform
     meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
     end
 
-    return ensure_artifact_installed(name, meta, artifacts_toml; platform=platform, verbose=verbose)
+    return ensure_artifact_installed(name, meta, artifacts_toml; platform=platform,
+                                     verbose=verbose, quiet_download=quiet_download)
 end
 
 function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
-                                   verbose::Bool = false)
+                                   verbose::Bool = false,
+                                   quiet_download::Bool = false)
     @nospecialize platform
     hash = SHA1(meta["git-tree-sha1"])
 
@@ -865,7 +870,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         # TODO: only do this if Pkg server knows about this package
         if (server = pkg_server()) !== nothing
             url = "$server/artifact/$hash"
-            if download_artifact(hash, url)
+            if download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download)
                 return artifact_path(hash)
             end
         end
@@ -880,7 +885,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         for entry in meta["download"]
             url = entry["url"]
             tarball_hash = entry["sha256"]
-            if download_artifact(hash, url, tarball_hash; verbose=verbose)
+            if download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download)
                 return artifact_path(hash)
             end
         end
@@ -896,7 +901,8 @@ end
                                    platform = platform_key_abi(),
                                    pkg_uuid = nothing,
                                    include_lazy = false,
-                                   verbose = false)
+                                   verbose = false,
+                                   quiet_download = false)
 
 Installs all non-lazy artifacts from a given `(Julia)Artifacts.toml` file. `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
@@ -910,7 +916,8 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::Platform = platform_key_abi(),
                                         pkg_uuid::Union{Nothing,Base.UUID} = nothing,
                                         include_lazy::Bool = false,
-                                        verbose::Bool = false)
+                                        verbose::Bool = false,
+                                        quiet_download::Bool = false)
     @nospecialize platform
     if !isfile(artifacts_toml)
         return
@@ -930,7 +937,8 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
         end
 
         # Otherwise, let's try and install it!
-        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform, verbose=verbose)
+        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform,
+                                  verbose=verbose, quiet_download=quiet_download)
     end
 end
 
