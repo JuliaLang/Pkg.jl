@@ -1467,6 +1467,18 @@ end
         @test haskey(Pkg.project().dependencies, "Markdown")
         @test haskey(Pkg.project().dependencies, "Unicode")
     end
+    # `--fixed` should prevent the target package from being updated, but update other dependencies
+    isolate(loaded_depot=true) do
+        Pkg.add(Pkg.PackageSpec(; name="Example", version="0.3.0"))
+        Pkg.add(Pkg.PackageSpec(; name="JSON", version="0.18.0"))
+        Pkg.update("JSON"; level=Pkg.UPLEVEL_FIXED)
+        Pkg.dependencies(json_uuid) do pkg
+            @test pkg.version == v"0.18.0"
+        end
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.version > v"0.3.0"
+        end
+    end
 end
 
 @testset "update: REPL" begin
