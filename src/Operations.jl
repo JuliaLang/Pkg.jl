@@ -1352,12 +1352,12 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             temp_ctx.env.project.deps[target.name] = target.uuid
             write_env(temp_ctx.env, update_undo = false)
             try
-                Pkg.resolve()
+                Pkg.resolve(;io=devnull)
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 @error err
                 temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
-                Pkg.resolve(temp_ctx)
+                Pkg.resolve(temp_ctx;io=devnull)
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code
@@ -1447,9 +1447,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         # now we sandbox
         printpkgstyle(ctx, :Testing, pkg.name)
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
-            println(ctx.io, "Running sandbox")
             test_fn !== nothing && test_fn()
-            Display.status(Context(), mode=PKGMODE_PROJECT)
+            Display.status(Context(), mode=PKGMODE_MANIFEST)
             flush(stdout)
             try
                 run(gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args))

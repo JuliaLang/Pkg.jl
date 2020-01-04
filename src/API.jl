@@ -225,8 +225,11 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(ctx::Context=Context()) =
-    up(ctx, level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false)
+resolve(; kwargs...) = resolve(Context(); kwargs...)
+function resolve(ctx::Context; kwargs...)
+    up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
+    return nothing
+end
 
 pin(pkg::Union{AbstractString, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
 pin(pkgs::Vector{<:AbstractString}; kwargs...)          = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
