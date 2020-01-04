@@ -2125,8 +2125,8 @@ tree_hash(root::AbstractString) = bytes2hex(Pkg.GitTools.tree_hash(root))
         # Directories containing symlinks (even if they point to other directories)
         # are NOT empty:
         if !Sys.iswindows()
-            symlink(joinpath(dir, "foo", "bar_link"), joinpath(dir, "bar"))
-            @test "ad4d1c57dd90a4c66671c788c3dd122ce68d6b47" == tree_hash(dir)
+            symlink("bar", joinpath(dir, "foo", "bar_link"))
+            @test "8bc80be82b2ae4bd69f50a1a077a81b8678c9024" == tree_hash(dir)
         end
     end
 end
