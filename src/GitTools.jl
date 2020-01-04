@@ -258,7 +258,9 @@ direct parent of a file or it contains some other directory that itself is a
 direct parent of a file. This is used to exclude directories from tree hashing.
 """
 function contains_files(path::AbstractString)
-    isdir(lstat(path)) || return true
+    st = lstat(path)
+    ispath(st) || throw(ArgumentError("non-existent path: $(repr(path))"))
+    isdir(st) || return true
     for p in readdir(path)
         contains_files(joinpath(path, p)) && return true
     end
