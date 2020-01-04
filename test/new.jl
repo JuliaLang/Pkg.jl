@@ -2124,6 +2124,23 @@ tree_hash(root::AbstractString) = bytes2hex(Pkg.GitTools.tree_hash(root))
             @test "952cfce0fb589c02736482fa75f9f9bb492242f8" == tree_hash(dir)
         end
     end
+
+    # Test for empty directory hashing
+    mktempdir() do dir
+        @test "4b825dc642cb6eb9a060e54bf8d69288fbee4904" == tree_hash(dir)
+
+        # Directories containing other empty directories are also empty
+        mkdir(joinpath(dir, "foo"))
+        mkdir(joinpath(dir, "foo", "bar"))
+        @test "4b825dc642cb6eb9a060e54bf8d69288fbee4904" == tree_hash(dir)
+
+        # Directories containing symlinks (even if they point to other directories)
+        # are NOT empty:
+        if !Sys.iswindows()
+            symlink("bar", joinpath(dir, "foo", "bar_link"))
+            @test "8bc80be82b2ae4bd69f50a1a077a81b8678c9024" == tree_hash(dir)
+        end
+    end
 end
 
 end #module
