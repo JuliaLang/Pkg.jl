@@ -772,7 +772,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Finally, run `Pkg.instantiate()` again.")
     end
     # Download artifacts for this here package before fast-exiting
-    Operations.download_artifacts([dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
+    Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     Operations.is_instantiated(ctx) && return
 
     Types.update_registries(ctx)
@@ -812,7 +812,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
 
     # Ensure artifacts are installed for the dependent packages, and finally this overall project
-    Operations.download_artifacts(pkgs; platform=platform, verbose=verbose)
+    Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
 
     new_apply = Operations.download_source(ctx, pkgs)
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
