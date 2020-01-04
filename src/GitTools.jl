@@ -251,19 +251,20 @@ function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
 end
 
 """
-    contains_no_files(root::AbstractString)
+    contains_files(root::AbstractString)
 
-Helper function to determine whether a directory contains no files; e.g. it is
-either empty or contains only other directories that contain nothing but other
-directories.  This is used to exclude directories from tree hashing.
+Helper function to determine whether a directory contains files; e.g. it is a
+direct parent of a file or it contains some other directory that itself is a
+direct parent of a file. This is used to exclude directories from tree hashing.
 """
-function contains_no_files(root::AbstractString)
-    for (root, dirs, files) in walkdir(root)
-        if !isempty(files)
-            return false
-        end
+function contains_files(path::AbstractString)
+    st = lstat(path)
+    ispath(st) || throw(ArgumentError("non-existent path: $(repr(path))"))
+    isdir(st) || return true
+    for p in readdir(path)
+        contains_files(joinpath(path, p)) && return true
     end
-    return true
+    return false
 end
     
 
@@ -285,7 +286,7 @@ function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
         mode = gitmode(filepath)
         if mode == mode_dir
             # If this directory contains no files, then skip it
-            contains_no_files(filepath) && continue
+            contains_files(filepath) || continue
 
             # Otherwise, hash it up!
             hash = tree_hash(filepath)
