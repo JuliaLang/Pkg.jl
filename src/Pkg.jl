@@ -20,8 +20,8 @@ function depots1()
 end
 
 function pkg_server()
-    server = get(ENV, "JULIA_PKG_SERVER", nothing)
-    server === nothing && return nothing
+    server = get(ENV, "JULIA_PKG_SERVER", "https://pkg.julialang.org")
+    isempty(server) && return nothing
     startswith(server, r"\w+://") || (server = "https://$server")
     return server
 end

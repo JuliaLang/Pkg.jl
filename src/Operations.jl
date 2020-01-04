@@ -676,7 +676,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                     end
                     for repo_url in urls[pkg.uuid]
                         url = get_archive_url_for_version(repo_url, pkg.tree_hash)
-                        push!(archive_urls, url => false)
+                        url !== nothing && push!(archive_urls, url => false)
                     end
                     success = install_archive(archive_urls, pkg.tree_hash, path)
                     if success && readonly
@@ -1091,21 +1091,17 @@ end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
-                 strict::Bool=false, platform::Platform=platform_key_abi())
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi())
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
-    pkgs = strict ? load_all_deps(ctx, pkgs) : load_direct_deps(ctx, pkgs)
-    check_registered(ctx, pkgs)
-
     # resolve & apply package versions
-    resolve_versions!(ctx, pkgs)
+    pkgs = _resolve(ctx, pkgs, preserve)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=true)
     download_artifacts(ctx, pkgs; platform=platform)
-
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1165,18 +1161,16 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     for pkg in pkgs
         up_load_manifest_info!(pkg, manifest_info(ctx, pkg.uuid))
     end
-    pkgs = load_direct_deps(ctx, pkgs) # make sure to include at least direct deps
+    pkgs = load_direct_deps(ctx, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
     check_registered(ctx, pkgs)
     resolve_versions!(ctx, pkgs)
     prune_manifest(ctx)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
-
     download_artifacts(ctx, pkgs)
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
-    # TODO what to do about repo packages?
 end
 
 function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
@@ -1469,7 +1463,6 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
                 run(gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args))
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
             catch err
-                @show err
                 push!(pkgs_errored, pkg.name)
             end
         end

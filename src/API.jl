@@ -59,7 +59,7 @@ develop(pkgs::Vector{<:AbstractString}; kwargs...) =
     develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
 develop(pkgs::Vector{PackageSpec}; kwargs...)      = develop(Context(), pkgs; kwargs...)
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 strict::Bool=false, platform::Platform=platform_key_abi(), kwargs...)
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(), kwargs...)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -99,7 +99,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         end
     end
 
-    Operations.develop(ctx, pkgs, new_git; strict=strict, platform=platform)
+    Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
     return
 end
 
