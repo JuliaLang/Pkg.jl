@@ -1151,18 +1151,16 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     for pkg in pkgs
         up_load_manifest_info!(pkg, manifest_info(ctx, pkg.uuid))
     end
-    pkgs = load_direct_deps(ctx, pkgs) # make sure to include at least direct deps
+    pkgs = load_direct_deps(ctx, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
     check_registered(ctx, pkgs)
     resolve_versions!(ctx, pkgs)
     prune_manifest(ctx)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
-
     download_artifacts(pkgs)
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
-    # TODO what to do about repo packages?
 end
 
 function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
