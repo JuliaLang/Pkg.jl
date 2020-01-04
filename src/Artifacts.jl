@@ -602,7 +602,7 @@ a multi-mapping.  It is valid to bind multiple artifacts with the same name, but
 different `platform`s and `hash`'es within the same `artifacts_toml`.  If `force` is set
 to `true`, this will overwrite a pre-existant mapping, otherwise an error is raised.
 
-`download_info` is an optional tuple that contains a vector of URLs and a hash.  These
+`download_info` is an optional vector that contains tuples of URLs and a hash.  These
 URLs will be listed as possible locations where this artifact can be obtained.  If `lazy`
 is set to `true`, even if download information is available, this artifact will not be
 downloaded until it is accessed via the `artifact"name"` syntax, or
