@@ -838,7 +838,7 @@ end
         dest::AbstractString;
         verbose::Bool = false,
         force::Bool = false,
-        quiet_download::Bool = true,
+        quiet_download::Bool = false,
     )
 
 Download file located at `url`, verify it matches the given `hash`, and throw
@@ -864,7 +864,7 @@ function download_verify(
     dest::AbstractString;
     verbose::Bool = false,
     force::Bool = false,
-    quiet_download::Bool = true,
+    quiet_download::Bool = false,
 )
     # Whether the file existed in the first place
     file_existed = false
@@ -1047,6 +1047,7 @@ end
         ignore_existence::Bool = false,
         force::Bool = false,
         verbose::Bool = false,
+        quiet_download::Bool = false,
     )
 
 Helper method to download tarball located at `url`, verify it matches the
@@ -1080,6 +1081,7 @@ function download_verify_unpack(
     ignore_existence::Bool = false,
     force::Bool = false,
     verbose::Bool = false,
+    quiet_download::Bool = false,
 )
     # First, determine whether we should keep this tarball around
     remove_tarball = false
@@ -1125,7 +1127,7 @@ function download_verify_unpack(
     # Download the tarball; if it already existed and we needed to remove it
     # then we should remove the unpacked path as well
     should_delete = !download_verify(url, hash, tarball_path;
-                                     force=force, verbose=verbose)
+                                     force=force, verbose=verbose, quiet_download=quiet_download)
     if should_delete
         if verbose
             @info("Removing dest directory $(dest) as source tarball changed")
