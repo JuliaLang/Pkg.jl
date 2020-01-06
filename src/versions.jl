@@ -274,11 +274,61 @@ end
 function parse_spec1(spec::String, i::Int)
     # parse specifier
     i = skipws(spec, i)
+    next = parse_specifier(spec, i)
+    isnothing(next) && return
+    specifier, i = next
+
+    # parse version number
+    next = parse_vernum(spec, i)
+    isnothing(next) && error("found no version number")
+    ver, i = next
+    next = iterate(spec, i)
+    if isnothing(next) || next[1] == ','
+        isnothing(next) || (i = next[2])  # comsume comma
+        specifier == '?' && (specifier = '^')  # implicit caret
+    elseif isspace(next[1])
+        i = skipws(spec, next[2])
+        next = iterate(spec, i)
+        if isnothing(next) || next[1] == ','
+            isnothing(next) || (i = next[2])  # consume comma
+            specifier == '?' && (specifier = '^')  # implicit caret
+        elseif next[1] == '-'
+            specifier == '?' || error("invalid hyphen specifier syntax")
+            specifier = '-'
+            next = iterate(spec, next[2])
+            isnothing(next) && error("incomplete hyphen specifier")
+            isspace(next[1]) || error("no space after hyphen specifier")
+            i = next[2]
+        else
+            error("unrecognizable character: $(repr(next[1]))")
+        end
+    elseif next[1] == '-'
+        error("no space before hyphen specifier")
+    else
+        error("unrecognizable character: $(repr(next[1]))")
+    end
+
+    # if not a hyphen specifier, parsing ends.
+    specifier == '-' || return interpret_spec(specifier, ver), i
+
+    # parse version number after hyphen
+    i = skipws(spec, i)
+    next = parse_vernum(spec, i)
+    isnothing(next) && error("incomplete hyphen specifier")
+    ver2, i = next
+    i = skipws(spec, i)
+    next = iterate(spec, i)
+    !isnothing(next) && next[1] == ',' && (i = next[2])
+    return interpret_spec(specifier, ver, ver2), i
+end
+
+function parse_specifier(spec::String, i::Int)
     next = iterate(spec, i)
     isnothing(next) && return
     specifier = next[1]
     if isdigit(specifier)
         # implicit caret or hyphen
+        specifier = '?'
     elseif specifier ∈ ('^', '~', '=', '≤', '≥')
         # caret, tilde, equal, or one-character inequal
         i = skipws(spec, next[2])
@@ -294,49 +344,7 @@ function parse_spec1(spec::String, i::Int)
     else
         error("invalid version specifier: $(repr(specifier))")
     end
-
-    # parse version number
-    next = parse_vernum(spec, i)
-    isnothing(next) && error("found no version number")
-    vernum, i = next
-    next = iterate(spec, i)
-    if isnothing(next) || next[1] == ','
-        isnothing(next) || (i = next[2]) # comsume comma
-        isdigit(specifier) && (specifier = '^')  # implicit caret
-    elseif isspace(next[1])
-        i = skipws(spec, next[2])
-        next = iterate(spec, i)
-        if isnothing(next) || next[1] == ','
-            isnothing(next) || (i = next[2])  # consume comma
-            isdigit(specifier) && (specifier = '^')  # implicit caret
-        elseif next[1] == '-'
-            isdigit(specifier) || error("found $(repr(specifier))) specifier before hyphen specifier")
-            specifier = '-'
-            next = iterate(spec, next[2])
-            isnothing(next) && error("incomplete hyphen specifier")
-            isspace(next[1]) || error("no space after hyphen specifier")
-            i = next[2]
-        else
-            error("unrecognizable character after version number: $(repr(next[1]))")
-        end
-    elseif next[1] == '-'
-        error("no space before hyphen specifier")
-    else
-        error("unrecognizable character after version number: $(repr(next[1]))")
-    end
-
-    # if not a hyphen specifier, parsing ends.
-    specifier == '-' || return interpret_spec(specifier, vernum), i
-
-    # parse version number after hyphen
-    i = skipws(spec, i)
-    next = parse_vernum(spec, i)
-    isnothing(next) && error("incomplete hyphen specifier")
-    vernum2, i = next
-    i = skipws(spec, i)
-    next = iterate(spec, i)
-    !isnothing(next) && next[1] == ',' && (i = next[2])
-    return interpret_spec(specifier, vernum, vernum2), i
+    return specifier, i
 end
 
 function parse_vernum(str::String, i::Int)
