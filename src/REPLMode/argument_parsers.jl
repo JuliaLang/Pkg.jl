@@ -104,7 +104,7 @@ end
 # Registries can be identified through: uuid, name, or name+uuid
 # when updating/removing. When adding we can accept a local path or url.
 function parse_registry(word::AbstractString; add=false)::RegistrySpec
-    word = replace(word, "~" => homedir())
+    word = expanduser(word)
     registry = RegistrySpec()
     if add && isdir_windows_workaround(word) # TODO: Should be casesensitive_isdir
         if isdir(joinpath(word, ".git")) # add path as url and clone it from there
