@@ -329,18 +329,15 @@ function parse_specifier(spec::String, i::Int)
     if isdigit(specifier)
         # implicit caret or hyphen
         specifier = '?'
-    elseif specifier ∈ ('^', '~', '=', '≤', '≥')
+    elseif specifier ∈ ('^', '~', '=', '<', '≥')
         # caret, tilde, equal, or one-character inequal
         i = skipws(spec, next[2])
-    elseif specifier ∈ ('<', '>')
-        # one- or two-character inequal
-        i = next[2]
-        next = iterate(spec, i)
-        if !isnothing(next) && next[1] == '='
-            specifier = specifier == '<' ? '≤' : '≥'
-            i = next[2]
-        end
-        i = skipws(spec, i)
+    elseif specifier == '>'
+        # two-character inequal (i.e. '>=')
+        next = iterate(spec, next[2])
+        !isnothing(next) && next[1] == '=' || error("expected '=' after '>'")
+        specifier = '≥'
+        i = skipws(spec, next[2])
     else
         error("invalid version specifier: $(repr(specifier))")
     end
@@ -429,18 +426,12 @@ function interpret_spec(specifier::Char, ver::NamedTuple)
         up = n == 1 ? VersionBound(major) : VersionBound(major, minor)
     elseif specifier == '='
         lo = up = b
-    elseif specifier == '≤'
-        up = b
     elseif specifier == '<'
         up = patch == 0 && minor == 0 ? VersionBound(major-1) :
              patch == 0 && minor != 0 ? VersionBound(major, minor-1) :
              VersionBound(major, minor, patch-1)
     elseif specifier == '≥'
         lo = b
-    elseif specifier == '>'
-        lo = patch == 0 && minor == 0 ? VersionBound(major+1) :
-             patch == 0 && minor != 0 ? VersionBound(major, minor+1) :
-             VersionBound(major, minor, patch+1)
     else
         @assert false
     end
