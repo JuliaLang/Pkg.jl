@@ -14,6 +14,7 @@ const platform = platform_key_abi()
         @test_throws ArgumentError Linux(:x86_64; libc=:crazy_libc)
         @test_throws ArgumentError Linux(:x86_64; libc=:glibc, call_abi=:crazy_abi)
         @test_throws ArgumentError Linux(:x86_64; libc=:glibc, call_abi=:eabihf)
+        @test_throws ArgumentError Linux(:arm)
         @test_throws ArgumentError Linux(:armv7l; libc=:glibc, call_abi=:kekeke)
         @test_throws ArgumentError MacOS(:i686)
         @test_throws ArgumentError MacOS(:x86_64; libc=:glibc)
@@ -75,14 +76,16 @@ const platform = platform_key_abi()
         @test wordsize(UnknownPlatform(:x86_64)) == 0
 
         @test call_abi(Linux(:x86_64)) == nothing
+        @test call_abi(Linux(:armv6l)) == :eabihf
         @test call_abi(Linux(:armv7l; call_abi=:eabihf)) == :eabihf
         @test call_abi(UnknownPlatform(;call_abi=:eabihf)) == nothing
 
         @test triplet(Windows(:i686)) == "i686-w64-mingw32"
         @test triplet(Linux(:x86_64; libc=:musl)) == "x86_64-linux-musl"
-        @test triplet(Linux(:armv7l; libc=:musl)) == "arm-linux-musleabihf"
+        @test triplet(Linux(:armv7l; libc=:musl)) == "armv7l-linux-musleabihf"
+        @test triplet(Linux(:armv6l; libc=:musl, call_abi=:eabihf)) == "armv6l-linux-musleabihf"
         @test triplet(Linux(:x86_64)) == "x86_64-linux-gnu"
-        @test triplet(Linux(:armv7l)) == "arm-linux-gnueabihf"
+        @test triplet(Linux(:armv6l)) == "armv6l-linux-gnueabihf"
         @test triplet(MacOS()) == "x86_64-apple-darwin14"
         @test triplet(FreeBSD(:x86_64)) == "x86_64-unknown-freebsd11.1"
         @test triplet(FreeBSD(:i686)) == "i686-unknown-freebsd11.1"
@@ -118,6 +121,8 @@ const platform = platform_key_abi()
         @test platform_key_abi("x86_64-apple-darwin17.0.0") == MacOS()
         @test platform_key_abi("armv7l-pc-linux-gnueabihf") == Linux(:armv7l)
         @test platform_key_abi("armv7l-linux-musleabihf") == Linux(:armv7l, libc=:musl)
+        @test platform_key_abi("armv6l-linux-gnueabihf") == Linux(:armv6l)
+        # Test that the short name "arm" goes to `armv7l`
         @test platform_key_abi("arm-linux-gnueabihf") == Linux(:armv7l)
         @test platform_key_abi("aarch64-unknown-linux-gnu") == Linux(:aarch64)
         @test platform_key_abi("powerpc64le-linux-gnu") == Linux(:powerpc64le)
@@ -210,7 +215,7 @@ const platform = platform_key_abi()
             libgfortran_version=v"5",
             cxxstring_abi=:cxx11,
         )
-        for arch in (:x86_64, :i686, :aarch64, :armv7l),
+        for arch in (:x86_64, :i686, :aarch64, :armv6l, :armv7l),
             cabi in (
                 CompilerABI(libgfortran_version=v"3"),
                 CompilerABI(cxxstring_abi=:cxx03),
