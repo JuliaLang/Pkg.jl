@@ -1301,7 +1301,11 @@ function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::Strin
     end
     # preserve important nodes
     keep = [target.uuid]
-    append!(keep, collect(values(read_project(test_project).deps)))
+    test_project_deps = read_project(test_project).deps
+    for (pkg, uuid) in test_project_deps
+        env.manifest[uuid] = PackageEntry(name=pkg)
+    end
+    append!(keep, collect(values(test_project_deps)))
     # prune and return
     return prune_manifest(env.manifest, keep)
 end
@@ -1384,12 +1388,43 @@ function update_package_test!(pkg::PackageSpec, entry::PackageEntry)
     pkg.pinned = entry.pinned
 end
 
+# Mostly here to give PkgEval some more coverage for packages
+# that still use test/REQUIRE. Ignores version bounds
+function parse_REQUIRE(require_path::String)
+    packages = String[]
+    for entry in eachline(require_path)
+        if startswith(entry, '#') || isempty(entry)
+            continue
+        end
+        # For lines like @osx Foo, ignore @osx
+        words = split(entry)
+        if startswith(words[1], '@')
+            popfirst!(words)
+        end
+        push!(packages, popfirst!(words))
+    end
+    return packages
+end
+
 # "targets" based test deps -> "test/Project.toml" based deps
 function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String, target::String)
     test_project = Types.Project()
     if projectfile_path(source_path; strict=true) === nothing
         # no project file, assuming this is an old REQUIRE package
         test_project.deps = ctx.env.manifest[pkg.uuid].deps
+        if target == "test"
+            test_REQUIRE_path = joinpath(source_path, "test", "REQUIRE")
+            if isfile(test_REQUIRE_path)
+                @warn "using test/REQUIRE files is deprecated and current support is lacking in some areas" 
+                test_pkgs = parse_REQUIRE(test_REQUIRE_path)
+                package_specs = [PackageSpec(name=pkg) for pkg in test_pkgs]
+                registry_resolve!(ctx, package_specs)
+                ensure_resolved(ctx, package_specs, registry=true)
+                for spec in package_specs
+                    test_project.deps[spec.name] = spec.uuid
+                end
+            end
+        end
         return test_project
     end
     # collect relevant info from source

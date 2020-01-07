@@ -288,6 +288,13 @@ end
     end
 end
 
+@testset "using a test/REQUIRE file" begin
+    isolate() do
+        Pkg.add(Pkg.PackageSpec(;name="EnglishText", version="0.6.0"))
+        Pkg.test("EnglishText")
+    end
+end
+
 #
 # # Activate
 #
