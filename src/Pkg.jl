@@ -26,6 +26,12 @@ function pkg_server()
     return server
 end
 
+function telemetryinfo(io::IO = stdout)
+    for header in Pkg.PlatformEngines.get_telemetry_headers(pkg_server())
+        println(io, header)
+    end
+end
+
 logdir(depot = depots1()) = joinpath(depot, "logs")
 devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
