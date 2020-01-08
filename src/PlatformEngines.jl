@@ -801,6 +801,8 @@ function get_telemetry_headers(url::AbstractString)
             push!(headers, "Julia-CI-Variables: "*join(ci_info, ';'))
         end
     end
+    # interactive session?
+    push!(headers, "Julia-Interactive: $(isinteractive())")
     return headers
 end
 
