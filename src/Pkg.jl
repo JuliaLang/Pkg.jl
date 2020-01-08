@@ -527,9 +527,9 @@ const precompile_script = """
     cd(tmp)
     empty!(DEPOT_PATH)
     pushfirst!(DEPOT_PATH, tmp)
-    # Prevent cloning registry
-    mkdir("registries")
-    touch("registries/blocker") # prevents default registry from cloning
+    # Prevent cloning the General registry by adding a fake one
+    mkdir("registries"); mkdir("registries/Registry")
+    open(io -> print(io, "name = \"Registry\"\nuuid = \"37c07fec-e54c-4851-934c-2e3885e4053e\"\nrepo = \"https://github.com/JuliaRegistries/Registry.git\"\n[packages]\n" ,"registries/Registry/Registry.toml", "w")
     touch("Project.toml")
     ] activate .
     $CTRL_C
