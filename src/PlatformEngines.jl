@@ -721,10 +721,13 @@ function load_telemetry_file(file::AbstractString)
     # some validity checking helpers
     is_valid_uuid(x) = false
     is_valid_salt(x) = false
+    is_valid_vars(x) = false
     is_valid_uuid(x::Bool) = !x # false is valid, true is not
     is_valid_salt(x::Bool) = !x # false is valid, true is not
+    is_valid_vars(x::Bool) = true
     is_valid_uuid(x::AbstractString) = occursin(Pkg.REPLMode.uuid_re, x)
     is_valid_salt(x::AbstractString) = occursin(r"^[0-9a-zA-Z]+$", x)
+    is_valid_vars(x::AbstractVector) = all(s isa AbstractString for s in x)
     # generate or fix system-specific info
     if !haskey(info, "client_uuid") || !is_valid_uuid(info["client_uuid"])
         info["client_uuid"] = string(uuid4())
@@ -732,6 +735,10 @@ function load_telemetry_file(file::AbstractString)
     end
     if !haskey(info, "secret_salt") || !is_valid_salt(info["secret_salt"])
         info["secret_salt"] = randstring(36)
+        changed = true
+    end
+    if haskey(info, "ci_variables") && !is_valid_vars(info["ci_variables"])
+        delete!(info, "ci_variables")
         changed = true
     end
     if changed
@@ -743,7 +750,9 @@ function load_telemetry_file(file::AbstractString)
     return info
 end
 
-const CI_VARS = [
+# based on information in this post:
+# https://github.community/t5/GitHub-Actions/Have-the-CI-environment-variable-set-by-default/m-p/32358/highlight/true#M1097
+const CI_VARIABLES = [
     "APPVEYOR",
     "CI",
     "CIRCLECI",
@@ -777,17 +786,23 @@ function get_telemetry_headers(url::AbstractString)
         end
     end
     # CI indicator variables
-    if get(info, "ci_indicators", true) != false
-        ci_indicators = String[]
-        for var in CI_VARS
+    ci_variables = get(info, "ci_variables", CI_VARIABLES)
+    ci_variables == true && (ci_variables = CI_VARIABLES)
+    if ci_variables != false
+        ci_info = String[]
+        for var in CI_VARIABLES ∩ map(uppercase, ci_variables)
             val = get(ENV, var, nothing)
             state = val === nothing ? "n" :
                 lowercase(val) in ("true", "t", "1", "yes", "y") ? "t" :
                 lowercase(val) in ("false", "f", "0", "no", "n") ? "f" : "o"
-            push!(ci_indicators, "$var=$state")
+            push!(ci_info, "$var=$state")
         end
-        push!(headers, "Julia-CI-Indicators: "*join(ci_indicators, ';'))
+        if !isempty(ci_info)
+            push!(headers, "Julia-CI-Variables: "*join(ci_info, ';'))
+        end
     end
+    # interactive session?
+    push!(headers, "Julia-Interactive: $(isinteractive())")
     return headers
 end
 
