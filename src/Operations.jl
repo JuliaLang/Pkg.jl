@@ -1301,11 +1301,7 @@ function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::Strin
     end
     # preserve important nodes
     keep = [target.uuid]
-    test_project_deps = read_project(test_project).deps
-    for (pkg, uuid) in test_project_deps
-        env.manifest[uuid] = PackageEntry(name=pkg)
-    end
-    append!(keep, collect(values(test_project_deps)))
+    append!(keep, collect(values(read_project(test_project).deps)))
     # prune and return
     return prune_manifest(env.manifest, keep)
 end
@@ -1411,7 +1407,7 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     test_project = Types.Project()
     if projectfile_path(source_path; strict=true) === nothing
         # no project file, assuming this is an old REQUIRE package
-        test_project.deps = ctx.env.manifest[pkg.uuid].deps
+        test_project.deps = copy(ctx.env.manifest[pkg.uuid].deps)
         if target == "test"
             test_REQUIRE_path = joinpath(source_path, "test", "REQUIRE")
             if isfile(test_REQUIRE_path)
