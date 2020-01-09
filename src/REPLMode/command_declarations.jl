@@ -258,8 +258,8 @@ it will be placed in the first depot of the stack.
     :completions => complete_installed_packages,
     :description => "update packages in manifest",
     :help => md"""
-    up [-p|--project]  [opts] pkg[=uuid] [@version] ...
-    up [-m|--manifest] [opts] pkg[=uuid] [@version] ...
+    up [-p|--project]  [-w|--warnall] [opts] pkg[=uuid] [@version] ...
+    up [-m|--manifest] [-w|--warnall] [opts] pkg[=uuid] [@version] ...
 
     opts: --major | --minor | --patch | --fixed
 
@@ -270,7 +270,9 @@ In `--project` mode, package specifications only match project packages, while
 in `manifest` mode they match any manifest package. Bound level options force
 the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
-packages will not be upgraded at all.
+packages will not be upgraded at all. `up -w -p` (resp. `up -w -m`) will print a
+warning for each package in the project (resp. manifest) that cannot be updated
+to the latest registered version.
 """,
 ],[ :name => "generate",
     :api => API.generate,
