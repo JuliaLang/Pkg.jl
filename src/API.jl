@@ -241,7 +241,7 @@ function warn_not_latest(ctx::Context = Context(),
         latest = pkg_to_latest[k]
         if latest !== nothing && current < latest
             if any([_pkg_spec_matches(p, k) for p in pkgs])
-                @warn("$(name) is at $(current), but the latest available version is $(latest)")
+                @warn("$(name) could only be updated to $(current) (the latest version is $(latest))")
             end
         end
     end
