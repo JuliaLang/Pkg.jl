@@ -721,10 +721,13 @@ function load_telemetry_file(file::AbstractString)
     # some validity checking helpers
     is_valid_uuid(x) = false
     is_valid_salt(x) = false
+    is_valid_vars(x) = false
     is_valid_uuid(x::Bool) = !x # false is valid, true is not
     is_valid_salt(x::Bool) = !x # false is valid, true is not
+    is_valid_vars(x::Bool) = true
     is_valid_uuid(x::AbstractString) = occursin(Pkg.REPLMode.uuid_re, x)
     is_valid_salt(x::AbstractString) = occursin(r"^[0-9a-zA-Z]+$", x)
+    is_valid_vars(x::AbstractVector) = all(s isa AbstractString for s in x)
     # generate or fix system-specific info
     if !haskey(info, "client_uuid") || !is_valid_uuid(info["client_uuid"])
         info["client_uuid"] = string(uuid4())
@@ -732,6 +735,10 @@ function load_telemetry_file(file::AbstractString)
     end
     if !haskey(info, "secret_salt") || !is_valid_salt(info["secret_salt"])
         info["secret_salt"] = randstring(36)
+        changed = true
+    end
+    if haskey(info, "ci_variables") && !is_valid_vars(info["ci_variables"])
+        delete!(info, "ci_variables")
         changed = true
     end
     if changed
@@ -743,7 +750,9 @@ function load_telemetry_file(file::AbstractString)
     return info
 end
 
-const CI_VARS = [
+# based on information in this post:
+# https://github.community/t5/GitHub-Actions/Have-the-CI-environment-variable-set-by-default/m-p/32358/highlight/true#M1097
+const CI_VARIABLES = [
     "APPVEYOR",
     "CI",
     "CIRCLECI",
@@ -759,6 +768,7 @@ function get_telemetry_headers(url::AbstractString)
     headers = String[]
     server_dir = get_server_dir(url)
     server_dir === nothing && return headers
+    push!(headers, "Julia-Pkg-Protocol: 1.0")
     info = load_telemetry_file(joinpath(server_dir, "telemetry.toml"))
     get(info, "telemetry", true) == false && return headers
     # general system information
@@ -776,17 +786,23 @@ function get_telemetry_headers(url::AbstractString)
         end
     end
     # CI indicator variables
-    if get(info, "ci_indicators", true) != false
-        ci_indicators = String[]
-        for var in CI_VARS
+    ci_variables = get(info, "ci_variables", CI_VARIABLES)
+    ci_variables == true && (ci_variables = CI_VARIABLES)
+    if ci_variables != false
+        ci_info = String[]
+        for var in CI_VARIABLES ∩ map(uppercase, ci_variables)
             val = get(ENV, var, nothing)
             state = val === nothing ? "n" :
                 lowercase(val) in ("true", "t", "1", "yes", "y") ? "t" :
                 lowercase(val) in ("false", "f", "0", "no", "n") ? "f" : "o"
-            push!(ci_indicators, "$var=$state")
+            push!(ci_info, "$var=$state")
         end
-        push!(headers, "Julia-CI-Indicators: "*join(ci_indicators, ';'))
+        if !isempty(ci_info)
+            push!(headers, "Julia-CI-Variables: "*join(ci_info, ';'))
+        end
     end
+    # interactive session?
+    push!(headers, "Julia-Interactive: $(isinteractive())")
     return headers
 end
 
@@ -838,7 +854,7 @@ end
         dest::AbstractString;
         verbose::Bool = false,
         force::Bool = false,
-        quiet_download::Bool = true,
+        quiet_download::Bool = false,
     )
 
 Download file located at `url`, verify it matches the given `hash`, and throw
@@ -864,7 +880,7 @@ function download_verify(
     dest::AbstractString;
     verbose::Bool = false,
     force::Bool = false,
-    quiet_download::Bool = true,
+    quiet_download::Bool = false,
 )
     # Whether the file existed in the first place
     file_existed = false
@@ -1047,6 +1063,7 @@ end
         ignore_existence::Bool = false,
         force::Bool = false,
         verbose::Bool = false,
+        quiet_download::Bool = false,
     )
 
 Helper method to download tarball located at `url`, verify it matches the
@@ -1080,6 +1097,7 @@ function download_verify_unpack(
     ignore_existence::Bool = false,
     force::Bool = false,
     verbose::Bool = false,
+    quiet_download::Bool = false,
 )
     # First, determine whether we should keep this tarball around
     remove_tarball = false
@@ -1125,7 +1143,7 @@ function download_verify_unpack(
     # Download the tarball; if it already existed and we needed to remove it
     # then we should remove the unpacked path as well
     should_delete = !download_verify(url, hash, tarball_path;
-                                     force=force, verbose=verbose)
+                                     force=force, verbose=verbose, quiet_download=quiet_download)
     if should_delete
         if verbose
             @info("Removing dest directory $(dest) as source tarball changed")
@@ -1180,13 +1198,23 @@ successfully.
 """
 function verify(path::AbstractString, hash::AbstractString; verbose::Bool = false,
                 report_cache_status::Bool = false, hash_path::AbstractString="$(path).sha256")
-    if length(hash) != 64
-        msg  = "Hash must be 256 bits (64 characters) long, "
-        msg *= "given hash is $(length(hash)) characters long"
+
+    # Check hash string format
+    if !occursin(r"^[0-9a-f]{64}$"i, hash)
+        msg = "Hash value must be 64 hexadecimal characters (256 bits), "
+        if !isascii(hash)
+            msg *= "given hash value is non-ASCII"
+        elseif occursin(r"^[0-9a-f]*$"i, hash)
+            msg *= "given hash value has the wrong length ($(length(hash)))"
+        else
+            msg *= "given hash value contains non-hexadecimal characters"
+        end
+        msg *= ": $(repr(hash))"
         error(msg)
     end
+    hash = lowercase(hash)
 
-    # First, check to see if the hash cache is consistent
+    # Check to see if the hash cache is consistent
     status = :hash_consistent
 
     # First, it must exist
@@ -1229,6 +1257,7 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
     calc_hash = open(path) do file
         bytes2hex(sha256(file))
     end
+    @assert occursin(r"^[0-9a-f]{64}$", calc_hash)
 
     if verbose
         @info("Calculated hash $calc_hash for file $path")

@@ -581,24 +581,34 @@ function install_git(
     end
 end
 
-function download_artifacts(pkgs::Vector{PackageSpec}; platform::Platform=platform_key_abi(),
+function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec}; platform::Platform=platform_key_abi(),
                             verbose::Bool=false)
     # Filter out packages that have no source_path()
     pkg_roots = String[p for p in source_path.(pkgs) if p !== nothing]
-    return download_artifacts(pkg_roots; platform=platform, verbose=verbose)
+    return download_artifacts(ctx, pkg_roots; platform=platform, verbose=verbose)
 end
 
-function download_artifacts(pkg_roots::Vector{String}; platform::Platform=platform_key_abi(),
+function download_artifacts(ctx::Context, pkg_roots::Vector{String}; platform::Platform=platform_key_abi(),
                             verbose::Bool=false)
+    # List of Artifacts.toml files that we're going to download from
+    artifacts_tomls = String[]
+
     for path in pkg_roots
         # Check to see if this package has an (Julia)Artifacts.toml
         for f in artifact_names
             artifacts_toml = joinpath(path, f)
             if isfile(artifacts_toml)
-                ensure_all_artifacts_installed(artifacts_toml; platform=platform, verbose=verbose)
-                write_env_usage(artifacts_toml, "artifact_usage.toml")
+                push!(artifacts_tomls, artifacts_toml)
                 break
             end
+        end
+    end
+
+    if !isempty(artifacts_tomls)
+        printpkgstyle(ctx, :Downloading, "artifacts...")
+        for artifacts_toml in artifacts_tomls
+            ensure_all_artifacts_installed(artifacts_toml; platform=platform, verbose=verbose, quiet_download=false)
+            write_env_usage(artifacts_toml, "artifact_usage.toml")
         end
     end
 end
@@ -1072,7 +1082,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
-    download_artifacts(pkgs; platform=platform)
+    download_artifacts(ctx, pkgs; platform=platform)
 
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
@@ -1081,21 +1091,17 @@ end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
-                 strict::Bool=false, platform::Platform=platform_key_abi())
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi())
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
-    pkgs = strict ? load_all_deps(ctx, pkgs) : load_direct_deps(ctx, pkgs)
-    check_registered(ctx, pkgs)
-
     # resolve & apply package versions
-    resolve_versions!(ctx, pkgs)
+    pkgs = _resolve(ctx, pkgs, preserve)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=true)
-    download_artifacts(pkgs; platform=platform)
-
+    download_artifacts(ctx, pkgs; platform=platform)
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1155,18 +1161,16 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     for pkg in pkgs
         up_load_manifest_info!(pkg, manifest_info(ctx, pkg.uuid))
     end
-    pkgs = load_direct_deps(ctx, pkgs) # make sure to include at least direct deps
+    pkgs = load_direct_deps(ctx, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
     check_registered(ctx, pkgs)
     resolve_versions!(ctx, pkgs)
     prune_manifest(ctx)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
-
-    download_artifacts(pkgs)
+    download_artifacts(ctx, pkgs)
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
-    # TODO what to do about repo packages?
 end
 
 function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
@@ -1202,7 +1206,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     update_manifest!(ctx, pkgs)
 
     new = download_source(ctx, pkgs)
-    download_artifacts(pkgs)
+    download_artifacts(ctx, pkgs)
     Display.print_env_diff(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
@@ -1239,7 +1243,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         resolve_versions!(ctx, pkgs)
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
-        download_artifacts(new)
+        download_artifacts(ctx, new)
         Display.print_env_diff(ctx)
         write_env(ctx.env) # write env before building
         build_versions(ctx, UUID[pkg.uuid for pkg in new])
@@ -1356,12 +1360,12 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             temp_ctx.env.project.deps[target.name] = target.uuid
             write_env(temp_ctx.env, update_undo = false)
             try
-                Pkg.resolve()
+                Pkg.resolve(;io=devnull)
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 @error err
                 temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
-                Pkg.resolve(temp_ctx)
+                Pkg.resolve(temp_ctx;io=devnull)
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code
@@ -1380,12 +1384,43 @@ function update_package_test!(pkg::PackageSpec, entry::PackageEntry)
     pkg.pinned = entry.pinned
 end
 
+# Mostly here to give PkgEval some more coverage for packages
+# that still use test/REQUIRE. Ignores version bounds
+function parse_REQUIRE(require_path::String)
+    packages = String[]
+    for entry in eachline(require_path)
+        if startswith(entry, '#') || isempty(entry)
+            continue
+        end
+        # For lines like @osx Foo, ignore @osx
+        words = split(entry)
+        if startswith(words[1], '@')
+            popfirst!(words)
+        end
+        push!(packages, popfirst!(words))
+    end
+    return packages
+end
+
 # "targets" based test deps -> "test/Project.toml" based deps
 function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String, target::String)
     test_project = Types.Project()
     if projectfile_path(source_path; strict=true) === nothing
         # no project file, assuming this is an old REQUIRE package
-        test_project.deps = ctx.env.manifest[pkg.uuid].deps
+        test_project.deps = copy(ctx.env.manifest[pkg.uuid].deps)
+        if target == "test"
+            test_REQUIRE_path = joinpath(source_path, "test", "REQUIRE")
+            if isfile(test_REQUIRE_path)
+                @warn "using test/REQUIRE files is deprecated and current support is lacking in some areas" 
+                test_pkgs = parse_REQUIRE(test_REQUIRE_path)
+                package_specs = [PackageSpec(name=pkg) for pkg in test_pkgs]
+                registry_resolve!(ctx, package_specs)
+                ensure_resolved(ctx, package_specs, registry=true)
+                for spec in package_specs
+                    test_project.deps[spec.name] = spec.uuid
+                end
+            end
+        end
         return test_project
     end
     # collect relevant info from source
@@ -1451,15 +1486,13 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         # now we sandbox
         printpkgstyle(ctx, :Testing, pkg.name)
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
-            println(ctx.io, "Running sandbox")
             test_fn !== nothing && test_fn()
-            Display.status(Context(), mode=PKGMODE_PROJECT)
+            Display.status(Context(), mode=PKGMODE_MANIFEST)
             flush(stdout)
             try
                 run(gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args))
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
             catch err
-                @show err
                 push!(pkgs_errored, pkg.name)
             end
         end

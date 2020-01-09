@@ -59,7 +59,7 @@ develop(pkgs::Vector{<:AbstractString}; kwargs...) =
     develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
 develop(pkgs::Vector{PackageSpec}; kwargs...)      = develop(Context(), pkgs; kwargs...)
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 strict::Bool=false, platform::Platform=platform_key_abi(), kwargs...)
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(), kwargs...)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -99,7 +99,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         end
     end
 
-    Operations.develop(ctx, pkgs, new_git; strict=strict, platform=platform)
+    Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
     return
 end
 
@@ -225,8 +225,11 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(ctx::Context=Context()) =
-    up(ctx, level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false)
+resolve(; kwargs...) = resolve(Context(); kwargs...)
+function resolve(ctx::Context; kwargs...)
+    up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
+    return nothing
+end
 
 pin(pkg::Union{AbstractString, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
 pin(pkgs::Vector{<:AbstractString}; kwargs...)          = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
@@ -772,7 +775,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Finally, run `Pkg.instantiate()` again.")
     end
     # Download artifacts for this here package before fast-exiting
-    Operations.download_artifacts([dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
+    Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     Operations.is_instantiated(ctx) && return
 
     Types.update_registries(ctx)
@@ -812,7 +815,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
 
     # Ensure artifacts are installed for the dependent packages, and finally this overall project
-    Operations.download_artifacts(pkgs; platform=platform, verbose=verbose)
+    Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
 
     new_apply = Operations.download_source(ctx, pkgs)
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)

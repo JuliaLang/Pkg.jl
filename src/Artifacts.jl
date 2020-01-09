@@ -602,7 +602,7 @@ a multi-mapping.  It is valid to bind multiple artifacts with the same name, but
 different `platform`s and `hash`'es within the same `artifacts_toml`.  If `force` is set
 to `true`, this will overwrite a pre-existant mapping, otherwise an error is raised.
 
-`download_info` is an optional tuple that contains a vector of URLs and a hash.  These
+`download_info` is an optional vector that contains tuples of URLs and a hash.  These
 URLs will be listed as possible locations where this artifact can be obtained.  If `lazy`
 is set to `true`, even if download information is available, this artifact will not be
 downloaded until it is accessed via the `artifact"name"` syntax, or
@@ -728,6 +728,7 @@ function download_artifact(
     tarball_url::String,
     tarball_hash::Union{String, Nothing} = nothing;
     verbose::Bool = false,
+    quiet_download::Bool = false,
 )
     if artifact_exists(tree_hash)
         return true
@@ -746,7 +747,8 @@ function download_artifact(
         # hash.  This will be fixed in a future Julia release which will properly interrogate
         # the filesystem ACLs for executable permissions, which git tree hashes care about.
         try
-            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose)
+            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
+                                   verbose=verbose, quiet_download=quiet_download)
         catch e
             # Clean that destination directory out if something went wrong
             rm(dest_dir; force=true, recursive=true)
@@ -844,19 +846,22 @@ Ensures an artifact is installed, downloading it via the download information st
 function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
                                    pkg_uuid::Union{Base.UUID,Nothing}=nothing,
-                                   verbose::Bool = false)
+                                   verbose::Bool = false,
+                                   quiet_download::Bool = false)
     @nospecialize platform
     meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
     end
 
-    return ensure_artifact_installed(name, meta, artifacts_toml; platform=platform, verbose=verbose)
+    return ensure_artifact_installed(name, meta, artifacts_toml; platform=platform,
+                                     verbose=verbose, quiet_download=quiet_download)
 end
 
 function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::String;
                                    platform::Platform = platform_key_abi(),
-                                   verbose::Bool = false)
+                                   verbose::Bool = false,
+                                   quiet_download::Bool = false)
     @nospecialize platform
     hash = SHA1(meta["git-tree-sha1"])
 
@@ -865,7 +870,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         # TODO: only do this if Pkg server knows about this package
         if (server = pkg_server()) !== nothing
             url = "$server/artifact/$hash"
-            if download_artifact(hash, url)
+            if download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download)
                 return artifact_path(hash)
             end
         end
@@ -880,7 +885,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         for entry in meta["download"]
             url = entry["url"]
             tarball_hash = entry["sha256"]
-            if download_artifact(hash, url, tarball_hash; verbose=verbose)
+            if download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download)
                 return artifact_path(hash)
             end
         end
@@ -896,7 +901,8 @@ end
                                    platform = platform_key_abi(),
                                    pkg_uuid = nothing,
                                    include_lazy = false,
-                                   verbose = false)
+                                   verbose = false,
+                                   quiet_download = false)
 
 Installs all non-lazy artifacts from a given `(Julia)Artifacts.toml` file. `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
@@ -910,7 +916,8 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::Platform = platform_key_abi(),
                                         pkg_uuid::Union{Nothing,Base.UUID} = nothing,
                                         include_lazy::Bool = false,
-                                        verbose::Bool = false)
+                                        verbose::Bool = false,
+                                        quiet_download::Bool = false)
     @nospecialize platform
     if !isfile(artifacts_toml)
         return
@@ -930,7 +937,8 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
         end
 
         # Otherwise, let's try and install it!
-        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform, verbose=verbose)
+        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform,
+                                  verbose=verbose, quiet_download=quiet_download)
     end
 end
 
@@ -1029,7 +1037,7 @@ macro artifact_str(name)
         # Use invokelatest() to introduce a compiler barrier, preventing many backedges from being added
         # and slowing down not only compile time, but also `.ji` load time.  This is critical here, as
         # artifact"" is used in other modules, so we don't want to be spreading backedges around everywhere.
-        Base.invokelatest(do_artifact_str, $name, $(artifact_dict), $(artifacts_toml), $__module__)
+        Base.invokelatest(do_artifact_str, $(esc(name)), $(artifact_dict), $(artifacts_toml), $__module__)
     end
 end
 
