@@ -153,12 +153,14 @@ See also [`PackageSpec`](@ref), [`PackageMode`](@ref).
 const rm = API.rm
 
 """
-    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT)
-    Pkg.update(pkg::Union{String, Vector{String}})
-    Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, warnall::Bool = false)
+    Pkg.update(pkg::Union{String, Vector{String}}; warnall::Bool = false)
+    Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}}; warnall::Bool = false)
 
 Update a package `pkg`. If no posistional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
 If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
+
+If `warnall` is `true` and `mode` is `PKGMODE_PROJECT` (resp. `PKGMODE_MANIFEST`), then a warning will be printed for each package in the project (resp. manifest) that cannot be updated to the latest registered version.
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
