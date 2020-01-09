@@ -323,7 +323,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
         compat = project_compatibility(ctx, pkg.name)
         v = intersect(pkg.version, compat)
-        if isempty(v)
+        if !ctx.ignore_compat && isempty(v)
             throw(Resolve.ResolverError(
                 "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"))
         end
@@ -422,11 +422,13 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                             other_uuid in uuids || push!(uuids, other_uuid)
                         end
                     end
-                    for (vr, cd) in compat_data
-                        all_compat_u_vr = get_or_make!(all_compat_u, vr)
-                        for (name,vs) in cd
-                            # check conflicts??
-                            all_compat_u_vr[name] = vs
+                    if !ctx.ignore_compat
+                        for (vr, cd) in compat_data
+                            all_compat_u_vr = get_or_make!(all_compat_u, vr)
+                            for (name,vs) in cd
+                                # check conflicts??
+                                all_compat_u_vr[name] = vs
+                            end
                         end
                     end
                 end

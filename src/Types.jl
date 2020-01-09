@@ -335,6 +335,7 @@ Base.@kwdef mutable struct Context
     # the future. It currently stands as an unofficial workaround for issue #795.
     num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
     graph_verbose::Bool = false
+    ignore_compat::Bool = false
     currently_running_target::Bool = false
 end
 
