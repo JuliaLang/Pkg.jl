@@ -197,7 +197,8 @@ up(pkgs::Vector{PackageSpec}; kwargs...)               = up(Context(), pkgs; kwa
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
-            update_registry::Bool=true, kwargs...)
+            update_registry::Bool=true, warnall::Bool=false, kwargs...)
+    original_pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     foreach(pkg -> pkg.mode = mode, pkgs)
 
@@ -222,7 +223,78 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         ensure_resolved(ctx, pkgs)
     end
     Operations.up(ctx, pkgs, level)
+    if warnall
+        warn_not_latest(ctx, pkgs)
+    else
+        warn_not_latest(ctx, original_pkgs)
+    end
     return
+end
+
+warn_not_latest(pkgs::Vector{PackageSpec}) = warn_not_latest(Context(), pkgs)
+function warn_not_latest(ctx::Context = Context(),
+                         pkgs::Vector{PackageSpec} = PackageSpec[])
+    pkg_to_current, pkg_to_latest = deps_current_and_latest(ctx)
+    for k in keys(pkg_to_latest)
+        name = k[1]
+        current = pkg_to_current[k]
+        latest = pkg_to_latest[k]
+        if latest !== nothing && current < latest
+            if any([_pkg_spec_matches(p, k) for p in pkgs])
+                @warn("$(name) is at $(current), but the latest available version is $(latest)")
+            end
+        end
+    end
+    return nothing
+end
+
+function _pkg_spec_matches(pkg::PackageSpec,
+                           t::T) where T <: Tuple{String, Base.UUID}
+    if pkg.name !== nothing && pkg.uuid !== nothing
+        return pkg.name == t[1] && pkg.uuid == t[2]
+    elseif pkg.name !== nothing && pkg.uuid === nothing
+        return pkg.name == t[1]
+    elseif pkg.name === nothing && pkg.uuid !== nothing
+        return pkg.uuid == t[2]
+    else
+        return false
+    end
+end
+
+function deps_current_and_latest(ctx::Context)
+    pkg_to_current = Dict{Tuple{String, Base.UUID}, Union{VersionNumber, Nothing}}()
+    pkg_to_latest = Dict{Tuple{String, Base.UUID}, Union{VersionNumber, Nothing}}()
+    deps = Pkg.dependencies()
+    stdlib_uuids = collect(keys(Pkg.Types.stdlibs()))
+    for dep in deps
+        name = dep[2].name
+        uuid = dep[1]
+        current_version = dep[2].version
+        if !(uuid in stdlib_uuids)
+            pkg_to_current[(name, uuid)] = current_version
+            pkg_to_latest[(name, uuid)] = nothing
+        end
+    end
+    Types.clone_default_registries(ctx)
+    for registry in Types.collect_registries()
+        data = Types.read_registry(joinpath(registry.path, "Registry.toml"))
+        for p in data["packages"]
+            uuid = Base.UUID(p[1])
+            name = p[2]["name"]
+            pkg_path = p[2]["path"]
+            if haskey(pkg_to_latest, (name, uuid))
+                existing_entry = pkg_to_latest[(name, uuid)]
+                versions_file = joinpath(registry.path, pkg_path, "Versions.toml")
+                if ispath(versions_file)
+                    new_entry = maximum(VersionNumber.(keys(TOML.parsefile(versions_file))))
+                    if existing_entry === nothing || max_version > existing_entry
+                        pkg_to_latest[(name, uuid)] = new_entry
+                    end
+                end
+            end
+        end
+    end
+    return pkg_to_current, pkg_to_latest
 end
 
 resolve(; kwargs...) = resolve(Context(); kwargs...)

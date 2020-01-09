@@ -253,6 +253,7 @@ it will be placed in the first depot of the stack.
         [:name => "minor", :api => :level => UPLEVEL_MINOR],
         [:name => "patch", :api => :level => UPLEVEL_PATCH],
         [:name => "fixed", :api => :level => UPLEVEL_FIXED],
+        [:name => "warnall", :short_name => "w", :api => :warnall => true],
     ],
     :completions => complete_installed_packages,
     :description => "update packages in manifest",
