@@ -307,7 +307,7 @@ The result is a `Dict` that maps a package UUID to a `PackageInfo` struct repres
 |:------------------|:-----------------------------------------------------------|
 | name              | The name of the package                                    |
 | version           | The version of the package (this is `Nothing` for stdlibs) |
-| in_project        | The package is in the project file (not only in Manifest)  |
+| in_project        | The package is in the project file (a direct dependency)   |
 | is_tracking_path  | Whether a package is directly tracking a directory         |
 | is_pinned         | Whether a package is pinned                                |
 | source            | The directory containing the source code for that package  |
