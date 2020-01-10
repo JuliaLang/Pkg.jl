@@ -1415,6 +1415,7 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
                 test_pkgs = parse_REQUIRE(test_REQUIRE_path)
                 package_specs = [PackageSpec(name=pkg) for pkg in test_pkgs]
                 registry_resolve!(ctx, package_specs)
+                stdlib_resolve!(package_specs)
                 ensure_resolved(ctx, package_specs, registry=true)
                 for spec in package_specs
                     test_project.deps[spec.name] = spec.uuid
