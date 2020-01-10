@@ -1524,6 +1524,7 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
         tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
+        in_project           = pkg.uuid in values(ctx.env.project.deps),
         is_pinned            = pkg.pinned,
         is_tracking_path     = pkg.path !== nothing,
         is_tracking_repo     = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,

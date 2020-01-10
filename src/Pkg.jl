@@ -307,6 +307,7 @@ The result is a `Dict` that maps a package UUID to a `PackageInfo` struct repres
 |:------------------|:-----------------------------------------------------------|
 | name              | The name of the package                                    |
 | version           | The version of the package (this is `Nothing` for stdlibs) |
+| in_project        | The package is in the project file (not only in Manifest)  |
 | is_tracking_path  | Whether a package is directly tracking a directory         |
 | is_pinned         | Whether a package is pinned                                |
 | source            | The directory containing the source code for that package  |
@@ -514,6 +515,31 @@ function __init__()
             end
         end
     end
+end
+
+################
+# Deprecations #
+################
+
+function installed()
+    @warn "Pkg.installed() is deprecated"
+    deps = dependencies()
+    installs = Dict{String, VersionNumber}()
+    for (uuid, dep) in deps
+        dep.in_project || continue
+        dep.version === nothing && continue
+        installs[dep.name] = dep.version
+    end
+    return installs
+end
+
+function dir(pkg::String, paths::AbstractString...)
+    @warn "`Pkg.dir(pkgname, paths...)` is deprecated; instead, do `import $pkg; joinpath(dirname(pathof($pkg)), \"..\", paths...)`." maxlog=1
+    pkgid = Base.identify_package(pkg)
+    pkgid === nothing && return nothing
+    path = Base.locate_package(pkgid)
+    path === nothing && return nothing
+    return abspath(path, "..", "..", paths...)
 end
 
 ##################
