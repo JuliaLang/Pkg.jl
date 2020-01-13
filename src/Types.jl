@@ -1286,6 +1286,7 @@ Base.@kwdef struct PackageInfo
     name::String
     version::Union{Nothing,VersionNumber}
     tree_hash::Union{Nothing,String}
+    is_direct_dep::Bool
     is_pinned::Bool
     is_tracking_path::Bool
     is_tracking_repo::Bool
@@ -1298,6 +1299,7 @@ end
 
 function Base.:(==)(a::PackageInfo, b::PackageInfo)
     return a.name == b.name && a.version == b.version && a.tree_hash == b.tree_hash &&
+        a.is_direct_dep == b.is_direct_dep &&
         a.is_pinned == b.is_pinned && a.is_tracking_path == b.is_tracking_path &&
         a.is_tracking_repo == a.is_tracking_repo &&
         a.is_tracking_registry == b.is_tracking_registry &&

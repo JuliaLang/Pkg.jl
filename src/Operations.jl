@@ -1415,6 +1415,7 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
                 test_pkgs = parse_REQUIRE(test_REQUIRE_path)
                 package_specs = [PackageSpec(name=pkg) for pkg in test_pkgs]
                 registry_resolve!(ctx, package_specs)
+                stdlib_resolve!(package_specs)
                 ensure_resolved(ctx, package_specs, registry=true)
                 for spec in package_specs
                     test_project.deps[spec.name] = spec.uuid
@@ -1523,6 +1524,7 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
         tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
+        is_direct_dep        = pkg.uuid in values(ctx.env.project.deps),
         is_pinned            = pkg.pinned,
         is_tracking_path     = pkg.path !== nothing,
         is_tracking_repo     = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,
