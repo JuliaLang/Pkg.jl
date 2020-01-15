@@ -728,7 +728,7 @@ function download_artifact(
     tarball_url::String,
     tarball_hash::Union{String, Nothing} = nothing;
     verbose::Bool = false,
-    quiet_download::Bool = false,
+    quiet_download::Bool = !(stderr isa Base.TTY),
 )
     if artifact_exists(tree_hash)
         return true
