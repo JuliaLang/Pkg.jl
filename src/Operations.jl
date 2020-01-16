@@ -605,9 +605,8 @@ function download_artifacts(ctx::Context, pkg_roots::Vector{String}; platform::P
     end
 
     if !isempty(artifacts_tomls)
-        printpkgstyle(ctx, :Downloading, "artifacts...")
         for artifacts_toml in artifacts_tomls
-            ensure_all_artifacts_installed(artifacts_toml; platform=platform, verbose=verbose, quiet_download=false)
+            ensure_all_artifacts_installed(artifacts_toml; platform=platform, verbose=verbose, quiet_download=!(stderr isa Base.TTY))
             write_env_usage(artifacts_toml, "artifact_usage.toml")
         end
     end

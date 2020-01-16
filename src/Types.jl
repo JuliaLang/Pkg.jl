@@ -1257,10 +1257,13 @@ function manifest_info(ctx::Context, uuid::UUID)::Union{PackageEntry,Nothing}
 end
 
 function printpkgstyle(ctx::Context, cmd::Symbol, text::String, ignore_indent::Bool=false)
+    printpkgstyle(ctx.io, cmd, text, ignore_indent)
+end
+function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false)
     indent = textwidth(string(:Downloading))
     ignore_indent && (indent = 0)
-    printstyled(ctx.io, lpad(string(cmd), indent), color=:green, bold=true)
-    println(ctx.io, " ", text)
+    printstyled(io, lpad(string(cmd), indent), color=:green, bold=true)
+    println(io, " ", text)
 end
 
 

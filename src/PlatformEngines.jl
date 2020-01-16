@@ -835,7 +835,7 @@ function download(
     end
     download_cmd = gen_download_cmd(url, dest, headers...)
     if verbose
-        @info("Downloading $(url) to $(dest)...")
+        # @info("Downloading $(url) to $(dest)...")
     end
     try
         run(download_cmd, (devnull, verbose ? stdout : devnull, verbose ? stderr : devnull))
