@@ -573,6 +573,7 @@ const precompile_script = """
     foo_hash = Pkg.Artifacts.create_artifact(dir -> touch(joinpath(dir, "foo")))
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo", foo_hash)
     # Also create multiple platform-specific ones because that's a codepath we need precompiled
+    using Pkg.BinaryPlatforms
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Pkg.Artifacts.platform_key_abi())
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Linux(:x86_64), force=true)
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Windows(:x86_64), force=true)
