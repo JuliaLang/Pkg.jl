@@ -561,7 +561,7 @@ const precompile_script = """
     pushfirst!(DEPOT_PATH, tmp)
     # Prevent cloning the General registry by adding a fake one
     mkdir("registries"); mkdir("registries/Registry")
-    open(io -> print(io, "name = \"Registry\"\nuuid = \"37c07fec-e54c-4851-934c-2e3885e4053e\"\nrepo = \"https://github.com/JuliaRegistries/Registry.git\"\n[packages]\n" ,"registries/Registry/Registry.toml", "w")
+    open(io -> print(io, "name = \\\"Registry\\\"\\nuuid = \\\"37c07fec-e54c-4851-934c-2e3885e4053e\\\"\\nrepo = \\\"https://github.com/JuliaRegistries/Registry.git\\\"\\n[packages]\\n") ,"registries/Registry/Registry.toml", "w")
     touch("Project.toml")
     ] activate .
     $CTRL_C
@@ -573,7 +573,7 @@ const precompile_script = """
     foo_hash = Pkg.Artifacts.create_artifact(dir -> touch(joinpath(dir, "foo")))
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo", foo_hash)
     # Also create multiple platform-specific ones because that's a codepath we need precompiled
-    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=platform_key_abi())
+    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Pkg.Artifacts.platform_key_abi())
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Linux(:x86_64), force=true)
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Windows(:x86_64), force=true)
     Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=MacOS(:x86_64), force=true)
