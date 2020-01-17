@@ -5,7 +5,7 @@ import ..depots1, ..depots, ..set_readonly
 import ..GitTools
 using ..BinaryPlatforms
 import ..TOML
-import ..Types: parse_toml, write_env_usage
+import ..Types: parse_toml, write_env_usage, printpkgstyle
 import ...Pkg: pkg_server
 using ..PlatformEngines
 using SHA
@@ -728,7 +728,7 @@ function download_artifact(
     tarball_url::String,
     tarball_hash::Union{String, Nothing} = nothing;
     verbose::Bool = false,
-    quiet_download::Bool = !(stderr isa Base.TTY),
+    quiet_download::Bool = false,
 )
     if artifact_exists(tree_hash)
         return true
@@ -870,9 +870,10 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         # TODO: only do this if Pkg server knows about this package
         if (server = pkg_server()) !== nothing
             url = "$server/artifact/$hash"
-            if download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download)
-                return artifact_path(hash)
+            download_success = with_show_download_info(name, quiet_download) do
+                download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download)
             end
+            download_success && return artifact_path(hash)
         end
 
         # If this artifact does not exist on-disk already, ensure it has download
@@ -885,9 +886,10 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         for entry in meta["download"]
             url = entry["url"]
             tarball_hash = entry["sha256"]
-            if download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download)
-                return artifact_path(hash)
+            download_success = with_show_download_info(name, quiet_download) do
+                download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download)
             end
+            download_success && return artifact_path(hash)
         end
         error("Unable to automatically install '$(name)' from '$(artifacts_toml)'")
     else
@@ -895,6 +897,22 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
     end
 end
 
+function with_show_download_info(f, name, quiet_download)
+    if !quiet_download
+        # Should ideally pass ctx::Context as first arg here
+        printpkgstyle(stdout, :Downloading, "artifact: $name")
+        print(stdout, "\e[?25l") # disable cursor
+    end
+    try
+        return f()
+    finally
+        if !quiet_download
+            print(stdout, "\033[1A") # move cursor up one line
+            print(stdout, "\033[2K") # clear line
+            print(stdout, "\e[?25h") # put back cursor
+        end
+    end
+end
 
 """
     ensure_all_artifacts_installed(artifacts_toml::String;
