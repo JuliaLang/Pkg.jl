@@ -9,7 +9,7 @@ using Dates
 import LibGit2
 
 import ..depots, ..depots1, ..logdir, ..devdir
-import ..Operations, ..Display, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
+import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using ..BinaryPlatforms
@@ -832,14 +832,7 @@ status(pkgs::Vector{PackageSpec}; kwargs...) = status(Context(), pkgs; kwargs...
 function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
                 io::IO=stdout, kwargs...)
     Context!(ctx; io=io, kwargs...)
-    project_resolve!(ctx, pkgs)
-    project_deps_resolve!(ctx, pkgs)
-    if mode === PKGMODE_MANIFEST
-        foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
-    end
-    manifest_resolve!(ctx, pkgs)
-    ensure_resolved(ctx, pkgs)
-    Pkg.Display.status(ctx, pkgs, diff=diff, mode=mode)
+    Operations.status(ctx, pkgs, mode=mode, git_diff=diff)
     return nothing
 end
 
@@ -972,7 +965,7 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     state.idx += direction
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
-    Pkg.Display.print_env_diff(ctx)
+    Operations.stat(ctx)
     write_env(ctx.env; update_undo=false)
 end
 

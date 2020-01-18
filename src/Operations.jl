@@ -8,7 +8,7 @@ import LibGit2
 
 import REPL
 using REPL.TerminalMenus
-using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..Display
+using ..Types, ..Resolve, ..PlatformEngines, ..GitTools
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
 using ..BinaryPlatforms
@@ -61,7 +61,7 @@ function load_version(version, fixed, preserve::PreserveLevel)
     end
 end
 
-function load_direct_deps(ctx::Context, pkgs::Vector{PackageSpec};
+function load_direct_deps(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs = copy(pkgs)
     for (name::String, uuid::UUID) in ctx.env.project.deps
@@ -82,8 +82,8 @@ function load_direct_deps(ctx::Context, pkgs::Vector{PackageSpec};
     return pkgs
 end
 
-function load_all_deps(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
-                        preserve::PreserveLevel=PRESERVE_ALL)
+function load_manifest_deps(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
+                            preserve::PreserveLevel=PRESERVE_ALL)
     pkgs = copy(pkgs)
     for (uuid, entry) in ctx.env.manifest
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
@@ -97,6 +97,12 @@ function load_all_deps(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
             version   = load_version(entry.version, isfixed(entry), preserve),
         ))
     end
+    return pkgs
+end
+
+function load_all_deps(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
+                       preserve::PreserveLevel=PRESERVE_ALL)
+    pkgs = load_manifest_deps(ctx, pkgs; preserve=preserve)
     return load_direct_deps(ctx, pkgs; preserve=preserve)
 end
 
@@ -964,7 +970,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     # only keep reachable manifest entires
     prune_manifest(ctx)
     # update project & manifest
-    Display.print_env_diff(ctx)
+    stat(ctx)
     write_env(ctx.env)
 end
 
@@ -1083,7 +1089,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     # and ensure they are all downloaded and unpacked as well:
     download_artifacts(ctx, pkgs; platform=platform)
 
-    Display.print_env_diff(ctx)
+    stat(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
@@ -1101,7 +1107,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=true)
     download_artifacts(ctx, pkgs; platform=platform)
-    Display.print_env_diff(ctx)
+    stat(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
@@ -1167,7 +1173,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
     download_artifacts(ctx, pkgs)
-    Display.print_env_diff(ctx)
+    stat(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
@@ -1206,7 +1212,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
 
     new = download_source(ctx, pkgs)
     download_artifacts(ctx, pkgs)
-    Display.print_env_diff(ctx)
+    stat(ctx)
     write_env(ctx.env) # write env before building
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
@@ -1243,12 +1249,12 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
         download_artifacts(ctx, new)
-        Display.print_env_diff(ctx)
+        stat(ctx)
         write_env(ctx.env) # write env before building
         build_versions(ctx, UUID[pkg.uuid for pkg in new])
     else
         foreach(pkg -> manifest_info(ctx, pkg.uuid).pinned = false, pkgs)
-        Display.print_env_diff(ctx)
+        stat(ctx)
         write_env(ctx.env)
     end
 end
@@ -1359,12 +1365,12 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             temp_ctx.env.project.deps[target.name] = target.uuid
             write_env(temp_ctx.env, update_undo = false)
             try
-                Pkg.resolve(;io=devnull)
+                Pkg.resolve(; io=devnull)
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 @error err
                 temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
-                Pkg.resolve(temp_ctx;io=devnull)
+                Pkg.resolve(temp_ctx; io=devnull)
                 @debug "Using _clean_ dep graph"
             end
             # Run sandboxed code
@@ -1487,7 +1493,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         printpkgstyle(ctx, :Testing, pkg.name)
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
             test_fn !== nothing && test_fn()
-            Display.status(Context(), mode=PKGMODE_MANIFEST)
+            status(Context(); mode=PKGMODE_COMBINED)
             flush(stdout)
             try
                 run(gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args))
@@ -1534,6 +1540,141 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
         dependencies         = copy(entry.deps), #TODO is copy needed?
     )
     return info
+end
+
+# Display
+
+function stat_rep(x::PackageSpec; name=true)
+    name = name ? "$(x.name)" : ""
+    version = x.version == VersionSpec() ? "" : "v$(x.version)"
+    rev = ""
+    if x.repo.rev !== nothing
+        rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
+    end
+    repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)#$(rev)`" : ""
+    path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
+    pinned = x.pinned ? "⚲" : ""
+    return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
+end
+
+print_single(ctx::Context, pkg::PackageSpec) = printstyled(ctx.io, stat_rep(pkg); color=:white)
+
+is_uninstantiated(::Nothing) = true
+is_uninstantiated(x::PackageSpec) = x.version == VersionSpec() && !is_stdlib(x.uuid)
+function print_diff(ctx::Context, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec})
+    if is_uninstantiated(old) && !is_uninstantiated(new)
+        printstyled(ctx.io, "+ $(stat_rep(new))"; color=:light_green)
+    elseif is_uninstantiated(new)
+        printstyled(ctx.io, "- $(stat_rep(old))"; color=:light_red)
+    elseif is_tracking_registry(old) && is_tracking_registry(new)
+        if new.version > old.version
+            printstyled(ctx.io, "↑ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
+        else
+            printstyled(ctx.io, "↓ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_magenta)
+        end
+    else
+        printstyled(ctx.io, "~ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
+    end
+end
+
+function diff_array(old_ctx::Union{Context,Nothing}, new_ctx::Context; manifest=true)
+    function index_pkgs(pkgs, uuid)
+        idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
+        return idx === nothing ? nothing : pkgs[idx]
+    end
+
+    new = manifest ? load_manifest_deps(new_ctx) : load_direct_deps(new_ctx)
+    if old_ctx === nothing
+        return [(pkg.uuid, nothing, pkg) for pkg in new]
+    end
+    old = manifest ? load_manifest_deps(old_ctx) : load_direct_deps(old_ctx)
+
+    all_uuids = union([pkg.uuid for pkg in old], [pkg.uuid for pkg in new])
+    return [(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
+end
+
+function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Symbol,
+                      uuids::Vector, names::Vector; manifest=true, diff=false)
+    ctx.io = something(ctx.status_io, ctx.io) # for instrumenting tests
+    filter = !isempty(uuids) || !isempty(names)
+    # print header
+    printpkgstyle(ctx, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))
+    # print info
+    printed_something = false
+    xs = diff_array(old_ctx, ctx; manifest=manifest)
+    xs = sort!(xs, by = (x -> (is_stdlib(x[1]), something(x[3], x[2]).name, x[1])))
+    for (uuid, old, new) in xs
+        diff && old == new && continue # in diff mode and no diff to show
+        filter && !(uuid in uuids) && !(something(new, old).name in names) && continue
+        printed_something = true
+
+        printstyled(ctx.io, "   $(string(uuid)[1:8]) "; color = :light_black)
+        diff ? print_diff(ctx, old, new) : print_single(ctx, new)
+        println(ctx.io)
+    end
+    if !printed_something
+        if diff
+            printpkgstyle(ctx, :Diff, "no changes")
+        else
+            printpkgstyle(ctx, :Status, filter ? "no matches" : manifest ? "empty manifest" : "empty project")
+        end
+    end
+end
+
+function git_head_context(ctx, project_dir)
+    env = EnvCache()
+    return try
+        LibGit2.with(LibGit2.GitRepo(project_dir)) do repo
+            git_path = LibGit2.path(repo)
+            project_path = relpath(ctx.env.project_file, git_path)
+            manifest_path = relpath(ctx.env.manifest_file, git_path)
+            env.project = read_project(GitTools.git_file_stream(repo, "HEAD:$project_path", fakeit=true))
+            env.manifest = read_manifest(GitTools.git_file_stream(repo, "HEAD:$manifest_path", fakeit=true))
+            Context(;env=env)
+        end
+    catch err
+        nothing
+    end
+end
+
+stat(ctx::Context) = status(ctx; mode=PKGMODE_COMBINED, env_diff=true)
+function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
+                header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff::Bool=false)
+    ctx.io == Base.devnull && return
+    # if a packge, print header
+    if header === nothing && ctx.env.pkg !== nothing
+       printstyled(ctx.io, "Project "; color=Base.info_color(), bold=true)
+       println(ctx.io, ctx.env.pkg.name, " v", ctx.env.pkg.version)
+    end
+    # load old ctx
+    old_ctx = nothing
+    if git_diff
+        project_dir = dirname(ctx.env.project_file)
+        if !ispath(joinpath(project_dir, ".git"))
+            @warn "diff option only available for environments in git repositories, ignoring."
+        else
+            old_ctx = git_head_context(ctx, project_dir)
+            if old_ctx === nothing
+                @warn "could not read project from HEAD, displaying absolute status instead."
+            end
+        end
+    elseif env_diff
+        old_env = EnvCache()
+        old_env.project = ctx.env.original_project
+        old_env.manifest = ctx.env.original_manifest
+        old_ctx = Context(;env=old_env)
+    end
+    # display
+    filter_uuids = [pkg.uuid for pkg in pkgs if pkg.uuid !== nothing]
+    filter_names = [pkg.name for pkg in pkgs if pkg.name !== nothing]
+    diff = old_ctx !== nothing
+    header = diff ? :Diff : :Status
+    if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
+        print_status(ctx, old_ctx, header, filter_uuids, filter_names; manifest=false, diff=diff)
+    end
+    if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
+        print_status(ctx, old_ctx, header, filter_uuids, filter_names; diff=diff)
+    end
 end
 
 end # module

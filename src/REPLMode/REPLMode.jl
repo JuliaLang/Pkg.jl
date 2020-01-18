@@ -8,7 +8,7 @@ import REPL
 import REPL: LineEdit, REPLCompletions
 
 import ..casesensitive_isdir
-using ..Types, ..Display, ..Operations, ..API, ..Registry, .. Resolve
+using ..Types, ..Operations, ..API, ..Registry, .. Resolve
 
 const SPECS = Ref{Union{Nothing,Dict}}(nothing)
 const TEST_MODE = Ref{Bool}(false)
