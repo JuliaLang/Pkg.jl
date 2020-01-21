@@ -412,7 +412,7 @@ julia> triplet(Windows(:i686))
 "i686-w64-mingw32"
 
 julia> triplet(Linux(:armv7l; compiler_abi=CompilerABI(;libgfortran_version=v"3")))
-"arm-linux-gnueabihf-libgfortran3"
+"armv7l-linux-gnueabihf-libgfortran3"
 ```
 """
 triplet(p::Platform) = string(
@@ -504,7 +504,7 @@ function platform_key_abi(machine::AbstractString)
     )
     libstdcxx_version_mapping = Dict(
         :libstdcxx_nothing => "",
-        # This is sadly easier than parsing out the digit directly 
+        # This is sadly easier than parsing out the digit directly
         (Symbol("libstdcxx$(idx)") => "-libstdcxx$(idx)" for idx in 18:26)...,
     )
     cxxstring_abi_mapping = Dict(

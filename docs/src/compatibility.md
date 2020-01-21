@@ -31,7 +31,7 @@ Example = "1.2, 2"
 ```
 will result in `[1.2.0, 3.0.0)`.  Note leading zeros are treated differently, e.g. `Example = "0.2, 1"` would only result in `[0.2.0-0.3.0, 1.0.0-2.0.0]`. See the next section for more information on versions with leading zeros.
 
-### Behavior of versions with leading zeros (0.0.x and 0.x.y)
+### [Behavior of versions with leading zeros (0.0.x and 0.x.y)](@id compat-pre-1.0)
 
 While the semver specification says that all versions with a major version of 0 (versions before 1.0.0) are incompatible
 with each other, we have decided to only apply that for when both the major and minor versions are zero. In other words,
