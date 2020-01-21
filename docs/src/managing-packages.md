@@ -124,7 +124,7 @@ Note tracking a package through `add` is distinct from `develop`:
 changes to files in the local package repository will not immediately be reflected when loading that package.
 The changes would have to be committed and the packages updated in order to pull in the changes.
 
-In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing Packages](@ref) for an example.
+In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing packages](@ref) for an example.
 
 ### Developing packages
 

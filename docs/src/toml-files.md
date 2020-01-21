@@ -63,7 +63,7 @@ should follow SemVer. The basic rules are:
 See also the section on [Compatibility](@ref).
 
 Note that Pkg.jl deviates from the SemVer specification when it comes to versions pre-1.0.0. See
-[Pre-1.0 behavior](@ref) for more details.
+the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 
 
 ### The `[deps]` section
@@ -108,9 +108,9 @@ julia = "1.1"
 ## `Manifest.toml`
 
 The manifest file is an absolute record of the state of the packages in the environment.
-It includes exact information about (direct and indirect) dependencies of the project. 
+It includes exact information about (direct and indirect) dependencies of the project.
 Given a `Project.toml` + `Manifest.toml` pair, it is possible to instantiate the exact same
-package environment, which is very useful for reproducibility. 
+package environment, which is very useful for reproducibility.
 For the details, see [`Pkg.instantiate`](@ref).
 
 !!! note
