@@ -764,12 +764,16 @@ const CI_VARIABLES = [
     "TRAVIS",
 ]
 
+const telemetry_file_lock = ReentrantLock()
+
 function get_telemetry_headers(url::AbstractString)
     headers = String[]
     server_dir = get_server_dir(url)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol: 1.0")
-    info = load_telemetry_file(joinpath(server_dir, "telemetry.toml"))
+    info = lock(telemetry_file_lock) do
+        load_telemetry_file(joinpath(server_dir, "telemetry.toml"))
+    end
     get(info, "telemetry", true) == false && return headers
     # general system information
     push!(headers, "Julia-Version: $VERSION")
