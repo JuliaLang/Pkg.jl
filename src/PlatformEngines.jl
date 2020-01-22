@@ -743,8 +743,9 @@ function load_telemetry_file(file::AbstractString)
     end
     if changed
         mkpath(dirname(file))
-        open(file, write=true) do io
+        mktemp() do tmp, io
             TOML.print(io, info, sorted=true)
+            mv(tmp, file, force=true)
         end
     end
     return info
