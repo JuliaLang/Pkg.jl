@@ -617,7 +617,7 @@ function handle_auth_error(url, err; verbose::Bool = false)
 end
 
 function register_auth_error_handler(f)
-    pushfirst!(AUTH_ERROR_HANDLERS, f)
+    unique!(pushfirst!(AUTH_ERROR_HANDLERS, f))
     return () -> deregister_auth_error_handler(f)
 end
 
