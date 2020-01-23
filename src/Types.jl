@@ -873,12 +873,14 @@ function pkg_server_registry_url(uuid::UUID)
     end
     download_ok || return nothing
     registry_url = nothing
-    for line in eachline(tmp_path)
-        if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
-            uuid == UUID(m.captures[1]) || continue
-            hash = String(m.captures[2])
-            registry_url = "$server/registry/$uuid/$hash"
-            break
+    open(tmp_path) do io
+        for line in eachline(io)
+            if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
+                uuid == UUID(m.captures[1]) || continue
+                hash = String(m.captures[2])
+                registry_url = "$server/registry/$uuid/$hash"
+                break
+            end
         end
     end
     rm(tmp_path, force=true)
