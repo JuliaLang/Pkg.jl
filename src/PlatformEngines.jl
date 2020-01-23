@@ -741,13 +741,15 @@ function load_telemetry_file(file::AbstractString)
         delete!(info, "ci_variables")
         changed = true
     end
-    if changed
-        mkpath(dirname(file))
-        open(file, write=true) do io
-            TOML.print(io, info, sorted=true)
-        end
+    changed || return info
+    # write telemetry file atomically (if on same file system)
+    mkpath(dirname(file))
+    mktemp() do tmp, io
+        TOML.print(io, info, sorted=true)
+        mv(tmp, file, force=true)
     end
-    return info
+    # reparse file in case a different process wrote it first
+    return load_telemetry_file(file)
 end
 
 # based on information in this post:
