@@ -863,22 +863,24 @@ function pkg_server_registry_url(uuid::UUID)
     server = pkg_server()
     server === nothing && return nothing
     probe_platform_engines!()
-    hash = nothing
+    tmp_path = tempname()
+    download_ok = false
     try
-        mktemp() do tmp_path, io
-            download("$server/registries", tmp_path, verbose=false)
-            for line in eachline(io)
-                if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
-                    uuid == UUID(m.captures[1]) || continue
-                    hash = String(m.captures[2])
-                    break
-                end
-            end
-        end
+        download("$server/registries", tmp_path, verbose=false)
+        download_ok = true
     catch err
         @warn "could not download $server/registries"
     end
-    hash === nothing ? nothing : "$server/registry/$uuid/$hash"
+    if download_ok
+        for line in eachline(tmp_path)
+            if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
+                uuid == UUID(m.captures[1]) || continue
+                hash = String(m.captures[2])
+                return "$server/registry/$uuid/$hash"
+            end
+        end
+    end
+    return nothing
 end
 pkg_server_registry_url(::Nothing) = nothing
 
