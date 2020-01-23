@@ -604,6 +604,25 @@ function get_server_dir(url::AbstractString)
     joinpath(depots1(), "servers", m.captures[1])
 end
 
+const AUTH_ERROR_HANDLERS = []
+
+function handle_auth_error(url, err; verbose::Bool = false)
+    handled, should_retry = false, false
+    for handler in AUTH_ERROR_HANDLERS
+        handled, should_retry = handler(url, err)
+        handled && break
+    end
+    handled && should_retry && return get_auth_header(url; verbose = verbose)
+    return nothing
+end
+
+function register_auth_error_handler(f)
+    pushfirst!(AUTH_ERROR_HANDLERS, f)
+    return () -> deregister_auth_error_handler(f)
+end
+
+deregister_auth_error_handler(f) = filter!(handler -> handler !== f, AUTH_ERROR_HANDLERS)
+
 function get_auth_header(url::AbstractString; verbose::Bool = false)
     server_dir = get_server_dir(url)
     server_dir === nothing && return
@@ -612,19 +631,19 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     # TODO: check for insecure auth file permissions
     if !is_secure_url(url)
         @warn "refusing to send auth info over insecure connection" url=url
-        return
+        return handle_auth_error(url, "insecure-connection"; verbose=verbose)
     end
     # parse the auth file
     auth_info = try
         TOML.parsefile(auth_file)
     catch err
         @error "malformed auth file" file=auth_file err=err
-        return
+        return handle_auth_error(url, "malformed-file"; verbose=verbose)
     end
     # check for an auth token
     if !haskey(auth_info, "access_token")
         @warn "auth file without access_token field" file=auth_file
-        return
+        return handle_auth_error(url, "no-access-token"; verbose=verbose)
     end
     auth_header = "Authorization: Bearer $(auth_info["access_token"])"
     # handle token expiration and refresh
@@ -645,12 +664,12 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
             @warn "expired auth without refresh keys" file=auth_file
         end
         # try it anyway since we can't refresh
-        return auth_header
+        return something(handle_auth_error(url, "no-refresh-key"; verbose=verbose), auth_header)
     end
     refresh_url = auth_info["refresh_url"]
     if !is_secure_url(refresh_url)
         @warn "ignoring insecure auth refresh URL" url=refresh_url
-        return auth_header
+        return something(handle_auth_error(url, "insecure-refresh-url"; verbose=verbose), auth_header)
     end
     verbose && @info "Refreshing expired auth token..." file=auth_file
     tmp = tempname()
@@ -659,13 +678,13 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     catch err
         @warn "token refresh failure" file=auth_file url=refresh_url err=err
         rm(tmp, force=true)
-        return
+        return handle_auth_error(url, "token-refresh-failed"; verbose=verbose)
     end
     auth_info = try TOML.parsefile(tmp)
     catch err
         @warn "discarding malformed auth file" url=refresh_url err=err
         rm(tmp, force=true)
-        return auth_header
+        return something(handle_auth_error(url, "malformed-file"; verbose=verbose), auth_header)
     end
     if !haskey(auth_info, "access_token")
         if haskey(auth_info, "refresh_token")
@@ -673,7 +692,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
         end
         @warn "discarding auth file without access token" auth=auth_info
         rm(tmp, force=true)
-        return auth_header
+        return something(handle_auth_error(url, "no-access-token"; verbose=verbose), auth_header)
     end
     if haskey(auth_info, "expires_in")
         expires_in = auth_info["expires_in"]
