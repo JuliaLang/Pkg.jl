@@ -871,16 +871,18 @@ function pkg_server_registry_url(uuid::UUID)
     catch err
         @warn "could not download $server/registries"
     end
-    if download_ok
-        for line in eachline(tmp_path)
-            if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
-                uuid == UUID(m.captures[1]) || continue
-                hash = String(m.captures[2])
-                return "$server/registry/$uuid/$hash"
-            end
+    download_ok || return nothing
+    registry_url = nothing
+    for line in eachline(tmp_path)
+        if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
+            uuid == UUID(m.captures[1]) || continue
+            hash = String(m.captures[2])
+            registry_url = "$server/registry/$uuid/$hash"
+            break
         end
     end
-    return nothing
+    rm(tmp_path, force=true)
+    return registry_url
 end
 pkg_server_registry_url(::Nothing) = nothing
 
