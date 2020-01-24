@@ -215,4 +215,22 @@ end
     end
 end
 
+@testset "Authentication Header Hooks" begin
+    @test PlatformEngines.get_auth_header("https://foo.bar") == nothing
+
+    called = 0
+    dispose = PlatformEngines.register_auth_error_handler(function (url, svr, err)
+        called += 1
+        return true, called < 3
+    end)
+
+    @test PlatformEngines.get_auth_header("https://foo.bar") == nothing
+    @test called == 3
+
+    dispose()
+
+    @test PlatformEngines.get_auth_header("https://foo.bar") == nothing
+    @test called == 3
+end
+
 end # module
