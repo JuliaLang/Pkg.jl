@@ -625,9 +625,9 @@ deregister_auth_error_handler(f) = filter!(handler -> handler !== f, AUTH_ERROR_
 
 function get_auth_header(url::AbstractString; verbose::Bool = false)
     server_dir = get_server_dir(url)
-    server_dir === nothing && return
+    server_dir === nothing && return handle_auth_error(url, "no-auth-file"; verbose=verbose)
     auth_file = joinpath(server_dir, "auth.toml")
-    isfile(auth_file) || return
+    isfile(auth_file) || return handle_auth_error(url, "no-auth-file"; verbose=verbose)
     # TODO: check for insecure auth file permissions
     if !is_secure_url(url)
         @warn "refusing to send auth info over insecure connection" url=url
