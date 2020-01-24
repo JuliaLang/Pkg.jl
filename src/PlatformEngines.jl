@@ -609,19 +609,43 @@ const AUTH_ERROR_HANDLERS = []
 function handle_auth_error(url, err; verbose::Bool = false)
     handled, should_retry = false, false
     for handler in AUTH_ERROR_HANDLERS
-        handled, should_retry = handler(url, err)
+        handled, should_retry = handler(url, Pkg.pkg_server(), err)
         handled && break
     end
     handled && should_retry && return get_auth_header(url; verbose = verbose)
     return nothing
 end
 
+"""
+    register_auth_error_handler(f)
+
+Registers `f` as the topmost handler for failures in package server authentication.
+
+`f` must be a function that takes three input arguments `(url, pkgserver, err)`, where `url` is the
+URL currently being downloaded, `pkgserver = Pkg.pkg_server()` the current package server, and
+`err` is one of `no-auth-file`, `insecure-connection`, `malformed-file`, `no-access-token`,
+`no-refresh-key`, `insecure-refresh-url`,  `malformed-file`, or `no-access-token`.
+
+The handler `f` needs to return a tuple of `Bool`s `(handled, should_retry)`. If `handled` is `false`,
+the next handler in the stack will be called, otherwise `get_auth_header` is called again if `should_retry`
+is `true`.
+
+`register_auth_error_handler` returns a zero-arg function that can be called to deregister the handler.
+"""
 function register_auth_error_handler(f)
     unique!(pushfirst!(AUTH_ERROR_HANDLERS, f))
     return () -> deregister_auth_error_handler(f)
 end
 
-deregister_auth_error_handler(f) = filter!(handler -> handler !== f, AUTH_ERROR_HANDLERS)
+"""
+    deregister_auth_error_handler(f)
+
+Removes `f` from the stack of authentication error handlers.
+"""
+function deregister_auth_error_handler(f)
+    filter!(handler -> handler !== f, AUTH_ERROR_HANDLERS)
+    return nothing
+end
 
 function get_auth_header(url::AbstractString; verbose::Bool = false)
     server_dir = get_server_dir(url)
