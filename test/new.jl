@@ -215,6 +215,25 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
             @test deps[UUID("9cb9b0df-a8d1-4a6c-a371-7d2ae60a2f25")].version == v"0.1.0"
         end
     end end
+    # `Pkg.test` will prefer the active graph when the same fixed node apears in the active graph and in the test graph
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "ConflictingTestDep")
+        Pkg.activate(path)
+        io = PipeBuffer()
+        inside_test_sandbox(;io=io) do
+            Pkg.dependencies(exuuid) do pkg
+                @test realpath(pkg.source) == realpath(joinpath(path, "dev", "Example"))
+            end
+        end
+        @test occursin(r"conflicting definitions for", read(io, String))
+    end end
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "EquivalentTestDeps")
+        Pkg.activate(path)
+        io = PipeBuffer()
+        Pkg.test(;io=io)
+        @test !occursin(r"conflicting definitions for", read(io, String))
+    end end
 end
 
 # These tests cover the original "targets" API for specifying test dependencies

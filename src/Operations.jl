@@ -43,6 +43,14 @@ function source_path(ctx, pkg::PackageSpec)
         nothing
 end
 
+function source_path(uuid::UUID, pkg::PackageEntry)
+    return is_stdlib(uuid)          ? Types.stdlib_path(pkg.name) :
+        pkg.path        !== nothing ? pkg.path :
+        pkg.repo.source !== nothing ? find_installed(pkg.name, uuid, pkg.tree_hash) :
+        pkg.tree_hash   !== nothing ? find_installed(pkg.name, uuid, pkg.tree_hash) :
+        nothing
+end
+
 is_dep(ctx::Context, pkg::PackageSpec) =
     any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
 
@@ -1159,6 +1167,40 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
     return false
 end
 
+function instantiate_tracking_repo(ctx::Context, pkgs::Vector{PackageSpec}, new::Vector{UUID}=UUID[])
+    for pkg in pkgs
+        pkg.repo.source !== nothing || continue
+        sourcepath = Operations.source_path(ctx, pkg)
+        isdir(sourcepath) && continue
+        ## Download repo at tree hash
+        # determine canonical form of repo source
+        if isurl(pkg.repo.source)
+            repo_source = pkg.repo.source
+        else
+            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
+        end
+        if !isurl(repo_source) && !isdir(repo_source)
+            pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
+        end
+        repo_path = Types.add_repo_cache_path(repo_source)
+        LibGit2.with(GitTools.ensure_clone(ctx, repo_path, pkg.repo.source; isbare=true)) do repo
+            # We only update the clone if the tree hash can't be found
+            tree_hash_object = GitTools.tree_hash(repo, string(pkg.tree_hash))
+            if tree_hash_object === nothing
+                GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=Types.refspecs)
+                tree_hash_object = GitTools.tree_hash(repo, string(pkg.tree_hash))
+            end
+            if tree_hash_object === nothing
+                 pkgerror("Did not find tree_hash $(pkg.tree_hash) for $(err_rep(pkg))")
+            end
+            mkpath(sourcepath)
+            GitTools.checkout_tree_to_path(repo, tree_hash_object, sourcepath)
+            push!(new, pkg.uuid)
+        end
+    end
+    return new
+end
+
 up_load_manifest_info!(pkg::PackageSpec, ::Nothing) = nothing
 function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     pkg.name = entry.name # TODO check name is same
@@ -1182,6 +1224,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     end
     pkgs = load_direct_deps(ctx, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
     check_registered(ctx, pkgs)
+    instantiate_tracking_repo(ctx, pkgs, new_git)
     resolve_versions!(ctx, pkgs)
     prune_manifest(ctx)
     update_manifest!(ctx, pkgs)
@@ -1335,6 +1378,16 @@ function abspath!(project::String, manifest::Dict{UUID,PackageEntry})
     return manifest
 end
 
+function remove_trailing_slash(x::String)
+    a, b = splitdir(x)
+    return isempty(b) ? a : x
+end
+
+function samefile(x::String, y::String)
+    Base.samefile(x,y) && return true
+    return remove_trailing_slash(normpath(x)) == remove_trailing_slash(normpath(y))
+end
+
 # ctx + pkg used to compute parent dep graph
 function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
                  sandbox_path::String, sandbox_project_override)
@@ -1362,13 +1415,19 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         sandbox_manifest = abspath!(sandbox_path, sandbox_env.manifest)
         for (name, uuid) in sandbox_env.project.deps
             entry = get(sandbox_manifest, uuid, nothing)
-            if entry !== nothing && isfixed(entry)
+            if entry !== nothing && !is_tracking_registry(entry)
                 subgraph = prune_manifest(sandbox_manifest, [uuid])
                 for (uuid, entry) in subgraph
-                    if haskey(working_manifest, uuid)
-                        pkgerror("can not merge projects")
+                    existing_entry = get(working_manifest, uuid, nothing)
+                    if existing_entry !== nothing
+                        if !samefile(project_rel_path(sandbox_path, source_path(uuid, entry)),
+                                     project_rel_path(tmp, source_path(uuid, existing_entry)))
+                            println(ctx.io, "conflicting definitions for `$(entry.name)=$(uuid)`.",
+                                    " prefering definition in active manifest over test manifest")
+                        end
+                    else
+                        working_manifest[uuid] = entry
                     end
-                    working_manifest[uuid] = entry
                 end
             end
         end
@@ -1470,8 +1529,6 @@ testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
               test_fn=nothing)
-    Pkg.instantiate(ctx)
-
     # load manifest data
     for pkg in pkgs
         if Types.is_project_uuid(ctx, pkg.uuid)

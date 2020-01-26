@@ -732,15 +732,6 @@ function precompile(ctx::Context)
     nothing
 end
 
-function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
-    try
-        return LibGit2.GitObject(repo, tree_hash)
-    catch err
-        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
-    end
-    return nothing
-end
-
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
@@ -781,42 +772,9 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Types.update_registries(ctx)
     pkgs = Operations.load_all_deps(ctx)
     Operations.check_registered(ctx, pkgs)
-    new_git = UUID[]
-    # Handling packages tracking repos
-    for pkg in pkgs
-        pkg.repo.source !== nothing || continue
-        sourcepath = Operations.source_path(ctx, pkg)
-        isdir(sourcepath) && continue
-        ## Download repo at tree hash
-        # determine canonical form of repo source
-        if isurl(pkg.repo.source)
-            repo_source = pkg.repo.source
-        else
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
-        end
-        if !isurl(repo_source) && !isdir(repo_source)
-            pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
-        end
-        repo_path = Types.add_repo_cache_path(repo_source)
-        LibGit2.with(GitTools.ensure_clone(ctx, repo_path, pkg.repo.source; isbare=true)) do repo
-            # We only update the clone if the tree hash can't be found
-            tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
-            if tree_hash_object === nothing
-                GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=Types.refspecs)
-                tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
-            end
-            if tree_hash_object === nothing
-                 pkgerror("Did not find tree_hash $(pkg.tree_hash) for $(err_rep(pkg))")
-            end
-            mkpath(sourcepath)
-            GitTools.checkout_tree_to_path(repo, tree_hash_object, sourcepath)
-            push!(new_git, pkg.uuid)
-        end
-    end
-
+    new_git = Operations.instantiate_tracking_repo(ctx, pkgs)
     # Ensure artifacts are installed for the dependent packages, and finally this overall project
     Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
-
     new_apply = Operations.download_source(ctx, pkgs)
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
 end

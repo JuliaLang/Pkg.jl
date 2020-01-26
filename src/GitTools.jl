@@ -334,4 +334,13 @@ function git_file_stream(repo::LibGit2.GitRepo, spec::String; fakeit::Bool=false
     return iob
 end
 
+function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
+    try
+        return LibGit2.GitObject(repo, tree_hash)
+    catch err
+        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
+    end
+    return nothing
+end
+
 end # module
