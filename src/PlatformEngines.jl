@@ -608,8 +608,9 @@ const AUTH_ERROR_HANDLERS = []
 
 function handle_auth_error(url, err; verbose::Bool = false)
     handled, should_retry = false, false
-    for handler in AUTH_ERROR_HANDLERS
-        handled, should_retry = handler(url, Pkg.pkg_server(), err)
+    for (scheme, handler) in AUTH_ERROR_HANDLERS
+        occursin(scheme, url) || continue
+        handled, should_retry = handler(url, pkg_server(), err)
         handled && break
     end
     handled && should_retry && return get_auth_header(url; verbose = verbose)
@@ -617,9 +618,12 @@ function handle_auth_error(url, err; verbose::Bool = false)
 end
 
 """
-    register_auth_error_handler(f)
+    register_auth_error_handler(urlscheme::Union{AbstractString, Regex}, f)
 
 Registers `f` as the topmost handler for failures in package server authentication.
+
+A handler is only invoked if `occursin(urlscheme, url)` is true (where `url` is the URL Pkg
+is currently trying to download.)
 
 `f` must be a function that takes three input arguments `(url, pkgserver, err)`, where `url` is the
 URL currently being downloaded, `pkgserver = Pkg.pkg_server()` the current package server, and
@@ -632,18 +636,18 @@ is `true`.
 
 `register_auth_error_handler` returns a zero-arg function that can be called to deregister the handler.
 """
-function register_auth_error_handler(f)
-    unique!(pushfirst!(AUTH_ERROR_HANDLERS, f))
-    return () -> deregister_auth_error_handler(f)
+function register_auth_error_handler(urlscheme::Union{AbstractString, Regex}, f)
+    unique!(pushfirst!(AUTH_ERROR_HANDLERS, urlscheme => f))
+    return () -> deregister_auth_error_handler(urlscheme, f)
 end
 
 """
-    deregister_auth_error_handler(f)
+    deregister_auth_error_handler(urlscheme::Union{AbstractString, Regex}, f)
 
 Removes `f` from the stack of authentication error handlers.
 """
-function deregister_auth_error_handler(f)
-    filter!(handler -> handler !== f, AUTH_ERROR_HANDLERS)
+function deregister_auth_error_handler(urlscheme::Union{AbstractString, Regex}, f)
+    filter!(handler -> handler !== (urlscheme => f), AUTH_ERROR_HANDLERS)
     return nothing
 end
 
