@@ -1080,7 +1080,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "SimplePackage")
         cd(dirname(path)) do
-            Pkg.pkg"develop SimplePackage"
+            Pkg.pkg"develop ./SimplePackage"
         end
         Pkg.dependencies(simple_package_uuid) do pkg
             @test pkg.name == "SimplePackage"

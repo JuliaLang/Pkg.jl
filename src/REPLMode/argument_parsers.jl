@@ -73,10 +73,7 @@ end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
-    if add_or_develop && isdir_windows_workaround(expanduser(word))
-        if !occursin(Base.Filesystem.path_separator_re, word)
-            @info "Resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
-        end
+    if add_or_develop && (occursin(Base.Filesystem.path_separator_re, word) || word in (".", ".."))
         return PackageSpec(repo=Types.GitRepo(source=expanduser(word)))
     elseif occursin(uuid_re, word)
         return PackageSpec(uuid=UUID(word))
