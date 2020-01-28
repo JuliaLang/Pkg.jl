@@ -278,9 +278,7 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     # read project file
     project = read_project(project_file)
     # initialize project package
-    if any(x -> x !== nothing, [project.name, project.uuid, project.version])
-        project.name === nothing && pkgerror("project appears to be a package but has no name")
-        project.uuid === nothing && pkgerror("project appears to be a package but has no uuid")
+    if project.name !== nothing && project.uuid !== nothing
         project_package = PackageSpec(
             name = project.name,
             uuid = project.uuid,
