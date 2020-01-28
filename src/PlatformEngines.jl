@@ -653,7 +653,7 @@ end
 
 function get_auth_header(url::AbstractString; verbose::Bool = false)
     server_dir = get_server_dir(url)
-    server_dir === nothing && return handle_auth_error(url, "no-auth-file"; verbose=verbose)
+    server_dir === nothing && return
     auth_file = joinpath(server_dir, "auth.toml")
     isfile(auth_file) || return handle_auth_error(url, "no-auth-file"; verbose=verbose)
     # TODO: check for insecure auth file permissions
