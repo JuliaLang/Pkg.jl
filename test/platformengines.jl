@@ -221,6 +221,8 @@ end
     old = nothing
     haskey(ENV, "JULIA_PKG_SERVER") && (old = ENV["JULIA_PKG_SERVER"])
 
+    push!(Base.DEPOT_PATH, ".")
+
     ENV["JULIA_PKG_SERVER"] = ""
 
     called = 0
@@ -243,6 +245,7 @@ end
     @test called == 3
 
     old === nothing ? delete!(ENV, "JULIA_PKG_SERVER") : (ENV["JULIA_PKG_SERVER"] = old)
+    pop!(Base.DEPOT_PATH)
 end
 
 end # module
