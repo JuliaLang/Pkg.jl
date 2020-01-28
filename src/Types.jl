@@ -474,7 +474,6 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         resolve_projectfile!(ctx, pkg, repo_path)
     end
     dev_path = devpath(ctx, pkg.name, shared)
-    # No need to clone here
     if isdir(dev_path)
         println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
         new = false
@@ -486,6 +485,9 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             mv(repo_path, dev_path)
         end
         new = true
+    end
+    if !has_uuid(pkg)
+        resolve_projectfile!(ctx, pkg, dev_path)
     end
     pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
     return new
