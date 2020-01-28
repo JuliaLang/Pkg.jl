@@ -424,6 +424,7 @@ function relative_project_path(ctx::Context, path::String)
 end
 
 function devpath(ctx::Context, name::String, shared::Bool)
+    @assert name != ""
     dev_dir = shared ? abspath(Pkg.devdir()) : joinpath(dirname(ctx.env.project_file), "dev")
     return joinpath(dev_dir, name)
 end
@@ -465,17 +466,25 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     end
     @assert pkg.repo.source !== nothing
 
-    repo_path = dev_repo_cache_path(pkg.repo.source)
-    repo = GitTools.ensure_clone(ctx, repo_path, pkg.repo.source)
-    # TODO! Should reset --hard to latest commit here
-    resolve_projectfile!(ctx, pkg, repo_path)
+    repo_path = tempname()
+    cloned = false
+    if !has_name(pkg)
+        GitTools.ensure_clone(ctx, repo_path, pkg.repo.source)
+        cloned = true
+        resolve_projectfile!(ctx, pkg, repo_path)
+    end
     dev_path = devpath(ctx, pkg.name, shared)
+    # No need to clone here
     if isdir(dev_path)
         println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
         new = false
     else
         mkpath(dirname(dev_path))
-        cp(repo_path, dev_path)
+        if !cloned
+           GitTools.ensure_clone(ctx, dev_path, pkg.repo.source)
+        else
+            mv(repo_path, dev_path)
+        end
         new = true
     end
     pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
@@ -495,7 +504,6 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
 end
 
 add_repo_cache_path(url::String) = joinpath(depots1(), "clones", string(hash(url)))
-dev_repo_cache_path(url::String) = add_repo_cache_path(url) * "_full"
 
 function set_repo_source_from_registry!(ctx, pkg)
     registry_resolve!(ctx, pkg)
