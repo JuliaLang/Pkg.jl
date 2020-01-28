@@ -215,4 +215,37 @@ end
     end
 end
 
+@testset "Authentication Header Hooks" begin
+    @test PlatformEngines.get_auth_header("https://foo.bar/baz") == nothing
+
+    old = nothing
+    haskey(ENV, "JULIA_PKG_SERVER") && (old = ENV["JULIA_PKG_SERVER"])
+
+    push!(Base.DEPOT_PATH, ".")
+
+    ENV["JULIA_PKG_SERVER"] = ""
+
+    called = 0
+    dispose = PlatformEngines.register_auth_error_handler("https://foo.bar/baz", function (url, svr, err)
+        called += 1
+        return true, called < 3
+    end)
+
+    @test PlatformEngines.get_auth_header("https://foo.bar/baz") == nothing
+    @test called == 0
+
+    ENV["JULIA_PKG_SERVER"] = "https://foo.bar"
+
+    @test PlatformEngines.get_auth_header("https://foo.bar/baz") == nothing
+    @test called == 3
+
+    dispose()
+
+    @test PlatformEngines.get_auth_header("https://foo.bar/baz") == nothing
+    @test called == 3
+
+    old === nothing ? delete!(ENV, "JULIA_PKG_SERVER") : (ENV["JULIA_PKG_SERVER"] = old)
+    pop!(Base.DEPOT_PATH)
+end
+
 end # module
