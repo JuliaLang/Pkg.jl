@@ -628,7 +628,7 @@ is currently trying to download.)
 `f` must be a function that takes three input arguments `(url, pkgserver, err)`, where `url` is the
 URL currently being downloaded, `pkgserver = Pkg.pkg_server()` the current package server, and
 `err` is one of `no-auth-file`, `insecure-connection`, `malformed-file`, `no-access-token`,
-`no-refresh-key`, `insecure-refresh-url`,  `malformed-file`, or `no-access-token`.
+`no-refresh-key` or `insecure-refresh-url`.
 
 The handler `f` needs to return a tuple of `Bool`s `(handled, should_retry)`. If `handled` is `false`,
 the next handler in the stack will be called, otherwise `get_auth_header` is called again if `should_retry`
