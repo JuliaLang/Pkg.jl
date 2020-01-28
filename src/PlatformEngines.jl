@@ -631,7 +631,7 @@ URL currently being downloaded, `pkgserver = Pkg.pkg_server()` the current packa
 `no-refresh-key` or `insecure-refresh-url`.
 
 The handler `f` needs to return a tuple of `Bool`s `(handled, should_retry)`. If `handled` is `false`,
-the next handler in the stack will be called, otherwise `get_auth_header` is called again if `should_retry`
+the next handler in the stack will be called, otherwise handling terminates; `get_auth_header` is called again if `should_retry`
 is `true`.
 
 `register_auth_error_handler` returns a zero-arg function that can be called to deregister the handler.
