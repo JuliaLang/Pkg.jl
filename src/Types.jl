@@ -469,7 +469,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     repo_path = tempname()
     cloned = false
     if !has_name(pkg)
-        GitTools.ensure_clone(ctx, repo_path, pkg.repo.source)
+        LibGit2.close(GitTools.ensure_clone(ctx, repo_path, pkg.repo.source))
         cloned = true
         resolve_projectfile!(ctx, pkg, repo_path)
     end
@@ -480,7 +480,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     else
         mkpath(dirname(dev_path))
         if !cloned
-           GitTools.ensure_clone(ctx, dev_path, pkg.repo.source)
+            LibGit2.close(GitTools.ensure_clone(ctx, dev_path, pkg.repo.source))
         else
             mv(repo_path, dev_path)
         end
