@@ -33,8 +33,11 @@ function isdir_windows_workaround(path::String)
     end
 end
 
-casesensitive_isdir(dir::String) =
-    isdir_windows_workaround(dir) && basename(dir) in readdir(joinpath(dir, ".."))
+function casesensitive_isdir(dir::String)
+    dir = abspath(dir)
+    lastdir = splitpath(dir)[end]
+    isdir_windows_workaround(dir) && lastdir in readdir(joinpath(dir, ".."))
+end
 
 ## ordering of UUIDs ##
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947

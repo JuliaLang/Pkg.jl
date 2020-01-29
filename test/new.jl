@@ -840,6 +840,25 @@ end
         @test args == [Pkg.PackageSpec(;name="Example")]
         @test opts == Dict(:preserve => Pkg.PRESERVE_DIRECT)
     end
+    # check casesensitive resolution of paths
+    isolate() do; cd_tempdir() do dir
+        Pkg.REPLMode.TEST_MODE[] = true
+        # Add using UUID syntax
+        mkdir("example")
+        api, args, opts = first(Pkg.pkg"add Example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test isempty(opts)
+        api, args, opts = first(Pkg.pkg"add example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;path="example")]
+        @test isempty(opts)
+        cd("example")
+        api, args, opts = first(Pkg.pkg"add .")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;path=".")]
+        @test isempty(opts)
+    end end
 end
 
 #

@@ -73,7 +73,7 @@ end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
-    if add_or_develop && isdir_windows_workaround(expanduser(word))
+    if add_or_develop && casesensitive_isdir(expanduser(word))
         if !occursin(Base.Filesystem.path_separator_re, word)
             @info "Resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
         end
