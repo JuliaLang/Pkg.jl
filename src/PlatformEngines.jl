@@ -791,10 +791,11 @@ function load_telemetry_file(file::AbstractString)
     changed || return info
     # write telemetry file atomically (if on same file system)
     mkpath(dirname(file))
-    mktemp() do tmp, io
+    tmp = tempname()
+    open(tmp, write=true) do io
         TOML.print(io, info, sorted=true)
-        mv(tmp, file, force=true)
     end
+    mv(tmp, file, force=true)
     # reparse file in case a different process wrote it first
     return load_telemetry_file(file)
 end
