@@ -45,30 +45,6 @@ using ..Utils
     end
 end
 
-@testset "Pkg.status" begin
-    temp_pkg_dir() do project_path
-        Pkg.add(PackageSpec(name="Example", version="0.5.1"))
-        Pkg.add("Random")
-        Pkg.status()
-        Pkg.status("Example")
-        Pkg.status(["Example", "Random"])
-        Pkg.status(PackageSpec("Example"))
-        Pkg.status(PackageSpec(uuid = "7876af07-990d-54b4-ab0e-23690620f79a"))
-        Pkg.status(PackageSpec.(["Example", "Random"]))
-        Pkg.status(; mode=PKGMODE_MANIFEST)
-        Pkg.status("Example"; mode=PKGMODE_MANIFEST)
-        @test_deprecated Pkg.status(PKGMODE_MANIFEST)
-        # issue #1183: Test exist in manifest but not in project
-        Pkg.status("Test"; mode=PKGMODE_MANIFEST)
-        @test_throws PkgError Pkg.status("Test"; mode=Pkg.Types.PKGMODE_COMBINED)
-        @test_throws PkgError Pkg.status("Test"; mode=PKGMODE_PROJECT)
-        # diff option
-        @test_logs (:warn, r"diff option only available") Pkg.status(diff=true)
-        git_init_and_commit(project_path)
-        @test_logs () Pkg.status(diff=true)
-    end
-end
-
 @testset "Pkg.test" begin
     temp_pkg_dir() do tmp
         copy_test_package(tmp, "TestArguments")

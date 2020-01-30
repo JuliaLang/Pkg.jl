@@ -248,23 +248,17 @@ end
 mutable struct EnvCache
     # environment info:
     env::Union{Nothing,String}
-    git::Union{Nothing,String}
-
     # paths for files:
     project_file::String
     manifest_file::String
-
     # name / uuid of the project
     pkg::Union{PackageSpec, Nothing}
-
     # cache of metadata:
     project::Project
     manifest::Manifest
-
     # What these where at creation of the EnvCache
     original_project::Project
     original_manifest::Manifest
-
     # registered package info:
     uuids::Dict{String,Vector{UUID}}
     paths::Dict{UUID,Vector{String}}
@@ -274,7 +268,6 @@ end
 function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
     project_dir = dirname(project_file)
-    git = ispath(joinpath(project_dir, ".git")) ? project_dir : nothing
     # read project file
     project = read_project(project_file)
     # initialize project package
@@ -299,7 +292,6 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     names = Dict{UUID,Vector{String}}()
 
     env′ = EnvCache(env,
-        git,
         project_file,
         manifest_file,
         project_package,
@@ -326,7 +318,7 @@ include("manifest.jl")
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
-    io::IO = DEFAULT_IO[] === nothing ? stderr : DEFAULT_IO[]
+    io::IO = something(DEFAULT_IO[], stderr)
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
@@ -334,6 +326,8 @@ Base.@kwdef mutable struct Context
     num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
     graph_verbose::Bool = false
     currently_running_target::Bool = false
+    # test instrumenting
+    status_io::Union{IO,Nothing} = nothing
 end
 
 project_uuid(ctx::Context) = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid
