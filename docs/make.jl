@@ -19,10 +19,15 @@ end
 # setup for doctesting
 DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Pkg.BinaryPlatforms); recursive=true)
 
+# Run doctests first and disable them in makedocs
+Documenter.doctest(joinpath(@__DIR__, "src"), [Pkg])
+
+# Build the docs
 makedocs(
     format = formats,
     modules = [Pkg],
     sitename = "Pkg.jl",
+    doctest = false,
     pages = Any[
         "index.md",
         "getting-started.md",
@@ -54,6 +59,7 @@ mktempdir() do tmp
     deploydocs(
         repo = "github.com/JuliaLang/Pkg.jl",
         versions = ["v#.#", "dev" => "dev"],
+        push_preview = true,
     )
     # Put back PDF into docs/build/pdf
     mkpath(joinpath(build, "pdf"))

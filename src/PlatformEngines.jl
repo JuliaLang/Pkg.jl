@@ -38,7 +38,7 @@ This option is mainyl used to exclude symlinks from extraction (see: `copyderef`
 This method is initialized by `probe_platform_engines()`, which should be
 automatically called upon first import of `BinaryProvider`.
 """
-gen_unpack_cmd = (tarball_path::AbstractString, out_path::AbstractString;
+gen_unpack_cmd = (tarball_path::AbstractString, out_path::AbstractString,
                   excludelist::Union{AbstractString, Nothing} = nothing) ->
     error("Call `probe_platform_engines()` before `gen_unpack_cmd()`")
 
@@ -741,13 +741,16 @@ function load_telemetry_file(file::AbstractString)
         delete!(info, "ci_variables")
         changed = true
     end
-    if changed
-        mkpath(dirname(file))
-        open(file, write=true) do io
-            TOML.print(io, info, sorted=true)
-        end
+    changed || return info
+    # write telemetry file atomically (if on same file system)
+    mkpath(dirname(file))
+    tmp = tempname()
+    open(tmp, write=true) do io
+        TOML.print(io, info, sorted=true)
     end
-    return info
+    mv(tmp, file, force=true)
+    # reparse file in case a different process wrote it first
+    return load_telemetry_file(file)
 end
 
 # based on information in this post:

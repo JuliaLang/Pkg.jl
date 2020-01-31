@@ -24,8 +24,6 @@ branches:
 stages:
   - name: test
   - name: docs
-    # build docs on master and for tags
-    if: (branch = master AND type = push) OR tag IS present
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi

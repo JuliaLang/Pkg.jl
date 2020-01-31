@@ -840,6 +840,25 @@ end
         @test args == [Pkg.PackageSpec(;name="Example")]
         @test opts == Dict(:preserve => Pkg.PRESERVE_DIRECT)
     end
+    # check casesensitive resolution of paths
+    isolate() do; cd_tempdir() do dir
+        Pkg.REPLMode.TEST_MODE[] = true
+        # Add using UUID syntax
+        mkdir("example")
+        api, args, opts = first(Pkg.pkg"add Example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test isempty(opts)
+        api, args, opts = first(Pkg.pkg"add example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;path="example")]
+        @test isempty(opts)
+        cd("example")
+        api, args, opts = first(Pkg.pkg"add .")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;path=".")]
+        @test isempty(opts)
+    end end
 end
 
 #
@@ -2007,20 +2026,6 @@ end
             @test isfile(joinpath(dir, "JuliaManifest.toml"))
         end
     end
-    # missing name/uuid for package project
-    isolate(loaded_depot=true) do; mktempdir() do tmp
-        project = joinpath(tmp, "Project.toml")
-        Base.ACTIVE_PROJECT[] = project
-        # missing name
-        write(project, "\"uuid\" = \"ed688b04-e580-4bf1-bc13-c3be32aba1f6\"")
-        @test_throws PkgError("project appears to be a package but has no name") Pkg.Types.EnvCache()
-        # missing uuid
-        write(project, "\"name\" = \"PackageName\"")
-        @test_throws PkgError("project appears to be a package but has no uuid") Pkg.Types.EnvCache()
-        # missing name and uuid
-        write(project, "\"version\" = \"1.0.0\"")
-        @test_throws PkgError("project appears to be a package but has no name") Pkg.Types.EnvCache()
-    end end
 end
 
 #

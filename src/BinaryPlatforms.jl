@@ -165,7 +165,7 @@ struct Linux <: Platform
                    libc::Union{Nothing,Symbol}=nothing,
                    call_abi::Union{Nothing,Symbol}=nothing,
                    compiler_abi::CompilerABI=CompilerABI())
-        if !in(arch, [:i686, :x86_64, :aarch64, :powerpc64le, :armv7l])
+        if !in(arch, [:i686, :x86_64, :aarch64, :powerpc64le, :armv6l, :armv7l])
             throw(ArgumentError("Unsupported architecture '$arch' for Linux"))
         end
 
@@ -178,8 +178,8 @@ struct Linux <: Platform
             throw(ArgumentError("Unsupported libc '$libc' for Linux"))
         end
 
-        # Auto-map the `call_abi` to be `eabihf` on armv7l
-        if call_abi === nothing && arch === :armv7l
+        # Auto-map the `call_abi` to be `eabihf` on armv6l/armv7l
+        if call_abi === nothing && arch in (:armv6l, :armv7l)
             call_abi = :eabihf
         end
 
@@ -187,13 +187,13 @@ struct Linux <: Platform
             throw(ArgumentError("Unsupported calling abi '$call_abi' for Linux"))
         end
 
-        # If we're constructing for armv7l, we MUST have the eabihf abi
-        if arch === :armv7l && call_abi !== :eabihf
-            throw(ArgumentError("armv7l Linux must use eabihf, not '$call_abi'"))
+        # If we're constructing for armv7l/armv6l, we MUST have the eabihf abi
+        if arch in (:armv6l, :armv7l) && call_abi !== :eabihf
+            throw(ArgumentError("armv6l/armv7l Linux must use eabihf, not '$call_abi'"))
         end
         # ...and vice-versa
-        if arch !== :armv7l && call_abi === :eabihf
-            throw(ArgumentError("eabihf Linux is only on armv7l, not '$arch'!"))
+        if !(arch in (:armv6l, :armv7l)) && call_abi === :eabihf
+            throw(ArgumentError("eabihf Linux is only supported on armv6l/armv7l, not '$arch'!"))
         end
 
         return new(arch, libc, call_abi, compiler_abi)
@@ -269,7 +269,7 @@ struct FreeBSD <: Platform
             arch = :x86_64
         elseif arch === :i386
             arch = :i686
-        elseif !in(arch, [:i686, :x86_64, :aarch64, :powerpc64le, :armv7l])
+        elseif !in(arch, [:i686, :x86_64, :aarch64, :powerpc64le, :armv6l, :armv7l])
             throw(ArgumentError("Unsupported architecture '$arch' for FreeBSD"))
         end
 
@@ -279,8 +279,8 @@ struct FreeBSD <: Platform
             throw(ArgumentError("Unsupported libc '$libc' for FreeBSD"))
         end
 
-        # Auto-map the `call_abi` to be `eabihf` on armv7l
-        if call_abi === nothing && arch === :armv7l
+        # Auto-map the `call_abi` to be `eabihf` on armv6l/armv7l
+        if call_abi === nothing && arch in (:armv6l, :armv7l)
             call_abi = :eabihf
         end
 
@@ -289,12 +289,12 @@ struct FreeBSD <: Platform
         end
 
         # If we're constructing for armv7l, we MUST have the eabihf abi
-        if arch === :armv7l && call_abi !== :eabihf
-            throw(ArgumentError("armv7l FreeBSD must use eabihf, not '$call_abi'"))
+        if arch in (:armv6l, :armv7l) && call_abi !== :eabihf
+            throw(ArgumentError("armv6l/armv7l FreeBSD must use eabihf, not '$call_abi'"))
         end
         # ...and vice-versa
-        if arch !== :armv7l && call_abi === :eabihf
-            throw(ArgumentError("eabihf FreeBSD is only on armv7l, not '$arch'!"))
+        if !(arch in (:armv6l, :armv7l)) && call_abi === :eabihf
+            throw(ArgumentError("eabihf FreeBSD is supported only on armv6l/armv7l, not '$arch'!"))
         end
 
         return new(arch, libc, call_abi, compiler_abi)
@@ -412,7 +412,7 @@ julia> triplet(Windows(:i686))
 "i686-w64-mingw32"
 
 julia> triplet(Linux(:armv7l; compiler_abi=CompilerABI(;libgfortran_version=v"3")))
-"arm-linux-gnueabihf-libgfortran3"
+"armv7l-linux-gnueabihf-libgfortran3"
 ```
 """
 triplet(p::Platform) = string(
@@ -431,7 +431,7 @@ vendor_str(p::FreeBSD) = "-unknown-freebsd11.1"
 triplet(p::UnknownPlatform) = "unknown-unknown-unknown"
 
 # Helper functions for Linux and FreeBSD libc/abi mishmashes
-arch_str(p::Platform) = (arch(p) === :armv7l) ? "arm" : string(arch(p))
+arch_str(p::Platform) = string(arch(p))
 function libc_str(p::Platform)
     if libc(p) === nothing
         return ""
@@ -477,7 +477,8 @@ function platform_key_abi(machine::AbstractString)
         :x86_64 => "(x86_|amd)64",
         :i686 => "i\\d86",
         :aarch64 => "aarch64",
-        :armv7l => "arm(v7l)?",
+        :armv7l => "arm(v7l)?", # if we just see `arm-linux-gnueabihf`, we assume it's `armv7l`
+        :armv6l => "armv6l",
         :powerpc64le => "p(ower)?pc64le",
     )
     platform_mapping = Dict(
@@ -503,7 +504,7 @@ function platform_key_abi(machine::AbstractString)
     )
     libstdcxx_version_mapping = Dict(
         :libstdcxx_nothing => "",
-        # This is sadly easier than parsing out the digit directly 
+        # This is sadly easier than parsing out the digit directly
         (Symbol("libstdcxx$(idx)") => "-libstdcxx$(idx)" for idx in 18:26)...,
     )
     cxxstring_abi_mapping = Dict(
