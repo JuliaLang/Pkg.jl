@@ -113,6 +113,11 @@ julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
 
+When adding dependencies to an existing package, you may have to run `resolve` to update the manifest.
+```julia-repl
+(HelloWorld) pkg> resolve
+```
+
 ### Adding a build step to the package
 
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
