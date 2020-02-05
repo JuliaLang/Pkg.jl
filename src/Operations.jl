@@ -1595,10 +1595,11 @@ end
 
 function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false)
+    not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=:red), "→", context=ctx.io)
     ctx.io = something(ctx.status_io, ctx.io) # for instrumenting tests
     filter = !isempty(uuids) || !isempty(names)
     # print header
-    printpkgstyle(ctx, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))
+    printpkgstyle(ctx, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file), true)
     # setup
     printed_something, empty_diff = false, true
     xs = diff_array(old_ctx, ctx; manifest=manifest)
@@ -1608,17 +1609,30 @@ function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Sym
         printpkgstyle(ctx, header, manifest ? "empty manifest" : "empty project")
         return nothing
     end
+    some_packages_not_downloaded = false
     # main print
     for (uuid, old, new) in xs
+        pkgid = Base.PkgId(uuid, new.name)
+        package_downloaded = pkgid in keys(Base.loaded_modules) ||		
+                              Base.locate_package(pkgid) !== nothing
         diff && old == new && continue # in diff mode and no diff to show
         empty_diff = false
         filter && !(uuid in uuids) && !(something(new, old).name in names) && continue
         printed_something = true
+        indicator = " "
+        if !is_uninstantiated(new) && !package_downloaded
+            some_packages_not_downloaded = true
+            indicator = not_installed_indicator
+        end
 
-        printstyled(ctx.io, "   $(string(uuid)[1:8]) "; color = :light_black)
+        print(ctx.io, indicator, " ")
+        printstyled(ctx.io, "[", string(uuid)[1:8], "] "; color = :light_black)
         diff ? print_diff(ctx, old, new) : print_single(ctx, new)
         println(ctx.io)
     end
+    if some_packages_not_downloaded		
+        printpkgstyle(ctx, :Info, "packages marked with $not_installed_indicator not downloaded, use `instantiate` to download", true)
+     end
     if !printed_something
         printpkgstyle(ctx, header, (diff && empty_diff) ? "empty diff" : "no matches")
     end
