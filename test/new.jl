@@ -21,6 +21,7 @@ simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 # # Depot Changes
 #
 
+#=
 @testset "Depot setup" begin
     isolate() do
         # Lets make sure we start with a clean slate.
@@ -1834,6 +1835,7 @@ end
         end
     end
 end
+=#
 
 #
 # # Status
@@ -1863,6 +1865,15 @@ matchesline(rx, io) = occursin(rx, readline(io))
         @test occursin(r"\[7876af07\] ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master`", readline(io))
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
         @test occursin(r"\[7876af07\] ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
+
+        # Package not installed
+        Base.rm(joinpath(DEPOT_PATH[end], "packages", "Example"); recursive=true)
+        iob = IOBuffer()
+        Pkg.status(; status_io=iob)
+        str = String(take!(iob))
+        @test occursin("Info packages marked with ", str)
+        @test occursin("→", str)
+
         # From tracking repo to tracking path
         Pkg.develop("Example"; status_io=io)
         @test occursin(r"Updating `.+Project\.toml`", readline(io))
@@ -1881,6 +1892,7 @@ matchesline(rx, io) = occursin(rx, readline(io))
         @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
         @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
+        
         # Removing registered version
         Pkg.rm("Example"; status_io=io)
         @test occursin(r"Updating `.+Project.toml`", readline(io))
