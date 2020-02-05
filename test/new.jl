@@ -20,6 +20,7 @@ simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 #
 # # Depot Changes
 #
+
 @testset "Depot setup" begin
     isolate() do
         # Lets make sure we start with a clean slate.
@@ -1850,42 +1851,42 @@ matchesline(rx, io) = occursin(rx, readline(io))
         # Basic Add
         Pkg.add(Pkg.PackageSpec(; name="Example", version="0.3.0"); status_io=io)
         @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"7876af07 \+ Example v0\.3\.0", readline(io))
+        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"7876af07 \+ Example v0\.3\.0", readline(io))
+        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
         # Double add should not claim "Updating"
         Pkg.add(Pkg.PackageSpec(; name="Example", version="0.3.0"); status_io=io)
-        @test isempty(take!(io))
+        @test isempty(String(take!(io)))
         # From tracking registry to tracking repo
         Pkg.add(Pkg.PackageSpec(; name="Example", rev="master"); status_io=io)
         @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"7876af07 ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master`", readline(io))
+        @test occursin(r"\[7876af07\] ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master`", readline(io))
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"7876af07 ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
+        @test occursin(r"\[7876af07\] ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
         # From tracking repo to tracking path
         Pkg.develop("Example"; status_io=io)
         @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"7876af07 ~ Example v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master` ⇒ v\d\.\d\.\d `.+`", readline(io))
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master` ⇒ v\d\.\d\.\d `.+`", readline(io))
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"7876af07 ~ Example v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master` ⇒ v\d\.\d\.\d `.+`", readline(io))
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master` ⇒ v\d\.\d\.\d `.+`", readline(io))
         # From tracking path to tracking repo
         Pkg.add(Pkg.PackageSpec(; name="Example", rev="master"); status_io=io)
         @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"7876af07 ~ Example v\d\.\d\.\d `.+` ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `.+` ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"7876af07 ~ Example v\d\.\d\.\d `.+` ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `.+` ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
         # From tracking repo to tracking registered version
         Pkg.free("Example"; status_io=io)
         @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"7876af07 ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"7876af07 ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
         # Removing registered version
         Pkg.rm("Example"; status_io=io)
         @test occursin(r"Updating `.+Project.toml`", readline(io))
-        @test occursin(r"7876af07 - Example v\d\.\d\.\d", readline(io))
+        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", readline(io))
         @test occursin(r"Updating `.+Manifest.toml`", readline(io))
-        @test occursin(r"7876af07 - Example v\d\.\d\.\d", readline(io))
+        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", readline(io))
     end
     # Project Status API
     isolate(loaded_depot=true) do
@@ -1901,10 +1902,10 @@ matchesline(rx, io) = occursin(rx, readline(io))
         Pkg.add(Pkg.PackageSpec(;url="https://github.com/00vareladavid/Unregistered.jl"))
         Pkg.status(; io = io)
         @test occursin(r"Status `.+Project\.toml`", readline(io))
-        @test occursin(r"7876af07 Example v\d\.\d\.\d `.+`", readline(io))
-        @test occursin(r"682c06a0 JSON v0.18.0", readline(io))
-        @test occursin(r"dcb67f36 Unregistered v\d\.\d\.\d `https://github\.com/00vareladavid/Unregistered\.jl#master`", readline(io))
-        @test occursin(r"d6f4376e Markdown", readline(io))
+        @test occursin(r"\[7876af07\] Example v\d\.\d\.\d `.+`", readline(io))
+        @test occursin(r"\[682c06a0\] JSON v0.18.0", readline(io))
+        @test occursin(r"\[dcb67f36\] Unregistered v\d\.\d\.\d `https://github\.com/00vareladavid/Unregistered\.jl#master`", readline(io))
+        @test occursin(r"\[d6f4376e\] Markdown", readline(io))
     end
     # Manifest Status API
     isolate(loaded_depot=true) do
@@ -1918,9 +1919,9 @@ matchesline(rx, io) = occursin(rx, readline(io))
         Pkg.add("Markdown")
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
-        @test occursin(r"7876af07 Example v0\.3\.0", readline(io))
-        @test occursin(r"2a0f44e3 Base64", readline(io))
-        @test occursin(r"d6f4376e Markdown", readline(io))
+        @test occursin(r"\[7876af07\] Example v0\.3\.0", readline(io))
+        @test occursin(r"\[2a0f44e3\] Base64", readline(io))
+        @test occursin(r"\[d6f4376e\] Markdown", readline(io))
     end
     # Diff API
     isolate(loaded_depot=true) do
@@ -1958,18 +1959,18 @@ matchesline(rx, io) = occursin(rx, readline(io))
         ## diff project
         Pkg.status(; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
-        @test occursin(r"7876af07 \+ Example v0\.3\.0", readline(io))
-        @test occursin(r"d6f4376e - Markdown", readline(io))
+        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
+        @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
         ## diff manifest
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"Diff `.+Manifest.toml`", readline(io))
-        @test occursin(r"7876af07 \+ Example v0\.3\.0", readline(io))
-        @test occursin(r"2a0f44e3 - Base64", readline(io))
-        @test occursin(r"d6f4376e - Markdown", readline(io))
+        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
+        @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
+        @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
         ## diff project with filtering
         Pkg.status("Markdown"; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
-        @test occursin(r"d6f4376e - Markdown", readline(io))
+        @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
         ## empty project diff filter
         Pkg.status("Base64"; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -1977,7 +1978,7 @@ matchesline(rx, io) = occursin(rx, readline(io))
         ## diff manifest with filtering
         Pkg.status("Base64"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"Diff `.+Manifest.toml`", readline(io))
-        @test occursin(r"2a0f44e3 - Base64", readline(io))
+        @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
         ## empty manifest diff filter
         Pkg.status("FooBar"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"Diff `.+Manifest.toml`", readline(io))
