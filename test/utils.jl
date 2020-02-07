@@ -10,7 +10,7 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
 
 const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
 
-function isolate(fn::Function; kwargs...)
+function isolate(fn::Function; loaded_depot=false, kwargs...)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -45,7 +45,7 @@ function isolate(fn::Function; kwargs...)
                 target_depot = mktempdir()
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, target_depot)
-                push!(DEPOT_PATH, LOADED_DEPOT)
+                loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
                 fn()
             finally
                 if target_depot !== nothing && isdir(target_depot)

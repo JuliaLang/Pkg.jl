@@ -968,8 +968,8 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     state.idx += direction
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
-    Operations.show_update(ctx)
     write_env(ctx.env; update_undo=false)
+    Operations.show_update(ctx)
 end
 
 
