@@ -592,16 +592,12 @@ end
 is_secure_url(url::AbstractString) =
     occursin(r"^(https://|\w+://(127\.0\.0\.1|localhost)(:\d+)?($|/))"i, url)
 
-function get_server_dir(url::AbstractString)
-    server = pkg_server()
+function get_server_dir(url::AbstractString, server=pkg_server())
     server === nothing && return
     startswith(url, server) || return
-    m = match(r"^\w+://([^\\/]+)$", server)
-    if m === nothing
-        @warn "malformed Pkg server value" server=server
-        return
-    end
-    joinpath(depots1(), "servers", m.captures[1])
+    m = match(r"^\w+://(.+)$", server)
+    m === nothing && return
+    joinpath(depots1(), "servers", splitpath(String(m.captures[1]))[1])
 end
 
 const AUTH_ERROR_HANDLERS = []
