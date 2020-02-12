@@ -115,7 +115,7 @@ For the details, see [`Pkg.instantiate`](@ref).
 
 !!! note
     The `Manifest.toml` file is generated and maintained by Pkg and, in general, this file
-    should *never* be modified manually.
+    should *never* be modified manually. Add `Manifest.toml` to your `.gitignore` to avoid any unexpected behavior.
 
 
 ### `Manifest.toml` entries
