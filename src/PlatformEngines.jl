@@ -20,11 +20,11 @@ export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
 Return a `Cmd` that will download resource located at `url` and store it at
 the location given by `out_path`.
 
-This method is initialized by `probe_platform_engines()`, which should be
+This method is initialized by `probe_platform_engines!()`, which should be
 automatically called upon first import of `BinaryProvider`.
 """
 gen_download_cmd = (url::AbstractString, out_path::AbstractString, hdrs::AbstractString...) ->
-    error("Call `probe_platform_engines()` before `gen_download_cmd()`")
+    error("Call `probe_platform_engines!()` before `gen_download_cmd()`")
 
 """
     gen_unpack_cmd(tarball_path::AbstractString, out_path::AbstractString;
@@ -35,12 +35,12 @@ Return a `Cmd` that will unpack the given `tarball_path` into the given
 excludlist is an optional file which contains a list of files that is not unpacked
 This option is mainyl used to exclude symlinks from extraction (see: `copyderef`)
 
-This method is initialized by `probe_platform_engines()`, which should be
+This method is initialized by `probe_platform_engines!()`, which should be
 automatically called upon first import of `BinaryProvider`.
 """
 gen_unpack_cmd = (tarball_path::AbstractString, out_path::AbstractString,
                   excludelist::Union{AbstractString, Nothing} = nothing) ->
-    error("Call `probe_platform_engines()` before `gen_unpack_cmd()`")
+    error("Call `probe_platform_engines!()` before `gen_unpack_cmd()`")
 
 """
     gen_package_cmd(in_path::AbstractString, tarball_path::AbstractString)
@@ -48,11 +48,11 @@ gen_unpack_cmd = (tarball_path::AbstractString, out_path::AbstractString,
 Return a `Cmd` that will package up the given `in_path` directory into a
 tarball located at `tarball_path`.
 
-This method is initialized by `probe_platform_engines()`, which should be
+This method is initialized by `probe_platform_engines!()`, which should be
 automatically called upon first import of `BinaryProvider`.
 """
 gen_package_cmd = (in_path::AbstractString, tarball_path::AbstractString) ->
-    error("Call `probe_platform_engines()` before `gen_package_cmd()`")
+    error("Call `probe_platform_engines!()` before `gen_package_cmd()`")
 
 """
     gen_list_tarball_cmd(tarball_path::AbstractString)
@@ -61,31 +61,31 @@ Return a `Cmd` that will list the files contained within the tarball located at
 `tarball_path`.  The list will not include directories contained within the
 tarball.
 
-This method is initialized by `probe_platform_engines()`.
+This method is initialized by `probe_platform_engines!()`.
 """
 gen_list_tarball_cmd = (tarball_path::AbstractString) ->
-    error("Call `probe_platform_engines()` before `gen_list_tarball_cmd()`")
+    error("Call `probe_platform_engines!()` before `gen_list_tarball_cmd()`")
 
 """
     parse_tarball_listing(output::AbstractString)
 
 Parses the result of `gen_list_tarball_cmd()` into something useful.
 
-This method is initialized by `probe_platform_engines()`.
+This method is initialized by `probe_platform_engines!()`.
 """
 parse_tarball_listing = (output::AbstractString) ->
-    error("Call `probe_platform_engines()` before `parse_tarball_listing()`")
+    error("Call `probe_platform_engines!()` before `parse_tarball_listing()`")
 
 """
     parse_symlinks(output::AbstractString)
 
 Returns a regex to parse symlinks from tarball listings.
 
-This method is initialized by `probe_platform_engines()`.
+This method is initialized by `probe_platform_engines!()`.
 """
 
 parse_symlinks = () ->
-    error("Call `probe_platform_engines()` before `parse_symlinks()`")
+    error("Call `probe_platform_engines!()` before `parse_symlinks()`")
 
 """
     probe_cmd(cmd::Cmd; verbose::Bool = false)
