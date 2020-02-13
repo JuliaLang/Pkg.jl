@@ -230,6 +230,8 @@ end
         @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "https://bar") == nothing
         @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "foo.bar") == nothing
         @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "https://foo.bar") == joinpath(Pkg.depots1(), "servers", "foo.bar")
+        @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "https://foo.bar/") == joinpath(Pkg.depots1(), "servers", "foo.bar")
+        @test PlatformEngines.get_server_dir("https://foo.bar/baz", "https://foo.bar/baz") == joinpath(Pkg.depots1(), "servers", "foo.bar")
         @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz") == joinpath(Pkg.depots1(), "servers", "foo.bar")
     end
 
