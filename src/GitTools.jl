@@ -141,8 +141,10 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
         return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
     catch err
         rm(source_path; force=true, recursive=true)
-        err isa LibGit2.GitError || rethrow()
-        if (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
+        err isa LibGit2.GitError || err isa InterruptException || rethrow()
+        if err isa InterruptException
+            Pkg.Types.pkgerror("git clone of `$url` interrupted")
+        elseif (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
            (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
             Pkg.Types.pkgerror("git repository not found at `$(url)`")
         else
