@@ -225,6 +225,23 @@ end
 
     ENV["JULIA_PKG_SERVER"] = ""
 
+    test_server_dir(url, server, ::Nothing) =
+        @test PlatformEngines.get_server_dir(url, server) == nothing
+    test_server_dir(url, server, domain) =
+        @test PlatformEngines.get_server_dir(url, server) ==
+            joinpath(Pkg.depots1(), "servers", domain)
+
+    @testset "get_server_dir" begin
+        test_server_dir("https://foo.bar/baz/a", nothing, nothing)
+        test_server_dir("https://foo.bar/baz/a", "https://bar", nothing)
+        test_server_dir("https://foo.bar/baz/a", "foo.bar", nothing)
+        test_server_dir("https://foo.bar/bazx", "https://foo.bar/baz", nothing)
+        test_server_dir("https://foo.bar/baz/a", "https://foo.bar", "foo.bar")
+        test_server_dir("https://foo.bar/baz", "https://foo.bar/baz", "foo.bar")
+        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
+        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
+    end
+
     called = 0
     dispose = PlatformEngines.register_auth_error_handler("https://foo.bar/baz", function (url, svr, err)
         called += 1
@@ -242,6 +259,13 @@ end
     dispose()
 
     @test PlatformEngines.get_auth_header("https://foo.bar/baz") == nothing
+    @test called == 3
+
+    dispose()
+
+    ENV["JULIA_PKG_SERVER"] = "https://foo.bar/baz"
+
+    @test PlatformEngines.get_auth_header("https://foo.bar/baz/a") == nothing
     @test called == 3
 
     old === nothing ? delete!(ENV, "JULIA_PKG_SERVER") : (ENV["JULIA_PKG_SERVER"] = old)
