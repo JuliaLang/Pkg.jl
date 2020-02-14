@@ -594,7 +594,7 @@ is_secure_url(url::AbstractString) =
 
 function get_server_dir(url::AbstractString, server=pkg_server())
     server === nothing && return
-    startswith(url, server) || return
+    url == server || startswith(url, "$server/") || return
     m = match(r"^\w+://([^\\/]+)(?:$|/)", server)
     if m === nothing
         @warn "malformed Pkg server value" server
