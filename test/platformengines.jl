@@ -225,14 +225,21 @@ end
 
     ENV["JULIA_PKG_SERVER"] = ""
 
+    test_server_dir(url, server, ::Nothing) =
+        @test PlatformEngines.get_server_dir(url, server) == nothing
+    test_server_dir(url, server, domain) =
+        @test PlatformEngines.get_server_dir(url, server) ==
+            joinpath(Pkg.depots1(), "servers", domain)
+
     @testset "get_server_dir" begin
-        @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", nothing) == nothing
-        @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "https://bar") == nothing
-        @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "foo.bar") == nothing
-        @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "https://foo.bar") == joinpath(Pkg.depots1(), "servers", "foo.bar")
-        @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "https://foo.bar/") == joinpath(Pkg.depots1(), "servers", "foo.bar")
-        @test PlatformEngines.get_server_dir("https://foo.bar/baz", "https://foo.bar/baz") == joinpath(Pkg.depots1(), "servers", "foo.bar")
-        @test PlatformEngines.get_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz") == joinpath(Pkg.depots1(), "servers", "foo.bar")
+        test_server_dir("https://foo.bar/baz/a", nothing, nothing)
+        test_server_dir("https://foo.bar/baz/a", "https://bar", nothing)
+        test_server_dir("https://foo.bar/baz/a", "foo.bar", nothing)
+        test_server_dir("https://foo.bar/baz/a", "https://foo.bar", "foo.bar")
+        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/", "foo.bar")
+        test_server_dir("https://foo.bar/baz", "https://foo.bar/baz", "foo.bar")
+        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
+        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
     end
 
     called = 0
