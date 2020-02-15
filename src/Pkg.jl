@@ -23,7 +23,7 @@ function pkg_server()
     server = get(ENV, "JULIA_PKG_SERVER", nothing)
     server === nothing && return nothing
     startswith(server, r"\w+://") || (server = "https://$server")
-    return server
+    return rstrip(server, '/')
 end
 
 function telemetryinfo(io::IO = stdout)
