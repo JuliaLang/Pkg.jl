@@ -85,6 +85,7 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     #@eval import Example
     #@eval import $(Symbol(pkg2))
     @test Pkg.dependencies()[pkg2_uuid].version == v"0.1.0"
+    @test Pkg.uuid(pkg2) == pkg2_uuid
     Pkg.REPLMode.pkgstr("free $pkg2")
     @test_throws PkgError Pkg.REPLMode.pkgstr("free $pkg2")
     Pkg.test("UnregisteredWithProject")
@@ -125,6 +126,7 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
                     pushfirst!(DEPOT_PATH, depot_dir)
                     pkg"instantiate"
                     @test Pkg.dependencies()[pkg2_uuid].version == v"0.2.0"
+                    @test Pkg.uuid(pkg2) == pkg2_uuid
                 end
             finally
                 empty!(DEPOT_PATH)

@@ -476,6 +476,13 @@ See also: [`redo`](@ref).
 const undo = API.undo
 
 """
+    uuid(pkg)
+
+Returns the `UUID` of the package `pkg`.
+"""
+const uuid = API.uuid
+
+"""
     redo()
 
 Redoes the changes from the latest [`undo`](@ref).

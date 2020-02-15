@@ -26,7 +26,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
-    PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
+    PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED, PKGMODE_REGISTRY,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
     printpkgstyle, isurl,
@@ -73,7 +73,7 @@ end
 ###############
 @enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
 @enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
-@enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
+@enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED, PKGMODE_REGISTRY)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
 
@@ -786,6 +786,25 @@ function ensure_resolved(ctx::Context,
         end
     end
     pkgerror(msg)
+end
+
+function resolve!(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_COMBINED)
+    if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
+        project_resolve!(ctx, pkgs)
+        project_deps_resolve!(ctx, pkgs)
+        manifest_resolve!(ctx, pkgs)
+    end
+    if mode == PKGMODE_COMBINED || mode == PKGMODE_REGISTRY
+        registry_resolve!(ctx, pkgs)
+        stdlib_resolve!(pkgs)
+        if mode == PKGMODE_REGISTRY && any(!isresolved, pkgs)
+            # Didn't find a package in the registry, but maybe it exists in the updated registry
+            update_registries(ctx)
+            registry_resolve!(ctx, pkgs)
+        end
+    end
+    ensure_resolved(ctx, pkgs, registry=true)
+    return pkgs
 end
 
 ##############

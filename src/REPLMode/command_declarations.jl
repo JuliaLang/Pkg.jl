@@ -322,6 +322,34 @@ the output to the difference as compared to the last git commit.
     The `--diff` option requires Julia 1.3. In earlier versions `--diff`
     is the default for environments in git repositories.
 """,
+],[ :name => "uuid",
+:short_name => "id",
+:api => API.print_uuids,
+:should_splat => false,
+:arg_count => 1 => Inf,
+:arg_parser => parse_package,
+:option_spec => OptionDeclaration[
+    [:name => "combined",  :short_name => "c", :api => :mode => PKGMODE_COMBINED],
+    [:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
+    [:name => "registry", :short_name => "r", :api => :mode => PKGMODE_REGISTRY],
+],
+:completions => complete_installed_packages,
+:description => "show package UUIDs",
+:help => md"""
+    uuid [-c|--combined] pkgs...
+    uuid [-p|--project] pkgs...
+    uuid [-r|--registry] pkgs...
+
+Shows the full UUIDs of the listed packages. In `--combined` mode (default),
+it looks for the packages in the currently project and manifest and
+then in the registry of installable packages, whereas in `--project`
+mode it only looks in the current project and manifest, and
+in `--registry` mode it looks only in the registry (updated if needed)
+and the standard library.
+
+!!! compat "Julia 1.5"
+    `pkg> uuid pkgs...` equires at least Julia 1.5.
+""",
 ],[ :name => "gc",
     :api => API.gc,
     :option_spec => OptionDeclaration[

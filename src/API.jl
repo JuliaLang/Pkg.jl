@@ -836,6 +836,22 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
     return nothing
 end
 
+uuid(pkg::Union{AbstractString,PackageSpec}; kws...) = uuid(Context(), pkg; kws...)
+uuid(ctx::Context, pkg::Union{AbstractString,PackageSpec}; mode=PKGMODE_COMBINED) = Types.resolve!(ctx, [check_package_name(pkg)]; mode=mode)[1].uuid
+
+print_uuids(pkg::Union{AbstractString,PackageSpec}; kwargs...) = print_uuids([pkg]; kwargs...)
+print_uuids(pkgs::Vector{<:AbstractString}; kwargs...) = print_uuids(check_package_name.(pkgs); kwargs...)
+print_uuids(pkgs::Vector{PackageSpec}; kwargs...) = print_uuids(Context(), pkgs; kwargs...)
+function print_uuids(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_COMBINED,
+                     io::IO=stdout, kwargs...)
+    Context!(ctx; io=io, kwargs...)
+    for p in Types.resolve!(ctx, pkgs; mode=mode)
+        printstyled(io, "   ", p.uuid, " "; color = :light_black)
+        printstyled(io, p.name; color = :white)
+        print(io, '\n')
+    end
+    return nothing
+end
 
 function activate()
     Base.ACTIVE_PROJECT[] = nothing
