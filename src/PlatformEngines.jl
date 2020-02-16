@@ -369,8 +369,6 @@ function probe_platform_engines!(;verbose::Bool = false)
         psh_download = (psh_path) -> begin
             return (url, path, hdrs...) -> begin
                 webclient_code = """
-                [System.Net.ServicePointManager]::SecurityProtocol =
-                    [System.Net.SecurityProtocolType]::Tls12;
                 \$webclient = (New-Object System.Net.Webclient);
                 \$webclient.UseDefaultCredentials = \$true;
                 \$webclient.Proxy.Credentials = \$webclient.Credentials;
