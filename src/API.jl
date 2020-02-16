@@ -836,8 +836,8 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
     return nothing
 end
 
-uuid(pkg::Union{AbstractString,PackageSpec}; kws...) = uuid(Context(), pkg; kws...)
-uuid(ctx::Context, pkg::Union{AbstractString,PackageSpec}; mode=PKGMODE_COMBINED) = Types.resolve!(ctx, [check_package_name(pkg)]; mode=mode)[1].uuid
+uuid(pkg::AbstractString; kws...) = uuid(Context(), pkg; kws...)
+uuid(ctx::Context, pkg::AbstractString; mode=PKGMODE_COMBINED) = Types.resolve!(ctx, [check_package_name(pkg)]; mode=mode)[1].uuid
 
 print_uuids(pkg::Union{AbstractString,PackageSpec}; kwargs...) = print_uuids([pkg]; kwargs...)
 print_uuids(pkgs::Vector{<:AbstractString}; kwargs...) = print_uuids(check_package_name.(pkgs); kwargs...)
