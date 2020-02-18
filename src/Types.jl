@@ -1059,7 +1059,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                     registry_file = joinpath(tmp, "Registry.toml")
                     registry = read_registry(registry_file; cache=false)
                     verify_registry(registry)
-                    mv(tmp, reg.path, force=true)
+                    cp(tmp, reg.path, force=true)
                 end
             end
         elseif isdir(joinpath(reg.path, ".git"))
