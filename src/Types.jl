@@ -377,20 +377,22 @@ function Context!(ctx::Context; kwargs...)
 end
 
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
-    !ispath(logdir()) && mkpath(logdir())
-    usage_file = joinpath(logdir(), usage_filepath)
-    touch(usage_file)
-
     # Don't record ghost usage
     !isfile(source_file) && return
 
-    # Do not rewrite as do-block syntax (no longer precompilable)
-    io = open(usage_file, "a")
-    print(io, """
-    [[$(repr(source_file))]]
-    time = $(now())Z
-    """)
-    close(io)
+    # Ensure that log dir exists
+    !ispath(logdir()) && mkpath(logdir())
+
+    # Generate entire entry as a string first
+    entry = sprint() do io
+        TOML.print(io, Dict(source_file => [Dict("time" => now())]))
+    end
+
+    # Append entry to log file in one chunk
+    usage_file = joinpath(logdir(), usage_filepath)
+    open(usage_file, append=true) do io
+        write(io, entry)
+    end
 end
 
 function read_package(path::String)
