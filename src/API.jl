@@ -785,7 +785,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Handling packages tracking repos
     for pkg in pkgs
         pkg.repo.source !== nothing || continue
-        sourcepath = Operations.source_path(pkg)
+        sourcepath = Operations.source_path(ctx, pkg)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
