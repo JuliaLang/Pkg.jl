@@ -248,6 +248,52 @@ The tests for a package can be run using `test`command:
    Testing Example tests passed
 ```
 
+Alternatively, you can use the `Pkg.test` function:
+```julia-repl
+julia> Pkg.test("Example")
+   Testing Example
+   Testing Example tests passed
+```
+
+### Testing only certain test sets
+
+The `Pkg.test` function accepts a keyword argument `test_args`. The arguments are passed to the test process, where they are available in the `ARGS` global variable. You can use this functionality to, for example, test only certain test sets.
+
+For example, suppose that you have a package named `HelloWorld`, and the contents of `test/runtests.jl` are:
+```julia
+
+using HelloWorld
+using Test
+
+@testset "HelloWorld.jl" begin
+    if isempty(ARGS) || "all" in ARGS
+        all_tests = true
+    else
+        all_tests = false
+    end
+    if all_tests || "foo" in ARGS
+        @testset "foo" begin
+            @test HelloWorld.foo(1) == 2
+        end
+    end
+    if all_tests || "bar" in ARGS
+        @testset "bar" begin
+            @test HelloWorld.bar(2) == 6
+        end
+    end
+    if all_tests || "baz" in ARGS
+        @testset "baz" begin
+            @test HelloWorld.baz(3) == 12
+        end
+    end
+end
+```
+
+Then you can run only the `foo` and `baz` test sets by running the following:
+```julia-repl
+julia> Pkg.test("HelloWorld"; test_args = ["foo", "baz"])
+```
+
 ## Building packages
 
 The build step of a package is automatically run when a package is first installed.
