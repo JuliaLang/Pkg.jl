@@ -593,7 +593,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
         # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
         if has_uuid(pkg)
-            version_path = Pkg.Operations.source_path(pkg)
+            version_path = Pkg.Operations.source_path(ctx, pkg)
             isdir(version_path) && return false
         end
 
@@ -603,7 +603,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
         # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
         # check to see if the package exists at its canonical path.
-        version_path = Pkg.Operations.source_path(pkg)
+        version_path = Pkg.Operations.source_path(ctx, pkg)
         isdir(version_path) && return false
 
         # Otherwise, move the temporary path into its correct place and set read only
