@@ -698,8 +698,12 @@ end
         # Now we try to find the package.
         rm(joinpath(DEPOT_PATH[1], "packages"); recursive=true)
         Pkg.instantiate()
+        # Test that Operations.is_instantiated works with relative path
+        @test Pkg.Operations.is_instantiated(Pkg.Types.Context())
         # Now we destroy the relative position and should not be able to find the package.
         rm(joinpath(DEPOT_PATH[1], "packages"); recursive=true)
+        # Test that Operations.is_instantiated works with relative path
+        @test !Pkg.Operations.is_instantiated(Pkg.Types.Context())
         mktempdir() do other_dir
             cp(dirname(Base.active_project()), other_dir; force=true)
             Pkg.activate(other_dir)

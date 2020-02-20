@@ -35,9 +35,9 @@ end
 tracking_registered_version(pkg) =
     !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.source === nothing
 
-function source_path(pkg::PackageSpec)
+function source_path(ctx, pkg::PackageSpec)
     return is_stdlib(pkg.uuid)      ? Types.stdlib_path(pkg.name) :
-        pkg.path        !== nothing ? pkg.path :
+        pkg.path        !== nothing ? joinpath(dirname(ctx.env.project_file), pkg.path) :
         pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         nothing
@@ -105,7 +105,7 @@ function is_instantiated(ctx::Context)::Bool
     pkgs = load_all_deps(ctx)
     # Make sure all paths exist
     for pkg in pkgs
-        sourcepath = Operations.source_path(pkg)
+        sourcepath = Operations.source_path(ctx, pkg)
         isdir(sourcepath) || return false
         check_artifacts_downloaded(sourcepath) || return false
     end
@@ -210,7 +210,7 @@ function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
         end
         return Dict{String,UUID}()
     else
-        path = project_rel_path(ctx, source_path(pkg))
+        path = project_rel_path(ctx, source_path(ctx, pkg))
         project_file = projectfile_path(path; strict=true)
         project_file === nothing && pkgerror("could not find Project file for package $(pkg.name)")
         project = read_project(project_file)
@@ -249,12 +249,12 @@ is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
 function collect_developed!(ctx::Context, pkg::PackageSpec, developed::Vector{PackageSpec})
-    source = project_rel_path(ctx, source_path(pkg))
+    source = project_rel_path(ctx, source_path(ctx, pkg))
     source_ctx = Context(env = EnvCache(projectfile_path(source)))
     pkgs = load_all_deps(source_ctx)
     for pkg in filter(is_tracking_path, pkgs)
         # normalize path
-        pkg.path = Types.relative_project_path(ctx, project_rel_path(source_ctx, source_path(pkg)))
+        pkg.path = Types.relative_project_path(ctx, project_rel_path(source_ctx, source_path(source_ctx, pkg)))
         push!(developed, pkg)
         collect_developed!(ctx, pkg, developed)
     end
@@ -271,7 +271,7 @@ end
 function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     deps_map = Dict{UUID,Vector{PackageSpec}}()
     for pkg in pkgs
-        path = project_rel_path(ctx, source_path(pkg))
+        path = project_rel_path(ctx, source_path(ctx, pkg))
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
         end
@@ -584,7 +584,7 @@ end
 function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec}; platform::Platform=platform_key_abi(),
                             verbose::Bool=false)
     # Filter out packages that have no source_path()
-    pkg_roots = String[p for p in source_path.(pkgs) if p !== nothing]
+    pkg_roots = String[p for p in source_path.((ctx,), pkgs) if p !== nothing]
     return download_artifacts(ctx, pkg_roots; platform=platform, verbose=verbose)
 end
 
@@ -640,7 +640,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
 
     pkgs_to_install = Tuple{PackageSpec, String}[]
     for pkg in pkgs
-        path = source_path(pkg)
+        path = source_path(ctx, pkg)
         ispath(path) && continue
         push!(pkgs_to_install, (pkg, path))
         push!(new_pkgs, pkg)
@@ -1410,7 +1410,7 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
         if target == "test"
             test_REQUIRE_path = joinpath(source_path, "test", "REQUIRE")
             if isfile(test_REQUIRE_path)
-                @warn "using test/REQUIRE files is deprecated and current support is lacking in some areas" 
+                @warn "using test/REQUIRE files is deprecated and current support is lacking in some areas"
                 test_pkgs = parse_REQUIRE(test_REQUIRE_path)
                 package_specs = [PackageSpec(name=pkg) for pkg in test_pkgs]
                 registry_resolve!(ctx, package_specs)
@@ -1466,7 +1466,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     missing_runtests = String[]
     source_paths     = String[]
     for pkg in pkgs
-        sourcepath = project_rel_path(ctx, source_path(pkg)) # TODO
+        sourcepath = project_rel_path(ctx, source_path(ctx, pkg)) # TODO
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
         push!(source_paths, sourcepath)
     end
@@ -1530,7 +1530,7 @@ function package_info(ctx::Context, pkg::PackageSpec, entry::PackageEntry)::Pack
         is_tracking_registry = is_tracking_registry(pkg),
         git_revision         = pkg.repo.rev,
         git_source           = git_source,
-        source               = project_rel_path(ctx, source_path(pkg)),
+        source               = project_rel_path(ctx, source_path(ctx, pkg)),
         dependencies         = copy(entry.deps), #TODO is copy needed?
     )
     return info
