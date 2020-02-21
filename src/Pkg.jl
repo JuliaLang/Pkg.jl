@@ -167,7 +167,7 @@ If no positional argument is given, `level` can be used to control by how much p
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
-const update = API.up
+const update = API.update
 
 """
     Pkg.test(; kwargs...)

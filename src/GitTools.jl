@@ -157,7 +157,15 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
     end
 end
 
-function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, kwargs...)
+function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; force=false, header=nothing, credentials=nothing, kwargs...)
+    if !force
+        if LibGit2.path(repo) in ctx.updated_repos
+            return nothing
+        else
+            push!(ctx.updated_repos, LibGit2.path(repo))
+        end
+    end
+
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
@@ -316,11 +324,12 @@ function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
     return SHA.digest!(ctx)
 end
 
-function check_valid_HEAD(repo)
+function has_valid_HEAD(repo)
     try LibGit2.head(repo)
     catch err
-        Pkg.Types.pkgerror("invalid git HEAD ($(err.msg))")
+        return false
     end
+    return true
 end
 
 function git_file_stream(repo::LibGit2.GitRepo, spec::String; fakeit::Bool=false)::IO

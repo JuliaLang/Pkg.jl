@@ -19,7 +19,7 @@ include("generate.jl")
 
 dependencies() = dependencies(Context())
 function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
-    pkgs = Operations.load_all_deps(ctx)
+    pkgs = Operations.load_manifest_deps(ctx)
     return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
 end
 function dependencies(fn::Function, uuid::UUID)
@@ -38,7 +38,8 @@ function project(ctx::Context)::ProjectInfo
         version      = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.version,
         ispackage    = ctx.env.pkg !== nothing,
         dependencies = ctx.env.project.deps,
-        path         = ctx.env.project_file
+        source       = ctx.env.project.source,
+        path         = ctx.env.project_file,
     )
 end
 
@@ -88,7 +89,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         end
     end
 
-    new_git = handle_repos_develop!(ctx, pkgs, shared)
+    new = handle_repos_develop!(ctx, pkgs, shared)
 
     for pkg in pkgs
         if Types.collides_with_project(ctx, pkg)
@@ -99,7 +100,8 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         end
     end
 
-    Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    Operations.assert_can_add(ctx, pkgs)
+    Operations.develop(ctx, pkgs, new; preserve=preserve, platform=platform)
     return
 end
 
@@ -135,16 +137,20 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
         end
     end
 
+    project_deps_resolve!(ctx, pkgs)
+    stdlib_resolve!(pkgs)
+    for pkg in pkgs
+        if pkg.repo.source === nothing && pkg.version == VersionSpec() && pkg.name in keys(ctx.env.project.source)
+            pkg.repo.source = Operations.renormalize_source(Operations.projectdir(ctx),
+                                                            ctx.env.project.source[pkg.name])
+        end
+    end
+
     repo_pkgs = [pkg for pkg in pkgs if (pkg.repo.source !== nothing || pkg.repo.rev !== nothing)]
-    new_git = handle_repos_add!(ctx, repo_pkgs)
-    # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
-    # repo + pinned -> name, uuid, tree_hash
+    new = handle_repos_add!(ctx, repo_pkgs)
 
     Types.update_registries(ctx)
-
-    project_deps_resolve!(ctx, pkgs)
     registry_resolve!(ctx, pkgs)
-    stdlib_resolve!(pkgs)
     ensure_resolved(ctx, pkgs, registry=true)
 
     for pkg in pkgs
@@ -156,7 +162,8 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
         end
     end
 
-    Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    Operations.assert_can_add(ctx, pkgs)
+    Operations.add(ctx, pkgs, new; preserve=preserve, platform=platform)
     return
 end
 
@@ -189,45 +196,43 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     return
 end
 
-up(ctx::Context; kwargs...)                            = up(ctx, PackageSpec[]; kwargs...)
-up(; kwargs...)                                        = up(PackageSpec[]; kwargs...)
-up(pkg::Union{AbstractString, PackageSpec}; kwargs...) = up([pkg]; kwargs...)
-up(pkgs::Vector{<:AbstractString}; kwargs...)          = up([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-up(pkgs::Vector{PackageSpec}; kwargs...)               = up(Context(), pkgs; kwargs...)
+update(ctx::Context; kwargs...)                            = update(ctx, PackageSpec[]; kwargs...)
+update(; kwargs...)                                        = update(PackageSpec[]; kwargs...)
+update(pkg::Union{AbstractString, PackageSpec}; kwargs...) = update([pkg]; kwargs...)
+update(pkgs::Vector{<:AbstractString}; kwargs...)          = update([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+update(pkgs::Vector{PackageSpec}; kwargs...)               = update(Context(), pkgs; kwargs...)
 
-function up(ctx::Context, pkgs::Vector{PackageSpec};
+function update(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-    foreach(pkg -> pkg.mode = mode, pkgs)
-
     Context!(ctx; kwargs...)
+
     if update_registry
         Types.clone_default_registries(ctx)
         Types.update_registries(ctx; force=true)
     end
+
+    new = UUID[]
     if isempty(pkgs)
-        if mode == PKGMODE_PROJECT
-            for (name::String, uuid::UUID) in ctx.env.project.deps
-                push!(pkgs, PackageSpec(name=name, uuid=uuid))
-            end
-        elseif mode == PKGMODE_MANIFEST
-            for (uuid, entry) in ctx.env.manifest
-                push!(pkgs, PackageSpec(name=entry.name, uuid=uuid))
-            end
+        if mode === PKGMODE_PROJECT
+            pkgs = Operations.load_direct_deps(ctx, pkgs, new)
+        else
+            pkgs = Operations.load_all_deps(ctx, pkgs, new)
         end
     else
+        foreach(pkg -> pkg.mode = PKGMODE_PROJECT, pkgs)
         project_deps_resolve!(ctx, pkgs)
-        manifest_resolve!(ctx, pkgs)
         ensure_resolved(ctx, pkgs)
+        pkgs = Operations.load_direct_deps(ctx, PackageSpec[], new; keep=Operations.uuids(pkgs))
     end
-    Operations.up(ctx, pkgs, level)
+    Operations.update(ctx, pkgs, new, level)
     return
 end
 
 resolve(; kwargs...) = resolve(Context(); kwargs...)
 function resolve(ctx::Context; kwargs...)
-    up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
+    update(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
     return nothing
 end
 
@@ -747,9 +752,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      platform::Platform=platform_key_abi(), kwargs...)
     Context!(ctx; kwargs...)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
-        _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         deps = Dict()
-        for (uuid, pkg) in _manifest
+        for (uuid, pkg) in Pkg.Types.read_manifest(ctx.env.manifest_file)
             if pkg.name in keys(deps)
                 # TODO, query what package to put in Project when in interactive mode?
                 pkgerror("cannot instantiate a manifest without project file when the manifest has multiple packages with the same name ($(pkg.name))")
@@ -760,7 +764,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         return instantiate(Context(); manifest=manifest, update_registry=update_registry, verbose=verbose, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
-        up(ctx; update_registry=update_registry)
+        update(ctx; update_registry=update_registry)
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
@@ -781,7 +785,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Types.update_registries(ctx)
     pkgs = Operations.load_all_deps(ctx)
     Operations.check_registered(ctx, pkgs)
-    new_git = UUID[]
+    new = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
         pkg.repo.source !== nothing || continue
@@ -810,15 +814,15 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             end
             mkpath(sourcepath)
             GitTools.checkout_tree_to_path(repo, tree_hash_object, sourcepath)
-            push!(new_git, pkg.uuid)
+            push!(new, pkg.uuid)
         end
     end
 
     # Ensure artifacts are installed for the dependent packages, and finally this overall project
     Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
 
-    new_apply = Operations.download_source(ctx, pkgs)
-    Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
+    union!(new, Operations.uuids(Operations.download_source(ctx, pkgs)))
+    Operations.build_versions(ctx, new; verbose=verbose)
 end
 
 
