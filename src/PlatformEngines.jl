@@ -759,7 +759,7 @@ const CI_VARIABLES = [
     "CI",
     "CIRCLECI",
     "CONTINUOUS_INTEGRATION",
-    "GITHUB_ACTION",
+    "GITHUB_ACTIONS",
     "GITLAB_CI",
     "JULIA_CI",
     "TF_BUILD",
