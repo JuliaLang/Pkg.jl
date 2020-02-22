@@ -815,6 +815,7 @@ const CI_VARIABLES = [
 
 function get_telemetry_headers(url::AbstractString)
     headers = String[]
+    haskey(ENV, "JULIA_PKG_TELEMETRY") || return headers
     server_dir = get_server_dir(url)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol: 1.0")
