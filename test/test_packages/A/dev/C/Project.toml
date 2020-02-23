@@ -4,3 +4,6 @@ version = "0.1.0"
 
 [deps]
 D = "bf733257-898a-45a0-b2f2-c1c188bdd879"
+
+[source]
+D = "../D"

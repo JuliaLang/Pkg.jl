@@ -242,7 +242,7 @@ it will be placed in the first depot of the stack.
 """ ,
 ],[ :name => "update",
     :short_name => "up",
-    :api => API.up,
+    :api => API.update,
     :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,

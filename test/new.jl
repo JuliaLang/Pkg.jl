@@ -172,7 +172,7 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
         inside_test_sandbox() do
             deps = Pkg.dependencies()
             @test deps[unregistered_uuid].is_tracking_path
-            @test deps[exuuid].is_tracking_path
+            @test deps[exuuid].version == v"0.5.3"
         end
     end end
     # the active dep graph is transfered to test sandbox, even when tracking unregistered repos
@@ -741,6 +741,38 @@ end
     end
 end
 
+@testset "add: recursive unregistered dependencies" begin
+    # Make sure that we store the `source` of unregistered packages
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        unreg_url = "https://github.com/00vareladavid/Unregistered.jl"
+        Pkg.add(Pkg.PackageSpec(; url=unreg_url))
+        path = copy_test_package(tempdir, "SimplePackage"; git_init=true)
+        Pkg.add(Pkg.PackageSpec(; path=path))
+        @test Pkg.project().source["Unregistered"] == unreg_url
+        @test Pkg.project().source["SimplePackage"] == realpath(path)
+        @test length(Pkg.project().source) == 2
+    end end
+    # StandaloneDepOnUnregistered is tracking a single unregistered package and has no manifest.
+    # We should still use the `source` field in the project to resolve
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "StandaloneDepOnUnregistered"; git_init=true)
+        Pkg.add(Pkg.PackageSpec(; path=path))
+        Pkg.dependencies(unregistered_uuid) do pkg
+            @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+            @test isdir(pkg.source)
+        end
+    end end
+    # recursive add of unregistered packages
+    isolate(loaded_depot=true) do
+        Pkg.add(Pkg.PackageSpec(; url="https://github.com/00vareladavid/UnregisteredA"))
+        Pkg.dependencies(UUID("b686e103-ce6e-4868-bd28-4023dc495743")) do pkg
+            @test isdir(pkg.source)
+            @test get(pkg.dependencies, "UnregisteredB", nothing) == UUID("4a15487d-6a03-40fd-be4e-f31ac6f07bdf")
+            @test get(pkg.dependencies, "UnregisteredD", nothing) == UUID("295405fa-16c4-4eca-be55-1f8fa46a8e43")
+        end
+    end
+end
+
 #
 # ## Resolve tiers
 #
@@ -1158,6 +1190,13 @@ end
         Pkg.dependencies(unregistered_uuid) do pkg
             @test pkg.name == "Unregistered"
         end
+        # develop should not remove source field, this makes toggling between add/dev possible
+        @test Pkg.project().source["Unregistered"] == remote_url
+        # Add should use the `source` to resolve
+        Pkg.add("Unregistered")
+        Pkg.dependencies(unregistered_uuid) do pkg
+            @test pkg.name == "Unregistered"
+        end
     end
 end
 
@@ -1293,6 +1332,20 @@ end
     isolate(loaded_depot=true) do
         Pkg.instantiate(;verbose=true)
     end
+end
+
+@testset "instantiate: unregistered dependencies" begin
+    isolate() do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "StandaloneDepOnUnregistered"; git_init=true)
+        Pkg.activate(path)
+        Pkg.instantiate()
+        Pkg.dependencies(unregistered_uuid) do pkg
+            @test pkg.name == "Unregistered"
+            @test isdir(pkg.source)
+            @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+            @test pkg.git_revision == "master"
+        end
+    end end
 end
 
 @testset "instantiate: caching" begin
@@ -1509,6 +1562,23 @@ end
             @test pkg.version > v"0.3.0"
         end
     end
+    # update recursive `dev`
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "A")
+        ## simple case
+        Pkg.activate(joinpath(tempdir, "A", "dev", "D"))
+        Pkg.add("Example")
+        Pkg.activate(path)
+        @test !haskey(Pkg.dependencies(), exuuid)
+        Pkg.update()
+        @test haskey(Pkg.dependencies(), exuuid)
+        ## add a diamond dependency
+        Pkg.activate(joinpath(tempdir, "A", "dev", "B"))
+        Pkg.develop(Pkg.PackageSpec(; path=joinpath(tempdir, "A", "dev", "D")))
+        Pkg.activate(path)
+        Pkg.update()
+        @test haskey(Pkg.dependencies(), UUID("bf733257-898a-45a0-b2f2-c1c188bdd879"))
+    end end
 end
 
 @testset "update: REPL" begin
@@ -1617,6 +1687,8 @@ end
     # free package tracking repo
     isolate(loaded_depot=true) do
         Pkg.add(Pkg.PackageSpec(; name="Example", rev="master"))
+        # also track a recursively unregistered dependency to make sure it is preserved
+        Pkg.add(Pkg.PackageSpec(; url="https://github.com/00vareladavid/UnregisteredA"))
         Pkg.free("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
@@ -1667,6 +1739,17 @@ end
         Pkg.resolve()
         @test !haskey(Pkg.dependencies(), markdown_uuid)
         @test !haskey(Pkg.dependencies(), test_stdlib_uuid)
+    end end
+    # resolve on standalone project with unregistered deps
+    isolate() do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "StandaloneDepOnUnregistered"; git_init=true)
+        Pkg.activate(path)
+        Pkg.resolve()
+        Pkg.dependencies(unregistered_uuid) do pkg
+            @test pkg.name == "Unregistered"
+            @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+            @test pkg.git_revision == "master"
+        end
     end end
 end
 
@@ -1735,6 +1818,14 @@ end
         @test !haskey(Pkg.dependencies(), exuuid)
         @test haskey(Pkg.dependencies(), json_uuid)
     end end
+    # rm should remove the `source` field
+    isolate(loaded_depot=true) do
+        unreg_url = "https://github.com/00vareladavid/Unregistered.jl"
+        Pkg.add(Pkg.PackageSpec(;url=unreg_url))
+        @test Pkg.project().source["Unregistered"] == unreg_url
+        Pkg.rm("Unregistered")
+        @test isempty(Pkg.project().source)
+    end
 end
 
 @testset "rm: REPL" begin

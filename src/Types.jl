@@ -21,7 +21,7 @@ using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
     Requires, Fixed, merge_requires!, satisfies, ResolverError,
-    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, err_rep,
+    Project, PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
@@ -205,6 +205,7 @@ Base.@kwdef mutable struct Project
     version::Union{VersionTypes, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
     # Sections
+    source::Dict{String,String} = Dict{String,String}()
     deps::Dict{String,UUID} = Dict{String,UUID}()
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
@@ -321,6 +322,7 @@ Base.@kwdef mutable struct Context
     io::IO = something(DEFAULT_IO[], stderr)
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
+    updated_repos::Vector{String} = String[]
     # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
     # the future. It currently stands as an unofficial workaround for issue #795.
     num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
@@ -412,11 +414,11 @@ end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
 
-function relative_project_path(ctx::Context, path::String)
-    # compute path relative the project
-    # realpath needed to expand symlinks before taking the relative path
-    return relpath(Pkg.safe_realpath(abspath(path)),
-                   Pkg.safe_realpath(dirname(ctx.env.project_file)))
+# compute path relative the project
+# realpath needed to expand symlinks before taking the relative path
+relative_project_path(ctx::Context, path::String) = relative_project_path(dirname(ctx.env.project_file), path)
+function relative_project_path(project::String, path::String)
+    return relpath(Pkg.safe_realpath(abspath(path)), Pkg.safe_realpath(project))
 end
 
 function devpath(ctx::Context, name::String, shared::Bool)
@@ -442,6 +444,8 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             else
                 pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
             end
+            # do not store in `source` table if dev path is not a valid git repo
+            pkg.repo.source = pkg.path
             return false
         end
     end
@@ -496,7 +500,6 @@ function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, 
         new && push!(new_uuids, pkg.uuid)
         @assert pkg.path !== nothing
         @assert has_uuid(pkg)
-        pkg.repo = GitRepo() # clear repo field, no longer needed
     end
     return new_uuids
 end
@@ -547,7 +550,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             if !isdir(joinpath(pkg.repo.source, ".git"))
                 pkgerror("Did not find a git repository at `$(pkg.repo.source)`")
             end
-            LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
+            LibGit2.with(LibGit2.GitRepo(pkg.repo.source)) do repo
+                if !GitTools.has_valid_HEAD(repo)
+                    pkgerror("invalid git HEAD at `$(pkg.repo.source)`")
+                end
+            end
             pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx, pkg.repo.source)
             repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
         else
@@ -556,7 +563,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     end
 
     LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
-        GitTools.check_valid_HEAD(repo)
+        if !GitTools.has_valid_HEAD(repo)
+            pkgerror("invalid git HEAD at `$(pkg.repo.source)`")
+        end
 
         # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
         if pkg.repo.rev === nothing
@@ -620,10 +629,8 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
 end
 
 function resolve_projectfile!(ctx, pkg, project_path)
-    env = ctx.env
     project_file = projectfile_path(project_path; strict=true)
-    project_file === nothing && pkgerror(string("could not find project file in package at ",
-                                                pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)))
+    project_file === nothing && pkgerror("could not find project file at `$(project_path)` for package $(err_rep(pkg))")
     project_data = read_package(project_file)
     if pkg.uuid === nothing || pkg.uuid == project_data.uuid
         pkg.uuid = project_data.uuid
@@ -635,6 +642,8 @@ function resolve_projectfile!(ctx, pkg, project_path)
     else
         pkgerror("name `$(project_data.name)` given by project file `$project_file` does not match given name `$(pkg.name)`")
     end
+    # TODO should we warn here if no version, make a dummy version, ....?
+    pkg.version = project_data.version
 end
 
 get_object_or_branch(repo, rev::SHA1) =
@@ -735,7 +744,6 @@ end
 
 function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
-        @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
             for (uuid, name) in stdlibs()
                 name == pkg.name && (pkg.uuid = uuid)
@@ -1080,7 +1088,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                 end
                 branch = LibGit2.headname(repo)
                 try
-                    GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
+                    GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"], force=true)
                 catch e
                     e isa PkgError || rethrow()
                     push!(errors, (reg.path, "failed to fetch from repo"))
@@ -1330,6 +1338,7 @@ Base.@kwdef struct ProjectInfo
     version::Union{Nothing,VersionNumber}
     ispackage::Bool
     dependencies::Dict{String,UUID}
+    source::Dict{String,String}
     path::String
 end
 

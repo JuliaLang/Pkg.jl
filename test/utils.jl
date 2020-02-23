@@ -206,23 +206,24 @@ function git_init_package(tmp, path)
     return pkgpath
 end
 
-function copy_test_package(tmpdir::String, name::String; use_pkg=true)
+function copy_test_package(tmpdir::String, name::String; use_pkg=true, git_init=false)
     target = joinpath(tmpdir, name)
     cp(joinpath(@__DIR__, "test_packages", name), target)
-    use_pkg || return target
+    if use_pkg
+        # The known Pkg UUID, and whatever UUID we're currently using for testing
+        known_pkg_uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+        pkg_uuid = Pkg.TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["uuid"]
 
-    # The known Pkg UUID, and whatever UUID we're currently using for testing
-    known_pkg_uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
-    pkg_uuid = Pkg.TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["uuid"]
-
-    # We usually want this test package to load our pkg, so update its Pkg UUID:
-    test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
-    for f in ("Manifest.toml", "Project.toml")
-        fpath = joinpath(tmpdir, name, f)
-        if isfile(fpath)
-            write(fpath, replace(read(fpath, String), known_pkg_uuid => pkg_uuid))
+        # We usually want this test package to load our pkg, so update its Pkg UUID:
+        test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
+        for f in ("Manifest.toml", "Project.toml")
+            fpath = joinpath(tmpdir, name, f)
+            if isfile(fpath)
+                write(fpath, replace(read(fpath, String), known_pkg_uuid => pkg_uuid))
+            end
         end
     end
+    git_init && git_init_and_commit(target)
     return target
 end
 

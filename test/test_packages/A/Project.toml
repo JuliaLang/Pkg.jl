@@ -5,3 +5,7 @@ version = "0.1.0"
 [deps]
 B = "dd0d8fba-d7c4-4f8e-a2bb-3a090b3e34f1"
 C = "4ee78ca3-4e78-462f-a078-747ed543fa85"
+
+[source]
+B = "dev/B"
+C = "dev/C"

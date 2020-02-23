@@ -46,6 +46,16 @@ function read_project_deps(raw, section_name::String)
     pkgerror("Expected `$(section_name)` section to be a key-value list")
 end
 
+read_project_source(::Nothing, project::Project) = Dict{String,String}()
+function read_project_source(raw::Dict{String,Any}, project::Project)
+    for (name, source) in raw
+        source isa String && continue
+        pkgerror("expected value for `$name` in source table to be a String")
+    end
+    return raw
+end
+read_project_source(raw, project::Project) = pkgerror("expected `source` section to be a table")
+
 read_project_targets(::Nothing, project::Project) = Dict{String,Vector{String}}()
 function read_project_targets(raw::Dict{String,Any}, project::Project)
     for (target, deps) in raw
@@ -118,6 +128,7 @@ function Project(raw::Dict)
     project.version  = read_project_version(get(raw, "version", nothing))
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
+    project.source   = read_project_source(get(raw, "source", nothing), project)
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
     validate(project)
@@ -161,6 +172,7 @@ function destructure(project::Project)::Dict
     entry!("extras",   project.extras)
     entry!("compat",   project.compat)
     entry!("targets",  project.targets)
+    entry!("source",   project.source)
     return raw
 end
 
