@@ -259,6 +259,11 @@ function collect_developed!(ctx::Context, pkg::PackageSpec, developed::Vector{Pa
     source_ctx = Context(env = EnvCache(projectfile_path(source)))
     pkgs = load_all_deps(source_ctx)
     for pkg in filter(is_tracking_path, pkgs)
+        # Break eventual cycles
+        if any(x -> x.uuid == pkg.uuid, developed)
+            @debug "found a cycle when collecting developed packages for $(pkg.name)"
+            continue
+        end
         # normalize path
         pkg.path = Types.relative_project_path(ctx, project_rel_path(source_ctx, source_path(source_ctx, pkg)))
         push!(developed, pkg)

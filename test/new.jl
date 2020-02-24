@@ -2182,6 +2182,23 @@ end
     end
 end
 
+@testset "cycles" begin
+    isolate(loaded_depot=true) do
+        cd_tempdir() do dir
+            Pkg.generate("Cycle_A")
+            cycle_a_uuid = Pkg.Types.read_project("Cycle_A/Project.toml").uuid
+            Pkg.generate("Cycle_B")
+            cycle_b_uuid = Pkg.Types.read_project("Cycle_A/Project.toml").uuid
+            Pkg.activate("Cycle_A")
+            Pkg.develop(Pkg.PackageSpec(path="Cycle_B"))
+            Pkg.activate("Cycle_B")
+            Pkg.develop(Pkg.PackageSpec(path="Cycle_A"))
+            manifest_b = Pkg.Types.read_manifest("Cycle_B/Manifest.toml")
+            @test cycle_a_uuid in keys(manifest_b)
+            @test_broken !(cycle_b_uuid in keys(manifest_b))
+        end
+    end
+end
 #
 # # Other
 #
