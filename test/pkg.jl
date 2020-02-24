@@ -565,6 +565,8 @@ end
 @testset "targets should survive add/rm" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
         cp(joinpath(@__DIR__, "project", "good", "pkg.toml"), "Project.toml")
+        mkdir("src")
+        touch("src/Pkg.jl")
         targets = deepcopy(Pkg.Types.read_project("Project.toml").targets)
         Pkg.activate(".")
         Pkg.add("Example")

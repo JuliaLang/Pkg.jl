@@ -276,6 +276,11 @@ end
 
 function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     deps_map = Dict{UUID,Vector{PackageSpec}}()
+    if ctx.env.pkg !== nothing
+        pkg = ctx.env.pkg
+        collect_project!(ctx, pkg, dirname(ctx.env.project_file), deps_map)
+        names[pkg.uuid] = pkg.name
+    end
     for pkg in pkgs
         path = project_rel_path(ctx, source_path(ctx, pkg))
         if !isdir(path)
@@ -287,12 +292,16 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
     fixed = Dict{UUID,Resolve.Fixed}()
     # Collect the dependencies for the fixed packages
     for (uuid, deps) in deps_map
-        idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
-        fix_pkg = pkgs[idx]
         q = Dict{UUID, VersionSpec}()
         for dep in deps
             names[dep.uuid] = dep.name
             q[dep.uuid] = dep.version
+        end
+        if Types.is_project_uuid(ctx, uuid)
+            fix_pkg = ctx.env.pkg
+        else
+            idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
+            fix_pkg = pkgs[idx]
         end
         fixed[uuid] = Resolve.Fixed(fix_pkg.version, q)
     end
