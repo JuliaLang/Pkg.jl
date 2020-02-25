@@ -59,7 +59,8 @@ develop(pkgs::Vector{<:AbstractString}; kwargs...) =
     develop([check_package_name(pkg, :develop) for pkg in pkgs]; kwargs...)
 develop(pkgs::Vector{PackageSpec}; kwargs...)      = develop(Context(), pkgs; kwargs...)
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(), kwargs...)
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(),
+                 verbose::Bool=false, kwargs...)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -99,7 +100,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         end
     end
 
-    Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform, verbose=verbose)
     return
 end
 
@@ -108,7 +109,7 @@ add(pkgs::Vector{<:AbstractString}; kwargs...) =
     add([check_package_name(pkg, :add) for pkg in pkgs]; kwargs...)
 add(pkgs::Vector{PackageSpec}; kwargs...)      = add(Context(), pkgs; kwargs...)
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
-             platform::Platform=platform_key_abi(), kwargs...)
+             platform::Platform=platform_key_abi(), verbose::Bool=false, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -156,7 +157,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
         end
     end
 
-    Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform, verbose=verbose)
     return
 end
 
@@ -197,7 +198,7 @@ up(pkgs::Vector{PackageSpec}; kwargs...)               = up(Context(), pkgs; kwa
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
-            update_registry::Bool=true, kwargs...)
+            update_registry::Bool=true, verbose::Bool=false, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     foreach(pkg -> pkg.mode = mode, pkgs)
 
@@ -221,7 +222,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx, pkgs)
         ensure_resolved(ctx, pkgs)
     end
-    Operations.up(ctx, pkgs, level)
+    Operations.up(ctx, pkgs, level; verbose=verbose)
     return
 end
 
@@ -234,7 +235,7 @@ end
 pin(pkg::Union{AbstractString, PackageSpec}; kwargs...) = pin([pkg]; kwargs...)
 pin(pkgs::Vector{<:AbstractString}; kwargs...)          = pin([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 pin(pkgs::Vector{PackageSpec}; kwargs...)               = pin(Context(), pkgs; kwargs...)
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+function pin(ctx::Context, pkgs::Vector{PackageSpec}; verbose::Bool=false, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -258,7 +259,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     foreach(pkg -> pkg.mode = PKGMODE_PROJECT, pkgs)
     project_deps_resolve!(ctx, pkgs)
     ensure_resolved(ctx, pkgs)
-    Operations.pin(ctx, pkgs)
+    Operations.pin(ctx, pkgs; verbose=verbose)
     return
 end
 
@@ -267,7 +268,7 @@ free(pkg::Union{AbstractString, PackageSpec}; kwargs...) = free([pkg]; kwargs...
 free(pkgs::Vector{<:AbstractString}; kwargs...)          = free([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
 free(pkgs::Vector{PackageSpec}; kwargs...)               = free(Context(), pkgs; kwargs...)
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+function free(ctx::Context, pkgs::Vector{PackageSpec}; verbose::Bool=false, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -287,7 +288,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     ensure_resolved(ctx, pkgs)
 
     find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
-    Operations.free(ctx, pkgs)
+    Operations.free(ctx, pkgs; verbose=verbose)
     return
 end
 

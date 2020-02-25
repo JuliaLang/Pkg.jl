@@ -1072,7 +1072,8 @@ function _resolve(ctx::Context, pkgs::Vector{PackageSpec}, preserve::PreserveLev
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
-             preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi())
+             preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(),
+             verbose::Bool=false)
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -1091,12 +1092,13 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
 
     show_update(ctx)
     write_env(ctx.env) # write env before building
-    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git), verbose=verbose)
 end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi())
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(),
+                 verbose::Bool=false)
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
@@ -1109,7 +1111,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     download_artifacts(ctx, pkgs; platform=platform)
     show_update(ctx)
     write_env(ctx.env) # write env before building
-    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git), verbose=verbose)
 end
 
 # load version constraint
@@ -1154,7 +1156,8 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
 
-function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
+function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
+            verbose::Bool=false)
     new_git = UUID[]
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
@@ -1175,7 +1178,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     download_artifacts(ctx, pkgs)
     show_update(ctx)
     write_env(ctx.env) # write env before building
-    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
+    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git), verbose=verbose)
 end
 
 function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
@@ -1202,7 +1205,7 @@ function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry
     end
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec})
+function pin(ctx::Context, pkgs::Vector{PackageSpec}; verbose::Bool=false)
     foreach(pkg -> update_package_pin!(ctx, pkg, manifest_info(ctx, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx, pkgs)
     check_registered(ctx, pkgs)
@@ -1214,7 +1217,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     download_artifacts(ctx, pkgs)
     show_update(ctx)
     write_env(ctx.env) # write env before building
-    build_versions(ctx, UUID[pkg.uuid for pkg in new])
+    build_versions(ctx, UUID[pkg.uuid for pkg in new], verbose=verbose)
 end
 
 function update_package_free!(ctx::Context, pkg::PackageSpec, entry::PackageEntry)
@@ -1239,7 +1242,7 @@ end
 
 # TODO: this is two techinically different operations with the same name
 # split into two subfunctions ...
-function free(ctx::Context, pkgs::Vector{PackageSpec})
+function free(ctx::Context, pkgs::Vector{PackageSpec}; verbose::Bool=false)
     foreach(pkg -> update_package_free!(ctx, pkg, manifest_info(ctx, pkg.uuid)), pkgs)
 
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
@@ -1251,7 +1254,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         download_artifacts(ctx, new)
         show_update(ctx)
         write_env(ctx.env) # write env before building
-        build_versions(ctx, UUID[pkg.uuid for pkg in new])
+        build_versions(ctx, UUID[pkg.uuid for pkg in new], verbose=verbose)
     else
         foreach(pkg -> manifest_info(ctx, pkg.uuid).pinned = false, pkgs)
         show_update(ctx)
