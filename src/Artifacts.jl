@@ -392,12 +392,12 @@ returns the `Platform` object that this entry specifies.  Returns `nothing` on e
 """
 function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
     if !haskey(entry, "os")
-        @error("Invalid artifacts file at '$(artifacts_toml)': platform-specific artifact entry '$name' missing 'os' key")
+        error("Invalid artifacts file at '$(artifacts_toml)': platform-specific artifact entry '$name' missing 'os' key")
         return nothing
     end
 
     if !haskey(entry, "arch")
-        @error("Invalid artifacts file at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
+        error("Invalid artifacts file at '$(artifacts_toml)': platform-specific artifact entrty '$name' missing 'arch' key")
         return nothing
     end
 
@@ -554,13 +554,13 @@ function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String
         meta = select_platform(dl_dict, platform)
     # If it's NOT a dict, complain
     elseif !isa(meta, Dict)
-        @error("Invalid artifacts file at $(artifacts_toml): artifact '$name' malformed, must be array or dict!")
+        error("Invalid artifacts file at $(artifacts_toml): artifact '$name' malformed, must be array or dict!")
         return nothing
     end
 
     # This is such a no-no, we are going to call it out right here, right now.
     if meta !== nothing && !haskey(meta, "git-tree-sha1")
-        @error("Invalid artifacts file at $(artifacts_toml): artifact '$name' contains no `git-tree-sha1`!")
+        error("Invalid artifacts file at $(artifacts_toml): artifact '$name' contains no `git-tree-sha1`!")
         return nothing
     end
 
@@ -752,10 +752,10 @@ function download_artifact(
         catch e
             # Clean that destination directory out if something went wrong
             rm(dest_dir; force=true, recursive=true)
-
             if isa(e, InterruptException)
                 rethrow(e)
             end
+            @error "failed to download artifact:" exception=e
             return false
         end
     else
@@ -767,13 +767,14 @@ function download_artifact(
         # everything should be cleaned up.  Luckily, that is precisely what our
         # `create_artifact()` wrapper does, so we use that here.
         calc_hash = try
-            create_artifact() do dir
-                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose)
+            create_artifact() do dest_dir
+                download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose)
             end
         catch e
             if isa(e, InterruptException)
                 rethrow(e)
             end
+            @error "failed to download artifact:" exception=e
             # If something went wrong during download, return false
             return false
         end
