@@ -37,6 +37,8 @@ include("versions.jl")
 
 const URL_regex = r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 
+const additional_manifest_names = String[]
+
 ## user-friendly representation of package IDs ##
 function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
     name = get(uuid_to_name, p, "(unknown)")
@@ -160,7 +162,8 @@ function projectfile_path(env_path::String; strict=false)
 end
 
 function manifestfile_path(env_path::String; strict=false)
-    for name in Base.manifest_names
+    all_manifest_names = vcat(additional_manifest_names, Base.manifest_names)
+    for name in all_manifest_names
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
@@ -170,7 +173,7 @@ function manifestfile_path(env_path::String; strict=false)
         project = basename(projectfile_path(env_path))
         idx = findfirst(x -> x == project, Base.project_names)
         @assert idx !== nothing
-        return joinpath(env_path, Base.manifest_names[idx])
+        return joinpath(env_path, all_manifest_names[idx])
     end
 end
 
