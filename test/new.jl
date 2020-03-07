@@ -320,6 +320,10 @@ end
         @test api == Pkg.activate
         @test args == "FooBar"
         @test isempty(opts)
+        # - activating a temporary project
+        api, opts = first(Pkg.pkg"activate --temp")
+        @test api == Pkg.activate
+        @test opts == Dict(:temp => true)
     end
 end
 

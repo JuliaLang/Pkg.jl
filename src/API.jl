@@ -837,7 +837,9 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate()
+function activate(;temp=false,shared=false)
+    shared && pkgerror("Must give a name for a shared environment")
+    temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
@@ -861,7 +863,8 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false)
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
+    temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
         # 1. if path exists, activate that
