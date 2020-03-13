@@ -336,21 +336,19 @@ The `--all` option will garbage collect all packages which can not be immediatel
 reached from any existing project.
 """,
 ],[ :name => "undo",
-    :short_name => "u",
     :api => API.undo,
     :description => "undo the latest change to the active project",
     :help => md"""
-    [u|undo]
+    undo
 
 Undoes the latest change to the active project.
 """,
 ],
 [ :name => "redo",
-  :short_name => "r",
   :api => API.redo,
   :description => "redo the latest change to the active project",
   :help => md"""
-    [r|redo]
+    redo
 
 Redoes the changes from the latest [`undo`](@ref).
 """,
