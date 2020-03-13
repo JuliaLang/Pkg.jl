@@ -630,11 +630,13 @@ backspace when the input line is empty or press Ctrl+C.
     pkg> cmd [opts] [args]
 
 Multiple commands can be given on the same line by interleaving a `;` between the commands.
+Some commands have an alias, indicated below.
 
 **Commands**
 """
     for (command, spec) in canonical_names()
-        push!(help.content, Markdown.parse("`$command`: $(spec.description)"))
+        short_name = spec.short_name === nothing ? "" : ", `" * spec.short_name * '`'
+        push!(help.content, Markdown.parse("`$command`$short_name: $(spec.description)"))
     end
     return help
 end

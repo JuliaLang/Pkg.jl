@@ -26,11 +26,11 @@ julia is started with `--startup-file=yes`.
     :completions => complete_help,
     :description => "show this message",
     :help => md"""
-    help
+    [?|help]
 
 List available commands along with short descriptions.
 
-    help cmd
+    [?|help] cmd
 
 If `cmd` is a partial command, display help for all subcommands.
 If `cmd` is a full command, display help for `cmd`.
@@ -64,7 +64,7 @@ If no manifest exists or the `--project` option is given, resolve and download t
     :completions => complete_installed_packages,
     :description => "remove packages from project or manifest",
     :help => md"""
-    rm [-p|--project] pkg[=uuid] ...
+    [rm|remove] [-p|--project] pkg[=uuid] ...
 
 Remove package `pkg` from the project file. Since the name `pkg` can only
 refer to one package in a project this is unambiguous, but you can specify
@@ -75,7 +75,7 @@ the project. Project mode operation is the default, so passing `-p` or
 `--project` is optional unless it is preceded by the `-m` or `--manifest`
 options at some earlier point.
 
-    rm [-m|--manifest] pkg[=uuid] ...
+    [rm|remove] [-m|--manifest] pkg[=uuid] ...
 
 Remove package `pkg` from the manifest file. If the name `pkg` refers to
 multiple packages in the manifest, `uuid` disambiguates it. Removing a package
@@ -144,7 +144,7 @@ pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
     :completions => complete_add_dev,
     :description => "clone the full package repo locally for development",
     :help => md"""
-    develop [--shared|--local] pkg[=uuid] ...
+    [dev|develop] [--shared|--local] pkg[=uuid] ...
 
 Make a package available for development. If `pkg` is an existing local path, that path will be recorded in
 the manifest and used. Otherwise, a full git clone of `pkg` is made. The location of the clone is
@@ -259,8 +259,8 @@ Use the `temp` option to create temporary environments. This should be useful fo
     :completions => complete_installed_packages,
     :description => "update packages in manifest",
     :help => md"""
-    up [-p|--project]  [opts] pkg[=uuid] [@version] ...
-    up [-m|--manifest] [opts] pkg[=uuid] [@version] ...
+    [up|update] [-p|--project]  [opts] pkg[=uuid] [@version] ...
+    [up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
     opts: --major | --minor | --patch | --fixed
 
@@ -306,9 +306,9 @@ The `startup.jl` file is disabled during precompilation unless julia is started 
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    status [-d|--diff] [pkgs...]
-    status [-d|--diff] [-p|--project] [pkgs...]
-    status [-d|--diff] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [pkgs...]
+    [st|status] [-d|--diff] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [-m|--manifest] [pkgs...]
 
 Show the status of the current environment. In `--project` mode (default), the
 status of the project file is summarized. In `--manifest` mode the output also
@@ -338,7 +338,6 @@ The `--all` option will garbage collect all packages which can not be immediatel
 reached from any existing project.
 """,
 ],[ :name => "undo",
-    :short_name => "u",
     :api => API.undo,
     :description => "undo the latest change to the active project",
     :help => md"""
@@ -348,7 +347,6 @@ Undoes the latest change to the active project.
 """,
 ],
 [ :name => "redo",
-  :short_name => "r",
   :api => API.redo,
   :description => "redo the latest change to the active project",
   :help => md"""
@@ -387,7 +385,7 @@ pkg> registry add https://www.my-custom-registry.com
     :arg_parser => parse_registry,
     :description => "remove package registries",
     :help => md"""
-    registry rm reg...
+    registry [rm|remove] reg...
 
 Remove package registries `reg...`.
 
@@ -396,7 +394,7 @@ Remove package registries `reg...`.
 
 **Examples**
 ```
-pkg> registry rm General
+pkg> registry [rm|remove] General
 ```
 """,
 ],[ :name => "update",
@@ -407,8 +405,8 @@ pkg> registry rm General
     :arg_parser => parse_registry,
     :description => "update package registries",
     :help => md"""
-    registry up
-    registry up reg...
+    registry [up|update]
+    registry [up|update] reg...
 
 Update package registries `reg...`. If no registries are specified
 all registries will be updated.
@@ -427,7 +425,7 @@ pkg> registry up General
     :api => Registry.status,
     :description => "information about installed registries",
     :help => md"""
-    registry status
+    registry [st|status]
 
 Display information about installed registries.
 
