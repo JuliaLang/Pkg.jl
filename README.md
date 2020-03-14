@@ -1,6 +1,5 @@
 # Pkg
 
-
 | **Documentation**                                                 | **Build Status**                                                                                |
 |:-----------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
 | [![][docs-v1-img]][docs-v1-url] [![][docs-dev-img]][docs-dev-url] | [![][travis-img]][travis-url] [![][appveyor-img]][appveyor-url] [![][codecov-img]][codecov-url] |
