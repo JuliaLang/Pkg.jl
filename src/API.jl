@@ -108,7 +108,8 @@ add(pkgs::Vector{<:AbstractString}; kwargs...) =
     add([check_package_name(pkg, :add) for pkg in pkgs]; kwargs...)
 add(pkgs::Vector{PackageSpec}; kwargs...)      = add(Context(), pkgs; kwargs...)
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
-             platform::Platform=platform_key_abi(), kwargs...)
+             platform::Platform=platform_key_abi(),
+             artifacts::Bool=true, build::Bool=true, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -156,7 +157,9 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
         end
     end
 
-    Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    Operations.add(ctx, pkgs, new_git;
+                   preserve=preserve, platform=platform,
+                   artifacts=artifacts, build=build)
     return
 end
 

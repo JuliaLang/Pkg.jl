@@ -1086,7 +1086,8 @@ function _resolve(ctx::Context, pkgs::Vector{PackageSpec}, preserve::PreserveLev
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
-             preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi())
+             preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(),
+             artifacts::Bool=true, build::Bool=true)
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -1101,11 +1102,11 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
-    download_artifacts(ctx, pkgs; platform=platform)
+    artifacts && download_artifacts(ctx, pkgs; platform=platform)
 
     show_update(ctx)
     write_env(ctx.env) # write env before building
-    build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
+    build && build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
 # Input: name, uuid, and path
