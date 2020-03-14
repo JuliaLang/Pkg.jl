@@ -8,7 +8,7 @@ import Base: SHA1
 
 using ..Utils
 
-# Helper function to create an artifact, then chmod() the whole thing to 0o755.  This is
+# Helper function to create an artifact, then chmod() the whole thing to 0o644.  This is
 # important to keep hashes stable across platforms that have different umasks, changing
 # the permissions within a tree hash, breaking our tests.
 function create_artifact_chmod(f::Function)
@@ -18,7 +18,8 @@ function create_artifact_chmod(f::Function)
         # Change all files to have 644 permissions, leave directories alone
         for (root, dirs, files) in walkdir(path)
             for f in files
-                chmod(joinpath(root, f), 0o644)
+                f = joinpath(root, f)
+                islink(f) || chmod(f, 0o644)
             end
         end
     end
