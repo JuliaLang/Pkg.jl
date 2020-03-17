@@ -8,6 +8,14 @@ export platform_key_abi, platform_dlext, valid_dl_path, arch, libc, compiler_abi
 import Base: show
 import Libdl
 
+# On Julia 1.5+, we have JLLs as our interface to binaries
+if VERSION >= v"1.5-DEV"
+using libLLVM_jll, CompilerSupportLibraries_jll
+# Manually invoke `__init__()` so elements are populated during bootstrap
+libLLVM_jll.__init__()
+CompilerSupportLibraries_jll.__init__()
+end
+
 abstract type Platform end
 
 """
@@ -700,7 +708,12 @@ Inspects the current Julia process to determine the libgfortran version this Jul
 linked against (if any).
 """
 function detect_libgfortran_version(;platform::Platform = default_platkey)
-    libgfortran_paths = filter(x -> occursin("libgfortran", x), Libdl.dllist())
+    libgfortran_paths = String[]
+    if VERSION >= v"1.5-DEV"
+        push!(libgfortran_paths, CompilerSupportLibraries_jll.libgfortran_path)
+    end
+
+    append!(libgfortran_paths, filter(x -> occursin("libgfortran", x), Libdl.dllist()))
     if isempty(libgfortran_paths)
         # One day, I hope to not be linking against libgfortran in base Julia
         return nothing
@@ -715,7 +728,11 @@ Inspects the currently running Julia process to find out what version of libstdc
 it is linked against (if any).
 """
 function detect_libstdcxx_version()
-    libstdcxx_paths = filter(x -> occursin("libstdc++", x), Libdl.dllist())
+    libstdcxx_paths = String[]
+    if VERSION >= v"1.5-DEV"
+        push!(libstdcxx_paths, CompilerSupportLibraries_jll.libstdcxx_path)
+    end
+    append!(libstdcxx_paths, filter(x -> occursin("libstdc++", x), Libdl.dllist()))
     if isempty(libstdcxx_paths)
         # This can happen if we were built by clang, so we don't link against
         # libstdc++ at all.
@@ -745,13 +762,23 @@ between Julia and LLVM; they must match.
 """
 function detect_cxxstring_abi()
     # First, if we're not linked against libstdc++, then early-exit because this doesn't matter.
-    libstdcxx_paths = filter(x -> occursin("libstdc++", x), Libdl.dllist())
+    libstdcxx_paths = String[]
+    if VERSION >= v"1.5-DEV"
+        push!(libstdcxx_paths, CompilerSupportLibraries_jll.libstdcxx_path)
+    end
+    append!(libstdcxx_paths, filter(x -> occursin("libstdc++", x), Libdl.dllist()))
     if isempty(libstdcxx_paths)
         # We were probably built by `clang`; we don't link against `libstdc++`` at all.
         return nothing
     end
 
     function open_libllvm(f::Function)
+        # On Julia 1.5+, we have JLLs that provide handles for us
+        if VERSION >= v"1.5-DEV"
+            return f(libLLVM_jll.libllvm_handle)
+        end
+
+        # Otherwise, we reach out and attempt to load libLLVM
         for lib_name in ("libLLVM", "LLVM", "libLLVMSupport")
             hdl = Libdl.dlopen_e(lib_name)
             if hdl != C_NULL
