@@ -264,7 +264,7 @@ may fit your package better.
 2. Avoid using `Julia` in your package name or prefixing it with `Ju`.
 
      * It is usually clear from context and to your users that the package is a Julia package.
-     * Package names already have a `.jl` extension, which communicates to users that `package.jl` is a Julia package.
+     * Package names already have a `.jl` extension, which communicates to users that `Package.jl` is a Julia package.
      * Having Julia in the name can imply that the package is connected to, or endorsed by, contributors
        to the Julia language itself.
 3. Packages that provide most of their functionality in association with a new type should have pluralized
