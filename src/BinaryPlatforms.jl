@@ -687,17 +687,9 @@ to the given libgfortran version.
 """
 function detect_libgfortran_version(libgfortran_name::AbstractString, platform::Platform = default_platkey)
     name, version = parse_dl_name_version(libgfortran_name, platform)
-    if version === nothing
-        # Even though we complain about this; we allow it to continue, in the hopes
-        # that we shall march on to a BRIGHTER TOMORROW, one in which we are not shackled
-        # by the constraints of libgfortran compiler ABIs on our precious programming
-        # languages; one where the mistakes of yesterday are mere memories and not
-        # continual maintenance burdens upon the children of tomorrow; one where numeric
-        # code can be cleanly implemented in a modern language and not bestowed onto the
-        # next generation by grizzled ancients, documented only with a faded yellow
-        # sticky note that says simply "good luck".
-        @warn("Unable to determine libgfortran version from '$(libgfortran_name)'")
-    end
+    # Note that `version` can actually be `nothing` for some paths (e.g. `libgfortran.so`)
+    # Eventually we may need to poke around with `dlsym()` here, but for now, we're pretty
+    # much guaranteed that libgfortran is named something like `libgfortran.so.4`
     return version
 end
 
@@ -710,15 +702,11 @@ linked against (if any).
 function detect_libgfortran_version(;platform::Platform = default_platkey)
     libgfortran_paths = String[]
     if VERSION >= v"1.5-DEV"
-        push!(libgfortran_paths, CompilerSupportLibraries_jll.libgfortran_path)
+        push!(libgfortran_paths, CompilerSupportLibraries_jll.libgfortran)
     end
 
     append!(libgfortran_paths, filter(x -> occursin("libgfortran", x), Libdl.dllist()))
-    if isempty(libgfortran_paths)
-        # One day, I hope to not be linking against libgfortran in base Julia
-        return nothing
-    end
-    return detect_libgfortran_version(first(libgfortran_paths), platform)
+    return something(detect_libgfortran_version.(libgfortran_paths, Ref(platform))..., Some(nothing))
 end
 
 """
