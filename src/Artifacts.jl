@@ -45,7 +45,14 @@ current set of depot paths and the current artifact directory override via the m
 """
 function artifacts_dirs(args...)
     if ARTIFACTS_DIR_OVERRIDE[] === nothing
-        return [abspath(depot, "artifacts", args...) for depot in depots()]
+        depot_artifacts = [abspath(depot, "artifacts", args...) for depot in depots()] # search all depots
+        project = Base.active_project()
+        if project === nothing || isempty(project)
+            project_artifacts = String[]
+        else
+            project_artifacts = [abspath(dirname(Base.active_project()), "artifacts", args...)] # search the active project
+        end
+        return vcat(depot_artifacts, project_artifacts)
     else
         # If we've been given an override, use _only_ that directory.
         return [abspath(ARTIFACTS_DIR_OVERRIDE[], args...)]
