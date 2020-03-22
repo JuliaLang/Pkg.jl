@@ -486,7 +486,7 @@ function projname(project_file::String)
     else
         name = project.name
     end
-    for depot in Base.DEPOT_PATH
+    for depot in Base.depot_path()
         envdir = joinpath(depot, "environments")
         if startswith(abspath(project_file), abspath(envdir))
             return "@" * name

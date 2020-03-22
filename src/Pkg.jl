@@ -12,10 +12,10 @@ export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
-depots() = Base.DEPOT_PATH
+depots() = Base.depot_path()
 function depots1()
     d = depots()
-    isempty(d) && Pkg.Types.pkgerror("no depots found in DEPOT_PATH")
+    isempty(d) && Pkg.Types.pkgerror("no depots found in Base.depot_path()")
     return d[1]
 end
 

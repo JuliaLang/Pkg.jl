@@ -3,7 +3,7 @@
 ########################
 function _shared_envs()
     possible = String[]
-    for depot in Base.DEPOT_PATH
+    for depot in Base.depot_path()
         envdir = joinpath(depot, "environments")
         isdir(envdir) || continue
         append!(possible, readdir(envdir))
