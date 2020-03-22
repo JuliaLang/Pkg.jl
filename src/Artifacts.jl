@@ -37,25 +37,40 @@ function with_artifacts_directory(f::Function, artifacts_dir::String)
 end
 
 """
-    artifacts_dirs(args...)
+    artifacts_read_dirs(args...)
 
 Return a list of paths joined into all possible artifacts directories, as dictated by the
 current set of depot paths and the current artifact directory override via the method
 `with_artifacts_dir()`.
 """
-function artifacts_dirs(args...)
+function artifacts_read_dirs(args...)
     if ARTIFACTS_DIR_OVERRIDE[] === nothing
-        depot_artifacts = [abspath(depot, "artifacts", args...) for depot in depots()] # search all depots
+        dirs = [abspath(depot, "artifacts", args...) for depot in depots()]
         project = Base.active_project()
-        if project === nothing || isempty(project)
-            project_artifacts = String[]
-        else
-            project_artifacts = [abspath(dirname(Base.active_project()), "artifacts", args...)] # search the active project
+        if project !== nothing
+            dirs = [abspath(dirname(Base.active_project()), "artifacts", args...); dirs]
         end
-        return vcat(depot_artifacts, project_artifacts)
+        return dirs
     else
         # If we've been given an override, use _only_ that directory.
         return [abspath(ARTIFACTS_DIR_OVERRIDE[], args...)]
+    end
+end
+
+"""
+    artifacts_write_dir()
+
+Return the artifact directory to which new artifacts will be written,
+as dictated by the current set of depot paths and the current artifact
+directory override via the method `with_artifacts_dir()`.
+"""
+function artifacts_write_dir()
+    if ARTIFACTS_DIR_OVERRIDE[] === nothing
+        # create new artifacts in tbe user depot
+        return abspath(first(depots()), "artifacts")
+    else
+        # If we've been given an override, use _only_ that directory.
+        return abspath(ARTIFACTS_DIR_OVERRIDE[])
     end
 end
 
@@ -210,7 +225,7 @@ identifying tree hash of this artifact.
 """
 function create_artifact(f::Function)
     # Ensure the `artifacts` directory exists in our default depot
-    artifacts_dir = first(artifacts_dirs())
+    artifacts_dir = artifacts_write_dir()
     mkpath(artifacts_dir)
 
     # Temporary directory where we'll do our creation business
