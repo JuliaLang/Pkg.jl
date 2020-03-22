@@ -331,7 +331,7 @@ on-disk.  Note that it is possible that the given artifact exists in multiple lo
     This function requires at least Julia 1.3.
 """
 function artifact_exists(hash::SHA1; honor_overrides::Bool=true)
-    return any(isdir.(artifact_paths(hash; honor_overrides=honor_overrides)))
+    return any(isdir.(artifact_read_paths(hash; honor_overrides=honor_overrides)))
 end
 
 """
