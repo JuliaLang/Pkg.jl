@@ -13,7 +13,7 @@ import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using ..BinaryPlatforms
-using ..Artifacts: artifact_paths
+using ..Artifacts: artifact_read_paths
 
 include("generate.jl")
 
