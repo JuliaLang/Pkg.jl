@@ -303,7 +303,7 @@ const generate = API.generate
 !!! compat "Julia 1.4"
     This feature requires Julia 1.4, and is considered experimental.
 
-Query the dependecy graph.
+Query the dependency graph.
 The result is a `Dict` that maps a package UUID to a `PackageInfo` struct representing the dependency (a package).
 
 # `PackageInfo` fields
