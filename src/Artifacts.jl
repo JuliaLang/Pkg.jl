@@ -58,19 +58,19 @@ function artifacts_read_dirs(args...)
 end
 
 """
-    artifacts_write_dir()
+    artifacts_write_dir(args...)
 
 Return the artifact directory to which new artifacts will be written,
 as dictated by the current set of depot paths and the current artifact
 directory override via the method `with_artifacts_dir()`.
 """
-function artifacts_write_dir()
+function artifacts_write_dir(args...)
     if ARTIFACTS_DIR_OVERRIDE[] === nothing
         # create new artifacts in tbe user depot
-        return abspath(first(depots()), "artifacts")
+        return abspath(first(depots()), "artifacts", args...)
     else
         # If we've been given an override, use _only_ that directory.
-        return abspath(ARTIFACTS_DIR_OVERRIDE[])
+        return abspath(ARTIFACTS_DIR_OVERRIDE[], args...)
     end
 end
 
@@ -261,12 +261,12 @@ function create_artifact(f::Function)
 end
 
 """
-    artifact_paths(hash::SHA1; honor_overrides::Bool=true)
+    artifact_read_paths(hash::SHA1; honor_overrides::Bool=true)
 
-Return all possible paths for an artifact given the current list of depots as returned
+Return all possible read paths for an artifact given the current list of depots as returned
 by `Pkg.depots()`.  All, some or none of these paths may exist on disk.
 """
-function artifact_paths(hash::SHA1; honor_overrides::Bool=true)
+function artifact_read_paths(hash::SHA1; honor_overrides::Bool=true)
     # First, check to see if we've got an override:
     if honor_overrides
         override = query_override(hash)
@@ -276,6 +276,24 @@ function artifact_paths(hash::SHA1; honor_overrides::Bool=true)
     end
 
     return artifacts_read_dirs(bytes2hex(hash.bytes))
+end
+
+"""
+    artifact_write_path(hash::SHA1; honor_overrides::Bool=true)
+
+Return the write path for an artifact.
+This path may or may not exist on disk.
+"""
+function artifact_write_path(hash::SHA1; honor_overrides::Bool=true)
+    # First, check to see if we've got an override:
+    if honor_overrides
+        override = query_override(hash)
+        if override !== nothing
+            return [override]
+        end
+    end
+
+    return artifacts_write_path(bytes2hex(hash.bytes))
 end
 
 """
@@ -289,17 +307,17 @@ the artifact does not exist, returns the location it would be installed to.
 """
 function artifact_path(hash::SHA1; honor_overrides::Bool=true)
     # Get all possible paths (rooted in all depots)
-    possible_paths = artifact_paths(hash; honor_overrides=honor_overrides)
+    possible_read_paths = artifact_read_paths(hash; honor_overrides=honor_overrides)
 
     # Find the first path that exists and return it
-    for p in possible_paths
+    for p in possible_read_paths
         if isdir(p)
             return p
         end
     end
 
     # If none exist, then just return the one that would exist within `depots1()`.
-    return first(possible_paths)
+    return artifact_write_path(hash; honor_overrides=honor_overrides)
 end
 
 """
