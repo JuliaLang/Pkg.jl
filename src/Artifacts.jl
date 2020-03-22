@@ -115,7 +115,7 @@ function load_overrides(;force::Bool = false)
         :hash => Dict{SHA1,Union{String,SHA1}}(),
     )
 
-    for override_file in reverse(artifacts_dirs("Overrides.toml"))
+    for override_file in reverse(artifacts_read_dirs("Overrides.toml"))
         !isfile(override_file) && continue
 
         # Load the toml file
@@ -275,7 +275,7 @@ function artifact_paths(hash::SHA1; honor_overrides::Bool=true)
         end
     end
 
-    return artifacts_dirs(bytes2hex(hash.bytes))
+    return artifacts_read_dirs(bytes2hex(hash.bytes))
 end
 
 """
@@ -338,7 +338,7 @@ function remove_artifact(hash::SHA1)
     end
 
     # Get all possible paths (rooted in all depots)
-    possible_paths = artifacts_dirs(bytes2hex(hash.bytes))
+    possible_paths = artifacts_read_dirs(bytes2hex(hash.bytes))
     for path in possible_paths
         if isdir(path)
             rm(path; recursive=true, force=true)
