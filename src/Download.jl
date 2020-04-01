@@ -1,6 +1,6 @@
 module Download
 
-import ..GitTools
+import Pkg.GitTools
 
 import HTTP
 import Tar
@@ -53,7 +53,7 @@ end
 
 function download_tree(
     url :: AbstractString,
-    path :: AbstractString;
+    path :: AbstractString = tempname();
     file_hash :: Union{AbstractString, Nothing} = nothing,
     tree_hash :: Union{AbstractString, Nothing} = nothing,
 )
@@ -63,9 +63,11 @@ function download_tree(
         rm(path, recursive=true)
     end
     tarball = download_file(url, file_hash = file_hash)
-    Tar.extract(tarball, path)
+    open(`gzcat $tarball`) do io
+        Tar.extract(io, path)
+    end
     if tree_hash !== nothing
-        calc_hash = hash_file(path)
+        calc_hash = hash_tree(path)
         if calc_hash != tree_hash
             msg  = "Tree hash mismatch!\n"
             msg *= "  Expected SHA1: $tree_hash\n"
@@ -86,7 +88,7 @@ function hash_file(path::AbstractString)
 end
 
 function hash_tree(path::AbstractString)
-    byte2hex(GitTools.tree_hash(path))
+    bytes2hex(GitTools.tree_hash(path))
 end
 
 # hash string normalization & validity checking
