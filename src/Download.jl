@@ -1,5 +1,7 @@
 module Download
 
+import ..GitTools
+
 import HTTP
 import Tar
 import SHA: sha256
@@ -18,10 +20,10 @@ function download_file(
     path :: AbstractString = tempname();
     file_hash :: Union{AbstractString, Nothing} = nothing,
 )
-    file_hash = normalize_hash(256, file_hash)
+    file_hash = normalize_file_hash(file_hash)
     if file_hash !== nothing && isfile(path)
         hash_file(path) == file_hash && return path
-        rm(path, force=true)
+        rm(path)
     end
     # TODO: should write directly to path but can't because of
     # https://github.com/JuliaWeb/HTTP.jl/issues/526
@@ -39,10 +41,10 @@ function download_file(
     if file_hash !== nothing
         calc_hash = hash_file(path)
         if calc_hash != file_hash
-            msg  = "Hash mismatch!\n"
-            msg *= "  Expected sha256: $file_hash\n"
-            msg *= "  Received sha256: $calc_hash"
-            rm(path, force=true)
+            msg  = "File hash mismatch!\n"
+            msg *= "  Expected SHA2-256: $file_hash\n"
+            msg *= "  Received SHA2-256: $calc_hash"
+            rm(path)
             error(msg)
         end
     end
@@ -55,19 +57,42 @@ function download_tree(
     file_hash :: Union{AbstractString, Nothing} = nothing,
     tree_hash :: Union{AbstractString, Nothing} = nothing,
 )
-    temp = download_file(url, file_hash = file_hash)
-
+    tree_hash = normalize_tree_hash(tree_hash)
+    if tree_hash !== nothing && isdir(path)
+        hash_tree(path) == tree_hash && return path
+        rm(path, recursive=true)
+    end
+    tarball = download_file(url, file_hash = file_hash)
+    Tar.extract(tarball, path)
+    if tree_hash !== nothing
+        calc_hash = hash_file(path)
+        if calc_hash != tree_hash
+            msg  = "Tree hash mismatch!\n"
+            msg *= "  Expected SHA1: $tree_hash\n"
+            msg *= "  Received SHA1: $calc_hash"
+            rm(path, recursive=true)
+            error(msg)
+        end
+    end
+    return path
 end
 
 # file hashing
 
-function hash_file(path::AbstractString, hash::Function = sha256)
+function hash_file(path::AbstractString)
     open(path) do io
-        bytes2hex(hash(io))
+        bytes2hex(sha256(io))
     end
 end
 
+function hash_tree(path::AbstractString)
+    byte2hex(GitTools.tree_hash(path))
+end
+
 # hash string normalization & validity checking
+
+normalize_file_hash(path) = normalize_hash(256, path) # SHA256
+normalize_tree_hash(path) = normalize_hash(160, path) # SHA1
 
 normalize_hash(bits::Int, ::Nothing) = nothing
 normalize_hash(bits::Int, hash::AbstractString) = normalize_hash(bits, String(hash))
