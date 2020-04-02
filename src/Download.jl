@@ -136,26 +136,13 @@ function download_unpack(
     file_hash :: Union{AbstractString, Nothing} = nothing,
     tree_hash :: Union{AbstractString, Nothing} = nothing,
 )
-    tree_hash = normalize_tree_hash(tree_hash)
-    if tree_hash !== nothing && isdir(path)
-        hash_tree(path) == tree_hash && return path
-        rm(path, recursive=true)
-    end
+    # TODO: don't download if path is already correct
     tarball = download(url, file_hash = file_hash)
-    open(`gzcat $tarball`) do io
-        Tar.extract(io, path)
+    try unpack(tarball, path, tree_hash = tree_hash)
+    catch
+        rm(tarball, force=true)
+        rethrow()
     end
-    if tree_hash !== nothing
-        calc_hash = hash_tree(path)
-        if calc_hash != tree_hash
-            msg  = "Tree hash mismatch!\n"
-            msg *= "  Expected SHA1: $tree_hash\n"
-            msg *= "  Computed SHA1: $calc_hash"
-            rm(path, recursive=true)
-            error(msg)
-        end
-    end
-    return path
 end
 
 # file hashing
