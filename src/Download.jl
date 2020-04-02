@@ -7,7 +7,8 @@ import Tar
 import SHA: sha256
 
 """
-    download_file(url, [ path ]; [ file_hash = <sha256 hash> ]) -> path
+    download(url, [ path ];
+        [ file_hash = <sha256> ]) -> path
 
 Download the file at `url`, saving the resulting download at `path`. If `path`
 is not provided, the file is saved to a temporary location which is returned. If
@@ -15,7 +16,7 @@ the `file_hash` keyword argument is provided, the SHA2-256 hash of the
 downloaded file is computed and if it does not match the provided hash value,
 the path is deleted and an error is thrown.
 """
-function download_file(
+function download(
     url :: AbstractString,
     path :: AbstractString = tempname();
     file_hash :: Union{AbstractString, Nothing} = nothing,
@@ -51,7 +52,17 @@ function download_file(
     return path
 end
 
-function download_tree(
+"""
+    download_unpack(url, [ path ];
+        [ file_hash = <sha256> ], [ tree_hash = <sha1> ]) -> path
+
+Download the file at `url`, saving the resulting download at `path`. If `path`
+is not provided, the file is saved to a temporary location which is returned. If
+the `file_hash` keyword argument is provided, the SHA2-256 hash of the
+downloaded file is computed and if it does not match the provided hash value,
+the path is deleted and an error is thrown.
+"""
+function download_unpack(
     url :: AbstractString,
     path :: AbstractString = tempname();
     file_hash :: Union{AbstractString, Nothing} = nothing,
@@ -62,7 +73,7 @@ function download_tree(
         hash_tree(path) == tree_hash && return path
         rm(path, recursive=true)
     end
-    tarball = download_file(url, file_hash = file_hash)
+    tarball = download(url, file_hash = file_hash)
     open(`gzcat $tarball`) do io
         Tar.extract(io, path)
     end
