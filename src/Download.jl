@@ -1,14 +1,14 @@
 module Download
 
 import Pkg.GitTools
+import Pkg.TOML
 
 import HTTP
 import Tar
 import SHA: sha256
 
 """
-    download(url, [ path ];
-        [ file_hash = <sha256> ]) -> path
+    download(url, [ path ]; [ file_hash = <sha256> ]) -> path
 
 Download the file at `url`, saving the resulting download at `path`. If `path`
 is not provided, the file is saved to a temporary location which is returned. If
@@ -44,10 +44,78 @@ function download(
         if calc_hash != file_hash
             msg  = "File hash mismatch!\n"
             msg *= "  Expected SHA2-256: $file_hash\n"
-            msg *= "  Received SHA2-256: $calc_hash"
+            msg *= "  Computed SHA2-256: $calc_hash"
             rm(path)
             error(msg)
         end
+    end
+    return path
+end
+
+"""
+    unpack(tarball, [ path ]; [ tree_hash = <sha1> ]) -> path
+
+Extract `tarball` to `path`, checking that the resulting tree has the git tree
+SHA1 hash provided (if any is). If `path` is already a tree, it will be checked
+for being the expected tree:
+
+* If `\$path/.tree_info.toml` exists and is a valid TOML file with a top-level
+  `git-tree-sha1` key, then the associated value is compared to `tree_hash` and
+  if they match the tree is presumed to have that hash and left as is.
+
+* Otherwise, the existing tree at `path` is removed and replaced by the result
+  of extracting `path` and `\$path/.tree_info.toml` is written as well with the
+  value of `git-tree-sha1` set to the tree hash of the unpacked tree.
+
+If `tree_hash` is provided and the hash of the extracted tree does not match,
+then `path` is removed entirely and hash mismatch error is thrown.
+
+If `path` is not provided, `path = tempname()` is used and returned.
+"""
+function unpack(
+    tarball :: AbstractString,
+    path :: AbstractString = tempname();
+    tree_hash :: Union{AbstractString, Nothing} = nothing,
+)
+    tree_info = joinpath(path, ".tree_info.toml")
+    tree_hash = normalize_tree_hash(tree_hash)
+    if tree_hash !== nothing && isdir(path)
+        if isfile(tree_info)
+            tree_info_hash = try
+                get(TOML.parsefile(), "git-tree-sha1", nothing)
+            catch err
+                @warn "invalid TOML" path=tree_info err
+            end
+            tree_info_hash == tree_hash && return path
+        end
+        rm(path, recursive=true)
+    end
+    contents = Dict{String,String}()
+    open(`gzcat $tarball`) do io
+        Tar.extract(io, path) do hdr
+            x = hdr.type == :file && (hdr.mode & 0o100) != 0
+            contents[hdr.path] = x ? "executable" : string(hdr.type)
+            return true # extract everything
+        end
+    end
+    # TODO: use .tree_info.toml aware tree_hash?
+    calc_hash = hash_tree(path)
+    if tree_hash !== nothing && calc_hash != tree_hash
+        msg  = "Tree hash mismatch!\n"
+        msg *= "  Expected SHA1: $tree_hash\n"
+        msg *= "  Computed SHA1: $calc_hash"
+        rm(path, recursive=true)
+        error(msg)
+    end
+    if ispath(tree_info)
+        @warn "Overwriting extracted `.tree_info.toml`" path=tree_info
+        rm(tree_info, force=true, recursive=true)
+    end
+    open(tree_info, write=true) do io
+        TOML.print(io, sorted=true, Dict(
+            "git-tree-sha1" => calc_hash,
+            "contents" => contents,
+        ))
     end
     return path
 end
@@ -82,7 +150,7 @@ function download_unpack(
         if calc_hash != tree_hash
             msg  = "Tree hash mismatch!\n"
             msg *= "  Expected SHA1: $tree_hash\n"
-            msg *= "  Received SHA1: $calc_hash"
+            msg *= "  Computed SHA1: $calc_hash"
             rm(path, recursive=true)
             error(msg)
         end
