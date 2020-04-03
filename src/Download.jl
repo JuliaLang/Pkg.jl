@@ -101,8 +101,8 @@ function unpack_core(
 )
     tree_info = joinpath(path, ".tree_info.toml")
     tree_hash = normalize_tree_hash(tree_hash)
-    if tree_hash !== nothing && isdir(path)
-        if isfile(tree_info)
+    if tree_hash === nothing || isdir(path)
+        if tree_hash !== nothing && isfile(tree_info)
             tree_info_hash = try
                 get(TOML.parsefile(tree_info), "git-tree-sha1", nothing)
             catch err
@@ -110,7 +110,7 @@ function unpack_core(
             end
             tree_info_hash == tree_hash && return path
         end
-        rm(path, recursive=true)
+        rm(path, force=true, recursive=true)
     end
     tarball = get_tarball()
     contents = Dict{String,String}()
@@ -139,7 +139,7 @@ function unpack_core(
     if haskey(contents, ".tree_info.toml") && ispath(tree_info)
         @warn "Overwriting extracted `.tree_info.toml`" path=tree_info
         hash_func = (isdir(tree_info) ? GitTools.tree_hash : GitTools.blob_hash)
-        tree_info_data["git-path-sha1"] = Dict(
+        tree_info_data["git-path-sha1s"] = Dict(
             ".tree_info.toml" => bytes2hex(hash_func(tree_info))
         )
         rm(tree_info, force=true, recursive=true)
@@ -168,8 +168,8 @@ function download_unpack(
     file_hash :: Union{AbstractString, Nothing} = nothing,
     tree_hash :: Union{AbstractString, Nothing} = nothing,
 )
+    tarball = nothing
     try
-        tarball = nothing
         unpack_core(path, tree_hash = tree_hash) do
             tarball = download(url, file_hash = file_hash)
         end
