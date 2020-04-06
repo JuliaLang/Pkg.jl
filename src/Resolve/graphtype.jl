@@ -268,12 +268,8 @@ mutable struct Graph
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
-            for (vr,vrmap) in deps[pkgs[p0]]
-                vn ∈ vr || continue
-                for (name, uuid) in vrmap
             vrmap = deps[pkgs[p0]][vn]
             for (name, uuid) in vrmap
-                end
                 # check conflicts ??
                 n2u[name] = uuid
             end
