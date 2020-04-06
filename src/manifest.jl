@@ -153,10 +153,11 @@ function Manifest(raw::Dict)::Manifest
     return validate_manifest(stage1)
 end
 
-function read_manifest(io::IO; path=nothing)
-    raw = nothing
+function read_manifest(path::String)
+    local raw
+    isfile(path) || return Dict{UUID,PackageEntry}()
     try
-        raw = TOML.parse(io)
+        raw = TOML.parsefile(path)
     catch err
         if err isa TOML.ParserError
             pkgerror("Could not parse manifest $(something(path,"")): $(err.msg)")
@@ -168,9 +169,6 @@ function read_manifest(io::IO; path=nothing)
     end
     return Manifest(raw)
 end
-
-read_manifest(path::String)::Manifest =
-    isfile(path) ? open(io->read_manifest(io;path=path), path) : Dict{UUID,PackageEntry}()
 
 ###########
 # WRITING #
