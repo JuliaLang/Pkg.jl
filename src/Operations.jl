@@ -1651,6 +1651,7 @@ function git_head_context(ctx, project_dir)
             Context(;env=env)
         end
     catch err
+        err isa Pkg.TOML.ParserError || rethrow(err)
         nothing
     end
 end

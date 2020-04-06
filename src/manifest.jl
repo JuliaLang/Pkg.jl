@@ -153,11 +153,16 @@ function Manifest(raw::Dict)::Manifest
     return validate_manifest(stage1)
 end
 
-function read_manifest(path::String)
+function read_manifest(path_or_stream)
     local raw
-    isfile(path) || return Dict{UUID,PackageEntry}()
     try
-        raw = TOML.parsefile(path)
+        if path_or_stream isa String
+            path = path_or_stream
+            isfile(path) || return Dict{UUID,PackageEntry}()
+            raw = TOML.parsefile(path)
+        else
+            raw = TOML.parse(path_or_stream)
+        end
     catch err
         if err isa TOML.ParserError
             pkgerror("Could not parse manifest $(something(path,"")): $(err.msg)")
