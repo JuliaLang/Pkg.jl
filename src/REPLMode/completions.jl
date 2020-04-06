@@ -54,8 +54,11 @@ function complete_remote_package(partial)
         for (uuid, pkginfo) in data["packages"]
             name = pkginfo["name"]
             if startswith(name, partial)
-                compat_data = Operations.load_package_data_raw(
-                    VersionSpec, joinpath(reg.path, pkginfo["path"], "Compat.toml"))
+                path = pkginfo["path"]
+                version_info = Operations.load_versions(path; include_yanked = false)
+                versions = sort!(collect(keys(version_info)))
+                compat_data = Operations.load_package_data(
+                    VersionSpec, joinpath(reg.path, path, "Compat.toml"), versions)
                 supported_julia_versions = VersionSpec()
                 found_julia_compat = false
                 for (ver_range, compats) in compat_data
