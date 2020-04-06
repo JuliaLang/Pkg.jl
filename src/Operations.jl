@@ -23,7 +23,7 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
     # 4 used to be the default so look there first
     for slug in (Base.version_slug(uuid, sha1, 4), slug_default)
         for depot in depots()
-            path = abspath(depot, "packages", name, slug)
+            path = joinpath(depot, "packages", name, slug)
             ispath(path) && return path
         end
     end
