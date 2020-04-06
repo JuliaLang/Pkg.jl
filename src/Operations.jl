@@ -144,7 +144,7 @@ function load_versions(path::String; include_yanked = false)
             if !get(info, "yanked", false) || include_yanked)
 end
 
-function load_package_data(f::Base.Callable, path::String, versions = keys(load_versions(dirname(path))))
+function load_package_data(f::Base.Callable, path::String, versions)
     compressed = parse_toml(path, fakeit=true)
     uncompressed = Dict{VersionNumber, Dict{String, f isa Type ? f : Any}}()
     for (vers, data) in compressed
@@ -154,7 +154,7 @@ function load_package_data(f::Base.Callable, path::String, versions = keys(load_
             uv = get!(uncompressed, v, Dict())
             for (key, value) in data
                 if haskey(uv, key)
-                    error("Overlapping ranges for $(key) in Compat. Detected for version $(v).")
+                    error("Overlapping ranges for $(key) in $(repr(path)). Detected for version $(v) with $(uv).")
                 else
                     uv[key] = f(value)
                 end
@@ -366,6 +366,8 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
+    # TODO: We already parse the Versions.toml file for each package in deps_graph but this
+    # function ends up reparsing it. Consider caching the earlier result.
     load_tree_hashes!(ctx, pkgs)
 end
 
@@ -381,8 +383,8 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
 
     for (fp, fx) in fixed
         all_versions[fp] = Set([fx.version])
-        all_deps[fp]     = Dict(VersionNumber(fx.version) => Dict())
-        all_compat[fp]   = Dict(VersionNumber(fx.version) => Dict())
+        all_deps[fp]     = Dict(fx.version => Dict())
+        all_compat[fp]   = Dict(fx.version => Dict())
     end
 
     while true
@@ -420,8 +422,8 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                 for path in registered_paths(ctx, uuid)
                     version_info = load_versions(path; include_yanked = false)
                     versions = sort!(collect(keys(version_info)))
-                    deps_data = load_package_data(UUID, joinpath(path, "Deps.toml"))
-                    compat_data = load_package_data(VersionSpec, joinpath(path, "Compat.toml"))
+                    deps_data = load_package_data(UUID, joinpath(path, "Deps.toml"), versions)
+                    compat_data = load_package_data(VersionSpec, joinpath(path, "Compat.toml"), versions)
 
                     union!(all_versions_u, versions)
 

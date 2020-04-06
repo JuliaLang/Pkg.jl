@@ -240,7 +240,6 @@ mutable struct Graph
         )
         # make sure all versions of all packages know about julia uuid
         for (uuid, _) in deps
-            deps[uuid][VersionRange()] = Dict("julia" => uuid_julia)
             for v in versions[uuid]
                 get!(deps[uuid], v, Dict())["julia"] = uuid_julia
             end
@@ -268,13 +267,14 @@ mutable struct Graph
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
-            vrmap = deps[pkgs[p0]][vn]
+            vrmap = get(() -> Dict(), deps[pkgs[p0]], vn)
             for (name, uuid) in vrmap
                 # check conflicts ??
                 n2u[name] = uuid
             end
             req = Dict{Int,VersionSpec}()
-            vrmap = compat[pkgs[p0]][vn]
+            uuid = pkgs[p0]
+            vrmap = get(() -> Dict(), compat[pkgs[p0]], vn)
             for (name,vs) in vrmap
                 haskey(n2u, name) || error("Unknown package $name found in the compatibility requirements of $(pkgID(pkgs[p0], uuid_to_name))")
                 uuid = n2u[name]

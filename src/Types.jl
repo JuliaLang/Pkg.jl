@@ -1162,11 +1162,12 @@ function find_registered!(ctx::Context,
     # note: empty vectors will be left for names & uuids that aren't found
     clone_default_registries(ctx)
     for registry in collect_registries()
+        reg_abspath = abspath(registry.path)
         data = read_registry(joinpath(registry.path, "Registry.toml"))
         for (_uuid, pkgdata) in data["packages"]
               uuid = UUID(_uuid)
               name = pkgdata["name"]
-              path = abspath(registry.path, pkgdata["path"])
+              path = joinpath(reg_abspath, pkgdata["path"])
               push!(get!(ctx.env.uuids, name, UUID[]), uuid)
               push!(get!(ctx.env.paths, uuid, String[]), path)
               push!(get!(ctx.env.names, uuid, String[]), name)
