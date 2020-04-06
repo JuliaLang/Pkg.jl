@@ -49,18 +49,6 @@ function storeuuid(p::String, uuid_to_name::Dict{UUID,String})
 end
 wantuuids(want_data) = Dict{UUID,VersionNumber}(pkguuid(p) => v for (p,v) in want_data)
 
-function load_package_data_raw(T::Type, input::String)
-    toml = Types.TOML.parse(input)
-    data = Dict{VersionRange,Dict{String,T}}()
-    for (v, d) in toml, (key, value) in d
-        vr = VersionRange(v)
-        dict = get!(data, vr, Dict{String,T}())
-        haskey(dict, key) && pkgerror("$ver/$key is duplicated in $path")
-        dict[key] = T(value)
-    end
-    return data
-end
-
 function gen_versionranges(dict::Dict{K,Set{VersionNumber}}, srtvers::Vector{VersionNumber}) where {K}
     vranges = Dict{K,Vector{VersionRange}}()
     for (vreq,vset) in dict
