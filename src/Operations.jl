@@ -134,42 +134,34 @@ end
 ####################
 # Registry Loading #
 ####################
-function load_package_data(f::Base.Callable, path::String, versions)
-    toml = parse_toml(path, fakeit=true)
-    data = Dict{VersionNumber,Dict{String,Any}}()
-    for ver in versions
-        ver::VersionNumber
-        for (v, d) in toml, (key, value) in d
-            vr = VersionRange(v)
-            ver in vr || continue
-            dict = get!(data, ver, Dict{String,Any}())
-            haskey(dict, key) && pkgerror("$ver/$key is duplicated in $path")
-            dict[key] = f(value)
-        end
-    end
-    return data
-end
-
 load_package_data(f::Base.Callable, path::String, version::VersionNumber) =
     get(load_package_data(f, path, [version]), version, nothing)
-
-function load_package_data_raw(T::Type, path::String)
-    toml = parse_toml(path, fakeit=true)
-    data = Dict{VersionRange,Dict{String,T}}()
-    for (v, d) in toml, (key, value) in d
-        vr = VersionRange(v)
-        dict = get!(data, vr, Dict{String,T}())
-        haskey(dict, key) && pkgerror("$vr/$key is duplicated in $path")
-        dict[key] = T(value)
-    end
-    return data
-end
 
 function load_versions(path::String; include_yanked = false)
     toml = parse_toml(path, "Versions.toml"; fakeit=true)
     return Dict{VersionNumber, SHA1}(
         VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml
             if !get(info, "yanked", false) || include_yanked)
+end
+
+function load_package_data(f::Base.Callable, path::String, versions = keys(load_versions(dirname(path))))
+    compressed = parse_toml(path, fakeit=true)
+    uncompressed = Dict{VersionNumber, Dict{String, f isa Type ? f : Any}}()
+    for (vers, data) in compressed
+        vs = VersionSpec(vers)
+        for v in versions
+            v in vs || continue
+            uv = get!(uncompressed, v, Dict())
+            for (key, value) in data
+                if haskey(uv, key)
+                    error("Overlapping ranges for $(key) in Compat. Detected for version $(v).")
+                else
+                    uv[key] = f(value)
+                end
+            end
+        end
+    end
+    return uncompressed
 end
 
 function load_tree_hash(ctx::Context, pkg::PackageSpec)
@@ -384,13 +376,13 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
     seen = UUID[]
 
     all_versions = Dict{UUID,Set{VersionNumber}}()
-    all_deps     = Dict{UUID,Dict{VersionRange,Dict{String,UUID}}}()
-    all_compat   = Dict{UUID,Dict{VersionRange,Dict{String,VersionSpec}}}()
+    all_deps     = Dict{UUID,Dict{VersionNumber,Dict{String,UUID}}}()
+    all_compat   = Dict{UUID,Dict{VersionNumber,Dict{String,VersionSpec}}}()
 
     for (fp, fx) in fixed
         all_versions[fp] = Set([fx.version])
-        all_deps[fp]     = Dict(VersionRange(fx.version) => Dict())
-        all_compat[fp]   = Dict(VersionRange(fx.version) => Dict())
+        all_deps[fp]     = Dict(VersionNumber(fx.version) => Dict())
+        all_compat[fp]   = Dict(VersionNumber(fx.version) => Dict())
     end
 
     while true
@@ -412,16 +404,15 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
 
                 v = something(proj.version, VERSION)
                 push!(all_versions_u, v)
-                vr = VersionRange(v)
 
-                all_deps_u_vr = get_or_make!(all_deps_u, vr)
+                all_deps_u_vr = get_or_make!(all_deps_u, v)
                 for (name, other_uuid) in proj.deps
                     all_deps_u_vr[name] = other_uuid
                     other_uuid in uuids || push!(uuids, other_uuid)
                 end
 
                 # TODO look at compat section for stdlibs?
-                all_compat_u_vr = get_or_make!(all_compat_u, vr)
+                all_compat_u_vr = get_or_make!(all_compat_u, v)
                 for (name, other_uuid) in proj.deps
                     all_compat_u_vr[name] = VersionSpec()
                 end
@@ -429,8 +420,8 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                 for path in registered_paths(ctx, uuid)
                     version_info = load_versions(path; include_yanked = false)
                     versions = sort!(collect(keys(version_info)))
-                    deps_data = load_package_data_raw(UUID, joinpath(path, "Deps.toml"))
-                    compat_data = load_package_data_raw(VersionSpec, joinpath(path, "Compat.toml"))
+                    deps_data = load_package_data(UUID, joinpath(path, "Deps.toml"))
+                    compat_data = load_package_data(VersionSpec, joinpath(path, "Compat.toml"))
 
                     union!(all_versions_u, versions)
 
