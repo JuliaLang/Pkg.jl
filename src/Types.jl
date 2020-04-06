@@ -432,7 +432,11 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         dev_path = is_local_path ? pkg.repo.source : devpath(ctx, pkg.name, shared)
         # If given an explicit local path, that needs to exist
         if is_local_path && !isdir(dev_path)
-            pkgerror("Dev path `$(pkg.repo.source)` does not exist")
+            if isfile(dev_path)
+                pkgerror("Dev path `$(dev_path)` is a file, but a directory is required.")
+            else
+                pkgerror("Dev path `$(dev_path)` does not exist.")
+            end
         end
         if isdir(dev_path)
             resolve_projectfile!(ctx, pkg, dev_path)
