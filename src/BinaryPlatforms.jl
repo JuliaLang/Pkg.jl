@@ -561,7 +561,7 @@ function parse_dl_name_version(path::AbstractString, platform::Platform)
         "so" => r"^(.*?).so((?:\.[\d]+)*)$",
         # On OSX, libraries look like `libnettle.6.3.dylib`
         "dylib" => r"^(.*?)((?:\.[\d]+)*).dylib$",
-        # On Windows, libraries look like `libnettle-6.dylib`
+        # On Windows, libraries look like `libnettle-6.dll`
         "dll" => r"^(.*?)(?:-((?:[\.\d]+)*))?.dll$"
     )
 
