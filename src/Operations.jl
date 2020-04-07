@@ -977,8 +977,8 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     # only keep reachable manifest entires
     prune_manifest(ctx)
     # update project & manifest
-    show_update(ctx)
     write_env(ctx.env)
+    show_update(ctx)
 end
 
 update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
@@ -1096,8 +1096,8 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     # and ensure they are all downloaded and unpacked as well:
     download_artifacts(ctx, pkgs; platform=platform)
 
-    show_update(ctx)
     write_env(ctx.env) # write env before building
+    show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
@@ -1114,8 +1114,8 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs; readonly=true)
     download_artifacts(ctx, pkgs; platform=platform)
-    show_update(ctx)
     write_env(ctx.env) # write env before building
+    show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
@@ -1180,8 +1180,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     update_manifest!(ctx, pkgs)
     new_apply = download_source(ctx, pkgs)
     download_artifacts(ctx, pkgs)
-    show_update(ctx)
     write_env(ctx.env) # write env before building
+    show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
@@ -1219,8 +1219,8 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
 
     new = download_source(ctx, pkgs)
     download_artifacts(ctx, pkgs)
-    show_update(ctx)
     write_env(ctx.env) # write env before building
+    show_update(ctx)
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
 
@@ -1256,13 +1256,13 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         update_manifest!(ctx, pkgs)
         new = download_source(ctx, pkgs)
         download_artifacts(ctx, new)
-        show_update(ctx)
         write_env(ctx.env) # write env before building
+        show_update(ctx)
         build_versions(ctx, UUID[pkg.uuid for pkg in new])
     else
         foreach(pkg -> manifest_info(ctx, pkg.uuid).pinned = false, pkgs)
-        show_update(ctx)
         write_env(ctx.env)
+        show_update(ctx)
     end
 end
 
@@ -1566,12 +1566,12 @@ end
 
 print_single(ctx::Context, pkg::PackageSpec) = printstyled(ctx.io, stat_rep(pkg); color=:white)
 
-is_uninstantiated(::Nothing) = true
-is_uninstantiated(x::PackageSpec) = x.version == VersionSpec() && !is_stdlib(x.uuid)
+is_instantiated(::Nothing) = false
+is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)
 function print_diff(ctx::Context, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec})
-    if is_uninstantiated(old) && !is_uninstantiated(new)
+    if !is_instantiated(old) && is_instantiated(new)
         printstyled(ctx.io, "+ $(stat_rep(new))"; color=:light_green)
-    elseif is_uninstantiated(new)
+    elseif !is_instantiated(new)
         printstyled(ctx.io, "- $(stat_rep(old))"; color=:light_red)
     elseif is_tracking_registry(old) && is_tracking_registry(new)
         if new.version > old.version
@@ -1589,45 +1589,57 @@ function diff_array(old_ctx::Union{Context,Nothing}, new_ctx::Context; manifest=
         idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
         return idx === nothing ? nothing : pkgs[idx]
     end
-
+    # load deps
     new = manifest ? load_manifest_deps(new_ctx) : load_direct_deps(new_ctx)
     if old_ctx === nothing
         return [(pkg.uuid, nothing, pkg) for pkg in new]
     end
     old = manifest ? load_manifest_deps(old_ctx) : load_direct_deps(old_ctx)
-
+    # merge old and new into single array
     all_uuids = union([pkg.uuid for pkg in old], [pkg.uuid for pkg in new])
     return [(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
 end
 
+is_package_downloaded(ctx, pkg::PackageSpec) = isdir(project_rel_path(ctx, source_path(ctx, pkg)))
+
 function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false)
+    not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=:red), "→", context=ctx.io)
     ctx.io = something(ctx.status_io, ctx.io) # for instrumenting tests
     filter = !isempty(uuids) || !isempty(names)
-    # print header
-    printpkgstyle(ctx, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))
     # setup
-    printed_something, empty_diff = false, true
     xs = diff_array(old_ctx, ctx; manifest=manifest)
-    xs = sort!(xs, by = (x -> (is_stdlib(x[1]), something(x[3], x[2]).name, x[1])))
-    # return early
+    # filter and return early if possible
+    if isempty(xs) && !diff
+        printpkgstyle(ctx, header, "$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file)) (empty " *
+                      (manifest ? "manifest" : "project") * ")", true)
+        return nothing
+    end
+    xs = !diff ? xs : [(id, old, new) for (id, old, new) in xs if old != new]
     if isempty(xs)
-        printpkgstyle(ctx, header, manifest ? "empty manifest" : "empty project")
+        printpkgstyle(ctx, Symbol("No Changes"), "to $(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))", true)
+        return nothing
+    end
+    xs = !filter ? xs : [(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
+    if isempty(xs)
+        printpkgstyle(ctx, Symbol("No Matches"),
+                      "in $(diff ? "diff for " : "")$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))", true)
         return nothing
     end
     # main print
+    printpkgstyle(ctx, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file), true)
+    xs = sort!(xs, by = (x -> (is_stdlib(x[1]), something(x[3], x[2]).name, x[1])))
+    all_packages_downloaded = true
     for (uuid, old, new) in xs
-        diff && old == new && continue # in diff mode and no diff to show
-        empty_diff = false
-        filter && !(uuid in uuids) && !(something(new, old).name in names) && continue
-        printed_something = true
-
-        printstyled(ctx.io, "   $(string(uuid)[1:8]) "; color = :light_black)
+        pkg_downloaded = !is_instantiated(new) || is_package_downloaded(ctx, new)
+        all_packages_downloaded &= pkg_downloaded
+        print(ctx.io, pkg_downloaded ? " " : not_installed_indicator)
+        printstyled(ctx.io, " [", string(uuid)[1:8], "] "; color = :light_black)
         diff ? print_diff(ctx, old, new) : print_single(ctx, new)
         println(ctx.io)
     end
-    if !printed_something
-        printpkgstyle(ctx, header, (diff && empty_diff) ? "empty diff" : "no matches")
+    if !all_packages_downloaded
+        printpkgstyle(ctx, :Info, "packages marked with $not_installed_indicator not downloaded, use `instantiate` to download", true)
     end
     return nothing
 end
@@ -1653,9 +1665,7 @@ function show_update(ctx::Context)
     old_env = EnvCache()
     old_env.project = ctx.env.original_project
     old_env.manifest = ctx.env.original_manifest
-    if old_env.project != ctx.env.project || old_env.manifest != ctx.env.manifest
-        status(ctx; header=:Updating, mode=PKGMODE_COMBINED, env_diff=old_env)
-    end
+    status(ctx; header=:Updating, mode=PKGMODE_COMBINED, env_diff=old_env)
     return nothing
 end
 
