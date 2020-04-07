@@ -2338,10 +2338,9 @@ tree_hash(root::AbstractString) = bytes2hex(Pkg.GitTools.tree_hash(root))
 end
 
 @testset "multiple registries overlapping version ranges for different versions" begin
-    isolate() do
+    isolate(loaded_depot=true) do
         # Add a new registry
         dp = DEPOT_PATH[1]
-        @show dp
         newreg = joinpath(dp, "registries", "NewReg")
         mkpath(newreg)
         write(joinpath(newreg, "Registry.toml"), """
