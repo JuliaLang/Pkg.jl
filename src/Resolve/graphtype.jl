@@ -114,8 +114,6 @@ mutable struct GraphData
 
     function GraphData(
             versions::Dict{UUID,Set{VersionNumber}},
-            deps::Dict{UUID,Dict{VersionRange,Dict{String,UUID}}},
-            compat::Dict{UUID,Dict{VersionRange,Dict{String,VersionSpec}}},
             uuid_to_name::Dict{UUID,String},
             verbose::Bool = false
         )
@@ -233,30 +231,30 @@ mutable struct Graph
 
     function Graph(
             versions::Dict{UUID,Set{VersionNumber}},
-            deps::Dict{UUID,Dict{VersionRange,Dict{String,UUID}}},
-            compat::Dict{UUID,Dict{VersionRange,Dict{String,VersionSpec}}},
+            deps::Dict{UUID,Dict{VersionNumber,Dict{String,UUID}}},
+            compat::Dict{UUID,Dict{VersionNumber,Dict{String,VersionSpec}}},
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
             fixed::Dict{UUID,Fixed},
             verbose::Bool = false
         )
         # make sure all versions of all packages know about julia uuid
-        for (uuid, _) in deps
-            deps[uuid][VersionRange()] = Dict("julia" => uuid_julia)
+        for (uuid,vnmap) in deps, vn in versions[uuid]
+            get!(Dict, vnmap, vn)["julia"] = uuid_julia
         end
 
         # Tell the resolver about julia itself
         fixed[uuid_julia] = Fixed(VERSION)
         uuid_to_name[uuid_julia] = "julia"
         versions[uuid_julia] = Set([VERSION])
-        deps[uuid_julia] = Dict()
-        compat[uuid_julia] = Dict()
+        deps[uuid_julia] = Dict(VERSION => Dict())
+        compat[uuid_julia] = Dict(VERSION => Dict())
 
         extra_uuids = union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...)
         extra_uuids ⊆ keys(versions) || error("unknown UUID found in reqs/fixed") # TODO?
 
         # Type assert below due to https://github.com/JuliaLang/julia/issues/25918
-        data = GraphData(versions, deps, compat, uuid_to_name, verbose)::GraphData
+        data = GraphData(versions, uuid_to_name, verbose)::GraphData
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
 
         local extended_deps
@@ -267,32 +265,29 @@ mutable struct Graph
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
-            for (vr,vrmap) in deps[pkgs[p0]]
-                vn ∈ vr || continue
-                for (name, uuid) in vrmap
-                    # check conflicts ??
-                    n2u[name] = uuid
-                end
+            vnmap = get(Dict, deps[pkgs[p0]], vn)
+            for (name, uuid) in vnmap
+                # check conflicts ??
+                n2u[name] = uuid
             end
             req = Dict{Int,VersionSpec}()
-            for (vr,vrmap) in compat[pkgs[p0]]
-                vn ∈ vr || continue
-                for (name,vs) in vrmap
-                    haskey(n2u, name) || error("Unknown package $name found in the compatibility requirements of $(pkgID(pkgs[p0], uuid_to_name))")
-                    uuid = n2u[name]
-                    p1 = pdict[uuid]
-                    p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
-                    # check conflicts instead of intersecting?
-                    # (intersecting is used by fixed packages though...)
-                    req_p1 = get!(req, p1) do; VersionSpec() end
-                    req[p1] = req_p1 ∩ vs
-                end
+            uuid = pkgs[p0]
+            vnmap = get(Dict, compat[pkgs[p0]], vn)
+            for (name,vs) in vnmap
+                haskey(n2u, name) || error("Unknown package $name found in the compatibility requirements of $(pkgID(pkgs[p0], uuid_to_name))")
+                uuid = n2u[name]
+                p1 = pdict[uuid]
+                p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
+                # check conflicts instead of intersecting?
+                # (intersecting is used by fixed packages though...)
+                req_p1 = get!(VersionSpec, req, p1)
+                req[p1] = req_p1 ∩ vs
             end
             # The remaining dependencies do not have compatibility constraints
             for uuid in values(n2u)
                 p1 = pdict[uuid]
                 p1 == p0 && continue
-                get!(req, p1) do; VersionSpec() end
+                get!(VersionSpec, req, p1)
             end
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
@@ -334,7 +329,7 @@ mutable struct Graph
                 adjdict[p0][p1] = j1
 
                 bm = trues(spp[p1], spp[p0])
-                bmt = permutedims(bm)
+                bmt = trues(spp[p0], spp[p1])
 
                 push!(gmsk[p0], bm)
                 push!(gmsk[p1], bmt)

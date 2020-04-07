@@ -49,58 +49,13 @@ function storeuuid(p::String, uuid_to_name::Dict{UUID,String})
 end
 wantuuids(want_data) = Dict{UUID,VersionNumber}(pkguuid(p) => v for (p,v) in want_data)
 
-function load_package_data_raw(T::Type, input::String)
-    toml = Types.TOML.parse(input)
-    data = Dict{VersionRange,Dict{String,T}}()
-    for (v, d) in toml, (key, value) in d
-        vr = VersionRange(v)
-        dict = get!(data, vr, Dict{String,T}())
-        haskey(dict, key) && pkgerror("$ver/$key is duplicated in $path")
-        dict[key] = T(value)
-    end
-    return data
-end
-
-function gen_versionranges(dict::Dict{K,Set{VersionNumber}}, srtvers::Vector{VersionNumber}) where {K}
-    vranges = Dict{K,Vector{VersionRange}}()
-    for (vreq,vset) in dict
-        vranges[vreq] = VersionRange[]
-        while !isempty(vset)
-            vn0 = minimum(vset)
-            i = findfirst(isequal(vn0), srtvers)
-            @assert i ≠ 0
-            pop!(vset, vn0)
-            vn1 = vn0
-            pushed = false
-            j = i + 1
-            while j ≤ length(srtvers)
-                vn = srtvers[j]
-                if vn ∈ vset
-                    pop!(vset, vn)
-                    vn1 = vn
-                    j += 1
-                else
-                    # vn1 =  srtvers[j-1]
-                    push!(vranges[vreq], VersionRange(VersionBound(vn0),VersionBound(vn1)))
-                    pushed = true
-                    break
-                end
-            end
-            !pushed && push!(vranges[vreq], VersionRange(VersionBound(vn0),VersionBound(vn1)))
-        end
-    end
-    allvranges = unique(vcat(collect(values(vranges))...))
-    return vranges, allvranges
-end
-
 function graph_from_data(deps_data)
     uuid_to_name = Dict{UUID,String}()
     uuid(p) = storeuuid(p, uuid_to_name)
-    # deps = DepsGraph(uuid_to_name)
     fixed = Dict{UUID,Fixed}()
-    all_versions = Dict{UUID,Set{VersionNumber}}(fp => Set([fx.version]) for (fp,fx) in fixed)
-    all_deps = Dict{UUID,Dict{VersionRange,Dict{String,UUID}}}(fp => Dict(VersionRange(fx.version)=>Dict()) for (fp,fx) in fixed)
-    all_compat = Dict{UUID,Dict{VersionRange,Dict{String,VersionSpec}}}(fp => Dict(VersionRange(fx.version)=>Dict()) for (fp,fx) in fixed)
+    all_versions = Dict{UUID,Set{VersionNumber}}()
+    all_deps = Dict{UUID,Dict{VersionNumber,Dict{String,UUID}}}()
+    all_compat = Dict{UUID,Dict{VersionNumber,Dict{String,VersionSpec}}}()
 
     deps = Dict{String,Dict{VersionNumber,Dict{String,VersionSpec}}}()
     for d in deps_data
@@ -116,37 +71,22 @@ function graph_from_data(deps_data)
         rvs = VersionSpec(r[2:end])
         deps[p][vn][rp] = rvs
     end
-    for p in keys(deps)
+    for (p,preq) in deps
         u = uuid(p)
         all_versions[u] = Set(keys(deps[p]))
-        srtvers = sort!(collect(keys(deps[p])))
 
         deps_pkgs = Dict{String,Set{VersionNumber}}()
         for (vn,vreq) in deps[p], rp in keys(vreq)
-            push!(get!(deps_pkgs, rp, Set{VersionNumber}()), vn)
+            push!(get!(Set{VersionNumber}, deps_pkgs, rp), vn)
         end
-        vranges, allvranges = gen_versionranges(deps_pkgs, srtvers)
-        all_deps[u] = Dict{VersionRange,Dict{String,UUID}}(VersionRange()=>Dict{String,UUID}("julia"=>Resolve.uuid_julia))
-        for vrng in allvranges
-            all_deps[u][vrng] = Dict{String,UUID}()
-            for (rp,vvr) in vranges
-                vrng ∈ vvr || continue
-                all_deps[u][vrng][rp] = uuid(rp)
-            end
-        end
-
-        deps_reqs = Dict{Pair{String,VersionSpec},Set{VersionNumber}}()
-        for (vn,vreq) in deps[p], (rp,rvs) in vreq
-            push!(get!(deps_reqs, (rp=>rvs), Set{VersionNumber}()), vn)
-        end
-        vranges, allvranges = gen_versionranges(deps_reqs, srtvers)
-        all_compat[u] = Dict{VersionRange,Dict{String,VersionSpec}}()
-        for vrng in allvranges
-            all_compat[u][vrng] = Dict{String,VersionSpec}()
-            for (req,vvr) in vranges
-                vrng ∈ vvr || continue
-                rp,rvs = req
-                all_compat[u][vrng][rp] = rvs
+        all_deps[u] = Dict{VersionNumber,Dict{String,UUID}}()
+        all_compat[u] = Dict{VersionNumber,Dict{String,VersionSpec}}()
+        for (vn,vreq) in preq
+            all_deps[u][vn] = Dict{String,UUID}()
+            all_compat[u][vn] = Dict{String,VersionSpec}()
+            for (rp,rvs) in vreq
+                all_deps[u][vn][rp] = uuid(rp)
+                all_compat[u][vn][rp] = rvs
             end
         end
     end

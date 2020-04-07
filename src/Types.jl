@@ -19,8 +19,7 @@ import ..PlatformEngines: probe_platform_engines!, download, download_verify_unp
 import Base: SHA1
 using SHA
 
-export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
-    Requires, Fixed, merge_requires!, satisfies,
+export UUID, pkgID, SHA1, VersionRange, VersionSpec,
     PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
@@ -1166,13 +1165,12 @@ function find_registered!(ctx::Context,
     # note: empty vectors will be left for names & uuids that aren't found
     clone_default_registries(ctx)
     for registry in collect_registries()
-
         reg_abspath = abspath(registry.path)
         data = read_registry(joinpath(registry.path, "Registry.toml"))
         for (_uuid, pkgdata) in data["packages"]
               uuid = UUID(_uuid)
               name = pkgdata["name"]
-              path = joinpath(registry.path, pkgdata["path"])
+              path = joinpath(reg_abspath, pkgdata["path"])
               push!(get!(ctx.env.uuids, name, UUID[]), uuid)
               push!(get!(ctx.env.paths, uuid, String[]), path)
               push!(get!(ctx.env.names, uuid, String[]), name)
