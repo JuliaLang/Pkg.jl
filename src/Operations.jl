@@ -1611,6 +1611,7 @@ is_package_downloaded(ctx, pkg::PackageSpec) = isdir(project_rel_path(ctx, sourc
 
 function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false)
+    not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=:red), "→", context=ctx.io)
     ctx.io = something(ctx.status_io, ctx.io) # for instrumenting tests
     filter = !isempty(uuids) || !isempty(names)
     # setup
@@ -1618,34 +1619,34 @@ function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Sym
     # filter and return early if possible
     if isempty(xs) && !diff
         printpkgstyle(ctx, header, "$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file)) (empty " *
-                      (manifest ? "manifest" : "project") * ")")
+                      (manifest ? "manifest" : "project") * ")", true)
         return nothing
     end
     xs = !diff ? xs : [(id, old, new) for (id, old, new) in xs if old != new]
     if isempty(xs)
-        printpkgstyle(ctx, Symbol("No Changes"), "to $(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))")
+        printpkgstyle(ctx, Symbol("No Changes"), "to $(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))", true)
         return nothing
     end
     xs = !filter ? xs : [(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
     if isempty(xs)
         printpkgstyle(ctx, Symbol("No Matches"),
-                      "in $(diff ? "diff for " : "")$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))")
+                      "in $(diff ? "diff for " : "")$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))", true)
         return nothing
     end
     # main print
-    printpkgstyle(ctx, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))
+    printpkgstyle(ctx, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file), true)
     xs = sort!(xs, by = (x -> (is_stdlib(x[1]), something(x[3], x[2]).name, x[1])))
     all_packages_downloaded = true
     for (uuid, old, new) in xs
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(ctx, new)
         all_packages_downloaded &= pkg_downloaded
-        printstyled(ctx.io, pkg_downloaded ? " " : "→"; color = :red)
+        print(ctx.io, pkg_downloaded ? " " : not_installed_indicator)
         printstyled(ctx.io, " [", string(uuid)[1:8], "] "; color = :light_black)
         diff ? print_diff(ctx, old, new) : print_single(ctx, new)
         println(ctx.io)
     end
     if !all_packages_downloaded
-        printpkgstyle(ctx, :Info, "packages marked with → are not downloaded, use `instantiate` to download", true)
+        printpkgstyle(ctx, :Info, "packages marked with $not_installed_indicator not downloaded, use `instantiate` to download", true)
     end
     return nothing
 end
