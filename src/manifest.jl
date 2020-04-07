@@ -142,6 +142,7 @@ function Manifest(raw::Dict)::Manifest
             entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
             deps = read_deps(get(info, "deps", nothing))
         catch
+            # TODO: Should probably not unconditionally log something
             @error "Could not parse entry for `$name`"
             rethrow()
         end
@@ -153,24 +154,28 @@ function Manifest(raw::Dict)::Manifest
     return validate_manifest(stage1)
 end
 
-function read_manifest(io::IO; path=nothing)
-    raw = nothing
+function read_manifest(path_or_stream)
+    local raw
     try
-        raw = TOML.parse(io)
+        if path_or_stream isa String
+            path = path_or_stream
+            isfile(path) || return Dict{UUID,PackageEntry}()
+            raw = TOML.parsefile(path)
+        else
+            raw = TOML.parse(path_or_stream)
+        end
     catch err
+        path = path_or_stream isa String ? path_or_stream : ""
         if err isa TOML.ParserError
-            pkgerror("Could not parse manifest $(something(path,"")): $(err.msg)")
+            pkgerror("Could not parse manifest $path: $(err.msg)")
         elseif all(x -> x isa TOML.ParserError, err)
-            pkgerror("Could not parse manifest $(something(path,"")): $err")
+            pkgerror("Could not parse manifest $path: $err")
         else
             rethrow()
         end
     end
     return Manifest(raw)
 end
-
-read_manifest(path::String)::Manifest =
-    isfile(path) ? open(io->read_manifest(io;path=path), path) : Dict{UUID,PackageEntry}()
 
 ###########
 # WRITING #
