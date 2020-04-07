@@ -1607,7 +1607,7 @@ function diff_array(old_ctx::Union{Context,Nothing}, new_ctx::Context; manifest=
     return [(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
 end
 
-is_package_downloaded(ctx, pkg::PackageSpec) = isdir(project_rel_path(ctx, source_path(pkg)))
+is_package_downloaded(ctx, pkg::PackageSpec) = isdir(project_rel_path(ctx, source_path(ctx, pkg)))
 
 function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false)
