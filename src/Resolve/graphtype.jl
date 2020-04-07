@@ -239,10 +239,8 @@ mutable struct Graph
             verbose::Bool = false
         )
         # make sure all versions of all packages know about julia uuid
-        for (uuid, _) in deps
-            for v in versions[uuid]
-                get!(deps[uuid], v, Dict())["julia"] = uuid_julia
-            end
+        for (uuid,vnmap) in deps, vn in versions[uuid]
+            get!(Dict, vnmap, vn)["julia"] = uuid_julia
         end
 
         # Tell the resolver about julia itself
@@ -267,29 +265,29 @@ mutable struct Graph
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
-            vrmap = get(() -> Dict(), deps[pkgs[p0]], vn)
-            for (name, uuid) in vrmap
+            vnmap = get(Dict, deps[pkgs[p0]], vn)
+            for (name, uuid) in vnmap
                 # check conflicts ??
                 n2u[name] = uuid
             end
             req = Dict{Int,VersionSpec}()
             uuid = pkgs[p0]
-            vrmap = get(() -> Dict(), compat[pkgs[p0]], vn)
-            for (name,vs) in vrmap
+            vnmap = get(Dict, compat[pkgs[p0]], vn)
+            for (name,vs) in vnmap
                 haskey(n2u, name) || error("Unknown package $name found in the compatibility requirements of $(pkgID(pkgs[p0], uuid_to_name))")
                 uuid = n2u[name]
                 p1 = pdict[uuid]
                 p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
                 # check conflicts instead of intersecting?
                 # (intersecting is used by fixed packages though...)
-                req_p1 = get!(req, p1) do; VersionSpec() end
+                req_p1 = get!(VersionSpec, req, p1)
                 req[p1] = req_p1 ∩ vs
             end
             # The remaining dependencies do not have compatibility constraints
             for uuid in values(n2u)
                 p1 = pdict[uuid]
                 p1 == p0 && continue
-                get!(req, p1) do; VersionSpec() end
+                get!(VersionSpec, req, p1)
             end
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
@@ -331,7 +329,7 @@ mutable struct Graph
                 adjdict[p0][p1] = j1
 
                 bm = trues(spp[p1], spp[p0])
-                bmt = permutedims(bm)
+                bmt = trues(spp[p0], spp[p1])
 
                 push!(gmsk[p0], bm)
                 push!(gmsk[p1], bmt)
