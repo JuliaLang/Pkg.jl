@@ -2341,7 +2341,6 @@ end
     isolate(loaded_depot=true) do
         # Add a new registry
         dp = DEPOT_PATH[1]
-        @show dp
         newreg = joinpath(dp, "registries", "NewReg")
         mkpath(newreg)
         write(joinpath(newreg, "Registry.toml"), """
