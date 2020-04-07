@@ -1279,7 +1279,7 @@ function gen_test_code(testfile::String;
     return ```
         $(Base.julia_cmd())
         --code-coverage=$(coverage ? "user" : "none")
-        --color=$(Base.have_color ? "yes" : "no")
+        --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
