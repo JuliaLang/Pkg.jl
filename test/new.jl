@@ -2330,4 +2330,41 @@ tree_hash(root::AbstractString) = bytes2hex(Pkg.GitTools.tree_hash(root))
     end
 end
 
+@testset "multiple registries overlapping version ranges for different versions" begin
+    isolate() do
+        # Add a new registry
+        dp = DEPOT_PATH[1]
+        @show dp
+        newreg = joinpath(dp, "registries", "NewReg")
+        mkpath(newreg)
+        write(joinpath(newreg, "Registry.toml"), """
+        name = "NewReg"
+        uuid = "23338594-aafe-5451-b93e-139f81909106"
+        repo = "whydoineedthis?"
+
+        [packages]
+        7876af07-990d-54b4-ab0e-23690620f79a = { name = "Example", path = "E/Example" }
+        """)
+        example_path = joinpath(newreg, "E", "Example")
+        mkpath(example_path)
+        write(joinpath(example_path, "Package.toml"), """
+        name = "Example"
+        uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+        repo = "https://github.com/JuliaLang/Example.jl.git"
+        """)
+
+        write(joinpath(example_path, "Versions.toml"), """
+        ["0.99.99"]
+        git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+        """)
+
+        write(joinpath(example_path, "Compat.toml"), """
+        ["0"]
+        julia = "0.0"
+        """)
+
+        # This shouldn't cause a resolver error
+        Pkg.add("Example")
+    end
+end
 end #module
