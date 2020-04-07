@@ -2,7 +2,7 @@ module BinaryPlatformTests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Pkg.BinaryPlatforms
-import Pkg.BinaryPlatforms: gcc_version, platform_name
+import Pkg.BinaryPlatforms: platform_name
 
 # The platform we're running on
 const platform = platform_key_abi()
@@ -155,37 +155,6 @@ const platform = platform_key_abi()
     end
 
     @testset "platforms_match()" begin
-        # Explicitly test our `gcc_version()` helper function
-        GCC_versions = [
-            v"4.8.5",
-            v"5.4.0",
-            v"6.3.0",
-            v"7.1.0",
-            v"7.2.0",
-            v"8.0.0",
-        ]
-
-        # With no constraints, we should get them all back
-        @test gcc_version(CompilerABI(), GCC_versions) == GCC_versions
-
-        # libgfortran v3 and libstdcxx 20 restrict us to only v4 and v5
-        cabi = CompilerABI(;libgfortran_version=v"3", libstdcxx_version=v"3.4.22")
-        @test gcc_version(cabi, GCC_versions) == [v"4.8.5", v"5.4.0"]
-
-        # Adding `:cxx11` eliminates `v"4.X"`:
-        cabi = CompilerABI(cabi; cxxstring_abi=:cxx11)
-        @test gcc_version(cabi, GCC_versions) == [v"5.4.0"]
-
-        # Just libgfortran v3 allows GCC 6 as well though
-        cabi = CompilerABI(;libgfortran_version=v"3")
-        @test gcc_version(cabi, GCC_versions) == [v"4.8.5", v"5.4.0", v"6.3.0"]
-
-        # Test libgfortran version v4, then splitting on libstdcxx_version:
-        cabi = CompilerABI(;libgfortran_version=v"4")
-        @test gcc_version(cabi, GCC_versions) == [v"7.1.0", v"7.2.0"]
-        cabi = CompilerABI(cabi; libstdcxx_version=v"3.4.23")
-        @test gcc_version(cabi, GCC_versions) == [v"7.1.0"]
-
         # Just do a quick combinatorial sweep for completeness' sake for platform matching
         for libgfortran_version in (nothing, v"3", v"5"),
             libstdcxx_version in (nothing, v"3.4.18", v"3.4.26"),
