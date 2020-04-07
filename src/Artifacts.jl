@@ -1029,6 +1029,8 @@ end
 Macro that is used to automatically ensure an artifact is installed, and return its
 location on-disk.  Automatically looks the artifact up by name in the project's
 `(Julia)Artifacts.toml` file.  Throws an error on inability to install the requested artifact.
+If run in the REPL, searches for the toml file starting in the current directory, see
+`find_artifacts_toml()` for more.
 
 !!! compat "Julia 1.3"
     This macro requires at least Julia 1.3.
@@ -1036,7 +1038,11 @@ location on-disk.  Automatically looks the artifact up by name in the project's
 macro artifact_str(name)
     # Load Artifacts.toml at compile time, so that we don't have to use `__source__.file`
     # at runtime, which gets stale if the `.ji` file is relocated.
-    local artifacts_toml = find_artifacts_toml(string(__source__.file))
+    srcfile = string(__source__.file)
+    if startswith(srcfile, "REPL[") && !isfile(srcfile)
+        srcfile = pwd()
+    end
+    local artifacts_toml = find_artifacts_toml(srcfile)
     if artifacts_toml === nothing
         error(string(
             "Cannot locate '(Julia)Artifacts.toml' file when attempting to use artifact '",
