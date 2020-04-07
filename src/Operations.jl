@@ -149,12 +149,12 @@ function load_package_data(f::Base.Callable, path::String, versions)
     uncompressed = Dict{VersionNumber, Dict{String, f isa Type ? f : Any}}()
     for (vers, data) in compressed
         vs = VersionSpec(vers)
-        for v in versions
+        for v in sort(versions)
             v in vs || continue
             uv = get!(uncompressed, v, Dict())
             for (key, value) in data
                 if haskey(uv, key)
-                    error("Overlapping ranges for $(key) in $(repr(path)). Detected for version $(v) with $(uv).")
+                    @warn "Overlapping ranges for $(key) in $(repr(path)) for version $v."
                 else
                     uv[key] = f(value)
                 end
