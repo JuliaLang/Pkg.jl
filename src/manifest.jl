@@ -138,7 +138,7 @@ function Manifest(raw::Dict)::Manifest
             entry.path        = read_field("path",          nothing, info, safe_path)
             entry.repo.source = read_field("repo-url",      nothing, info, identity)
             entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
-            entry.repo.subdir = read_field("repo-subdir",        nothing, info, identity)
+            entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
             entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
             deps = read_deps(get(info, "deps", nothing))
         catch
