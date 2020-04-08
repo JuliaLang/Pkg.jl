@@ -1558,7 +1558,8 @@ function stat_rep(x::PackageSpec; name=true)
     if x.repo.rev !== nothing
         rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
     end
-    repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)#$(rev)`" : ""
+    subdir_str = x.repo.subdir == nothing ? "" : "/[$(x.repo.subdir)]"
+    repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
     path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
     pinned = x.pinned ? "⚲" : ""
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")

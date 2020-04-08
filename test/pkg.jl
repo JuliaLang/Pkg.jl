@@ -719,4 +719,28 @@ end
     end end
 end
 
+@testset "subdir functionality" begin
+    temp_pkg_dir() do project_path; with_temp_env() do
+        mktempdir() do tmp
+            repodir = git_init_package(tmp, "test_packages/MainRepo")
+            # Add with subdir
+            subdir_uuid = UUID("6fe4e069-dcb0-448a-be67-3a8bf3404c58")
+            Pkg.add(Pkg.PackageSpec(url = repodir, subdir = "SubDir"))
+            pkgdir = abspath(joinpath(dirname(Base.find_package("SubDir")), ".."))
+
+            # Update with subdir in manifest
+            Pkg.update()
+            # Test instantiate with subdir
+            rm(pkgdir; recursive=true)
+            Pkg.instantiate()
+            @test isinstalled("SubDir")
+            Pkg.rm("SubDir")
+
+            # Dev of local path with subdir
+            Pkg.develop(Pkg.PackageSpec(path=repodir, subdir = "SubDir"))
+            @test Pkg.dependencies()[subdir_uuid].source == joinpath(repodir, "SubDir")
+        end
+    end end
+end
+
 end # module

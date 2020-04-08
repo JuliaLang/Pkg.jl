@@ -79,10 +79,11 @@ const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
 Base.@kwdef mutable struct GitRepo
     source::Union{Nothing,String} = nothing
     rev::Union{Nothing,String} = nothing
+    subdir::Union{String, Nothing} = nothing
 end
 
 Base.:(==)(r1::GitRepo, r2::GitRepo) =
-    r1.source == r2.source && r1.rev == r2.rev
+    r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
 
 isurl(r::String) = occursin(URL_regex, r)
 
@@ -133,6 +134,9 @@ function Base.show(io::IO, pkg::PackageSpec)
     end
     if pkg.repo.rev !== nothing
         push!(f, "rev" => pkg.repo.rev)
+    end
+    if pkg.repo.subdir !== nothing
+        push!(f, "subdir" => pkg.repo.subdir)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
@@ -236,6 +240,7 @@ function Base.show(io::IO, pkg::PackageEntry)
     pkg.pinned                  && push!(f, "pinned"    => pkg.pinned)
     pkg.repo.source !== nothing && push!(f, "url/path"  => "`$(pkg.repo.source)`")
     pkg.repo.rev    !== nothing && push!(f, "rev"       => pkg.repo.rev)
+    pkg.repo.subdir !== nothing && push!(f, "subdir"    => pkg.repo.subdir)
     print(io, "PackageEntry(\n")
     for (field, value) in f
         print(io, "  ", field, " = ", value, "\n")
@@ -418,7 +423,7 @@ function relative_project_path(ctx::Context, path::String)
                    Pkg.safe_realpath(dirname(ctx.env.project_file)))
 end
 
-function devpath(ctx::Context, name::String, shared::Bool)
+function devpath(ctx::Context, name::AbstractString, shared::Bool)
     @assert name != ""
     dev_dir = shared ? abspath(Pkg.devdir()) : joinpath(dirname(ctx.env.project_file), "dev")
     return joinpath(dev_dir, name)
@@ -429,6 +434,9 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
     if is_local_path || pkg.name !== nothing
         dev_path = is_local_path ? pkg.repo.source : devpath(ctx, pkg.name, shared)
+        if pkg.repo.subdir !== nothing
+            dev_path = joinpath(dev_path, pkg.repo.subdir)
+        end
         # If given an explicit local path, that needs to exist
         if is_local_path && !isdir(dev_path)
             if isfile(dev_path)
@@ -467,14 +475,20 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
 
     repo_path = tempname()
     cloned = false
+    package_path = pkg.repo.subdir === nothing ? repo_path : joinpath(repo_path, pkg.repo.subdir)
     if !has_name(pkg)
         LibGit2.close(GitTools.ensure_clone(ctx, repo_path, pkg.repo.source))
         cloned = true
-        resolve_projectfile!(ctx, pkg, repo_path)
+        resolve_projectfile!(ctx, pkg, package_path)
     end
-    dev_path = devpath(ctx, pkg.name, shared)
+    if pkg.repo.subdir !== nothing
+        repo_name = split(pkg.repo.source, '/')[end]
+        dev_path = devpath(ctx, repo_name, shared)
+    else
+        dev_path = devpath(ctx, pkg.name, shared)
+    end
     if isdir(dev_path)
-        println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
+        println(ctx.io, "Path `$(dev_path)` exists and looks like the correct repo. Using existing path.")
         new = false
     else
         mkpath(dirname(dev_path))
@@ -489,6 +503,10 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         resolve_projectfile!(ctx, pkg, dev_path)
     end
     pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
+    if pkg.repo.subdir !== nothing
+        pkg.path = joinpath(pkg.path, pkg.repo.subdir)
+    end
+
     return new
 end
 
@@ -588,6 +606,14 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
         # Now we have the gitobject for our ref, time to find the tree hash for it
         tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
+        if pkg.repo.subdir !== nothing
+            try
+                tree_hash_object = tree_hash_object[pkg.repo.subdir]
+            catch e
+                e isa KeyError || rethrow()
+                pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
+            end
+        end
         pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
 
         # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
@@ -625,8 +651,8 @@ end
 function resolve_projectfile!(ctx, pkg, project_path)
     env = ctx.env
     project_file = projectfile_path(project_path; strict=true)
-    project_file === nothing && pkgerror(string("could not find project file in package at ",
-                                                pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)))
+    project_file === nothing && pkgerror(string("could not find project file in package at `",
+                                                pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)), "` maybe `subdir` needs to be specified")
     project_data = read_package(project_file)
     if pkg.uuid === nothing || pkg.uuid == project_data.uuid
         pkg.uuid = project_data.uuid

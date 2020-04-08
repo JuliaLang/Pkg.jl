@@ -127,7 +127,6 @@ end
 function Manifest(raw::Dict)::Manifest
     stage1 = Dict{String,Vector{Stage1}}()
     for (name, infos) in raw, info in infos
-        # TODO is name guaranteed to be a string?
         entry = PackageEntry()
         entry.name = name
         uuid = nothing
@@ -139,6 +138,7 @@ function Manifest(raw::Dict)::Manifest
             entry.path        = read_field("path",          nothing, info, safe_path)
             entry.repo.source = read_field("repo-url",      nothing, info, identity)
             entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
+            entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
             entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
             deps = read_deps(get(info, "deps", nothing))
         catch
@@ -208,6 +208,7 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "path", path)
         entry!(new_entry, "repo-url", entry.repo.source)
         entry!(new_entry, "repo-rev", entry.repo.rev)
+        entry!(new_entry, "repo-subdir", entry.repo.subdir)
         if isempty(entry.deps)
             delete!(new_entry, "deps")
         else

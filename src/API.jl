@@ -987,11 +987,12 @@ end
 function Package(;name::Union{Nothing,AbstractString} = nothing,
                  uuid::Union{Nothing,String,UUID} = nothing,
                  version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
-                 url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT)
+                 url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT,
+                 subdir = nothing)
     if path !== nothing && url !== nothing
         pkgerror("`path` and `url` are conflicting specifications")
     end
-    repo = Types.GitRepo(rev = rev, source = url !== nothing ? url : path)
+    repo = Types.GitRepo(rev = rev, source = url !== nothing ? url : path, subdir = subdir)
     version = version === nothing ? VersionSpec() : VersionSpec(version)
     uuid = uuid isa String ? UUID(uuid) : uuid
     PackageSpec(;name=name, uuid=uuid, version=version, mode=mode, path=nothing,

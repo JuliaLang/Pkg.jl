@@ -123,6 +123,7 @@ Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version; latest re
 Pkg.add(PackageSpec(name="Example", version="0.3.1")) # Specify version; exact release
 Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url to remote gitrepo
 Pkg.add(PackageSpec(url="/remote/mycompany/juliapackages/OurPackage")) # From path to local gitrepo
+Pkg.add(PackageSpec(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl)")) # With subdir
 ```
 
 See also [`PackageSpec`](@ref).
@@ -414,7 +415,7 @@ const activate = API.activate
 
 """
     PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
-    PackageSpec(; name, url, path, rev, version, mode, level)
+    PackageSpec(; name, url, path, subdir, rev, version, mode, level)
 
 A `PackageSpec` is a representation of a package with various metadata.
 This includes:
@@ -425,6 +426,7 @@ This includes:
    the enum [`UpgradeLevel`](@ref).
   * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
   * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
+  * A `subdir` which can be used when adding a package that is not in the root of a repository.
   * A `mode`, which is an instance of the enum [`PackageMode`](@ref), with possible values `PKGMODE_PROJECT`
    (the default) or `PKGMODE_MANIFEST`. Used in e.g. [`Pkg.rm`](@ref).
 
