@@ -725,7 +725,7 @@ end
             repodir = git_init_package(tmp, "test_packages/MainRepo")
             # Add with subdir
             subdir_uuid = UUID("6fe4e069-dcb0-448a-be67-3a8bf3404c58")
-            Pkg.add(Pkg.PackageSpec(url = repodir, subdir = "SubDir"))
+            Pkg.add(url = repodir, subdir = "SubDir")
             pkgdir = abspath(joinpath(dirname(Base.find_package("SubDir")), ".."))
 
             # Update with subdir in manifest
@@ -737,7 +737,7 @@ end
             Pkg.rm("SubDir")
 
             # Dev of local path with subdir
-            Pkg.develop(Pkg.PackageSpec(path=repodir, subdir = "SubDir"))
+            Pkg.develop(path=repodir, subdir="SubDir")
             @test Pkg.dependencies()[subdir_uuid].source == joinpath(repodir, "SubDir")
         end
     end end
