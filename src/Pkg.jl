@@ -119,10 +119,10 @@ The following table describes the argument values for `preserve` (in order of st
 ```julia
 Pkg.add("Example") # Add a package from registry
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and preserve existing dependencies
-Pkg.add(PackageSpec(name="Example", version="0.3")) # Specify version; latest release in the 0.3 series
-Pkg.add(PackageSpec(name="Example", version="0.3.1")) # Specify version; exact release
-Pkg.add(PackageSpec(url="https://github.com/JuliaLang/Example.jl", rev="master")) # From url to remote gitrepo
-Pkg.add(PackageSpec(url="/remote/mycompany/juliapackages/OurPackage")) # From path to local gitrepo
+Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
+Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
+Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master") # From url to remote gitrepo
+Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local gitrepo
 ```
 
 See also [`PackageSpec`](@ref).
@@ -244,7 +244,7 @@ git revision. A pinned package is never updated.
 # Examples
 ```julia
 Pkg.pin("Example")
-Pkg.pin(PackageSpec(name="Example", version="0.3.1"))
+Pkg.pin(name="Example", version="0.3.1")
 ```
 """
 const pin = API.pin
@@ -260,7 +260,6 @@ e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
 # Examples
 ```julia
 Pkg.free("Package")
-Pkg.free(PackageSpec("Package"))
 ```
 """
 const free = API.free
@@ -283,10 +282,10 @@ If `pkg` is given as a local path, the package at that path will be tracked.
 Pkg.develop("Example")
 
 # By url
-Pkg.develop(PackageSpec(url="https://github.com/JuliaLang/Compat.jl"))
+Pkg.develop(url="https://github.com/JuliaLang/Compat.jl")
 
 # By path
-Pkg.develop(PackageSpec(path="MyJuliaPackages/Package.jl"))
+Pkg.develop(path="MyJuliaPackages/Package.jl")
 ```
 
 See also [`PackageSpec`](@ref)
@@ -431,6 +430,15 @@ This includes:
 Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
 in the vector.
 
+!!! compat "Julia 1.5"
+    Many functions that take a `PackageSpec` or a `Vector{PackageSpec}` can be called with a more concise notation with `NamedTuple`s.
+    For example, `Pkg.add` can be called either as the explicit or concise versions as:
+    | Explicit                                                            | Concise
+    |:--------------------------------------------------------------------|:-----------------------------------------------|
+    | `Pkg.add(PackageSpec(name="Package))`                               | `Pkg.add(name = "Package")`                    |
+    | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
+    |` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
+
 Below is a comparison between the REPL version and the API version:
 
 | `REPL`               | `API`                                                 |
@@ -443,6 +451,7 @@ Below is a comparison between the REPL version and the API version:
 | `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
 | `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
 | `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
+
 """
 const PackageSpec = API.Package
 

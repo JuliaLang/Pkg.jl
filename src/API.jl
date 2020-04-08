@@ -47,11 +47,16 @@ function check_package_name(x::AbstractString, mode=nothing)
         message = "`$x` is not a valid package name"
         if mode !== nothing && any(occursin.(['\\','/'], x)) # maybe a url or a path
             message *= "\nThe argument appears to be a URL or path, perhaps you meant " *
-                "`Pkg.$mode(PackageSpec(url=\"...\"))` or `Pkg.$mode(PackageSpec(path=\"...\"))`."
+                "`Pkg.$mode(url=\"...\")` or `Pkg.$mode(path=\"...\")`."
         end
         pkgerror(message)
     end
-    return PackageSpec(x)
+    return
+end
+check_package_name(::Nothing, ::Any) = nothing
+
+function require_not_empty(pkgs, f::Symbol)
+    isempty(pkgs) && pkgerror("$f requires at least one package")
 end
 
 # Provide some convenience calls
@@ -60,11 +65,27 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         $f(pkgs::Vector{PackageSpec}; kwargs...)               = $f(Context(), pkgs; kwargs...)
+        $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
+        function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
+                      version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
+                      url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, kwargs...)
+            pkg = Package(name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, mode=mode)
+            # Handle $f() case
+            if pkg == Package()
+                $f(PackageSpec[]; kwargs...)
+            else
+                $f(pkg; kwargs...)
+            end
+        end
+        function $f(pkgs::Vector{<:NamedTuple}; kwargs...)
+            $f([Package(;pkg...) for pkg in pkgs]; kwargs...)
+        end
     end
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(), kwargs...)
+    require_not_empty(pkgs, :develop)
     foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -111,6 +132,7 @@ end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
              platform::Platform=platform_key_abi(), kwargs...)
+    require_not_empty(pkgs, :add)
     foreach(pkg -> check_package_name(pkg.name, :add), pkgs)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -164,6 +186,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
 end
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
+    require_not_empty(pkgs, :rm)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     foreach(pkg -> pkg.mode = mode, pkgs)
 
@@ -188,7 +211,6 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     return
 end
 
-up(; kwargs...)                                        = up(PackageSpec[]; kwargs...)
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
@@ -226,6 +248,7 @@ function resolve(ctx::Context; kwargs...)
 end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+    require_not_empty(pkgs, :pin)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -254,6 +277,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
 end
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+    require_not_empty(pkgs, :free)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -277,7 +301,6 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     return
 end
 
-test(;kwargs...)                                         = test(PackageSpec[]; kwargs...)
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, test_fn=nothing,
               julia_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
@@ -803,7 +826,6 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-status(; kwargs...) = status(PackageSpec[]; kwargs...)
 function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
                 io::IO=stdout, kwargs...)
     Context!(ctx; io=io, kwargs...)
