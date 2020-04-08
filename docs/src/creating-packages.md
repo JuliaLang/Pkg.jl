@@ -38,13 +38,13 @@ shell> tree .
 1 directory, 2 files
 ```
 
-The `Project.toml` file contains the name of the package, its unique UUID, its version, the author and potential dependencies:
+The `Project.toml` file contains the name of the package, its unique UUID, its version, the authors and potential dependencies:
 
 ```toml
 name = "HelloWorld"
 uuid = "b4cd1eb8-1e24-11e8-3319-93036a3eb9f3"
 version = "0.1.0"
-author = ["Some One <someone@email.com>"]
+authors = ["Some One <someone@email.com>"]
 
 [deps]
 ```
