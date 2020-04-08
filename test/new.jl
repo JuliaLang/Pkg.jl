@@ -887,10 +887,10 @@ end
         # Names which are invalid and are probably URLs or paths.
         @test_throws PkgError("""
         `https://github.com` is not a valid package name
-        The argument appears to be a URL or path, perhaps you meant `Pkg.develop(PackageSpec(url="..."))` or `Pkg.develop(PackageSpec(path="..."))`.""") Pkg.develop("https://github.com")
+        The argument appears to be a URL or path, perhaps you meant `Pkg.develop(url="...")` or `Pkg.develop(path="...")`.""") Pkg.develop("https://github.com")
         @test_throws PkgError("""
         `./Foobar` is not a valid package name
-        The argument appears to be a URL or path, perhaps you meant `Pkg.develop(PackageSpec(url="..."))` or `Pkg.develop(PackageSpec(path="..."))`.""") Pkg.develop("./Foobar")
+        The argument appears to be a URL or path, perhaps you meant `Pkg.develop(url="...")` or `Pkg.develop(path="...")`.""") Pkg.develop("./Foobar")
         # An empty spec is invalid.
         @test_throws PkgError(
             "name, UUID, URL, or filesystem path specification required when calling `develop`"
