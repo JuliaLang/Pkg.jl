@@ -506,7 +506,6 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     if pkg.repo.subdir !== nothing
         pkg.path = joinpath(pkg.path, pkg.repo.subdir)
     end
-    @show pkg.path
 
     return new
 end
