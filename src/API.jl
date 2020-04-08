@@ -70,6 +70,11 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
                       url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
             pkg = Package(name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, mode=mode, subdir=subdir)
+            # Pkg.status takes a mode argument as well which is a bit ambiguous with the
+            # mode argument to the PackageSpec but probably not a problem in practice
+            if $f === status
+                kwargs = merge((;kwargs...), (:mode => mode,))
+            end
             # Handle $f() case
             if pkg == Package()
                 $f(PackageSpec[]; kwargs...)
