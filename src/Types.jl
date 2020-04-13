@@ -539,6 +539,11 @@ function set_repo_source_from_registry!(ctx, pkg)
     end
     _, repo_source = repo_info[1] # Just take the first repo we found
     pkg.repo.source = repo_source
+    subdir_info = registered_info(ctx, pkg.uuid, "subdir")
+    _, subdir = subdir_info[1] # Just take the first subdir we found
+    if subdir !== nothing
+        pkg.repo.subdir = subdir
+    end
 end
 
 
