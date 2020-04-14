@@ -18,6 +18,7 @@ include("binaryplatforms.jl")
 include("platformengines.jl")
 include("sandbox.jl")
 include("resolve.jl")
+include("subdir.jl")
 
 # clean up locally cached registry
 rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)

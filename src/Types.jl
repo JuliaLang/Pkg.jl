@@ -34,7 +34,7 @@ export UUID, pkgID, SHA1, VersionRange, VersionSpec,
 
 include("versions.jl")
 
-const URL_regex = r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
+const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 
 ## user-friendly representation of package IDs ##
 function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
