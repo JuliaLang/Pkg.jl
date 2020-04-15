@@ -51,8 +51,19 @@ function setup_packages_repository(dir)
     return package_tree_hash, dep_tree_hash
 end
 
+# Convert a path into a file URL.
+function make_file_url(path)
+    # Turn the slashes on Windows. In case the path starts with a
+    # drive letter, an extra slash will be needed in the file URL.
+    path = replace(path, "\\" => "/")
+    if !startswith(path, "/")
+        path = "/" * path
+    end
+    return "file://$(path)"
+end
+
 # Create a registry with the two packages `Package` and `Dep`.
-function setup_registry(dir, packages_dir, package_tree_hash, dep_tree_hash)
+function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
     package_path = joinpath(dir, "P", "Package")
     dep_path = joinpath(dir, "D", "Dep")
     mkpath(package_path)
@@ -68,7 +79,7 @@ function setup_registry(dir, packages_dir, package_tree_hash, dep_tree_hash)
     write(joinpath(package_path, "Package.toml"), """
         name = "Package"
         uuid = "408b23ff-74ea-48c4-abc7-a671b41e2073"
-        repo = "file://$(packages_dir)"
+        repo = "$(packages_dir_url)"
         subdir = "julia"
         """)
     write(joinpath(package_path, "Versions.toml"), """
@@ -83,7 +94,7 @@ function setup_registry(dir, packages_dir, package_tree_hash, dep_tree_hash)
     write(joinpath(dep_path, "Package.toml"), """
         name = "Dep"
         uuid = "d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"
-        repo = "file://$(packages_dir)"
+        repo = "$(packages_dir_url)"
         subdir = "dependencies/Dep"
         """)
     write(joinpath(dep_path, "Versions.toml"), """
@@ -99,12 +110,18 @@ end
 
 @testset "subdir" begin
     temp_pkg_dir() do depot
+        # Apparently the working directory can turn out to be a
+        # removed directory when getting here, which doesn't go well
+        # with the `pkg"add ..."` calls. Just set it to something that
+        # exists.
+        cd(@__DIR__)
         # Setup a repository with two packages and a registry where
         # these packages are registered.
         packages_dir = mktempdir()
         registry_dir = mktempdir()
+        packages_dir_url = make_file_url(packages_dir)
         tree_hashes = setup_packages_repository(packages_dir)
-        setup_registry(registry_dir, packages_dir, tree_hashes...)
+        setup_registry(registry_dir, packages_dir_url, tree_hashes...)
         pkgstr("registry add $(registry_dir)")
         dep = (name="Dep", uuid=UUID("d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"))
 
@@ -193,38 +210,38 @@ end
         pkg"rm Dep"
 
         # Add from url.
-        url = "file://$(packages_dir)"
-        Pkg.add(Pkg.PackageSpec(url=url, subdir="julia"))
+        Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="julia"))
         @test isinstalled("Package")
         @test !isinstalled("Dep")
         @test isinstalled(dep)
         pkg"rm Package"
 
-        Pkg.add(Pkg.PackageSpec(url=url, subdir="dependencies/Dep"))
+        Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep"))
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
 
         # Add from url at branch.
-        Pkg.add(Pkg.PackageSpec(url=url, subdir="julia", rev="master"))
+        Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="julia",
+                                rev="master"))
         @test isinstalled("Package")
         @test !isinstalled("Dep")
         @test isinstalled(dep)
         pkg"rm Package"
 
-        Pkg.add(Pkg.PackageSpec(url=url, subdir="dependencies/Dep", rev="master"))
+        Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep", rev="master"))
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
 
         # Develop from url.
-        Pkg.develop(Pkg.PackageSpec(url=url, subdir="julia"))
+        Pkg.develop(Pkg.PackageSpec(url=packages_dir_url, subdir="julia"))
         @test isinstalled("Package")
         @test !isinstalled("Dep")
         @test isinstalled(dep)
         pkg"rm Package"
 
-        Pkg.develop(Pkg.PackageSpec(url=url, subdir="dependencies/Dep"))
+        Pkg.develop(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep"))
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
