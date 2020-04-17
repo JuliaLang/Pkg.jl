@@ -864,6 +864,7 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
                     pkgerror("multiple registries with name `$(reg.name)`, please specify with uuid.")
                 end
                 reg.url = known.url
+                reg.uuid = known.uuid
             end
         end
     end
