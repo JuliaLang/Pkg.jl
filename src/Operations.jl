@@ -321,13 +321,20 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     end
     names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
     # recursive search for packages which are tracking a path
-    append!(pkgs, collect_developed(ctx, pkgs))
-    # construct data structures for resolver and call it
+    developed = collect_developed(ctx, pkgs)
+    # But we only want to use information for those packages that we already know about
+    for pkg in developed
+        if !any(x -> x.uuid == pkg.uuid, pkgs)
+            push!(pkgs, pkg)
+        end
+    end
     # this also sets pkg.version for fixed packages
     fixed = collect_fixed!(ctx, filter(!is_tracking_registry, pkgs), names)
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
     # at this point, fixed packages have a version and `deps`
+
+    @assert length(Set(pkg.uuid for pkg in pkgs)) == length(pkgs)
 
     # check compat
     for pkg in pkgs

@@ -2373,4 +2373,16 @@ end
         Pkg.add("Example")
     end
 end
+
+@testset "not collecting multiple package instances #1570" begin
+    isolate(loaded_depot=true) do
+        Pkg.generate("A")
+        Pkg.generate("B")
+        Pkg.activate("B")
+        Pkg.develop(PackageSpec(path="A"))
+        Pkg.activate(".")
+        Pkg.develop(PackageSpec(path="A"))
+        Pkg.develop(PackageSpec(path="B"))
+    end
+end
 end #module
