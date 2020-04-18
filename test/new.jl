@@ -2369,10 +2369,10 @@ end
         Pkg.generate("A")
         Pkg.generate("B")
         Pkg.activate("B")
-        Pkg.develop(PackageSpec(path="A"))
+        Pkg.develop(Pkg.PackageSpec(path="A"))
         Pkg.activate(".")
-        Pkg.develop(PackageSpec(path="A"))
-        Pkg.develop(PackageSpec(path="B"))
+        Pkg.develop(Pkg.PackageSpec(path="A"))
+        Pkg.develop(Pkg.PackageSpec(path="B"))
     end
 end
 end #module
