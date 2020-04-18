@@ -166,16 +166,6 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
             @test Pkg.dependencies()[json_uuid].version == active_json_version
         end
     end end
-    # the active dep graph is transfered to test sandbox, even when tracking paths
-    isolate(loaded_depot=true) do; mktempdir() do tempdir
-        path = copy_test_package(tempdir, "TestSubgraphTrackingPath")
-        Pkg.activate(path)
-        inside_test_sandbox() do
-            deps = Pkg.dependencies()
-            @test deps[unregistered_uuid].is_tracking_path
-            @test deps[exuuid].is_tracking_path
-        end
-    end end
     # the active dep graph is transfered to test sandbox, even when tracking unregistered repos
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "TestSubgraphTrackingRepo")
