@@ -322,7 +322,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
     # recursive search for packages which are tracking a path
     developed = collect_developed(ctx, pkgs)
-    # But we only want to use information for those packages that we already know about
+    # But we only want to use information for those packages that we don't know about
     for pkg in developed
         if !any(x -> x.uuid == pkg.uuid, pkgs)
             push!(pkgs, pkg)
