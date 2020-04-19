@@ -14,11 +14,16 @@ end
 struct Rev
     rev::String
 end
+
+struct Subdir
+    dir::String
+end
+
 const PackageIdentifier = String
-const PackageToken = Union{PackageIdentifier, VersionRange, Rev}
+const PackageToken = Union{PackageIdentifier, VersionRange, Rev, Subdir}
 
 const package_id_re =
-    r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s]+\s*=\s*[^@\#\s]+ | \#\s*[^@\#\s]* | @\s*[^@\#\s]* | [^@\#\s]+"x
+    r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s]+\s*=\s*[^@\#\s]+ | \#\s*[^@\#\s]* | @\s*[^@\#\s]* | \[[^\s]+\] | [^@\#\s\[]+"x
 
 function package_lex(qwords::Vector{QString})::Vector{String}
     words = String[]
@@ -33,6 +38,7 @@ end
 PackageToken(word::String)::PackageToken =
     first(word) == '@' ? VersionRange(word[2:end]) :
     first(word) == '#' ? Rev(word[2:end]) :
+    first(word) == '[' && last(word) == ']' ? Subdir(word[2:end-1]) :
     String(word)
 
 function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
@@ -42,8 +48,10 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
         modifier = popfirst!(args)
         if modifier isa VersionRange
             pkg.version = VersionSpec(modifier)
-        else # modifier isa Rev
+        elseif modifier isa Rev
             pkg.repo.rev = modifier.rev
+        else # modifier isa Subdir
+            pkg.repo.subdir = modifier.dir
         end
     end
 
