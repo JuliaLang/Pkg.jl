@@ -273,8 +273,7 @@ end
 """
     tree_hash(root::AbstractString)
 
-Calculate the git tree hash of a given path.  Note that attempting to take the
-tree hash of an empty directory will throw an error.
+Calculate the git tree hash of a given path.
 """
 function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
