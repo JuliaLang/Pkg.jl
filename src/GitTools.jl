@@ -85,6 +85,8 @@ function setprotocol!(;
 end
 
 function normalize_url(url::AbstractString)
+    # LibGit2 is fussy about trailing slash. Make sure there is none.
+    url = rstrip(url, '/')
     m = match(GIT_REGEX, url)
     m === nothing && return url
 
