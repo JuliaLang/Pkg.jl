@@ -38,7 +38,7 @@ end
 PackageToken(word::String)::PackageToken =
     first(word) == '@' ? VersionRange(word[2:end]) :
     first(word) == '#' ? Rev(word[2:end]) :
-    first(word) == '[' && last(word) == ']' ? Subdir(word[2:end-1]) :
+    first(word) == '[' && last(word) == ']' ? Subdir(chop(word, head=1, tail=1)) :
     String(word)
 
 function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
