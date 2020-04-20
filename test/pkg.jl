@@ -717,4 +717,14 @@ end
     end end
 end
 
+# PR #1784 - Remove trailing slash from URL.
+@testset "URL with trailing slash" begin
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            Pkg.add(Pkg.PackageSpec(url = "https://github.com/JuliaLang/Example.jl.git/"))
+            @test isinstalled("Example")
+        end
+    end
+end
+
 end # module
