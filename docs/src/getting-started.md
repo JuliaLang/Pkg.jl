@@ -85,11 +85,11 @@ To set the active environment, use `activate`:
 
 ```julia-repl
 (v1.1) pkg> activate tutorial
-[ Info: activating new environment at `/tmp/tutorial/Project.toml`.
+[ Info: activating new environment at `~/tutorial/Project.toml`
 ```
 
 Pkg lets us know we are creating a new environment and that this environment
-will be stored in the `/tmp/tutorial` directory.
+will be stored in the `~/tutorial` directory.
 
 Pkg has also updated the REPL prompt in order to reflect the new
 active environment:
@@ -102,11 +102,11 @@ We can ask for information about the active environment by using `status`:
 
 ```julia-repl
 (tutorial) pkg> status
-    Status `/tmp/tutorial/Project.toml`
+    Status `~/tutorial/Project.toml`
    (empty environment)
 ```
 
-`/tmp/tutorial/Project.toml` is the location of the active environment's **project file**.
+`~/tutorial/Project.toml` is the location of the active environment's **project file**.
 A project file is where Pkg stores metadata for an environment.
 Notice this new environment is empty.
 Let us add a package and observe:
@@ -116,7 +116,7 @@ Let us add a package and observe:
 ...
 
 (tutorial) pkg> status
-    Status `/tmp/tutorial/Project.toml`
+    Status `~/tutorial/Project.toml`
   [7876af07] Example v0.5.1
 ```
 
@@ -133,13 +133,13 @@ We can use `develop` to set up a git clone of the `Example` package.
 ...
 
 (tutorial) pkg> status
-    Status `/tmp/tutorial/Project.toml`
+    Status `~/tutorial/Project.toml`
   [7876af07] Example v0.5.1+ [`dev/Example`]
 ```
 
 Notice the feedback has changed.
 `dev/Example` refers to the location of the newly created clone.
-If we look inside the `/tmp/tutorial` directory, we will notice the following files:
+If we look inside the `~/tutorial` directory, we will notice the following files:
 
 ```
 tutorial
