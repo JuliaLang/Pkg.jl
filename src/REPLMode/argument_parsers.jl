@@ -46,12 +46,18 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
     function apply_modifier!(pkg::PackageSpec, args::Vector{PackageToken})
         (isempty(args) || args[1] isa PackageIdentifier) && return
         modifier = popfirst!(args)
+        if modifier isa Subdir
+            pkg.repo.subdir = modifier.dir
+            (isempty(args) || args[1] isa PackageIdentifier) && return
+            modifier = popfirst!(args)
+        end
+
         if modifier isa VersionRange
             pkg.version = VersionSpec(modifier)
         elseif modifier isa Rev
             pkg.repo.rev = modifier.rev
-        else # modifier isa Subdir
-            pkg.repo.subdir = modifier.dir
+        else
+            pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
         end
     end
 
@@ -66,7 +72,9 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
         else
             arg isa VersionRange ?
                 pkgerror("Package name/uuid must precede version specifier `@$arg`.") :
-                pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.")
+            arg isa Rev ?
+                pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.") :
+                pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
         end
     end
     return pkgs
