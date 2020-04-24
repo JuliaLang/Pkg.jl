@@ -1508,10 +1508,11 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             status(Context(); mode=PKGMODE_COMBINED)
             flush(stdout)
-            try
-                run(gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args))
+            cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
+            p = run(ignorestatus(cmd))
+            if success(p)
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
-            catch err
+            else
                 push!(pkgs_errored, pkg.name)
             end
         end
