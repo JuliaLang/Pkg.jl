@@ -81,10 +81,10 @@ we can explicitly track that branch (or commit) by appending `#branchname` (or `
 ```
 
 The status output now shows that we are tracking the `master` branch of `Example`.
-When updating packages, we will pull updates from that branch.
-Notice that if instead of a branch name we specified an exact commit id, e.g.
-`add Example#277827f2b18e14a611d98144422eb29f61498104`, then we would be effectively
-"pinned" in that commit (see [Pinning a package](@ref)).
+When updating packages, updates are pulled from that branch.
+Note that if we specified an exact commit instead of a branch name, e.g.
+`add Example#27782`, then the package would be effectively
+"pinned" to that commit (see [Pinning a package](@ref)).
 
 To go back to tracking the registry version of `Example`, the command `free` is used:
 
