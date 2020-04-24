@@ -1,0 +1,3 @@
+module TestFailure
+
+end # module

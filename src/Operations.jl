@@ -131,6 +131,25 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
+# TODO: Should be included in Base
+function signal_name(signal::Integer)
+    if signal == Base.SIGHUP
+        "HUP"
+    elseif signal == Base.SIGINT
+        "INT"
+    elseif signal == Base.SIGQUIT
+        "QUIT"
+    elseif signal == Base.SIGKILL
+        "KILL"
+    elseif signal == Base.SIGPIPE
+        "PIPE"
+    elseif signal == Base.SIGTERM
+        "TERM"
+    else
+        string(signal)
+    end
+end
+
 ####################
 # Registry Loading #
 ####################
@@ -1496,7 +1515,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     end
 
     # sandbox
-    pkgs_errored = String[]
+    pkgs_errored = Tuple{String, Base.Process}[]
     for (pkg, source_path) in zip(pkgs, source_paths)
         # compatibility shim between "targets" and "test/Project.toml"
         test_project_override = isfile(projectfile_path(testdir(source_path))) ?
@@ -1513,16 +1532,30 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             if success(p)
                 printpkgstyle(ctx, :Testing, pkg.name * " tests passed ")
             else
-                push!(pkgs_errored, pkg.name)
+                push!(pkgs_errored, (pkg.name, p))
             end
         end
     end
 
     # report errors
     if !isempty(pkgs_errored)
-        pkgerror(length(pkgs_errored) == 1 ? "Package " : "Packages ",
-                 join(pkgs_errored, ", "),
-                 " errored during testing")
+        function reason(p)
+            if Base.process_signaled(p)
+                " (received signal: " * signal_name(p.termsignal) * ")"
+            elseif Base.process_exited(p) && p.exitcode != 1
+                " (exit code: " * string(p.exitcode) * ")"
+            else
+                ""
+            end
+        end
+
+        if length(pkgs_errored) == 1
+            pkg_name, p = first(pkgs_errored)
+            pkgerror("Package $pkg_name errored during testing$(reason(p))")
+        else
+            failures = ["• $pkg_name$(reason(p))" for (pkg_name, p) in pkgs_errored]
+            pkgerror("Packages errored during testing:\n", join(failures, "\n"))
+        end
     end
 end
 

@@ -14,7 +14,7 @@ end
 
 # try to call realpath on as much as possible
 function safe_realpath(path)
-    if ispath(path) 
+    if ispath(path)
         try
             return realpath(path)
         catch
