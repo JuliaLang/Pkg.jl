@@ -188,8 +188,13 @@ This indicates that `B` is compatible with both versions 0.1 and version 0.2; if
 this would fix the package error.
 However, there is one major concern you need to address first: perhaps there was an incompatible change
 in `v0.2` of `D` that breaks `B`.
-Before proceeding further, you should update all packages and then run `B`'s tests;
-if they pass, you can assume that `B` didn't need any further updating to accomodate `v0.2` of `D`,
-and you can safely submit this change as a pull request to `B`.
-If instead an error is thrown, to be able to use both `A` and `B` simultaneously
-someone will need to update the code of `B` so that it works properly with the newer version of `D`.
+Before proceeding further, you should update all packages and then run `B`'s tests, scanning the
+output of `pkg> test B` to be sure that `v0.2` of `D` is in fact being used.
+(It is possible that an additional dependency of `D` pins it to `v0.1`, and you wouldn't want to be misled into thinking that you had tested `B` on the newer version.)
+If the new version was used and the tests still pass,
+you can assume that `B` didn't need any further updating to accomodate `v0.2` of `D`;
+you can safely submit this change as a pull request to `B` so that a new release is made.
+If instead an error is thrown, it indicates that `B` requires more extensive updates to be
+compatible with the latest version of `D`; those updates will need to be completed before
+it becomes possible to use both `A` and `B` simultaneously.
+You can, though, continue to use the independently of one another.
