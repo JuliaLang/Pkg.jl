@@ -126,7 +126,7 @@ The changes would have to be committed and the packages updated in order to pull
 
 In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing packages](@ref) for an example.
 
-### Developing packages
+### [Developing packages](@id developing)
 
 By only using `add` your Manifest will always have a "reproducible state", in other words, as long as the repositories and registries used are still accessible
 it is possible to retrieve the exact state of all the dependencies in the project. This has the advantage that you can send your project (`Project.toml`
@@ -197,7 +197,7 @@ This will only remove packages that exist in the project; to remove a package th
 exists as a dependency use `pkg> rm --manifest DepPackage`.
 Note that this will remove all packages that depend on `DepPackage`.
 
-## Updating packages
+## [Updating packages](@id updating)
 
 When new versions of packages that the project is using are released, it is a good idea to update. Simply calling `up` will try to update *all* the dependencies of the project
 to the latest compatible version. Sometimes this is not what you want. You can specify a subset of the dependencies to upgrade by giving them as arguments to `up`, e.g:
@@ -265,6 +265,84 @@ julia> print(read("~/.julia/packages/MbedTLS/h1Vu/deps/build.log", String))
 ...
 [ Info: using prebuilt binaries
 ```
+
+## Interpreting and resolving version conflicts
+
+An environment consists of a set of mutually-compatible packages.
+Sometimes, you can find yourself in a situation in which two packages you'd like to use simultaneously
+have incompatible requirements.
+In such cases you'll get an "Unsatisfiable requirements" error:
+
+```@setup conflict
+using Pkg
+include(joinpath(pkgdir(Pkg), "test", "resolve_utils.jl"))
+using .ResolveUtils
+deps_data = Any[["A", v"1.0.0", "C", v"0.1"],
+                ["B", v"1.0.0", "C", v"0.2"],
+                ["C", v"0.1.0"],
+                ["C", v"0.1.1"],
+                ["C", v"0.2.0"]]
+reqs_data = Any[["A", "*"],
+                ["B", "*"]]
+```
+
+```@example conflict
+resolve_tst(deps_data, reqs_data)   # hide
+```
+
+This message means that a package named `C` has some kind of version conflict.
+This kind of error can arise even if you have never `add`ed `C` directly,
+if `C` is required by two packages that you are trying to use in the same environment.
+Stepping through the message line-by-line,
+
+```
+ERROR: Unsatisfiable requirements detected for package C [c99a7cb2]:
+ C [c99a7cb2] log:
+ ├─possible versions are: [0.1.0-0.1.1, 0.2.0] or uninstalled
+```
+means that `C` has three released versions, `v0.1.0`, `v0.1.1`, and `v0.2.0`.
+You also have the option of not having it installed at all.
+Each of these might have different implications for the set of other packages that can be installed.
+
+```
+ ├─restricted by compatibility requirements with B [f4259836] to versions: 0.2.0
+```
+means that there's some other package, `B`, that depends on `C`, specifically version `v0.2.0` of `C`.
+Next comes some information about `B` itself:
+
+```
+ │ └─B [f4259836] log:
+ │   ├─possible versions are: 1.0.0 or uninstalled
+ │   └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
+```
+`B` has just one release, `v1.0.0`.
+You've not specified a particular version of `B` that you want (`restricted to versions *` means that any version will do),
+but the `explicit requirement` means that you've asked for `B` to be part of your environment,
+for example by `pkg> add B`.
+The alternative would be that `B` itself is a dependency of some other package, in which
+case you'd get further similar lines (each more deeply indented) that document the
+chain of dependencies that result in this requirement for `v0.2.0` of `C`.
+
+The conflict becomes clear with the line
+```
+ └─restricted by compatibility requirements with A [29c70717] to versions: 0.1.0 — no versions left
+   └─A [29c70717] log:
+     ├─possible versions are: 1.0.0 or uninstalled
+     └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
+```
+This means that there's some other package, `A`, that *also* depends on `C`,
+specifically version `v0.1.0` of `C`.
+You've also tried putting `A` in your environment (see the `by an explicit requirement`),
+but `A` and `B` do not have a compatible version of `C` in common.
+Consequently there are `no versions (of C) left` that can satisfy all these requirements simultaneously.
+
+To fix such errors, you have a number of options:
+
+- try [updating your packages](@ref updating). Perhaps the developers of `A` have released a new version that is compatible with `v0.2.0` of `C`.
+- remove either `A` or `B` from your environment. If there isn't a mutually-compatible pair, you can't use them in the same session.
+- consider filing an issue requesting the developers of `A` to support the newer release of `C`,
+or submit a pull request to do so yourself. Typically you can do this locally by [developing](@ref) `A` and editing its `Project.toml` file; see the chapter on [Compatibility](@ref) for further information.
+
 ## Garbage collecting old, unused packages
 
 As packages are updated and projects are deleted, installed package versions and artifacts that were
