@@ -124,7 +124,7 @@ Note tracking a package through `add` is distinct from `develop`:
 changes to files in the local package repository will not immediately be reflected when loading that package.
 The changes would have to be committed and the packages updated in order to pull in the changes.
 
-In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing packages](@ref) for an example.
+In addition, it is possible to add packages relatively to the `Manifest.toml` file, see [Developing packages](@ref developing) for an example.
 
 ### [Developing packages](@id developing)
 
@@ -266,7 +266,7 @@ julia> print(read("~/.julia/packages/MbedTLS/h1Vu/deps/build.log", String))
 [ Info: using prebuilt binaries
 ```
 
-## Interpreting and resolving version conflicts
+## [Interpreting and resolving version conflicts](@id conflicts)
 
 An environment consists of a set of mutually-compatible packages.
 Sometimes, you can find yourself in a situation in which two packages you'd like to use simultaneously
@@ -277,71 +277,109 @@ In such cases you'll get an "Unsatisfiable requirements" error:
 using Pkg
 include(joinpath(pkgdir(Pkg), "test", "resolve_utils.jl"))
 using .ResolveUtils
-deps_data = Any[["A", v"1.0.0", "C", v"0.1"],
-                ["B", v"1.0.0", "C", v"0.2"],
-                ["C", v"0.1.0"],
-                ["C", v"0.1.1"],
-                ["C", v"0.2.0"]]
+deps_data = Any[["A", v"1.0.0", "C", v"0.2"],
+                ["B", v"1.0.0", "D", v"0.1"],
+                ["C", v"0.1.0", "D", v"0.1"],
+                ["C", v"0.1.1", "D", v"0.1"],
+                ["C", v"0.2.0", "D", v"0.2"],
+                ["D", v"0.1.0"],
+                ["D", v"0.2.0"],
+                ["D", v"0.2.1"]]
 reqs_data = Any[["A", "*"],
                 ["B", "*"]]
 ```
 
 ```@example conflict
-resolve_tst(deps_data, reqs_data)   # hide
+print("pkg> add A\n", try resolve_tst(deps_data, reqs_data) catch e sprint(showerror, e) end)   # hide
 ```
 
-This message means that a package named `C` has some kind of version conflict.
-This kind of error can arise even if you have never `add`ed `C` directly,
-if `C` is required by two packages that you are trying to use in the same environment.
-Stepping through the message line-by-line,
+This message means that a package named `D` has a version conflict.
+Even if you have never `add`ed `D` directly, this kind of error can arise
+if `D` is required by other packages that you are trying to use.
+
+The error message has a lot of crucial information.
+It may be easiest to interpret piecewise:
 
 ```
-ERROR: Unsatisfiable requirements detected for package C [c99a7cb2]:
- C [c99a7cb2] log:
- ├─possible versions are: [0.1.0-0.1.1, 0.2.0] or uninstalled
+Unsatisfiable requirements detected for package D [756980fe]:
+ D [756980fe] log:
+ ├─possible versions are: [0.1.0, 0.2.0-0.2.1] or uninstalled
 ```
-means that `C` has three released versions, `v0.1.0`, `v0.1.1`, and `v0.2.0`.
+means that `D` has three released versions, `v0.1.0`, `v0.2.0`, and `v0.2.1`.
 You also have the option of not having it installed at all.
-Each of these might have different implications for the set of other packages that can be installed.
+Each of these options might have different implications for the set of other packages that can be installed.
+
+Crucially, notice the stroke characters (vertical and horizontal lines) and their indentation.
+Together, these connect *messages* to specific *packages*.
+For instance the right stroke of `├─` indicates that the message to its right (`possible versions...`)
+is connected to the package pointed to by its vertical stroke (`D`).
+This same principle applies to the next line:
 
 ```
- ├─restricted by compatibility requirements with B [f4259836] to versions: 0.2.0
+ ├─restricted by compatibility requirements with B [f4259836] to versions: 0.1.0
 ```
-means that there's some other package, `B`, that depends on `C`, specifically version `v0.2.0` of `C`.
-Next comes some information about `B` itself:
+The vertical stroke here is also aligned under `D`, and thus this message
+is in reference to `D`.
+Specifically, there's some other package `B` that depends on version `v0.1.0` of `D`.
+Notice that this is not the newest version of `D`.
+
+Next comes some information about `B`:
 
 ```
  │ └─B [f4259836] log:
  │   ├─possible versions are: 1.0.0 or uninstalled
  │   └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
 ```
-`B` has just one release, `v1.0.0`.
-You've not specified a particular version of `B` that you want (`restricted to versions *` means that any version will do),
+The two lines below the first have a vertical stroke that aligns with `B`,
+and thus they provide information about `B`.
+They tell you that `B` has just one release, `v1.0.0`.
+You've not specified a particular version of `B` (`restricted to versions *` means that any version will do),
 but the `explicit requirement` means that you've asked for `B` to be part of your environment,
 for example by `pkg> add B`.
-The alternative would be that `B` itself is a dependency of some other package, in which
-case you'd get further similar lines (each more deeply indented) that document the
-chain of dependencies that result in this requirement for `v0.2.0` of `C`.
+You might have asked for `B` previously, and the requirement is still active.
 
 The conflict becomes clear with the line
 ```
- └─restricted by compatibility requirements with A [29c70717] to versions: 0.1.0 — no versions left
-   └─A [29c70717] log:
-     ├─possible versions are: 1.0.0 or uninstalled
-     └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
+└─restricted by compatibility requirements with C [c99a7cb2] to versions: 0.2.0 — no versions left
 ```
-This means that there's some other package, `A`, that *also* depends on `C`,
-specifically version `v0.1.0` of `C`.
-You've also tried putting `A` in your environment (see the `by an explicit requirement`),
-but `A` and `B` do not have a compatible version of `C` in common.
-Consequently there are `no versions (of C) left` that can satisfy all these requirements simultaneously.
+
+Here again the vertical stroke aligns with `D`: this means that `D` is *also* required by another package, `C`.
+`C` requires `v0.2.0` of `D`, and this conflicts with `B`'s need for `v0.1.0` of `D`.
+This explains the conflict.
+
+But wait, you might ask, what is `C` and why do I need it at all?
+The next few lines introduce the problem:
+
+```
+   └─C [c99a7cb2] log:
+     ├─possible versions are: [0.1.0-0.1.1, 0.2.0] or uninstalled
+     └─restricted by compatibility requirements with A [29c70717] to versions: 0.2.0
+```
+These provide more information about `C`, revealing that it has 3 released versions: `v0.1.0`, `v0.1.1`, and `v0.2.0`.
+Moreover, `C` is required by another package `A`.
+Indeed, `A`'s requirements are such that we need `v0.2.0` of `C`.
+`A`'s origin is revealed on the next lines:
+
+```
+       └─A [29c70717] log:
+         ├─possible versions are: 1.0.0 or uninstalled
+         └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
+```
+
+So we can see that `A` was `explicitly required`, and in this case it's because we were trying to
+`add` it to our environment.
+
+In summary, we explicitly asked to use `A` and `B`, but this gave a conflict for `D`.
+The reason was that `B` and `C` require conflicting versions of `D`.
+Even though `C` isn't something we asked for explicitly, it was needed by `A`.
 
 To fix such errors, you have a number of options:
 
-- try [updating your packages](@ref updating). Perhaps the developers of `A` have released a new version that is compatible with `v0.2.0` of `C`.
-- remove either `A` or `B` from your environment. If there isn't a mutually-compatible pair, you can't use them in the same session.
-- consider filing an issue requesting the developers of `A` to support the newer release of `C`,
-or submit a pull request to do so yourself. Typically you can do this locally by [developing](@ref) `A` and editing its `Project.toml` file; see the chapter on [Compatibility](@ref) for further information.
+- try [updating your packages](@ref updating). It's possible the developers of these packages have recently released new versions that are mutually compatible.
+- remove either `A` or `B` from your environment. Perhaps `B` is left over from something you were previously working on, and you don't need it anymore. If you don't need `A` and `B` at the same time, this is the easiest way to fix the problem.
+- try reporting your conflict. In this case, we were able to deduce that `B` requires an outdated version of `D`. You could thus report an issue in the development repository of `B.jl` asking for an updated version.
+- try fixing the problem yourself.
+  This becomes easier once you understand `Project.toml` files and how they declare their compatiblity requirements. We'll return to this example in [Fixing conflicts](@ref).
 
 ## Garbage collecting old, unused packages
 
