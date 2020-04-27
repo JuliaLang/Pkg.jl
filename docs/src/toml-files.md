@@ -20,6 +20,16 @@ dependencies and compatibility constraints are listed in the project file. The f
 are described below.
 
 
+### The `authors` field
+
+For a package, the optional `authors` field is a list of strings describing the
+package authors, in the form `NAME <EMAIL>`. For example:
+```toml
+authors = ["Some One <someone@email.com>",
+           "Foo Bar <foo@bar.com>"]
+```
+
+
 ### The `name` field
 
 The name of the package/project is determined by the `name` field, for example:
