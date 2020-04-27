@@ -165,16 +165,6 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
             @test Pkg.dependencies()[json_uuid].version == active_json_version
         end
     end end
-    # the active dep graph is transfered to test sandbox, even when tracking paths
-    isolate(loaded_depot=true) do; mktempdir() do tempdir
-        path = copy_test_package(tempdir, "TestSubgraphTrackingPath")
-        Pkg.activate(path)
-        inside_test_sandbox() do
-            deps = Pkg.dependencies()
-            @test deps[unregistered_uuid].is_tracking_path
-            @test deps[exuuid].is_tracking_path
-        end
-    end end
     # the active dep graph is transfered to test sandbox, even when tracking unregistered repos
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "TestSubgraphTrackingRepo")
@@ -2156,6 +2146,18 @@ tree_hash(root::AbstractString) = bytes2hex(Pkg.GitTools.tree_hash(root))
             symlink("bar", joinpath(dir, "foo", "bar_link"))
             @test "8bc80be82b2ae4bd69f50a1a077a81b8678c9024" == tree_hash(dir)
         end
+    end
+end
+
+@testset "not collecting multiple package instances #1570" begin
+    isolate(loaded_depot=true) do
+        Pkg.generate("A")
+        Pkg.generate("B")
+        Pkg.activate("B")
+        Pkg.develop(Pkg.PackageSpec(path="A"))
+        Pkg.activate(".")
+        Pkg.develop(Pkg.PackageSpec(path="A"))
+        Pkg.develop(Pkg.PackageSpec(path="B"))
     end
 end
 
