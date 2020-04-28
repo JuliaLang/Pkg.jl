@@ -6,7 +6,7 @@ import ..GitTools
 using ..BinaryPlatforms
 import ..TOML
 import ..Types: parse_toml, write_env_usage, printpkgstyle
-import ...Pkg: pkg_server
+import ...Pkg: pkg_server, safe_realpath
 using ..PlatformEngines
 using SHA
 
@@ -729,7 +729,7 @@ function permissions_blind_filesystem(path::AbstractString)
     global _permissions_blind_filesystem_cache
 
     # Immediately normalize `path`
-    path = realpath(path)
+    path = safe_realpath(path)
     if !isdir(path)
         error("Must provide a directory as `path`")
     end
