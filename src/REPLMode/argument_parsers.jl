@@ -1,4 +1,4 @@
-import ..isdir_windows_workaround
+import ..isdir_nothrow
 
 ###############
 # PackageSpec #
@@ -106,7 +106,7 @@ end
 function parse_registry(word::AbstractString; add=false)::RegistrySpec
     word = expanduser(word)
     registry = RegistrySpec()
-    if add && isdir_windows_workaround(word) # TODO: Should be casesensitive_isdir
+    if add && isdir_nothrow(word) # TODO: Should be casesensitive_isdir
         if isdir(joinpath(word, ".git")) # add path as url and clone it from there
             registry.url = abspath(word)
         else # put the path
