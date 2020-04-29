@@ -162,3 +162,39 @@ PkgA = "0.2 - 4"       # 0.2.0 - 4.*.* = [0.2.0, 5.0.0)
 PkgA = "0.2 - 0.5"     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
 PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```
+
+## Fixing conflicts
+
+Version conflicts were introduced previously with an [example](@ref conflicts)
+of a conflict arising in a package `D` used by two other packages, `B` and `C`.
+Our analysis of the error message revealed that `B` is using an outdated
+version of `D`.
+To fix it, the first thing to try is to `pkg> dev B` so that
+you can modify `B` and its compatibility requirements.
+If you open its `Project.toml` file in an editor, you would probably notice something like
+
+```toml
+[compat]
+D = "0.1"
+```
+
+Usually the first step is to modify this to something like
+```toml
+[compat]
+D = "0.1, 0.2"
+```
+
+This indicates that `B` is compatible with both versions 0.1 and version 0.2; if you `pkg> up`
+this would fix the package error.
+However, there is one major concern you need to address first: perhaps there was an incompatible change
+in `v0.2` of `D` that breaks `B`.
+Before proceeding further, you should update all packages and then run `B`'s tests, scanning the
+output of `pkg> test B` to be sure that `v0.2` of `D` is in fact being used.
+(It is possible that an additional dependency of `D` pins it to `v0.1`, and you wouldn't want to be misled into thinking that you had tested `B` on the newer version.)
+If the new version was used and the tests still pass,
+you can assume that `B` didn't need any further updating to accomodate `v0.2` of `D`;
+you can safely submit this change as a pull request to `B` so that a new release is made.
+If instead an error is thrown, it indicates that `B` requires more extensive updates to be
+compatible with the latest version of `D`; those updates will need to be completed before
+it becomes possible to use both `A` and `B` simultaneously.
+You can, though, continue to use the independently of one another.
