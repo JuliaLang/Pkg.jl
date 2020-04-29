@@ -14,7 +14,7 @@ end
 
 # try to call realpath on as much as possible
 function safe_realpath(path)
-    if ispath(path) 
+    if ispath(path)
         try
             return realpath(path)
         catch
@@ -28,6 +28,13 @@ end
 # Windows sometimes throw on `isdir`...
 function isdir_nothrow(path::String)
     try isdir(path)
+    catch e
+        false
+    end
+end
+
+function isfile_nothrow(path::String)
+    try isfile(path)
     catch e
         false
     end
