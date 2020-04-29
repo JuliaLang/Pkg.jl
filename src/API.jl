@@ -384,7 +384,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         unique(f for (_, files) in manifest_usage_by_depot for f in keys(files)),
         unique(f for (_, files) in artifact_usage_by_depot for f in keys(files)),
     )
-    all_index_files = Set(filter(isfile_nothrow, all_index_files))
+    all_index_files = Set(filter(Pkg.isfile_nothrow, all_index_files))
 
     # Immediately write this back as condensed manifest_usage.toml files
     function write_condensed_usage(usage_by_depot, fname)
