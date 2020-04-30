@@ -23,7 +23,7 @@ const PackageIdentifier = String
 const PackageToken = Union{PackageIdentifier, VersionRange, Rev, Subdir}
 
 const package_id_re =
-    r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s]+\s*=\s*[^@\#\s]+ | \#\s*[^@\#\s]* | @\s*[^@\#\s]* | \[[^\s]+\] | [^@\#\s\[]+"x
+    r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s:]+\s*=\s*[^@\#\s:]+ | \#\s*[^@\#\s]* | @\s*[^@\#\s]* | :[^@\#\s]+ | ([^@\#\s:] | :(/|\\))+"x
 
 function package_lex(qwords::Vector{QString})::Vector{String}
     words = String[]
@@ -38,7 +38,7 @@ end
 PackageToken(word::String)::PackageToken =
     first(word) == '@' ? VersionRange(word[2:end]) :
     first(word) == '#' ? Rev(word[2:end]) :
-    first(word) == '[' && last(word) == ']' ? Subdir(chop(word, head=1, tail=1)) :
+    first(word) == ':' ? Subdir(word[2:end]) :
     String(word)
 
 function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}

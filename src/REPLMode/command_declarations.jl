@@ -105,7 +105,7 @@ specified by `#branch` or `#commit`.
 If a local path is used as an argument to `add`, the path needs to be a git repository.
 The project will then track that git repository just like it would track a remote repository online.
 If the package is not located at the top of the git repository, a subdirectory can be specified with
-`path/[subdir/path]`.
+`path:subdir/path`.
 
 `Pkg` resolves the set of packages in your environment using a tiered approach.
 The `--preserve` command line option allows you to key into a specific tier in the resolve algorithm.
