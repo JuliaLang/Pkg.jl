@@ -753,4 +753,78 @@ end
     end
 end
 
+@testset "Pkg.test process failure" begin
+    temp_pkg_dir() do project_path
+        mktempdir() do dir
+            cp(joinpath(@__DIR__, "test_packages", "TestFailure"), joinpath(dir, "TestFailure"))
+            cd(joinpath(dir, "TestFailure")) do
+                with_current_env() do
+                    Sys.isunix() && @testset "signal: KILL" begin
+                        withenv("TEST_SIGNAL" => "KILL") do
+                            try
+                                Pkg.test()
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == "Package TestFailure errored during testing (received signal: KILL)"
+                            end
+                        end
+                    end
+
+                    Sys.isunix() && @testset "signal: QUIT" begin
+                        withenv("TEST_SIGNAL" => "QUIT") do
+                            try
+                                Pkg.test()
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == "Package TestFailure errored during testing (exit code: 131)"
+                            end
+                        end
+                    end
+
+                    @testset "exit code: 1" begin
+                        withenv("TEST_EXITCODE" => "1") do
+                            try
+                                Pkg.test()
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == "Package TestFailure errored during testing"
+                            end
+                        end
+                    end
+
+                    @testset "exit code: 2" begin
+                        withenv("TEST_EXITCODE" => "2") do
+                            try
+                                Pkg.test()
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == "Package TestFailure errored during testing (exit code: 2)"
+                            end
+                        end
+                    end
+
+                    @testset "multiple failures" begin
+                        withenv("TEST_EXITCODE" => "3") do
+                            try
+                                Pkg.test(["TestFailure", "TestFailure"])
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == """
+                                    Packages errored during testing:
+                                    • TestFailure (exit code: 3)
+                                    • TestFailure (exit code: 3)"""
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 end # module
