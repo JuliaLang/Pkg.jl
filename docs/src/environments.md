@@ -79,3 +79,12 @@ Simply clone their project using e.g. `git clone`, `cd` to the project directory
 
 If the project contains a manifest, this will install the packages in the same state that is given by that manifest.
 Otherwise, it will resolve the latest versions of the dependencies compatible with the project.
+
+To run a script from the command line using this environment, use the
+`--project` option for `julia`. For example if `Project.toml` (and
+`Manifest.toml` if using unregistered packages) are in the same directory as
+`myscript.jl`, call 
+
+```bash
+> julia --project=. myscript.jl
+```
