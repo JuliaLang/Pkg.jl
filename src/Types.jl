@@ -855,7 +855,13 @@ const DEFAULT_REGISTRIES =
 function clone_default_registries(ctx::Context)
     if isempty(collect_registries()) # only clone if there are no installed registries
         printpkgstyle(ctx, :Cloning, "default registries into $(pathrepr(depots1()))")
-        clone_or_cp_registries(DEFAULT_REGISTRIES)
+        registries = copy(DEFAULT_REGISTRIES)
+        for uuid in keys(pkg_server_registry_urls())
+            if !(uuid in (reg.uuid for reg in registries))
+                push!(registries, RegistrySpec(uuid = uuid))
+            end
+        end
+        clone_or_cp_registries(registries)
     end
 end
 
@@ -905,9 +911,26 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
     end
 end
 
-function pkg_server_registry_url(uuid::UUID)
+# Use the pattern
+#
+# registry_urls = nothing
+# for ...
+#     url, registry_urls = pkg_server_registry_url(uuid, registry_urls)
+# end
+#
+# to query the pkg server at most once for registries.
+pkg_server_registry_url(uuid::UUID, ::Nothing) =
+    pkg_server_registry_url(uuid, pkg_server_registry_urls())
+
+pkg_server_registry_url(uuid::UUID, registry_urls::Dict{UUID, String}) =
+    get(registry_urls, uuid, nothing), registry_urls
+
+pkg_server_registry_url(::Nothing, registry_urls) = nothing, registry_urls
+
+function pkg_server_registry_urls()
+    registry_urls = Dict{UUID, String}()
     server = pkg_server()
-    server === nothing && return nothing
+    server === nothing && return registry_urls
     probe_platform_engines!()
     tmp_path = tempname()
     download_ok = false
@@ -917,22 +940,19 @@ function pkg_server_registry_url(uuid::UUID)
     catch err
         @warn "could not download $server/registries"
     end
-    download_ok || return nothing
-    registry_url = nothing
+    download_ok || return registry_urls
     open(tmp_path) do io
         for line in eachline(io)
             if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
-                uuid == UUID(m.captures[1]) || continue
+                uuid = UUID(m.captures[1])
                 hash = String(m.captures[2])
-                registry_url = "$server/registry/$uuid/$hash"
-                break
+                registry_urls[uuid] = "$server/registry/$uuid/$hash"
             end
         end
     end
     rm(tmp_path, force=true)
-    return registry_url
+    return registry_urls
 end
-pkg_server_registry_url(::Nothing) = nothing
 
 pkg_server_url_hash(url::String) = split(url, '/')[end]
 
@@ -941,13 +961,15 @@ clone_or_cp_registries(regs::Vector{RegistrySpec}, depot::String=depots1()) =
     clone_or_cp_registries(Context(), regs, depot)
 function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
+    registry_urls = nothing
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
             pkgerror("ambiguous registry specification; both url and path is set.")
         end
         # clone to tmpdir first
         mktempdir() do tmp
-            if (url = pkg_server_registry_url(reg.uuid)) !== nothing
+            url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
+            if url !== nothing
                 # download from Pkg server
                 try
                     download_verify_unpack(url, nothing, tmp, ignore_existence = true)
@@ -1073,13 +1095,14 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                            force::Bool=false)
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
+    registry_urls = nothing
     for reg in unique(r -> r.uuid, find_installed_registries(ctx, regs))
         regpath = pathrepr(reg.path)
         if isfile(joinpath(reg.path, ".tree_info.toml"))
             printpkgstyle(ctx, :Updating, "registry at " * regpath)
             tree_info = TOML.parsefile(joinpath(reg.path, ".tree_info.toml"))
             old_hash = tree_info["git-tree-sha1"]
-            url = pkg_server_registry_url(reg.uuid)
+            url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
             if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
                 # TODO: update faster by using a diff, if available
                 mktempdir() do tmp
