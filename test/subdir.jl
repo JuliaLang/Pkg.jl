@@ -185,6 +185,18 @@ end
         @test isinstalled("Dep")
         pkg"rm Dep"
 
+        # Add from path, REPL subdir syntax.
+        pkgstr("add $(packages_dir):julia")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("add $(packages_dir):dependencies/Dep")
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
         # Add from path at branch.
         Pkg.add(Pkg.PackageSpec(path=packages_dir, subdir="julia", rev="master"))
         @test isinstalled("Package")
@@ -193,6 +205,19 @@ end
         pkg"rm Package"
 
         Pkg.add(Pkg.PackageSpec(path=packages_dir, subdir="dependencies/Dep", rev="master"))
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
+        # Add from path at branch, REPL subdir syntax
+        @show "add $(packages_dir):julia#master"
+        pkgstr("add $(packages_dir):julia#master")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("add $(packages_dir):dependencies/Dep#master")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
@@ -209,6 +234,18 @@ end
         @test isinstalled("Dep")
         pkg"rm Dep"
 
+        # Develop from path, REPL subdir syntax.
+        pkgstr("develop $(packages_dir):julia")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("develop $(packages_dir):dependencies/Dep")
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
         # Add from url.
         Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="julia"))
         @test isinstalled("Package")
@@ -217,6 +254,18 @@ end
         pkg"rm Package"
 
         Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep"))
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
+        # Add from url, REPL subdir syntax.
+        pkgstr("add $(packages_dir_url):julia")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("add $(packages_dir_url):dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
@@ -234,6 +283,18 @@ end
         @test isinstalled("Dep")
         pkg"rm Dep"
 
+        # Add from url at branch, REPL subdir syntax.
+        pkgstr("add $(packages_dir_url):julia#master")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("add $(packages_dir_url):dependencies/Dep#master")
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
         # Develop from url.
         Pkg.develop(Pkg.PackageSpec(url=packages_dir_url, subdir="julia"))
         @test isinstalled("Package")
@@ -242,6 +303,18 @@ end
         pkg"rm Package"
 
         Pkg.develop(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep"))
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
+        # Develop from url, REPL subdir syntax.
+        pkgstr("develop $(packages_dir_url):julia")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("develop $(packages_dir_url):dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"

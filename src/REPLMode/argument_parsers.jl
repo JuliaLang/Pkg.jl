@@ -14,11 +14,44 @@ end
 struct Rev
     rev::String
 end
-const PackageIdentifier = String
-const PackageToken = Union{PackageIdentifier, VersionRange, Rev}
 
-const package_id_re =
-    r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s]+\s*=\s*[^@\#\s]+ | \#\s*[^@\#\s]* | @\s*[^@\#\s]* | [^@\#\s]+"x
+struct Subdir
+    dir::String
+end
+
+const PackageIdentifier = String
+const PackageToken = Union{PackageIdentifier, VersionRange, Rev, Subdir}
+
+    # Match a git repository URL. This includes uses of `@` and `:` but
+    # requires that it has `.git` at the end.
+let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)?",
+
+    # Match a `NAME=UUID` package specifier.
+    name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
+
+    # Match a `#BRANCH` branch or tag specifier.
+    branch = raw"\#\s*[^@\#\s]*",
+
+    # Match an `@VERSION` version specifier.
+    version = raw"@\s*[^@\#\s]*",
+
+    # Match a `:SUBDIR` subdir specifier.
+    subdir = raw":[^@\#\s]+",
+
+    # Match any other way to specify a package. This includes package
+    # names, local paths, and URLs that don't match the `url` part. In
+    # order not to clash with the branch, version, and subdir
+    # specifiers, these cannot include `@` or `#`, and `:` is only
+    # allowed if followed by `/` or `\`. For URLs matching this part
+    # of the regex, that means that `@` (e.g. user names) and `:`
+    # (e.g. port) cannot be used but it doesn't have to end with
+    # `.git`.
+    other = raw"([^@\#\s:] | :(/|\\))+"
+
+    # Combine all of the above.
+    global const package_id_re = Regex(
+        "$url | $name_uuid | $branch | $version | $subdir | $other", "x")
+end
 
 function package_lex(qwords::Vector{QString})::Vector{String}
     words = String[]
@@ -33,6 +66,7 @@ end
 PackageToken(word::String)::PackageToken =
     first(word) == '@' ? VersionRange(word[2:end]) :
     first(word) == '#' ? Rev(word[2:end]) :
+    first(word) == ':' ? Subdir(word[2:end]) :
     String(word)
 
 function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
@@ -40,10 +74,18 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
     function apply_modifier!(pkg::PackageSpec, args::Vector{PackageToken})
         (isempty(args) || args[1] isa PackageIdentifier) && return
         modifier = popfirst!(args)
+        if modifier isa Subdir
+            pkg.repo.subdir = modifier.dir
+            (isempty(args) || args[1] isa PackageIdentifier) && return
+            modifier = popfirst!(args)
+        end
+
         if modifier isa VersionRange
             pkg.version = VersionSpec(modifier)
-        else # modifier isa Rev
+        elseif modifier isa Rev
             pkg.repo.rev = modifier.rev
+        else
+            pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
         end
     end
 
@@ -58,7 +100,9 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
         else
             arg isa VersionRange ?
                 pkgerror("Package name/uuid must precede version specifier `@$arg`.") :
-                pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.")
+            arg isa Rev ?
+                pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.") :
+                pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
         end
     end
     return pkgs

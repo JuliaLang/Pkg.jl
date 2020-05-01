@@ -482,7 +482,14 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         resolve_projectfile!(ctx, pkg, package_path)
     end
     if pkg.repo.subdir !== nothing
-        repo_name = split(pkg.repo.source, '/')[end]
+        repo_name = split(pkg.repo.source, '/', keepempty=false)[end]
+        # Make the develop path prettier.
+        if endswith(repo_name, ".git")
+            repo_name = chop(repo_name, tail=4)
+        end
+        if endswith(repo_name, ".jl")
+            repo_name = chop(repo_name, tail=3)
+        end
         dev_path = devpath(ctx, repo_name, shared)
     else
         dev_path = devpath(ctx, pkg.name, shared)
