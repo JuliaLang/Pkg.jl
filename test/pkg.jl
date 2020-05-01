@@ -771,7 +771,8 @@ end
                         end
                     end
 
-                    Sys.isunix() && @testset "signal: QUIT" begin
+                    # The following test is broken on macOS
+                    Sys.islinux() && @testset "signal: QUIT" begin
                         withenv("TEST_SIGNAL" => "QUIT") do
                             try
                                 Pkg.test()
