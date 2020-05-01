@@ -22,8 +22,36 @@ end
 const PackageIdentifier = String
 const PackageToken = Union{PackageIdentifier, VersionRange, Rev, Subdir}
 
-const package_id_re =
-    r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s:]+\s*=\s*[^@\#\s:]+ | \#\s*[^@\#\s]* | @\s*[^@\#\s]* | :[^@\#\s]+ | ([^@\#\s:] | :(/|\\))+"x
+    # Match a git repository URL. This includes uses of `@` and `:` but
+    # requires that it has `.git` at the end.
+let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)?",
+
+    # Match a `NAME=UUID` package specifier.
+    name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
+
+    # Match a `#BRANCH` branch or tag specifier.
+    branch = raw"\#\s*[^@\#\s]*",
+
+    # Match an `@VERSION` version specifier.
+    version = raw"@\s*[^@\#\s]*",
+
+    # Match a `:SUBDIR` subdir specifier.
+    subdir = raw":[^@\#\s]+",
+
+    # Match any other way to specify a package. This includes package
+    # names, local paths, and URLs that don't match the `url` part. In
+    # order not to clash with the branch, version, and subdir
+    # specifiers, these cannot include `@` or `#`, and `:` is only
+    # allowed if followed by `/` or `\`. For URLs matching this part
+    # of the regex, that means that `@` (e.g. user names) and `:`
+    # (e.g. port) cannot be used but it doesn't have to end with
+    # `.git`.
+    other = raw"([^@\#\s:] | :(/|\\))+"
+
+    # Combine all of the above.
+    global const package_id_re = Regex(
+        "$url | $name_uuid | $branch | $version | $subdir | $other", "x")
+end
 
 function package_lex(qwords::Vector{QString})::Vector{String}
     words = String[]
