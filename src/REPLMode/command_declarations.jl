@@ -362,21 +362,27 @@ Redoes the changes from the latest [`undo`](@ref).
 [   :name => "add",
     :api => Registry.add,
     :should_splat => false,
-    :arg_count => 1 => Inf,
+    :arg_count => 0 => Inf,
     :arg_parser => ((x,y) -> parse_registry(x,y; add = true)),
     :description => "add package registries",
     :help => md"""
     registry add reg...
 
-Add package registries `reg...` to the user depot.
+Add package registries `reg...` to the user depot. Without arguments
+it adds known registries, i.e. the General registry and registries
+served by the configured package server.
 
 !!! compat "Julia 1.1"
     Pkg's registry handling requires at least Julia 1.1.
+
+!!! compat "Julia 1.5"
+    `registry add` without arguments requires at least Julia 1.5.
 
 **Examples**
 ```
 pkg> registry add General
 pkg> registry add https://www.my-custom-registry.com
+pkg> registry add
 ```
 """,
 ],[ :name => "remove",

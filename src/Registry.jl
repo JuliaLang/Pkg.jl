@@ -26,7 +26,11 @@ add(regs::Vector{String}; kwargs...) = add([RegistrySpec(name = name) for name i
 add(regs::Vector{RegistrySpec}; kwargs...) = add(Context(), regs; kwargs...)
 function add(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
     Context!(ctx; kwargs...)
-    Types.clone_or_cp_registries(ctx, regs)
+    if isempty(regs)
+        Types.clone_default_registries(ctx, only_if_empty = false)
+    else
+        Types.clone_or_cp_registries(ctx, regs)
+    end
 end
 
 """

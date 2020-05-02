@@ -852,15 +852,19 @@ const DEFAULT_REGISTRIES =
                               uuid = UUID("23338594-aafe-5451-b93e-139f81909106"),
                               url = "https://github.com/JuliaRegistries/General.git")]
 
-function clone_default_registries(ctx::Context)
-    if isempty(collect_registries()) # only clone if there are no installed registries
-        printpkgstyle(ctx, :Cloning, "default registries into $(pathrepr(depots1()))")
+function clone_default_registries(ctx::Context; only_if_empty = true)
+    installed_registries = [reg.uuid for reg in collect_registries()]
+    # Only clone if there are no installed registries, unless called
+    # with false keyword argument.
+    if isempty(installed_registries) || !only_if_empty
+        printpkgstyle(ctx, :Cloning, "known registries into $(pathrepr(depots1()))")
         registries = copy(DEFAULT_REGISTRIES)
         for uuid in keys(pkg_server_registry_urls())
             if !(uuid in (reg.uuid for reg in registries))
                 push!(registries, RegistrySpec(uuid = uuid))
             end
         end
+        filter!(reg -> !(reg.uuid in installed_registries), registries)
         clone_or_cp_registries(registries)
     end
 end
