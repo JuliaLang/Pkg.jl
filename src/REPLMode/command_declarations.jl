@@ -119,6 +119,8 @@ The following table describes the command line arguments to `--preserve` (in ord
 | `none`   | Do not attempt to preserve any version information                                  |
 | `tiered` | Use the tier which will preserve the most version information (this is the default) |
 
+!!! compat "Julia 1.5"
+    Subdirectory specification requires at least Julia 1.5.
 
 **Examples**
 ```
