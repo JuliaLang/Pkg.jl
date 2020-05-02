@@ -412,7 +412,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     all_manifest_files = filter(f -> endswith(f, "Manifest.toml"), all_index_files)
     all_artifacts_files = filter(f -> !endswith(f, "Manifest.toml"), all_index_files)
 
-    function process_manifest(path)
+    function process_manifest_pkgs(path)
         # Read the manifest in
         manifest = try
             read_manifest(path)
@@ -426,7 +426,21 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         return [pkg_dir(u, e) for (u, e) in manifest if e.tree_hash !== nothing]
     end
 
-    function process_artifacts_toml(path)
+    # TODO: Merge with function above to not read manifest twice?
+    function process_manifest_repos(path)
+        # Read the manifest in
+        manifest = try
+            read_manifest(path)
+        catch e
+            # Do not warn here, assume that `process_manifest_pkgs` has already warned
+            return nothing
+        end
+
+        # Collect the locations of every repo referred to in this manifest
+        return [Types.add_repo_cache_path(e.repo.source) for (u, e) in manifest if e.repo.source !== nothing]
+    end
+
+    function process_artifacts_toml(path, packages_to_delete)
         # Not only do we need to check if this file doesn't exist, we also need to check
         # to see if it this artifact is contained within a package that is going to go
         # away.  This places an inherent ordering between marking packages and marking
@@ -458,14 +472,14 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     end
 
     # Mark packages/artifacts as active or not by calling the appropriate
-    function mark(process_func::Function, index_files)
+    function mark(process_func::Function, index_files; do_print=true)
         marked_paths = String[]
         for index_file in index_files
             # Check to see if it's still alive
             paths = process_func(index_file)
             if paths !== nothing
                 # Print the path of this beautiful, extant file to the user
-                println("        $(Types.pathrepr(index_file))")
+                do_print && println("        $(Types.pathrepr(index_file))")
                 append!(marked_paths, paths)
             end
         end
@@ -503,13 +517,54 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
 
     # Scan manifests, parse them, read in all UUIDs listed and mark those as active
     printpkgstyle(ctx, :Active, "manifests:")
-    packages_to_keep = mark(process_manifest, all_manifest_files)
+    packages_to_keep = mark(process_manifest_pkgs, all_manifest_files)
 
     # Do an initial scan of our depots to get a preliminary `packages_to_delete`.
     packages_to_delete = String[]
     for depot in depots()
         depot_orphaned_packages = String[]
+        packagedir = abspath(depot, "packages")
+        if isdir(packagedir)
+            for name in readdir(packagedir)
+                !isdir(joinpath(packagedir, name)) && continue
 
+                for slug in readdir(joinpath(packagedir, name))
+                    pkg_dir = joinpath(packagedir, name, slug)
+                    !isdir(pkg_dir) && continue
+
+                    if !(pkg_dir in packages_to_keep)
+                        push!(depot_orphaned_packages, pkg_dir)
+                    end
+                end
+            end
+        end
+        merge_orphanages!(Dict(), depot_orphaned_packages, packages_to_delete)
+    end
+
+
+    # Next, do the same for artifacts.  Note that we MUST do this after calculating
+    # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
+    # `Artifacts.toml` files that will be deleted by the future culling operation.
+    printpkgstyle(ctx, :Active, "artifacts:")
+    artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete), all_artifacts_files)
+    repos_to_keep = mark(process_manifest_repos, all_manifest_files; do_print=false)
+
+    # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
+    # are implicitly defined in that we walk all packages/artifacts installed, then if
+    # they were not marked in the above steps, we reap them.
+    packages_to_delete = String[]
+    artifacts_to_delete = String[]
+    repos_to_delete = String[]
+
+    for depot in depots()
+        # We track orphaned objects on a per-depot basis, writing out our `orphaned.toml`
+        # tracking file immediately, only pushing onto the overall `*_to_delete` lists if
+        # the package has been orphaned for at least a period of `collect_delay`
+        depot_orphaned_packages = String[]
+        depot_orphaned_artifacts = String[]
+        depot_orphaned_repos = String[]
+
+        # ??: This code block is identical to one a bit above
         packagedir = abspath(depot, "packages")
         if isdir(packagedir)
             for name in readdir(packagedir)
@@ -526,39 +581,13 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
             end
         end
 
-        merge_orphanages!(Dict(), depot_orphaned_packages, packages_to_delete)
-    end
-
-    # Next, do the same for artifacts.  Note that we MUST do this after calculating
-    # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
-    # `Artifacts.toml` files that will be deleted by the future culling operation.
-    printpkgstyle(ctx, :Active, "artifacts:")
-    artifacts_to_keep = mark(process_artifacts_toml, all_artifacts_files)
-
-    # Collect all orphaned paths (packages and artifacts that are not reachable).  These
-    # are implicitly defined in that we walk all packages/artifacts installed, then if
-    # they were not marked in the above steps, we reap them.
-    packages_to_delete = String[]
-    artifacts_to_delete = String[]
-    for depot in depots()
-        # We track orphaned objects on a per-depot basis, writing out our `orphaned.toml`
-        # tracking file immediately, only pushing onto the overall `*_to_delete` lists if
-        # the package has been orphaned for at least a period of `collect_delay`
-        depot_orphaned_packages = String[]
-        depot_orphaned_artifacts = String[]
-
-        packagedir = abspath(depot, "packages")
-        if isdir(packagedir)
-            for name in readdir(packagedir)
-                !isdir(joinpath(packagedir, name)) && continue
-
-                for slug in readdir(joinpath(packagedir, name))
-                    pkg_dir = joinpath(packagedir, name, slug)
-                    !isdir(pkg_dir) && continue
-
-                    if !(pkg_dir in packages_to_keep)
-                        push!(depot_orphaned_packages, pkg_dir)
-                    end
+        reposdir = abspath(depot, "clones")
+        if isdir(reposdir)
+            for repo in readdir(reposdir)
+                repo_dir = joinpath(reposdir, repo)
+                !isdir(repo_dir) && continue
+                if !(repo_dir in repos_to_keep)
+                    push!(depot_orphaned_repos, repo_dir)
                 end
             end
         end
@@ -588,6 +617,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         # create the `new_orphanage` list for this depot.
         merge_orphanages!(new_orphanage, depot_orphaned_packages, packages_to_delete, old_orphanage)
         merge_orphanages!(new_orphanage, depot_orphaned_artifacts, artifacts_to_delete, old_orphanage)
+        merge_orphanages!(new_orphanage, depot_orphaned_repos, repos_to_delete, old_orphanage)
 
         # Write out the `new_orphanage` for this depot
         if !isempty(new_orphanage) || isfile(orphanage_file)
@@ -632,9 +662,13 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     end
 
     package_space_freed = 0
+    repo_space_freed = 0
     artifact_space_freed = 0
     for path in packages_to_delete
         package_space_freed += delete_path(path)
+    end
+    for path in repos_to_delete
+        repo_space_freed += delete_path(path)
     end
     for path in artifacts_to_delete
         artifact_space_freed += delete_path(path)
@@ -655,6 +689,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     end
 
     ndel_pkg = length(packages_to_delete)
+    ndel_repos = length(repos_to_delete)
     ndel_art = length(artifacts_to_delete)
 
     if ndel_pkg > 0
@@ -662,13 +697,18 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         bytes_saved_string = pretty_byte_str(package_space_freed)
         printpkgstyle(ctx, :Deleted, "$(ndel_pkg) package installation$(s) ($bytes_saved_string)")
     end
+    if ndel_repos > 0
+        s = ndel_repos == 1 ? "" : "s"
+        bytes_saved_string = pretty_byte_str(repo_space_freed)
+        printpkgstyle(ctx, :Deleted, "$(ndel_repos) repo$(s) ($bytes_saved_string)")
+    end
     if ndel_art > 0
         s = ndel_art == 1 ? "" : "s"
         bytes_saved_string = pretty_byte_str(artifact_space_freed)
         printpkgstyle(ctx, :Deleted, "$(ndel_art) artifact installation$(s) ($bytes_saved_string)")
     end
-    if ndel_pkg == 0 && ndel_art == 0
-        printpkgstyle(ctx, :Deleted, "no artifacts or packages")
+    if ndel_pkg == 0 & ndel_art == 0 && ndel_repos == 0
+        printpkgstyle(ctx, :Deleted, "no artifacts, repos or packages")
     end
 
     return

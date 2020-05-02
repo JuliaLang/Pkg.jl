@@ -192,6 +192,15 @@ temp_pkg_dir() do project_path
         # Setting collect_delay to zero causes it to be reaped immediately, however
         Pkg.gc(;collect_delay=Second(0))
         @test isempty(readdir(pkgdir))
+
+        clonedir = joinpath(Pkg.depots1(), "clones")
+        Pkg.add(Pkg.PackageSpec(name=TEST_PKG.name, rev="master"))
+        @test !isempty(readdir(clonedir))
+        Pkg.rm(TEST_PKG.name)
+        Pkg.gc(;collect_delay=Day(1000))
+        @test !isempty(readdir(clonedir))
+        Pkg.gc(;collect_delay=Second(0))
+        @test isempty(readdir(clonedir))
     end
 
     @testset "package with wrong UUID" begin
