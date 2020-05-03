@@ -57,7 +57,7 @@ function _print(io::IO, a::AbstractDict,
     sorted::Bool = false,
     by = identity,
 )
-    akeys = keys(a)
+    akeys = Base.KeySet(a)   # keys is non-inferrable due to Iterators.Pairs
     if sorted
         akeys = sort!(collect(akeys), by = by)
     end

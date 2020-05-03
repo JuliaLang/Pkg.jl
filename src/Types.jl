@@ -224,8 +224,14 @@ Base.@kwdef mutable struct PackageEntry
     deps::Dict{String,UUID} = Dict{String,UUID}()
     other::Union{Dict,Nothing} = nothing
 end
-Base.:(==)(t1::PackageEntry, t2::PackageEntry) = all([getfield(t1, x) == getfield(t2, x) for x in filter!(!=(:other), collect(fieldnames(PackageEntry)))])
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [getfield(t, x) for x in filter!(!=(:other), collect(fieldnames(PackageEntry)))], init=h)
+Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
+    t1.version == t2.version &&
+    t1.path == t2.path &&
+    t1.pinned == t2.pinned &&
+    t1.repo == t2.repo &&
+    t1.tree_hash == t2.tree_hash &&
+    t1.deps == t2.deps   # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps], init=h)  # omits `other`
 const Manifest = Dict{UUID,PackageEntry}
 
 function Base.show(io::IO, pkg::PackageEntry)
