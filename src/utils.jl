@@ -26,8 +26,15 @@ function safe_realpath(path)
 end
 
 # Windows sometimes throw on `isdir`...
-function isdir_windows_workaround(path::String)
+function isdir_nothrow(path::String)
     try isdir(path)
+    catch e
+        false
+    end
+end
+
+function isfile_nothrow(path::String)
+    try isfile(path)
     catch e
         false
     end
@@ -36,7 +43,7 @@ end
 function casesensitive_isdir(dir::String)
     dir = abspath(dir)
     lastdir = splitpath(dir)[end]
-    isdir_windows_workaround(dir) && lastdir in readdir(joinpath(dir, ".."))
+    isdir_nothrow(dir) && lastdir in readdir(joinpath(dir, ".."))
 end
 
 ## ordering of UUIDs ##

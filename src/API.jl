@@ -384,7 +384,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         unique(f for (_, files) in manifest_usage_by_depot for f in keys(files)),
         unique(f for (_, files) in artifact_usage_by_depot for f in keys(files)),
     )
-    all_index_files = Set(filter(isfile, all_index_files))
+    all_index_files = Set(filter(Pkg.isfile_nothrow, all_index_files))
 
     # Immediately write this back as condensed manifest_usage.toml files
     function write_condensed_usage(usage_by_depot, fname)
@@ -911,7 +911,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
         # 1. if path exists, activate that
         # 2. if path exists in deps, and the dep is deved, activate that path (`devpath` above)
         # 3. activate the non-existing directory (e.g. as in `pkg> activate .` for initing a new env)
-        if Pkg.isdir_windows_workaround(path)
+        if Pkg.isdir_nothrow(path)
             fullpath = abspath(path)
         else
             fullpath = _activate_dep(path)

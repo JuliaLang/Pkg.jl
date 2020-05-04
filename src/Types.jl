@@ -986,7 +986,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             # slug = Base.package_slug(UUID(registry["uuid"]))
             regpath = joinpath(depot, "registries", registry["name"]#=, slug=#)
             ispath(dirname(regpath)) || mkpath(dirname(regpath))
-            if Pkg.isdir_windows_workaround(regpath)
+            if Pkg.isdir_nothrow(regpath)
                 existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
                 if registry["uuid"] == existing_registry["uuid"]
                     println(ctx.io,
