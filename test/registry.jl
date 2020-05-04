@@ -102,6 +102,13 @@ end
             pkgstr("registry rm $(reg)")
             test_installed([])
         end
+
+        ## Pkg REPL without argument
+        pkgstr("registry add")
+        test_installed([General])
+        pkgstr("registry rm General")
+        test_installed([])
+
         ## Registry API
         for reg in ("General",
                     RegistrySpec("General"),
