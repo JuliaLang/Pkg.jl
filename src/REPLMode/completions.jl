@@ -49,13 +49,14 @@ end
 function complete_remote_package(partial)
     cmp = String[]
     julia_version = VERSION
+    ctx = Context()
     for reg in Types.collect_registries()
         data = Types.read_registry(joinpath(reg.path, "Registry.toml"))
         for (uuid, pkginfo) in data["packages"]
             name = pkginfo["name"]
             if startswith(name, partial)
                 path = pkginfo["path"]
-                version_info = Operations.load_versions(path; include_yanked = false)
+                version_info = Operations.load_versions(ctx, path; include_yanked=false)
                 versions = sort!(collect(keys(version_info)))
                 compat_data = Operations.load_package_data(
                     VersionSpec, joinpath(reg.path, path, "Compat.toml"), versions)
