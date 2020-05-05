@@ -863,7 +863,7 @@ function clone_default_registries(ctx::Context; only_if_empty = true)
     # Only clone if there are no installed registries, unless called
     # with false keyword argument.
     if isempty(installed_registries) || !only_if_empty
-        printpkgstyle(ctx, :Cloning, "known registries into $(pathrepr(depots1()))")
+        printpkgstyle(ctx, :Installing, "known registries into $(pathrepr(depots1()))")
         registries = copy(DEFAULT_REGISTRIES)
         for uuid in keys(pkg_server_registry_urls())
             if !(uuid in (reg.uuid for reg in registries))
