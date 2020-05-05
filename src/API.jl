@@ -821,8 +821,10 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
                  " Finally, run `Pkg.instantiate()` again.")
     end
-    # Download artifacts for this here package before fast-exiting
+    # TODO: seems to be a bug in is_instantiated on the line below so we have to download
+    # artifacts here even though we do the same at the end of this function
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
+    # check if all source code and artifacts are downloaded to exit early
     Operations.is_instantiated(ctx) && return
 
     Types.update_registries(ctx)

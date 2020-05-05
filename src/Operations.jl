@@ -110,12 +110,7 @@ function is_instantiated(ctx::Context)::Bool
     # Load everything
     pkgs = load_all_deps(ctx)
     # Make sure all paths exist
-    for pkg in pkgs
-        sourcepath = Operations.source_path(ctx, pkg)
-        isdir(sourcepath) || return false
-        check_artifacts_downloaded(sourcepath) || return false
-    end
-    return true
+    return all(pkg -> is_package_downloaded(ctx, pkg), pkgs)
 end
 
 function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
@@ -156,11 +151,19 @@ end
 load_package_data(f::Base.Callable, path::String, version::VersionNumber) =
     get(load_package_data(f, path, [version]), version, nothing)
 
-function load_versions(path::String; include_yanked = false)
+function load_versions(ctx, path::String; include_yanked=false)
     toml = parse_toml(path, "Versions.toml"; fakeit=true)
-    return Dict{VersionNumber, SHA1}(
+    versions = Dict{VersionNumber, SHA1}(
         VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml
             if !get(info, "yanked", false) || include_yanked)
+    if Pkg.OFFLINE_MODE[] # filter out all versions that are not already downloaded
+        pkg = parse_toml(path, "Package.toml")
+        filter!(versions) do (v, sha)
+            pkg_spec = PackageSpec(name=pkg["name"], uuid=UUID(pkg["uuid"]), version=v, tree_hash=sha)
+            return is_package_downloaded(ctx, pkg_spec)
+        end
+    end
+    return versions
 end
 
 function load_package_data(f::Base.Callable, path::String, versions)
@@ -186,7 +189,7 @@ end
 function load_tree_hash(ctx::Context, pkg::PackageSpec)
     hashes = SHA1[]
     for path in registered_paths(ctx, pkg.uuid)
-        vers = load_versions(path; include_yanked = true)
+        vers = load_versions(ctx, path; include_yanked=true)
         hash = get(vers, pkg.version, nothing)
         hash !== nothing && push!(hashes, hash)
     end
@@ -208,7 +211,7 @@ end
 function set_maximum_version_registry!(ctx::Context, pkg::PackageSpec)
     pkgversions = Set{VersionNumber}()
     for path in registered_paths(ctx, pkg.uuid)
-        pathvers = keys(load_versions(path; include_yanked = false))
+        pathvers = keys(load_versions(ctx, path; include_yanked=false))
         union!(pkgversions, pathvers)
     end
     if length(pkgversions) == 0
@@ -444,7 +447,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                 end
             else
                 for path in registered_paths(ctx, uuid)
-                    version_info = load_versions(path; include_yanked = false)
+                    version_info = load_versions(ctx, path; include_yanked=false)
                     versions = sort!(collect(keys(version_info)))
                     deps_data = load_package_data(UUID, joinpath(path, "Deps.toml"), versions)
                     compat_data = load_package_data(VersionSpec, joinpath(path, "Compat.toml"), versions)
@@ -1641,7 +1644,13 @@ function diff_array(old_ctx::Union{Context,Nothing}, new_ctx::Context; manifest=
     return [(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
 end
 
-is_package_downloaded(ctx, pkg::PackageSpec) = isdir(project_rel_path(ctx, source_path(ctx, pkg)))
+function is_package_downloaded(ctx, pkg::PackageSpec)
+    sourcepath = source_path(ctx, pkg)
+    @assert sourcepath !== nothing
+    isdir(sourcepath) || return false
+    check_artifacts_downloaded(sourcepath) || return false
+    return true
+end
 
 function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false)
