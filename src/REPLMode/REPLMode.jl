@@ -8,7 +8,8 @@ import REPL
 import REPL: LineEdit, REPLCompletions
 
 import ..casesensitive_isdir
-using ..Types, ..Operations, ..API, ..Registry, .. Resolve
+using ..Types, ..Operations, ..API, ..Registry, ..Resolve
+import ..Pkg: Pkg
 
 const SPECS = Ref{Union{Nothing,Dict}}(nothing)
 const TEST_MODE = Ref{Bool}(false)
@@ -515,6 +516,9 @@ function promptf()
                 prev_project_file = project_file
             end
         end
+    end
+    if Pkg.OFFLINE_MODE[]
+        prefix = prefix * "[offline] "
     end
     return prefix * "pkg> "
 end

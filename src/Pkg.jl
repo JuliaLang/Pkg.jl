@@ -421,6 +421,9 @@ In offline mode Pkg tries to do as much as possible without connecting
 to internet. For example, when adding a package Pkg only considers
 versions that are already downloaded in version resolution.
 
+To work in offline mode across Julia sessions you can
+set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
+
 !!! compat "Julia 1.5"
     Pkg's offline mode requires Julia 1.5 or later.
 """
@@ -545,6 +548,8 @@ function __init__()
             end
         end
     end
+    OFFLINE_MODE[] = get(ENV, "JULIA_PKG_OFFLINE", nothing) == "true"
+    return nothing
 end
 
 ################
