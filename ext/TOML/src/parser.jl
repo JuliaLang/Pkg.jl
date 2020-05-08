@@ -49,7 +49,7 @@ mutable struct Parser{IO_T <: IO}
     Parser(input::IO_T) where {IO_T <: IO}  = new{IO_T}(input, ParserError[], IOBuffer(), ' ')
 end
 Parser(input::String) = Parser(IOBuffer(input))
-Base.error(p::Parser, l, h, msg) = push!(p.errors, ParserError(l, h, msg))
+pusherror!(p::Parser, l, h, msg) = push!(p.errors, ParserError(l, h, msg))
 Base.eof(p::Parser) = eof(p.input)
 Base.position(p::Parser) = Int(position(p.input))+1
 Base.write(p::Parser, x) = write(p.charbuffer, x)
@@ -110,12 +110,12 @@ function expect(p::Parser, ch::AbstractChar)
     consume(p, ch) && return true
     lo = position(p)
     if eof(p)
-        error(p, lo, lo, "expected `$ch`, but found EOF")
+        pusherror!(p, lo, lo, "expected `$ch`, but found EOF")
     else
         v = peek(p)
         mark(p.input)
         c = read(p)
-        error(p, lo, lo+1, "expected `$ch`, but found `$c`")
+        pusherror!(p, lo, lo+1, "expected `$ch`, but found `$c`")
         reset(p.input)
     end
     return false
@@ -197,7 +197,7 @@ function keyname(p::Parser)
     end
 
     if key !== nothing && isempty(key)
-        error(p, s, s, "expected a key but found an empty string")
+        pusherror!(p, s, s, "expected a key but found an empty string")
         key = nothing
     end
     return key
@@ -236,7 +236,7 @@ end
 "Insert key-value pair to table, if duplicate key found reports error"
 function insertpair(p::Parser, tbl::Table, k, v, st)
     if haskey(tbl, k)
-        error(p, st, st+length(k), "duplicate key `$k`")
+        pusherror!(p, st, st+length(k), "duplicate key `$k`")
     else
         tbl.values[k] = v
     end
@@ -254,7 +254,7 @@ function integer(p::Parser, st::Int, allow_leading_zeros::Bool=false, allow_sign
     nch = peek(p)
     if nch === nothing
         pos = nextpos(p)
-        error(p, pos, pos, "expected start of a numeric literal")
+        pusherror!(p, pos, pos, "expected start of a numeric literal")
         return nothing
     else
         ch = nch
@@ -266,7 +266,7 @@ function integer(p::Parser, st::Int, allow_leading_zeros::Bool=false, allow_sign
                 if nch !== nothing
                     ch = nch
                     if isdigit(ch)
-                        error(p, st, position(p), "leading zeroes are not allowed")
+                        pusherror!(p, st, position(p), "leading zeroes are not allowed")
                         return nothing
                     end
                 end
@@ -275,7 +275,7 @@ function integer(p::Parser, st::Int, allow_leading_zeros::Bool=false, allow_sign
             end
         else
             # non-digit
-            error(p, st, position(p), "expected a digit, found `$ch`")
+            pusherror!(p, st, position(p), "expected a digit, found `$ch`")
             return nothing
         end
     end
@@ -295,7 +295,7 @@ function integer(p::Parser, st::Int, allow_leading_zeros::Bool=false, allow_sign
     end
     if underscore
         pos = nextpos(p)
-        error(p, pos, pos, "numeral cannot end with an underscore")
+        pusherror!(p, pos, pos, "numeral cannot end with an underscore")
         nothing
     else
         p.charbuffer.ptr == 1 ? nothing : String(take!(p.charbuffer))
@@ -336,7 +336,7 @@ function boolean(p::Parser, st::Int)
             i = ti
             ch = tch
         end
-        error(p, st, st+i-1, "unexpected character: `$ch`")
+        pusherror!(p, st, st+i-1, "unexpected character: `$ch`")
     end
 
     return nothing
@@ -394,7 +394,7 @@ function numdatetime(p::Parser, st::Int)
             nothing
         end
     end
-    ret === nothing && error(p, st, pend, "invalid numeric literal")
+    ret === nothing && pusherror!(p, st, pend, "invalid numeric literal")
     return ret
 end
 
@@ -469,7 +469,7 @@ function datetime(p::Parser, syear::String, st::Int)
                 second, msec)
         return dt
     else
-        error(p, st, position(p), "malformed date literal")
+        pusherror!(p, st, position(p), "malformed date literal")
         return nothing
     end
 end
@@ -500,7 +500,7 @@ function basicstring(p::Parser, st::Int, multiline::Bool)
         end
         if eof(p)
             pos = position(p)
-            error(p, st, pos, "unterminated string literal")
+            pusherror!(p, st, pos, "unterminated string literal")
             return nothing
         else
             ch = read(p)
@@ -523,7 +523,7 @@ function basicstring(p::Parser, st::Int, multiline::Bool)
                 ec !== nothing && write(p, ec)
             elseif ch < '\x1f'
                 pos = position(p)
-                error(p, st, pos, "control character `$ch` must be escaped")
+                pusherror!(p, st, pos, "control character `$ch` must be escaped")
             else
                 write(p, ch)
             end
@@ -539,7 +539,7 @@ function escape(p::Parser, st::Int, multiline::Bool)
     end
     pos = position(p)
     if eof(p)
-        error(p, st, pos, "unterminated escape sequence")
+        pusherror!(p, st, pos, "unterminated escape sequence")
         return nothing
     else
         ch = read(p)
@@ -563,23 +563,23 @@ function escape(p::Parser, st::Int, multiline::Bool)
             snum = String(read(p.input, len))
             try
                 if length(snum) < len
-                    error(p, st, st+len, "expected $len hex digits after a `$ch` escape")
+                    pusherror!(p, st, st+len, "expected $len hex digits after a `$ch` escape")
                     nothing
                 end
                 if !all(isxdigit, snum)
-                    error(p, st, st+len, "unknown string escape: `$snum`")
+                    pusherror!(p, st, st+len, "unknown string escape: `$snum`")
                     nothing
                 end
                 c = unescape_string(ucstr * snum)[1]
                 c
             catch
-                error(p, st, st+len, "codepoint `$snum` is not a valid unicode codepoint")
+                pusherror!(p, st, st+len, "codepoint `$snum` is not a valid unicode codepoint")
                 rewind(p, len)
                 nothing
             end
         else
             escape_str = "\\x"*string(UInt32(ch), base=16, pad=2)
-            error(p, st, position(p), "unknown string escape: `$escape_str`")
+            pusherror!(p, st, position(p), "unknown string escape: `$escape_str`")
             nothing
         end
     end
@@ -607,11 +607,11 @@ function literalstring(p::Parser, st::Int, multiline::Bool)
     while true
         if !multiline && newline(p)
             npos = nextpos(p)
-            error(p, st, npos, "literal strings cannot contain newlines")
+            pusherror!(p, st, npos, "literal strings cannot contain newlines")
             return nothing
         end
         if eof(p)
-            error(p, st, position(p), "unterminated string literal")
+            pusherror!(p, st, position(p), "unterminated string literal")
             return nothing
         else
             ch = read(p.input, UInt8)
@@ -656,7 +656,7 @@ function array(p::Parser, st::Int)
         valtype = isa(pvalue, Array) ? Array : typeof(pvalue)
         expected = rettype === Any ? valtype : expected
         if valtype != expected
-            error(p, pstart, pend, "expected type `$expected`, found type `$valtype`")
+            pusherror!(p, pstart, pend, "expected type `$expected`, found type `$valtype`")
         else
             rettype = expected
             push!(ret, pvalue)
@@ -716,7 +716,7 @@ function value(p::Parser)
     elseif ch == '-' || ch == '+' || isdigit(ch)
         return numdatetime(p, pos)
     else
-        error(p, pos, pos+1, "expected a value")
+        pusherror!(p, pos, pos+1, "expected a value")
         return nothing
     end
 end
@@ -751,7 +751,7 @@ function keyvalues(p::Parser, tbl::Table)
         if !comment(p) && !newline(p)
             pc = peek(p)
             pc === nothing && return true
-            error(p, klo, vend, "expected a newline after a key")
+            pusherror!(p, klo, vend, "expected a newline after a key")
             return false
         end
     end
@@ -775,11 +775,11 @@ function nested(p, into, ks, kstart)
                 if length(tmp)>0 && typeof(tmp[end]) === Table
                     cnode = tmp[end]
                 else
-                    error(p, kstart, kstart+kend, "array `$k` does not contain tables")
+                    pusherror!(p, kstart, kstart+kend, "array `$k` does not contain tables")
                     return nothing, kend
                 end
             else
-                error(p, kstart, kstart+kend, "key `$k` was not previously a table")
+                pusherror!(p, kstart, kstart+kend, "key `$k` was not previously a table")
                 return nothing, kend
             end
         end
@@ -798,13 +798,13 @@ function addtable(p::Parser, into::Table, ks::Vector{String}, tbl::Table, kstart
     if haskey(cur, tkey)
         ctbl = cur[tkey]
         if isa(ctbl, Table)
-            ctbl.defined && error(p, kstart, kstart+kend+length(tkey), "redefinition of table `$tkey`")
+            ctbl.defined && pusherror!(p, kstart, kstart+kend+length(tkey), "redefinition of table `$tkey`")
 
             for (k,v) in tbl.values
                 insertpair(p, ctbl, k, v, kstart)
             end
         else
-            error(p, kstart, kstart+kend+length(tkey), "key `$tkey` was not previously a table")
+            pusherror!(p, kstart, kstart+kend+length(tkey), "key `$tkey` was not previously a table")
         end
     else
         cur.values[tkey] = tbl
@@ -825,10 +825,10 @@ function addarray(p::Parser, into::Table, ks::Vector{String}, val, kstart)
             if isa(val, eltype(vec))
                 push!(vec, val)
             else
-                error(p, kstart, kstart+kend+length(akey), "expected type `$(typeof(val))`, found type `$(eltype(vec))`")
+                pusherror!(p, kstart, kstart+kend+length(akey), "expected type `$(typeof(val))`, found type `$(eltype(vec))`")
             end
         else
-            error(p, kstart, kstart+kend+length(akey), "key `$akey` was previously not an array")
+            pusherror!(p, kstart, kstart+kend+length(akey), "key `$akey` was previously not an array")
         end
     else
         cur.values[akey] = Any[val]
