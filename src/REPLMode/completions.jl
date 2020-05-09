@@ -81,10 +81,10 @@ end
 
 function complete_help(options, partial)
     names = String[]
-    for cmds in values(SPECS[])
+    for cmds in values(SPECS)
          append!(names, [spec.canonical_name for spec in values(cmds)])
     end
-    return sort!(unique!(append!(names, collect(keys(SPECS[])))))
+    return sort!(unique!(append!(names, collect(keys(SPECS)))))
 end
 
 function complete_installed_packages(options, partial)
@@ -114,8 +114,8 @@ end
 # COMPLETION INTERFACE #
 ########################
 function default_commands()
-    names = collect(keys(SPECS[]))
-    append!(names, map(x -> getproperty(x, :canonical_name), values(SPECS[]["package"])))
+    names = collect(keys(SPECS))
+    append!(names, map(x -> getproperty(x, :canonical_name), values(SPECS["package"])))
     return sort(unique(names))
 end
 
@@ -123,7 +123,7 @@ function complete_command(statement::Statement, final::Bool, on_sub::Bool)
     if statement.super !== nothing
         if (!on_sub && final) || (on_sub && !final)
             # last thing determined was the super -> complete canonical names of subcommands
-            specs = SPECS[][statement.super]
+            specs = SPECS[statement.super]
             names = map(x -> getproperty(x, :canonical_name), values(specs))
             return sort(unique(names))
         end
