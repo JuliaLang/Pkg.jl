@@ -814,10 +814,11 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         end
     end
 
-    # Ensure artifacts are installed for the dependent packages, and finally this overall project
-    Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
-
+    # Install all packages
     new_apply = Operations.download_source(ctx, pkgs)
+    # Install all artifacts
+    Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
+    # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
 end
 

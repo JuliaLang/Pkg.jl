@@ -20,7 +20,7 @@ import Base: SHA1
 using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec, empty_versionspec,
-    Requires, Fixed, merge_requires!, satisfies, ResolverError,
+    Requires, Fixed, merge_requires!, satisfies,
     PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved, instantiate_pkg_repo!,
@@ -224,8 +224,14 @@ Base.@kwdef mutable struct PackageEntry
     deps::Dict{String,UUID} = Dict{String,UUID}()
     other::Union{Dict,Nothing} = nothing
 end
-Base.:(==)(t1::PackageEntry, t2::PackageEntry) = all([getfield(t1, x) == getfield(t2, x) for x in filter!(!=(:other), collect(fieldnames(PackageEntry)))])
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [getfield(t, x) for x in filter!(!=(:other), collect(fieldnames(PackageEntry)))], init=h)
+Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
+    t1.version == t2.version &&
+    t1.path == t2.path &&
+    t1.pinned == t2.pinned &&
+    t1.repo == t2.repo &&
+    t1.tree_hash == t2.tree_hash &&
+    t1.deps == t2.deps   # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps], init=h)  # omits `other`
 const Manifest = Dict{UUID,PackageEntry}
 
 function Base.show(io::IO, pkg::PackageEntry)
@@ -383,20 +389,22 @@ function Context!(ctx::Context; kwargs...)
 end
 
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
-    !ispath(logdir()) && mkpath(logdir())
-    usage_file = joinpath(logdir(), usage_filepath)
-    touch(usage_file)
-
     # Don't record ghost usage
     !isfile(source_file) && return
 
-    # Do not rewrite as do-block syntax (no longer precompilable)
-    io = open(usage_file, "a")
-    print(io, """
-    [[$(repr(source_file))]]
-    time = $(now())Z
-    """)
-    close(io)
+    # Ensure that log dir exists
+    !ispath(logdir()) && mkpath(logdir())
+
+    # Generate entire entry as a string first
+    entry = sprint() do io
+        TOML.print(io, Dict(source_file => [Dict("time" => now())]))
+    end
+
+    # Append entry to log file in one chunk
+    usage_file = joinpath(logdir(), usage_filepath)
+    open(usage_file, append=true) do io
+        write(io, entry)
+    end
 end
 
 function read_package(path::String)
@@ -862,6 +870,7 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
                     pkgerror("multiple registries with name `$(reg.name)`, please specify with uuid.")
                 end
                 reg.url = known.url
+                reg.uuid = known.uuid
             end
         end
     end
@@ -1166,11 +1175,13 @@ function find_registered!(ctx::Context,
     # note: empty vectors will be left for names & uuids that aren't found
     clone_default_registries(ctx)
     for registry in collect_registries()
+
+        reg_abspath = abspath(registry.path)
         data = read_registry(joinpath(registry.path, "Registry.toml"))
         for (_uuid, pkgdata) in data["packages"]
               uuid = UUID(_uuid)
               name = pkgdata["name"]
-              path = abspath(registry.path, pkgdata["path"])
+              path = joinpath(registry.path, pkgdata["path"])
               push!(get!(ctx.env.uuids, name, UUID[]), uuid)
               push!(get!(ctx.env.paths, uuid, String[]), path)
               push!(get!(ctx.env.names, uuid, String[]), name)

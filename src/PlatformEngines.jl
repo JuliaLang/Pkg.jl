@@ -10,6 +10,11 @@ export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
        download_verify, unpack, package, download_verify_unpack,
        list_tarball_files, list_tarball_symlinks
 
+# To reduce method invalidation, it's best to call a logging method that
+# avoids introduction of backedges.
+# See https://github.com/JuliaLang/julia/pull/35714
+const logging_level = isdefined(Base.CoreLogging, :_invoked_min_enabled_level) ? Base.CoreLogging._invoked_min_enabled_level : Base.CoreLogging.min_enabled_level
+
 # In this file, we setup the `gen_download_cmd()`, `gen_unpack_cmd()` and
 # `gen_package_cmd()` functions by providing methods to probe the environment
 # and determine the most appropriate platform binaries to call.
@@ -126,7 +131,7 @@ function probe_symlink_creation(dest::AbstractString)
         link_path *= "1"
     end
 
-    loglevel = Logging.min_enabled_level(current_logger())
+    loglevel = logging_level(current_logger())
     try
         disable_logging(Logging.Warn)
         symlink("foo", link_path)
@@ -759,7 +764,7 @@ const CI_VARIABLES = [
     "CI",
     "CIRCLECI",
     "CONTINUOUS_INTEGRATION",
-    "GITHUB_ACTION",
+    "GITHUB_ACTIONS",
     "GITLAB_CI",
     "JULIA_CI",
     "TF_BUILD",

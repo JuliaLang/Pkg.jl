@@ -47,6 +47,6 @@ module TOML
     end
 
     "Parse file"
-    parsefile(filename::AbstractString) = open(parse, filename, "r")
+    parsefile(filename::AbstractString) = parse(IOBuffer(read(filename)))
 
 end

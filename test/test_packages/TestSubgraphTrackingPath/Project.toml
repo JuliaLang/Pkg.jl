@@ -1,6 +1,0 @@
-name = "TestSubgraphTrackingPath"
-uuid = "d0c1820a-42b1-4475-a264-e47af7733fd7"
-version = "0.1.0"
-
-[deps]
-Unregistered = "dcb67f36-efa0-11e8-0cef-2fc465ed98ae"

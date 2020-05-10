@@ -10,7 +10,6 @@ import REPL: LineEdit, REPLCompletions
 import ..casesensitive_isdir
 using ..Types, ..Display, ..Operations, ..API, ..Registry, .. Resolve
 
-const SPECS = Ref{Union{Nothing,Dict}}(nothing)
 const TEST_MODE = Ref{Bool}(false)
 
 #########################
@@ -252,14 +251,14 @@ function core_parse(words::Vector{QString}; only_cmd=false)
         word = QString("?", false)
     end
     # determine command
-    super = get(SPECS[], word.raw, nothing)
+    super = get(SPECS, word.raw, nothing)
     if super !== nothing # explicit
         statement.super = word.raw
         next_word!() || return statement, word.raw
         command = get(super, word.raw, nothing)
         command !== nothing || return statement, word.raw
     else # try implicit package
-        super = SPECS[]["package"]
+        super = SPECS["package"]
         command = get(super, word.raw, nothing)
         command !== nothing || return statement, word.raw
     end
@@ -393,7 +392,7 @@ end
 
 function do_cmd!(command::Command, repl)
     # REPL specific commands
-    command.spec === SPECS[]["package"]["help"] && return Base.invokelatest(do_help!, command, repl)
+    command.spec === SPECS["package"]["help"] && return Base.invokelatest(do_help!, command, repl)
     # API commands
     if command.spec.should_splat
         TEST_MODE[] && return command.spec.api, command.arguments..., command.options
@@ -423,7 +422,7 @@ function do_help!(command::Command, repl::REPL.AbstractREPL)
     cmd = parse_command(command.arguments)
     if cmd isa String
         # gather all helps for super spec `cmd`
-        all_specs = sort!(unique(values(SPECS[][cmd]));
+        all_specs = sort!(unique(values(SPECS[cmd]));
                           by=(spec->spec.canonical_name))
         for spec in all_specs
             isempty(help_md.content) || push!(help_md.content, md"---")
@@ -602,17 +601,17 @@ end
 include("completions.jl")
 include("argument_parsers.jl")
 include("command_declarations.jl")
-SPECS[] = CompoundSpecs(compound_declarations)
+const SPECS = CompoundSpecs(compound_declarations)
 
 ########
 # HELP #
 ########
 function canonical_names()
     # add "package" commands
-    xs = [(spec.canonical_name => spec) for spec in unique(values(SPECS[]["package"]))]
+    xs = [(spec.canonical_name => spec) for spec in unique(values(SPECS["package"]))]
     sort!(xs, by=first)
     # add other super commands, e.g. "registry"
-    for (super, specs) in SPECS[]
+    for (super, specs) in SPECS
         super != "package" || continue # skip "package"
         temp = [(join([super, spec.canonical_name], " ") => spec) for spec in unique(values(specs))]
         append!(xs, sort!(temp, by=first))
