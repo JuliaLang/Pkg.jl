@@ -292,9 +292,9 @@ function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
             contains_files(filepath) || continue
 
             # Otherwise, hash it up!
-            hash = tree_hash(filepath)
+            hash = tree_hash(filepath; HashType = HashType)
         else
-            hash = blob_hash(filepath)
+            hash = blob_hash(filepath, HashType)
         end
         push!(entries, (f, hash, mode))
     end
@@ -304,7 +304,7 @@ function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
 
     content_size = 0
     for (n, h, m) in entries
-        content_size += ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + 20
+        content_size += ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + sizeof(h)
     end
 
     # Return the hash of these entries
