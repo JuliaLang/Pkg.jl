@@ -253,10 +253,15 @@ function resolve(ctx::Context; kwargs...)
 end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
-    require_not_empty(pkgs, :pin)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
+    if isempty(pkgs)
+        for (name::String, uuid::UUID) in ctx.env.project.deps
+            push!(pkgs, PackageSpec(name=name, uuid=uuid))
+        end
+    end
+    
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
             pkgerror("name or UUID specification required when calling `pin`")
