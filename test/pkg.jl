@@ -253,15 +253,17 @@ temp_pkg_dir() do project_path
     end
     
     @testset "pinning / freeing all" begin
-        Pkg.add(PackageSpec(TEST_PKG.name, v"0.2"))
+        Pkg.add(TEST_PKG.name)
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
+        Pkg.rm(TEST_PKG.name)
+        Pkg.add(PackageSpec(TEST_PKG.name, v"0.2"))
         Pkg.pin()
         @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
         Pkg.update()
         @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
-        Pkg.free(TEST_PKG.name)
+        Pkg.free()
         Pkg.update()
-        @test Pkg.dependencies()[TEST_PKG.uuid].version.minor != 2
+        @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == old_v
         Pkg.rm(TEST_PKG.name)
     end
 
