@@ -251,6 +251,11 @@ temp_pkg_dir() do project_path
         @test Pkg.dependencies()[TEST_PKG.uuid].version == old_v
         Pkg.rm(TEST_PKG.name)
     end
+    
+    @testset "pinning / freeing all" begin # TODO: test versions
+        Pkg.pin()
+        Pkg.free()
+    end
 
     @testset "develop / freeing" begin
         Pkg.add(TEST_PKG.name)
