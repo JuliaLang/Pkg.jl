@@ -629,7 +629,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
             end
         end
     else
-        artifact_dict = Dict()
+        artifact_dict = TOML.DictType()
     end
 
     # Otherwise, the new piece of data we're going to write out is this dict:
@@ -673,8 +673,10 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
     end
 
     # Spit it out onto disk
-    open(artifacts_toml, "w") do io
-        TOML.print(io, artifact_dict, sorted=true)
+    let artifact_dict = artifact_dict
+        open(artifacts_toml, "w") do io
+            TOML.print(io, artifact_dict, sorted=true)
+        end
     end
 
     # Mark that we have used this Artifact.toml
