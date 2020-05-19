@@ -379,6 +379,17 @@ temp_pkg_dir() do project_path; cd(project_path) do
             end
             c, r = test_complete("dev ~")
             @test joinpath(homedir(), "") in c
+
+            # nested directories
+            nested_dirs = "foo/bar/baz"
+            tildepath = "~/$nested_dirs"
+            try
+                mkpath(expanduser(tildepath))
+                c, r = test_complete("dev ~/foo/bar/b")
+                @test joinpath(homedir(), nested_dirs, "") in c
+            finally
+                rm(expanduser(tildepath); force = true)
+            end
         end
 
         # activate

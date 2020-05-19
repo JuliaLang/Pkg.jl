@@ -38,7 +38,7 @@ function complete_local_dir(s, i1, i2)
         if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
             completions = [joinpath(s, "")]
         else
-            completions = [joinpath(homedir(), x) for x in completions]
+            completions = [joinpath(dirname(s), x) for x in completions]
         end
         return completions, i1:oldi2, true
     end
