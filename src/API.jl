@@ -329,15 +329,24 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 end
 
 """
-    gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
+    gc(ctx::Context=Context(); collect_delay::Period=Day(7),
+                               scratch_cleanup_period::Period=Day(31),
+                               kwargs...)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
-finding artifacts and packages that are thereafter not used by any other projects.  This
-method will only remove package versions and artifacts that have been continually un-used
-for a period of `collect_delay`; which defaults to seven days.
+finding artifacts and packages that are thereafter not used by any other projects,
+marking them as "orphaned".  This method will only remove orphaned objects (package
+versions, artifacts, and scratch spaces) that have been continually un-used for a period
+of `collect_delay`; which defaults to seven days.
+
+This method will automatically mark as orphaned any scratch spaces that have not been
+accessed for at least `scratch_cleanup_period` days, defaulting to twenty-one days.  The
+orphaned spaces will then be removed after the typical `collect_delay` timeperiod.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
+function gc(ctx::Context=Context(); collect_delay::Period=Day(7),
+                                    scratch_cleanup_period::Period=Day(21),
+                                    kwargs...)
     Context!(ctx; kwargs...)
     env = ctx.env
 
@@ -352,61 +361,83 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     manifest_usage_by_depot = Dict{String, Dict{String, DateTime}}()
     artifact_usage_by_depot = Dict{String, Dict{String, DateTime}}()
 
+    # Collect both last know usage dates, as well as parent projects for each scratch space
+    scratch_usage_by_depot = Dict{String, Dict{String, DateTime}}()
+    scratch_parents_by_depot = Dict{String, Dict{String, Set{String}}}()
+
     # Load manifest files from all depots
     for depot in depots()
         # When a manifest/artifact.toml is installed/used, we log it within the
         # `manifest_usage.toml` files within `write_env_usage()` and `bind_artifact!()`
-        function collect_usage!(usage_data::Dict, usage_filepath)
+        function reduce_usage!(f::Function, usage_filepath)
             if !isfile(usage_filepath)
-                return usage_data
+                return
             end
 
             for (filename, infos) in TOML.parse(String(read(usage_filepath)))
-                # If this file was already listed in this index, update it with the later
-                # information
-                for info in infos
-                    usage_data[filename] = max(
-                        get(usage_data, filename, DateTime(0)),
-                        DateTime(info["time"]),
-                    )
-                end
+                f.(Ref(filename), infos)
             end
-            return usage_data
         end
 
         # Extract usage data from this depot, (taking only the latest state for each
         # tracked manifest/artifact.toml), then merge the usage values from each file
         # into the overall list across depots to create a single, coherent view across
         # all depots.
-        manifest_usage_by_depot[depot] = Dict{String, DateTime}()
-        artifact_usage_by_depot[depot] = Dict{String, DateTime}()
-        collect_usage!(
-            manifest_usage_by_depot[depot],
-            joinpath(logdir(depot), "manifest_usage.toml"),
-        )
-        collect_usage!(
-            artifact_usage_by_depot[depot],
-            joinpath(logdir(depot), "artifact_usage.toml"),
-        )
+        usage = Dict{String, DateTime}()
+        reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
+            # For Manifest usage, store only the last DateTime for each filename found
+            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+        end
+        manifest_usage_by_depot[depot] = usage
+
+        usage = Dict{String, DateTime}()
+        reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
+            # For Artifact usage, store only the last DateTime for each filename found
+            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+        end
+        artifact_usage_by_depot[depot] = usage
+
+        # track last-used
+        usage = Dict{String, DateTime}()
+        parents = Dict{String, Set{String}}()
+        reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
+            # For Artifact usage, store only the last DateTime for each filename found
+            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+            if !haskey(parents, filename)
+                parents[filename] = Set{String}()
+            end
+            for parent in info["parent_projects"]
+                push!(parents[filename], parent)
+            end
+        end
+        scratch_usage_by_depot[depot] = usage
+        scratch_parents_by_depot[depot] = parents
     end
 
-    # Next, figure out which files are still extant
-    all_index_files = vcat(
-        unique(f for (_, files) in manifest_usage_by_depot for f in keys(files)),
-        unique(f for (_, files) in artifact_usage_by_depot for f in keys(files)),
-    )
-    all_index_files = Set(filter(Pkg.isfile_nothrow, all_index_files))
+    # Next, figure out which files are still existent
+    all_manifest_tomls = unique(f for (_, files) in manifest_usage_by_depot for f in keys(files))
+    all_artifact_tomls = unique(f for (_, files) in artifact_usage_by_depot for f in keys(files))
+    all_scratch_dirs = unique(f for (_, dirs) in scratch_usage_by_depot for f in keys(dirs))
+    all_scratch_parents = Set{String}()
+    for (depot, parents) in scratch_parents_by_depot
+        for parent in values(parents)
+            union!(all_scratch_parents, parent)
+        end
+    end
+    #all_scratch_parents = union!(all_scratch_parents, (union(values(parents)...) for (_, parents) in scratch_parents_by_depot)...)
 
-    # Immediately write this back as condensed manifest_usage.toml files
-    function write_condensed_usage(usage_by_depot, fname)
+    all_manifest_tomls = Set(filter(Pkg.isfile_nothrow, all_manifest_tomls))
+    all_artifact_tomls = Set(filter(Pkg.isfile_nothrow, all_artifact_tomls))
+    all_scratch_dirs = Set(filter(Pkg.isdir_nothrow, all_scratch_dirs))
+    all_scratch_parents = Set(filter(Pkg.isfile_nothrow, all_scratch_parents))
+
+    # Immediately write these back as condensed toml files
+    function write_condensed_toml(f::Function, usage_by_depot, fname)
         for (depot, usage) in usage_by_depot
-            # Keep only the keys of the files that are still extant
-            usage = filter(p -> p[1] in all_index_files, usage)
+            # Run through user-provided filter/condenser
+            usage = f(depot, usage)
 
-            # Expand it back into a dict of arrays-of-dicts
-            usage = Dict(k => [Dict("time" => v)] for (k, v) in usage)
-
-            # Write it out to disk within this depot
+            # Write out the TOML file for this depot
             usage_path = joinpath(logdir(depot), fname)
             if !isempty(usage) || isfile(usage_path)
                 open(usage_path, "w") do io
@@ -415,13 +446,44 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
             end
         end
     end
-    write_condensed_usage(manifest_usage_by_depot, "manifest_usage.toml")
-    write_condensed_usage(artifact_usage_by_depot, "artifact_usage.toml")
 
-    # Next, we will process the manifest.toml and artifacts.toml files separately,
-    # extracting from them the paths of the packages and artifacts that they reference.
-    all_manifest_files = filter(f -> endswith(f, "Manifest.toml"), all_index_files)
-    all_artifacts_files = filter(f -> !endswith(f, "Manifest.toml"), all_index_files)
+    # Write condensed Manifest usage
+    write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
+        # Keep only manifest usage markers that are still existent
+        filter!(((k,v),) -> k in all_manifest_tomls, usage)
+
+        # Expand it back into a dict-of-dicts
+        return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+    end
+
+    # Write condensed Artifact usage
+    write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
+        filter!(((k,v),) -> k in all_artifact_tomls, usage)
+        return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+    end
+
+    # Write condensed scratch space usage
+    write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
+        # Keep only scratch directories that still exist
+        filter!(((k,v),) -> k in all_scratch_dirs, usage)
+
+        # Expand it back into a dict-of-dicts
+        expanded_usage = Dict{String,Vector{Dict}}()
+        for (k, v) in usage
+            # Drop scratch spaces whose parents are all non-existant
+            parents = scratch_parents_by_depot[depot][k]
+            filter!(p -> p in all_scratch_parents, parents)
+            if isempty(parents)
+                continue
+            end
+
+            expanded_usage[k] = [Dict(
+                "time" => v,
+                "parent_projects" => collect(parents),
+            )]
+        end
+        return expanded_usage
+    end
 
     function process_manifest_pkgs(path)
         # Read the manifest in
@@ -454,7 +516,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     function process_artifacts_toml(path, packages_to_delete)
         # Not only do we need to check if this file doesn't exist, we also need to check
         # to see if it this artifact is contained within a package that is going to go
-        # away.  This places an inherent ordering between marking packages and marking
+        # away.  This places an implicit ordering between marking packages and marking
         # artifacts; the package marking must be done first so that we can ensure that
         # all artifacts that are solely bound within such packages also get reaped.
         if any(startswith(path, package_dir) for package_dir in packages_to_delete)
@@ -482,7 +544,39 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         return artifact_path_list
     end
 
-    # Mark packages/artifacts as active or not by calling the appropriate
+    function process_scratchspace(path, packages_to_delete)
+        # Find all parents of this path and its latest access time
+        parents = String[]
+        last_access = DateTime(0)
+
+        # It is slightly awkward that we need to reach out to our `*_by_depot`
+        # datastructures here; that's because unlike Artifacts and Manifests we're not
+        # parsing a TOML file to find paths within it here, we're actually doing the
+        # inverse, finding files that point to this directory.
+        for (depot, parent_map) in scratch_parents_by_depot
+            if haskey(parent_map, path)
+                append!(parents, parent_map[path])
+            end
+            if haskey(scratch_usage_by_depot[depot], path)
+                last_access = max(last_access, scratch_usage_by_depot[depot][path])
+            end
+        end
+
+        # Look to see if all parents are packages that will be removed
+        filter!(p -> !any(startswith(path, package_dir) for package_dir in packages_to_delete), parents)
+        if isempty(parents)
+            return nothing
+        end
+
+        # Check to see what the last access time was; if it's father back than our
+        # `scratch_cleanup_period`, then do not mark this path
+        if now() - last_access > scratch_cleanup_period
+            return nothing
+        end
+        return [path]
+    end
+
+    # Mark packages/artifacts as active or not by calling the appropriate user function
     function mark(process_func::Function, index_files; do_print=true)
         marked_paths = String[]
         for index_file in index_files
@@ -528,7 +622,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
 
     # Scan manifests, parse them, read in all UUIDs listed and mark those as active
     printpkgstyle(ctx, :Active, "manifests:")
-    packages_to_keep = mark(process_manifest_pkgs, all_manifest_files)
+    packages_to_keep = mark(process_manifest_pkgs, all_manifest_tomls)
 
     # Do an initial scan of our depots to get a preliminary `packages_to_delete`.
     packages_to_delete = String[]
@@ -557,8 +651,10 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
     # `Artifacts.toml` files that will be deleted by the future culling operation.
     printpkgstyle(ctx, :Active, "artifacts:")
-    artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete), all_artifacts_files)
-    repos_to_keep = mark(process_manifest_repos, all_manifest_files; do_print=false)
+    artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete), all_artifact_tomls)
+    repos_to_keep = mark(process_manifest_repos, all_manifest_tomls; do_print=false)
+    printpkgstyle(ctx, :Active, "scratchspaces:")
+    spaces_to_keep = mark(x -> process_scratchspace(x, packages_to_delete), all_scratch_dirs)
 
     # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
     # are implicitly defined in that we walk all packages/artifacts installed, then if
@@ -566,6 +662,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     packages_to_delete = String[]
     artifacts_to_delete = String[]
     repos_to_delete = String[]
+    spaces_to_delete = String[]
 
     for depot in depots()
         # We track orphaned objects on a per-depot basis, writing out our `orphaned.toml`
@@ -574,8 +671,8 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         depot_orphaned_packages = String[]
         depot_orphaned_artifacts = String[]
         depot_orphaned_repos = String[]
+        depot_orphaned_scratchspaces = String[]
 
-        # ??: This code block is identical to one a bit above
         packagedir = abspath(depot, "packages")
         if isdir(packagedir)
             for name in readdir(packagedir)
@@ -615,6 +712,21 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
             end
         end
 
+        scratchdir = abspath(depot, "scratchspaces")
+        if isdir(scratchdir)
+            for uuid in readdir(scratchdir)
+                uuid_dir = joinpath(scratchdir, uuid)
+                !isdir(uuid_dir) && continue
+                for space in readdir(uuid_dir)
+                    space_dir = joinpath(uuid_dir, space)
+                    !isdir(space_dir) && continue
+                    if !(space_dir in spaces_to_keep)
+                        push!(depot_orphaned_scratchspaces, space_dir)
+                    end
+                end
+            end
+        end
+
         # Read in this depot's `orphaned.toml` file:
         orphanage_file = joinpath(logdir(depot), "orphaned.toml")
         new_orphanage = Dict{String, DateTime}()
@@ -629,6 +741,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         merge_orphanages!(new_orphanage, depot_orphaned_packages, packages_to_delete, old_orphanage)
         merge_orphanages!(new_orphanage, depot_orphaned_artifacts, artifacts_to_delete, old_orphanage)
         merge_orphanages!(new_orphanage, depot_orphaned_repos, repos_to_delete, old_orphanage)
+        merge_orphanages!(new_orphanage, depot_orphaned_scratchspaces, spaces_to_delete, old_orphanage)
 
         # Write out the `new_orphanage` for this depot
         if !isempty(new_orphanage) || isfile(orphanage_file)
@@ -675,6 +788,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     package_space_freed = 0
     repo_space_freed = 0
     artifact_space_freed = 0
+    scratch_space_freed = 0
     for path in packages_to_delete
         package_space_freed += delete_path(path)
     end
@@ -683,6 +797,9 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     end
     for path in artifacts_to_delete
         artifact_space_freed += delete_path(path)
+    end
+    for path in spaces_to_delete
+        scratch_space_freed += delete_path(path)
     end
 
     # Prune package paths that are now empty
@@ -699,27 +816,41 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         end
     end
 
-    ndel_pkg = length(packages_to_delete)
-    ndel_repos = length(repos_to_delete)
-    ndel_art = length(artifacts_to_delete)
+    # Prune scratch space UUID folders that are now empty
+    for depot in depots()
+        scratch_dir = abspath(depot, "scratchspaces")
+        !isdir(scratch_dir) && continue
 
-    if ndel_pkg > 0
-        s = ndel_pkg == 1 ? "" : "s"
-        bytes_saved_string = pretty_byte_str(package_space_freed)
-        printpkgstyle(ctx, :Deleted, "$(ndel_pkg) package installation$(s) ($bytes_saved_string)")
+        for uuid in readdir(scratch_dir)
+            uuid_dir = joinpath(scratch_dir, uuid)
+            !isdir(uuid_dir) && continue
+            if isempty(readdir(uuid_dir))
+                Base.rm(uuid_dir)
+            end
+        end
     end
-    if ndel_repos > 0
-        s = ndel_repos == 1 ? "" : "s"
-        bytes_saved_string = pretty_byte_str(repo_space_freed)
-        printpkgstyle(ctx, :Deleted, "$(ndel_repos) repo$(s) ($bytes_saved_string)")
+
+    ndel_pkg = length(packages_to_delete)
+    ndel_repo = length(repos_to_delete)
+    ndel_art = length(artifacts_to_delete)
+    ndel_space = length(spaces_to_delete)
+
+    function print_deleted(ndel, freed, name)
+        if ndel <= 0
+            return
+        end
+
+        s = ndel == 1 ? "" : "s"
+        bytes_saved_string = pretty_byte_str(freed)
+        printpkgstyle(ctx, :Deleted, "$(ndel) $(name)$(s) ($bytes_saved_string)")
     end
-    if ndel_art > 0
-        s = ndel_art == 1 ? "" : "s"
-        bytes_saved_string = pretty_byte_str(artifact_space_freed)
-        printpkgstyle(ctx, :Deleted, "$(ndel_art) artifact installation$(s) ($bytes_saved_string)")
-    end
-    if ndel_pkg == 0 & ndel_art == 0 && ndel_repos == 0
-        printpkgstyle(ctx, :Deleted, "no artifacts, repos or packages")
+    print_deleted(ndel_pkg, package_space_freed, "package installation")
+    print_deleted(ndel_repo, repo_space_freed, "repo")
+    print_deleted(ndel_art, artifact_space_freed, "artifact installation")
+    print_deleted(ndel_space, scratch_space_freed, "scratchspace")
+
+    if ndel_pkg == 0 && ndel_art == 0 && ndel_repo == 0 && ndel_space == 0
+        printpkgstyle(ctx, :Deleted, "no artifacts, repos, packages or scratchspaces")
     end
 
     return

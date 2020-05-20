@@ -1,4 +1,4 @@
-# [**10.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
+# [**11.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
 
 Two files that are central to Pkg are `Project.toml` and `Manifest.toml`. `Project.toml`
 and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (hence the

@@ -386,16 +386,17 @@ function Context!(ctx::Context; kwargs...)
     return ctx
 end
 
-function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
+function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString,
+                         entry::Dict = Dict("time" => now()))
     # Don't record ghost usage
-    !isfile(source_file) && return
+    !ispath(source_file) && return
 
     # Ensure that log dir exists
     !ispath(logdir()) && mkpath(logdir())
 
     # Generate entire entry as a string first
     entry = sprint() do io
-        TOML.print(io, Dict(source_file => [Dict("time" => now())]))
+        TOML.print(io, Dict(source_file => [entry]))
     end
 
     # Append entry to log file in one chunk

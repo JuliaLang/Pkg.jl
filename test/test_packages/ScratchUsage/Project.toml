@@ -1,0 +1,7 @@
+name = "ScratchUsage"
+uuid = "93485645-17f1-6f3b-45bc-419db53815ea"
+# This version will get automatically replaced within `test/scratchspaces.jl`
+version = "1.2.3"
+
+[deps]
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
