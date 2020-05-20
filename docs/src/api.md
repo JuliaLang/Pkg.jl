@@ -1,4 +1,4 @@
-# [**12.** API Reference](@id API-Reference)
+# [**13.** API Reference](@id API-Reference)
 
 This section describes the function interface, or "API mode",
 for interacting with Pkg.jl. The function API is recommended
@@ -86,4 +86,19 @@ Pkg.Artifacts.ensure_artifact_installed
 Pkg.Artifacts.ensure_all_artifacts_installed
 Pkg.Artifacts.@artifact_str
 Pkg.Artifacts.archive_artifact
+```
+
+## [Caches API Reference](@id Caches-Reference)
+
+!!! compat "Julia 1.6"
+    Pkg's artifacts API requires at least Julia 1.6.
+
+```@docs
+Pkg.Caches.get_cache!
+Pkg.Caches.@get_cache!
+Pkg.Caches.delete_cache!
+Pkg.Caches.with_caches_directory
+Pkg.Caches.caches_dir
+Pkg.Caches.cache_path
+Pkg.Caches.track_cache_access
 ```

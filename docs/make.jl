@@ -37,6 +37,7 @@ makedocs(
         "compatibility.md",
         "registries.md",
         "artifacts.md",
+        "caches.md",
         # "faq.md",
         "glossary.md",
         "toml-files.md",
