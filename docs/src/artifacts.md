@@ -184,3 +184,22 @@ Note that while that hash was previously overridden, it is no longer, and theref
 Most methods that are affected by overrides have the ability to ignore overrides by setting `honor_overrides=false` as a keyword argument within them.
 For UUID/name based overrides to work, `Artifacts.toml` files must be loaded with the knowledge of the UUID of the loading package.
 This is deduced automatically by the `artifacts""` string macro, however if you are for some reason manually using the `Pkg.Artifacts` API within your package and you wish to honor overrides, you must provide the package UUID to API calls like `artifact_meta()` and `ensure_artifact_installed()` via the `pkg_uuid` keyword argument.
+
+# Generating Artifacts in installed packages
+
+If a package needs to dynamically create Artifacts (e.g. to cache the output of a reproducible build pipeline), it is best practice to treat the package directory as read-only, forcing the package to store its `Artifacts.toml` file elsewhere.
+[Scratch Spaces](@ref) provide a natural storage space for dynamically-generated `Artifacts.toml` files, allowing your package to obtain the best of both worlds: you can generate content-addressed, easily-redistributable chunks of data, stored within an index that sits within a mutable storage space.
+Because the `Artifacts.toml` file does not exist within the package's directory, once you have used `bind_artifact!()` as above to store artifact paths into an `Artifacts.toml` file within a scratch space, the `@artifact_str` macro will not be able to pull artifact hashes out of the `Artifacts.toml` file directly, so you must pass the path to the `Artifacts.toml` file directly:
+
+```julia
+using Pkg.Artifacts, Pkg.Scratch
+
+function get_artifact(name::String)
+    # This is the path to the Artifacts.toml we will manipulate
+    artifact_toml = joinpath(@get_scratch!("mutable_artifacts"), "Artifacts.toml")
+
+    # Query the `Artifacts.toml` file for the hash bound to the name "iris"
+    # (returns `nothing` if no such binding exists)
+    iris_hash = artifact_hash(name, artifact_toml)
+end
+```
