@@ -361,7 +361,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
                 return usage_data
             end
 
-            for (filename, infos) in TOML.parse(String(read(usage_filepath)))
+            for (filename, infos) in TOML.parsefile(usage_filepath)
                 # If this file was already listed in this index, update it with the later
                 # information
                 for info in infos

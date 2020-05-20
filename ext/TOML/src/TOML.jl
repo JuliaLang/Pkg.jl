@@ -31,8 +31,8 @@ module TOML
     end
 
     "Parse IO input and return result as dictionary."
-    function parse(io::IO)
-        parser = Parser(io)
+    function parse(io::IO, filename="unknown-file")
+        parser = Parser(io, filename)
         res = parse(parser)
         length(parser.errors)>0 && throw(CompositeException(parser.errors))
         return table2dict(res)
@@ -47,6 +47,6 @@ module TOML
     end
 
     "Parse file"
-    parsefile(filename::AbstractString) = parse(IOBuffer(read(filename)))
+    parsefile(filename::AbstractString) = parse(IOBuffer(read(filename)), filename)
 
 end

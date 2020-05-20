@@ -37,24 +37,31 @@ Base.haskey(tbl::Table, key::AbstractString) = haskey(tbl.values ,key)
 struct ParserError <: Exception
     lo::Int
     hi::Int
+    filename::String
     msg::String
 end
 
 "TOML Parser: Data structure for parsing process."
 mutable struct Parser{IO_T <: IO}
     input::IO_T
+    filename::String
     errors::Vector{ParserError}
     charbuffer::Base.GenericIOBuffer{Array{UInt8,1}}
     currentchar::Char
 
-    Parser(input::IO_T) where {IO_T <: IO}  = new{IO_T}(input, ParserError[], IOBuffer(), ' ')
+    Parser(input::IO_T, filename) where {IO_T <: IO}  = new{IO_T}(input, filename, ParserError[], IOBuffer(), ' ')
 end
-Parser(input::String) = Parser(IOBuffer(input))
-pusherror!(p::Parser, l, h, msg) = push!(p.errors, ParserError(l, h, msg))
+Parser(input::String, filename="unknown-file") = Parser(IOBuffer(input), filename)
 Base.eof(p::Parser) = eof(p.input)
 Base.position(p::Parser) = Int(position(p.input))+1
 Base.write(p::Parser, x) = write(p.charbuffer, x)
 Base.read(p::Parser) = p.currentchar = read(p.input, Char)
+
+function pusherror!(p::Parser, lo_offset, hi_offset, msg)
+    lo_line = first(linecol(p, lo_offset))
+    hi_line = first(linecol(p, hi_offset))
+    push!(p.errors, ParserError(lo_line, hi_line, p.filename, msg))
+end
 
 "Rewind parser input on `n` characters."
 function rewind(p::Parser, n=1)
