@@ -359,6 +359,15 @@ Undoes the latest change to the active project.
 Redoes the changes from the latest [`undo`](@ref).
 """,
 ],
+[ :name => "search",
+  :api => API.search,
+  :description => "search registries by package name",
+  :help => md"""
+    search
+
+Redoes the changes from the latest [`undo`](@ref).
+""",
+],
 ], #package
 "registry" => CommandDeclaration[
 [   :name => "add",
