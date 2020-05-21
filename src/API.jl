@@ -330,8 +330,8 @@ end
 
 function search(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(), kwargs...)
-    require_not_empty(pkgs, :develop)
-    foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
+    require_not_empty(pkgs, :search)
+    foreach(pkg -> check_package_name(pkg.name, :search), pkgs)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
