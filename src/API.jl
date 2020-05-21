@@ -60,7 +60,7 @@ function require_not_empty(pkgs, f::Symbol)
 end
 
 # Provide some convenience calls
-for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
+for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :search)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
@@ -325,6 +325,50 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         ensure_resolved(ctx, pkgs)
     end
     Operations.test(ctx, pkgs; coverage=coverage, test_fn=test_fn, julia_args=julia_args, test_args=test_args)
+    return
+end
+
+function search(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(), kwargs...)
+    require_not_empty(pkgs, :develop)
+    foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
+    pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
+    Context!(ctx; kwargs...)
+
+    for pkg in pkgs
+        if pkg.name == "julia" # if julia is passed as a package the solver gets tricked
+            pkgerror("`julia` is not a valid package name")
+        end
+        if pkg.name === nothing
+            pkgerror("name required when calling `search`")
+        end
+        pkg.name === nothing || check_package_name(pkg.name, "add")
+        if pkg.repo.source !== nothing || pkg.repo.rev !== nothing
+            if pkg.version != VersionSpec()
+                pkgerror("version specification invalid when tracking a repository:",
+                         " `$(pkg.version)` specified for package $(err_rep(pkg))")
+            end
+        end
+        # not strictly necessary to check these fields early, but it is more efficient
+        if pkg.name !== nothing && (length(findall(x -> x.name == pkg.name, pkgs)) > 1)
+            pkgerror("it is invalid to specify multiple packages with the same name: $(err_rep(pkg))")
+        end
+    end
+
+    Types.clone_default_registries(ctx)
+    names = String[]
+    for registry in Types.collect_registries()
+        reg_abspath = abspath(registry.path)
+        data = Types.read_registry(joinpath(registry.path, "Registry.toml"))
+        append!(names, [pkgdata["name"] for (_, pkgdata) in data["packages"]])
+    end
+
+    for pkg in pkgs
+        alike = sort(names, by=x->Pkg.stringmetric(lowercase(pkg.name), lowercase(x)))[1:5]
+        println("For `$(pkg.name)` found:")
+        println("    ", join(alike[1:4], ", "), ", and $(alike[5])")
+    end
+
     return
 end
 

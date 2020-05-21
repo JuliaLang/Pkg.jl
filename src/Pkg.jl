@@ -295,7 +295,7 @@ See also [`PackageSpec`](@ref)
 """
 const develop = API.develop
 
-#TODO: Will probably be deprecated for something in PkgDev
+# TODO: Will probably be deprecated for something in PkgDev
 const generate = API.generate
 
 """
@@ -412,6 +412,8 @@ Pkg.activate("MyDependency")
 """
 const activate = API.activate
 
+const search = API.search
+
 """
     Pkg.offline(b::Bool=true)
 
@@ -427,7 +429,7 @@ set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
 !!! compat "Julia 1.5"
     Pkg's offline mode requires Julia 1.5 or later.
 """
-offline(b::Bool=true) = (OFFLINE_MODE[] = b; nothing)
+offline(b::Bool = true) = (OFFLINE_MODE[] = b; nothing)
 
 """
     PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
@@ -559,7 +561,7 @@ end
 function installed()
     @warn "Pkg.installed() is deprecated"
     deps = dependencies()
-    installs = Dict{String, VersionNumber}()
+    installs = Dict{String,VersionNumber}()
     for (uuid, dep) in deps
         dep.is_direct_dep || continue
         dep.version === nothing && continue
@@ -569,7 +571,7 @@ function installed()
 end
 
 function dir(pkg::String, paths::AbstractString...)
-    @warn "`Pkg.dir(pkgname, paths...)` is deprecated; instead, do `import $pkg; joinpath(dirname(pathof($pkg)), \"..\", paths...)`." maxlog=1
+    @warn "`Pkg.dir(pkgname, paths...)` is deprecated; instead, do `import $pkg; joinpath(dirname(pathof($pkg)), \"..\", paths...)`." maxlog = 1
     pkgid = Base.identify_package(pkg)
     pkgid === nothing && return nothing
     path = Base.locate_package(pkgid)
