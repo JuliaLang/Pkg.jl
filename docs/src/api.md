@@ -103,3 +103,18 @@ Pkg.Scratch.scratch_dir
 Pkg.Scratch.scratch_path
 Pkg.Scratch.track_scratch_access
 ```
+## [Preferences API Reference](@id Preferences-Reference)
+
+!!! compat "Julia 1.6"
+    Pkg's preferences API requires at least Julia 1.6.
+
+```@docs
+Pkg.Preferences.load_preferences
+Pkg.Preferences.@load_preferences
+Pkg.Preferences.save_preferences!
+Pkg.Preferences.@save_preferences!
+Pkg.Preferences.modify_preferences!
+Pkg.Preferences.@modify_preferences!
+Pkg.Preferences.clear_preferences!
+Pkg.Preferences.@clear_preferences!
+```
