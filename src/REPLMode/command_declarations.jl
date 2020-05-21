@@ -365,7 +365,7 @@ Redoes the changes from the latest [`undo`](@ref).
   :help => md"""
     search
 
-Redoes the changes from the latest [`undo`](@ref).
+Searches the registries for Packages by name [`search`](@ref).
 """,
 ],
 ], #package
