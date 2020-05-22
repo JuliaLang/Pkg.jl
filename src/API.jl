@@ -367,7 +367,13 @@ function search(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     for pkg in pkgs
         alike = REPL.levsort(pkg.name, names)
         println("For `$(pkg.name)` found:")
-        println("    ", join(alike[1:end-1], ", "), ", and $(alike[end])")
+        if length(alike) == 0
+            println("    No similar packages")
+        elseif length(alike) == 1
+            println("    $(alike[end])")
+        else
+            println("    ", join(alike[1:end-1], ", "), ", and $(alike[end])")
+        end
     end
 
     return

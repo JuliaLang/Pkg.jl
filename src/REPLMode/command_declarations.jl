@@ -361,6 +361,8 @@ Redoes the changes from the latest [`undo`](@ref).
 ],
 [ :name => "search",
   :api => API.search,
+  :should_splat => false,
+  :arg_count => 1 => Inf,
   :description => "search registries by package name",
   :help => md"""
     search
