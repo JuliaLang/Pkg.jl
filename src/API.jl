@@ -6,6 +6,7 @@ using UUIDs
 using Printf
 import Random
 using Dates
+using REPL
 import LibGit2
 
 import ..depots, ..depots1, ..logdir, ..devdir
@@ -364,9 +365,9 @@ function search(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     end
 
     for pkg in pkgs
-        alike = sort(names, by=x->Pkg.stringmetric(lowercase(pkg.name), lowercase(x)))[1:5]
+        alike = REPL.levsort(pkg.name, names)
         println("For `$(pkg.name)` found:")
-        println("    ", join(alike[1:4], ", "), ", and $(alike[5])")
+        println("    ", join(alike[1:end-1], ", "), ", and $(alike[end])")
     end
 
     return
