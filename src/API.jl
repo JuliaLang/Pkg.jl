@@ -1047,4 +1047,31 @@ Package(name::AbstractString) = PackageSpec(name)
 Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
 Package(name::AbstractString, uuid::UUID, version::VersionTypes) = PackageSpec(name, uuid, version)
 
+
+"""
+    get_uuid(m::Module)
+
+Given a `Module`, find the `UUID` of the parent package to that `Module`.  If none can be
+found (e.g. `Main`, `Base`, anonymous modules, etc...) returns `nothing`.
+"""
+function get_uuid(m::Module)
+    return Base.PkgId(m).uuid
+end
+
+"""
+    get_version(pkg)
+
+Given a `UUID` identifying a package, returns the version of that package within the
+current project.  If the package cannot be found by the given UUID, throws an
+`ArgumentError`.
+"""
+function get_version(uuid::UUID)
+    ctx = Pkg.Types.Context()
+    matching_pkgs = filter(((u, e),) -> u == uuid, ctx.env.manifest)
+    if isempty(matching_pkgs)
+        throw(ArgumentError("Unable to find given UUID in environment"))
+    end
+    return first(matching_pkgs)[2].version
+end
+
 end # module
