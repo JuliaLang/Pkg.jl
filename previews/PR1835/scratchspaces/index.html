@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>9. Scratch Spaces · Pkg.jl</title><link rel="canonical" href="https://julialang.github.io/Pkg.jl/v1/scratchspaces/"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="Pkg.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit">Pkg.jl</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../"><strong>1.</strong> Introduction</a></li><li><a class="tocitem" href="../getting-started/"><strong>2.</strong> Getting Started</a></li><li><a class="tocitem" href="../managing-packages/"><strong>3.</strong> Managing Packages</a></li><li><a class="tocitem" href="../environments/"><strong>4.</strong> Working with Environments</a></li><li><a class="tocitem" href="../creating-packages/"><strong>5.</strong> Creating Packages</a></li><li><a class="tocitem" href="../compatibility/"><strong>6.</strong> Compatibility</a></li><li><a class="tocitem" href="../registries/"><strong>7.</strong> Registries</a></li><li><a class="tocitem" href="../artifacts/"><strong>8.</strong> Artifacts</a></li><li class="is-active"><a class="tocitem" href><strong>9.</strong> Scratch Spaces</a><ul class="internal"><li><a class="tocitem" href="#API-overview-1"><span>API overview</span></a></li><li><a class="tocitem" href="#Use-cases-1"><span>Use cases</span></a></li><li><a class="tocitem" href="#Tips-and-Tricks-1"><span>Tips and Tricks</span></a></li></ul></li><li><a class="tocitem" href="../glossary/"><strong>10.</strong> Glossary</a></li><li><a class="tocitem" href="../toml-files/"><strong>11.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></a></li><li><a class="tocitem" href="../repl/"><strong>11.</strong> REPL Mode Reference</a></li><li><a class="tocitem" href="../api/"><strong>13.</strong> API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href><strong>9.</strong> Scratch Spaces</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href><strong>9.</strong> Scratch Spaces</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/scratchspaces.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Scratch-Spaces-1"><a class="docs-heading-anchor" href="#Scratch-Spaces-1"><strong>9.</strong> Scratch Spaces</a><a class="docs-heading-anchor-permalink" href="#Scratch-Spaces-1" title="Permalink"></a></h1><div class="admonition is-compat"><header class="admonition-header">Julia 1.6</header><div class="admonition-body"><p>Pkg&#39;s Scratch Spaces functionality requires at least Julia 1.6.</p></div></div><p><code>Pkg</code> can manage and automatically garbage collect scratch spaces of temporary or readily-recreatable data. These spaces can contain datasets, text, binaries, or any other kind of data that would be convenient to store, but which is non-fatal to have garbage collected if it has not been accessed recently, or if the owning package has been uninstalled. As compared to <a href="../artifacts/#Artifacts-1">Artifacts</a>, these containers of data are mutable and should be treated as ephemeral; all usage of scratch spaces should assume that the data stored within them could be gone by the next time your code is run. In the current implementation, scratch spaces are removed during Pkg garbage collection if the scratch space has not been accessed for a period of time (see the <code>scratch_cleanup_period</code> keyword argument to <a href="@ref">Pkg.gc</a>), or if the owning package has been removed. Users can also request a full wipe of all scratch spaces to clean up unused disk space through <code>Pkg.Scratch.clear_scratchspaces!()</code>.</p><h2 id="API-overview-1"><a class="docs-heading-anchor" href="#API-overview-1">API overview</a><a class="docs-heading-anchor-permalink" href="#API-overview-1" title="Permalink"></a></h2><p>Scratch space usage is performed primarily through one function: <code>get_scratch!()</code>. It provides a single interface for creating and getting previously-created spaces, either tied to a package by its UUID, or as a global scratch space that can be accessed by any package. Here is an example where a package creates a scratch space that is namespaced to its own UUID:</p><pre><code class="language-julia">module ScratchExample
+using Pkg, Pkg.Scratch
+
+# This will be filled in inside `__init__()`
+download_cache = &quot;&quot;
+
+# Downloads a resource, stores it within a scratchspace
+function download_dataset(url)
+    fname = joinpath(download_cache, basename(url))
+    if !isfile(fname)
+        download(url, fname)
+    end
+    return fname
+end
+
+function __init__()
+    global download_cache = @get_scratch!(&quot;downloaded_files&quot;)
+end
+
+end # module ScratchExample</code></pre><p>Note that we initialize the <code>download_cache</code> within <code>__init__()</code> so that our packages are as relocatable as possible; we typically do not want to bake absolute paths into our precompiled files. This makes use of the <code>@get_scratch!()</code> macro, which is identical to the <code>get_scratch!()</code> method, except it automatically determines the UUID of the calling module, if possible. The user can manually pass in a <code>Module</code> as well for a slightly more verbose incantation:</p><pre><code class="language-julia">function __init__()
+    global download_cache = get_scratch!(&quot;downloaded_files&quot;, @__MODULE__)
+end</code></pre><p>If a user wishes to manually delete a scratch space, the method <code>delete_scratch!(key; pkg_uuid)</code> is the natural analog to <code>get_scratch!()</code>, however in general users will not need to do so, the scratch spaces will be garbage collected by <code>Pkg</code> automatically.</p><p>For a full listing of docstrings and methods, see the <a href="../api/#Scratch-Space-Reference-1">Scratch Space Reference</a> section.</p><h2 id="Use-cases-1"><a class="docs-heading-anchor" href="#Use-cases-1">Use cases</a><a class="docs-heading-anchor-permalink" href="#Use-cases-1" title="Permalink"></a></h2><p>Good use cases for a Pkg scratch space include:</p><ul><li><p>Caching downloads of files that must be routinely accessed and modified by a package.  Files that must be modified are a bad fit for the immutable <a href="../artifacts/#Artifacts-1">Artifacts</a> abstraction, and files can always be re-downloaded if the cache is wiped by the user.</p></li><li><p>Generated data that depends on the characteristics of the host system.  Examples are compiled binaries, fontcache system font folder inspection output, generated CUDA bitcode files, etc...  Objects that would be difficult to compute off of the user&#39;s machine, and that can be recreated without user intervention are a great fit.</p></li><li><p>Directories that should be shared between multiple packages in a single depot.  The scratch space keying mechanism makes it simple to provide scratch spaces that can be shared between different versions of a package, or even between different packages.  This allows packages to provide a scratch space where other packages can easily find the generated data, however the typical race condition warnings apply here; always design your access patterns assuming another process could be reading or writing to this scratch space at any time.</p></li></ul><p>Bad use cases for a Pkg scratch space include (but are not limited to):</p><ul><li><p>Anything that requires user input to regenerate.  Because scratch spaces can disappear, it is a bad experience for the user to need to answer questions at seemingly random times when the space must be rebuilt.</p></li><li><p>Storing data that is write-once, read-many times.  We suggest you use <a href="../artifacts/#Artifacts-1">Artifacts</a> for that, as they are much more persistent and are built to become portable (so that other machines do not have to generate the data, they can simple make use of the artifact by downloading it from a hosted location).  Scratch spaces generally should follow a write-many read-many access pattern.</p></li></ul><h2 id="Tips-and-Tricks-1"><a class="docs-heading-anchor" href="#Tips-and-Tricks-1">Tips and Tricks</a><a class="docs-heading-anchor-permalink" href="#Tips-and-Tricks-1" title="Permalink"></a></h2><blockquote><p>Can I trigger data regeneration if the scratch space is found to be empty/files are missing?</p></blockquote><p>Yes, this is quite simple; just check the contents of the directory when you first call <code>get_scratch!()</code>, and if it&#39;s empty, run your generation function:</p><pre><code class="language-julia">using Pkg, Pkg.Scratch
+
+function get_dataset_dir()
+    dataset_dir = @get_scratch!(&quot;dataset&quot;)
+    if isempty(readdir(dataset_dir))
+        perform_expensive_dataset_generation(dataset_dir)
+    end
+    return dataset_dir
+end</code></pre><blockquote><p>Can I create a scratch space that is not shared across versions of my package?</p></blockquote><p>Yes!  Make use of the <code>key</code> parameter and Pkg&#39;s ability to look up the current version of your package at compile-time:</p><pre><code class="language-julia">module VersionSpecificExample
+using Pkg, Pkg.Scratch
+
+# Get the current version at compile-time, that&#39;s fine it&#39;s not going to change. ;)
+const pkg_version = Pkg.API.get_version(Pkg.API.get_uuid(@__MODULE__))
+
+# This will be filled in by `__init__()`; it might change if we get deployed somewhere
+version_specific_scratch = Ref{String}()
+
+function __init__()
+    # This space will be unique between versions of my package that different major and
+    # minor versions, but allows patch releases to share the same.
+    scratch_name = &quot;data_for_version-$(pkg_version.major).$(pkg_version.minor)&quot;
+    global version_specific_scratch[] = @get_scratch!(scratch_name)
+end
+
+end # module</code></pre><blockquote><p>Can I use a scratch space as a temporary workspace, then turn it into an Artifact?</p></blockquote><p>Yes!  Once you&#39;re satisfied with your dataset that has been cooking inside a space, and you&#39;re ready to share it with the world as an immutable artifact, you can use <code>create_artifact()</code> to create an artifact from the space, <code>archive_artifact()</code> to get a tarball that you can upload somewhere, and <code>bind_artifact!()</code> to write out an <code>Artifacts.toml</code> that allows others to download and use it:</p><pre><code class="language-julia">using Pkg, Pkg.Scratch, Pkg.Artifacts
+
+function export_scratch(scratch_name::String, github_repo::String)
+    scratch_dir = @get_scratch!(scratch_name)
+
+    # Copy space directory over to an Artifact
+    hash = create_artifact() do artifact_dir
+        rm(artifact_dir)
+        cp(scratch_dir, artifact_dir)
+    end
+
+    # Archive artifact out to a tarball.  Since `upload_tarball()` is not a function that
+    # exists, users must either write it themselves (uploading to whatever hosting
+    # provider they prefer), or run each line of this `do`-block manually, upload the
+    # tarball manually, record its URL, and pass that to `bind_artifact!()`.
+    mktempdir() do upload_dir
+        tarball_path = joinpath(upload_dir, &quot;$(scratch_name).tar.gz&quot;)
+        tarball_hash = archive_artifact(hash, tarball_path)
+
+        # Upload tarball to a hosted site somewhere.  Note; this function does not
+        # exist, it&#39;s put here simply to show the flow of events.
+        tarball_url = upload_tarball(tarball_path)
+
+        # Bind artifact to an Artifacts.toml file in the current directory; this file can
+        # be used by others to download and use your newly-created Artifact!
+        bind_artifact!(
+            joinpath(@__DIR__, &quot;./Artifacts.toml&quot;),
+            scratch_name,
+            hash;
+            download_info=[(tarball_url, tarball_hash)],
+            force=true,
+        )
+    end
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../artifacts/">« <strong>8.</strong> Artifacts</a><a class="docs-footer-nextpage" href="../glossary/"><strong>10.</strong> Glossary »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Tuesday 26 May 2020 17:59">Tuesday 26 May 2020</span>. Using Julia version 1.4.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
