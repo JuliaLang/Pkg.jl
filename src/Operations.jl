@@ -148,8 +148,6 @@ end
 ####################
 # Registry Loading #
 ####################
-load_package_data(f::Base.Callable, path::String, version::VersionNumber) =
-    get(load_package_data(f, path, [version]), version, nothing)
 
 function load_versions(ctx, path::String; include_yanked=false)
     toml = parse_toml(path, "Versions.toml"; fakeit=true)
@@ -166,19 +164,24 @@ function load_versions(ctx, path::String; include_yanked=false)
     return versions
 end
 
-function load_package_data(f::Base.Callable, path::String, versions)
+load_package_data(::Type{T}, path::String, version::VersionNumber) where {T} =
+    get(load_package_data(T, path, [version]), version, nothing)
+
+# TODO: This function is very expensive. Optimize it
+function load_package_data(::Type{T}, path::String, versions::Vector{VersionNumber}) where {T}
     compressed = parse_toml(path, fakeit=true)
-    uncompressed = Dict{VersionNumber, Dict{String, f isa Type ? f : Any}}()
+    uncompressed = Dict{VersionNumber, Dict{String,T}}()
+    vsorted = sort(versions)
     for (vers, data) in compressed
         vs = VersionSpec(vers)
-        for v in sort(versions)
+        for v in vsorted
             v in vs || continue
-            uv = get!(uncompressed, v, Dict())
+            uv = get!(() -> Dict{String, T}(), uncompressed, v)
             for (key, value) in data
                 if haskey(uv, key)
                     @warn "Overlapping ranges for $(key) in $(repr(path)) for version $v."
                 else
-                    uv[key] = f(value)
+                    uv[key] = T(value)
                 end
             end
         end

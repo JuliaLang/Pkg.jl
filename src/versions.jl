@@ -87,8 +87,30 @@ end
 
 Base.hash(r::VersionBound, h::UInt) = hash(hash(r.t, h), r.n)
 
-VersionBound(s::AbstractString) =
-    s == "*" ? VersionBound() : VersionBound(map(x -> parse(Int, x), split(s, '.'))...)
+# Hot code
+function VersionBound(s::AbstractString)
+    s == "*" && return VersionBound()
+    l = lastindex(s)
+
+    p = findnext('.', s, 1)
+    b = p === nothing ? l : (p-1)
+    i = parse(Int64, SubString(s, 1, b))
+    p === nothing && return VersionBound(i)
+
+    a = p+1
+    p = findnext('.', s, a)
+    b = p === nothing ? l : (p-1)
+    j = parse(Int64, SubString(s, a, b))
+    p === nothing && return VersionBound(i, j)
+
+    a = p+1
+    p = findnext('.', s, a)
+    b = p === nothing ? l : (p-1)
+    k = parse(Int64, SubString(s, a, b))
+    p === nothing && return VersionBound(i, j, k)
+
+    error("invalid VersionBound string $(repr(s))")
+end
 
 ################
 # VersionRange #
