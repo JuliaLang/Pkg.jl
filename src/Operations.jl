@@ -170,6 +170,7 @@ load_package_data(::Type{T}, path::String, version::VersionNumber) where {T} =
 # TODO: This function is very expensive. Optimize it
 function load_package_data(::Type{T}, path::String, versions::Vector{VersionNumber}) where {T}
     compressed = parse_toml(path, fakeit=true)
+    compressed = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, compressed)
     uncompressed = Dict{VersionNumber, Dict{String,T}}()
     vsorted = sort(versions)
     for (vers, data) in compressed
