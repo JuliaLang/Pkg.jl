@@ -1226,9 +1226,9 @@ function download_verify_unpack(
         unpack(tarball_path, dest; verbose=verbose)
     finally
         if remove_tarball
-            Base.rm(tarball)
+            Base.rm(tarball_path)
             # Remove cached tarball hash, if it exists.
-            Base.rm(string(tarball, ".sha256"); force=true)
+            Base.rm(string(tarball_path, ".sha256"); force=true)
         end
     end
 
