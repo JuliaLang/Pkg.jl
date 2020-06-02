@@ -581,35 +581,77 @@ end
 # Precompilation #
 ##################
 
-const CTRL_C = '\x03'
-const precompile_script = """
-    import Pkg
+function _run_precompilation_script_setup()
     tmp = mktempdir()
     cd(tmp)
     empty!(DEPOT_PATH)
     pushfirst!(DEPOT_PATH, tmp)
-    # Prevent cloning the General registry by adding a fake one
-    mkdir("registries"); mkdir("registries/Registry")
-    open(io -> print(io, "name = \\\"Registry\\\"\\nuuid = \\\"37c07fec-e54c-4851-934c-2e3885e4053e\\\"\\nrepo = \\\"https://github.com/JuliaRegistries/Registry.git\\\"\\n[packages]\\n") ,"registries/Registry/Registry.toml", "w")
     touch("Project.toml")
-    ] activate .
+    Pkg.activate(".")
+    Pkg.generate("TestPkg")
+    mv("TestPkg", "TestPkg.jl")
+    tree_hash = cd("TestPkg.jl") do
+        run(`git init`)
+        run(`git add -A`)
+        run(`git commit -m 'first commit'`)
+        read(`git log --pretty=format:'%T'`, String)
+    end
+    # Prevent cloning the General registry by adding a fake one
+    mkpath("registries/Registry/T/TestPkg")
+    write("registries/Registry/Registry.toml", """
+        name = "Registry"
+        uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
+        repo = "https://github.com/JuliaRegistries/Registry.git"
+        [packages]
+        63082263-6d55-44e8-bcb3-c1c466e4f46d = { name = "TestPkg", path = "T/TestPkg" }
+        """)
+    write("registries/Registry/T/TestPkg/Compat.toml", """
+          ["0"]
+          julia = "1"
+          """)
+    write("registries/Registry/T/TestPkg/Deps.toml", """
+          ["0"]
+          Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+          """)
+    write("registries/Registry/T/TestPkg/Versions.toml", """
+          ["0.1.0"]
+          git-tree-sha1 = "$tree_hash"
+          """)
+    write("registries/Registry/T/TestPkg/Package.toml", """
+        name = "Example"
+        uuid = "63082263-6d55-44e8-bcb3-c1c466e4f46d"
+        repo = "$tmp/TestPkg.jl"
+        """)
+    return tmp
+end
+
+function _run_precompilation_script_artifact()
+    # Create simple artifact, bind it, then use it:
+    foo_hash = Pkg.Artifacts.create_artifact(dir -> touch(joinpath(dir, "foo")))
+    Artifacts.bind_artifact!("./Artifacts.toml", "foo", foo_hash)
+    # Also create multiple platform-specific ones because that's a codepath we need precompiled
+    Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=BinaryPlatforms.platform_key_abi())
+    Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=BinaryPlatforms.Linux(:x86_64), force=true)
+    Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=BinaryPlatforms.Windows(:x86_64), force=true)
+    Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=BinaryPlatforms.MacOS(:x86_64), force=true)
+    # Because @artifact_str doesn't work at REPL-level, we JIT out a file that we can include()
+    write("load_artifact.jl", """
+          Pkg.Artifacts.artifact"foo"
+          Pkg.Artifacts.artifact"foo_plat"
+          """)
+    foo_path = include("load_artifact.jl")
+end
+
+const CTRL_C = '\x03'
+const precompile_script = """
+    import Pkg
+    tmp = Pkg._run_precompilation_script_setup()
     $CTRL_C
-    Pkg.add("Test") # adding an stdlib doesn't require internet access
+    Pkg.add("TestPkg")
     ] add Te\t\t$CTRL_C
     ] st
     $CTRL_C
-    # Create simple artifact, bind it, then use it:
-    foo_hash = Pkg.Artifacts.create_artifact(dir -> touch(joinpath(dir, "foo")))
-    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo", foo_hash)
-    # Also create multiple platform-specific ones because that's a codepath we need precompiled
-    using Pkg.BinaryPlatforms
-    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=platform_key_abi())
-    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Linux(:x86_64), force=true)
-    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=Windows(:x86_64), force=true)
-    Pkg.Artifacts.bind_artifact!("./Artifacts.toml", "foo_plat", foo_hash; platform=MacOS(:x86_64), force=true)
-    # Because @artifact_str doesn't work at REPL-level, we JIT out a file that we can include()
-    open(io -> println(io, "Pkg.Artifacts.artifact\\\"foo\\\"; Pkg.Artifacts.artifact\\\"foo_plat\\\""), "load_artifact.jl", "w")
-    foo_path = include("load_artifact.jl")
+    Pkg._run_precompilation_script_artifact()
     rm(tmp; recursive=true)"""
 
 end # module
