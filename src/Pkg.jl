@@ -581,6 +581,7 @@ end
 # Precompilation #
 ##################
 
+using LibGit2: LibGit2
 function _run_precompilation_script_setup()
     tmp = mktempdir()
     cd(tmp)
@@ -589,12 +590,15 @@ function _run_precompilation_script_setup()
     touch("Project.toml")
     Pkg.activate(".")
     Pkg.generate("TestPkg")
+    uuid = Pkg.TOML.parsefile(joinpath("TestPkg", "Project.toml"))["uuid"]
     mv("TestPkg", "TestPkg.jl")
     tree_hash = cd("TestPkg.jl") do
-        run(`git init`)
-        run(`git add -A`)
-        run(`git commit -m 'first commit'`)
-        read(`git log --pretty=format:'%T'`, String)
+        repo = LibGit2.init(".")
+        LibGit2.add!(repo, "")
+        commit = LibGit2.commit(repo, "initial commit")
+        th = LibGit2.peel(LibGit2.GitTree, LibGit2.GitObject(repo, commit)) |> LibGit2.GitHash |> string
+        close(repo)
+        th
     end
     # Prevent cloning the General registry by adding a fake one
     mkpath("registries/Registry/T/TestPkg")
@@ -603,7 +607,7 @@ function _run_precompilation_script_setup()
         uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
         repo = "https://github.com/JuliaRegistries/Registry.git"
         [packages]
-        63082263-6d55-44e8-bcb3-c1c466e4f46d = { name = "TestPkg", path = "T/TestPkg" }
+        $uuid = { name = "TestPkg", path = "T/TestPkg" }
         """)
     write("registries/Registry/T/TestPkg/Compat.toml", """
           ["0"]
@@ -618,8 +622,8 @@ function _run_precompilation_script_setup()
           git-tree-sha1 = "$tree_hash"
           """)
     write("registries/Registry/T/TestPkg/Package.toml", """
-        name = "Example"
-        uuid = "63082263-6d55-44e8-bcb3-c1c466e4f46d"
+        name = "TestPkg"
+        uuid = "$uuid"
         repo = "$tmp/TestPkg.jl"
         """)
     return tmp
@@ -648,6 +652,8 @@ const precompile_script = """
     tmp = Pkg._run_precompilation_script_setup()
     $CTRL_C
     Pkg.add("TestPkg")
+    Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
+    Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
     ] add Te\t\t$CTRL_C
     ] st
     $CTRL_C
