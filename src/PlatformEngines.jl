@@ -734,8 +734,10 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
             auth_info["expires_at"] = expires_at
         end
     end
-    open(tmp, write=true) do io
-        TOML.print(io, auth_info, sorted=true)
+    let auth_info = auth_info
+        open(tmp, write=true) do io
+            TOML.print(io, auth_info, sorted=true)
+        end
     end
     mv(tmp, auth_file, force=true)
     return "Authorization: Bearer $(auth_info["access_token"])"
@@ -758,13 +760,13 @@ end
 
 function load_telemetry_file(file::AbstractString)
     if !ispath(file)
-        info, changed = Dict(), true
+        info, changed = TOML.DictType(), true
     else
         info, changed = try
             TOML.parsefile(file), false
         catch err
             @warn "replacing malformed telemetry file" file=file err=err
-            Dict(), true
+            TOML.DictType(), true
         end
     end
     # bail early if fully opted out
@@ -796,8 +798,10 @@ function load_telemetry_file(file::AbstractString)
     # write telemetry file atomically (if on same file system)
     mkpath(dirname(file))
     tmp = tempname()
-    open(tmp, write=true) do io
-        TOML.print(io, info, sorted=true)
+    let info = info
+        open(tmp, write=true) do io
+            TOML.print(io, info, sorted=true)
+        end
     end
     mv(tmp, file, force=true)
     # reparse file in case a different process wrote it first
@@ -1223,6 +1227,8 @@ function download_verify_unpack(
     finally
         if remove_tarball
             Base.rm(tarball_path)
+            # Remove cached tarball hash, if it exists.
+            Base.rm(string(tarball_path, ".sha256"); force=true)
         end
     end
 

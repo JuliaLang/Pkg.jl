@@ -1,13 +1,14 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+const DictType = Dict{String,Any}
 
 "TOML Table"
 struct Table
-    values::Dict{String,Any}
+    values::DictType
     defined::Bool
 end
 
-Table(defined::Bool) = Table(Dict{String,Any}(), defined)
+Table(defined::Bool) = Table(DictType(), defined)
 function Base.show(io::IO, tbl::Table, level::Int=1)
     Base.print(io, "T($(tbl.defined)){\n")
     for (k,v) in tbl.values
