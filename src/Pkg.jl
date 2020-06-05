@@ -593,9 +593,10 @@ function _run_precompilation_script_setup()
     uuid = Pkg.TOML.parsefile(joinpath("TestPkg", "Project.toml"))["uuid"]
     mv("TestPkg", "TestPkg.jl")
     tree_hash = cd("TestPkg.jl") do
+        sig = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
         repo = LibGit2.init(".")
         LibGit2.add!(repo, "")
-        commit = LibGit2.commit(repo, "initial commit")
+        commit = LibGit2.commit(repo, "initial commit"; author=sig, committer=sig)
         th = LibGit2.peel(LibGit2.GitTree, LibGit2.GitObject(repo, commit)) |> LibGit2.GitHash |> string
         close(repo)
         th
