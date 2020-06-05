@@ -18,6 +18,9 @@ The format of the version specifier is described in detail below.
 !!! info
     There is currently no way to give compatibility from the Pkg REPL mode so for now, one has to manually edit the project file.
 
+!!! info
+    Registration into Julia's General Registry requires compatibility entries to have [upper bounds](https://github.com/JuliaRegistries/RegistryCI.jl#automatic-merging-guidelines).
+
 ## Version specifier format
 
 Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver).
