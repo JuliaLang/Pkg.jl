@@ -285,34 +285,30 @@ Works out a compressed `VersionSpec` that permits everything in the `subset`,
 and nothing else from the `pool`.
 """
 function compressed_versionspec(pool, subset=pool)
-    # PREM-OPT: we keep resorting these, probably not required.
+    length(subset)==1 && return VersionSpec(only(subset))
+    # PREM-OPT: we keep re-sorting these, probably not required.
     sort!(pool)
     sort!(subset)
-    # PREM-OPT: no need to store all the elements in contiguous_subsets, just can store version range of end-points
-    contiguous_subsets = Vector{VersionNumber}[]
-    local cur_subset
+    @assert subset ⊆ pool
 
-    pool_ii = 1
-    in_run = false
-    for s in subset
-        if !in_run
-            while s != pool[pool_ii]
-                pool_ii += 1
-                @assert(pool_ii <= length(pool), "Exhaused pool without finding element of subset. this is impossile")
+    contiguous_subsets = VersionRange[]
+
+    range_start = first(subset)
+    pool_ii = findfirst(isequal(range_start), pool) + 1  # skip-forward til we have started
+    for s in @view subset[2:end]
+        if s != pool[pool_ii]
+            range_end = pool[pool_ii-1]  # previous element was last in this range
+            push!(contiguous_subsets, VersionRange(range_start, range_end))
+            range_start = s  # start a new range
+            while (s != pool[pool_ii])  # advance til time to start
+                pool_ii+=1
             end
-            cur_subset = Vector{VersionNumber}()
-            push!(contiguous_subsets, cur_subset)
-            in_run = true
-        end
-        # in_run
-        if s == pool[pool_ii]
-            push!(cur_subset, s)
-        else
-            in_run=false
         end
         pool_ii+=1
     end
-    return VersionSpec(VersionRange.(first.(contiguous_subsets), last.(contiguous_subsets)))
+    push!(contiguous_subsets, VersionRange(range_start, last(subset)))
+
+    return VersionSpec(contiguous_subsets)
 end
 
 ###################
