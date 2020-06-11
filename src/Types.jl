@@ -20,7 +20,7 @@ import Base: SHA1
 using SHA
 
 export UUID, pkgID, SHA1, VersionRange, VersionSpec,
-    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, err_rep,
+    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, compressed_versionspec, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
