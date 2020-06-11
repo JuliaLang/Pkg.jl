@@ -130,6 +130,8 @@ end
 VersionRange(b::VersionBound=VersionBound()) = VersionRange(b, b)
 VersionRange(t::Integer...)                  = VersionRange(VersionBound(t...))
 VersionRange(v::VersionNumber)               = VersionRange(VersionBound(v))
+VersionRange(lo::VersionNumber, hi::VersionNumber) = VersionRange(VersionBound(lo), VersionBound(hi))
+
 
 function VersionRange(s::AbstractString)
     m = match(r"^\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*)(?:\s*-\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*))?\s*$", s)
@@ -272,6 +274,46 @@ function Base.print(io::IO, s::VersionSpec)
 end
 Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
 
+
+"""
+    compressed_versionspec(pool, subset=pool)
+
+ - `pool`: all versions that exist (a superset of `subset`)
+ - `subset`: the subset of those versions that we want to include in the spec.
+
+Works out a compressed `VersionSpec` that permits everything in the `subset`,
+and nothing else from the `pool`.
+"""
+function compressed_versionspec(pool, subset=pool)
+    # PREM-OPT: we keep resorting these, probably not required.
+    sort!(pool)
+    sort!(subset)
+    # PREM-OPT: no need to store all the elements in contiguous_subsets, just can store version range of end-points
+    contiguous_subsets = Vector{VersionNumber}[]
+    local cur_subset
+
+    pool_ii = 1
+    in_run = false
+    for s in subset
+        if !in_run
+            while s != pool[pool_ii]
+                pool_ii += 1
+                @assert(pool_ii <= length(pool), "Exhaused pool without finding element of subset. this is impossile")
+            end
+            cur_subset = Vector{VersionNumber}()
+            push!(contiguous_subsets, cur_subset)
+            in_run = true
+        end
+        # in_run
+        if s == pool[pool_ii]
+            push!(cur_subset, s)
+        else
+            in_run=false
+        end
+        pool_ii+=1
+    end
+    return VersionSpec(VersionRange.(first.(contiguous_subsets), last.(contiguous_subsets)))
+end
 
 ###################
 # Semver notation #
