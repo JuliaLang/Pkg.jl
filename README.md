@@ -16,8 +16,7 @@ If you want to develop this package do the following steps:
 - `import Pkg` will now load the files in the cloned repo instead of the Pkg stdlib .
 - To test your changes, simply do `include("test/runtests.jl")`.
 
-If you need to build Julia from source with a git checkout of Pkg, then instead use `make DEPS_GIT=Pkg` when building Julia.
-You may need to do `make clean` beforehand.
+If you need to build Julia from source with a git checkout of Pkg, then instead use `make DEPS_GIT=Pkg` when building Julia. The `Pkg` repo is in `stdlib/Pkg`, and created initially with a detached `HEAD`. If you're doing this from a pre-existing Julia repository, you may need to `make clean` beforehand.
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://julialang.github.io/Pkg.jl/dev/
