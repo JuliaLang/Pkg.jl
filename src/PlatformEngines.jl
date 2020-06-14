@@ -420,7 +420,9 @@ function probe_platform_engines!(;verbose::Bool = false)
     if haskey(ENV, "BINARYPROVIDER_DOWNLOAD_ENGINE")
         engine = ENV["BINARYPROVIDER_DOWNLOAD_ENGINE"]
         es = split(engine)
-        dl_ngs = filter(e -> e[1].exec[1:length(es)] == es, download_engines)
+        dl_ngs = let es=es
+            filter(e -> e[1].exec[1:length(es)] == es, download_engines)
+        end
         if isempty(dl_ngs)
             all_ngs = join([d[1].exec[1] for d in download_engines], ", ")
             warn_msg  = "Ignoring BINARYPROVIDER_DOWNLOAD_ENGINE as its value "
@@ -437,7 +439,9 @@ function probe_platform_engines!(;verbose::Bool = false)
     if haskey(ENV, "BINARYPROVIDER_COMPRESSION_ENGINE")
         engine = ENV["BINARYPROVIDER_COMPRESSION_ENGINE"]
         es = split(engine)
-        comp_ngs = filter(e -> e[1].exec[1:length(es)] == es, compression_engines)
+        comp_ngs = let es=es
+            filter(e -> e[1].exec[1:length(es)] == es, compression_engines)
+        end
         if isempty(comp_ngs)
             all_ngs = join([c[1].exec[1] for c in compression_engines], ", ")
             warn_msg  = "Ignoring BINARYPROVIDER_COMPRESSION_ENGINE as its "

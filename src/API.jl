@@ -402,7 +402,9 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     function write_condensed_usage(usage_by_depot, fname)
         for (depot, usage) in usage_by_depot
             # Keep only the keys of the files that are still extant
-            usage = filter(p -> p[1] in all_index_files, usage)
+            usage = let oldusage = usage
+                filter(p -> p[1] in all_index_files, oldusage)
+            end
 
             # Expand it back into a dict of arrays-of-dicts
             usage = Dict(k => [Dict("time" => v)] for (k, v) in usage)
