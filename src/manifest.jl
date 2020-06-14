@@ -3,7 +3,11 @@
 ###########
 function read_field(name::String, default, info, map)
     x = get(info, name, default)
-    x == default && return default
+    if default === nothing
+        x === nothing && return nothing
+    else
+        x == default && return default
+    end
     x isa String || pkgerror("Expected field `$name` to be a String.")
     return map(x)
 end
