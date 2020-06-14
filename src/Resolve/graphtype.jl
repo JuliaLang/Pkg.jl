@@ -589,7 +589,9 @@ function color_string(c, str...)
         string(str...)
     end
 end
-pkgID_color(pkgID) = 17 + hash(pkgID) % 216  # Give each package a probably unique color
+
+const CONTRAST_COLORS =  [21:51; 55:119; 124:142; 160:184; 196:220];
+pkgID_color(pkgID) = CONTRAST_COLORS[1 + hash(pkgID) % end]  # Give each package a probably unique color
 logstr(pkgID, args...) = color_string(pkgID_color(pkgID), args...)
 logstr(pkgID) = logstr(pkgID, pkgID)
 
