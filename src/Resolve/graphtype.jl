@@ -582,7 +582,13 @@ function wipe_snapshots!(graph::Graph)
     return graph
 end
 
-color_string(c, str...) = string(Base.text_colors[c], str..., Base.text_colors[:default])
+function color_string(c, str...)
+    if stderr[:color]  #check if color has been disabled by `julia --color=no`
+        string(Base.text_colors[c], str..., Base.text_colors[:default])
+    else
+        string(str...)
+    end
+end
 pkgID_color(pkgID) = 17 + hash(pkgID) % 216  # Give each package a probably unique color
 logstr(pkgID, args...) = color_string(pkgID_color(pkgID), args...)
 logstr(pkgID) = logstr(pkgID, pkgID)
