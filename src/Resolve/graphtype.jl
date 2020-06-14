@@ -853,7 +853,7 @@ end
 function showlogjournal(io::IO, rlog::ResolveLog)
     journal = rlog.journal
     id(p) = p == UUID0 ? "[global event]" : pkgID(p, rlog)
-    padding = maximum(length(id(p)) for (p,_) in journal)
+    padding = maximum(length(id(p)) for (p,_) in journal; init=0)
     for (p,msg) in journal
         println(io, ' ', rpad(id(p), padding), ": ", msg)
     end

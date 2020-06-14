@@ -218,12 +218,8 @@ function set_maximum_version_registry!(ctx::Context, pkg::PackageSpec)
         pathvers = keys(load_versions(ctx, path; include_yanked=false))
         union!(pkgversions, pathvers)
     end
-    if length(pkgversions) == 0
-        pkg.version = VersionNumber(0)
-    else
-        max_version = maximum(pkgversions)
-        pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
-    end
+    max_version = maximum(pkgversions; init=VersionNumber(0))
+    pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
 end
 
 function collect_project!(ctx::Context, pkg::PackageSpec, path::String,
@@ -694,7 +690,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
     end
 
     widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
-    max_name = length(widths) == 0 ? 0 : maximum(widths)
+    max_name = maximum(widths; init=0)
 
     ########################################
     # Install from archives asynchronously #
@@ -906,7 +902,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     # toposort builds by dependencies
     order = dependency_order_uuids(ctx, map(first, builds))
     sort!(builds, by = build -> order[first(build)])
-    max_name = isempty(builds) ? 0 : maximum(textwidth.([build[2] for build in builds]))
+    max_name = maximum(build->textwidth(build[2]), builds; init=0)
     # build each package versions in a child process
     for (uuid, name, source_path, version) in builds
         pkg = PackageSpec(;uuid=uuid, name=name, version=version)
