@@ -2417,7 +2417,7 @@ end
             Pkg.add(Pkg.PackageSpec(uuid=exuuid, version=v"0.5.3"))
         catch e
             @test e isa ResolverError
-            @test occursin("possible versions are: 0.5.1 or uninstalled", e.msg)
+            @test occursin(r"possible versions are: .*0.5.1.* or uninstalled", e.msg)
         end
         Pkg.offline(false)
     end
