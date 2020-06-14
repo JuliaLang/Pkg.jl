@@ -292,9 +292,9 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     end
     # determine manifest file
     dir = abspath(project_dir)
-    manifest_file = project.manifest !== nothing ?
-        abspath(project.manifest) :
-        manifestfile_path(dir)
+    manifest_file = project.manifest
+    manifest_file = manifest_file !== nothing ?
+        abspath(manifest_file) : manifestfile_path(dir)::String
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
     uuids = Dict{String,Vector{UUID}}()
@@ -887,9 +887,9 @@ function collect_registries(depot::String)
         if isfile(file)
             registry = read_registry(file)
             verify_registry(registry)
-            spec = RegistrySpec(name = registry["name"],
-                                uuid = UUID(registry["uuid"]),
-                                url = get(registry, "repo", nothing),
+            spec = RegistrySpec(name = registry["name"]::String,
+                                uuid = UUID(registry["uuid"]::String),
+                                url = get(registry, "repo", nothing)::Union{String,Nothing},
                                 path = dirname(file))
             push!(regs, spec)
         end
@@ -1246,13 +1246,13 @@ function find_registered!(ctx::Context,
     for registry in collect_registries()
         reg_abspath = abspath(registry.path)
         data = read_registry(joinpath(registry.path, "Registry.toml"))
-        for (_uuid, pkgdata) in data["packages"]
-              uuid = UUID(_uuid)
-              name = pkgdata["name"]
-              path = joinpath(reg_abspath, pkgdata["path"])
-              push!(get!(ctx.env.uuids, name, UUID[]), uuid)
-              push!(get!(ctx.env.paths, uuid, String[]), path)
-              push!(get!(ctx.env.names, uuid, String[]), name)
+        for (_uuid::String, pkgdata::TOML.DictType) in data["packages"]
+            name = pkgdata["name"]::String
+            uuid = UUID(_uuid)
+            push!(get!(Vector{UUID}, ctx.env.uuids, name), uuid)
+            path = joinpath(reg_abspath, pkgdata["path"])
+            push!(get!(Vector{String}, ctx.env.names, uuid), name)
+            push!(get!(Vector{String}, ctx.env.paths, uuid), path)
         end
     end
     for d in (ctx.env.uuids, ctx.env.paths, ctx.env.names)

@@ -43,11 +43,11 @@ function OptionSpecs(decs::Vector{OptionDeclaration})::Dict{String, OptionSpec}
     specs = Dict()
     for x in decs
         opt_spec = OptionSpec(;x...)
-        @assert get(specs, opt_spec.name, nothing) === nothing # don't overwrite
+        @assert !haskey(specs, opt_spec.name) # don't overwrite
         specs[opt_spec.name] = opt_spec
         if opt_spec.short_name !== nothing
-            @assert get(specs, opt_spec.short_name, nothing) === nothing # don't overwrite
-            specs[opt_spec.short_name] = opt_spec
+            @assert !haskey(specs, opt_spec.short_name::String) # don't overwrite
+            specs[opt_spec.short_name::String] = opt_spec
         end
     end
     return specs
@@ -104,8 +104,8 @@ function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,Com
         @assert !haskey(specs, spec.canonical_name) "duplicate spec entry"
         specs[spec.canonical_name] = spec
         if spec.short_name !== nothing
-            @assert !haskey(specs, spec.short_name) "duplicate spec entry"
-            specs[spec.short_name] = spec
+            @assert !haskey(specs, spec.short_name::String) "duplicate spec entry"
+            specs[spec.short_name::String] = spec
         end
     end
     return specs

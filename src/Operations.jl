@@ -699,7 +699,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
     ########################################
     # Install from archives asynchronously #
     ########################################
-    jobs = Channel(ctx.num_concurrent_downloads);
+    jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads);
     results = Channel(ctx.num_concurrent_downloads);
     @async begin
         for pkg in pkgs_to_install
@@ -741,7 +741,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
 
     missed_packages = Tuple{PackageSpec, String}[]
     for i in 1:length(pkgs_to_install)
-        pkg, exc_or_success, bt_or_path = take!(results)
+        pkg::PackageSpec, exc_or_success, bt_or_path = take!(results)
         exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
                                                  sprint(Base.showerror, exc_or_success, bt_or_path))
         success, path = exc_or_success, bt_or_path
@@ -1649,8 +1649,9 @@ function diff_array(old_ctx::Union{Context,Nothing}, new_ctx::Context; manifest=
     end
     old = manifest ? load_manifest_deps(old_ctx) : load_direct_deps(old_ctx)
     # merge old and new into single array
-    all_uuids = union([pkg.uuid for pkg in old], [pkg.uuid for pkg in new])
-    return [(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
+    T, S = Union{UUID,Nothing}, Union{PackageSpec,Nothing}
+    all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
+    return Tuple{T,S,S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
 end
 
 function is_package_downloaded(ctx, pkg::PackageSpec)
@@ -1752,8 +1753,8 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
         old_ctx = Context(;env=env_diff)
     end
     # display
-    filter_uuids = [pkg.uuid for pkg in pkgs if pkg.uuid !== nothing]
-    filter_names = [pkg.name for pkg in pkgs if pkg.name !== nothing]
+    filter_uuids = [pkg.uuid::UUID for pkg in pkgs if pkg.uuid !== nothing]
+    filter_names = [pkg.name::String for pkg in pkgs if pkg.name !== nothing]
     diff = old_ctx !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
