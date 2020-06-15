@@ -583,7 +583,7 @@ function wipe_snapshots!(graph::Graph)
 end
 
 function color_string(c, str...)
-    if stderr[:color]  #check if color has been disabled by `julia --color=no`
+    if get(stderr, :color, false)  #check if color is allowed
         string(Base.text_colors[c], str..., Base.text_colors[:default])
     else
         string(str...)
