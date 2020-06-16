@@ -120,13 +120,6 @@ PkgD = "< 1.2.3"  # [0.0.0, 1.2.3) = [0.0.0, 1.2.2]
 
 ### Hyphen specifiers
 
-!!! compat "Julia 1.4"
-    Hyphen specifiers requires at least Julia 1.4, so it is recomended to also add
-    ```toml
-    [compat]
-    julia = "1.4"
-    ```
-    to the project file when using them.
 Hyphen syntax can also be used to specify version ranges. Make sure that you have a space on both sides of the hyphen.
 
 ```toml
@@ -162,6 +155,14 @@ PkgA = "0.2 - 4"       # 0.2.0 - 4.*.* = [0.2.0, 5.0.0)
 PkgA = "0.2 - 0.5"     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
 PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```
+
+!!! compat "Julia 1.4"
+    Hyphen specifiers requires at least Julia 1.4, so it is strongly recomended to also add
+    ```toml
+    [compat]
+    julia = "1.4"
+    ```
+    to the project file when using them.
 
 ## Fixing conflicts
 
