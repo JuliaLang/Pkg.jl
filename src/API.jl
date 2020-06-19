@@ -6,7 +6,7 @@ using UUIDs
 using Printf
 import Random
 using Dates
-using REPL
+using REPL: levsort
 import LibGit2
 
 import ..depots, ..depots1, ..logdir, ..devdir
