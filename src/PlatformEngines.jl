@@ -774,12 +774,17 @@ function load_telemetry_file(file::AbstractString)
     # some validity checking helpers
     is_valid_uuid(x) = false
     is_valid_salt(x) = false
+    is_valid_hlls(x) = false
     is_valid_vars(x) = false
     is_valid_uuid(x::Bool) = !x # false is valid, true is not
     is_valid_salt(x::Bool) = !x # false is valid, true is not
+    is_valid_hlls(x::Bool) = !x # false is valid, true is not
     is_valid_vars(x::Bool) = true
     is_valid_uuid(x::AbstractString) = occursin(Pkg.REPLMode.uuid_re, x)
     is_valid_salt(x::AbstractString) = occursin(r"^[0-9a-zA-Z]+$", x)
+    is_valid_hlls(x::AbstractArray) = length(x) == 2 &&
+        x[1] isa Integer && 0 ≤ x[1] < 1024 &&
+        x[2] isa Integer && 0 ≤ x[2] ≤ 64
     is_valid_vars(x::AbstractVector) = all(s isa AbstractString for s in x)
     # generate or fix system-specific info
     if !haskey(info, "client_uuid") || !is_valid_uuid(info["client_uuid"])
@@ -788,6 +793,12 @@ function load_telemetry_file(file::AbstractString)
     end
     if !haskey(info, "secret_salt") || !is_valid_salt(info["secret_salt"])
         info["secret_salt"] = randstring(36)
+        changed = true
+    end
+    if !haskey(info, "HyperLogLog") || !is_valid_hlls(info["HyperLogLog"])
+        bucket = rand(0:1023)
+        sample = trailing_zeros(rand(UInt64))
+        info["HyperLogLog"] = [bucket, sample]
         changed = true
     end
     if haskey(info, "ci_variables") && !is_valid_vars(info["ci_variables"])
@@ -858,6 +869,11 @@ function get_telemetry_headers(url::AbstractString)
         if !isempty(ci_info)
             push!(headers, "Julia-CI-Variables: "*join(ci_info, ';'))
         end
+    end
+    # HyperLogLog cardinality estimator sample
+    if info["HyperLogLog"] != false
+        bucket, sample = info["HyperLogLog"]
+        push!(headers, "Julia-HyperLogLog: $bucket,$sample")
     end
     # interactive session?
     push!(headers, "Julia-Interactive: $(isinteractive())")
