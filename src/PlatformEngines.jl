@@ -844,14 +844,20 @@ const CI_VARIABLES = [
     "TRAVIS",
 ]
 
-function get_telemetry_headers(url::AbstractString)
+function get_telemetry_headers(url::AbstractString, notify::Bool=true)
     headers = String[]
-    server_dir = get_server_dir(url)
+    server = pkg_server()
+    server_dir = get_server_dir(url, server)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol: 1.0")
     telemetry_file = joinpath(server_dir, "telemetry.toml")
+    notify &= !ispath(telemetry_file)
     info = load_telemetry_file(telemetry_file)
     get(info, "telemetry", true) == false && return headers
+    # legal (GDPR/CCPA) message about telemetry
+    notify && @info """
+    LEGAL NOTICE: package operations send anonymous data about your install to $server (your current package server), including the operating system and Julia versison you are running and a random client UUID. Running `Pkg.telemetryinfo()` will show exactly what is sent to. See https://julialang.org/legal/data/ for more details about what data is sent, what it is used for, how long it is retained, and how to opt out of sending this information.
+    """
     # general system information
     push!(headers, "Julia-Version: $VERSION")
     system = Pkg.BinaryPlatforms.triplet(Pkg.BinaryPlatforms.platform_key_abi())
