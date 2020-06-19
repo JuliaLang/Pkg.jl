@@ -4,7 +4,7 @@
 
 module PlatformEngines
 using SHA, Logging, UUIDs, Random
-import ...Pkg: Pkg, TOML, pkg_server, depots1
+import ...Pkg: Pkg, TOML, pkg_server, depots, depots1
 
 export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
        download_verify, unpack, package, download_verify_unpack,
@@ -759,14 +759,24 @@ function hash_data(strs::AbstractString...)
 end
 
 function load_telemetry_file(file::AbstractString)
+    info = TOML.DictType()
+    changed = true
     if !ispath(file)
-        info, changed = TOML.DictType(), true
+        for depot in depots()
+            defaults_file = joinpath(depot, "servers", "telemetry.toml")
+            if isfile(defaults_file)
+                try info = TOML.parsefile(defaults_file)
+                catch err
+                    @warn "ignoring malformed telemetry defaults file" file=defaults_file err=err
+                end
+                break
+            end
+        end
     else
-        info, changed = try
-            TOML.parsefile(file), false
+        try info = TOML.parsefile(file)
+            changed = false
         catch err
             @warn "replacing malformed telemetry file" file=file err=err
-            TOML.DictType(), true
         end
     end
     # bail early if fully opted out
@@ -791,7 +801,8 @@ function load_telemetry_file(file::AbstractString)
         info["client_uuid"] = string(uuid4())
         changed = true
     end
-    if !haskey(info, "secret_salt") || !is_valid_salt(info["secret_salt"])
+    if info["client_uuid"] isa AbstractString &&
+        (!haskey(info, "secret_salt") || !is_valid_salt(info["secret_salt"]))
         info["secret_salt"] = randstring(36)
         changed = true
     end
@@ -838,7 +849,8 @@ function get_telemetry_headers(url::AbstractString)
     server_dir = get_server_dir(url)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol: 1.0")
-    info = load_telemetry_file(joinpath(server_dir, "telemetry.toml"))
+    telemetry_file = joinpath(server_dir, "telemetry.toml")
+    info = load_telemetry_file(telemetry_file)
     get(info, "telemetry", true) == false && return headers
     # general system information
     push!(headers, "Julia-Version: $VERSION")
