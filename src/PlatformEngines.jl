@@ -844,6 +844,8 @@ const CI_VARIABLES = [
     "TRAVIS",
 ]
 
+const telemetry_file_lock = ReentrantLock()
+
 function get_telemetry_headers(url::AbstractString, notify::Bool=true)
     headers = String[]
     server = pkg_server()
@@ -852,7 +854,9 @@ function get_telemetry_headers(url::AbstractString, notify::Bool=true)
     push!(headers, "Julia-Pkg-Protocol: 1.0")
     telemetry_file = joinpath(server_dir, "telemetry.toml")
     notify &= !ispath(telemetry_file)
-    info = load_telemetry_file(telemetry_file)
+    info = lock(telemetry_file_lock) do
+        load_telemetry_file(telemetry_file)
+    end
     get(info, "telemetry", true) == false && return headers
     # legal (GDPR/CCPA) message about telemetry
     notify && @info """
