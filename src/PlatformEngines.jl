@@ -847,6 +847,10 @@ const CI_VARIABLES = [
 const telemetry_file_lock = ReentrantLock()
 const telemetry_notice_printed = Ref(false)
 
+telemetry_notice(server::AbstractString=pkg_server()) = """
+    LEGAL NOTICE: package operations send anonymous data about your system to $server (your current package server), including the operating system and Julia versisons you are using, and a random client UUID. Running `Pkg.telemetryinfo()` will show exactly what data is sent. See https://julialang.org/legal/data/ for more details about what this data is used for, how long it is retained, and how to opt out of sending it.
+    """
+
 function get_telemetry_headers(url::AbstractString, notify::Bool=true)
     headers = String[]
     server = pkg_server()
@@ -862,9 +866,7 @@ function get_telemetry_headers(url::AbstractString, notify::Bool=true)
     # legal (GDPR/CCPA) message about telemetry
     if notify && !telemetry_notice_printed[]
         telemetry_notice_printed[] = true
-        @info """
-        LEGAL NOTICE: package operations send anonymous data about your install to $server (your current package server), including the operating system and Julia versison you are running and a random client UUID. Running `Pkg.telemetryinfo()` will show exactly what is sent to. See https://julialang.org/legal/data/ for more details about what data is sent, what it is used for, how long it is retained, and how to opt out of sending this information.
-        """
+        @info telemetry_notice()
     end
     # general system information
     push!(headers, "Julia-Version: $VERSION")
