@@ -31,8 +31,7 @@ Since this tarball contains a folder `bin`, and a text file named `socrates` wit
 using Pkg.Artifacts
 
 rootpath = artifact"socrates"
-
-open(joinpath(root, "bin", "socrates")) do file
+open(joinpath(rootpath, "bin", "socrates")) do file
     println(read(file, String))
 end
 ```
@@ -49,7 +48,7 @@ println("sha256: ", bytes2hex(open(sha256, filename)))
 println("git-tree-sha1: ", Tar.tree_hash(IOBuffer(inflate_gzip(filename))))
 ```
 
-To access this artifact from within a package you create, place the `Artifacts.toml` at the root of your package, adjacent to `Project.toml`. Then, make sure to add `Pkg` in your `deps` and set `julia = "1.3"` in your `compat` section.
+To access this artifact from within a package you create, place the `Artifacts.toml` at the root of your package, adjacent to `Project.toml`. Then, make sure to add `Pkg` in your `deps` and set `julia = "1.3"` or higher in your `compat` section.
 
 ## `Artifacts.toml` files
 
