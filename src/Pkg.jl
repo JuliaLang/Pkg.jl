@@ -27,7 +27,8 @@ function pkg_server()
 end
 
 function telemetryinfo(io::IO = stdout)
-    for header in Pkg.PlatformEngines.get_telemetry_headers(pkg_server())
+    headers = Pkg.PlatformEngines.get_telemetry_headers(pkg_server(), false)
+    for header in headers
         println(io, header)
     end
 end
