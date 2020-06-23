@@ -7,6 +7,49 @@
 These containers, (called "Artifacts") can be created locally, hosted anywhere, and automatically downloaded and unpacked upon installation of your Julia package.
 This mechanism is also used to provide the binary dependencies for packages built with [`BinaryBuilder.jl`](https://github.com/JuliaPackaging/BinaryBuilder.jl).
 
+## Basic Usage
+
+`Pkg` artifacts are declared in an `Artifacts.toml` file, which can be placed in your current directory or in the root of your package.
+Currently, `Pkg` supports downloading of tarfiles (which can be compressed) from a URL.
+Following is a minimal `Artifacts.toml` file which will permit the downloading of a `socrates.tar.gz` file from `github.com`.
+In this example, a single artifact, given the name `socrates`, is defined.
+
+```TOML
+# a simple Artifacts.toml file
+[socrates]
+git-tree-sha1 = "43563e7631a7eafae1f9f8d9d332e3de44ad7239"
+
+    [[socrates.download]]
+    url = "https://github.com/staticfloat/small_bin/raw/master/socrates.tar.gz"
+    sha256 = "e65d2f13f2085f2c279830e863292312a72930fee5ba3c792b14c33ce5c5cc58"
+```
+
+If this `Artifacts.toml` file is placed in your current directory, then `socrates.tar.gz` can be downloaded, unpacked and used with `artifact"socrates"`.
+Since this tarball contains a folder `bin`, and a text file named `socrates` within that folder, we could access the content of that file as follows.
+
+```julia
+using Pkg.Artifacts
+
+rootpath = artifact"socrates"
+open(joinpath(rootpath, "bin", "socrates")) do file
+    println(read(file, String))
+end
+```
+
+If you have an existing tarball that is accessible via a `url`, it could also be be accessed in this manner.
+To create the `Artifacts.toml` you must compute two hashes: the `sha256` hash of the download file, and the `git-tree-sha1` of the unpacked content.
+These can be computed as follows.
+
+```julia
+using Tar, Inflate, SHA
+
+filename = "socrates.tar.gz"
+println("sha256: ", bytes2hex(open(sha256, filename)))
+println("git-tree-sha1: ", Tar.tree_hash(IOBuffer(inflate_gzip(filename))))
+```
+
+To access this artifact from within a package you create, place the `Artifacts.toml` at the root of your package, adjacent to `Project.toml`. Then, make sure to add `Pkg` in your `deps` and set `julia = "1.3"` or higher in your `compat` section.
+
 ## `Artifacts.toml` files
 
 `Pkg` provides an API for working with artifacts, as well as a TOML file format for recording artifact usage in your packages, and to automate downloading of artifacts at package install time.
