@@ -803,12 +803,12 @@ function load_telemetry_file(file::AbstractString)
     end
     if info["client_uuid"] isa AbstractString &&
         (!haskey(info, "secret_salt") || !is_valid_salt(info["secret_salt"]))
-        info["secret_salt"] = randstring(36)
+        info["secret_salt"] = randstring(RandomDevice(), 36)
         changed = true
     end
     if !haskey(info, "HyperLogLog") || !is_valid_hlls(info["HyperLogLog"])
-        bucket = rand(0:1023)
-        sample = trailing_zeros(rand(UInt64))
+        bucket = rand(RandomDevice(), 0:1023)
+        sample = trailing_zeros(rand(RandomDevice(), UInt64))
         info["HyperLogLog"] = [bucket, sample]
         changed = true
     end
