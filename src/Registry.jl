@@ -76,11 +76,12 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-update(regs::Vector{RegistrySpec} = Types.collect_registries(depots1()); kwargs...) =
+update(regs::Vector{RegistrySpec} = RegistrySpec[]; kwargs...) =
     update(Context(), regs; kwargs...)
 function update(ctx::Context,
-                regs::Vector{RegistrySpec} = Types.collect_registries(depots1());
+                regs::Vector{RegistrySpec} = RegistrySpec[];
                 kwargs...)
+    isempty(regs) && (regs = Types.collect_registries(depots1()))
     Context!(ctx; kwargs...)
     Types.update_registries(ctx, regs; force=true)
 end
