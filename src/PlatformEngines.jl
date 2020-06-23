@@ -876,8 +876,11 @@ function get_telemetry_headers(url::AbstractString, notify::Bool=true)
     if info["client_uuid"] != false
         push!(headers, "Julia-Client-UUID: $(info["client_uuid"])")
         if info["secret_salt"] != false
-            project_hash = hash_data("project", Base.active_project(), info["secret_salt"])
-            push!(headers, "Julia-Project-Hash: $project_hash")
+            project = Base.active_project()
+            if project !== nothing
+                project_hash = hash_data("project", project, info["secret_salt"])
+                push!(headers, "Julia-Project-Hash: $project_hash")
+            end
         end
     end
     # CI indicator variables
