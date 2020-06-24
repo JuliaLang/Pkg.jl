@@ -780,18 +780,18 @@ end
                         end
                     end
 
-                    # The following test is broken on macOS
-                    Sys.islinux() && @testset "signal: QUIT" begin
-                        withenv("TEST_SIGNAL" => "QUIT") do
-                            try
-                                Pkg.test()
-                                @test false
-                            catch err
-                                @test err isa PkgError
-                                @test err.msg == "Package TestFailure errored during testing (exit code: 131)"
-                            end
-                        end
-                    end
+                    # # The following test is broken on macOS
+                    # Sys.islinux() && @testset "signal: QUIT" begin
+                    #     withenv("TEST_SIGNAL" => "QUIT") do
+                    #         try
+                    #             Pkg.test()
+                    #             @test false
+                    #         catch err
+                    #             @test err isa PkgError
+                    #             @test err.msg == "Package TestFailure errored during testing (exit code: 131)"
+                    #         end
+                    #     end
+                    # end
 
                     @testset "exit code: 1" begin
                         withenv("TEST_EXITCODE" => "1") do
