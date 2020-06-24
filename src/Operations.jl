@@ -113,17 +113,17 @@ function is_instantiated(ctx::Context)::Bool
     return all(pkg -> is_package_downloaded(ctx, pkg), pkgs)
 end
 
-function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec})
+function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
     manifest = ctx.env.manifest
     empty!(manifest)
-    #find_registered!(ctx.env, [pkg.uuid for pkg in pkgs]) # Is this necessary? its for `load_deps`...
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
                              tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo)
         is_stdlib(pkg.uuid) && (entry.version = nothing) # do not set version for stdlibs
-        entry.deps = load_deps(ctx, pkg)
+        entry.deps = deps_map[pkg.uuid]
         ctx.env.manifest[pkg.uuid] = entry
     end
+    prune_manifest(ctx)
 end
 
 # TODO: Should be included in Base
@@ -223,22 +223,6 @@ function set_maximum_version_registry!(ctx::Context, pkg::PackageSpec)
     else
         max_version = maximum(pkgversions)
         pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
-    end
-end
-
-function load_deps(ctx::Context, pkg::PackageSpec)::Dict{String,UUID}
-    if tracking_registered_version(pkg)
-        for path in registered_paths(ctx, pkg.uuid)
-            data = load_package_data(UUID, joinpath(path, "Deps.toml"), pkg.version)
-            data !== nothing && return data
-        end
-        return Dict{String,UUID}()
-    else
-        path = project_rel_path(ctx, source_path(ctx, pkg))
-        project_file = projectfile_path(path; strict=true)
-        project_file === nothing && pkgerror("could not find Project file for package $(pkg.name)")
-        project = read_project(project_file)
-        return project.deps
     end
 end
 
@@ -380,7 +364,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
         names[pkg.uuid] = pkg.name
     end
     reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs)
-    graph = deps_graph(ctx, names, reqs, fixed)
+    graph, deps_map = deps_graph(ctx, names, reqs, fixed)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
 
@@ -400,6 +384,24 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # TODO: We already parse the Versions.toml file for each package in deps_graph but this
     # function ends up reparsing it. Consider caching the earlier result.
     load_tree_hashes!(ctx, pkgs)
+    final_deps_map = Dict{UUID, Dict{String, UUID}}()
+    for pkg in pkgs
+        deps = begin
+            if pkg.uuid in keys(fixed)
+                deps_fixed = Dict{String, UUID}()
+                for dep in keys(fixed[pkg.uuid].requires)
+                    deps_fixed[names[dep]] = dep
+                end
+                deps_fixed
+            else
+                deps_map[pkg.uuid][pkg.version]
+            end
+        end
+        # julia is an implicit dependency
+        filter!(d -> d.first != "julia", deps)
+        final_deps_map[pkg.uuid] = deps
+    end
+    return final_deps_map
 end
 
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
@@ -490,7 +492,8 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
         end
     end
 
-    return Resolve.Graph(all_versions, all_deps, all_compat, uuid_to_name, reqs, fixed, #=verbose=# ctx.graph_verbose)
+    return Resolve.Graph(all_versions, all_deps, all_compat, uuid_to_name, reqs, fixed, #=verbose=# ctx.graph_verbose),
+           all_deps
 end
 
 function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
@@ -884,6 +887,9 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             version = ctx.env.pkg.version
         else
             entry = manifest_info(ctx, uuid)
+            if entry === nothing
+                error("could not find entry with uuid $uuid in manifest $(ctx.env.manifest_file)")
+            end
             name = entry.name
             if entry.tree_hash !== nothing
                 path = find_installed(name, uuid, entry.tree_hash)
@@ -1098,8 +1104,8 @@ function targeted_resolve(ctx::Context, pkgs::Vector{PackageSpec}, preserve::Pre
         pkgs = load_direct_deps(ctx, pkgs; preserve=preserve)
     end
     check_registered(ctx, pkgs)
-    resolve_versions!(ctx, pkgs)
-    return pkgs
+    deps_map = resolve_versions!(ctx, pkgs)
+    return pkgs, deps_map
 end
 
 function _resolve(ctx::Context, pkgs::Vector{PackageSpec}, preserve::PreserveLevel)
@@ -1119,8 +1125,8 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     end
     foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
     # resolve
-    pkgs = _resolve(ctx, pkgs, preserve)
-    update_manifest!(ctx, pkgs)
+    pkgs, deps_map = _resolve(ctx, pkgs, preserve)
+    update_manifest!(ctx, pkgs, deps_map)
     new_apply = download_source(ctx, pkgs)
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
@@ -1141,8 +1147,8 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     # resolve & apply package versions
-    pkgs = _resolve(ctx, pkgs, preserve)
-    update_manifest!(ctx, pkgs)
+    pkgs, deps_map = _resolve(ctx, pkgs, preserve)
+    update_manifest!(ctx, pkgs, deps_map)
     new_apply = download_source(ctx, pkgs; readonly=true)
     download_artifacts(ctx, pkgs; platform=platform)
     write_env(ctx.env) # write env before building
@@ -1206,9 +1212,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     end
     pkgs = load_direct_deps(ctx, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
     check_registered(ctx, pkgs)
-    resolve_versions!(ctx, pkgs)
-    prune_manifest(ctx)
-    update_manifest!(ctx, pkgs)
+    deps_map = resolve_versions!(ctx, pkgs)
+    update_manifest!(ctx, pkgs, deps_map)
     new_apply = download_source(ctx, pkgs)
     download_artifacts(ctx, pkgs)
     write_env(ctx.env) # write env before building
@@ -1245,8 +1250,8 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     pkgs = load_direct_deps(ctx, pkgs)
     check_registered(ctx, pkgs)
 
-    resolve_versions!(ctx, pkgs)
-    update_manifest!(ctx, pkgs)
+    pkgs, deps_map = _resolve(ctx, pkgs, PRESERVE_TIERED)
+    update_manifest!(ctx, pkgs, deps_map)
 
     new = download_source(ctx, pkgs)
     download_artifacts(ctx, pkgs)
@@ -1283,8 +1288,8 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
         pkgs = load_direct_deps(ctx, pkgs)
         check_registered(ctx, pkgs)
-        resolve_versions!(ctx, pkgs)
-        update_manifest!(ctx, pkgs)
+        pkgs, deps_map = _resolve(ctx, pkgs, PRESERVE_TIERED)
+        update_manifest!(ctx, pkgs, deps_map)
         new = download_source(ctx, pkgs)
         download_artifacts(ctx, new)
         write_env(ctx.env) # write env before building
