@@ -582,12 +582,9 @@ function wipe_snapshots!(graph::Graph)
     return graph
 end
 
+
 function color_string(c, str...)
-    if get(stderr, :color, false)  #check if color is allowed
-        string(Base.text_colors[c], str..., Base.text_colors[:default])
-    else
-        string(str...)
-    end
+    return sprint((io, args) -> printstyled(io, args...; color=c), str, context=stderr)
 end
 
 const CONTRAST_COLORS =  [21:51; 55:119; 124:142; 160:184; 196:220];
