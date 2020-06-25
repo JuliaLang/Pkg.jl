@@ -1,7 +1,7 @@
 module NewTests
 
 using  Test, UUIDs, Dates
-import Pkg, LibGit2
+import ..Pkg, LibGit2
 using  Pkg.Types: PkgError
 using  Pkg.Resolve: ResolverError
 using  ..Utils
@@ -2111,6 +2111,16 @@ end
         dir = joinpath(@__DIR__, "manifest", "bad")
         for bad_manifest in joinpath.(dir, readdir(dir))
             @test_throws PkgError Pkg.Types.read_manifest(bad_manifest)
+        end
+    end
+    # pruning manifest
+    dir = joinpath(@__DIR__, "manifest", "unpruned")
+    isolate(loaded_depot=true) do
+        mktempdir() do tmp
+            cp(dir, joinpath(tmp, "unpruned"))
+            Pkg.activate(joinpath(tmp, "unpruned"))
+            Pkg.resolve()
+            @test !occursin("Crayons", read(joinpath(tmp, "unpruned", "Manifest.toml"), String))
         end
     end
     # manifest read/write
