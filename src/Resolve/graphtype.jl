@@ -587,8 +587,18 @@ function color_string(c, str...)
     return sprint((io, args) -> printstyled(io, args...; color=c), str, context=stderr)
 end
 
-const CONTRAST_COLORS =  [21:51; 55:119; 124:142; 160:184; 196:220];
-pkgID_color(pkgID) = CONTRAST_COLORS[1 + hash(pkgID) % end]  # Give each package a probably unique color
+# system colors excluding greys, bright-yellow and dark-blue
+const CONFLICT_COLORS = [5,1,6,3,2,13,12,9,10];
+const pkgID_color = let  # Cycle through each color in turn when a new color is needed
+    pkgID2color = Dict{String, Int}()
+    cur_color_index = 0;
+    function pkgID_color(pkgID)
+        get!(pkgID2color, pkgID) do
+            cur_color_index+=1
+            CONFLICT_COLORS[mod1(cur_color_index, end)]
+        end
+    end
+end
 logstr(pkgID, args...) = color_string(pkgID_color(pkgID), args...)
 logstr(pkgID) = logstr(pkgID, pkgID)
 
