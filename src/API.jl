@@ -227,6 +227,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         Types.clone_default_registries(ctx)
         Types.update_registries(ctx; force=true)
     end
+    Operations.prune_manifest(ctx)
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT
             for (name::String, uuid::UUID) in ctx.env.project.deps
