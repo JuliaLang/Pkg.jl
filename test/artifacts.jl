@@ -303,7 +303,10 @@ end
             with_artifacts_directory(dir) do
                 @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
                 @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
-                    @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                    # Only warn on wrong tree hash for now (see Pkg.jl#1885)
+                    # @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                    path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                    @test endswith(path, "0000000000000000000000000000000000000000")
                 end
             end
         end
