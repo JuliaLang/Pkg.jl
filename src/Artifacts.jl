@@ -786,7 +786,9 @@ function download_artifact(
             msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
             msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
             @error(msg)
-            return false
+            # Tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
+            # so we return true here and only raise the warning on the lines above.
+            # return false
         end
     end
 
