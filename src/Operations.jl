@@ -627,7 +627,12 @@ end
 function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec}; platform::Platform=platform_key_abi(),
                             verbose::Bool=false)
     # Filter out packages that have no source_path()
-    pkg_roots = String[p for p in source_path.((ctx,), pkgs) if p !== nothing]
+    # pkg_roots = String[p for p in source_path.((ctx,), pkgs) if p !== nothing]  # this runs up against inference limits?
+    pkg_roots = String[]
+    for pkg in pkgs
+        p = source_path(ctx, pkg)
+        p !== nothing && push!(pkg_roots, p)
+    end
     return download_artifacts(ctx, pkg_roots; platform=platform, verbose=verbose)
 end
 
