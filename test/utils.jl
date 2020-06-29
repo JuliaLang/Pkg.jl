@@ -13,7 +13,6 @@ const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
 function isolate(fn::Function; loaded_depot=false, kwargs...)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
-    old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
     old_working_directory = pwd()
     old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
@@ -32,7 +31,6 @@ function isolate(fn::Function; loaded_depot=false, kwargs...)
 
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
-        Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
         Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
@@ -62,7 +60,6 @@ function isolate(fn::Function; loaded_depot=false, kwargs...)
         empty!(DEPOT_PATH)
         append!(LOAD_PATH, old_load_path)
         append!(DEPOT_PATH, old_depot_path)
-        Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
         cd(old_working_directory)
         Pkg.REPLMode.TEST_MODE[] = false # reset unconditionally
@@ -73,7 +70,6 @@ end
 function temp_pkg_dir(fn::Function;rm=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
-    old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
     old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
     try
@@ -88,7 +84,6 @@ function temp_pkg_dir(fn::Function;rm=true)
         end
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
-        Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
         Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
         withenv("JULIA_PROJECT" => nothing,
@@ -115,7 +110,6 @@ function temp_pkg_dir(fn::Function;rm=true)
         empty!(DEPOT_PATH)
         append!(LOAD_PATH, old_load_path)
         append!(DEPOT_PATH, old_depot_path)
-        Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
         Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
     end
