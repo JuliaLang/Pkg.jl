@@ -3,14 +3,6 @@
 A package is a project with a `name`, `uuid` and `version` entry in the `Project.toml` file, and a `src/PackageName.jl` file that defines the module `PackageName`.
 This file is executed when the package is loaded.
 
-!!! note
-    If you have an *existing* package from an older version of Julia (using a `REQUIRE`
-    file rather than `Project.toml`), then you can generate a `Project.toml` file by first creating a [`gen_project.jl`](https://github.com/JuliaLang/Pkg.jl/blob/934f8b71eb436da6d2bdb30ccfc80e5e11891c5b/bin/gen_project.jl)
-    file in your desired package (create a new file called `gen_project.jl` and then paste in the code from [here](https://github.com/JuliaLang/Pkg.jl/blob/934f8b71eb436da6d2bdb30ccfc80e5e11891c5b/bin/gen_project.jl)). Next, navigate to the development directory of your package and then run the script with `julia gen_project.jl` from the terminal.
-    This has to be done (once) before a new release can be registered for an older package.
-    (Delete `REQUIRE` and commit the resulting `Project.toml` after checking it for
-    correctness and adding a `version = "..."` line.)
-
 ### Generating files for a package
 
 !!! note
