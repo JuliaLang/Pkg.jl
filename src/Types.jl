@@ -1109,7 +1109,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
     registry_urls = nothing
-    for reg in unique(r -> r.uuid, find_installed_registries(ctx, regs))
+    for reg in unique(r -> r.uuid, find_installed_registries(ctx, regs); seen=Set{Union{UUID,Nothing}}())
         let reg=reg
             regpath = pathrepr(reg.path)
             if isfile(joinpath(reg.path, ".tree_info.toml"))
