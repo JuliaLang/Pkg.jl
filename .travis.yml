@@ -2,12 +2,16 @@ language: julia
 
 julia:
   # - 1.0
-  - 1.4
+  # - 1.4
   - nightly
 
 os:
   - linux
   - osx
+
+env:
+- JULIA_PKG_SERVER="https://pkg.julialang.org"
+- JULIA_PKG_SERVER=""
 
 notifications:
   email: false
@@ -33,7 +37,7 @@ script:
 jobs:
   include:
     - stage: docs
-      julia: 1.4
+      julia: nightly
       os: linux
       script:
         - julia -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"))'
