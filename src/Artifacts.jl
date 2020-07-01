@@ -390,7 +390,7 @@ end
 Given an `entry` for the artifact named `name`, located within the file `artifacts_toml`,
 returns the `Platform` object that this entry specifies.  Returns `nothing` on error.
 """
-function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
+function unpack_platform(entry::Dict, name::String, artifacts_toml::String)::Union{Nothing,Platform}
     if !haskey(entry, "os")
         @error("Invalid artifacts file at '$(artifacts_toml)': platform-specific artifact entry '$name' missing 'os' key")
         return nothing
@@ -403,9 +403,9 @@ function unpack_platform(entry::Dict, name::String, artifacts_toml::String)
 
     # Helpers to pull out `Symbol`s and `VersionNumber`s while preserving `nothing`.
     nosym(x::Nothing) = nothing
-    nosym(x) = Symbol(lowercase(x))
+    nosym(x) = Symbol(lowercase(x))::Symbol
     nover(x::Nothing) = nothing
-    nover(x) = VersionNumber(x)
+    nover(x) = VersionNumber(x)::VersionNumber
 
     # Extract architecture, libc, libgfortran version and cxxabi (if given)
     arch = nosym(get(entry, "arch", nothing))

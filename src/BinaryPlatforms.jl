@@ -255,7 +255,7 @@ julia> arch(MacOS())
 :x86_64
 ```
 """
-arch(p::Platform) = p.arch
+arch(p::Platform) = p.arch::Symbol
 arch(u::UnknownPlatform) = nothing
 
 """
@@ -271,7 +271,7 @@ julia> libc(Linux(:aarch64))
 julia> libc(FreeBSD(:x86_64))
 ```
 """
-libc(p::Platform) = p.libc
+libc(p::Platform) = p.libc::Union{Nothing,Symbol}
 libc(u::UnknownPlatform) = nothing
 
 """
@@ -288,7 +288,7 @@ julia> call_abi(FreeBSD(:armv7l))
 :eabihf
 ```
 """
-call_abi(p::Platform) = p.call_abi
+call_abi(p::Platform) = p.call_abi::Union{Nothing,Symbol}
 call_abi(u::UnknownPlatform) = nothing
 
 """
@@ -301,7 +301,7 @@ julia> compiler_abi(Linux(:x86_64))
 CompilerABI()
 ```
 """
-compiler_abi(p::Platform) = p.compiler_abi
+compiler_abi(p::Platform) = p.compiler_abi::CompilerABI
 compiler_abi(p::UnknownPlatform) = CompilerABI()
 
 # Also break out CompilerABI getters for our platforms

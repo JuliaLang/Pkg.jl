@@ -218,12 +218,8 @@ function set_maximum_version_registry!(ctx::Context, pkg::PackageSpec)
         pathvers = keys(load_versions(ctx, path; include_yanked=false))
         union!(pkgversions, pathvers)
     end
-    if length(pkgversions) == 0
-        pkg.version = VersionNumber(0)
-    else
-        max_version = maximum(pkgversions)
-        pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
-    end
+    max_version = maximum(pkgversions; init=VersionNumber(0))
+    pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
 end
 
 function collect_project!(ctx::Context, pkg::PackageSpec, path::String,
@@ -631,7 +627,12 @@ end
 function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec}; platform::Platform=platform_key_abi(),
                             verbose::Bool=false)
     # Filter out packages that have no source_path()
-    pkg_roots = String[p for p in source_path.((ctx,), pkgs) if p !== nothing]
+    # pkg_roots = String[p for p in source_path.((ctx,), pkgs) if p !== nothing]  # this runs up against inference limits?
+    pkg_roots = String[]
+    for pkg in pkgs
+        p = source_path(ctx, pkg)
+        p !== nothing && push!(pkg_roots, p)
+    end
     return download_artifacts(ctx, pkg_roots; platform=platform, verbose=verbose)
 end
 
@@ -694,12 +695,12 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
     end
 
     widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
-    max_name = length(widths) == 0 ? 0 : maximum(widths)
+    max_name = maximum(widths; init=0)
 
     ########################################
     # Install from archives asynchronously #
     ########################################
-    jobs = Channel(ctx.num_concurrent_downloads);
+    jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads);
     results = Channel(ctx.num_concurrent_downloads);
     @async begin
         for pkg in pkgs_to_install
@@ -741,7 +742,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
 
     missed_packages = Tuple{PackageSpec, String}[]
     for i in 1:length(pkgs_to_install)
-        pkg, exc_or_success, bt_or_path = take!(results)
+        pkg::PackageSpec, exc_or_success, bt_or_path = take!(results)
         exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
                                                  sprint(Base.showerror, exc_or_success, bt_or_path))
         success, path = exc_or_success, bt_or_path
@@ -906,7 +907,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     # toposort builds by dependencies
     order = dependency_order_uuids(ctx, map(first, builds))
     sort!(builds, by = build -> order[first(build)])
-    max_name = isempty(builds) ? 0 : maximum(textwidth.([build[2] for build in builds]))
+    max_name = maximum(build->textwidth(build[2]), builds; init=0)
     # build each package versions in a child process
     for (uuid, name, source_path, version) in builds
         pkg = PackageSpec(;uuid=uuid, name=name, version=version)
@@ -1649,8 +1650,9 @@ function diff_array(old_ctx::Union{Context,Nothing}, new_ctx::Context; manifest=
     end
     old = manifest ? load_manifest_deps(old_ctx) : load_direct_deps(old_ctx)
     # merge old and new into single array
-    all_uuids = union([pkg.uuid for pkg in old], [pkg.uuid for pkg in new])
-    return [(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
+    T, S = Union{UUID,Nothing}, Union{PackageSpec,Nothing}
+    all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
+    return Tuple{T,S,S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
 end
 
 function is_package_downloaded(ctx, pkg::PackageSpec)
@@ -1752,8 +1754,8 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
         old_ctx = Context(;env=env_diff)
     end
     # display
-    filter_uuids = [pkg.uuid for pkg in pkgs if pkg.uuid !== nothing]
-    filter_names = [pkg.name for pkg in pkgs if pkg.name !== nothing]
+    filter_uuids = [pkg.uuid::UUID for pkg in pkgs if pkg.uuid !== nothing]
+    filter_names = [pkg.name::String for pkg in pkgs if pkg.name !== nothing]
     diff = old_ctx !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED

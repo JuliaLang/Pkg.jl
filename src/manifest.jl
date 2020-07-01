@@ -3,7 +3,11 @@
 ###########
 function read_field(name::String, default, info, map)
     x = get(info, name, default)
-    x == default && return default
+    if default === nothing
+        x === nothing && return nothing
+    else
+        x == default && return default
+    end
     x isa String || pkgerror("Expected field `$name` to be a String.")
     return map(x)
 end
@@ -154,7 +158,7 @@ function Manifest(raw::Dict)::Manifest
     return validate_manifest(stage1)
 end
 
-function read_manifest(path_or_stream)
+function read_manifest(path_or_stream::Union{String,IO})
     local raw
     try
         if path_or_stream isa String
@@ -168,7 +172,7 @@ function read_manifest(path_or_stream)
         path = path_or_stream isa String ? path_or_stream : ""
         if err isa TOML.ParserError
             pkgerror("Could not parse manifest $path: $(err.msg)")
-        elseif all(x -> x isa TOML.ParserError, err)
+        elseif isa(err, CompositeException) && all(x -> x isa TOML.ParserError, err)
             pkgerror("Could not parse manifest $path: $err")
         else
             rethrow()

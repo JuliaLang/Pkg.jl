@@ -292,9 +292,9 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     end
     # determine manifest file
     dir = abspath(project_dir)
-    manifest_file = project.manifest !== nothing ?
-        abspath(project.manifest) :
-        manifestfile_path(dir)
+    manifest_file = project.manifest
+    manifest_file = manifest_file !== nothing ?
+        abspath(manifest_file) : manifestfile_path(dir)::String
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
     uuids = Dict{String,Vector{UUID}}()
@@ -594,66 +594,68 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         end
     end
 
-    LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
-        GitTools.check_valid_HEAD(repo)
+    let repo_source = repo_source
+        LibGit2.with(GitTools.ensure_clone(ctx, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
+            GitTools.check_valid_HEAD(repo)
 
-        # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
-        if pkg.repo.rev === nothing
-            pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
-        end
+            # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
+            if pkg.repo.rev === nothing
+                pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
+            end
 
-        obj_branch = get_object_or_branch(repo, pkg.repo.rev)
-        fetched = false
-        if obj_branch === nothing
-            fetched = true
-            GitTools.fetch(ctx, repo, repo_source; refspecs=refspecs)
             obj_branch = get_object_or_branch(repo, pkg.repo.rev)
+            fetched = false
             if obj_branch === nothing
-                pkgerror("Did not find rev $(pkg.repo.rev) in repository")
+                fetched = true
+                GitTools.fetch(ctx, repo, repo_source; refspecs=refspecs)
+                obj_branch = get_object_or_branch(repo, pkg.repo.rev)
+                if obj_branch === nothing
+                    pkgerror("Did not find rev $(pkg.repo.rev) in repository")
+                end
             end
-        end
-        gitobject, isbranch = obj_branch
+            gitobject, isbranch = obj_branch
 
-        # If we are tracking a branch and are not pinned we want to update the repo if we haven't done that yet
-        entry = manifest_info(ctx, pkg.uuid)
-        ispinned = entry !== nothing && entry.pinned
-        if isbranch && !fetched && !ispinned
-            GitTools.fetch(ctx, repo, repo_source; refspecs=refspecs)
-            gitobject, isbranch = get_object_or_branch(repo, pkg.repo.rev)
-        end
-
-        # Now we have the gitobject for our ref, time to find the tree hash for it
-        tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
-        if pkg.repo.subdir !== nothing
-            try
-                tree_hash_object = tree_hash_object[pkg.repo.subdir]
-            catch e
-                e isa KeyError || rethrow()
-                pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
+            # If we are tracking a branch and are not pinned we want to update the repo if we haven't done that yet
+            innerentry = manifest_info(ctx, pkg.uuid)
+            ispinned = innerentry !== nothing && innerentry.pinned
+            if isbranch && !fetched && !ispinned
+                GitTools.fetch(ctx, repo, repo_source; refspecs=refspecs)
+                gitobject, isbranch = get_object_or_branch(repo, pkg.repo.rev)
             end
-        end
-        pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
 
-        # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
-        if has_uuid(pkg)
+            # Now we have the gitobject for our ref, time to find the tree hash for it
+            tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
+            if pkg.repo.subdir !== nothing
+                try
+                    tree_hash_object = tree_hash_object[pkg.repo.subdir]
+                catch e
+                    e isa KeyError || rethrow()
+                    pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
+                end
+            end
+            pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
+
+            # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
+            if has_uuid(pkg)
+                version_path = Pkg.Operations.source_path(ctx, pkg)
+                isdir(version_path) && return false
+            end
+
+            temp_path = mktempdir()
+            GitTools.checkout_tree_to_path(repo, tree_hash_object, temp_path)
+            package = resolve_projectfile!(ctx, pkg, temp_path)
+
+            # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
+            # check to see if the package exists at its canonical path.
             version_path = Pkg.Operations.source_path(ctx, pkg)
             isdir(version_path) && return false
+
+            # Otherwise, move the temporary path into its correct place and set read only
+            mkpath(version_path)
+            mv(temp_path, version_path; force=true)
+            set_readonly(version_path)
+            return true
         end
-
-        temp_path = mktempdir()
-        GitTools.checkout_tree_to_path(repo, tree_hash_object, temp_path)
-        package = resolve_projectfile!(ctx, pkg, temp_path)
-
-        # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
-        # check to see if the package exists at its canonical path.
-        version_path = Pkg.Operations.source_path(ctx, pkg)
-        isdir(version_path) && return false
-
-        # Otherwise, move the temporary path into its correct place and set read only
-        mkpath(version_path)
-        mv(temp_path, version_path; force=true)
-        set_readonly(version_path)
-        return true
     end
 end
 
@@ -885,9 +887,9 @@ function collect_registries(depot::String)
         if isfile(file)
             registry = read_registry(file)
             verify_registry(registry)
-            spec = RegistrySpec(name = registry["name"],
-                                uuid = UUID(registry["uuid"]),
-                                url = get(registry, "repo", nothing),
+            spec = RegistrySpec(name = registry["name"]::String,
+                                uuid = UUID(registry["uuid"]::String),
+                                url = get(registry, "repo", nothing)::Union{String,Nothing},
                                 path = dirname(file))
             push!(regs, spec)
         end
@@ -1107,81 +1109,85 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
     registry_urls = nothing
-    for reg in unique(r -> r.uuid, find_installed_registries(ctx, regs))
-        regpath = pathrepr(reg.path)
-        if isfile(joinpath(reg.path, ".tree_info.toml"))
-            printpkgstyle(ctx, :Updating, "registry at " * regpath)
-            tree_info = TOML.parsefile(joinpath(reg.path, ".tree_info.toml"))
-            old_hash = tree_info["git-tree-sha1"]
-            url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-            if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
-                # TODO: update faster by using a diff, if available
-                mktempdir() do tmp
-                    try
-                        download_verify_unpack(url, nothing, tmp, ignore_existence = true)
-                    catch err
-                        @warn "could not download $url"
+    for reg in unique(r -> r.uuid, find_installed_registries(ctx, regs); seen=Set{Union{UUID,Nothing}}())
+        let reg=reg
+            regpath = pathrepr(reg.path)
+            if isfile(joinpath(reg.path, ".tree_info.toml"))
+                printpkgstyle(ctx, :Updating, "registry at " * regpath)
+                tree_info = TOML.parsefile(joinpath(reg.path, ".tree_info.toml"))
+                old_hash = tree_info["git-tree-sha1"]
+                url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
+                if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
+                    let new_hash=new_hash
+                        # TODO: update faster by using a diff, if available
+                        mktempdir() do tmp
+                            try
+                                download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                            catch err
+                                @warn "could not download $url"
+                            end
+                            tree_info_file = joinpath(tmp, ".tree_info.toml")
+                            ispath(tree_info_file) &&
+                                error("tree info file $tree_info_file already exists")
+                            open(tree_info_file, write=true) do io
+                                println(io, "git-tree-sha1 = ", repr(new_hash))
+                            end
+                            registry_file = joinpath(tmp, "Registry.toml")
+                            registry = read_registry(registry_file; cache=false)
+                            verify_registry(registry)
+                            cp(tmp, reg.path, force=true)
+                        end
                     end
-                    tree_info_file = joinpath(tmp, ".tree_info.toml")
-                    ispath(tree_info_file) &&
-                        error("tree info file $tree_info_file already exists")
-                    open(tree_info_file, write=true) do io
-                        println(io, "git-tree-sha1 = ", repr(new_hash))
-                    end
-                    registry_file = joinpath(tmp, "Registry.toml")
-                    registry = read_registry(registry_file; cache=false)
-                    verify_registry(registry)
-                    cp(tmp, reg.path, force=true)
                 end
-            end
-        elseif isdir(joinpath(reg.path, ".git"))
-            printpkgstyle(ctx, :Updating, "registry at " * regpath)
-            # Using LibGit2.with here crashes julia when running the
-            # tests for PkgDev wiht "Unreachable reached".
-            # This seems to work around it.
-            repo = nothing
-            try
-                repo = LibGit2.GitRepo(reg.path)
-                if LibGit2.isdirty(repo)
-                    push!(errors, (regpath, "registry dirty"))
-                    @goto done
-                end
-                if !LibGit2.isattached(repo)
-                    push!(errors, (regpath, "registry detached"))
-                    @goto done
-                end
-                if !("origin" in LibGit2.remotes(repo))
-                    push!(errors, (regpath, "origin not in the list of remotes"))
-                    @goto done
-                end
-                branch = LibGit2.headname(repo)
+            elseif isdir(joinpath(reg.path, ".git"))
+                printpkgstyle(ctx, :Updating, "registry at " * regpath)
+                # Using LibGit2.with here crashes julia when running the
+                # tests for PkgDev wiht "Unreachable reached".
+                # This seems to work around it.
+                repo = nothing
                 try
-                    GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
-                catch e
-                    e isa PkgError || rethrow()
-                    push!(errors, (reg.path, "failed to fetch from repo"))
-                    @goto done
-                end
-                ff_succeeded = try
-                    LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
-                catch e
-                    e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
-                    push!(errors, (reg.path, "branch origin/$branch not found"))
-                    @goto done
-                end
-
-                if !ff_succeeded
-                    try LibGit2.rebase!(repo, "origin/$branch")
-                    catch e
-                        e isa LibGit2.GitError || rethrow()
-                        push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
+                    repo = LibGit2.GitRepo(reg.path)
+                    if LibGit2.isdirty(repo)
+                        push!(errors, (regpath, "registry dirty"))
                         @goto done
                     end
-                end
-                @label done
-            finally
-                if repo isa LibGit2.GitRepo
-                    close(repo)
+                    if !LibGit2.isattached(repo)
+                        push!(errors, (regpath, "registry detached"))
+                        @goto done
+                    end
+                    if !("origin" in LibGit2.remotes(repo))
+                        push!(errors, (regpath, "origin not in the list of remotes"))
+                        @goto done
+                    end
+                    branch = LibGit2.headname(repo)
+                    try
+                        GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
+                    catch e
+                        e isa PkgError || rethrow()
+                        push!(errors, (reg.path, "failed to fetch from repo"))
+                        @goto done
+                    end
+                    ff_succeeded = try
+                        LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
+                    catch e
+                        e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
+                        push!(errors, (reg.path, "branch origin/$branch not found"))
+                        @goto done
+                    end
+
+                    if !ff_succeeded
+                        try LibGit2.rebase!(repo, "origin/$branch")
+                        catch e
+                            e isa LibGit2.GitError || rethrow()
+                            push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
+                            @goto done
+                        end
+                    end
+                    @label done
+                finally
+                    if repo isa LibGit2.GitRepo
+                        close(repo)
+                    end
                 end
             end
         end
@@ -1240,13 +1246,13 @@ function find_registered!(ctx::Context,
     for registry in collect_registries()
         reg_abspath = abspath(registry.path)
         data = read_registry(joinpath(registry.path, "Registry.toml"))
-        for (_uuid, pkgdata) in data["packages"]
-              uuid = UUID(_uuid)
-              name = pkgdata["name"]
-              path = joinpath(reg_abspath, pkgdata["path"])
-              push!(get!(ctx.env.uuids, name, UUID[]), uuid)
-              push!(get!(ctx.env.paths, uuid, String[]), path)
-              push!(get!(ctx.env.names, uuid, String[]), name)
+        for (_uuid::String, pkgdata::TOML.DictType) in data["packages"]
+            name = pkgdata["name"]::String
+            uuid = UUID(_uuid)
+            push!(get!(Vector{UUID}, ctx.env.uuids, name), uuid)
+            path = joinpath(reg_abspath, pkgdata["path"])
+            push!(get!(Vector{String}, ctx.env.names, uuid), name)
+            push!(get!(Vector{String}, ctx.env.paths, uuid), path)
         end
     end
     for d in (ctx.env.uuids, ctx.env.paths, ctx.env.names)
