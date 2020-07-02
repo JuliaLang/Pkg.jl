@@ -8,11 +8,12 @@ import Random
 using Dates
 import LibGit2
 
-import ..depots, ..depots1, ..logdir, ..devdir
+import ..depots, ..depots1, ..logdir, ..devdir, ..pkg_server
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using ..BinaryPlatforms
+using ..PlatformEngines: modify_telemetry_file
 using ..Artifacts: artifact_paths
 
 include("generate.jl")
@@ -959,6 +960,69 @@ function activate(f::Function, new_project::AbstractString)
         f()
     finally
         Base.ACTIVE_PROJECT[] = old
+    end
+end
+
+function set_telemetry(server, val::Bool)
+    modify_telemetry_file(server) do info
+        info["telemetry"] = val
+    end
+    abled = Dict(false => "disabled", true => "enabled")
+    if server === nothing
+        println("Telemetry ", abled[val], " for all future Pkg servers")
+    else
+        println("Telemetry ", abled[val], " for ", server)
+    end
+end
+
+function set_telemetry(val::Bool, all::Bool = false)
+    if all
+        # iterate over all servers:
+        for depot in depots()
+            if !isdir(joinpath(depot, "servers"))
+                continue
+            end
+            for server in readdir(joinpath(depot, "servers"))
+                if !isfile(joinpath(depot, "servers", server, "telemetry.toml"))
+                    continue
+                end
+
+                set_telemetry(string("https://", server), val)
+            end
+        end
+
+        # Set default for future servers
+        set_telemetry(nothing, val)
+    else
+        # Set for current server
+        set_telemetry(pkg_server(), val)
+    end
+end
+
+# Entrypoints for REPL mode
+telemetry_enable(;all::Bool = false) = set_telemetry(true, all)
+telemetry_disable(;all::Bool = false) = set_telemetry(false, all)
+function telemetry_status()
+    abled = Dict(true => "enabled", false => "disabled")
+    modify_telemetry_file(nothing) do info
+        println("Default: ", abled[get(info, "telemetry", true)])
+    end
+
+    # Next, iterate over all servers:
+    for depot in depots()
+        if !isdir(joinpath(depot, "servers"))
+            continue
+        end
+
+        for server in readdir(joinpath(depot, "servers"))
+            if !isfile(joinpath(depot, "servers", server, "telemetry.toml"))
+                continue
+            end
+
+            modify_telemetry_file("https://$(server)") do info
+                println(server, ": ", abled[get(info, "telemetry", true)])
+            end
+        end
     end
 end
 

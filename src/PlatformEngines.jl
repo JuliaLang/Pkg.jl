@@ -855,6 +855,62 @@ telemetry_notice(server::AbstractString=pkg_server()) = """
     LEGAL NOTICE: package operations send anonymous data about your system to $server (your current package server), including the operating system and Julia versions you are using, and a random client UUID. Running `Pkg.telemetryinfo()` will show exactly what data is sent. See https://julialang.org/legal/data/ for more details about what this data is used for, how long it is retained, and how to opt out of sending it.
     """
 
+"""
+    modify_telemetry_file(f::Function, server=pkg_server())
+
+Do-block method for modifying a telemetry TOML file; if `server` is set to `nothing`,
+opens the defaults telemetry TOML file which is used to set set Pkg server values.
+"""
+function modify_telemetry_file(f::Function, server=pkg_server())
+    filepath = nothing
+    if server === nothing
+        # Search for an existent defaults file
+        for depot in depots()
+            defaults_file = joinpath(depot, "servers", "telemetry.toml")
+            if isfile(defaults_file)
+                filepath = defaults_file
+            end
+        end
+
+        # If none exists, we will create one in depots1
+        if filepath === nothing
+            filepath = joinpath(depots1(), "servers", "telemetry.toml")
+        end
+    else
+        server_dir = get_server_dir(server, server)
+        filepath = joinpath(server_dir, "telemetry.toml")
+    end
+
+    info = Dict()
+    if isfile(filepath)
+        try info = TOML.parsefile(filepath)
+        catch err
+            @warn "replacing malformed telemetry file" filepath err
+        end
+    end
+
+    # Call user function with `info`
+    try
+        f(info)
+
+        # If everything goes well, then write out the file again
+        if isempty(info)
+            rm(filepath; force=true)
+        else
+            mkpath(dirname(filepath))
+            tmp = tempname()
+            let info = info
+                open(tmp, write=true) do io
+                    TOML.print(io, info, sorted=true)
+                end
+            end
+            mv(tmp, filepath, force=true)
+        end
+    catch e
+        rethrow(e)
+    end
+end
+
 function get_telemetry_headers(url::AbstractString, notify::Bool=true)
     headers = String[]
     server = pkg_server()

@@ -447,6 +447,67 @@ Display information about installed registries.
 pkg> registry status
 ```
 """,
-]
+],
 ], #registry
+"telemetry" => CommandDeclaration[
+[   :name => "enable",
+    :api => API.telemetry_enable,
+    :description => "Enable Pkg telemetry headers",
+    :option_spec => OptionDeclaration[
+        [:name => "all", :api => :all => true],
+    ],
+    :help => md"""
+    telemetry enable [--all]
+
+Enable Pkg telemetry headers for the current Julia Pkg server.
+To enable for all current and future servers, use `--all`.
+
+!!! compat "Julia 1.6"
+    Pkg's telemetry header handling requires at least Julia 1.1.
+
+**Examples**
+```
+pkg> telemetry enable
+```
+""",
+], [
+    :name => "disable",
+    :api => API.telemetry_disable,
+    :description => "Disable Pkg telemetry headers",
+    :option_spec => OptionDeclaration[
+        [:name => "all", :api => :all => true],
+    ],
+    :help => md"""
+    telemetry disable [--all]
+
+Disable Pkg telemetry headers for the current Julia Pkg server.
+To enable for all current and future servers, use `--all`.
+
+!!! compat "Julia 1.6"
+Pkg's telemetry header handling requires at least Julia 1.1.
+
+**Examples**
+```
+pkg> telemetry disable
+```
+""",
+], [
+    :name => "status",
+    :api => API.telemetry_status,
+    :description => "Display Pkg telemetry header status",
+    :help => md"""
+    telemetry status
+
+Display Pkg telemetry header status for all known servers.
+
+!!! compat "Julia 1.6"
+Pkg's telemetry header handling requires at least Julia 1.1.
+
+**Examples**
+```
+pkg> telemetry status
+```
+""",
+],
+], #telemetry
 ] #command_declarations
