@@ -1,5 +1,7 @@
 # **4.** Working with Environments
 
+The following discusses Pkg's interaction with environments. For more on the role environments play in code loading, including the "stack" of environments from which code can be loaded, see [this section in the Julia manual](https://docs.julialang.org/en/v1/manual/code-loading/#Environments-1).
+
 ## Creating your own projects
 
 So far we have added packages to the default project at `~/.julia/environments/v1.0`. It is however easy to create other, independent, projects.
