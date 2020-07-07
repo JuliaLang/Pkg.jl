@@ -10,7 +10,10 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
 
 const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
 
-function isolate(fn::Function; loaded_depot=false, kwargs...)
+const REGISTRY_DIR = joinpath(@__DIR__, "registries", "General")
+
+
+function isolate(fn::Function; loaded_depot=false)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -19,13 +22,12 @@ function isolate(fn::Function; loaded_depot=false, kwargs...)
     old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
     try
         # Clone the registry only once
-        generaldir = joinpath(@__DIR__, "registries", "General")
-        if !isdir(generaldir)
-            mkpath(generaldir)
+        if !isdir(REGISTRY_DIR)
+            mkpath(REGISTRY_DIR)
             Base.shred!(LibGit2.CachedCredentials()) do creds
                 LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
                                                 "https://github.com/JuliaRegistries/General.git",
-                    generaldir, credentials = creds)) do repo
+                    REGISTRY_DIR, credentials = creds)) do repo
                 end
             end
         end
@@ -35,7 +37,7 @@ function isolate(fn::Function; loaded_depot=false, kwargs...)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
+        Pkg.Types.DEFAULT_REGISTRIES[1].url = REGISTRY_DIR
         Pkg.REPLMode.TEST_MODE[] = false
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
