@@ -847,7 +847,6 @@ const CI_VARIABLES = [
     "JULIA_CI",
     "JULIA_PKGEVAL",
     "JULIA_REGISTRYCI_AUTOMERGE",
-    "PKGEVAL",
     "TF_BUILD",
     "TRAVIS",
 ]
