@@ -87,8 +87,8 @@ function _print(io::IO, a::AbstractDict,
                 printkey(io, ks)
                 Base.print(io,"]\n")
             end
-            _print(io, value, ks,
-                indent = indent + header, first_block = header, sorted = sorted, by = by)
+            # Use runtime dispatch here since the type of value seems not to be enforced other than as AbstractDict
+            Base.invokelatest(_print, io, value, ks; indent = indent + header, first_block = header, sorted = sorted, by = by)
             pop!(ks)
         elseif is_array_of_tables(value)
             # print array of tables
@@ -101,7 +101,7 @@ function _print(io::IO, a::AbstractDict,
                 printkey(io, ks)
                 Base.print(io,"]]\n")
                 !isa(v, AbstractDict) && error("array should contain only tables")
-                _print(io, v, ks, indent = indent + 1, sorted = sorted, by = by)
+                Base.invokelatest(_print, io, v, ks; indent = indent + 1, sorted = sorted, by = by)
             end
             pop!(ks)
         end

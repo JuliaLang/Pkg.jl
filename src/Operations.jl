@@ -1645,14 +1645,14 @@ function diff_array(old_ctx::Union{Context,Nothing}, new_ctx::Context; manifest=
     end
     # load deps
     new = manifest ? load_manifest_deps(new_ctx) : load_direct_deps(new_ctx)
+    T, S = Union{UUID,Nothing}, Union{PackageSpec,Nothing}
     if old_ctx === nothing
-        return [(pkg.uuid, nothing, pkg) for pkg in new]
+        return Tuple{T,S,S}[(pkg.uuid, nothing, pkg)::Tuple{T,S,S} for pkg in new]
     end
     old = manifest ? load_manifest_deps(old_ctx) : load_direct_deps(old_ctx)
     # merge old and new into single array
-    T, S = Union{UUID,Nothing}, Union{PackageSpec,Nothing}
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
-    return Tuple{T,S,S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid)) for uuid in all_uuids]
+    return Tuple{T,S,S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T,S,S} for uuid in all_uuids]
 end
 
 function is_package_downloaded(ctx, pkg::PackageSpec)
@@ -1676,12 +1676,12 @@ function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Sym
                       (manifest ? "manifest" : "project") * ")", true)
         return nothing
     end
-    xs = !diff ? xs : [(id, old, new) for (id, old, new) in xs if old != new]
+    xs = !diff ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if old != new]
     if isempty(xs)
         printpkgstyle(ctx, Symbol("No Changes"), "to $(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))", true)
         return nothing
     end
-    xs = !filter ? xs : [(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
+    xs = !filter ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
     if isempty(xs)
         printpkgstyle(ctx, Symbol("No Matches"),
                       "in $(diff ? "diff for " : "")$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))", true)
