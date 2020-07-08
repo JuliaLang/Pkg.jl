@@ -2405,4 +2405,19 @@ end
     end
 end
 
+@testset "relative depot path" begin
+    isolate(loaded_depot=false) do
+        mktempdir() do tmp
+            ENV["JULIA_DEPOT_PATH"] = "tmp"
+            Base.init_depot_path()
+            Pkg.Types.DEFAULT_REGISTRIES[1].url = Utils.REGISTRY_DIR
+            cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
+            git_init_and_commit(joinpath(tmp, "BasicSandbox"))
+            cd(tmp) do
+                Pkg.add(path="BasicSandbox")
+            end
+        end
+    end
+end
+
 end #module
