@@ -3,8 +3,8 @@
 # Content in this file is extracted from BinaryProvider.jl, see LICENSE.method
 
 module PlatformEngines
-using SHA, Logging, UUIDs, Random
-import ...Pkg: Pkg, TOML, pkg_server, depots, depots1
+using SHA, Logging
+import ...Pkg: Pkg, TOML, pkg_server, depots1
 
 export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
        download_verify, unpack, package, download_verify_unpack,
@@ -748,93 +748,6 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     return "Authorization: Bearer $(auth_info["access_token"]::String)"
 end
 
-function hash_data(strs::AbstractString...)
-    ctx = SHA.SHA224_CTX()
-    for str in strs
-        data = Vector{UInt8}(str)
-        len = length(data)
-        while true
-            push!(data, len % UInt8)
-            len == 0 && break
-            len >>= 8
-        end
-        SHA.update!(ctx, data)
-    end
-    return bytes2hex(@view SHA.digest!(ctx)[1:20])
-end
-
-function load_telemetry_file(file::AbstractString)
-    info = Dict{String, Any}()
-    changed = true
-    if !ispath(file)
-        for depot in depots()
-            defaults_file = joinpath(depot, "servers", "telemetry.toml")
-            if isfile(defaults_file)
-                try info = TOML.parsefile(defaults_file)
-                catch err
-                    @warn "ignoring malformed telemetry defaults file" file=defaults_file err=err
-                end
-                break
-            end
-        end
-    else
-        try info = TOML.parsefile(file)
-            changed = false
-        catch err
-            @warn "replacing malformed telemetry file" file=file err=err
-        end
-    end
-    # bail early if fully opted out
-    get(info, "telemetry", true) === false && return info
-    # some validity checking helpers
-    is_valid_uuid(x) = false
-    is_valid_salt(x) = false
-    is_valid_hlls(x) = false
-    is_valid_vars(x) = false
-    is_valid_uuid(x::Bool) = !x # false is valid, true is not
-    is_valid_salt(x::Bool) = !x # false is valid, true is not
-    is_valid_hlls(x::Bool) = !x # false is valid, true is not
-    is_valid_vars(x::Bool) = true
-    is_valid_uuid(x::AbstractString) = occursin(Pkg.REPLMode.uuid_re, x)
-    is_valid_salt(x::AbstractString) = occursin(r"^[0-9a-zA-Z]+$", x)
-    is_valid_hlls(x::AbstractArray) = length(x) == 2 &&
-        x[1] isa Integer && 0 ≤ x[1] < 1024 &&
-        x[2] isa Integer && 0 ≤ x[2] ≤ 64
-    is_valid_vars(x::AbstractVector) = all(s isa AbstractString for s in x)
-    # generate or fix system-specific info
-    if !haskey(info, "client_uuid") || !is_valid_uuid(info["client_uuid"])
-        info["client_uuid"] = string(uuid4())
-        changed = true
-    end
-    if info["client_uuid"] isa AbstractString &&
-        (!haskey(info, "secret_salt") || !is_valid_salt(info["secret_salt"]))
-        info["secret_salt"] = randstring(RandomDevice(), 36)
-        changed = true
-    end
-    if !haskey(info, "HyperLogLog") || !is_valid_hlls(info["HyperLogLog"])
-        bucket = rand(RandomDevice(), 0:1023)
-        sample = trailing_zeros(rand(RandomDevice(), UInt64))
-        info["HyperLogLog"] = [bucket, sample]
-        changed = true
-    end
-    if haskey(info, "ci_variables") && !is_valid_vars(info["ci_variables"])
-        delete!(info, "ci_variables")
-        changed = true
-    end
-    changed || return info
-    # write telemetry file atomically (if on same file system)
-    mkpath(dirname(file))
-    tmp = tempname()
-    let info = info
-        open(tmp, write=true) do io
-            TOML.print(io, info, sorted=true)
-        end
-    end
-    mv(tmp, file, force=true)
-    # reparse file in case a different process wrote it first
-    return load_telemetry_file(file)
-end
-
 # based on information in this post:
 # https://github.community/t5/GitHub-Actions/Have-the-CI-environment-variable-set-by-default/m-p/32358/highlight/true#M1097
 const CI_VARIABLES = [
@@ -852,70 +765,24 @@ const CI_VARIABLES = [
     "TRAVIS",
 ]
 
-const telemetry_file_lock = ReentrantLock()
-const telemetry_notice_printed = Ref(false)
-
-telemetry_notice(server::AbstractString=pkg_server()) = """
-    LEGAL NOTICE: package operations send anonymous data about your system to $server (your current package server), including the operating system and Julia versions you are using, and a random client UUID. Running `Pkg.telemetryinfo()` will show exactly what data is sent. See https://julialang.org/legal/data/ for more details about what this data is used for, how long it is retained, and how to opt out of sending it.
-    """
-
-function get_telemetry_headers(url::AbstractString, notify::Bool=true)
+function get_metadata_headers(url::AbstractString)
     headers = String[]
     server = pkg_server()
     server_dir = get_server_dir(url, server)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol: 1.0")
-    telemetry_file = joinpath(server_dir, "telemetry.toml")
-    notify &= !ispath(telemetry_file)
-    info = lock(telemetry_file_lock) do
-        load_telemetry_file(telemetry_file)
-    end
-    get(info, "telemetry", true) == false && return headers
-    # legal (GDPR/CCPA) message about telemetry
-    if notify && !telemetry_notice_printed[]
-        telemetry_notice_printed[] = true
-        @info telemetry_notice()
-    end
-    # general system information
     push!(headers, "Julia-Version: $VERSION")
     system = Pkg.BinaryPlatforms.triplet(Pkg.BinaryPlatforms.platform_key_abi())
     push!(headers, "Julia-System: $system")
-    # install-specific information
-    if info["client_uuid"] !== false
-        client_uuid = info["client_uuid"]::String
-        push!(headers, "Julia-Client-UUID: $client_uuid")
-        if info["secret_salt"] !== false
-            secret_salt = info["secret_salt"]::String
-            salt_hash = hash_data("salt", client_uuid, secret_salt)
-            project = Base.active_project()
-            if project !== nothing
-                project_hash = hash_data("project", project, info["secret_salt"])
-                push!(headers, "Julia-Project-Hash: $project_hash")
-            end
-        end
+    ci_info = String[]
+    for var in CI_VARIABLES
+        val = get(ENV, var, nothing)
+        state = val === nothing ? "n" :
+            lowercase(val) in ("true", "t", "1", "yes", "y") ? "t" :
+            lowercase(val) in ("false", "f", "0", "no", "n") ? "f" : "o"
+        push!(ci_info, "$var=$state")
     end
-    # CI indicator variables
-    ci_variables = get(info, "ci_variables", CI_VARIABLES)
-    ci_variables === true && (ci_variables = CI_VARIABLES)
-    if ci_variables != false
-        ci_info = String[]
-        for var in CI_VARIABLES ∩ map(uppercase, ci_variables::Vector{String})
-            val = get(ENV, var, nothing)
-            state = val === nothing ? "n" :
-                lowercase(val) in ("true", "t", "1", "yes", "y") ? "t" :
-                lowercase(val) in ("false", "f", "0", "no", "n") ? "f" : "o"
-            push!(ci_info, "$var=$state")
-        end
-        if !isempty(ci_info)
-            push!(headers, "Julia-CI-Variables: "*join(ci_info, ';'))
-        end
-    end
-    # HyperLogLog cardinality estimator sample
-    if info["HyperLogLog"] != false
-        bucket, sample = info["HyperLogLog"]
-        push!(headers, "Julia-HyperLogLog: $bucket,$sample")
-    end
-    # interactive session?
+    push!(headers, "Julia-CI-Variables: "*join(ci_info, ';'))
     push!(headers, "Julia-Interactive: $(isinteractive())")
     return headers
 end
@@ -944,7 +811,7 @@ function download(
     if auth_header !== nothing
         push!(headers, auth_header)
     end
-    for header in get_telemetry_headers(url)
+    for header in get_metadata_headers(url)
         push!(headers, header)
     end
     download_cmd = gen_download_cmd(url, dest, headers...)
