@@ -839,11 +839,14 @@ end
 const CI_VARIABLES = [
     "APPVEYOR",
     "CI",
+    "CI_SERVER",
     "CIRCLECI",
     "CONTINUOUS_INTEGRATION",
     "GITHUB_ACTIONS",
     "GITLAB_CI",
     "JULIA_CI",
+    "JULIA_PKGEVAL",
+    "JULIA_REGISTRYCI_AUTOMERGE",
     "TF_BUILD",
     "TRAVIS",
 ]
