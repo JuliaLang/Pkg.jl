@@ -21,9 +21,9 @@ import ...Pkg: pkg_server
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
     slug_default = Base.version_slug(uuid, sha1)
     # 4 used to be the default so look there first
-    for slug in (Base.version_slug(uuid, sha1, 4), slug_default)
+    for slug in (slug_default, Base.version_slug(uuid, sha1, 4))
         for depot in depots()
-            path = joinpath(depot, "packages", name, slug)
+            path = abspath(depot, "packages", name, slug)
             ispath(path) && return path
         end
     end
