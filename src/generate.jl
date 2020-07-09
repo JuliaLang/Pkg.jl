@@ -2,6 +2,7 @@
 
 generate(path::String; kwargs...) = generate(Context(), path; kwargs...)
 function generate(ctx::Context, path::String; kwargs...)
+    Base.depwarn("Pkg.generate is deprecated. Please use PkgTemplates.jl instead.", Core.Typeof(generate).name.mt.name)
     Context!(ctx; kwargs...)
     dir, pkg = dirname(path), basename(path)
     Base.isidentifier(pkg) || pkgerror("$(repr(pkg)) is not a valid package name")
