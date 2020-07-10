@@ -1,7 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 function generate_deprecated(varargs...; kwargs...)
-    Base.depwarn("Pkg.generate is deprecated. Please use PkgTemplates.jl instead.", Core.Typeof(generate).name.mt.name)
+    Base.depwarn("Pkg.generate is deprecated. Please use PkgTemplates.jl instead.", Symbol("Pkg.generate"))
     return generate(varargs...; kwargs...)
 end
 
