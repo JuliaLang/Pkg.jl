@@ -133,6 +133,7 @@ const platform = platform_key_abi()
         @test platform_key_abi("i686-unknown-freebsd11.1") == FreeBSD(:i686)
         @test platform_key_abi("amd64-unknown-freebsd12.0") == FreeBSD(:x86_64)
         @test platform_key_abi("i386-unknown-freebsd10.3") == FreeBSD(:i686)
+        @test platform_key_abi("arm64-apple-darwin20.0") == MacOS(:aarch64)
 
         # Test inclusion of ABI stuff, both old-style and new-style
         @test platform_key_abi("x86_64-linux-gnu-gcc7") == Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"4"))
