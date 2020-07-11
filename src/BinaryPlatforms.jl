@@ -140,7 +140,7 @@ struct MacOS <: Platform
                    libc::Union{Nothing,Symbol}=nothing,
                    call_abi::Union{Nothing,Symbol}=nothing,
                    compiler_abi::CompilerABI=CompilerABI())
-        if arch !== :x86_64
+        if arch !== :x86_64 && arch !== :aarch64
             throw(ArgumentError("Unsupported architecture '$arch' for macOS"))
         end
         if libc !== nothing
@@ -404,7 +404,7 @@ function platform_key_abi(machine::AbstractString)
     arch_mapping = Dict(
         :x86_64 => "(x86_|amd)64",
         :i686 => "i\\d86",
-        :aarch64 => "aarch64",
+        :aarch64 => "(aarch|arm)64",
         :armv7l => "arm(v7l)?", # if we just see `arm-linux-gnueabihf`, we assume it's `armv7l`
         :armv6l => "armv6l",
         :powerpc64le => "p(ower)?pc64le",
@@ -458,6 +458,7 @@ function platform_key_abi(machine::AbstractString)
     ))
 
     m = match(triplet_regex, machine)
+    msg = ""
     if m !== nothing
         # Helper function to find the single named field within the giant regex
         # that is not `nothing` for each mapping we give it.
@@ -502,11 +503,14 @@ function platform_key_abi(machine::AbstractString)
                 cxxstring_abi=cxxstring_abi
             )
             return T(arch, libc=libc, call_abi=call_abi, compiler_abi=compiler_abi)
-        catch
+        catch err
+            if isa(err, ArgumentError)
+                msg = " ($(err.msg))"
+            end
         end
     end
 
-    @warn("Platform `$(machine)` is not an officially supported platform")
+    @warn("Platform `$(machine)` is not an officially supported platform$msg")
     return UnknownPlatform()
 end
 
