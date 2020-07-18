@@ -278,7 +278,7 @@ patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
 """,
 ],[ :name => "generate",
-    :api => API.generate,
+    :api => API.generate_deprecated,
     :arg_count => 1 => 1,
     :arg_parser => ((x,y) -> map(expanduser, unwrap(x))),
     :description => "generate files for a new project",
