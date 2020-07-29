@@ -886,6 +886,7 @@ function get_telemetry_headers(url::AbstractString, notify::Bool=true)
         if info["secret_salt"] !== false
             secret_salt = info["secret_salt"]::String
             salt_hash = hash_data("salt", client_uuid, secret_salt)
+            project = Base.active_project()
             if project !== nothing
                 project_hash = hash_data("project", project, info["secret_salt"])
                 push!(headers, "Julia-Project-Hash: $project_hash")
