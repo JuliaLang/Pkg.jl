@@ -24,7 +24,7 @@ const PackageToken = Union{PackageIdentifier, VersionRange, Rev, Subdir}
 
     # Match a git repository URL. This includes uses of `@` and `:` but
     # requires that it has `.git` at the end.
-let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)?",
+let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git$)(/)?",
 
     # Match a `NAME=UUID` package specifier.
     name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
