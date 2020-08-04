@@ -273,12 +273,6 @@ end
     end
 end
 
-@testset "build: fallback when no project file exists" begin
-    isolate() do
-        Pkg.add(name="ZMQ", version="0.6.3")
-    end
-end
-
 @testset "using a test/REQUIRE file" begin
     isolate() do
         Pkg.add(name="EnglishText", version="0.6.0")
