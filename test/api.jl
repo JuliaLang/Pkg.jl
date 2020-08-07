@@ -120,9 +120,9 @@ end
         copy_test_package(tmp, "TestArguments")
         Pkg.activate(joinpath(tmp, "TestArguments"))
         uuid, version = Core.eval(Module(:__anon__), quote
-            using TestArguments, Pkg
-            uuid = Pkg.API.get_uuid(TestArguments)
-            version = Pkg.API.get_version(uuid)
+            using TestArguments
+            uuid = $(Pkg).API.get_uuid(TestArguments)
+            version = $(Pkg).API.get_version(uuid)
             return uuid, version
         end)
         @test uuid == Base.UUID("265b0eca-b78c-42af-9929-ddebf847c026")
