@@ -115,4 +115,21 @@ import .FakeTerminals.FakeTerminal
     end
 end
 
+@testset "get_uuid/get_version" begin
+    temp_pkg_dir() do tmp
+        copy_test_package(tmp, "TestArguments")
+        Pkg.activate(joinpath(tmp, "TestArguments"))
+        uuid, version = Core.eval(Module(:__anon__), quote
+            using TestArguments, Pkg
+            uuid = Pkg.API.get_uuid(TestArguments)
+            version = Pkg.API.get_version(uuid)
+            return uuid, version
+        end)
+        @test uuid == Base.UUID("265b0eca-b78c-42af-9929-ddebf847c026")
+        @test version == v"0.1.0"
+        @test Pkg.API.get_uuid(Module(:__anon__)) === nothing
+        @test_throws ArgumentError Pkg.API.get_version(Base.UUID(UInt128(0)))
+    end
+end
+
 end # module APITests
