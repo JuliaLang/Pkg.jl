@@ -118,7 +118,6 @@ end
 @testset "get_uuid/get_version" begin
     temp_pkg_dir() do tmp
         copy_test_package(tmp, "TestArguments")
-        Pkg.activate(joinpath(tmp, "TestArguments"))
         uuid, version = Core.eval(Module(:__anon__), quote
             using TestArguments
             uuid = $(Pkg).API.get_uuid(TestArguments)
