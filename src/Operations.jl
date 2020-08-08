@@ -1246,6 +1246,10 @@ function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry
     end
 end
 
+function update_package_pin!(ctx::Context, pkg::PackageSpec, ::Nothing)
+    pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
+end
+
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_pin!(ctx, pkg, manifest_info(ctx, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx, pkgs)
