@@ -1539,6 +1539,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
             test_fn !== nothing && test_fn()
             status(Context(); mode=PKGMODE_COMBINED)
+            printpkgstyle(ctx, :Testing, "Running tests...")
             flush(stdout)
             cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
             p = run(ignorestatus(cmd))
