@@ -12,7 +12,8 @@ using SHA
 
 export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
-       find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact
+       find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
+       add_artifact!
 
 # keep in sync with Base.project_names and Base.manifest_names
 const artifact_names = ("JuliaArtifacts.toml", "Artifacts.toml")
@@ -351,6 +352,12 @@ function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
     return hash.bytes == GitTools.tree_hash(artifact_path(hash))
 end
 
+function sha256sum(tarball_path)
+    return open(tarball_path, "r") do io
+        return bytes2hex(sha256(io))
+    end
+end
+
 """
     archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
 
@@ -378,9 +385,7 @@ function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Boo
     package(artifact_path(hash), tarball_path)
 
     # Calculate its sha256 and return that
-    return open(tarball_path, "r") do io
-        return bytes2hex(sha256(io))
-    end
+    return sha256sum(tarball_path)
 end
 
 
@@ -1067,6 +1072,36 @@ macro artifact_str(name)
         # artifact"" is used in other modules, so we don't want to be spreading backedges around everywhere.
         Base.invokelatest(do_artifact_str, $(esc(name)), $(artifact_dict), $(artifacts_toml), $__module__)
     end
+end
+
+function add_artifact!(
+    artifacts_toml::String,
+    name::String,
+    tarball_url::String;
+    clear=true,
+    options...,
+)
+    probe_platform_engines!()
+
+    tarball_path = download(tarball_url)
+    sha256 = sha256sum(tarball_path)
+
+    git_tree_sha1 = create_artifact() do artifact_dir
+        unpack(tarball_path, artifact_dir)
+    end
+
+    rm(tarball_path)
+    clear && remove_artifact(git_tree_sha1)
+
+    bind_artifact!(
+        artifacts_toml,
+        name,
+        git_tree_sha1;
+        download_info = [(tarball_url, sha256)],
+        options...,
+    )
+
+    return git_tree_sha1
 end
 
 end # module Artifacts
