@@ -277,123 +277,203 @@ Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
 # Semver notation #
 ###################
 
-function semver_spec(s::String)
-    ranges = VersionRange[]
-    for ver in strip.(split(strip(s), ','))
-        range = nothing
-        found_match = false
-        for (ver_reg, f) in ver_regs
-            if occursin(ver_reg, ver)
-                range = f(match(ver_reg, ver))
-                found_match = true
-                break
-            end
-        end
-        found_match || error("invalid version specifier: $s")
-        push!(ranges, range)
+function semver_spec(spec::String)
+    next = parse_spec1(spec, 1)
+    isnothing(next) && error("found no version specification")
+    ranges = [next[1]]
+    next = parse_spec1(spec, next[2])
+    while !isnothing(next)
+        push!(ranges, next[1])
+        next = parse_spec1(spec, next[2])
     end
     return VersionSpec(ranges)
 end
 
-function semver_interval(m::RegexMatch)
-    @assert length(m.captures) == 4
-    n_significant = count(x -> x !== nothing, m.captures) - 1
-    typ, _major, _minor, _patch = m.captures
-    major =                           parse(Int, _major)
-    minor = (n_significant < 2) ? 0 : parse(Int, _minor)
-    patch = (n_significant < 3) ? 0 : parse(Int, _patch)
-    if n_significant == 3 && major == 0 && minor == 0 && patch == 0
-        error("invalid version: \"0.0.0\"")
-    end
-    # Default type is :caret
-    vertyp = (typ == "" || typ == "^") ? :caret : :tilde
-    v0 = VersionBound((major, minor, patch))
-    if vertyp === :caret
-        if major != 0
-            return VersionRange(v0, VersionBound((v0[1],)))
-        elseif minor != 0
-            return VersionRange(v0, VersionBound((v0[1], v0[2])))
+
+# Parser of version specification
+# -------------------------------
+
+function parse_spec1(spec::String, i::Int)
+    # parse specifier
+    i = skipws(spec, i)
+    next = parse_specifier(spec, i)
+    isnothing(next) && return
+    specifier, i = next
+
+    # parse version number
+    next = parse_vernum(spec, i)
+    isnothing(next) && error("found no version number")
+    ver, i = next
+    next = iterate(spec, i)
+    if isnothing(next) || next[1] == ','
+        isnothing(next) || (i = next[2])  # comsume comma
+        specifier == '?' && (specifier = '^')  # implicit caret
+    elseif isspace(next[1])
+        i = skipws(spec, next[2])
+        next = iterate(spec, i)
+        if isnothing(next) || next[1] == ','
+            isnothing(next) || (i = next[2])  # consume comma
+            specifier == '?' && (specifier = '^')  # implicit caret
+        elseif next[1] == '-'
+            specifier == '?' || error("invalid hyphen specifier syntax")
+            specifier = '-'
+            next = iterate(spec, next[2])
+            isnothing(next) && error("incomplete hyphen specifier")
+            isspace(next[1]) || error("no space after hyphen specifier")
+            i = next[2]
         else
-            if n_significant == 1
-                return VersionRange(v0, VersionBound((0,)))
-            elseif n_significant == 2
-                return VersionRange(v0, VersionBound((0, 0,)))
-            else
-                return VersionRange(v0, VersionBound((0, 0, v0[3])))
-            end
+            error("unrecognizable character: $(repr(next[1]))")
         end
+    elseif next[1] == '-'
+        error("no space before hyphen specifier")
     else
-        if n_significant == 3 || n_significant == 2
-            return VersionRange(v0, VersionBound((v0[1], v0[2],)))
-        else
-            return VersionRange(v0, VersionBound((v0[1],)))
-        end
+        error("unrecognizable character: $(repr(next[1]))")
     end
+
+    # if not a hyphen specifier, parsing ends.
+    specifier == '-' || return interpret_spec(specifier, ver), i
+
+    # parse version number after hyphen
+    i = skipws(spec, i)
+    next = parse_vernum(spec, i)
+    isnothing(next) && error("incomplete hyphen specifier")
+    ver2, i = next
+    i = skipws(spec, i)
+    next = iterate(spec, i)
+    !isnothing(next) && next[1] == ',' && (i = next[2])
+    return interpret_spec(specifier, ver, ver2), i
 end
 
-const _inf = Pkg.Types.VersionBound("*")
-function inequality_interval(m::RegexMatch)
-    @assert length(m.captures) == 4
-    typ, _major, _minor, _patch = m.captures
-    n_significant = count(x -> x !== nothing, m.captures) - 1
-    major =                           parse(Int, _major)
-    minor = (n_significant < 2) ? 0 : parse(Int, _minor)
-    patch = (n_significant < 3) ? 0 : parse(Int, _patch)
-    if n_significant == 3 && major == 0 && minor == 0 && patch == 0
+function parse_specifier(spec::String, i::Int)
+    next = iterate(spec, i)
+    isnothing(next) && return
+    specifier = next[1]
+    if isdigit(specifier)
+        # implicit caret or hyphen
+        specifier = '?'
+    elseif specifier ∈ ('^', '~', '=', '<', '≥')
+        # caret, tilde, equal, or one-character inequal
+        i = skipws(spec, next[2])
+    elseif specifier == '>'
+        # two-character inequal (i.e. '>=')
+        next = iterate(spec, next[2])
+        !isnothing(next) && next[1] == '=' || error("expected '=' after '>'")
+        specifier = '≥'
+        i = skipws(spec, next[2])
+    else
+        error("invalid version specifier: $(repr(specifier))")
+    end
+    return specifier, i
+end
+
+function parse_vernum(str::String, i::Int)
+    # ignore 'v' if any
+    next = iterate(str, i)
+    isnothing(next) && return
+    next[1] == 'v' && (i = next[2])
+
+    # major
+    next = parse_decimal(str, i)
+    isnothing(next) && return
+    major, i = next
+    next = iterate(str, i)
+    !isnothing(next) && next[1] == '.' ||
+        return (ndigits = 1, major = major, minor = 0, patch = 0), i
+    i = next[2]
+
+    # minor
+    next = parse_decimal(str, i)
+    isnothing(next) && error("incomplete version number")
+    minor, i = next
+    next = iterate(str, i)
+    !isnothing(next) && next[1] == '.' ||
+        return (ndigits = 2, major = major, minor = minor, patch = 0), i
+    i = next[2]
+
+    # patch
+    next = parse_decimal(str, i)
+    isnothing(next) && error("incomplete version number")
+    patch, i = next
+    return (ndigits = 3, major = major, minor = minor, patch = patch), i
+end
+
+function parse_decimal(str::String, i::Int)
+    num = 0
+    next = iterate(str, i)
+    !isnothing(next) && isdigit(next[1]) || return
+    while !isnothing(next) && isdigit(next[1])
+        c, i = next
+        # TODO: check overflow
+        num = 10num + Int(c - '0')
+        next = iterate(str, i)
+    end
+    return num, i
+end
+
+function skipws(s::String, i::Int)
+    next = iterate(s, i)
+    while !isnothing(next) && isspace(next[1])
+        i = next[2]
+        next = iterate(s, i)
+    end
+    return i
+end
+
+
+# Interpreter of version specification
+# ------------------------------------
+
+function check_version(v::NamedTuple)
+    @assert 1 ≤ v.ndigits ≤ 3  # this never happens
+    if v.ndigits == 3 && v.major == v.minor == v.patch == 0
         error("invalid version: 0.0.0")
     end
-    v = VersionBound(major, minor, patch)
-    if occursin(r"^<\s*$", typ)
-        nil = VersionBound(0, 0, 0)
-        if v[3] == 0
-            if v[2] == 0
-                v1 = VersionBound(v[1]-1)
-            else
-                v1 = VersionBound(v[1], v[2]-1)
-            end
-        else
-            v1 = VersionBound(v[1], v[2], v[3]-1)
-        end
-        return VersionRange(nil, v1)
-    elseif occursin(r"^=\s*$", typ)
-        return VersionRange(v)
-    elseif occursin(r"^>=\s*$", typ) || occursin(r"^≥\s*$", typ)
-           return VersionRange(v, _inf)
-    else
-        error("invalid prefix $typ")
-    end
 end
 
-function hyphen_interval(m::RegexMatch)
-    @assert length(m.captures) == 6
-    _lower_major, _lower_minor, _lower_patch, _upper_major, _upper_minor, _upper_patch = m.captures
-    if isnothing(_lower_minor)
-        lower_bound = VersionBound(parse(Int, _lower_major))
-    elseif isnothing(_lower_patch)
-        lower_bound = VersionBound(parse(Int, _lower_major),
-                                   parse(Int, _lower_minor))
+# unary specifier
+function interpret_spec(specifier::Char, ver::NamedTuple)
+    check_version(ver)
+    n = ver.ndigits
+    major, minor, patch = ver.major, ver.minor, ver.patch
+    b = VersionBound(major, minor, patch)
+    lo = VersionBound(0, 0, 0)
+    up = VersionBound()
+    if specifier == '^'
+        lo = b
+        up = n == 1 || major != 0 ? VersionBound(major) :
+             n == 2 || minor != 0 ? VersionBound(0, minor) :
+             VersionBound(0, 0, patch)
+    elseif specifier == '~'
+        lo = b
+        up = n == 1 ? VersionBound(major) : VersionBound(major, minor)
+    elseif specifier == '='
+        lo = up = b
+    elseif specifier == '<'
+        up = patch == 0 && minor == 0 ? VersionBound(major-1) :
+             patch == 0 && minor != 0 ? VersionBound(major, minor-1) :
+             VersionBound(major, minor, patch-1)
+    elseif specifier == '≥'
+        lo = b
     else
-        lower_bound = VersionBound(parse(Int, _lower_major),
-                                   parse(Int, _lower_minor),
-                                   parse(Int, _lower_patch))
+        @assert false
     end
-    if isnothing(_upper_minor)
-        upper_bound = VersionBound(parse(Int, _upper_major))
-    elseif isnothing(_upper_patch)
-        upper_bound = VersionBound(parse(Int, _upper_major),
-                                   parse(Int, _upper_minor))
-    else
-        upper_bound = VersionBound(parse(Int, _upper_major),
-                                   parse(Int, _upper_minor),
-                                   parse(Int, _upper_patch))
-    end
-    return VersionRange(lower_bound, upper_bound)
+    return VersionRange(lo, up)
 end
 
-const version = "v?([0-9]+?)(?:\\.([0-9]+?))?(?:\\.([0-9]+?))?"
-const ver_regs =
-[
-    Regex("^([~^]?)?$version\$") => semver_interval, # 0.5 ^0.4 ~0.3.2
-    Regex("^((?:≥\\s*)|(?:>=\\s*)|(?:=\\s*)|(?:<\\s*)|(?:=\\s*))v?$version\$")  => inequality_interval,# < 0.2 >= 0.5,2
-    Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
-]
+# binary specifier
+function interpret_spec(specifier::Char, ver1::NamedTuple, ver2::NamedTuple)
+    check_version(ver1)
+    check_version(ver2)
+    @assert specifier == '-'  # the only supported binary specifier
+    n = ver1.ndigits
+    major, minor, patch = ver1.major, ver1.minor, ver1.patch
+    lo = n == 1 ? VersionBound(major) :
+         n == 2 ? VersionBound(major, minor) :
+         VersionBound(major, minor, patch)
+    n = ver2.ndigits
+    major, minor, patch = ver2.major, ver2.minor, ver2.patch
+    up = n == 1 ? VersionBound(major) :
+         n == 2 ? VersionBound(major, minor) :
+         VersionBound(major, minor, patch)
+    return VersionRange(lo, up)
+end
