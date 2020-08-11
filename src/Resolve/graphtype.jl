@@ -583,16 +583,19 @@ function wipe_snapshots!(graph::Graph)
 end
 
 
-function color_string(c, str...)
-    return sprint((io, args) -> printstyled(io, args...; color=c), str, context=stderr)
-end
+
 
 # system colors excluding whites/greys/blacks and error-red
 const CONFLICT_COLORS = [1:6; 10:14];
 pkgID_color(pkgID) = CONFLICT_COLORS[mod1(hash(pkgID), end)]
 
-logstr(pkgID, args...) = color_string(pkgID_color(pkgID), args...)
 logstr(pkgID) = logstr(pkgID, pkgID)
+function logstr(pkgID, args...)
+    # workout the string with the color codes, check stderr to decide if color is enabled
+    return sprint(args; context=stderr) do io, iargs
+        printstyled(io, iargs...; color=pkgID_color(pkgID))
+    end
+end
 
 function init_log!(data::GraphData)
     np = data.np
