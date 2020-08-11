@@ -587,18 +587,10 @@ function color_string(c, str...)
     return sprint((io, args) -> printstyled(io, args...; color=c), str, context=stderr)
 end
 
-# system colors excluding greys, bright-yellow and dark-blue
-const CONFLICT_COLORS = [5,1,6,3,2,13,12,9,10];
-const pkgID_color = let  # Cycle through each color in turn when a new color is needed
-    pkgID2color = Dict{String, Int}()
-    cur_color_index = 0;
-    function pkgID_color(pkgID)
-        get!(pkgID2color, pkgID) do
-            cur_color_index+=1
-            CONFLICT_COLORS[mod1(cur_color_index, end)]
-        end
-    end
-end
+# system colors excluding whites/greys/blacks and error-red
+const CONFLICT_COLORS = [1:6; 10:14];
+pkgID_color(pkgID) = CONFLICT_COLORS[mod1(hash(pkgID), end)]
+
 logstr(pkgID, args...) = color_string(pkgID_color(pkgID), args...)
 logstr(pkgID) = logstr(pkgID, pkgID)
 
