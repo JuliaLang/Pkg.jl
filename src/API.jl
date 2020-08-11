@@ -773,10 +773,7 @@ function precompile(ctx::Context)
             break
         end
         if stale
-            try
-                Base.compilecache(pkg, sourcepath)
-            catch
-            end
+            Base.compilecache(pkg, sourcepath)
         end
     end
     nothing
