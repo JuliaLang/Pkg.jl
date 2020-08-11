@@ -837,26 +837,26 @@ end
     end
 end
 
-@testset "compressed_versionspec" begin
+@testset "range_compressed_versionspec" begin
     pool = [v"1.0.0", v"1.1.0", v"1.2.0", v"1.2.1", v"2.0.0", v"2.0.1", v"3.0.0", v"3.1.0"]
-    @test (compressed_versionspec(pool)
-        == compressed_versionspec(pool, pool)
+    @test (range_compressed_versionspec(pool)
+        == range_compressed_versionspec(pool, pool)
         == VersionSpec("1.0.0-3.1.0")
     )
 
     @test isequal(
-        compressed_versionspec(pool, [v"1.2.0", v"1.2.1", v"2.0.0", v"2.0.1", v"3.0.0"]),
+        range_compressed_versionspec(pool, [v"1.2.0", v"1.2.1", v"2.0.0", v"2.0.1", v"3.0.0"]),
         VersionSpec("1.2.0-3.0.0")
     )
 
     @test isequal(  # subset has 1.x and 3.x, but not 2.x
-        compressed_versionspec(
+        range_compressed_versionspec(
             pool, [v"1.0.0", v"1.1.0", v"1.2.0", v"1.2.1", v"3.0.0", v"3.1.0"]
         ),
         VersionSpec([VersionRange(v"1.0.0", v"1.2.1"), VersionRange(v"3.0.0", v"3.1.0")])
     )
 
-    @test compressed_versionspec(pool, [v"1.1.0"]) == VersionSpec("1.1.0")
+    @test range_compressed_versionspec(pool, [v"1.1.0"]) == VersionSpec("1.1.0")
 end
 
 end # module

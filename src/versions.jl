@@ -276,15 +276,15 @@ Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
 
 
 """
-    compressed_versionspec(pool, subset=pool)
+    range_compressed_versionspec(pool, subset=pool)
 
  - `pool`: all versions that exist (a superset of `subset`)
  - `subset`: the subset of those versions that we want to include in the spec.
 
-Works out a compressed `VersionSpec` that permits everything in the `subset`,
-and nothing else from the `pool`.
+Finds a minimal collection of ranges as a `VersionSpec`, that permits everything in the
+`subset`, but does not permit anything else from the `pool`.
 """
-function compressed_versionspec(pool, subset=pool)
+function range_compressed_versionspec(pool, subset=pool)
     length(subset)==1 && return VersionSpec(only(subset))
     # PREM-OPT: we keep re-sorting these, probably not required.
     sort!(pool)
