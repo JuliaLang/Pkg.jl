@@ -1,0 +1,3 @@
+module FailBuild
+
+end # module

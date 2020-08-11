@@ -1767,6 +1767,13 @@ end
         @test args == [Pkg.PackageSpec(;name="Foo"), Pkg.PackageSpec(;name="Bar")]
         @test opts == Dict(:verbose => true)
     end
+    
+    # Test package that fails build
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        package_path = copy_test_package(tempdir, "FailBuild")
+        Pkg.activate(package_path)
+        @test_throws ErrorException Pkg.build()
+    end end
 end
 
 #
