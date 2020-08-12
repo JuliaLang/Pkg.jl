@@ -245,7 +245,7 @@ function iterate!(graph::Graph, msgs::Messages, perm::NodePerm)
         graph.ignored[p0] && continue
         maxdiff0 = update!(p0, graph, msgs)
         if maxdiff0 isa Unsat
-            return Unsat
+            return maxdiff0
         end
         maxdiff = max(maxdiff, maxdiff0)
     end
