@@ -229,6 +229,11 @@ mutable struct Graph
     # number of packages (all Vectors above have this length)
     np::Int
 
+    # some workspace vectors
+    newmsg::Vector{FieldValue}
+    diff::Vector{FieldValue}
+    cavfld::Vector{FieldValue}
+
     function Graph(
             versions::Dict{UUID,Set{VersionNumber}},
             deps::Dict{UUID,Dict{VersionNumber,Dict{String,UUID}}},
@@ -353,7 +358,8 @@ mutable struct Graph
         ignored = falses(np)
         solve_stack = Tuple{Vector{BitVector},BitVector}[]
 
-        graph = new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np)
+        graph = new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np,
+                    FieldValue[], FieldValue[], FieldValue[])
 
         _add_fixed!(graph, fixed)
         _add_reqs!(graph, reqs, :explicit_requirement)
@@ -445,10 +451,17 @@ function _add_fixed!(graph::Graph, fixed::Dict{UUID,Fixed})
     return graph
 end
 
-Types.pkgID(p::UUID, rlog::ResolveLog) = pkgID(p, rlog.uuid_to_name)
-Types.pkgID(p::UUID, data::GraphData) = pkgID(p, data.uuid_to_name)
-Types.pkgID(p0::Int, data::GraphData) = pkgID(data.pkgs[p0], data)
-Types.pkgID(p, graph::Graph) = pkgID(p, graph.data)
+pkgID(p::UUID, rlog::ResolveLog) = pkgID(p, rlog.uuid_to_name)
+pkgID(p::UUID, data::GraphData) = pkgID(p, data.uuid_to_name)
+pkgID(p0::Int, data::GraphData) = pkgID(data.pkgs[p0], data)
+pkgID(p, graph::Graph) = pkgID(p, graph.data)
+
+## user-friendly representation of package IDs ##
+function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
+    name = get(uuid_to_name, p, "(unknown)")
+    uuid_short = string(p)[1:8]
+    return "$name [$uuid_short]"
+end
 
 function check_consistency(graph::Graph)
     np = graph.np
@@ -504,7 +517,8 @@ function check_consistency(graph::Graph)
             @assert size(gmsk0[j0]) == (spp1,spp0)
             j1 = adjdict0[p1]
             gmsk1 = gmsk[p1]
-            @assert gmsk1[j1] == permutedims(gmsk0[j0])
+            # This assert is a bit too expensive
+            # @assert gmsk1[j1] == permutedims(gmsk0[j0])
         end
     end
     for (p,p0) in pdict
@@ -1256,7 +1270,7 @@ function build_eq_classes_soft1!(graph::Graph, p0::Int)
     # group versions into sets that behave identically
     # each set is represented by its highest-valued member
     repr_vers = sort!(Int[findlast(isequal(repr_vecs[w0]), cvecs) for w0 = 1:neq])
-    @assert all(repr_vers .> 0)
+    @assert all(>(0), repr_vers)
     @assert repr_vers[end] == eff_spp0
 
     # convert the version numbers into the original numbering

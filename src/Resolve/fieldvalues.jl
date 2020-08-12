@@ -45,22 +45,10 @@ Base.:+(a::FieldValue, b::FieldValue) = FieldValue(a.l0+b.l0, a.l1+b.l1, a.l2+b.
 function Base.isless(a::FieldValue, b::FieldValue)
     a.l0 < b.l0 && return true
     a.l0 > b.l0 && return false
-    c = cmp(a.l1, b.l1)
-    c < 0 && return true
-    c > 0 && return false
-    c = cmp(a.l2, b.l2)
-    c < 0 && return true
-    c > 0 && return false
-    a.l3 < b.l3 && return true
-    return false
+    return (a.l1, a.l2, a.l3) < (b.l1, b.l2, b.l3)
 end
 
-Base.:(==)(a::FieldValue, b::FieldValue) =
-    a.l0 == b.l0 && a.l1 == b.l1 && a.l2 == b.l2 && a.l3 == b.l3
-
 Base.abs(a::FieldValue) = FieldValue(abs(a.l0), abs(a.l1), abs(a.l2), abs(a.l3))
-
-Base.copy(a::FieldValue) = FieldValue(a.l0, copy(a.l1), copy(a.l2), a.l3)
 
 # if the maximum field has l0 < 0, it means that
 # some hard constraint is being violated

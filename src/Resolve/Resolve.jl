@@ -7,7 +7,7 @@ using ..Types
 using Printf
 using Random
 
-export resolve, sanity_check, Graph
+export resolve, sanity_check, Graph, pkgID
 
 ####################
 # Requires / Fixed #
@@ -52,9 +52,9 @@ end
 
 const uuid_julia = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 
-include("graphtype.jl")
 include("versionweights.jl")
 include("fieldvalues.jl")
+include("graphtype.jl")
 include("maxsum.jl")
 
 "Resolve package dependencies."
