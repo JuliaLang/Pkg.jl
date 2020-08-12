@@ -1772,7 +1772,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         package_path = copy_test_package(tempdir, "FailBuild")
         Pkg.activate(package_path)
-        @test_throws ErrorException Pkg.build()
+        @test_throws PkgError Pkg.build()
     end end
 end
 
