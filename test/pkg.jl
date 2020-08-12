@@ -837,4 +837,26 @@ end
     end
 end
 
+@testset "range_compressed_versionspec" begin
+    pool = [v"1.0.0", v"1.1.0", v"1.2.0", v"1.2.1", v"2.0.0", v"2.0.1", v"3.0.0", v"3.1.0"]
+    @test (range_compressed_versionspec(pool)
+        == range_compressed_versionspec(pool, pool)
+        == VersionSpec("1.0.0-3.1.0")
+    )
+
+    @test isequal(
+        range_compressed_versionspec(pool, [v"1.2.0", v"1.2.1", v"2.0.0", v"2.0.1", v"3.0.0"]),
+        VersionSpec("1.2.0-3.0.0")
+    )
+
+    @test isequal(  # subset has 1.x and 3.x, but not 2.x
+        range_compressed_versionspec(
+            pool, [v"1.0.0", v"1.1.0", v"1.2.0", v"1.2.1", v"3.0.0", v"3.1.0"]
+        ),
+        VersionSpec([VersionRange(v"1.0.0", v"1.2.1"), VersionRange(v"3.0.0", v"3.1.0")])
+    )
+
+    @test range_compressed_versionspec(pool, [v"1.1.0"]) == VersionSpec("1.1.0")
+end
+
 end # module

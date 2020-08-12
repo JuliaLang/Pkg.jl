@@ -582,7 +582,7 @@ function init_log!(data::GraphData)
         if isempty(versions)
             msg = "$id has no known versions!" # This shouldn't happen?
         else
-            msg = "possible versions are: $(VersionSpec(VersionRange.(versions))) or uninstalled"
+            msg = "possible versions are: $(range_compressed_versionspec(versions)) or uninstalled"
         end
         first_entry = get!(rlog.pool, p) do; ResolveLogEntry(rlog.journal, p, "$id log:") end
 
@@ -627,7 +627,7 @@ function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
     rp0 = pdict[rp]
     @assert !gconstr[rp0][end]
     if any(gconstr[rp0])
-        msg *= ", leaving only versions $(VersionSpec(VersionRange.(pvers[rp0][gconstr[rp0][1:(end-1)]])))"
+        msg *= ", leaving only versions $(range_compressed_versionspec(pvers[rp0], pvers[rp0][gconstr[rp0][1:(end-1)]]))"
     else
         msg *= " — no versions left"
     end
@@ -650,7 +650,7 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
 
     function vs_string(p0::Int, vmask::BitVector)
         if any(vmask[1:(end-1)])
-            vns = string(VersionSpec(VersionRange.(pvers[p0][vmask[1:(end-1)]])))
+            vns = string(range_compressed_versionspec(pvers[p0], pvers[p0][vmask[1:(end-1)]]))
             vmask[end] && (vns *= " or uninstalled")
         else
             @assert vmask[end]
@@ -788,7 +788,7 @@ function log_event_eq_classes!(graph::Graph, p0::Int)
     pvers = graph.data.pvers
 
     if any(gconstr[p0][1:(end-1)])
-        vns = string(VersionSpec(VersionRange.(pvers[p0][gconstr[p0][1:(end-1)]])))
+        vns = string(range_compressed_versionspec(pvers[p0], pvers[p0][gconstr[p0][1:(end-1)]]))
         gconstr[p0][end] && (vns *= " or uninstalled")
     elseif gconstr[p0][end]
         vns = "uninstalled"
