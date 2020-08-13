@@ -940,7 +940,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             else
                 "", ""
             end
-            error("Error building `$(pkg.name)`$last_lines: \n$log_show$full_log_at")
+            pkgerror("Error building `$(pkg.name)`$last_lines: \n$log_show$full_log_at")
         end
     end
     return
