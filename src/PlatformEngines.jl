@@ -1084,7 +1084,7 @@ Given a `.tar.gz` filepath, return a dictionary of symlinks in the archive
 function list_tarball_symlinks(tarball_path::AbstractString)
     output = get_tarball_contents(tarball_path; verbose_tar = true)
     mm = [m.captures for m in eachmatch(parse_symlinks(), output)]
-    symlinks = [m[1] => joinpath(dirname(m[1]), m[2]) for m in mm]
+    symlinks = [String(m[1]) => joinpath(dirname(m[1]), m[2]) for m in mm if m[1] !== nothing && m[2] !== nothing]
     return symlinks
 end
 
