@@ -1313,13 +1313,20 @@ function gen_test_code(testfile::String;
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(testfile)))
         """
+    if Base.JLOptions().depwarn == 2
+        depwarn = "error"
+    elseif Base.JLOptions().depwarn == 1
+        depwarn = "yes"       
+    else
+        depwarn = "no"
+    end
     return ```
         $(Base.julia_cmd())
         --code-coverage=$(coverage ? "user" : "none")
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes
-        --depwarn=$(Base.JLOptions().depwarn == 2 ? "error" : "yes")
+        --depwarn=$(depwarn)
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
