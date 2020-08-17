@@ -937,9 +937,17 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # check if all source code and artifacts are downloaded to exit early
     Operations.is_instantiated(ctx) && return
 
-    Types.update_registries(ctx)
     pkgs = Operations.load_all_deps(ctx)
-    Operations.check_registered(ctx, pkgs)
+    try
+        # First try without updating the registry
+        Operations.check_registered(ctx, pkgs)
+    catch e
+        if !(e isa PkgError) || update_registries == false
+            rethrow(e)
+        end
+        Types.update_registries(ctx)
+        Operations.check_registered(ctx, pkgs)
+    end
     new_git = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
