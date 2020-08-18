@@ -413,14 +413,14 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
     uuids = collect(union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...))
     seen = UUID[]
 
-    all_versions = Dict{UUID,Set{VersionNumber}}()
-    all_deps     = Dict{UUID,Dict{VersionNumber,Dict{String,UUID}}}()
-    all_compat   = Dict{UUID,Dict{VersionNumber,Dict{String,VersionSpec}}}()
+    all_versions = VersionsDict()
+    all_deps     = DepsDict()
+    all_compat   = CompatDict()
 
     for (fp, fx) in fixed
         all_versions[fp] = Set([fx.version])
-        all_deps[fp]     = Dict(fx.version => Dict())
-        all_compat[fp]   = Dict(fx.version => Dict())
+        all_deps[fp]     = Dict(fx.version => valtype(DepsValDict)())
+        all_compat[fp]   = Dict(fx.version => valtype(CompatValDict)())
     end
 
     while true

@@ -551,7 +551,7 @@ end
         end
 
         # Force Pkg to reload what it knows about artifact overrides
-        Pkg.Artifacts.load_overrides(;force=true)
+        @inferred Union{Nothing,Dict{Symbol,Any}} Pkg.Artifacts.load_overrides(;force=true)
 
         # Verify that the hash-based override worked
         @test artifact_path(baz_hash) == artifact_path(bar_hash)

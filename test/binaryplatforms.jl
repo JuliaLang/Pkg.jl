@@ -5,7 +5,7 @@ using Test, Pkg.BinaryPlatforms
 import Pkg.BinaryPlatforms: platform_name
 
 # The platform we're running on
-const platform = platform_key_abi()
+const platform = @inferred Platform platform_key_abi()
 
 @testset "PlatformNames" begin
     # Ensure the platform type constructors are well behaved
@@ -114,7 +114,7 @@ const platform = platform_key_abi()
 
     @testset "platform_key_abi parsing" begin
         # Make sure the platform_key_abi() with explicit triplet works
-        @test platform_key_abi("x86_64-linux-gnu") == Linux(:x86_64)
+        @test @inferred(Platform, platform_key_abi("x86_64-linux-gnu")) == Linux(:x86_64)
         @test platform_key_abi("x86_64-linux-musl") == Linux(:x86_64, libc=:musl)
         @test platform_key_abi("i686-unknown-linux-gnu") == Linux(:i686)
         @test platform_key_abi("x86_64-apple-darwin14") == MacOS()

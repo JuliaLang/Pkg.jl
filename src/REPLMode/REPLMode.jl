@@ -39,8 +39,8 @@ function OptionSpec(;name::String,
     return OptionSpec(name, short_name, api, takes_arg)
 end
 
-function OptionSpecs(decs::Vector{OptionDeclaration})::Dict{String, OptionSpec}
-    specs = Dict()
+function OptionSpecs(decs::Vector{OptionDeclaration})
+    specs = Dict{String, OptionSpec}()
     for x in decs
         opt_spec = OptionSpec(;x...)
         @assert !haskey(specs, opt_spec.name) # don't overwrite
@@ -97,8 +97,8 @@ function CommandSpec(;name::Union{Nothing,String}           = nothing,
                        OptionSpecs(option_spec), completions, description, help)
 end
 
-function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,CommandSpec}
-    specs = Dict()
+function CommandSpecs(declarations::Vector{CommandDeclaration})
+    specs = Dict{String,CommandSpec}()
     for dec in declarations
         spec = CommandSpec(;dec...)
         @assert !haskey(specs, spec.canonical_name) "duplicate spec entry"
@@ -111,8 +111,8 @@ function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,Com
     return specs
 end
 
-function CompoundSpecs(compound_declarations)::Dict{String,Dict{String,CommandSpec}}
-    compound_specs = Dict()
+function CompoundSpecs(compound_declarations)
+    compound_specs = Dict{String,Dict{String,CommandSpec}}()
     for (name, command_declarations) in compound_declarations
         specs = CommandSpecs(command_declarations)
         @assert !haskey(compound_specs, name) "duplicate super spec entry"
