@@ -394,12 +394,12 @@ Sys.isbsd(p::Platform) = (p isa FreeBSD) || (p isa MacOS)
 
 
 """
-    platform_key_abi(machine::AbstractString)
+    platform_key_abi(machine::String)
 
 Returns the platform key for the current platform, or any other though the
 the use of the `machine` parameter.
 """
-function platform_key_abi(machine::AbstractString)
+function platform_key_abi(machine::String)
     # We're going to build a mondo regex here to parse everything:
     arch_mapping = Dict(
         :x86_64 => "(x86_|amd)64",

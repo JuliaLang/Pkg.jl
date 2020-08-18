@@ -702,7 +702,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
         # try it anyway since we can't refresh
         return something(handle_auth_error(url, "no-refresh-key"; verbose=verbose), auth_header)
     end
-    refresh_url = auth_info["refresh_url"]
+    refresh_url = auth_info["refresh_url"]::String
     if !is_secure_url(refresh_url)
         @warn "ignoring insecure auth refresh URL" url=refresh_url
         return something(handle_auth_error(url, "insecure-refresh-url"; verbose=verbose), auth_header)
@@ -898,7 +898,7 @@ function get_telemetry_headers(url::AbstractString, notify::Bool=true)
     ci_variables === true && (ci_variables = CI_VARIABLES)
     if ci_variables != false
         ci_info = String[]
-        for var in CI_VARIABLES ∩ map(uppercase, ci_variables)
+        for var in CI_VARIABLES ∩ map(uppercase, ci_variables::Vector{String})
             val = get(ENV, var, nothing)
             state = val === nothing ? "n" :
                 lowercase(val) in ("true", "t", "1", "yes", "y") ? "t" :

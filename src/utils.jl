@@ -11,6 +11,7 @@ function set_readonly(path)
     end
     return nothing
 end
+set_readonly(::Nothing) = nothing
 
 # try to call realpath on as much as possible
 function safe_realpath(path)

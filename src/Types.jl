@@ -760,8 +760,8 @@ function registry_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
     # collect all names and uuids since we're looking anyway
-    names = String[pkg.name for pkg in pkgs if has_name(pkg)]
-    uuids = UUID[pkg.uuid for pkg in pkgs if has_uuid(pkg)]
+    names = [pkg.name::String for pkg in pkgs if has_name(pkg)]
+    uuids = [pkg.uuid::UUID for pkg in pkgs if has_uuid(pkg)]
     find_registered!(ctx, names, uuids)
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
@@ -795,14 +795,16 @@ function ensure_resolved(ctx::Context,
         pkgs::AbstractVector{PackageSpec};
         registry::Bool=false,)::Nothing
         unresolved_uuids = Dict{String,Vector{UUID}}()
-    for name in [pkg.name for pkg in pkgs if !has_uuid(pkg)]
-        uuids = [uuid for (uuid, entry) in ctx.env.manifest if entry.name == name]
+    for pkg in pkgs
+        has_uuid(pkg) && continue
+        uuids = [uuid for (uuid, entry) in ctx.env.manifest if entry.name == pkg.name]
         sort!(uuids, by=uuid -> uuid.value)
-        unresolved_uuids[name] = uuids
+        unresolved_uuids[pkg.name] = uuids
     end
     unresolved_names = UUID[]
-    for uuid in [pkg.uuid for pkg in pkgs if !has_name(pkg)]
-        push!(unresolved_names, uuid)
+    for pkg in pkgs
+        has_name(pkg) && continue
+        push!(unresolved_names, pkg.uuid)
     end
     isempty(unresolved_uuids) && isempty(unresolved_names) && return
     msg = sprint() do io
