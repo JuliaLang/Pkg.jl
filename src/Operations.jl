@@ -1326,6 +1326,7 @@ function gen_test_code(testfile::String;
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
+        --threads=$(Threads.nthreads())
         $(julia_args)
         --eval $(code)
     ```
