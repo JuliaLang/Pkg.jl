@@ -2380,6 +2380,19 @@ end
     end
 end
 
+@testset "cyclic dependency graph" begin
+    isolate(loaded_depot=true) do
+        Pkg.generate("A")
+        Pkg.generate("B")
+        Pkg.activate("A")
+        Pkg.develop(path="B")
+        git_init_and_commit("A")
+        Pkg.activate("B")
+        # This shouldn't error even though A has a dependency on B
+        Pkg.add(path="A")
+    end
+end
+
 @testset "Offline mode" begin
     isolate(loaded_depot=false) do
         # cache this version
