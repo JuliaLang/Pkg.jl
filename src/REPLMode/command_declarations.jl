@@ -1,12 +1,14 @@
+const PSA = Pair{Symbol,Any}
+
 compound_declarations = [
 "package" => CommandDeclaration[
-[   :name => "test",
+PSA[:name => "test",
     :api => API.test,
     :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
-    :option_spec => OptionDeclaration[
-        [:name => "coverage", :api => :coverage => true],
+    :option_spec => [
+        PSA[:name => "coverage", :api => :coverage => true],
     ],
     :completions => complete_installed_packages,
     :description => "run tests for packages",
@@ -18,7 +20,8 @@ in the package directory. The option `--coverage` can be used to run the tests w
 coverage enabled. The `startup.jl` file is disabled during testing unless
 julia is started with `--startup-file=yes`.
 """,
-],[ :name => "help",
+],
+PSA[:name => "help",
     :short_name => "?",
     :api => identity, # dummy API function
     :arg_count => 0 => Inf,
@@ -35,12 +38,13 @@ List available commands along with short descriptions.
 If `cmd` is a partial command, display help for all subcommands.
 If `cmd` is a full command, display help for `cmd`.
 """,
-],[ :name => "instantiate",
+],
+PSA[:name => "instantiate",
     :api => API.instantiate,
-    :option_spec => OptionDeclaration[
-        [:name => "project", :short_name => "p", :api => :manifest => false],
-        [:name => "manifest", :short_name => "m", :api => :manifest => true],
-        [:name => "verbose", :short_name => "v", :api => :verbose => true],
+    :option_spec => [
+        PSA[:name => "project", :short_name => "p", :api => :manifest => false],
+        PSA[:name => "manifest", :short_name => "m", :api => :manifest => true],
+        PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
     :description => "downloads all the dependencies for the project",
     :help => md"""
@@ -51,15 +55,16 @@ If `cmd` is a full command, display help for `cmd`.
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
 """,
-],[ :name => "remove",
+],
+PSA[:name => "remove",
     :short_name => "rm",
     :api => API.rm,
     :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => parse_package,
-    :option_spec => OptionDeclaration[
-        [:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
-        [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
+    :option_spec => [
+        PSA[:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
+        PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
     ],
     :completions => complete_installed_packages,
     :description => "remove packages from project or manifest",
@@ -82,13 +87,14 @@ multiple packages in the manifest, `uuid` disambiguates it. Removing a package
 from the manifest forces the removal of all packages that depend on it, as well
 as any no-longer-necessary manifest packages due to project package removals.
 """,
-],[ :name => "add",
+],
+PSA[:name => "add",
     :api => API.add,
     :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => ((x,y) -> parse_package(x,y; add_or_dev=true)),
-    :option_spec => OptionDeclaration[
-        [:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+    :option_spec => [
+        PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
     :completions => complete_add_dev,
     :description => "add packages to project",
@@ -134,16 +140,17 @@ pkg> add git@github.com:JuliaLang/Example.jl.git
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
 """,
-],[ :name => "develop",
+],
+PSA[:name => "develop",
     :short_name => "dev",
     :api => API.develop,
     :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => ((x,y) -> parse_package(x,y; add_or_dev=true)),
-    :option_spec => OptionDeclaration[
-        [:name => "strict", :api => :strict => true],
-        [:name => "local", :api => :shared => false],
-        [:name => "shared", :api => :shared => true],
+    :option_spec => [
+        PSA[:name => "strict", :api => :strict => true],
+        PSA[:name => "local", :api => :shared => false],
+        PSA[:name => "shared", :api => :shared => true],
     ],
     :completions => complete_add_dev,
     :description => "clone the full package repo locally for development",
@@ -165,7 +172,8 @@ pkg> develop ~/mypackages/Example
 pkg> develop --local Example
 ```
 """,
-],[ :name => "free",
+],
+PSA[:name => "free",
     :api => API.free,
     :should_splat => false,
     :arg_count => 1 => Inf,
@@ -178,7 +186,8 @@ pkg> develop --local Example
 Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
 makes the package no longer being checked out.
 """,
-],[ :name => "pin",
+],
+PSA[:name => "pin",
     :api => API.pin,
     :should_splat => false,
     :arg_count => 1 => Inf,
@@ -198,13 +207,14 @@ pkg> pin Example@0.5.0
 pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
 ```
 """,
-],[ :name => "build",
+],
+PSA[:name => "build",
     :api => API.build,
     :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
-    :option_spec => OptionDeclaration[
-        [:name => "verbose", :short_name => "v", :api => :verbose => true],
+    :option_spec => [
+        PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
     :completions => complete_installed_packages,
     :description => "run the build script for packages",
@@ -216,7 +226,8 @@ If no packages are given, run the build scripts for all packages in the manifest
 The `-v`/`--verbose` option redirects build output to `stdout`/`stderr` instead of the `build.log` file.
 The `startup.jl` file is disabled during building unless julia is started with `--startup-file=yes`.
 """,
-],[ :name => "resolve",
+],
+PSA[:name => "resolve",
     :api => API.resolve,
     :description => "resolves to update the manifest from changes in dependencies of developed packages",
     :help => md"""
@@ -225,13 +236,14 @@ The `startup.jl` file is disabled during building unless julia is started with `
 Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
 packages have changed causing the current Manifest to be out of sync.
 """,
-],[ :name => "activate",
+],
+PSA[:name => "activate",
     :api => API.activate,
     :arg_count => 0 => 1,
     :arg_parser => parse_activate,
-    :option_spec => OptionDeclaration[
-        [:name => "shared", :api => :shared => true],
-        [:name => "temp", :api => :temp => true],
+    :option_spec => [
+        PSA[:name => "shared", :api => :shared => true],
+        PSA[:name => "temp", :api => :temp => true],
     ],
     :completions => complete_activate,
     :description => "set the primary environment the package manager manipulates",
@@ -246,19 +258,20 @@ When the option `--shared` is given, `path` will be assumed to be a directory na
 it will be placed in the first depot of the stack.
 Use the `temp` option to create temporary environments. This should be useful for experimenting with packages.
 """ ,
-],[ :name => "update",
+],
+PSA[:name => "update",
     :short_name => "up",
     :api => API.up,
     :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
-    :option_spec => OptionDeclaration[
-        [:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
-        [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
-        [:name => "major", :api => :level => UPLEVEL_MAJOR],
-        [:name => "minor", :api => :level => UPLEVEL_MINOR],
-        [:name => "patch", :api => :level => UPLEVEL_PATCH],
-        [:name => "fixed", :api => :level => UPLEVEL_FIXED],
+    :option_spec => [
+        PSA[:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
+        PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
+        PSA[:name => "major", :api => :level => UPLEVEL_MAJOR],
+        PSA[:name => "minor", :api => :level => UPLEVEL_MINOR],
+        PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
+        PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
     ],
     :completions => complete_installed_packages,
     :description => "update packages in manifest",
@@ -277,7 +290,8 @@ the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
 """,
-],[ :name => "generate",
+],
+PSA[:name => "generate",
     :api => API.generate_deprecated,
     :arg_count => 1 => 1,
     :arg_parser => ((x,y) -> map(expanduser, unwrap(x))),
@@ -287,7 +301,8 @@ packages will not be upgraded at all.
 
 Create a project called `pkgname` in the current folder.
 """,
-],[ :name => "precompile",
+],
+PSA[:name => "precompile",
     :api => API.precompile,
     :description => "precompile all the project dependencies",
     :help => md"""
@@ -296,16 +311,17 @@ Create a project called `pkgname` in the current folder.
 Precompile all the dependencies of the project by running `import` on all of them in a new process.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
 """,
-],[ :name => "status",
+],
+PSA[:name => "status",
     :short_name => "st",
     :api => API.status,
     :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
-    :option_spec => OptionDeclaration[
-        [:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
-        [:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
-        [:name => "diff", :short_name => "d", :api => :diff => true],
+    :option_spec => [
+        PSA[:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
+        PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
+        PSA[:name => "diff", :short_name => "d", :api => :diff => true],
     ],
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
@@ -328,10 +344,11 @@ the output to the difference as compared to the last git commit.
     The `--diff` option requires Julia 1.3. In earlier versions `--diff`
     is the default for environments in git repositories.
 """,
-],[ :name => "gc",
+],
+PSA[:name => "gc",
     :api => API.gc,
-    :option_spec => OptionDeclaration[
-        [:name => "all", :api => :collect_delay => Hour(0)],
+    :option_spec => [
+        PSA[:name => "all", :api => :collect_delay => Hour(0)],
     ],
     :description => "garbage collect packages not used for a significant time",
     :help => md"""
@@ -341,7 +358,8 @@ Free disk space by garbage collecting packages not used for a significant time.
 The `--all` option will garbage collect all packages which can not be immediately
 reached from any existing project.
 """,
-],[ :name => "undo",
+],
+PSA[:name => "undo",
     :api => API.undo,
     :description => "undo the latest change to the active project",
     :help => md"""
@@ -350,10 +368,10 @@ reached from any existing project.
 Undoes the latest change to the active project.
 """,
 ],
-[ :name => "redo",
-  :api => API.redo,
-  :description => "redo the latest change to the active project",
-  :help => md"""
+PSA[:name => "redo",
+    :api => API.redo,
+    :description => "redo the latest change to the active project",
+    :help => md"""
     redo
 
 Redoes the changes from the latest [`undo`](@ref).
@@ -361,7 +379,7 @@ Redoes the changes from the latest [`undo`](@ref).
 ],
 ], #package
 "registry" => CommandDeclaration[
-[   :name => "add",
+PSA[:name => "add",
     :api => Registry.add,
     :should_splat => false,
     :arg_count => 0 => Inf,
@@ -387,7 +405,8 @@ pkg> registry add https://www.my-custom-registry.com
 pkg> registry add
 ```
 """,
-],[ :name => "remove",
+],
+PSA[:name => "remove",
     :short_name => "rm",
     :api => Registry.rm,
     :should_splat => false,
@@ -407,7 +426,8 @@ Remove package registries `reg...`.
 pkg> registry [rm|remove] General
 ```
 """,
-],[ :name => "update",
+],
+PSA[:name => "update",
     :short_name => "up",
     :api => Registry.update,
     :should_splat => false,
@@ -430,7 +450,8 @@ pkg> registry up
 pkg> registry up General
 ```
 """,
-],[ :name => "status",
+],
+PSA[:name => "status",
     :short_name => "st",
     :api => Registry.status,
     :description => "information about installed registries",
