@@ -214,11 +214,11 @@ function gitmode(path::AbstractString)
 end
 
 """
-    blob_hash(path::AbstractString)
+    blob_hash(HashType::Type, path::AbstractString)
 
 Calculate the git blob hash of a given path.
 """
-function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
+function blob_hash(::Type{HashType}, path::AbstractString) where HashType
     ctx = HashType()
     if islink(path)
         datalen = length(readlink(path))
@@ -253,6 +253,7 @@ function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
     # Finish it off and return the digest!
     return SHA.digest!(ctx)
 end
+blob_hash(path::AbstractString) = blob_hash(SHA1_CTX, path)
 
 """
     contains_files(root::AbstractString)
@@ -270,14 +271,14 @@ function contains_files(path::AbstractString)
     end
     return false
 end
-    
+
 
 """
-    tree_hash(root::AbstractString)
+    tree_hash(HashType::Type, root::AbstractString)
 
 Calculate the git tree hash of a given path.
 """
-function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
+function tree_hash(::Type{HashType}, root::AbstractString) where HashType
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
     for f in readdir(root)
         # Skip `.git` directories
@@ -292,9 +293,9 @@ function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
             contains_files(filepath) || continue
 
             # Otherwise, hash it up!
-            hash = tree_hash(filepath; HashType = HashType)
+            hash = tree_hash(HashType, filepath)
         else
-            hash = blob_hash(filepath, HashType)
+            hash = blob_hash(HashType, filepath)
         end
         push!(entries, (f, hash, mode))
     end
@@ -316,6 +317,7 @@ function tree_hash(root::AbstractString; HashType = SHA.SHA1_CTX)
     end
     return SHA.digest!(ctx)
 end
+tree_hash(root::AbstractString) = tree_hash(SHA.SHA1_CTX, root)
 
 function check_valid_HEAD(repo)
     try LibGit2.head(repo)

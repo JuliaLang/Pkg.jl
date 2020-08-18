@@ -1767,7 +1767,7 @@ end
         @test args == [Pkg.PackageSpec(;name="Foo"), Pkg.PackageSpec(;name="Bar")]
         @test opts == Dict(:verbose => true)
     end
-    
+
     # Test package that fails build
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         package_path = copy_test_package(tempdir, "FailBuild")
@@ -2294,7 +2294,7 @@ end
     end
 end
 
-tree_hash(root::AbstractString) = bytes2hex(Pkg.GitTools.tree_hash(root))
+tree_hash(root::AbstractString) = bytes2hex(@inferred Pkg.GitTools.tree_hash(root))
 
 @testset "git tree hash computation" begin
     mktempdir() do dir
