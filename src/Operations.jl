@@ -116,11 +116,18 @@ end
 function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
     manifest = ctx.env.manifest
     empty!(manifest)
+    if ctx.env.pkg !== nothing
+        pkgs = [pkgs; ctx.env.pkg]
+    end
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
                              tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo)
         is_stdlib(pkg.uuid) && (entry.version = nothing) # do not set version for stdlibs
-        entry.deps = deps_map[pkg.uuid]
+        if Types.is_project(ctx, pkg)
+            entry.deps = ctx.env.project.deps
+        else
+            entry.deps = deps_map[pkg.uuid]
+        end
         ctx.env.manifest[pkg.uuid] = entry
     end
     prune_manifest(ctx)
@@ -1245,6 +1252,10 @@ function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry
     end
 end
 
+function update_package_pin!(ctx::Context, pkg::PackageSpec, ::Nothing)
+    pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
+end
+
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_pin!(ctx, pkg, manifest_info(ctx, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx, pkgs)
@@ -1322,6 +1333,7 @@ function gen_test_code(testfile::String;
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
+        --threads=$(Threads.nthreads())
         $(julia_args)
         --eval $(code)
     ```
@@ -1690,6 +1702,9 @@ function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Sym
     xs = sort!(xs, by = (x -> (is_stdlib(x[1]), something(x[3], x[2]).name, x[1])))
     all_packages_downloaded = true
     for (uuid, old, new) in xs
+        if Types.is_project_uuid(ctx, uuid)
+            continue
+        end
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(ctx, new)
         all_packages_downloaded &= pkg_downloaded
         print(ctx.io, pkg_downloaded ? " " : not_installed_indicator)
@@ -1731,7 +1746,7 @@ end
 function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing)
     ctx.io == Base.devnull && return
-    # if a packge, print header
+    # if a package, print header
     if header === nothing && ctx.env.pkg !== nothing
        printstyled(ctx.io, "Project "; color=Base.info_color(), bold=true)
        println(ctx.io, ctx.env.pkg.name, " v", ctx.env.pkg.version)
