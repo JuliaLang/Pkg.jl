@@ -236,7 +236,7 @@ end
 
 function core_parse(words::Vector{QString}; only_cmd=false)
     statement = Statement()
-    word = nothing
+    word::Union{Nothing,QString} = nothing
     function next_word!()
         isempty(words) && return false
         word = popfirst!(words)

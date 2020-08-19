@@ -415,7 +415,7 @@ function unpack_platform(entry::Dict, name::String, artifacts_toml::String)::Uni
     cxxstring_abi = nosym(get(entry, "cxxstring_abi", nothing))
 
     # Construct the actual Platform object
-    os = lowercase(entry["os"])
+    os = lowercase(entry["os"]::String)
     compiler_abi=CompilerABI(
         libgfortran_version=libgfortran_version,
         libstdcxx_version=libstdcxx_version,
