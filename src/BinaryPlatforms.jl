@@ -430,7 +430,7 @@ function platform_key_abi(machine::String)
         :libgfortran4 => "(-libgfortran4)|(-gcc7)",
         :libgfortran5 => "(-libgfortran5)|(-gcc8)",
     )
-    libstdcxx_version_mapping = Dict(
+    libstdcxx_version_mapping = Dict{Symbol,String}(
         :libstdcxx_nothing => "",
         # This is sadly easier than parsing out the digit directly
         (Symbol("libstdcxx$(idx)") => "-libstdcxx$(idx)" for idx in 18:26)...,
@@ -494,7 +494,7 @@ function platform_key_abi(machine::String)
         # First, figure out what platform we're dealing with, then sub that off
         # to the appropriate constructor.  If a constructor runs into trouble,
         # catch the error and return `UnknownPlatform()` here to be nicer to client code.
-        ctors = Dict(:darwin => MacOS, :mingw32 => Windows, :freebsd => FreeBSD, :linux => Linux)
+        ctors = Dict{Symbol,Type{<:Platform}}(:darwin => MacOS, :mingw32 => Windows, :freebsd => FreeBSD, :linux => Linux)
         try
             T = ctors[platform]
             compiler_abi = CompilerABI(;
@@ -502,7 +502,7 @@ function platform_key_abi(machine::String)
                 libstdcxx_version=libstdcxx_version,
                 cxxstring_abi=cxxstring_abi
             )
-            return T(arch, libc=libc, call_abi=call_abi, compiler_abi=compiler_abi)
+            return T(arch, libc=libc, call_abi=call_abi, compiler_abi=compiler_abi)::Platform
         catch err
             if isa(err, ArgumentError)
                 msg = " ($(err.msg))"
@@ -731,7 +731,7 @@ default_platkey = platform_key_abi(string(
 ))
 function platform_key_abi()
     global default_platkey
-    return default_platkey
+    return default_platkey::Platform
 end
 
 function platforms_match(a::Platform, b::Platform)

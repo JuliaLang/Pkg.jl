@@ -18,9 +18,9 @@ using ..Artifacts: artifact_paths
 include("generate.jl")
 
 dependencies() = dependencies(Context())
-function dependencies(ctx::Context)::Dict{UUID, PackageInfo}
+function dependencies(ctx::Context)
     pkgs = Operations.load_all_deps(ctx)
-    return Dict(pkg.uuid => Operations.package_info(ctx, pkg) for pkg in pkgs)
+    return Dict(pkg.uuid::UUID => Operations.package_info(ctx, pkg) for pkg in pkgs)
 end
 function dependencies(fn::Function, uuid::UUID)
     dep = get(dependencies(), uuid, nothing)
@@ -329,6 +329,9 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
+const UsageDict = Dict{String,DateTime}
+const UsageByDepotDict = Dict{String,UsageDict}
+
 """
     gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
 
@@ -351,11 +354,11 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     # versions that are only ever subsets of what we read out of them in the first place.
 
     # Collect last known usage dates of manifest and artifacts toml files, split by depot
-    manifest_usage_by_depot = Dict{String, Dict{String, DateTime}}()
-    artifact_usage_by_depot = Dict{String, Dict{String, DateTime}}()
+    manifest_usage_by_depot = UsageByDepotDict()
+    artifact_usage_by_depot = UsageByDepotDict()
 
     # Collect both last known usage dates, as well as parent projects for each scratch space
-    scratch_usage_by_depot = Dict{String, Dict{String, DateTime}}()
+    scratch_usage_by_depot = UsageByDepotDict()
     scratch_parents_by_depot = Dict{String, Dict{String, Set{String}}}()
 
     # Load manifest files from all depots
@@ -376,14 +379,14 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         # tracked manifest/artifact.toml), then merge the usage values from each file
         # into the overall list across depots to create a single, coherent view across
         # all depots.
-        usage = Dict{String, DateTime}()
+        usage = UsageDict()
         reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
             # For Manifest usage, store only the last DateTime for each filename found
             usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
         end
         manifest_usage_by_depot[depot] = usage
 
-        usage = Dict{String, DateTime}()
+        usage = UsageDict()
         reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
             # For Artifact usage, store only the last DateTime for each filename found
             usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
@@ -391,7 +394,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         artifact_usage_by_depot[depot] = usage
 
         # track last-used
-        usage = Dict{String, DateTime}()
+        usage = UsageDict()
         parents = Dict{String, Set{String}}()
         reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
             # For Artifact usage, store only the last DateTime for each filename found
@@ -576,7 +579,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     end
 
     gc_time = now()
-    function merge_orphanages!(new_orphanage, paths, deletion_list, old_orphanage = Dict())
+    function merge_orphanages!(new_orphanage, paths, deletion_list, old_orphanage = UsageDict())
         for path in paths
             free_time = something(
                 get(old_orphanage, path, nothing),
@@ -625,7 +628,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
                 end
             end
         end
-        merge_orphanages!(Dict(), depot_orphaned_packages, packages_to_delete)
+        merge_orphanages!(UsageDict(), depot_orphaned_packages, packages_to_delete)
     end
 
 
@@ -711,11 +714,11 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
 
         # Read in this depot's `orphaned.toml` file:
         orphanage_file = joinpath(logdir(depot), "orphaned.toml")
-        new_orphanage = Dict{String, DateTime}()
+        new_orphanage = UsageDict()
         old_orphanage = try
             TOML.parse(String(read(orphanage_file)))
         catch
-            Dict{String, DateTime}()
+            UsageDict()
         end
 
         # Update the package and artifact lists of things to delete, and
@@ -905,7 +908,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Context!(ctx; kwargs...)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
-        deps = Dict()
+        deps = Dict{String,String}()
         for (uuid, pkg) in _manifest
             if pkg.name in keys(deps)
                 # TODO, query what package to put in Project when in interactive mode?

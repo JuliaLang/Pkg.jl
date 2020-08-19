@@ -60,7 +60,7 @@ mutable struct ResolveLog
         journal = ResolveJournal()
         init = ResolveLogEntry(journal, UUID0, "")
         globals = ResolveLogEntry(journal, UUID0, "Global events:")
-        return new(init, globals, Dict(), journal, true, verbose, uuid_to_name)
+        return new(init, globals, Dict{UUID,ResolveLogEntry}(), journal, true, verbose, uuid_to_name)
     end
 end
 
@@ -235,9 +235,9 @@ mutable struct Graph
     cavfld::Vector{FieldValue}
 
     function Graph(
-            versions::Dict{UUID,Set{VersionNumber}},
-            deps::Dict{UUID,Dict{VersionNumber,Dict{String,UUID}}},
-            compat::Dict{UUID,Dict{VersionNumber,Dict{String,VersionSpec}}},
+            versions::VersionsDict,
+            deps::DepsDict,
+            compat::CompatDict,
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
             fixed::Dict{UUID,Fixed},
@@ -245,39 +245,37 @@ mutable struct Graph
         )
         # make sure all versions of all packages know about julia uuid
         for (uuid,vnmap) in deps, vn in versions[uuid]
-            get!(Dict, vnmap, vn)["julia"] = uuid_julia
+            get!(valtype(vnmap), vnmap, vn)["julia"] = uuid_julia
         end
 
         # Tell the resolver about julia itself
         fixed[uuid_julia] = Fixed(VERSION)
         uuid_to_name[uuid_julia] = "julia"
         versions[uuid_julia] = Set([VERSION])
-        deps[uuid_julia] = Dict(VERSION => Dict())
-        compat[uuid_julia] = Dict(VERSION => Dict())
+        deps[uuid_julia] = DepsValDict(VERSION => valtype(DepsValDict)())
+        compat[uuid_julia] = CompatValDict(VERSION => valtype(CompatValDict)())
 
-        extra_uuids = union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...)
+        extra_uuids = union(keys(reqs), union(keys(fixed), map(fx->keys(fx.requires), values(fixed))...))
         extra_uuids ⊆ keys(versions) || error("unknown UUID found in reqs/fixed") # TODO?
 
-        # Type assert below due to https://github.com/JuliaLang/julia/issues/25918
-        data = GraphData(versions, uuid_to_name, verbose)::GraphData
+        data = GraphData(versions, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
 
         local extended_deps
         let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
-            # Type assert below to help inference
-            extended_deps = [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]::Vector{Vector{Dict{Int,BitVector}}}
+            extended_deps = [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
         end
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
-            vnmap = get(Dict, deps[pkgs[p0]], vn)
+            vnmap = get(Dict{String,UUID}, deps[pkgs[p0]], vn)
             for (name, uuid) in vnmap
                 # check conflicts ??
                 n2u[name] = uuid
             end
             req = Dict{Int,VersionSpec}()
             uuid = pkgs[p0]
-            vnmap = get(Dict, compat[pkgs[p0]], vn)
+            vnmap = get(Dict{String,VersionSpec}, compat[pkgs[p0]], vn)
             for (name,vs) in vnmap
                 haskey(n2u, name) || error("Unknown package $name found in the compatibility requirements of $(pkgID(pkgs[p0], uuid_to_name))")
                 uuid = n2u[name]
@@ -882,7 +880,7 @@ function showlog(io::IO, rlog::ResolveLog, p::UUID; view::Symbol = :tree)
     view ∈ [:plain, :tree] || throw(ArgumentError("the view argument should be `:plain` or `:tree`"))
     entry = rlog.pool[p]
     if view === :tree
-        _show(io, rlog, entry, _logindent, IdDict(entry=>true), true)
+        _show(io, rlog, entry, _logindent, IdDict{Any,Any}(entry=>true), true)
     else
         entries = ResolveLogEntry[entry]
         function getentries(entry)

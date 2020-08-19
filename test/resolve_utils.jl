@@ -40,7 +40,7 @@ function graph_from_data(deps_data)
     uuid(p) = storeuuid(p, uuid_to_name)
     fixed = Dict{UUID,Fixed}()
     all_versions = Dict{UUID,Set{VersionNumber}}()
-    all_deps = Dict{UUID,Dict{VersionNumber,Dict{String,UUID}}}()
+    all_deps = DepsDict()
     all_compat = Dict{UUID,Dict{VersionNumber,Dict{String,VersionSpec}}}()
 
     deps = Dict{String,Dict{VersionNumber,Dict{String,VersionSpec}}}()

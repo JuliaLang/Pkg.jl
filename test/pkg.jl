@@ -212,7 +212,7 @@ temp_pkg_dir() do project_path
     @testset "adding and upgrading different versions" begin
         # VersionNumber
         Pkg.add(PackageSpec(TEST_PKG.name, v"0.3"))
-        @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3"
+        @test @inferred(Pkg.dependencies())[TEST_PKG.uuid].version == v"0.3"
         Pkg.add(PackageSpec(TEST_PKG.name, v"0.3.1"))
         @test Pkg.dependencies()[TEST_PKG.uuid].version == v"0.3.1"
         Pkg.rm(TEST_PKG.name)

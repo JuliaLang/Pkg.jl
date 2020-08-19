@@ -72,7 +72,7 @@ within a particular package's UUID.  In both cases, there are two different targ
 the override: overriding to an on-disk location through an absolutet path, and
 overriding to another artifact by its content-hash.
 """
-const ARTIFACT_OVERRIDES = Ref{Union{Dict,Nothing}}(nothing)
+const ARTIFACT_OVERRIDES = Ref{Union{Dict{Symbol,Any},Nothing}}(nothing)
 function load_overrides(;force::Bool = false)
     if ARTIFACT_OVERRIDES[] !== nothing && !force
         return ARTIFACT_OVERRIDES[]
@@ -85,7 +85,7 @@ function load_overrides(;force::Bool = false)
     # Overrides per UUID/bound name are intercepted upon Artifacts.toml load, and new
     # entries within the "hash" overrides are generated on-the-fly.  Thus, all redirects
     # mechanisticly happen through the "hash" overrides.
-    overrides = Dict(
+    overrides = Dict{Symbol,Any}(
         # Overrides by UUID
         :UUID => Dict{Base.UUID,Dict{String,Union{String,SHA1}}}(),
 
@@ -149,18 +149,19 @@ function load_overrides(;force::Bool = false)
                 end
 
                 # If this mapping is itself a dict, store it as a set of UUID/artifact name overrides
-                if !haskey(overrides[:UUID], uuid)
-                    overrides[:UUID][uuid] = Dict{String,Union{String,SHA1}}()
+                ovruuid = overrides[:UUID]::Dict{Base.UUID,Dict{String,Union{String,SHA1}}}
+                if !haskey(ovruuid, uuid)
+                    ovruuid[uuid] = Dict{String,Union{String,SHA1}}()
                 end
 
                 # For each name in the mapping, update appropriately
                 for name in keys(mapping)
                     # If the mapping for this name is the empty string, un-override it
                     if mapping[name] == ""
-                        delete!(overrides[:UUID][uuid], name)
+                        delete!(ovruuid[uuid], name)
                     else
                         # Otherwise, store it!
-                        overrides[:UUID][uuid][name] = mapping[name]
+                        ovruuid[uuid][name] = mapping[name]
                     end
                 end
             end
@@ -434,14 +435,14 @@ function unpack_platform(entry::Dict, name::String, artifacts_toml::String)::Uni
     end
 end
 
+const os_map = IdDict{Type{<:Platform},String}(
+    Windows => "windows",
+    MacOS => "macos",
+    FreeBSD => "freebsd",
+    Linux => "linux",
+)
 function pack_platform!(meta::Dict, p::Platform)
     @nospecialize meta p
-    os_map = Dict(
-        Windows => "windows",
-        MacOS => "macos",
-        FreeBSD => "freebsd",
-        Linux => "linux",
-    )
     meta["os"] = os_map[typeof(p)]
     meta["arch"] = string(arch(p))
     if libc(p) !== nothing
