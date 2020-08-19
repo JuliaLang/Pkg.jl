@@ -685,10 +685,10 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     # handle token expiration and refresh
     expires_at = Inf
     if haskey(auth_info, "expires_at")
-        expires_at = min(expires_at, auth_info["expires_at"]::Integer)
+        expires_at = min(expires_at, Float64(auth_info["expires_at"])::Float64)
     end
     if haskey(auth_info, "expires_in")
-        expires_at = min(expires_at, mtime(auth_file) + auth_info["expires_in"]::Integer)
+        expires_at = min(expires_at, mtime(auth_file) + Float64(auth_info["expires_in"])::Float64)
     end
     # if token is good until ten minutes from now, use it
     time_now = time()
@@ -733,7 +733,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     if haskey(auth_info, "expires_in")
         expires_in = auth_info["expires_in"]
         if expires_in isa Number
-            expires_at = floor(Int64, time_now + expires_in)
+            expires_at = floor(time_now + Float64(expires_in)::Float64)
             # overwrite expires_at (avoids clock skew issues)
             auth_info["expires_at"] = expires_at
         end
