@@ -2377,13 +2377,30 @@ end
 
 @testset "not collecting multiple package instances #1570" begin
     isolate(loaded_depot=true) do
-        Pkg.generate("A")
-        Pkg.generate("B")
-        Pkg.activate("B")
-        Pkg.develop(Pkg.PackageSpec(path="A"))
-        Pkg.activate(".")
-        Pkg.develop(Pkg.PackageSpec(path="A"))
-        Pkg.develop(Pkg.PackageSpec(path="B"))
+        cd_tempdir() do dir
+            Pkg.generate("A")
+            Pkg.generate("B")
+            Pkg.activate("B")
+            Pkg.develop(Pkg.PackageSpec(path="A"))
+            Pkg.activate(".")
+            Pkg.develop(Pkg.PackageSpec(path="A"))
+            Pkg.develop(Pkg.PackageSpec(path="B"))
+        end
+    end
+end
+
+@testset "cyclic dependency graph" begin
+    isolate(loaded_depot=true) do
+        cd_tempdir() do dir
+            Pkg.generate("A")
+            Pkg.generate("B")
+            Pkg.activate("A")
+            Pkg.develop(path="B")
+            git_init_and_commit("A")
+            Pkg.activate("B")
+            # This shouldn't error even though A has a dependency on B
+            Pkg.add(path="A")
+        end
     end
 end
 
