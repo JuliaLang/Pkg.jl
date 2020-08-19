@@ -190,15 +190,16 @@ function probe_platform_engines!(;verbose::Bool = false)
     # download_engines is a list of (test_cmd, download_opts_functor)
     # The probulator will check each of them by attempting to run `$test_cmd`,
     # and if that works, will set the global download functions appropriately.
-    download_engines = [
-        (`curl --help`, (url, path, hdrs...) ->
+    function helpfetcher(url, path, hdrs...)  # see https://github.com/JuliaLang/julia/issues/37058
+        isempty(hdrs) || error("`fetch` does not support passing headers")
+        `fetch -f $path $url`
+    end
+    download_engines = Tuple{Cmd,Function}[
+            (`curl --help`, (url, path, hdrs...) ->
             `curl -H$hdrs -C - -\# -f -o $path -L $url`),
         (`wget --help`, (url, path, hdrs...) ->
             `wget --tries=5 --header=$hdrs -c -O $path $url`),
-        (`fetch --help`, (url, path, hdrs...) -> begin
-            isempty(hdrs) || error("`fetch` does not support passing headers")
-            `fetch -f $path $url`
-        end),
+        (`fetch --help`, helpfetcher),
         (`busybox wget --help`, (url, path, hdrs...) ->
             `busybox wget --header=$hdrs -c -O $path $url`),
     ]

@@ -485,8 +485,8 @@ function check_consistency(graph::Graph)
     # TODO: check ignored and solve_stack
 
     @assert np ≥ 0
-    for x in [spp, gadj, gmsk, gconstr, adjdict, ignored, rlog.pool, pkgs, pdict, pvers, vdict]
-        @assert length(x) == np
+    for x in Any[spp, gadj, gmsk, gconstr, adjdict, ignored, rlog.pool, pkgs, pdict, pvers, vdict]
+        @assert length(x)::Int == np
     end
     for p0 = 1:np
         @assert pdict[pkgs[p0]] == p0
