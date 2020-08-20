@@ -1257,11 +1257,12 @@ function find_registered!(ctx::Context,
             push!(get!(Vector{String}, ctx.env.paths, uuid), path)
         end
     end
-    for d in (ctx.env.uuids, ctx.env.paths, ctx.env.names)
-        for (k, v) in d
-            unique!(v)
-        end
-    end
+
+    uniqueall!(d) = for (k, v) in d unique!(v) end
+    uniqueall!(ctx.env.uuids)
+    uniqueall!(ctx.env.paths)
+    uniqueall!(ctx.env.names)
+    return nothing
 end
 
 # Get registered uuids associated with a package name
