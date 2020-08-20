@@ -582,9 +582,6 @@ function wipe_snapshots!(graph::Graph)
     return graph
 end
 
-
-
-
 # system colors excluding whites/greys/blacks and error-red
 const CONFLICT_COLORS = [1:6; 10:14];
 pkgID_color(pkgID) = CONFLICT_COLORS[mod1(hash(pkgID), end)]
