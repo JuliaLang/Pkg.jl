@@ -103,7 +103,7 @@ status(; kwargs...) = status(Context(); kwargs...)
 function status(ctx::Context; io::IO=stdout, as_api=false, kwargs...) # TODO split as_api into own function
     Context!(ctx; io=io, kwargs...)
     regs = Types.collect_registries()
-    regs = unique(r -> r.uuid, regs; seen=Set{Union{UUID,Nothing}}()) # Maybe not?
+    regs = unique(r -> r.uuid, regs; seen=Set{Union{UUID,Nothing}}())
     as_api && return regs
     Types.printpkgstyle(ctx, Symbol("Registry Status"), "")
     if isempty(regs)
