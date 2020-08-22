@@ -758,13 +758,26 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         return size
     end
 
+    # Fix issues where we can't delete directories because we don't have write permissions to it.
+    function prepare_for_deletion(path)
+        try chmod(path, 0o755)
+        catch; end
+        for (root, dirs, files) in walkdir(path)
+            for dir in dirs
+                try chmod(joinpath(root, dir), 0o755)
+                catch; end
+            end
+        end
+    end
+
     # Delete paths for unreachable package versions and artifacts, and computing size saved
     function delete_path(path)
         path_size = recursive_dir_size(path)
         try
-            Base.rm(path; recursive=true)
-        catch
-            @warn "Failed to delete $path"
+            prepare_for_deletion(path)
+            Base.rm(path; recursive=true, force=true)
+        catch e
+            @warn("Failed to delete $path", exception=e)
         end
         printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" * pretty_byte_str(path_size) * ")")
         return path_size
