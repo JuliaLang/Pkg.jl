@@ -499,7 +499,7 @@ function process_overrides(artifact_dict::Dict, pkg_uuid::Base.UUID)
             end
 
             # If we've got a platform-specific friend, override all hashes:
-            if isa(artifact_dict[name], Array)
+            if isa(artifact_dict[name], Vector)
                 for entry in artifact_dict[name]
                     hash = SHA1(entry["git-tree-sha1"])
                     overrides[:hash][hash] = overrides[:UUID][pkg_uuid][name]
@@ -550,7 +550,7 @@ function artifact_meta(name::String, artifact_dict::Dict, artifacts_toml::String
     meta = artifact_dict[name]
 
     # If it's an array, find the entry that best matches our current platform
-    if isa(meta, Array)
+    if isa(meta, Vector)
         dl_dict = Dict{Platform,Dict{String,Any}}(unpack_platform(x, name, artifacts_toml) => x for x in meta)
         meta = select_platform(dl_dict, platform)
     # If it's NOT a dict, complain
@@ -623,9 +623,9 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
 
         if !force && haskey(artifact_dict, name)
             meta = artifact_dict[name]
-            if !isa(meta, Array)
+            if !isa(meta, Vector)
                 error("Mapping for '$name' within $(artifacts_toml) already exists!")
-            elseif any((unpack_platform(x, name, artifacts_toml) for x in meta) .== Ref(platform))
+            elseif any(isequal(platform), unpack_platform(x, name, artifacts_toml) for x in meta)
                 error("Mapping for '$name'/$(triplet(platform)) within $(artifacts_toml) already exists!")
             end
         end
