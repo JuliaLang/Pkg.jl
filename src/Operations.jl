@@ -347,7 +347,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # fixed packages are `dev`ed or `add`ed by repo
     # at this point, fixed packages have a version and `deps`
 
-    @assert length(Set(pkg.uuid for pkg in pkgs)) == length(pkgs)
+    @assert length(Set(pkg.uuid::UUID for pkg in pkgs)) == length(pkgs)
 
     # check compat
     for pkg in pkgs

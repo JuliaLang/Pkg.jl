@@ -7,7 +7,7 @@ import ..isdir_nothrow
 Parser for PackageSpec objects.
 """
 function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
-    args::Vector{PackageToken} = map(PackageToken, package_lex(args))
+    args = PackageToken[PackageToken(pkgword) for pkgword in package_lex(args)]
     return parse_package_args(args; add_or_dev=add_or_dev)
 end
 

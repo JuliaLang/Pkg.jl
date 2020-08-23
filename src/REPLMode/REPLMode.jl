@@ -523,7 +523,7 @@ function promptf()
 end
 
 # Set up the repl Pkg REPLMode
-function create_mode(repl, main)
+function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     pkg_mode = LineEdit.Prompt(promptf;
         prompt_prefix = repl.options.hascolor ? Base.text_colors[:blue] : "",
         prompt_suffix = "",
@@ -579,7 +579,7 @@ function create_mode(repl, main)
     return pkg_mode
 end
 
-function repl_init(repl)
+function repl_init(repl::REPL.AbstractREPL)
     main_mode = repl.interface.modes[1]
     pkg_mode = create_mode(repl, main_mode)
     push!(repl.interface.modes, pkg_mode)
