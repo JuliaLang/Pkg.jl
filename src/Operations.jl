@@ -117,7 +117,7 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
     manifest = ctx.env.manifest
     empty!(manifest)
     if ctx.env.pkg !== nothing
-        pkgs = [pkgs; ctx.env.pkg]
+        pkgs = push!(copy(pkgs), ctx.env.pkg::PackageSpec)
     end
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
