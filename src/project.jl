@@ -124,24 +124,18 @@ function Project(raw::Dict)
     return project
 end
 
-function read_project(io::IO; path=nothing)
-    raw = nothing
-    try
-        raw = TOML.parse(io)
-    catch err
-        if err isa TOML.ParserError
-            pkgerror("Could not parse project $(something(path,"")): $(err.msg)")
-        elseif err isa CompositeException && all(x -> x isa TOML.ParserError, err)
-            pkgerror("Could not parse project $(something(path,"")): $err")
-        else
-            rethrow()
-        end
+function read_project(f_or_io::Union{String, IO})
+    raw = if f_or_io isa IO
+        TOML.tryparse(read(f_or_io, String))
+    else
+        isfile(f_or_io) ? TOML.tryparsefile(f_or_io) : return Project()
+    end
+    if raw isa TOML.ParserError
+        pkgerror("Could not parse project: ", sprint(showerror, raw))
     end
     return Project(raw)
 end
 
-read_project(path::String) =
-    isfile(path) ? open(io->read_project(io;path=path), path) : Project()
 
 ###########
 # WRITING #
@@ -175,7 +169,11 @@ end
 write_project(project::Project, project_file::AbstractString) =
     write_project(destructure(project), project_file)
 function write_project(project::Dict, project_file::AbstractString)
-    io = IOBuffer()
-    TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key))
-    open(f -> write(f, seekstart(io)), project_file; truncate=true)
+    str = sprint() do io
+        TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key)) do x
+            (x isa UUID || x isa VersionNumber) && return string(x)
+            error("unhandled type `$(typeof(x))`")
+        end
+    end
+    write(project_file, str)
 end

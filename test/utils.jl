@@ -3,6 +3,7 @@
 module Utils
 
 import ..Pkg
+using TOML
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
@@ -215,7 +216,7 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
 
     # The known Pkg UUID, and whatever UUID we're currently using for testing
     known_pkg_uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
-    pkg_uuid = Pkg.TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["uuid"]
+    pkg_uuid = TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["uuid"]
 
     # We usually want this test package to load our pkg, so update its Pkg UUID:
     test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
@@ -230,7 +231,7 @@ end
 
 function add_this_pkg()
     pkg_dir = dirname(@__DIR__)
-    pkg_uuid = Pkg.TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
+    pkg_uuid = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
     spec = Pkg.PackageSpec(
         name="Pkg",
         uuid=UUID(pkg_uuid),

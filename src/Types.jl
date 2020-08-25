@@ -10,7 +10,7 @@ import REPL
 import Base.string
 using REPL.TerminalMenus
 
-using ..TOML
+using TOML
 import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
 import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
 import ..BinaryPlatforms: Platform
@@ -148,11 +148,6 @@ end
 ############
 # EnvCache #
 ############
-
-function parse_toml(path::String...; fakeit::Bool=false)
-    p = joinpath(path...)
-    !fakeit || isfile(p) ? TOML.parsefile(p) : Dict{String,Any}()
-end
 
 function projectfile_path(env_path::String; strict=false)
     for name in Base.project_names
@@ -338,6 +333,7 @@ Base.@kwdef mutable struct Context
     currently_running_target::Bool = false
     # test instrumenting
     status_io::Union{IO,Nothing} = nothing
+    parser::TOML.Parser = TOML.Parser()
 end
 
 project_uuid(ctx::Context) = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid
@@ -1248,7 +1244,7 @@ function find_registered!(ctx::Context,
     for registry in collect_registries()
         reg_abspath = abspath(registry.path)
         data = read_registry(joinpath(registry.path, "Registry.toml"))
-        for (_uuid::String, pkgdata::TOML.DictType) in data["packages"]
+        for (_uuid::String, pkgdata::Dict{String, Any}) in data["packages"]
             name = pkgdata["name"]::String
             uuid = UUID(_uuid)
             push!(get!(Vector{UUID}, ctx.env.uuids, name), uuid)
@@ -1338,7 +1334,7 @@ function registered_info(ctx::Context, uuid::UUID, key::String)
     isempty(paths) && pkgerror("`$uuid` is not registered")
     values = []
     for path in paths
-        info = parse_toml(path, "Package.toml")
+        info = parse_toml(joinpath(path, "Package.toml"))
         value = get(info, key, nothing)
         push!(values, (path, value))
     end
@@ -1418,5 +1414,13 @@ Base.@kwdef struct ProjectInfo
     dependencies::Dict{String,UUID}
     path::String
 end
+
+# TOML stuff
+
+parse_toml(ctx::Context, path::String; fakeit::Bool=false) =
+    parse_toml(ctx.parser, path; fakeit)
+parse_toml(path::String; fakeit::Bool=false) = parse_toml(TOML.Parser(), path; fakeit)
+parse_toml(parser::TOML.Parser, path::String; fakeit::Bool=false) = 
+    !fakeit || isfile(path) ? TOML.parsefile(parser, path) : Dict{String,Any}()
 
 end # module

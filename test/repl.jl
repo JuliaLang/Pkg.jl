@@ -8,6 +8,7 @@ using Pkg.Types: manifest_info, EnvCache, Context
 import Pkg.Types.PkgError
 using UUIDs
 using Test
+using TOML
 import LibGit2
 
 using ..Utils
@@ -551,10 +552,10 @@ end
 @testset "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
         sleep(1.1)
-        project = Pkg.TOML.parsefile(projfile_path)
+        project = TOML.parsefile(projfile_path)
         project["name"] = newname
         open(projfile_path, "w") do io
-            Pkg.TOML.print(io, project)
+            TOML.print(io, project)
         end
     end
 
