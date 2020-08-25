@@ -349,14 +349,16 @@ PSA[:name => "gc",
     :api => API.gc,
     :option_spec => [
         PSA[:name => "all", :api => :collect_delay => Hour(0)],
+        PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
     :description => "garbage collect packages not used for a significant time",
     :help => md"""
-    gc [--all]
+    gc [-v|--verbose] [--all]
 
 Free disk space by garbage collecting packages not used for a significant time.
 The `--all` option will garbage collect all packages which can not be immediately
 reached from any existing project.
+Use verbose mode for detailed output.
 """,
 ],
 PSA[:name => "undo",

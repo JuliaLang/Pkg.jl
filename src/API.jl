@@ -333,7 +333,7 @@ const UsageDict = Dict{String,DateTime}
 const UsageByDepotDict = Dict{String,UsageDict}
 
 """
-    gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
+    gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, kwargs...)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
@@ -341,8 +341,10 @@ finding artifacts and packages that are thereafter not used by any other project
 marking them as "orphaned".  This method will only remove orphaned objects (package
 versions, artifacts, and scratch spaces) that have been continually un-used for a period
 of `collect_delay`; which defaults to seven days.
+
+Use verbose mode (`verbose=true`) for detailed output.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
+function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, kwargs...)
     Context!(ctx; kwargs...)
     env = ctx.env
 
@@ -562,18 +564,29 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     end
 
     # Mark packages/artifacts as active or not by calling the appropriate user function
-    function mark(process_func::Function, index_files; do_print=true)
+    function mark(process_func::Function, index_files, ctx::Context; do_print=true, verbose=false, file_str=nothing)
         marked_paths = String[]
+        active_index_files = Set{String}()
         for index_file in index_files
             # Check to see if it's still alive
             paths = process_func(index_file)
             if paths !== nothing
-                # Print the path of this beautiful, extant file to the user
-                do_print && println("        $(Types.pathrepr(index_file))")
+                # Mark found paths, and record the index_file for printing
+                push!(active_index_files, index_file)
                 append!(marked_paths, paths)
             end
         end
 
+        if do_print
+            @assert file_str !== nothing
+            n = length(active_index_files)
+            printpkgstyle(ctx, :Active, "$(file_str): $(n) found")
+            if verbose
+                foreach(active_index_files) do f
+                    println(ctx.io, "        $(Types.pathrepr(f))")
+                end
+            end
+        end
         # Return the list of marked paths
         return Set(marked_paths)
     end
@@ -606,8 +619,9 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
 
 
     # Scan manifests, parse them, read in all UUIDs listed and mark those as active
-    printpkgstyle(ctx, :Active, "manifests:")
-    packages_to_keep = mark(process_manifest_pkgs, all_manifest_tomls)
+    # printpkgstyle(ctx, :Active, "manifests:")
+    packages_to_keep = mark(process_manifest_pkgs, all_manifest_tomls, ctx,
+        verbose=verbose, file_str="manifest files")
 
     # Do an initial scan of our depots to get a preliminary `packages_to_delete`.
     packages_to_delete = String[]
@@ -635,11 +649,13 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
     # Next, do the same for artifacts.  Note that we MUST do this after calculating
     # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
     # `Artifacts.toml` files that will be deleted by the future culling operation.
-    printpkgstyle(ctx, :Active, "artifacts:")
-    artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete), all_artifact_tomls)
-    repos_to_keep = mark(process_manifest_repos, all_manifest_tomls; do_print=false)
-    printpkgstyle(ctx, :Active, "scratchspaces:")
-    spaces_to_keep = mark(x -> process_scratchspace(x, packages_to_delete), all_scratch_dirs)
+    # printpkgstyle(ctx, :Active, "artifacts:")
+    artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete),
+        all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
+    repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print=false)
+    # printpkgstyle(ctx, :Active, "scratchspaces:")
+    spaces_to_keep = mark(x -> process_scratchspace(x, packages_to_delete),
+        all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
 
     # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
     # are implicitly defined in that we walk all packages/artifacts installed, then if
@@ -779,7 +795,10 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), kwargs...)
         catch e
             @warn("Failed to delete $path", exception=e)
         end
-        printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" * pretty_byte_str(path_size) * ")")
+        if verbose
+            printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" *
+                pretty_byte_str(path_size) * ")")
+        end
         return path_size
     end
 
