@@ -971,8 +971,6 @@ end
 pkg_server_url_hash(url::String) = split(url, '/')[end]
 
 # entry point for `registry add`
-clone_or_cp_registries(regs::Vector{RegistrySpec}, depot::String=depots1()) =
-    clone_or_cp_registries(Context(), regs, depot)
 function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
     registry_urls = nothing
