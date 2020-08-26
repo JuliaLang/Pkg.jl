@@ -44,20 +44,6 @@ jobs:
         - julia --project -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
         - julia --project=docs --color=yes docs/make.jl pdf
       after_success: skip
-    - name: TOML (Julia 1.3)
-      stage: test
-      os: linux
-      julia: 1.3
-      script:
-        - julia --project=ext/TOML -e 'using Pkg; Pkg.test()'
-      after_success: skip
-    - name: TOML (Julia nightly)
-      stage: test
-      os: linux
-      julia: nightly
-      script:
-        - julia --project=ext/TOML -e 'using Pkg; Pkg.test()'
-      after_success: skip
 
 after_success:
   - julia --project=test/coverage -e 'using Pkg; Pkg.instantiate();
