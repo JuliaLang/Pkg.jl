@@ -630,7 +630,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
             end
         end
     else
-        artifact_dict = TOML.DictType()
+        artifact_dict = Dict{String, Any}()
     end
 
     # Otherwise, the new piece of data we're going to write out is this dict:

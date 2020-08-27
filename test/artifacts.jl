@@ -3,7 +3,7 @@ import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Random, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed, extract_all_hashes
-using Pkg.TOML, Dates
+using TOML, Dates
 import Base: SHA1
 
 using ..Utils
@@ -248,7 +248,7 @@ end
         @test ensure_artifact_installed("foo_txt", artifacts_toml) == artifact_path(hash)
 
         # Test that binding caused an entry in the manifest_usage.toml
-        usage = Pkg.TOML.parse(String(read(joinpath(Pkg.logdir(), "artifact_usage.toml"))))
+        usage = TOML.parsefile(joinpath(Pkg.logdir(), "artifact_usage.toml"))
         @test any(x -> startswith(x, artifacts_toml), keys(usage))
 
         # Test that we can overwrite bindings
@@ -436,7 +436,7 @@ end
         bind_artifact!(artifacts_toml, "die", die_hash)
 
         # Now test that the usage file exists, and contains our Artifacts.toml
-        usage = Pkg.TOML.parse(String(read(usage_path)))
+        usage = TOML.parsefile(usage_path)
         @test any(x -> startswith(x, artifacts_toml), keys(usage))
 
         # Test that a gc() doesn't remove anything
@@ -454,7 +454,7 @@ end
         @test artifact_exists(die_hash)
 
         orphaned_path = joinpath(Pkg.logdir(), "orphaned.toml")
-        orphanage = Pkg.TOML.parse(String(read(orphaned_path)))
+        orphanage = TOML.parsefile(orphaned_path)
         @test any(x -> startswith(x, artifact_path(die_hash)), keys(orphanage))
 
         # Now, sleep for 0.2 seconds, then gc with a collect delay of 0.1 seconds
@@ -467,10 +467,10 @@ end
 
         # die_hash should still be listed within the orphan list, but one more gc() will
         # remove it; this is intentional and allows for robust removal scheduling.
-        orphanage = Pkg.TOML.parse(String(read(orphaned_path)))
+        orphanage = TOML.parsefile(orphaned_path)
         @test any(x -> startswith(x, artifact_path(die_hash)), keys(orphanage))
         Pkg.gc()
-        orphanage = Pkg.TOML.parse(String(read(orphaned_path)))
+        orphanage = TOML.parsefile(orphaned_path)
         @test !any(x -> startswith(x, artifact_path(die_hash)), keys(orphanage))
 
         # Next, unbind the live_hash, then run with collect_delay=0, and ensure that

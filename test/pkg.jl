@@ -8,6 +8,7 @@ import LibGit2
 using Test
 using UUIDs
 using Dates
+using TOML
 
 using Pkg
 using Pkg.Types
@@ -357,7 +358,7 @@ temp_pkg_dir() do project_path
     end
 
     @testset "check logging" begin
-        usage = Pkg.TOML.parse(String(read(joinpath(Pkg.logdir(), "manifest_usage.toml"))))
+        usage = TOML.parsefile(joinpath(Pkg.logdir(), "manifest_usage.toml"))
         manifest = Pkg.safe_realpath(joinpath(project_path, "Manifest.toml"))
         @test any(x -> startswith(x, manifest), keys(usage))
     end

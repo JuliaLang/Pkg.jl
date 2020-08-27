@@ -1,4 +1,4 @@
-import Pkg.TOML
+import TOML
 build_artifact = joinpath(@__DIR__, "artifact")
 isfile(build_artifact) && rm(build_artifact)
 project = TOML.parsefile(Base.active_project())

@@ -158,25 +158,14 @@ function Manifest(raw::Dict)::Manifest
     return validate_manifest(stage1)
 end
 
-function read_manifest(path_or_stream::Union{String,IO})
-    local raw
-    try
-        if path_or_stream isa String
-            path = path_or_stream
-            isfile(path) || return Dict{UUID,PackageEntry}()
-            raw = TOML.parsefile(path)
-        else
-            raw = TOML.parse(path_or_stream)
-        end
-    catch err
-        path = path_or_stream isa String ? path_or_stream : ""
-        if err isa TOML.ParserError
-            pkgerror("Could not parse manifest $path: $(err.msg)")
-        elseif isa(err, CompositeException) && all(x -> x isa TOML.ParserError, err)
-            pkgerror("Could not parse manifest $path: $err")
-        else
-            rethrow()
-        end
+function read_manifest(f_or_io::Union{String,IO})
+    raw = if f_or_io isa IO
+        TOML.tryparse(read(f_or_io, String))
+    else
+        isfile(f_or_io) ? TOML.tryparsefile(f_or_io) : return Dict{UUID,PackageEntry}()
+    end
+    if raw isa TOML.ParserError
+        pkgerror("Could not parse manifest: ", sprint(showerror, raw))
     end
     return Manifest(raw)
 end
@@ -189,7 +178,7 @@ function destructure(manifest::Manifest)::Dict
         if value == default
             delete!(entry, key)
         else
-            entry[key] = value isa TOML.TYPE ? value : string(value)
+            entry[key] = value
         end
     end
 
@@ -237,8 +226,12 @@ end
 write_manifest(manifest::Manifest, manifest_file::AbstractString) =
     write_manifest(destructure(manifest), manifest_file)
 function write_manifest(manifest::Dict, manifest_file::AbstractString)
-    io = IOBuffer()
-    print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-    TOML.print(io, manifest, sorted=true)
-    open(f -> write(f, seekstart(io)), manifest_file; truncate=true)
+    str = sprint() do io
+        print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
+        TOML.print(io, manifest, sorted=true) do x
+            (x isa UUID || x isa SHA1 || x isa VersionNumber) && return string(x)
+            error("unhandled type `$(typeof(x))`")
+        end
+    end
+    write(manifest_file, str)
 end

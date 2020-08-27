@@ -372,7 +372,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
                 return
             end
 
-            for (filename, infos) in TOML.parse(String(read(usage_filepath)))
+            for (filename, infos) in TOML.parsefile(usage_filepath)
                 f.(Ref(filename), infos)
             end
         end

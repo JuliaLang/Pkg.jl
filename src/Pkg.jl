@@ -4,6 +4,7 @@ module Pkg
 
 import Random
 import REPL
+import TOML
 
 export @pkg_str
 export PackageSpec
@@ -39,9 +40,6 @@ envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
 const DEFAULT_IO = Ref{Union{Nothing,IO}}(nothing)
-
-# load snapshotted dependencies
-include("../ext/TOML/src/TOML.jl")
 
 include("utils.jl")
 include("GitTools.jl")
@@ -591,7 +589,7 @@ function _run_precompilation_script_setup()
     touch("Project.toml")
     Pkg.activate(".")
     Pkg.generate("TestPkg")
-    uuid = Pkg.TOML.parsefile(joinpath("TestPkg", "Project.toml"))["uuid"]
+    uuid = TOML.parsefile(joinpath("TestPkg", "Project.toml"))["uuid"]
     mv("TestPkg", "TestPkg.jl")
     tree_hash = cd("TestPkg.jl") do
         sig = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)

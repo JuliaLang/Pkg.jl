@@ -157,12 +157,12 @@ end
 ####################
 
 function load_versions(ctx, path::String; include_yanked=false)
-    toml = parse_toml(path, "Versions.toml"; fakeit=true)
+    toml = parse_toml(joinpath(path, "Versions.toml"); fakeit=true)
     versions = Dict{VersionNumber, SHA1}(
         VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml
             if !get(info, "yanked", false) || include_yanked)
     if Pkg.OFFLINE_MODE[] # filter out all versions that are not already downloaded
-        pkg = parse_toml(path, "Package.toml")
+        pkg = parse_toml(joinpath(path, "Package.toml"))
         filter!(versions) do (v, sha)
             pkg_spec = PackageSpec(name=pkg["name"], uuid=UUID(pkg["uuid"]), version=v, tree_hash=sha)
             return is_package_downloaded(ctx, pkg_spec)
@@ -506,7 +506,7 @@ function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
         ver = pkg.version::VersionNumber
         urls[uuid] = String[]
         for path in registered_paths(ctx, uuid)
-            info = parse_toml(path, "Package.toml")
+            info = parse_toml(joinpath(path, "Package.toml"))
             repo = info["repo"]
             repo in urls[uuid] || push!(urls[uuid], repo)
         end
@@ -1624,7 +1624,7 @@ function stat_rep(x::PackageSpec; name=true)
     if x.repo.rev !== nothing
         rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
     end
-    subdir_str = x.repo.subdir == nothing ? "" : ":$(x.repo.subdir)"
+    subdir_str = x.repo.subdir === nothing ? "" : ":$(x.repo.subdir)"
     repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
     path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
     pinned = x.pinned ? "⚲" : ""
