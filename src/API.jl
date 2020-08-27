@@ -977,7 +977,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         # First try without updating the registry
         Operations.check_registered(ctx, pkgs)
     catch e
-        if !(e isa PkgError) || update_registries == false
+        if !(e isa PkgError) || update_registry == false
             rethrow(e)
         end
         Types.update_registries(ctx)
