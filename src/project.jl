@@ -36,7 +36,7 @@ function read_project_deps(raw::Dict{String,Any}, section_name::String)
             uuid = UUID(uuid)
         catch err
             err isa ArgumentError || rethrow()
-            pkgerror("Malfomed value for `$name` in `$(section_name)` section.")
+            pkgerror("Malformed value for `$name` in `$(section_name)` section.")
         end
         deps[name] = uuid
     end
