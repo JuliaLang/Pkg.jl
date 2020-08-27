@@ -1702,7 +1702,8 @@ function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Sym
     end
     # main print
     printpkgstyle(ctx, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file), true)
-    xs = sort!(xs, by = (x -> (is_stdlib(x[1]), something(x[3], x[2]).name, x[1])))
+    # Sort stdlibs and _jlls towards the end in status output
+    xs = sort!(xs, by = (x -> (is_stdlib(x[1]), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
     all_packages_downloaded = true
     for (uuid, old, new) in xs
         if Types.is_project_uuid(ctx, uuid)
