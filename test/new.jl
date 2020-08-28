@@ -2418,7 +2418,7 @@ end
         catch e
             @test e isa ResolverError
             # `\S*` in regex below will allow for ANSI color escape codes in the logs
-            @test occursin(r"possible versions are: [^\d\s]*0\.5\.1[^\d\s]* or uninstalled", e.msg)
+            @test occursin(r"possible versions are: \S*0\.5\.1\S* or uninstalled", e.msg)
         end
         Pkg.offline(false)
     end
