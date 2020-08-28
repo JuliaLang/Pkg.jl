@@ -764,7 +764,7 @@ function hash_data(strs::AbstractString...)
 end
 
 function load_telemetry_file(file::AbstractString)
-    info = TOML.DictType()
+    info = Dict{String, Any}()
     changed = true
     if !ispath(file)
         for depot in depots()
