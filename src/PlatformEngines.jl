@@ -198,7 +198,7 @@ function probe_platform_engines!(;verbose::Bool = false)
             (`curl --help`, (url, path, hdrs...) ->
             `curl -H$hdrs -C - -\# -f -o $path -L $url`),
         (`wget --help`, (url, path, hdrs...) ->
-            `wget --tries=5 --header=$hdrs -c -O $path $url`),
+            `wget --tries=5 --header=$hdrs -q --show-progress -c -O $path $url`),
         (`fetch --help`, helpfetcher),
         (`busybox wget --help`, (url, path, hdrs...) ->
             `busybox wget --header=$hdrs -c -O $path $url`),
