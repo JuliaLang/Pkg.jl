@@ -2417,7 +2417,8 @@ end
             Pkg.add(Pkg.PackageSpec(uuid=exuuid, version=v"0.5.3"))
         catch e
             @test e isa ResolverError
-            @test occursin("possible versions are: 0.5.1 or uninstalled", e.msg)
+            # `\S*` in regex below will allow for ANSI color escape codes in the logs
+            @test occursin(r"possible versions are: \S*0\.5\.1\S* or uninstalled", e.msg)
         end
         Pkg.offline(false)
     end
