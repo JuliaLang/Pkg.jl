@@ -529,7 +529,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         artifact_path_list = String[]
         for name in keys(artifact_dict)
             getpaths(meta) = artifact_paths(SHA1(hex2bytes(meta["git-tree-sha1"])))
-            if isa(artifact_dict[name], Array)
+            if isa(artifact_dict[name], Vector)
                 for platform_meta in artifact_dict[name]
                     append!(artifact_path_list, getpaths(platform_meta))
                 end

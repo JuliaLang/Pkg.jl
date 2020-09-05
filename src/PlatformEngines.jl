@@ -276,7 +276,7 @@ function probe_platform_engines!(;verbose::Bool = false)
     # Symbolic Link =
     # Hard Link =
     gen_7z = (p) -> (unpack_7z(p), package_7z(p), list_7z(p), parse_7z_list, r"Path = ([^\r\n]+)\r?\n(?:[^\r\n]+\r?\n)+Symbolic Link = ([^\r\n]+)"s)
-    compression_engines = Tuple[]
+    compression_engines = Tuple{Cmd,Vararg{Any}}[]
 
     (tmpfile, io) = mktemp()
     write(io, "Demo file for tar listing (Pkg.jl)")
@@ -889,7 +889,7 @@ function get_telemetry_headers(url::AbstractString, notify::Bool=true)
             salt_hash = hash_data("salt", client_uuid, secret_salt)
             project = Base.active_project()
             if project !== nothing
-                project_hash = hash_data("project", project, info["secret_salt"])
+                project_hash = hash_data("project", project, info["secret_salt"]::String)
                 push!(headers, "Julia-Project-Hash: $project_hash")
             end
         end

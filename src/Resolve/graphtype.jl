@@ -297,7 +297,7 @@ mutable struct Graph
             req_msk = Dict{Int,BitVector}()
             for (p1, vs) in req
                 pv = pvers[p1]
-                req_msk_p1 = BitArray(undef, spp[p1] - 1)
+                req_msk_p1 = BitVector(undef, spp[p1] - 1)
                 @inbounds for i in 1:spp[p1] - 1
                     req_msk_p1[i] = pv[i] ∈ vs
                 end
@@ -881,7 +881,7 @@ function showlog(io::IO, rlog::ResolveLog; view::Symbol = :plain)
     seen = IdDict()
     recursive = (view === :tree)
     _show(io, rlog, rlog.globals, _logindent, seen, false)
-    initentries = [event[1] for event in rlog.init.events]
+    initentries = Union{ResolveLogEntry,Nothing}[event[1]::Union{ResolveLogEntry,Nothing} for event in rlog.init.events]
     for entry in sort!(initentries, by=(entry->pkgID(entry.pkg, rlog)))
         seen[entry] = true
         _show(io, rlog, entry, _logindent, seen, recursive)
@@ -1345,7 +1345,7 @@ function prune_graph!(graph::Graph)
 
     # We will remove all packages that only have one allowed state
     # (includes fixed packages and forbidden packages)
-    pkg_mask = BitArray(count(gconstr[p0]) ≠ 1 for p0 = 1:np)
+    pkg_mask = BitVector(count(gconstr[p0]) ≠ 1 for p0 = 1:np)
     new_np = count(pkg_mask)
 
     # a map that translates the new index ∈ 1:new_np into its
@@ -1394,7 +1394,7 @@ function prune_graph!(graph::Graph)
     # versions that aren't allowed (but not the "uninstalled" state)
     function keep_vers(new_p0)
         p0 = old_idx[new_p0]
-        return BitArray((v0 == spp[p0]) | gconstr[p0][v0] for v0 = 1:spp[p0])
+        return BitVector((v0 == spp[p0]) | gconstr[p0][v0] for v0 = 1:spp[p0])
     end
     vers_mask = [keep_vers(new_p0) for new_p0 = 1:new_np]
 

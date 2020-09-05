@@ -208,7 +208,7 @@ Base.@kwdef mutable struct Project
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
 end
-Base.:(==)(t1::Project, t2::Project) = all([getfield(t1, x) == getfield(t2, x) for x in fieldnames(Project)])
+Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
 
@@ -859,7 +859,7 @@ const DEFAULT_REGISTRIES =
                               url = "https://github.com/JuliaRegistries/General.git")]
 
 function clone_default_registries(ctx::Context; only_if_empty = true)
-    installed_registries = [reg.uuid for reg in collect_registries()]
+    installed_registries = [reg.uuid::UUID for reg in collect_registries()]
     # Only clone if there are no installed registries, unless called
     # with false keyword argument.
     if isempty(installed_registries) || !only_if_empty
@@ -1242,7 +1242,8 @@ function find_registered!(ctx::Context,
     for registry in collect_registries()
         reg_abspath = abspath(registry.path)
         data = read_registry(joinpath(registry.path, "Registry.toml"))
-        for (_uuid::String, pkgdata::Dict{String, Any}) in data["packages"]
+        for (_uuid, pkgdata) in data["packages"]
+            _uuid, pkgdata = _uuid::String, pkgdata::Dict{String,Any}
             name = pkgdata["name"]::String
             uuid = UUID(_uuid)
             push!(get!(Vector{UUID}, ctx.env.uuids, name), uuid)
@@ -1418,7 +1419,7 @@ end
 parse_toml(ctx::Context, path::String; fakeit::Bool=false) =
     parse_toml(ctx.parser, path; fakeit)
 parse_toml(path::String; fakeit::Bool=false) = parse_toml(TOML.Parser(), path; fakeit)
-parse_toml(parser::TOML.Parser, path::String; fakeit::Bool=false) = 
+parse_toml(parser::TOML.Parser, path::String; fakeit::Bool=false) =
     !fakeit || isfile(path) ? TOML.parsefile(parser, path) : Dict{String,Any}()
 
 end # module
