@@ -770,7 +770,7 @@ function download_artifact(
         # `create_artifact()` wrapper does, so we use that here.
         calc_hash = try
             create_artifact() do dir
-                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose)
+                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose, quiet_download=quiet_download)
             end
         catch e
             if isa(e, InterruptException)
