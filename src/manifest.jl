@@ -144,13 +144,13 @@ function Manifest(raw::Dict)::Manifest
             entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
             entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
             entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
-            deps = read_deps(get(info, "deps", nothing))
+            deps = read_deps(get(info::Dict, "deps", nothing))
         catch
             # TODO: Should probably not unconditionally log something
             @error "Could not parse entry for `$name`"
             rethrow()
         end
-        entry.other = info
+        entry.other = info::Union{Dict,Nothing}
         stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps))
     end
     # by this point, all the fields of the `PackageEntry`s have been type casted

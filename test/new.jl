@@ -881,7 +881,7 @@ end
             ) Pkg.develop(Pkg.PackageSpec())
         # git revisions imply that `develop` tracks a git repo.
         @test_throws PkgError(
-            "git revision specification invalid when calling `develop`: `master` specified for package `Example`"
+            "rev argument not supported by `develop`; consider using `add` instead"
             ) Pkg.develop(name="Example", rev="master")
         # Adding an unregistered package by name.
         @test_throws PkgError Pkg.develop("ThisIsHopefullyRandom012856014925701382")
@@ -2417,7 +2417,8 @@ end
             Pkg.add(Pkg.PackageSpec(uuid=exuuid, version=v"0.5.3"))
         catch e
             @test e isa ResolverError
-            @test occursin("possible versions are: 0.5.1 or uninstalled", e.msg)
+            # `\S*` in regex below will allow for ANSI color escape codes in the logs
+            @test occursin(r"possible versions are: \S*0\.5\.1\S* or uninstalled", e.msg)
         end
         Pkg.offline(false)
     end

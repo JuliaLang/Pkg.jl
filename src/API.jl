@@ -104,8 +104,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
             pkgerror("name, UUID, URL, or filesystem path specification required when calling `develop`")
         end
         if pkg.repo.rev !== nothing
-            pkgerror("git revision specification invalid when calling `develop`:",
-                     " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))")
+            pkgerror("rev argument not supported by `develop`; consider using `add` instead")
         end
         if pkg.version != VersionSpec()
             pkgerror("version specification invalid when calling `develop`:",
@@ -530,7 +529,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         artifact_path_list = String[]
         for name in keys(artifact_dict)
             getpaths(meta) = artifact_paths(SHA1(hex2bytes(meta["git-tree-sha1"])))
-            if isa(artifact_dict[name], Array)
+            if isa(artifact_dict[name], Vector)
                 for platform_meta in artifact_dict[name]
                     append!(artifact_path_list, getpaths(platform_meta))
                 end

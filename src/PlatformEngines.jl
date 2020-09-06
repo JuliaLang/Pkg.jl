@@ -198,7 +198,7 @@ function probe_platform_engines!(;verbose::Bool = false)
             (`curl --help`, (url, path, hdrs...) ->
             `curl -H$hdrs -C - -\# -f -o $path -L $url`),
         (`wget --help`, (url, path, hdrs...) ->
-            `wget --tries=5 --header=$hdrs -c -O $path $url`),
+            `wget --tries=5 --header=$hdrs -q --show-progress -c -O $path $url`),
         (`fetch --help`, helpfetcher),
         (`busybox wget --help`, (url, path, hdrs...) ->
             `busybox wget --header=$hdrs -c -O $path $url`),
@@ -276,7 +276,7 @@ function probe_platform_engines!(;verbose::Bool = false)
     # Symbolic Link =
     # Hard Link =
     gen_7z = (p) -> (unpack_7z(p), package_7z(p), list_7z(p), parse_7z_list, r"Path = ([^\r\n]+)\r?\n(?:[^\r\n]+\r?\n)+Symbolic Link = ([^\r\n]+)"s)
-    compression_engines = Tuple[]
+    compression_engines = Tuple{Cmd,Vararg{Any}}[]
 
     (tmpfile, io) = mktemp()
     write(io, "Demo file for tar listing (Pkg.jl)")

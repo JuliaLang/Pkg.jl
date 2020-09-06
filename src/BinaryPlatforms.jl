@@ -513,6 +513,7 @@ function platform_key_abi(machine::String)
     @warn("Platform `$(machine)` is not an officially supported platform$msg")
     return UnknownPlatform()
 end
+platform_key_abi(machine::AbstractString) = platform_key_abi(String(machine))
 
 
 # Define show() for these Platform objects for two reasons:

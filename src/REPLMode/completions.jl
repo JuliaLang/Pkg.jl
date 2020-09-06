@@ -32,8 +32,11 @@ function complete_local_dir(s, i1, i2)
     end
 
     cmp = REPL.REPLCompletions.complete_path(s, i2)
+    cmp2 = cmp[2]
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
-    completions = filter!(x -> isdir(s[1:prevind(s, first(cmp[2])-i1+1)]*x), completions)
+    completions = let s=s
+        filter!(x -> isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x), completions)
+    end
     if expanded_user
         if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
             completions = [joinpath(s, "")]

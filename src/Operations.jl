@@ -117,7 +117,7 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
     manifest = ctx.env.manifest
     empty!(manifest)
     if ctx.env.pkg !== nothing
-        pkgs = [pkgs; ctx.env.pkg]
+        pkgs = push!(copy(pkgs), ctx.env.pkg::PackageSpec)
     end
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
@@ -347,7 +347,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # fixed packages are `dev`ed or `add`ed by repo
     # at this point, fixed packages have a version and `deps`
 
-    @assert length(Set(pkg.uuid for pkg in pkgs)) == length(pkgs)
+    @assert length(Set(pkg.uuid::UUID for pkg in pkgs)) == length(pkgs)
 
     # check compat
     for pkg in pkgs
