@@ -6,22 +6,23 @@ function generate(io, command)
     cmd_nospace = replace(command, " " => "-")
     println(io, """
     ```@raw html
-    <section class="docstring">
-    <div class="docstring-header">
-        <a class="docstring-binding" id="repl-$(cmd_nospace)" href="#repl-$(cmd_nospace)">
-            <code>$(command)</code>
-        </a>
-        —
-        <span class="docstring-category">REPL command</span>
-    .
-    </div>
+    <article class="docstring">
+        <header>
+            <a class="docstring-binding" id="repl-$(cmd_nospace)" href="#repl-$(cmd_nospace)">
+                <code>$(command)</code>
+            </a>
+            —
+            <span class="docstring-category">REPL command</span>
+        </header>
+        <section>
     ```
     ```@eval
     using Pkg
     Dict(Pkg.REPLMode.canonical_names())["$(command)"].help
     ```
     ```@raw html
-    </section>
+        </section>
+    </article>
     ```
     """)
 end
