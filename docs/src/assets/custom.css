@@ -1,11 +1,3 @@
-.admonition.compat > .admonition-title {
- background-color: hsla(90, 60%, 50%, 1);
-}
-
-.admonition.compat {
- background-color: hsla(90, 70%, 90%, 1);
-}
-
-nav.toc .logo {
+#documenter .docs-sidebar .docs-logo > img {
     max-height: 12em;
 }
