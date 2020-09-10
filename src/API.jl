@@ -12,7 +12,7 @@ import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
 using ..Types, ..TOML
 using ..Types: VersionTypes
-using ..BinaryPlatforms
+using Base.BinaryPlatforms
 using ..Artifacts: artifact_paths
 
 include("generate.jl")
@@ -89,7 +89,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::Platform=platform_key_abi(), kwargs...)
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
     foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
@@ -135,7 +135,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
-             platform::Platform=platform_key_abi(), kwargs...)
+             platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :add)
     foreach(pkg -> check_package_name(pkg.name, :add), pkgs)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
@@ -935,7 +935,7 @@ end
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
-                     platform::Platform=platform_key_abi(), kwargs...)
+                     platform::AbstractPlatform=HostPlatform(), kwargs...)
     Context!(ctx; kwargs...)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)

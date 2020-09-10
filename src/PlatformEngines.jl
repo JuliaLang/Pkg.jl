@@ -5,6 +5,7 @@
 module PlatformEngines
 using SHA, Logging
 import ...Pkg: Pkg, TOML, pkg_server, depots1
+using Base.BinaryPlatforms
 
 export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
        download_verify, unpack, package, download_verify_unpack,
@@ -25,8 +26,7 @@ const logging_level = isdefined(Base.CoreLogging, :_invoked_min_enabled_level) ?
 Return a `Cmd` that will download resource located at `url` and store it at
 the location given by `out_path`.
 
-This method is initialized by `probe_platform_engines!()`, which should be
-automatically called upon first import of `BinaryProvider`.
+This method is initialized by `probe_platform_engines!()`.
 """
 gen_download_cmd = (url::AbstractString, out_path::AbstractString, hdrs::AbstractString...) ->
     error("Call `probe_platform_engines!()` before `gen_download_cmd()`")
@@ -40,8 +40,7 @@ Return a `Cmd` that will unpack the given `tarball_path` into the given
 excludlist is an optional file which contains a list of files that is not unpacked
 This option is mainyl used to exclude symlinks from extraction (see: `copyderef`)
 
-This method is initialized by `probe_platform_engines!()`, which should be
-automatically called upon first import of `BinaryProvider`.
+This method is initialized by `probe_platform_engines!()`.
 """
 gen_unpack_cmd = (tarball_path::AbstractString, out_path::AbstractString,
                   excludelist::Union{AbstractString, Nothing} = nothing) ->
@@ -53,8 +52,7 @@ gen_unpack_cmd = (tarball_path::AbstractString, out_path::AbstractString,
 Return a `Cmd` that will package up the given `in_path` directory into a
 tarball located at `tarball_path`.
 
-This method is initialized by `probe_platform_engines!()`, which should be
-automatically called upon first import of `BinaryProvider`.
+This method is initialized by `probe_platform_engines!()`.
 """
 gen_package_cmd = (in_path::AbstractString, tarball_path::AbstractString) ->
     error("Call `probe_platform_engines!()` before `gen_package_cmd()`")
@@ -772,7 +770,7 @@ function get_metadata_headers(url::AbstractString)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol: 1.0")
     push!(headers, "Julia-Version: $VERSION")
-    system = Pkg.BinaryPlatforms.triplet(Pkg.BinaryPlatforms.platform_key_abi())
+    system = triplet(HostPlatform())
     push!(headers, "Julia-System: $system")
     ci_info = String[]
     for var in CI_VARIABLES

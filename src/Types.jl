@@ -13,7 +13,7 @@ using REPL.TerminalMenus
 using TOML
 import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
 import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
-import ..BinaryPlatforms: Platform
+import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
 
 import Base: SHA1
