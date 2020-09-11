@@ -881,10 +881,14 @@ function collect_registries(depot::String)
     regs = RegistrySpec[]
     ispath(d) || return regs
     for name in readdir(d)
-        file = joinpath(d, name, "Registry.toml")
+        regdir = joinpath(d, name)
+        file = joinpath(regdir, "Registry.toml")
         if isfile(file)
-            registry = read_registry(file)
-            verify_registry(registry)
+            registry = verify_registry(regdir)::Union{Dict,PkgError}
+            if registry isa PkgError
+                @warn "Corrupt registry: $(registry.msg) Skipping."
+                continue
+            end
             spec = RegistrySpec(name = registry["name"]::String,
                                 uuid = UUID(registry["uuid"]::String),
                                 url = get(registry, "repo", nothing)::Union{String,Nothing},
@@ -1000,12 +1004,11 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             else
                 pkgerror("no path or url specified for registry")
             end
-            # verify that the clone looks like a registry
-            if !isfile(joinpath(tmp, "Registry.toml"))
-                pkgerror("no `Registry.toml` file in cloned registry.")
+            # verify that the result looks like a registry
+            registry = verify_registry(tmp)::Union{Dict,PkgError}
+            if registry isa PkgError
+                pkgerror("something went wrong when fetching the registry: $(registry.msg).")
             end
-            registry = read_registry(joinpath(tmp, "Registry.toml"); cache=false) # don't cache this tmp registry
-            verify_registry(registry)
             # copy to `depot`
             # slug = Base.package_slug(UUID(registry["uuid"]))
             regpath = joinpath(depot, "registries", registry["name"]#=, slug=#)
@@ -1016,13 +1019,20 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
                     println(ctx.io,
                             "registry `$(registry["name"])` already exist in `$(Base.contractuser(regpath))`.")
                 else
-                    throw(PkgError("registry `$(registry["name"])=\"$(registry["uuid"])\"` conflicts with " *
+                    pkgerror("registry `$(registry["name"])=\"$(registry["uuid"])\"` conflicts with " *
                         "existing registry `$(existing_registry["name"])=\"$(existing_registry["uuid"])\"`. " *
                         "To install it you can clone it manually into e.g. " *
-                        "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
+                        "$(pathrepr(joinpath(depot, "registries", registry["name"]*"-2"))).")
                 end
             else
                 cp(tmp, regpath)
+                # The copy step seems to sometimes go bad(?), so verify the registry
+                # again now that it is in the correct place
+                registry = verify_registry(regpath)::Union{Dict,PkgError}
+                if registry isa PkgError
+                    try rm(regpath; recursive=true, force=true) catch _ end
+                    pkgerror("something went wrong when installing the registry: $(registry.msg).")
+                end
                 printpkgstyle(ctx, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
             end
         end
@@ -1047,10 +1057,16 @@ end
 # verify that the registry looks like a registry
 const REQUIRED_REGISTRY_ENTRIES = ("name", "uuid", "repo", "packages") # ??
 
-function verify_registry(registry::Dict{String, Any})
-    for key in REQUIRED_REGISTRY_ENTRIES
-        haskey(registry, key) || pkgerror("no `$key` entry in `Registry.toml`.")
+function verify_registry(regpath::String)
+    regtoml = joinpath(regpath, "Registry.toml")
+    if !isfile(regtoml)
+        return PkgError("expected a `Registry.toml` file in the registry path $(pathrepr(regpath)).")
     end
+    registry = read_registry(regtoml; cache=false)
+    for key in REQUIRED_REGISTRY_ENTRIES
+        haskey(registry, key) || return PkgError("no `$key` entry in $(pathrepr(regtoml)).")
+    end
+    return registry
 end
 
 # Search for the input registries among installed ones
@@ -1128,10 +1144,19 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                             open(tree_info_file, write=true) do io
                                 println(io, "git-tree-sha1 = ", repr(new_hash))
                             end
-                            registry_file = joinpath(tmp, "Registry.toml")
-                            registry = read_registry(registry_file; cache=false)
-                            verify_registry(registry)
+                            # verify that the result looks like a registry
+                            registry = verify_registry(tmp)::Union{Dict,PkgError}
+                            if registry isa PkgError
+                                pkgerror("something went wrong when updating the registry: $(registry.msg).")
+                            end
                             cp(tmp, reg.path, force=true)
+                            # The copy step seems to sometimes go bad(?), so verify the registry
+                            # again now that it is in the correct place
+                            registry = verify_registry(reg.path)::Union{Dict,PkgError}
+                            if registry isa PkgError
+                                try rm(reg.path; recursive=true, force=true) catch _ end
+                                pkgerror("something went wrong when updating the registry: $(registry.msg).")
+                            end
                         end
                     end
                 end
