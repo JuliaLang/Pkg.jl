@@ -895,14 +895,26 @@ end
 precompile() = precompile(Context())
 function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
+    
+    man = Pkg.Types.read_manifest(ctx.env.manifest_file)
+    pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
+    pkg_dep_lists = [collect(keys(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
+    filter!.(!Pkg.Operations.is_stdlib, pkg_dep_lists)
+    
+    perm = sortperm(length.(pkg_dep_lists), rev=true) # sort so that we queue pkgs with fewer deps first
+    pkgids = pkgids[perm]
+    pkg_dep_lists = pkg_dep_lists[perm]
 
-    pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !is_stdlib(uuid)]
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
-    end
+        push!(pkg_dep_lists, collect(keys(ctx.env.project.deps)))
+    end    
+    
+    precomp_list = String[]
+    precomp_tasks = Task[]
 
     # TODO: since we are a complete list, but not topologically sorted, handling of recursion will be completely at random
-    for pkg in pkgids
+    for (i, pkg) in pairs(pkgids)
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         sourcepath === nothing && continue
@@ -917,9 +929,21 @@ function precompile(ctx::Context)
             break
         end
         if stale
-            Base.compilecache(pkg, sourcepath)
+            t = @async begin
+                if length(pkg_dep_lists[i]) > 0 # if pkg has deps
+                    while length(precomp_list) == 0 || !all(map(x->in(x, precomp_list), pkg_dep_lists[i])) # if all deps not precomped
+                        sleep(0.001)
+                    end
+                end
+                Base.compilecache(pkg, sourcepath)
+                push!(precomp_list, pkg.name) 
+            end  
+            push!(precomp_tasks, t) 
+        else
+            push!(precomp_list, pkg.name)
         end
     end
+    wait.(precomp_tasks)
     nothing
 end
 
