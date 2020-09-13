@@ -909,7 +909,11 @@ function precompile(ctx::Context)
         push!(pkg_dep_lists, collect(keys(ctx.env.project.deps)))
     end    
     
-    precomp_list = String[]
+    precomp_events = Dict{String,Base.Event}()
+    for pkgid in pkgids
+        precomp_events[pkgid.name] = Base.Event()
+    end
+    
     precomp_tasks = Task[]
 
     # TODO: since we are a complete list, but not topologically sorted, handling of recursion will be completely at random
@@ -929,19 +933,15 @@ function precompile(ctx::Context)
         end
         if stale
             t = @async begin
-                if length(pkg_dep_lists[i]) > 0 # if pkg has deps
-                    while length(precomp_list) == 0 || !all(map(x->in(x, precomp_list), pkg_dep_lists[i])) # if all deps not precomped
-                        sleep(0.001)
-                    end
-                end
+                length(pkg_dep_lists[i]) > 0 && wait.(map(x->precomp_events[x], pkg_dep_lists[i]))
                 put!(parallel_limiter, true)
                 Base.compilecache(pkg, sourcepath)
-                push!(precomp_list, pkg.name) 
+                notify(precomp_events[pkg.name])
                 take!(parallel_limiter)
             end  
             push!(precomp_tasks, t) 
         else
-            push!(precomp_list, pkg.name)
+            notify(precomp_events[pkg.name])
         end
     end
     wait.(precomp_tasks)
