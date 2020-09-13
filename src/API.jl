@@ -894,9 +894,6 @@ end
 
 precompile() = precompile(Context())
 function precompile(ctx::Context)
-    
-    is_stdlib_from_name(name::String) = name in values(stdlibs())
-    
     printpkgstyle(ctx, :Precompiling, "project...")
     
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
@@ -904,17 +901,17 @@ function precompile(ctx::Context)
     
     man = Pkg.Types.read_manifest(ctx.env.manifest_file)
     pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
-    pkg_dep_lists = [collect(keys(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
-    filter!.(!is_stdlib_from_name, pkg_dep_lists)
+    pkg_dep_uuid_lists = [collect(values(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
+    filter!.(!is_stdlib, pkg_dep_uuid_lists)
 
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
-        push!(pkg_dep_lists, collect(keys(ctx.env.project.deps)))
+        push!(pkg_dep_uuid_lists, collect(keys(ctx.env.project.deps)))
     end    
     
-    precomp_events = Dict{String,Base.Event}()
+    precomp_events = Dict{Base.UUID,Base.Event}()
     for pkgid in pkgids
-        precomp_events[pkgid.name] = Base.Event()
+        precomp_events[pkgid.uuid] = Base.Event()
     end
     
     precomp_tasks = Task[]
@@ -936,15 +933,15 @@ function precompile(ctx::Context)
         end
         if stale
             t = @async begin
-                length(pkg_dep_lists[i]) > 0 && wait.(map(x->precomp_events[x], pkg_dep_lists[i]))
+                length(pkg_dep_uuid_lists[i]) > 0 && wait.(map(x->precomp_events[x], pkg_dep_uuid_lists[i]))
                 Base.acquire(parallel_limiter)
                 Base.compilecache(pkg, sourcepath)
-                notify(precomp_events[pkg.name])
+                notify(precomp_events[pkg.uuid])
                 Base.release(parallel_limiter)
             end  
             push!(precomp_tasks, t) 
         else
-            notify(precomp_events[pkg.name])
+            notify(precomp_events[pkg.uuid])
         end
     end
     wait.(precomp_tasks)
