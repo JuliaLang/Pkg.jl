@@ -900,7 +900,7 @@ function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
     
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
-    parallel_limiter = Channel{Bool}(num_tasks)
+    parallel_limiter = Base.Semaphore(num_tasks)
     
     man = Pkg.Types.read_manifest(ctx.env.manifest_file)
     pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
@@ -937,10 +937,10 @@ function precompile(ctx::Context)
         if stale
             t = @async begin
                 length(pkg_dep_lists[i]) > 0 && wait.(map(x->precomp_events[x], pkg_dep_lists[i]))
-                put!(parallel_limiter, true)
+                Base.acquire(parallel_limiter)
                 Base.compilecache(pkg, sourcepath)
                 notify(precomp_events[pkg.name])
-                take!(parallel_limiter)
+                Base.release(parallel_limiter)
             end  
             push!(precomp_tasks, t) 
         else
