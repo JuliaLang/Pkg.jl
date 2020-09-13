@@ -894,6 +894,9 @@ end
 
 precompile() = precompile(Context())
 function precompile(ctx::Context)
+    
+    is_stdlib_from_name(name::String) = name in values(stdlibs())
+    
     printpkgstyle(ctx, :Precompiling, "project...")
     
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
@@ -902,7 +905,7 @@ function precompile(ctx::Context)
     man = Pkg.Types.read_manifest(ctx.env.manifest_file)
     pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
     pkg_dep_lists = [collect(keys(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
-    filter!.(!Pkg.Operations.is_stdlib, pkg_dep_lists)
+    filter!.(!is_stdlib_from_name, pkg_dep_lists)
 
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))

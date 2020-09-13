@@ -372,7 +372,6 @@ function stdlibs()
     return STDLIB[]
 end
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
-is_stdlib(name::String) = name in values(stdlibs())
 
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
