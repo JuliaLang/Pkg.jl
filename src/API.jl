@@ -896,6 +896,9 @@ precompile() = precompile(Context())
 function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
     
+    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
+    parallel_limiter = Channel{Bool}(num_tasks)
+    
     man = Pkg.Types.read_manifest(ctx.env.manifest_file)
     pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
     pkg_dep_lists = [collect(keys(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
@@ -931,8 +934,10 @@ function precompile(ctx::Context)
                         sleep(0.001)
                     end
                 end
+                put!(parallel_limiter, true)
                 Base.compilecache(pkg, sourcepath)
                 push!(precomp_list, pkg.name) 
+                take!(parallel_limiter)
             end  
             push!(precomp_tasks, t) 
         else
