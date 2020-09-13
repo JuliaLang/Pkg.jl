@@ -900,10 +900,6 @@ function precompile(ctx::Context)
     pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
     pkg_dep_lists = [collect(keys(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
     filter!.(!Pkg.Operations.is_stdlib, pkg_dep_lists)
-    
-    perm = sortperm(length.(pkg_dep_lists), rev=true) # sort so that we queue pkgs with fewer deps first
-    pkgids = pkgids[perm]
-    pkg_dep_lists = pkg_dep_lists[perm]
 
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
