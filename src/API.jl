@@ -1169,6 +1169,10 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     Operations.show_update(ctx)
 end
 
+import ..Fsck
+function fsck(ctx::Context=Context())
+    Fsck.fsck(ctx)
+end
 
 function setprotocol!(;
     domain::AbstractString="github.com",

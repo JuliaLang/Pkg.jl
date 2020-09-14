@@ -42,6 +42,8 @@ include("Types.jl")
 include("Resolve/Resolve.jl")
 include("Artifacts.jl")
 include("Operations.jl")
+include("fsck.jl")
+# import .Fsck
 include("API.jl")
 include("Registry.jl")
 include("REPLMode/REPLMode.jl")
@@ -501,6 +503,13 @@ const undo = API.undo
 Redoes the changes from the latest [`undo`](@ref).
 """
 const redo = API.redo
+
+"""
+    fsck()
+
+Verify the integrity of packages and registries.
+"""
+const fsck = API.fsck
 
 """
     RegistrySpec(name::String)

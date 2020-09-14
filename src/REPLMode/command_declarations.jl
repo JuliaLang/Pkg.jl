@@ -379,6 +379,15 @@ PSA[:name => "redo",
 Redoes the changes from the latest [`undo`](@ref).
 """,
 ],
+PSA[:name => "fsck",
+    :api => API.fsck,
+    :description => "verify and optionally repair packages and registries",
+    :help => md"""
+    fsck
+
+Verify the integrity of packages and registries.
+""",
+],
 ], #package
 "registry" => CommandDeclaration[
 PSA[:name => "add",
