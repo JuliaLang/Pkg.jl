@@ -1055,7 +1055,12 @@ function check_registered(ctx::Context, pkgs::Vector{PackageSpec})
     find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     for pkg in pkgs
         isempty(registered_paths(ctx, pkg.uuid)) || continue
-        pkgerror("expected package $(err_rep(pkg)) to be registered")
+        # stdlib does not have a version entry
+        if pkg.version == VersionSpec()
+            @warn "$(err_rep(pkg)) is an unknown stdlib, perhaps manifest generated on newer Julia version"
+        else
+            pkgerror("expected package $(err_rep(pkg)) to be registered")
+        end
     end
 end
 
