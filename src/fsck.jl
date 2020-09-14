@@ -9,6 +9,12 @@ using ..Types: Types, Context, RegistrySpec
 using ..Operations: find_installed
 using ..GitTools: GitTools
 
+struct FsckComplication
+    type
+    severity
+    repairable::Bool
+end
+
 function fsck(ctx::Context)
     fsck_packages(ctx)
     fsck_registries(ctx)
@@ -39,24 +45,6 @@ end
 ################
 ## Registries ##
 ################
-function collect_registries(depot::String)
-    d = joinpath(depot, "registries")
-    regs = RegistrySpec[]
-    ispath(d) || return regs
-    for name in readdir(d)
-        file = joinpath(d, name, "Registry.toml")
-        if isfile(file)
-            registry = read_registry(file)
-            verify_registry(registry)
-            spec = RegistrySpec(name = registry["name"]::String,
-                                uuid = UUID(registry["uuid"]::String),
-                                url = get(registry, "repo", nothing)::Union{String,Nothing},
-                                path = dirname(file))
-            push!(regs, spec)
-        end
-    end
-    return regs
-end
 
 function fsck_registries(ctx::Context)
     for depot in depots()
