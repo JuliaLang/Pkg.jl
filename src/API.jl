@@ -942,6 +942,7 @@ function precompile(ctx::Context)
                 return
             end
             
+            # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep_uuid->was_recompiled[dep_uuid], pkg_dep_uuid_lists[i]))
             if any_dep_recompiled || is_stale(paths, sourcepath)
                 Base.acquire(parallel_limiter)
