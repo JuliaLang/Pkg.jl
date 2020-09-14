@@ -903,19 +903,20 @@ function precompile(ctx::Context)
     pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
     pkg_dep_uuid_lists = [collect(values(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
     filter!.(!is_stdlib, pkg_dep_uuid_lists)
-
+    
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
         push!(pkg_dep_uuid_lists, collect(keys(ctx.env.project.deps)))
     end    
     
     precomp_events = Dict{Base.UUID,Base.Event}()
+    was_recompiled = Dict{Base.UUID,Bool}()
     for pkgid in pkgids
         precomp_events[pkgid.uuid] = Base.Event()
+        was_recompiled[pkgid.uuid] = false
     end
     
     precomp_tasks = Task[]
-
     # TODO: since we are a complete list, but not topologically sorted, handling of recursion will be completely at random
     for (i, pkg) in pairs(pkgids)
         paths = Base.find_all_in_cache_path(pkg)
@@ -923,26 +924,29 @@ function precompile(ctx::Context)
         sourcepath === nothing && continue
         # Heuristic for when precompilation is disabled
         occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String)) && continue
-        stale = true
-        for path_to_try in paths::Vector{String}
-            staledeps = Base.stale_cachefile(sourcepath, path_to_try)
-            staledeps === true && continue
-            # TODO: else, this returns a list of packages that may be loaded to make this valid (the topological list)
-            stale = false
-            break
-        end
-        if stale
-            t = @async begin
-                length(pkg_dep_uuid_lists[i]) > 0 && wait.(map(x->precomp_events[x], pkg_dep_uuid_lists[i]))
+        
+        t = @async begin
+            length(pkg_dep_uuid_lists[i]) > 0 && wait.(map(x->precomp_events[x], pkg_dep_uuid_lists[i]))
+            any_dep_recompiled = any(map(x->was_recompiled[x], pkg_dep_uuid_lists[i]))
+            stale = true
+            for path_to_try in paths::Vector{String}
+                staledeps = Base.stale_cachefile(sourcepath, path_to_try, Base.TOMLCache()) #|| any(deps_recompiled)
+                staledeps === true && continue
+                # TODO: else, this returns a list of packages that may be loaded to make this valid (the topological list)
+                stale = false
+                break
+            end
+            if any_dep_recompiled || stale
                 Base.acquire(parallel_limiter)
                 Base.compilecache(pkg, sourcepath)
+                was_recompiled[pkg.uuid] = true
                 notify(precomp_events[pkg.uuid])
                 Base.release(parallel_limiter)
-            end  
-            push!(precomp_tasks, t) 
-        else
-            notify(precomp_events[pkg.uuid])
-        end
+            else
+                notify(precomp_events[pkg.uuid])
+            end
+        end  
+        push!(precomp_tasks, t) 
     end
     wait.(precomp_tasks)
     nothing
