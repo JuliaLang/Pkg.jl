@@ -916,6 +916,15 @@ function precompile(ctx::Context)
         was_recompiled[pkgid.uuid] = false
     end
     
+    function is_stale(paths, sourcepath)
+        for path_to_try in paths::Vector{String}
+            staledeps = Base.stale_cachefile(sourcepath, path_to_try, Base.TOMLCache())
+            staledeps === true && continue
+            return false
+        end
+        return true
+    end
+    
     errored = false
     @sync for (i, pkg) in pairs(pkgids)
         paths = Base.find_all_in_cache_path(pkg)
@@ -932,15 +941,9 @@ function precompile(ctx::Context)
                 notify(precomp_events[pkg.uuid])
                 return
             end
+            
             any_dep_recompiled = any(map(dep_uuid->was_recompiled[dep_uuid], pkg_dep_uuid_lists[i]))
-            stale = true
-            for path_to_try in paths::Vector{String}
-                staledeps = Base.stale_cachefile(sourcepath, path_to_try, Base.TOMLCache()) #|| any(deps_recompiled)
-                staledeps === true && continue
-                stale = false
-                break
-            end
-            if any_dep_recompiled || stale
+            if any_dep_recompiled || is_stale(paths, sourcepath)
                 Base.acquire(parallel_limiter)
                 try
                     Base.compilecache(pkg, sourcepath)
