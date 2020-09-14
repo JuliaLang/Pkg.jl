@@ -915,7 +915,7 @@ function precompile(ctx::Context)
         precomp_events[pkgid.uuid] = Base.Event()
         was_recompiled[pkgid.uuid] = false
     end
-    # TODO: since we are a complete list, but not topologically sorted, handling of recursion will be completely at random
+    
     errored = false
     @sync for (i, pkg) in pairs(pkgids)
         paths = Base.find_all_in_cache_path(pkg)
@@ -937,7 +937,6 @@ function precompile(ctx::Context)
             for path_to_try in paths::Vector{String}
                 staledeps = Base.stale_cachefile(sourcepath, path_to_try, Base.TOMLCache()) #|| any(deps_recompiled)
                 staledeps === true && continue
-                # TODO: else, this returns a list of packages that may be loaded to make this valid (the topological list)
                 stale = false
                 break
             end
