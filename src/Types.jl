@@ -326,9 +326,7 @@ Base.@kwdef mutable struct Context
     io::IO = something(DEFAULT_IO[], stderr)
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
-    # NOTE: The JULIA_PKG_CONCURRENCY environment variable is likely to be removed in
-    # the future. It currently stands as an unofficial workaround for issue #795.
-    num_concurrent_downloads::Int = haskey(ENV, "JULIA_PKG_CONCURRENCY") ? parse(Int, ENV["JULIA_PKG_CONCURRENCY"]) : 8
+    num_concurrent_downloads::Int = 8
     graph_verbose::Bool = false
     currently_running_target::Bool = false
     # test instrumenting
