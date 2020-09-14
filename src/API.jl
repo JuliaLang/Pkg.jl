@@ -915,19 +915,24 @@ function precompile(ctx::Context)
         precomp_events[pkgid.uuid] = Base.Event()
         was_recompiled[pkgid.uuid] = false
     end
-    
-    precomp_tasks = Task[]
     # TODO: since we are a complete list, but not topologically sorted, handling of recursion will be completely at random
-    for (i, pkg) in pairs(pkgids)
+    errored = false
+    @sync for (i, pkg) in pairs(pkgids)
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         sourcepath === nothing && continue
         # Heuristic for when precompilation is disabled
         occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String)) && continue
         
-        t = @async begin
-            length(pkg_dep_uuid_lists[i]) > 0 && wait.(map(x->precomp_events[x], pkg_dep_uuid_lists[i]))
-            any_dep_recompiled = any(map(x->was_recompiled[x], pkg_dep_uuid_lists[i]))
+        @async begin
+            for dep_uuid in pkg_dep_uuid_lists[i]
+                wait(precomp_events[dep_uuid])
+            end
+            if errored # early termination of precompilation session
+                notify(precomp_events[pkg.uuid])
+                return
+            end
+            any_dep_recompiled = any(map(dep_uuid->was_recompiled[dep_uuid], pkg_dep_uuid_lists[i]))
             stale = true
             for path_to_try in paths::Vector{String}
                 staledeps = Base.stale_cachefile(sourcepath, path_to_try, Base.TOMLCache()) #|| any(deps_recompiled)
@@ -938,17 +943,21 @@ function precompile(ctx::Context)
             end
             if any_dep_recompiled || stale
                 Base.acquire(parallel_limiter)
-                Base.compilecache(pkg, sourcepath)
-                was_recompiled[pkg.uuid] = true
-                notify(precomp_events[pkg.uuid])
-                Base.release(parallel_limiter)
+                try
+                    Base.compilecache(pkg, sourcepath)
+                    was_recompiled[pkg.uuid] = true
+                catch err
+                    errored = true
+                    throw(err)
+                finally
+                    notify(precomp_events[pkg.uuid])
+                    Base.release(parallel_limiter)
+                end
             else
                 notify(precomp_events[pkg.uuid])
             end
         end  
-        push!(precomp_tasks, t) 
     end
-    wait.(precomp_tasks)
     nothing
 end
 
