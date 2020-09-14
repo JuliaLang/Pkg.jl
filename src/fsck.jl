@@ -63,6 +63,22 @@ function fsck_registries(ctx::Context)
         rdir = joinpath(depot, "registries")
         isdir(rdir) || continue
         for regdir in filter!(isdir, readdir(rdir; join=true))
+            tree_info = joinpath(regdir, ".tree_info.toml")
+            if isfile(tree_info)
+                ti = TOML.tryparsefile(tree_info)
+                ti === nothing && @warn "corrupt .tree_info.toml"
+                # Remove the file for computation
+                rm(tree_info)
+                expected = SHA1(ti["git-tree-sha1"])
+                computed = SHA1(GitTools.tree_hash(regdir))
+                if computed != expected
+                    @warn "Content hash mismatch for registry" expected computed
+                end
+                # Put it back
+                open(tree_info, "w") do io
+                    TOML.print(io, ti)
+                end
+            end
             toml = joinpath(regdir, "Registry.toml")
             isfile(toml) || @warn "Missing Registry.toml" folder=regdir
             dict = TOML.tryparsefile(toml)
