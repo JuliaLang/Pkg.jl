@@ -124,9 +124,13 @@ See also [`PackageSpec`](@ref).
 const add = API.add
 
 """
-    Pkg.precompile()
+    Pkg.precompile(;parallel=true)
 
-Precompile all the dependencies of the project.
+Precompile all dependencies of the project. 
+By default runs an optimized parallel precompillation of all dependencies in the 
+project manifest. By setting `parallel=false` the strategy reverts to the prior behavior
+of precompiling each top level dependency sequentially, and will only precompile dependencies 
+that are actually loaded on the given system.
 
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3. On earlier versions
