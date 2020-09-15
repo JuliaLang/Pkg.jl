@@ -1169,6 +1169,21 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     Operations.show_update(ctx)
 end
 
+compat() = compat(Context())
+compat(pkg::PackageSpec, vspec) = compat(Context(), pkg, vspec)
+function compat(ctx::Context, pkg::PackageSpec, vspec::String)
+    project_deps_resolve!(ctx, [pkg])
+    if pkg.uuid ∉ values(ctx.env.project.deps)
+        pkgerror("package $(pkg.name === nothing ? pkg.uuid : pkg.name) not found in project")
+    end
+    @assert pkg.name !== nothing && pkg.uuid !== nothing
+    Pkg.Types.semver_spec(vspec) # verify that the input string is valid
+    # Update the Project.toml file
+    ctx.env.project.compat[pkg.name] = vspec
+    Types.write_project(ctx.env)
+    return
+end
+
 
 function setprotocol!(;
     domain::AbstractString="github.com",

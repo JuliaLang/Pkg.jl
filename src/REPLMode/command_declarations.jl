@@ -379,6 +379,18 @@ PSA[:name => "redo",
 Redoes the changes from the latest [`undo`](@ref).
 """,
 ],
+PSA[:name => "compat",
+    :api => API.compat,
+    :description => "show or set compat entries",
+    :arg_count => 2 => 2,
+    :arg_parser => parse_compat,
+    :help => md"""
+
+    compat pkg entry
+
+Set version compatibility for package `pkg` to `entry`.
+""",
+],
 ], #package
 "registry" => CommandDeclaration[
 PSA[:name => "add",

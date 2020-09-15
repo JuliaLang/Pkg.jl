@@ -194,6 +194,28 @@ function parse_activate(args::Vector{QString}, options)
     return args # this is currently invalid input for "activate"
 end
 
+# compat add Example@0.1.1
+# compat add Example 0.1.1
+function parse_compat(args::Vector{QString}, options)
+    length(args) > 1 || pkgerror("wrong number of arguments")
+    args = unwrap(args)
+    pkgword, compat_words = args[1], args[2:end]
+    if occursin(uuid_re, pkgword)
+        pkg = PackageSpec(uuid=UUID(pkgword))
+    elseif occursin(name_re, pkgword)
+        pkg = PackageSpec(String(match(name_re, pkgword).captures[1]))
+    elseif occursin(name_uuid_re, pkgword)
+        m = match(name_uuid_re, pkgword)
+        pkg = PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
+    else
+        pkgerror("can not parse `$pkgword` as a package")
+    end
+
+    vspec = join(compat_words)
+
+    return [pkg, vspec]
+end
+
 #
 # # Option Maps
 #
