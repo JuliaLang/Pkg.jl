@@ -909,10 +909,10 @@ function precompile(ctx::Context)
         push!(pkg_dep_uuid_lists, collect(keys(ctx.env.project.deps)))
     end    
     
-    precomp_events = Dict{Base.UUID,Base.Event}()
+    was_processed = Dict{Base.UUID,Base.Event}()
     was_recompiled = Dict{Base.UUID,Bool}()
     for pkgid in pkgids
-        precomp_events[pkgid.uuid] = Base.Event()
+        was_processed[pkgid.uuid] = Base.Event()
         was_recompiled[pkgid.uuid] = false
     end
     
@@ -934,11 +934,11 @@ function precompile(ctx::Context)
         occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String)) && continue
         
         @async begin
-            for dep_uuid in pkg_dep_uuid_lists[i]
-                wait(precomp_events[dep_uuid])
+            for dep_uuid in pkg_dep_uuid_lists[i] # wait for deps to finish
+                wait(was_processed[dep_uuid])
             end
             if errored # early termination of precompilation session
-                notify(precomp_events[pkg.uuid])
+                notify(was_processed[pkg.uuid])
                 return
             end
             
@@ -953,11 +953,11 @@ function precompile(ctx::Context)
                     errored = true
                     throw(err)
                 finally
-                    notify(precomp_events[pkg.uuid])
+                    notify(was_processed[pkg.uuid])
                     Base.release(parallel_limiter)
                 end
             else
-                notify(precomp_events[pkg.uuid])
+                notify(was_processed[pkg.uuid])
             end
         end  
     end
