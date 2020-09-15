@@ -435,3 +435,100 @@ Pair{Regex,Any}[
                 Regex("^((?:≥\\s*)|(?:>=\\s*)|(?:=\\s*)|(?:<\\s*)|(?:=\\s*))v?$version\$")  => inequality_interval,# < 0.2 >= 0.5,2
                 Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
 ]
+
+
+function to_toml(vs::VersionSpec)
+    io = IOBuffer()
+    first = true
+    for vr in vs.ranges
+        first || print(io, ", ")
+        first = false
+        to_toml(io, vr)
+    end
+    return String(take!(io))
+end
+
+# function to_toml2(io::IOBuffer, vr::VersionRange)
+#     if vr.lower[1] > 0
+#         if vr.upper.n == 1 # print as semver_interval
+#             join(io, (vr.lower[i] for i in 1:vr.lower.n if vr.lower[i] != 0 ), '.')
+#             for i in vr.lower[1]+1:vr.upper[1]
+#                 print(io, ", ", i)
+#             end
+#         end
+#     elseif vr.lower[2] > 0
+#         if vr.upper.n == 2 # print as semver_interval
+#             join(io, (vr.lower[i] for i in 1:vr.lower.n if vr.lower[i] != 0 || i < 2 ), '.')
+#             for i in vr.lower[2]+1:vr.upper[2]
+#                 print(io, ", 0.", i)
+#             end
+#         end
+#     else # vr.lower[3] > 0
+#         if vr.upper.n == 3 # print as semver_interval
+#             join(io, (vr.lower[i] for i in 1:vr.lower.n if vr.lower[i] != 0 || i < 3 ), '.')
+#             for i in vr.lower[3]+1:vr.upper[3]
+#                 print(io, ", 0.0.", i)
+#             end
+#         end
+#     end
+# end
+
+function to_toml(io::IOBuffer, vr::VersionRange)
+    if (vr.lower[1] > 0 && vr.upper.n == 1) ||
+       (vr.lower[1] == 0 && vr.lower[2] > 0 && vr.upper.n == 2) ||
+       (vr.lower[1] == 0 && vr.lower[2] == 0 && vr.lower[3] > 0 && vr.upper.n == 3)
+        # caret semver interval
+        n_sig = vr.upper.n
+        join(io, (vr.lower[i] for i in 1:vr.lower.n if vr.lower[i] != 0 || i < n_sig ), '.')
+        prefix = ", " * "0."^(n_sig-1)
+        for i in vr.lower[n_sig]+1:vr.upper[n_sig]
+            print(io, prefix, i)
+        end
+    elseif (vr.lower[1] == vr.upper[1] && vr.lower[2] == vr.upper[2] && vr.upper.n == 2)
+        # tilde semver interval
+        n_sig = vr.lower.n
+        print(io, '~')
+        join(io, (vr.lower[i] for i in 1:vr.lower.n if vr.lower[i] != 0 || i < n_sig ), '.')
+    elseif vr.lower.t == (0,0,0)
+        # upper bound
+        n_sig = vr.upper.n
+        print(io, '<')
+        join(io, (i==n_sig ? vr.upper[i]+1 : vr.upper[i] for i in 1:n_sig), '.')
+    elseif vr.upper == _inf
+        # lower bound
+        print(io, ">=")
+        n_sig = findfirst(!iszero, vr.lower.t)
+        join(io, (vr.lower[i] for i in 1:vr.lower.n if vr.lower[i] != 0 || i < n_sig ), '.')
+        # join(io, (vr.lower[i] for i in 1:vr.lower.n if vr.lower[i] != 0  ), '.')
+    else
+        error()
+
+
+    end
+end
+
+for str in (
+        # caret semver
+        "0.0.1", "0.1", "0.1.1", "1", "1.1", "1.1.1",
+        # tilde semver
+        "~0.0.1", "~1.1", "~1.1.1",
+        # upper bound
+        "<0.0.1", "<0.1.1", "<1.1.1", "<0.1", "<0.1.1", "<1", "<1.1", "<1.1.1", "<2",
+        )
+    @show str
+    @show to_toml(Pkg.Types.semver_spec(str))
+    @assert to_toml(Pkg.Types.semver_spec(str)) == str
+    @assert Pkg.Types.semver_spec(to_toml(Pkg.Types.semver_spec(str))) ==
+            Pkg.Types.semver_spec(str)
+end
+
+# These are not roundtrippable as strings, will be printed as caret
+# but should still represent the same VersionSpec when parsed again
+for str in (
+    "~0.1", "~0.1, ~0.2", "~0.1, ~0.3", "~0.1, ~0.2, ~0.3",
+    "~0.1.1", "~0.1.1, ~0.2.2", "~0.1.1, ~0.3.3", "~0.1.1, ~0.2.2, ~0.3.3",
+    "~1", "~1, ~2", "~1, ~3", "~1, ~2, ~3",
+    )
+    @assert Pkg.Types.semver_spec(to_toml(Pkg.Types.semver_spec(str))) ==
+            Pkg.Types.semver_spec(str)
+end
