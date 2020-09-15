@@ -937,15 +937,16 @@ function precompile(ctx::Context)
             for dep_uuid in pkg_dep_uuid_lists[i] # wait for deps to finish
                 wait(was_processed[dep_uuid])
             end
-            if errored # early termination of precompilation session
-                notify(was_processed[pkg.uuid])
-                return
-            end
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep_uuid->was_recompiled[dep_uuid], pkg_dep_uuid_lists[i]))
-            if any_dep_recompiled || is_stale(paths, sourcepath)
+            if !errored && (any_dep_recompiled || is_stale(paths, sourcepath))
                 Base.acquire(parallel_limiter)
+                if errored # catch things queued before error occurred
+                    notify(was_processed[pkg.uuid])
+                    Base.release(parallel_limiter)
+                    return
+                end
                 try
                     Base.compilecache(pkg, sourcepath)
                     was_recompiled[pkg.uuid] = true
