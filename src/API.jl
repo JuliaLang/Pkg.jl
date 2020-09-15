@@ -104,8 +104,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
             pkgerror("name, UUID, URL, or filesystem path specification required when calling `develop`")
         end
         if pkg.repo.rev !== nothing
-            pkgerror("git revision specification invalid when calling `develop`:",
-                     " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))")
+            pkgerror("rev argument not supported by `develop`; consider using `add` instead")
         end
         if pkg.version != VersionSpec()
             pkgerror("version specification invalid when calling `develop`:",
@@ -833,7 +832,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         # First try without updating the registry
         Operations.check_registered(ctx, pkgs)
     catch e
-        if !(e isa PkgError) || update_registries == false
+        if !(e isa PkgError) || update_registry == false
             rethrow(e)
         end
         Types.update_registries(ctx)

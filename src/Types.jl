@@ -871,7 +871,7 @@ function clone_default_registries(ctx::Context; only_if_empty = true)
             end
         end
         filter!(reg -> !(reg.uuid in installed_registries), registries)
-        clone_or_cp_registries(registries)
+        clone_or_cp_registries(ctx, registries)
     end
 end
 

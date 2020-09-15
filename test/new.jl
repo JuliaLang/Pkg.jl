@@ -887,7 +887,7 @@ end
             ) Pkg.develop(Pkg.PackageSpec())
         # git revisions imply that `develop` tracks a git repo.
         @test_throws PkgError(
-            "git revision specification invalid when calling `develop`: `master` specified for package `Example`"
+            "rev argument not supported by `develop`; consider using `add` instead"
             ) Pkg.develop(name="Example", rev="master")
         # Adding an unregistered package by name.
         @test_throws PkgError Pkg.develop("ThisIsHopefullyRandom012856014925701382")
