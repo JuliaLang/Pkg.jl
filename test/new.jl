@@ -2248,15 +2248,6 @@ end
     end
 end
 
-@testset "Set download concurrency" begin
-    isolate() do
-        withenv("JULIA_PKG_CONCURRENCY" => 1) do
-            ctx = Pkg.Types.Context()
-            @test ctx.num_concurrent_downloads == 1
-        end
-    end
-end
-
 @testset "API details" begin
     # API should not mutate
     isolate() do

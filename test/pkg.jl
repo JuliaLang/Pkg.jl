@@ -526,13 +526,6 @@ end end
     @test Pkg.Types.pathrepr(path) == "`@stdlib/Test`"
 end
 
-@testset "Set download concurrency" begin
-    withenv("JULIA_PKG_CONCURRENCY" => 1) do
-        ctx = Pkg.Types.Context()
-        @test ctx.num_concurrent_downloads == 1
-    end
-end
-
 @testset "stdlib_resolve!" begin
     a = Pkg.Types.PackageSpec(name="Markdown")
     b = Pkg.Types.PackageSpec(uuid=UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
