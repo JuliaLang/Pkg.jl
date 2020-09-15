@@ -6,6 +6,7 @@ desc = "The next-generation Julia package manager."
 version = "1.5.0"
 
 [deps]
+Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"

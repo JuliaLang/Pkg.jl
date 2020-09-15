@@ -25,69 +25,6 @@ function create_artifact_chmod(f::Function)
     end
 end
 
-@testset "Serialization Tools" begin
-    # First, some basic tests
-    meta = Dict()
-    pack_platform!(meta, Linux(:i686))
-    @test meta["os"] == "linux"
-    @test meta["arch"] == "i686"
-    @test meta["libc"] == "glibc"
-
-    meta = Dict()
-    pack_platform!(meta, Linux(:armv7l; libc=:musl))
-    @test meta["os"] == "linux"
-    @test meta["arch"] == "armv7l"
-    @test meta["libc"] == "musl"
-
-    meta = Dict()
-    pack_platform!(meta, Windows(:x86_64; compiler_abi=CompilerABI(;libgfortran_version=v"3")))
-    @test meta["os"] == "windows"
-    @test meta["arch"] == "x86_64"
-    @test meta["libgfortran_version"] == "3.0.0"
-
-    meta = Dict()
-    pack_platform!(meta, MacOS(:x86_64))
-    @test meta == Dict("os" => "macos", "arch" => "x86_64")
-
-    # Next, fuzz it out!  Ensure that we exactly reconstruct our platforms!
-    platforms = Platform[]
-    for libgfortran_version in (v"3", v"4", v"5", nothing),
-        libstdcxx_version in (v"3.4.11", v"3.4.19", nothing),
-        cxxstring_abi in (:cxx03, :cxx11, nothing)
-
-        cabi = CompilerABI(;
-            libgfortran_version=libgfortran_version,
-            libstdcxx_version=libstdcxx_version,
-            cxxstring_abi=cxxstring_abi,
-        )
-
-        for arch in (:x86_64, :i686, :aarch64, :armv7l),
-            libc in (:glibc, :musl)
-
-            push!(platforms, Linux(arch; libc=libc, compiler_abi=cabi))
-        end
-        push!(platforms, Windows(:x86_64; compiler_abi=cabi))
-        push!(platforms, Windows(:i686; compiler_abi=cabi))
-        push!(platforms, MacOS(:x86_64; compiler_abi=cabi))
-        push!(platforms, FreeBSD(:x86_64; compiler_abi=cabi))
-    end
-
-    for p in platforms
-        meta = Dict()
-        pack_platform!(meta, p)
-        @test unpack_platform(meta, "foo", "<in-memory-Artifacts.toml>") == p
-
-        # Test that some things raise warnings
-        bad_meta = copy(meta)
-        delete!(bad_meta, "os")
-        @test_logs (:error, r"Invalid artifacts file") unpack_platform(bad_meta, "foo", "")
-
-        bad_meta = copy(meta)
-        delete!(bad_meta, "arch")
-        @test_logs (:error, r"Invalid artifacts file") unpack_platform(bad_meta, "foo", "")
-    end
-end
-
 @testset "Artifact Creation" begin
     # We're going to ensure that our artifact creation does in fact give git-tree-sha1's.
     creators = [
