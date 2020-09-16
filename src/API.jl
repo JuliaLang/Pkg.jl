@@ -899,13 +899,15 @@ function precompile(ctx::Context; parallel=true)
     num_tasks = parallel ? parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1))) : 1
     parallel_limiter = Base.Semaphore(num_tasks)
     
+    toplevel_pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !is_stdlib(uuid)]
+    
     if parallel
         man = Pkg.Types.read_manifest(ctx.env.manifest_file)
         pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
         pkg_dep_uuid_lists = [collect(values(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
         filter!.(!is_stdlib, pkg_dep_uuid_lists)
     else
-        pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !is_stdlib(uuid)]
+        pkgids = toplevel_pkgids
         pkg_dep_uuid_lists = fill(Base.UUID[], length(pkgids)) # give empty arrays because we're not waiting for deps
     end
     
@@ -953,11 +955,17 @@ function precompile(ctx::Context; parallel=true)
                     return
                 end
                 try
-                    Base.compilecache(pkg, sourcepath)
                     was_recompiled[pkg.uuid] = true
+                    redirect_stderr(Base.devnull) do
+                        Base.compilecache(pkg, sourcepath)
+                    end
                 catch err
-                    errored = true
-                    throw(err)
+                    if pkg in toplevel_pkgids # only throw errors for top-level
+                        errored = true
+                        throw(err) 
+                    else
+                        @warn "Precompilation failed for sub-dependency $pkg"
+                    end
                 finally
                     notify(was_processed[pkg.uuid])
                     Base.release(parallel_limiter)
