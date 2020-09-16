@@ -956,9 +956,7 @@ function precompile(ctx::Context; parallel=true)
                 end
                 try
                     was_recompiled[pkg.uuid] = true
-                    redirect_stderr(Base.devnull) do
-                        Base.compilecache(pkg, sourcepath)
-                    end
+                    Base.compilecache(pkg, sourcepath, false) # don't print errors given we control
                 catch err
                     if pkg in toplevel_pkgids # only throw errors for top-level
                         errored = true
