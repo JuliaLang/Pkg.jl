@@ -957,7 +957,7 @@ function precompile(ctx::Context)
                         errored = true
                         throw(err) 
                     else
-                        @warn "Precompilation failed for sub-dependency $pkg"
+                        @warn "Precompilation failed for indirect dependency $pkg"
                     end
                 finally
                     notify(was_processed[pkg.uuid])
