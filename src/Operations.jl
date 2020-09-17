@@ -10,7 +10,8 @@ import REPL
 using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
-import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
+import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
+                    artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle
@@ -586,12 +587,36 @@ function install_git(
     end
 end
 
+function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform())
+    # Check to see if this package has an (Julia)Artifacts.toml
+    artifacts_tomls = Tuple{String,Dict}[]
+    for f in artifact_names
+        artifacts_toml = joinpath(pkg_root, f)
+        if isfile(artifacts_toml)
+            selector_path = joinpath(pkg_root, ".pkg", "select_artifacts.jl")
+
+            # If there is a dynamic artifact selector, run that in an appropriate sandbox to select artifacts
+            if isfile(selector_path)
+                select_cmd = Cmd(`$(gen_build_code(selector_path)) $(triplet(platform))`)
+                addenv(select_cmd, "JULIA_LOAD_PATH" => "@stdlib")
+                meta_toml = String(read(select_cmd))
+                push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
+            else
+                # Otherwise, use the standard selector from `Artifacts`
+                artifacts = select_downloadable_artifacts(artifacts_toml; platform)
+                push!(artifacts_tomls, (artifacts_toml, artifacts))
+            end
+            break
+        end
+    end
+    return artifacts_tomls
+end
+
+
 function download_artifacts(env::EnvCache, pkgs::Vector{PackageSpec};
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
                             verbose::Bool=false)
-    # Filter out packages that have no source_path()
-    # pkg_roots = String[p for p in source_path.((env.project_file,), pkgs) if p !== nothing]  # this runs up against inference limits?
     pkg_roots = String[]
     for pkg in pkgs
         p = source_path(env.project_file, pkg, julia_version)
@@ -603,34 +628,22 @@ end
 function download_artifacts(pkg_roots::Vector{String};
                             platform::AbstractPlatform=HostPlatform(),
                             verbose::Bool=false)
-    # List of Artifacts.toml files that we're going to download from
-    artifacts_tomls = String[]
-
-    for path in pkg_roots
-        # Check to see if this package has an (Julia)Artifacts.toml
-        for f in artifact_names
-            artifacts_toml = joinpath(path, f)
-            if isfile(artifacts_toml)
-                push!(artifacts_tomls, artifacts_toml)
-                break
+    for pkg_root in pkg_roots
+        for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
+            # For each Artifacts.toml, install each artifact we've collected from it
+            for name in keys(artifacts)
+                ensure_artifact_installed(name, artifacts[name], artifacts_toml;
+                                            verbose, quiet_download=!(stderr isa Base.TTY))
             end
-        end
-    end
-
-    if !isempty(artifacts_tomls)
-        for artifacts_toml in artifacts_tomls
-            ensure_all_artifacts_installed(artifacts_toml; platform=platform, verbose=verbose, quiet_download=!(stderr isa Base.TTY))
             write_env_usage(artifacts_toml, "artifact_usage.toml")
         end
     end
 end
 
 function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform=HostPlatform())
-    for f in artifact_names
-        artifacts_toml = joinpath(pkg_root, f)
-        if isfile(artifacts_toml)
-            hashes = extract_all_hashes(artifacts_toml)
-            if !all(artifact_exists.(hashes))
+    for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
+        for name in keys(artifacts)
+            if !artifact_exists(Base.SHA1(artifacts[name]["git-tree-sha1"]))
                 return false
             end
             break
@@ -824,7 +837,6 @@ function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID,I
     seen = UUID[]
     k = 0
     function visit(uuid::UUID)
-        is_stdlib(uuid) && return
         uuid in seen &&
             return @warn("Dependency graph not a DAG, linearizing anyway")
         haskey(order, uuid) && return
