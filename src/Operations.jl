@@ -4,7 +4,7 @@ module Operations
 
 using UUIDs
 using Random: randstring
-import LibGit2
+import LibGit2, Dates, TOML
 
 import REPL
 using REPL.TerminalMenus
@@ -924,7 +924,26 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             nothing :
             gen_target_project(ctx, pkg, source_path, "build")
 
-        log_file = splitext(build_file)[1] * ".log"
+        # Put log output in Pkg's scratchspace if the package is content adressed
+        # by tree sha and in the build directory if it is tracked by path etc.
+        entry = manifest_info(ctx, uuid)
+        if entry !== nothing && entry.tree_hash !== nothing
+            key = string(entry.tree_hash)
+            PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+            scratch = joinpath(depots1(), "scratchspaces", PkgUUID, key)
+            mkpath(scratch)
+            log_file = joinpath(scratch, "build.log")
+            # Associate the logfile with the package beeing built
+            dict = Dict{String,Any}(scratch => [
+                Dict{String,Any}("time" => Dates.now(), "parent_projects" => [projectfile_path(source_path)])
+            ])
+            open(joinpath(depots1(), "logs", "scratch_usage.toml"), "a") do io
+                TOML.print(io, dict)
+            end
+        else
+            log_file = splitext(build_file)[1] * ".log"
+        end
+
         printpkgstyle(ctx, :Building,
                       rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
 
