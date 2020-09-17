@@ -266,7 +266,7 @@ const free = API.free
 Make a package available for development by tracking it by path.
 If `pkg` is given with only a name or by a URL, the package will be downloaded
 to the location specified by the environment variable `JULIA_PKG_DEVDIR`, with
-`.julia/dev` as the default.
+`joinpath(DEPOT_PATH[1],"dev")` being the default.
 
 If `pkg` is given as a local path, the package at that path will be tracked.
 

@@ -145,7 +145,7 @@ Let's try to `dev` a registered package:
   [7876af07] + Example v0.5.1+ [`~/.julia/dev/Example`]
 ```
 
-The `dev` command fetches a full clone of the package to `~/.julia/dev/` (the path can be changed by setting the environment variable `JULIA_PKG_DEVDIR`).
+The `dev` command fetches a full clone of the package to `~/.julia/dev/` (the path can be changed by setting the environment variable `JULIA_PKG_DEVDIR`, the default being `joinpath(DEPOT_PATH[1],"dev")`).
 When importing `Example` julia will now import it from `~/.julia/dev/Example` and whatever local changes have been made to the files in that path are consequently
 reflected in the code loaded. When we used `add` we said that we tracked the package repository, we here say that we track the path itself.
 Note the package manager will never touch any of the files at a tracked path. It is therefore up to you to pull updates, change branches etc.
