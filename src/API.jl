@@ -894,29 +894,6 @@ end
 
 precompile() = precompile(Context())
 function precompile(ctx::Context)
-    printpkgstyle(ctx, :Precompiling, "project...")
-    
-    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
-    parallel_limiter = Base.Semaphore(num_tasks)
-    
-    toplevel_pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !is_stdlib(uuid)]
-    
-    man = Pkg.Types.read_manifest(ctx.env.manifest_file)
-    pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
-    pkg_dep_uuid_lists = [collect(values(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
-    filter!.(!is_stdlib, pkg_dep_uuid_lists)
-    
-    if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
-        push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
-        push!(pkg_dep_uuid_lists, collect(keys(ctx.env.project.deps)))
-    end    
-    
-    was_processed = Dict{Base.UUID,Base.Event}()
-    was_recompiled = Dict{Base.UUID,Bool}()
-    for pkgid in pkgids
-        was_processed[pkgid.uuid] = Base.Event()
-        was_recompiled[pkgid.uuid] = false
-    end
     
     function is_stale(paths, sourcepath)
         for path_to_try in paths::Vector{String}
@@ -925,6 +902,34 @@ function precompile(ctx::Context)
             return false
         end
         return true
+    end
+    
+    # stdlibs that aren't loaded might need precompiling if not part of sysimage
+    function is_stdlib_and_loaded(pkg::Base.PkgId)
+        return Pkg.Operations.is_stdlib(pkg.uuid) && Base.root_module_exists(pkg)
+    end
+    
+    printpkgstyle(ctx, :Precompiling, "project...")
+    
+    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
+    parallel_limiter = Base.Semaphore(num_tasks)
+    
+    toplevel_pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !is_stdlib_and_loaded(Base.PkgId(uuid, name))]
+    
+    man = Pkg.Types.read_manifest(ctx.env.manifest_file)
+    pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !is_stdlib_and_loaded(Base.PkgId(first(dep), last(dep).name))]
+    pkg_dep_lists = [[Base.PkgId(last(x), first(x)) for x in last(dep).deps if !is_stdlib_and_loaded(Base.PkgId(last(x), first(x)))] for dep in man if !is_stdlib_and_loaded(Base.PkgId(first(dep), last(dep).name))]
+    
+    if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
+        push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
+        push!(pkg_dep_lists, [Base.PkgId(last(x), first(x)) for x in ctx.env.project.deps if !is_stdlib_and_loaded(Base.PkgId(last(x), first(x)))])
+    end    
+    
+    was_processed = Dict{Base.PkgId,Base.Event}()
+    was_recompiled = Dict{Base.PkgId,Bool}()
+    for pkgid in pkgids
+        was_processed[pkgid] = Base.Event()
+        was_recompiled[pkgid] = false
     end
     
     errored = false
@@ -936,21 +941,21 @@ function precompile(ctx::Context)
         occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String)) && continue
         
         @async begin
-            for dep_uuid in pkg_dep_uuid_lists[i] # wait for deps to finish
-                wait(was_processed[dep_uuid])
+            for dep in pkg_dep_lists[i] # wait for deps to finish
+                wait(was_processed[dep])
             end
             
             # skip stale checking and force compilation if any dep was recompiled in this session
-            any_dep_recompiled = any(map(dep_uuid->was_recompiled[dep_uuid], pkg_dep_uuid_lists[i]))
+            any_dep_recompiled = any(map(dep->was_recompiled[dep], pkg_dep_lists[i]))
             if !errored && (any_dep_recompiled || is_stale(paths, sourcepath))
                 Base.acquire(parallel_limiter)
                 if errored # catch things queued before error occurred
-                    notify(was_processed[pkg.uuid])
+                    notify(was_processed[pkg])
                     Base.release(parallel_limiter)
                     return
                 end
                 try
-                    was_recompiled[pkg.uuid] = true
+                    was_recompiled[pkg] = true
                     Base.compilecache(pkg, sourcepath, false) # don't print errors given we control
                 catch err
                     if pkg in toplevel_pkgids # only throw errors for top-level
@@ -960,11 +965,11 @@ function precompile(ctx::Context)
                         @warn "Precompilation failed for indirect dependency $pkg"
                     end
                 finally
-                    notify(was_processed[pkg.uuid])
+                    notify(was_processed[pkg])
                     Base.release(parallel_limiter)
                 end
             else
-                notify(was_processed[pkg.uuid])
+                notify(was_processed[pkg])
             end
         end  
     end
