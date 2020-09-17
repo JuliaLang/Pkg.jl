@@ -892,28 +892,23 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     Operations.build(ctx, pkgs, verbose)
 end
 
-precompile(;kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; parallel=true)
+precompile() = precompile(Context())
+function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
     
-    num_tasks = parallel ? parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1))) : 1
+    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     
     toplevel_pkgids = [Base.PkgId(uuid, name) for (name, uuid) in ctx.env.project.deps if !is_stdlib(uuid)]
     
-    if parallel
-        man = Pkg.Types.read_manifest(ctx.env.manifest_file)
-        pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
-        pkg_dep_uuid_lists = [collect(values(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
-        filter!.(!is_stdlib, pkg_dep_uuid_lists)
-    else
-        pkgids = toplevel_pkgids
-        pkg_dep_uuid_lists = fill(Base.UUID[], length(pkgids)) # give empty arrays because we're not waiting for deps
-    end
+    man = Pkg.Types.read_manifest(ctx.env.manifest_file)
+    pkgids = [Base.PkgId(first(dep), last(dep).name) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
+    pkg_dep_uuid_lists = [collect(values(last(dep).deps)) for dep in man if !Pkg.Operations.is_stdlib(first(dep))]
+    filter!.(!is_stdlib, pkg_dep_uuid_lists)
     
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         push!(pkgids, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
-        push!(pkg_dep_uuid_lists, parallel ? collect(keys(ctx.env.project.deps)) : Base.UUID[])
+        push!(pkg_dep_uuid_lists, collect(keys(ctx.env.project.deps)))
     end    
     
     was_processed = Dict{Base.UUID,Base.Event}()
