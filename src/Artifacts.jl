@@ -18,7 +18,8 @@ using SHA
 
 export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
-       find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact
+       find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
+       select_downloadable_artifacts
 
 """
     create_artifact(f::Function)
@@ -475,25 +476,11 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
                                         include_lazy::Bool = false,
                                         verbose::Bool = false,
                                         quiet_download::Bool = false)
-    if !isfile(artifacts_toml)
-        return
-    end
-    artifact_dict = load_artifacts_toml(artifacts_toml; pkg_uuid=pkg_uuid)
-
-    for name in keys(artifact_dict)
-        # Get the metadata about this name for the requested platform
-        meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
-
-        # If there are no instances of this name for the desired platform, skip it
-        meta === nothing && continue
-
-        # If this mapping doesn't have a `download` stanza or is lazy, skip it
-        if !haskey(meta, "download") || (get(meta, "lazy", false) && !include_lazy)
-            continue
-        end
-
+    # Collect all artifacts we're supposed to install
+    artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy, pkg_uuid)
+    for name in keys(artifacts)
         # Otherwise, let's try and install it!
-        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform,
+        ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=platform,
                                   verbose=verbose, quiet_download=quiet_download)
     end
 end

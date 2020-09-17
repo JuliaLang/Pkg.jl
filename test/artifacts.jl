@@ -1,7 +1,7 @@
 module ArtifactTests
 import ..Pkg # ensure we are using the correct Pkg
 
-using Test, Random, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
+using Test, Random, Pkg.Artifacts, Base.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed, extract_all_hashes
 using TOML, Dates
 import Base: SHA1
@@ -368,6 +368,112 @@ end
         # Test that collapse_the_symlink is installed
         cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=Platform("powerpc64le", "linux"))
         @test artifact_exists(cts_hash)
+    end
+
+    # Ensure that platform augmentation hooks work.  We will switch between two arbitrary artifacts for this,
+    # by inspecting an environment variable in our package hook.
+    engaged_hash = SHA1("a5f8161ca1ab2e94fedd3578586fe06d7906177c")
+    engaged_url = "https://github.com/JuliaBinaryWrappers/HelloWorldGo_jll.jl/releases/download/HelloWorldGo-v1.0.4+0/HelloWorldGo.v1.0.4.aarch64-linux-musl.tar.gz"
+    engaged_sha256 = "9b66d6b02a370d0170a8c217a872cd1f3d53de267d4e63c22a40b49f04367f8a"
+    disengaged_hash = SHA1("ea8ea92ecd57aa602d254ca6c637309642202768")
+    disengaged_url = "https://github.com/JuliaBinaryWrappers/HelloWorldGo_jll.jl/releases/download/HelloWorldGo-v1.0.4+0/HelloWorldGo.v1.0.4.i686-w64-mingw32.tar.gz"
+    disengaged_sha256 = "5c96a327fc6f0dc71d533373bc6cc6719a1e477c72319b800f29abf1b1e7d812"
+
+    function generate_flooblegrank_artifacts(ap_path)
+        # Bind both "engaged" and "disengaged" variants of our `gooblebox` artifact to generate an Artifacts.toml file
+        artifacts_toml = joinpath(ap_path, "Artifacts.toml")
+        engaged_platform = HostPlatform()
+        engaged_platform["flooblecrank"] = "engaged"
+        Pkg.Artifacts.bind_artifact!(
+            artifacts_toml,
+            "gooblebox",
+            engaged_hash;
+            download_info = [(engaged_url, engaged_sha256)],
+            platform = engaged_platform,
+        )
+        disengaged_platform = HostPlatform()
+        disengaged_platform["flooblecrank"] = "disengaged"
+        Pkg.Artifacts.bind_artifact!(
+            artifacts_toml,
+            "gooblebox",
+            disengaged_hash;
+            download_info = [(disengaged_url, disengaged_sha256)],
+            platform = disengaged_platform,
+        )
+    end
+
+    for flooblecrank_status in ("engaged", "disengaged")
+        # Ensure that they're both missing at first so tests can fail properly
+        temp_pkg_dir() do project_path
+            copy_test_package(project_path, "AugmentedPlatform")
+            ap_path = joinpath(project_path, "AugmentedPlatform")
+            generate_flooblegrank_artifacts(ap_path)
+
+            Pkg.activate(ap_path)
+            add_this_pkg()
+            if flooblecrank_status == "engaged"
+                right_hash = engaged_hash
+                wrong_hash = disengaged_hash
+            else
+                right_hash = disengaged_hash
+                wrong_hash = engaged_hash
+            end
+
+            @test !isdir(artifact_path(right_hash))
+            @test !isdir(artifact_path(wrong_hash))
+
+            # Instantiate with this environment variable, to install the proper one
+            withenv("FLOOBLECRANK" => flooblecrank_status) do
+                Pkg.instantiate()
+                @test isdir(artifact_path(right_hash))
+                @test !isdir(artifact_path(wrong_hash))
+            end
+
+            # Manual test that artifact is installed by instantiate()
+            artifacts_toml = joinpath(ap_path, "Artifacts.toml")
+            p = HostPlatform()
+            p["flooblecrank"] = flooblecrank_status
+            flooblecrank_hash = artifact_hash("gooblebox", artifacts_toml; platform=p)
+            @test flooblecrank_hash == right_hash
+            @test artifact_exists(flooblecrank_hash)
+
+            # Test that if we load the package, it knows how to find its own artifact,
+            # because it feeds the right `Platform` object through to `@artifact_str()`
+            cmd = setenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
+                         "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
+                         "FLOOBLECRANK" => flooblecrank_status)
+            using_output = chomp(String(read(cmd)))
+            @test success(cmd)
+            @test artifact_path(right_hash) == using_output
+
+            mkpath("/tmp/foo/$(flooblecrank_status)")
+            rm("/tmp/foo/$(flooblecrank_status)"; recursive=true, force=true)
+            cp(project_path, "/tmp/foo/$(flooblecrank_status)")
+            cp(Base.DEPOT_PATH[1], "/tmp/foo/$(flooblecrank_status)/depot")
+        end
+    end
+
+    # Also run a test of "cross-installation"
+    temp_pkg_dir() do project_path
+        copy_test_package(project_path, "AugmentedPlatform")
+        ap_path = joinpath(project_path, "AugmentedPlatform")
+        generate_flooblegrank_artifacts(ap_path)
+
+        Pkg.activate(ap_path)
+        add_this_pkg()
+        @test !isdir(artifact_path(engaged_hash))
+        @test !isdir(artifact_path(disengaged_hash))
+
+        # Instantiate with the environment variable set, but with an explicit
+        # tag set in the platform object, which overrides.
+        withenv("FLOOBLECRANK" => "disengaged") do
+            p = HostPlatform()
+            p["flooblecrank"] = "engaged"
+            Pkg.instantiate(;platform=p)
+
+            @test isdir(artifact_path(engaged_hash))
+            @test !isdir(artifact_path(disengaged_hash))
+        end
     end
 end
 
