@@ -904,11 +904,6 @@ function precompile(ctx::Context)
         return true
     end
     
-    # stdlibs that aren't loaded might need precompiling if not part of sysimage
-    function is_stdlib_and_loaded(pkg::Base.PkgId)
-        return Pkg.Operations.is_stdlib(pkg.uuid) && Base.root_module_exists(pkg)
-    end
-    
     printpkgstyle(ctx, :Precompiling, "project...")
     
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
@@ -916,22 +911,22 @@ function precompile(ctx::Context)
     
     direct_deps = [
         Base.PkgId(uuid, name) 
-        for (name, uuid) in ctx.env.project.deps if !is_stdlib_and_loaded(Base.PkgId(uuid, name))
+        for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
     
     man = Pkg.Types.read_manifest(ctx.env.manifest_file)
     deps_pair_or_nothing = Iterators.map(man) do dep
         pkg = Base.PkgId(first(dep), last(dep).name)
-        is_stdlib_and_loaded(pkg) && return nothing
+        Base.in_sysimage(pkg) && return nothing
         deps = [Base.PkgId(last(x), first(x)) for x in last(dep).deps]
-        return pkg => filter!(!is_stdlib_and_loaded, deps)
+        return pkg => filter!(!Base.in_sysimage, deps)
     end
     depsmap = Dict(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
     
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         depsmap[Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name)] = [
             Base.PkgId(last(x), first(x)) 
-            for x in ctx.env.project.deps if !is_stdlib_and_loaded(Base.PkgId(last(x), first(x)))
+            for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
     end    
     
