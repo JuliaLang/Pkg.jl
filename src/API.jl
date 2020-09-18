@@ -937,9 +937,9 @@ function precompile(ctx::Context)
     
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
-    for dep in depsmap
-        was_processed[first(dep)] = Base.Event()
-        was_recompiled[first(dep)] = false
+    for pkgid in keys(depsmap)
+        was_processed[pkgid] = Base.Event()
+        was_recompiled[pkgid] = false
     end
     
     errored = false
