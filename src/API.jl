@@ -929,7 +929,7 @@ function precompile(ctx::Context)
     depsmap = Dict(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
     
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
-        depsmap[Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name)  ] = [
+        depsmap[Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name)] = [
             Base.PkgId(last(x), first(x)) 
             for x in ctx.env.project.deps if !is_stdlib_and_loaded(Base.PkgId(last(x), first(x)))
         ]
@@ -943,9 +943,7 @@ function precompile(ctx::Context)
     end
     
     errored = false
-    @sync for deppair in depsmap
-        pkg = first(deppair)
-        deps = last(deppair)
+    @sync for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         sourcepath === nothing && continue
