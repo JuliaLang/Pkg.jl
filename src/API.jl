@@ -959,11 +959,12 @@ function precompile(ctx::Context)
                     Base.release(parallel_limiter)
                     return
                 end
+                is_direct_dep =  pkg in direct_deps
                 try
                     was_recompiled[pkg] = true
-                    Base.compilecache(pkg, sourcepath, false) # don't print errors given we control
+                    Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
                 catch err
-                    if dep in direct_deps # only throw errors for direct dependencies (in Project)
+                    if is_direct_dep # only throw errors for direct dependencies (in Project)
                         errored = true
                         throw(err) 
                     else
