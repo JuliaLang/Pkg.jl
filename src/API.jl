@@ -898,8 +898,7 @@ function precompile(ctx::Context)
     function is_stale(paths, sourcepath)
         for path_to_try in paths::Vector{String}
             staledeps = Base.stale_cachefile(sourcepath, path_to_try, Base.TOMLCache())
-            staledeps === true && continue
-            return false
+            staledeps ? continue : return false
         end
         return true
     end

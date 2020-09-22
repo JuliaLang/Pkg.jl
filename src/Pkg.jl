@@ -126,10 +126,10 @@ const add = API.add
 """
     Pkg.precompile()
 
-Precompile all dependencies of the project via a depth-first depdendency tree-based 
-parallel precompilation of all dependencies in the project manifest. 
-Errors will only throw when precompiling the top-level dependencies, given that 
-not all manifest dependencies may be loaded by the top-level dependencies on the given system.
+Precompile all the dependencies of the project in parallel.
+!!! note
+    Errors will only throw when precompiling the top-level dependencies, given that 
+    not all manifest dependencies may be loaded by the top-level dependencies on the given system.
 
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3. On earlier versions
