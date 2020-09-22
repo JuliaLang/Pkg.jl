@@ -938,9 +938,10 @@ function precompile(ctx::Context)
     end
     
     errored = false
+    toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
-        sourcepath = Base.locate_package(pkg)
+        sourcepath = Base.locate_package(pkg, toml_c)
         sourcepath === nothing && continue
         # Heuristic for when precompilation is disabled
         occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String)) && continue
