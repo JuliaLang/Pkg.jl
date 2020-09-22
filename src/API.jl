@@ -944,7 +944,10 @@ function precompile(ctx::Context)
         sourcepath = Base.locate_package(pkg, toml_c)
         sourcepath === nothing && continue
         # Heuristic for when precompilation is disabled
-        occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String)) && continue
+        if occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String))
+            notify(was_processed[pkg])
+            continue
+        end
         
         @async begin
             for dep in deps # wait for deps to finish
