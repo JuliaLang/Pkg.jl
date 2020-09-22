@@ -895,8 +895,7 @@ end
 precompile() = precompile(Context())
 function precompile(ctx::Context)
     
-    function is_stale(paths, sourcepath)
-        toml_c = Base.TOMLCache()
+    function is_stale(paths, sourcepath, toml_c)
         for path_to_try in paths::Vector{String}
             staledeps = Base.stale_cachefile(sourcepath, path_to_try, toml_c)
             staledeps === true ? continue : return false
@@ -937,9 +936,12 @@ function precompile(ctx::Context)
         was_recompiled[pkgid] = false
     end
     
+    last_dep_preprocessed = Base.Event()
     errored = false
     toml_c = Base.TOMLCache()
+    i = 0
     @sync for (pkg, deps) in depsmap
+        i += 1
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg, toml_c)
         sourcepath === nothing && continue
@@ -949,14 +951,18 @@ function precompile(ctx::Context)
             continue
         end
         
+        # pre-process all first to make tomlcache read-only during async
+        i == length(depsmap) && notify(last_dep_preprocessed) 
+        
         @async begin
+            wait(last_dep_preprocessed) # wait for tomlcache to be ready
             for dep in deps # wait for deps to finish
                 wait(was_processed[dep])
             end
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !errored && (any_dep_recompiled || is_stale(paths, sourcepath))
+            if !errored && (any_dep_recompiled || is_stale(paths, sourcepath, toml_c))
                 Base.acquire(parallel_limiter)
                 if errored # catch things queued before error occurred
                     notify(was_processed[pkg])
@@ -981,7 +987,7 @@ function precompile(ctx::Context)
             else
                 notify(was_processed[pkg])
             end
-        end  
+        end
     end
     nothing
 end
