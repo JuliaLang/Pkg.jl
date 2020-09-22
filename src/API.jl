@@ -899,7 +899,7 @@ function precompile(ctx::Context)
         toml_c = Base.TOMLCache()
         for path_to_try in paths::Vector{String}
             staledeps = Base.stale_cachefile(sourcepath, path_to_try, toml_c)
-            staledeps ? continue : return false
+            staledeps === true ? continue : return false
         end
         return true
     end
