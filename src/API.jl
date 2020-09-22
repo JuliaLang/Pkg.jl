@@ -935,12 +935,9 @@ function precompile(ctx::Context)
         was_recompiled[pkgid] = false
     end
     
-    last_dep_preprocessed = Base.Event()
     errored = false
     toml_c = Base.TOMLCache()
-    i = 0
     @sync for (pkg, deps) in depsmap
-        i += 1
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg, toml_c)
         sourcepath === nothing && continue
@@ -950,11 +947,7 @@ function precompile(ctx::Context)
             continue
         end
         
-        # pre-process all first to make tomlcache read-only during async
-        i == length(depsmap) && notify(last_dep_preprocessed) 
-        
         @async begin
-            wait(last_dep_preprocessed) # wait for tomlcache to be ready
             for dep in deps # wait for deps to finish
                 wait(was_processed[dep])
             end
