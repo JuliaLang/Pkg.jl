@@ -892,17 +892,16 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     Operations.build(ctx, pkgs, verbose)
 end
 
+function _is_stale(paths::Vector{String}, sourcepath::String, toml_c::Base.TOMLCache)
+    for path_to_try in paths::Vector{String}
+        staledeps = Base.stale_cachefile(sourcepath, path_to_try, toml_c)
+        staledeps === true ? continue : return false
+    end
+    return true
+end
+
 precompile() = precompile(Context())
 function precompile(ctx::Context)
-    
-    function is_stale(paths, sourcepath, toml_c)
-        for path_to_try in paths::Vector{String}
-            staledeps = Base.stale_cachefile(sourcepath, path_to_try, toml_c)
-            staledeps === true ? continue : return false
-        end
-        return true
-    end
-    
     printpkgstyle(ctx, :Precompiling, "project...")
     
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
@@ -962,7 +961,7 @@ function precompile(ctx::Context)
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !errored && (any_dep_recompiled || is_stale(paths, sourcepath, toml_c))
+            if !errored && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
                 Base.acquire(parallel_limiter)
                 if errored # catch things queued before error occurred
                     notify(was_processed[pkg])
