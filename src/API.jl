@@ -893,7 +893,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
 end
 
 function _is_stale(paths::Vector{String}, sourcepath::String, toml_c::Base.TOMLCache)
-    for path_to_try in paths::Vector{String}
+    for path_to_try in paths
         staledeps = Base.stale_cachefile(sourcepath, path_to_try, toml_c)
         staledeps === true ? continue : return false
     end
