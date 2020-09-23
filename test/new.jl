@@ -1774,6 +1774,27 @@ end
         Pkg.activate(package_path)
         @test_throws PkgError Pkg.build()
     end end
+
+    # Build log location
+    isolate(loaded_depot=true) do; mktempdir() do tmp
+        path = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "FailBuild"))
+        # Log file in the directory when it is deved
+        Pkg.develop(path=path; io=devnull)
+        log_file_dev = joinpath(path, "deps", "build.log")
+        @test !isfile(log_file_dev)
+        @test_throws PkgError Pkg.build("FailBuild"; io=devnull)
+        @test isfile(log_file_dev)
+        @test occursin("oops", read(log_file_dev, String))
+        # Log file in scratchspace when added
+        addpath = dirname(dirname(Base.find_package("FailBuild")))
+        log_file_add = joinpath(path, "deps", "build.log")
+        @test_throws PkgError Pkg.add(path=path; io=devnull)
+        @test !isfile(joinpath(Base.find_package("FailBuild"), "..", "..", "deps", "build.log"))
+        log_file_add = joinpath(DEPOT_PATH[1], "scratchspaces",
+            "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log")
+        @test isfile(log_file_add)
+        @test occursin("oops", read(log_file_add, String))
+    end end
 end
 
 #

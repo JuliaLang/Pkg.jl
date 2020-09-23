@@ -186,6 +186,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     end
 
     Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    _do_auto_precompile() && Pkg.precompile()
     return
 end
 
@@ -243,6 +244,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         ensure_resolved(ctx, pkgs)
     end
     Operations.up(ctx, pkgs, level)
+    _do_auto_precompile() && Pkg.precompile()
     return
 end
 
@@ -900,6 +902,8 @@ function _is_stale(paths::Vector{String}, sourcepath::String, toml_c::Base.TOMLC
     return true
 end
 
+_do_auto_precompile() = parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "0")) == 1
+
 precompile() = precompile(Context())
 function precompile(ctx::Context)
     printpkgstyle(ctx, :Precompiling, "project...")
@@ -1082,6 +1086,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
+    
+    _do_auto_precompile() && Pkg.precompile()
 end
 
 
