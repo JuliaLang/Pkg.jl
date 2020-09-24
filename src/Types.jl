@@ -328,6 +328,7 @@ Base.@kwdef mutable struct Context
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
     graph_verbose::Bool = false
+    ignore_compat::Bool = false
     currently_running_target::Bool = false
     # test instrumenting
     status_io::Union{IO,Nothing} = nothing
