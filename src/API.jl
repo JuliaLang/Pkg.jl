@@ -958,7 +958,7 @@ function precompile(ctx::Context)
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !errored && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
+            if !errored && !Operations.precomp_suspended(pkg) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
                 Base.acquire(parallel_limiter)
                 if errored # catch things queued before error occurred
                     notify(was_processed[pkg])
@@ -974,6 +974,7 @@ function precompile(ctx::Context)
                     was_recompiled[pkg] = true
                     Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
                 catch err
+                    Operations.precomp_suspend!(pkg)
                     if is_direct_dep # only throw errors for direct dependencies (in Project)
                         errored = true
                         throw(err) 
