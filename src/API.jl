@@ -188,7 +188,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
         end
     end
 
-    Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    Operations.add(ctx, pkgs, new_git; preserve, platform)
     return
 end
 

@@ -241,7 +241,8 @@ mutable struct Graph
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
             fixed::Dict{UUID,Fixed},
-            verbose::Bool = false
+            verbose::Bool = false,
+            julia_version::Union{VersionNumber,Nothing} = VERSION,
         )
         # make sure all versions of all packages know about julia uuid
         for (uuid,vnmap) in deps, vn in versions[uuid]
@@ -249,13 +250,17 @@ mutable struct Graph
         end
 
         # Tell the resolver about julia itself
-        fixed[uuid_julia] = Fixed(VERSION)
         uuid_to_name[uuid_julia] = "julia"
-        versions[uuid_julia] = Set([VERSION])
-        deps[uuid_julia] = DepsValDict(VERSION => valtype(DepsValDict)())
-        compat[uuid_julia] = CompatValDict(VERSION => valtype(CompatValDict)())
+        if julia_version !== nothing
+            fixed[uuid_julia] = Fixed(julia_version)
+            versions[uuid_julia] = Set([julia_version])
+            deps[uuid_julia] = DepsValDict(julia_version => valtype(DepsValDict)())
+            compat[uuid_julia] = CompatValDict(julia_version => valtype(CompatValDict)())
+        else
+            versions[uuid_julia] = Set([])
+        end
 
-        extra_uuids = union(keys(reqs), union(keys(fixed), map(fx->keys(fx.requires), values(fixed))...))
+        extra_uuids = union(collect(keys(reqs)), union(collect(keys(fixed)), map(fx->keys(fx.requires), values(fixed))...))
         extra_uuids ⊆ keys(versions) || error("unknown UUID found in reqs/fixed") # TODO?
 
         data = GraphData(versions, uuid_to_name, verbose)
