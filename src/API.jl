@@ -906,9 +906,7 @@ end
 _do_auto_precompile() = parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "0")) == 1
 
 precompile() = precompile(Context())
-function precompile(ctx::Context)
-    printpkgstyle(ctx, :Precompiling, "project...")
-    
+function precompile(ctx::Context)    
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     
@@ -940,6 +938,7 @@ function precompile(ctx::Context)
         was_recompiled[pkgid] = false
     end
     
+    msg_printed = false
     errored = false
     toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
@@ -968,6 +967,10 @@ function precompile(ctx::Context)
                 end
                 is_direct_dep =  pkg in direct_deps
                 try
+                    if !msg_printed 
+                        msg_printed = true
+                        printpkgstyle(ctx, :Precompiling, "project...")
+                    end
                     was_recompiled[pkg] = true
                     Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
                 catch err
