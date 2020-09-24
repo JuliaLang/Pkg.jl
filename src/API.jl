@@ -1035,7 +1035,10 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # artifacts here even though we do the same at the end of this function
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
-    Operations.is_instantiated(ctx) && return
+    if Operations.is_instantiated(ctx) 
+        _do_auto_precompile() && Pkg.precompile()
+        return
+    end
 
     pkgs = Operations.load_all_deps(ctx)
     try
@@ -1087,6 +1090,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
+    
+    _do_auto_precompile() && Pkg.precompile()
 end
 
 
