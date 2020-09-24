@@ -9,7 +9,7 @@ export platform_key_abi, platform_dlext, valid_dl_path, arch, libc, compiler_abi
 
 import Base.BinaryPlatforms: libgfortran_version, libstdcxx_version, platform_name,
                              wordsize, platform_dlext, tags, arch, libc, call_abi,
-                             cxxstring_abi, triplet
+                             cxxstring_abi
 
 struct UnknownPlatform <: AbstractPlatform
     UnknownPlatform(args...; kwargs...) = new()
@@ -87,6 +87,20 @@ end
 # Add one-off functions
 MacOS(; kwargs...) = MacOS(:x86_64; kwargs...)
 FreeBSD(; kwargs...) = FreeBSD(:x86_64; kwargs...)
+
+function triplet(p::AbstractPlatform)
+    # We are going to sub off to `Base.BinaryPlatforms.triplet()` here,
+    # with the important exception that we override `os_version` to better
+    # mimic the old behavior of `triplet()`
+    if Sys.isfreebsd(p)
+        p = deepcopy(p)
+        p["os_version"] = "11.1.0"
+    elseif Sys.isapple(p)
+        p = deepcopy(p)
+        p["os_version"] = "14.0.0"
+    end
+    return Base.BinaryPlatforms.triplet(p)
+end
 
 """
     platform_key_abi(machine::AbstractString)
