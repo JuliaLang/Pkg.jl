@@ -64,7 +64,10 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-        $f(pkgs::Vector{PackageSpec}; kwargs...)               = $f(Context(), pkgs; kwargs...)
+        function $f(pkgs::Vector{PackageSpec}; kwargs...)
+            $f(Context(), pkgs; kwargs...)
+            ($(f in (:add, :up, :pin, :free, :build)) && _do_auto_precompile()) && Pkg.precompile()
+        end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
@@ -186,7 +189,6 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     end
 
     Operations.add(ctx, pkgs, new_git; preserve=preserve, platform=platform)
-    _do_auto_precompile() && Pkg.precompile()
     return
 end
 
@@ -244,7 +246,6 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         ensure_resolved(ctx, pkgs)
     end
     Operations.up(ctx, pkgs, level)
-    _do_auto_precompile() && Pkg.precompile()
     return
 end
 
@@ -1034,7 +1035,10 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # artifacts here even though we do the same at the end of this function
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
-    Operations.is_instantiated(ctx) && return
+    if Operations.is_instantiated(ctx) 
+        _do_auto_precompile() && Pkg.precompile()
+        return
+    end
 
     pkgs = Operations.load_all_deps(ctx)
     try
