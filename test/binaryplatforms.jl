@@ -79,9 +79,9 @@ const platform = @inferred Platform platform_key_abi()
         @test triplet(Linux(:armv6l; libc=:musl, call_abi=:eabihf)) == "armv6l-linux-musleabihf"
         @test triplet(Linux(:x86_64)) == "x86_64-linux-gnu"
         @test triplet(Linux(:armv6l)) == "armv6l-linux-gnueabihf"
-        @test triplet(MacOS()) == "x86_64-apple-darwin"
-        @test triplet(FreeBSD(:x86_64)) == "x86_64-unknown-freebsd"
-        @test triplet(FreeBSD(:i686)) == "i686-unknown-freebsd"
+        @test triplet(MacOS()) == "x86_64-apple-darwin14"
+        @test triplet(FreeBSD(:x86_64)) == "x86_64-unknown-freebsd11.1"
+        @test triplet(FreeBSD(:i686)) == "i686-unknown-freebsd11.1"
     end
 
     @testset "Valid DL paths" begin
