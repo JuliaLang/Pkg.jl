@@ -65,8 +65,9 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
-            $f(Context(), pkgs; kwargs...)
-            ($(f in (:add, :up, :pin, :free, :build)) && _do_auto_precompile()) && Pkg.precompile(true)
+            ret = $f(Context(), pkgs; kwargs...)
+            $(f in (:add, :up, :pin, :free, :build)) && _auto_precompile()
+            return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
@@ -903,12 +904,19 @@ function _is_stale(paths::Vector{String}, sourcepath::String, toml_c::Base.TOMLC
     return true
 end
 
-_do_auto_precompile() = parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "0")) == 1
+function _auto_precompile()
+    if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "0")) == 1
+        Pkg.precompile(internal_call=true)
+    end
+end
 
-precompile(auto::Bool=false) = precompile(Context(), auto)
-function precompile(ctx::Context, auto::Bool=false)    
+precompile(;internal_call::Bool=false) = precompile(Context(), internal_call=internal_call)
+function precompile(ctx::Context; internal_call::Bool=false)    
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
+    
+    # when manually called, unsuspend all packages that were suspended due to precomp errors
+    !internal_call && Operations.precomp_unsuspend!() 
     
     direct_deps = [
         Base.PkgId(uuid, name) 
@@ -938,7 +946,6 @@ function precompile(ctx::Context, auto::Bool=false)
         was_recompiled[pkgid] = false
     end
     
-    msg_printed = false
     errored = false
     toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
@@ -958,8 +965,7 @@ function precompile(ctx::Context, auto::Bool=false)
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            #              only observe suspension state if auto-invoked
-            if !errored && (!auto || !Operations.precomp_suspended(pkg)) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
+            if !errored && !Operations.precomp_suspended(pkg) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
                 
                 Base.acquire(parallel_limiter)
                 if errored # catch things queued before error occurred
@@ -969,10 +975,7 @@ function precompile(ctx::Context, auto::Bool=false)
                 end
                 is_direct_dep =  pkg in direct_deps
                 try
-                    if !msg_printed 
-                        msg_printed = true
-                        printpkgstyle(ctx, :Precompiling, "project...")
-                    end
+                    !any(values(was_recompiled)) && printpkgstyle(ctx, :Precompiling, "project...")
                     was_recompiled[pkg] = true
                     Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
                 catch err
@@ -1042,7 +1045,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx) 
-        _do_auto_precompile() && Pkg.precompile(true)
+        _auto_precompile()
         return
     end
 
@@ -1097,7 +1100,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
     
-    _do_auto_precompile() && Pkg.precompile(true)
+    _auto_precompile()
 end
 
 

@@ -22,6 +22,7 @@ import ...Pkg: pkg_server
 const pkgs_precompile_suspended = Base.PkgId[]
 precomp_suspend!(pkg) = push!(pkgs_precompile_suspended, pkg)
 precomp_unsuspend!(pkg) = filter!(!isequal(pkg), pkgs_precompile_suspended)
+precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
 precomp_suspended(pkg) = pkg in pkgs_precompile_suspended
 
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
