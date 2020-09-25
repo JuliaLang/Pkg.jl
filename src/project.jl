@@ -46,7 +46,7 @@ function read_project_deps(raw, section_name::String)
     pkgerror("Expected `$(section_name)` section to be a key-value list")
 end
 
-read_project_targets(::Nothing, project::Project) = Dict{String,Vector{String}}()
+read_project_targets(::Nothing, project::Project) = Dict{String,Any}()
 function read_project_targets(raw::Dict{String,Any}, project::Project)
     for (target, deps) in raw
         deps isa Vector{String} || pkgerror("""
@@ -58,7 +58,7 @@ end
 read_project_targets(raw, project::Project) =
     pkgerror("Expected `targets` section to be a key-value list")
 
-read_project_compat(::Nothing, project::Project) = Dict{String,String}()
+read_project_compat(::Nothing, project::Project) = Dict{String,Any}()
 function read_project_compat(raw::Dict{String,Any}, project::Project)
     for (name, version) in raw
         try VersionSpec(semver_spec(version))
@@ -112,8 +112,8 @@ end
 function Project(raw::Dict)
     project = Project()
     project.other    = raw
-    project.name     = get(raw, "name", nothing)
-    project.manifest = get(raw, "manifest", nothing)
+    project.name     = get(raw, "name", nothing)::Union{String, Nothing}
+    project.manifest = get(raw, "manifest", nothing)::Union{String, Nothing}
     project.uuid     = read_project_uuid(get(raw, "uuid", nothing))
     project.version  = read_project_version(get(raw, "version", nothing))
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
