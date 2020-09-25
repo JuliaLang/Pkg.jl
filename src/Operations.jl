@@ -336,9 +336,11 @@ end
 # all versioned packges should have a `tree_hash`
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # compatibility
-    v = intersect(VERSION, project_compatibility(ctx, "julia"))
-    if isempty(v)
-        @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
+    if ctx.julia_version !== nothing
+        v = intersect(ctx.julia_version, project_compatibility(ctx, "julia"))
+        if isempty(v)
+            @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
+        end
     end
     names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
     # recursive search for packages which are tracking a path
@@ -503,7 +505,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
         end
     end
 
-    return Resolve.Graph(all_versions, all_deps, all_compat, uuid_to_name, reqs, fixed, #=verbose=# ctx.graph_verbose),
+    return Resolve.Graph(all_versions, all_deps, all_compat, uuid_to_name, reqs, fixed, #=verbose=# ctx.graph_verbose, ctx.julia_version),
            all_deps
 end
 

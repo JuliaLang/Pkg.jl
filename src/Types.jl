@@ -328,7 +328,9 @@ Base.@kwdef mutable struct Context
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
     graph_verbose::Bool = false
-    currently_running_target::Bool = false
+
+    # The Julia Version to resolve with respect to
+    julia_version::Union{VersionNumber,Nothing} = VERSION
     # test instrumenting
     status_io::Union{IO,Nothing} = nothing
     parser::TOML.Parser = TOML.Parser()
