@@ -540,13 +540,13 @@ function set_repo_source_from_registry!(ctx, pkg)
     end
     ensure_resolved(ctx, [pkg]; registry=true)
     # We might have been given a name / uuid combo that does not have an entry in the registry
-    repo_info = registered_info(ctx, pkg.uuid, "repo")
+    repo_info = registered_info(ctx, pkg.uuid, "repo", String)
     if isempty(repo_info)
         pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
     end
     _, repo_source = repo_info[1] # Just take the first repo we found
     pkg.repo.source = repo_source
-    subdir_info = registered_info(ctx, pkg.uuid, "subdir")
+    subdir_info = registered_info(ctx, pkg.uuid, "subdir", String)
     _, subdir = subdir_info[1] # Just take the first subdir we found
     if subdir !== nothing
         pkg.repo.subdir = subdir
@@ -1284,7 +1284,7 @@ function registered_uuid(ctx::Context, name::String)::Union{Nothing,UUID}
     choices::Vector{String} = []
     choices_cache::Vector{Tuple{UUID,String}} = []
     for uuid in uuids
-        values = registered_info(ctx, uuid, "repo")
+        values = registered_info(ctx, uuid, "repo", String)
         for value in values
             depot = "(unknown)"
             for d in depots()
@@ -1315,7 +1315,7 @@ function registered_name(ctx::Context, uuid::UUID)::Union{Nothing,String}
     names = registered_names(ctx, uuid)
     length(names) == 0 && return nothing
     length(names) == 1 && return names[1]
-    values = registered_info(ctx, uuid, "name")
+    values = registered_info(ctx, uuid, "name", String)
     name = nothing
     for value in values
         name  === nothing && (name = value[2])
@@ -1325,14 +1325,14 @@ function registered_name(ctx::Context, uuid::UUID)::Union{Nothing,String}
 end
 
 # Return most current package info for a registered UUID
-function registered_info(ctx::Context, uuid::UUID, key::String)
+function registered_info(ctx::Context, uuid::UUID, key::String, ::Type{T}) where {T}
     haskey(ctx.env.paths, uuid) || find_registered!(ctx, [uuid])
     paths = ctx.env.paths[uuid]
     isempty(paths) && pkgerror("`$uuid` is not registered")
-    values = []
+    values = Tuple{String, Union{T, Nothing}}[]
     for path in paths
         info = parse_toml(joinpath(path, "Package.toml"))
-        value = get(info, key, nothing)
+        value = get(info, key, nothing)::Union{T, Nothing}
         push!(values, (path, value))
     end
     return values

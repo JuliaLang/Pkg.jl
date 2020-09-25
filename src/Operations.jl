@@ -164,7 +164,7 @@ function load_versions(ctx, path::String; include_yanked=false)
     if Pkg.OFFLINE_MODE[] # filter out all versions that are not already downloaded
         pkg = parse_toml(joinpath(path, "Package.toml"))
         filter!(versions) do (v, sha)
-            pkg_spec = PackageSpec(name=pkg["name"], uuid=UUID(pkg["uuid"]), version=v, tree_hash=sha)
+            pkg_spec = PackageSpec(name=pkg["name"]::String, uuid=UUID(pkg["uuid"]::String), version=v, tree_hash=sha)
             return is_package_downloaded(ctx, pkg_spec)
         end
     end
