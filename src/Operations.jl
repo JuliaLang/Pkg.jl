@@ -18,6 +18,13 @@ import ...Pkg: pkg_server
 #########
 # Utils #
 #########
+
+const pkgs_precompile_suspended = Base.PkgId[]
+precomp_suspend!(pkg) = push!(pkgs_precompile_suspended, pkg)
+precomp_unsuspend!(pkg) = filter!(!isequal(pkg), pkgs_precompile_suspended)
+precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
+precomp_suspended(pkg) = pkg in pkgs_precompile_suspended
+
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
     slug_default = Base.version_slug(uuid, sha1)
     # 4 used to be the default so look there first
@@ -129,6 +136,7 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
             entry.deps = deps_map[pkg.uuid]
         end
         ctx.env.manifest[pkg.uuid] = entry
+        precomp_unsuspend!(pkg)
     end
     prune_manifest(ctx)
 end
