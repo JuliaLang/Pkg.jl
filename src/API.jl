@@ -66,7 +66,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
             $f(Context(), pkgs; kwargs...)
-            ($(f in (:add, :up, :pin, :free, :build)) && _do_auto_precompile()) && Pkg.precompile()
+            ($(f in (:add, :up, :pin, :free, :build)) && _do_auto_precompile()) && Pkg.precompile(true)
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
@@ -905,8 +905,8 @@ end
 
 _do_auto_precompile() = parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "0")) == 1
 
-precompile() = precompile(Context())
-function precompile(ctx::Context)    
+precompile(auto::Bool=false) = precompile(Context(), auto)
+function precompile(ctx::Context, auto::Bool=false)    
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     
@@ -958,7 +958,9 @@ function precompile(ctx::Context)
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !errored && !Operations.precomp_suspended(pkg) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
+            #              only observe suspension state if auto-invoked
+            if !errored && (!auto || !Operations.precomp_suspended(pkg)) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
+                
                 Base.acquire(parallel_limiter)
                 if errored # catch things queued before error occurred
                     notify(was_processed[pkg])
@@ -1040,7 +1042,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx) 
-        _do_auto_precompile() && Pkg.precompile()
+        _do_auto_precompile() && Pkg.precompile(true)
         return
     end
 
@@ -1095,7 +1097,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
     
-    _do_auto_precompile() && Pkg.precompile()
+    _do_auto_precompile() && Pkg.precompile(true)
 end
 
 
