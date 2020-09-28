@@ -976,8 +976,9 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 end
                 is_direct_dep =  pkg in direct_deps
                 try
-                    if !any(values(was_recompiled))
-                        lock(print_lock) do
+                    lock(print_lock) do
+                        if !any(values(was_recompiled))
+                            was_recompiled[pkg] = true # needed to prevent async race
                             printpkgstyle(ctx, :Precompiling, "project...")
                         end
                     end
