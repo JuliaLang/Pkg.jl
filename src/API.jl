@@ -975,7 +975,10 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 end
                 is_direct_dep =  pkg in direct_deps
                 try
-                    !any(values(was_recompiled)) && printpkgstyle(ctx, :Precompiling, "project...")
+                    if !any(values(was_recompiled))
+                        was_recompiled[pkg] = true # needed to prevent `@async` race, and multiple prints
+                        printpkgstyle(ctx, :Precompiling, "project...")
+                    end
                     was_recompiled[pkg] = true
                     Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
                 catch err
