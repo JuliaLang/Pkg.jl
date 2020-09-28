@@ -946,7 +946,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         was_recompiled[pkgid] = false
     end
     
-    print_done = Event()
+    print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
     errored = false
     toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
@@ -977,11 +977,10 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 is_direct_dep =  pkg in direct_deps
                 try
                     if !any(values(was_recompiled))
-                        was_recompiled[pkg] = true # needed to prevent `@async` race, and multiple prints
-                        printpkgstyle(ctx, :Precompiling, "project...")
-                        notify(print_done)
+                        lock(print_lock) do
+                            printpkgstyle(ctx, :Precompiling, "project...")
+                        end
                     end
-                    wait(print_done)
                     was_recompiled[pkg] = true
                     Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
                 catch err
