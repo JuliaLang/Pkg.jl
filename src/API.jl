@@ -978,11 +978,10 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 try
                     lock(print_lock) do
                         if !any(values(was_recompiled))
-                            was_recompiled[pkg] = true # needed to prevent async race
                             printpkgstyle(ctx, :Precompiling, "project...")
                         end
+                        was_recompiled[pkg] = true # needs to be in lock to prevent async race on printing
                     end
-                    was_recompiled[pkg] = true
                     Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
                 catch err
                     Operations.precomp_suspend!(pkg)
