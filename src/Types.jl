@@ -348,7 +348,7 @@ is_project_uuid(ctx::Context, uuid::UUID) = project_uuid(ctx) == uuid
 ###########
 # Context #
 ###########
-stdlib_dir() = normpath(joinpath(Sys.BINDIR, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
+stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
 stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
 
 const STDLIB = Ref{Dict{UUID,String}}()
