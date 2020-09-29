@@ -977,7 +977,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 try
                     !any(values(was_recompiled)) && printpkgstyle(ctx, :Precompiling, "project...")
                     was_recompiled[pkg] = true
-                    Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
+                    Base.compilecache(pkg, sourcepath, toml_c, is_direct_dep) # don't print errors from indirect deps
                 catch err
                     Operations.precomp_suspend!(pkg)
                     if is_direct_dep # only throw errors for direct dependencies (in Project)
