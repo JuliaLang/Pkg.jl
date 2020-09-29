@@ -81,7 +81,10 @@ for T in (:Linux, :Windows, :MacOS, :FreeBSD)
         end
     end
 
-    # Finally, 
+    # Finally, add equality testing between these wrapper types and other AbstractPlatforms
+    @eval begin
+        Base.:(==)(a::$(T), b::AbstractPlatform) = b == a.p
+    end
 end
 
 # Add one-off functions
