@@ -210,19 +210,21 @@ end
         ]
 
         # First, test the binding of things with various platforms and overwriting and such works properly
-        bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=Linux(:x86_64))
-        @test artifact_hash("foo_txt", artifacts_toml; platform=Linux(:x86_64)) == hash
-        @test artifact_hash("foo_txt", artifacts_toml; platform=MacOS()) == nothing
-        @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=Linux(:x86_64))
-        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=Linux(:x86_64), force=true)
-        bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=Windows(:i686))
-        @test artifact_hash("foo_txt", artifacts_toml; platform=Linux(:x86_64)) == hash2
-        @test artifact_hash("foo_txt", artifacts_toml; platform=Windows(:i686)) == hash
-        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=Linux(:x86_64)) == artifact_path(hash2)
-        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=Windows(:i686)) == artifact_path(hash)
+        linux64 = Platform("x86_64", "linux")
+        win32 = Platform("i686", "windows")
+        bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=linux64)
+        @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash
+        @test artifact_hash("foo_txt", artifacts_toml; platform=Platform("x86_64", "macos")) == nothing
+        @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64)
+        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
+        bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=win32)
+        @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash2
+        @test artifact_hash("foo_txt", artifacts_toml; platform=win32) == hash
+        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=linux64) == artifact_path(hash2)
+        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=win32) == artifact_path(hash)
 
         # Next, check that we can get the download_info properly:
-        meta = artifact_meta("foo_txt", artifacts_toml; platform=Windows(:i686))
+        meta = artifact_meta("foo_txt", artifacts_toml; platform=win32)
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
         @test meta["download"][2]["sha256"] == "a"^64
     end
@@ -325,18 +327,18 @@ end
 
         # Install artifacts such that `c_simple` is not installed properly
         # because of the platform we requested, but `socrates` is.
-        ensure_all_artifacts_installed(artifacts_toml; platform=Linux(:powerpc64le))
+        ensure_all_artifacts_installed(artifacts_toml; platform=Platform("powerpc64le", "linux"))
 
         # Test that c_simple doesn't even show up
-        c_simple_hash = artifact_hash("c_simple", artifacts_toml; platform=Linux(:powerpc64le))
+        c_simple_hash = artifact_hash("c_simple", artifacts_toml; platform=Platform("powerpc64le", "linux"))
         @test c_simple_hash == nothing
 
         # Test that socrates shows up, but is not installed
-        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=Linux(:powerpc64le))
+        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=Platform("powerpc64le", "linux"))
         @test !artifact_exists(socrates_hash)
 
         # Test that collapse_the_symlink is installed
-        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=Linux(:powerpc64le))
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=Platform("powerpc64le", "linux"))
         @test artifact_exists(cts_hash)
     end
 end
