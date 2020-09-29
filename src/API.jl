@@ -982,7 +982,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                         end
                         was_recompiled[pkg] = true # needs to be in lock to prevent async race on printing
                     end
-                    Base.compilecache(pkg, sourcepath, is_direct_dep) # don't print errors from indirect deps
+                    Base.compilecache(pkg, sourcepath, toml_c, is_direct_dep) # don't print errors from indirect deps
                 catch err
                     Operations.precomp_suspend!(pkg)
                     if is_direct_dep # only throw errors for direct dependencies (in Project)
