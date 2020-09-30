@@ -939,10 +939,10 @@ function precompile(ctx::Context; internal_call::Bool=false)
         ]
     end    
     
-    was_processed = Dict{Base.PkgId,Base.Event}()
+    was_processed = Dict{Base.PkgId,Bool}()
     was_recompiled = Dict{Base.PkgId,Bool}()
     for pkgid in keys(depsmap)
-        was_processed[pkgid] = Base.Event()
+        was_processed[pkgid] = false
         was_recompiled[pkgid] = false
     end
     
@@ -956,14 +956,14 @@ function precompile(ctx::Context; internal_call::Bool=false)
         sourcepath === nothing && continue
         # Heuristic for when precompilation is disabled
         if occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String))
-            notify(was_processed[pkg])
+            was_processed[pkg] = true
             continue
         end
         
         @async begin
             for dep in deps # wait for deps to finish
                 idle_elapsed = 0
-                while was_processed[dep].set == false && idle_elapsed < 0.25 # failsafe against deadlocks
+                while !was_processed[dep] && idle_elapsed < 0.25 # failsafe against deadlocks
                     sleep(0.01)
                     idle_elapsed = parallel_limiter.curr_cnt == 0 ? idle_elapsed + 0.01 : 0
                 end
@@ -975,7 +975,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 
                 Base.acquire(parallel_limiter)
                 if errored # catch things queued before error occurred
-                    notify(was_processed[pkg])
+                    was_processed[pkg] = true
                     Base.release(parallel_limiter)
                     return
                 end
@@ -997,11 +997,11 @@ function precompile(ctx::Context; internal_call::Bool=false)
                         @warn "Precompilation failed for indirect dependency $(pkg)"
                     end
                 finally
-                    notify(was_processed[pkg])
+                    was_processed[pkg] = true
                     Base.release(parallel_limiter)
                 end
             else
-                notify(was_processed[pkg])
+                was_processed[pkg] = true
             end
         end
     end
