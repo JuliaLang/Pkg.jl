@@ -950,6 +950,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
     errored = false
     toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
+        @assert all(map(dep->dep in keys(depsmap), deps)) "$pkg has dependencies that are missing from the manifest of the current environment"
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg, toml_c)
         sourcepath === nothing && continue
@@ -961,14 +962,10 @@ function precompile(ctx::Context; internal_call::Bool=false)
         
         @async begin
             for dep in deps # wait for deps to finish
-                not_doing_anything_elapsed = 0
-                while was_processed[dep].set == false && not_doing_anything_elapsed < 0.25 # failsafe against deadlocks
+                idle_elapsed = 0
+                while was_processed[dep].set == false && idle_elapsed < 0.25 # failsafe against deadlocks
                     sleep(0.01)
-                    if parallel_limiter.curr_cnt == 0
-                        not_doing_anything_elapsed += 0.01
-                    else
-                        not_doing_anything_elapsed = 0
-                    end
+                    idle_elapsed = parallel_limiter.curr_cnt == 0 ? idle_elapsed + 0.01 : 0
                 end
             end
             
