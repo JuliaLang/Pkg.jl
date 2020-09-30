@@ -946,6 +946,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         was_recompiled[pkgid] = false
     end
     
+    print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
     errored = false
     toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
@@ -975,8 +976,12 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 end
                 is_direct_dep =  pkg in direct_deps
                 try
-                    !any(values(was_recompiled)) && printpkgstyle(ctx, :Precompiling, "project...")
-                    was_recompiled[pkg] = true
+                    lock(print_lock) do
+                        if !any(values(was_recompiled))
+                            printpkgstyle(ctx, :Precompiling, "project...")
+                        end
+                        was_recompiled[pkg] = true # needs to be in lock to prevent async race on printing
+                    end
                     Base.compilecache(pkg, sourcepath, toml_c, is_direct_dep) # don't print errors from indirect deps
                 catch err
                     Operations.precomp_suspend!(pkg)
