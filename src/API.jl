@@ -961,7 +961,15 @@ function precompile(ctx::Context; internal_call::Bool=false)
         
         @async begin
             for dep in deps # wait for deps to finish
-                wait(was_processed[dep])
+                not_doing_anything_elapsed = 0
+                while was_processed[dep].set == false && not_doing_anything_elapsed < 0.25 # failsafe against deadlocks
+                    sleep(0.01)
+                    if parallel_limiter.curr_cnt == 0
+                        not_doing_anything_elapsed += 0.01
+                    else
+                        not_doing_anything_elapsed = 0
+                    end
+                end
             end
             
             # skip stale checking and force compilation if any dep was recompiled in this session
