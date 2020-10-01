@@ -9,7 +9,7 @@ import REPL: LineEdit, REPLCompletions
 
 import ..casesensitive_isdir
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
-import ..Pkg: Pkg
+import ..Pkg: Pkg, RegistryHandling
 
 const TEST_MODE = Ref{Bool}(false)
 
