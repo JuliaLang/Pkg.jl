@@ -3,18 +3,13 @@
 # Content in this file is extracted from BinaryProvider.jl, see LICENSE.method
 
 module PlatformEngines
-using SHA, Logging
+using SHA
 import ...Pkg: Pkg, TOML, pkg_server, depots1
 using Base.BinaryPlatforms
 
 export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
        download_verify, unpack, package, download_verify_unpack,
        list_tarball_files, list_tarball_symlinks
-
-# To reduce method invalidation, it's best to call a logging method that
-# avoids introduction of backedges.
-# See https://github.com/JuliaLang/julia/pull/35714
-const logging_level = isdefined(Base.CoreLogging, :_invoked_min_enabled_level) ? Base.CoreLogging._invoked_min_enabled_level : Base.CoreLogging.min_enabled_level
 
 # In this file, we setup the `gen_download_cmd()`, `gen_unpack_cmd()` and
 # `gen_package_cmd()` functions by providing methods to probe the environment
@@ -126,21 +121,16 @@ function probe_symlink_creation(dest::AbstractString)
     # Build arbitrary (non-existent) file path name
     link_path = joinpath(dest, "binaryprovider_symlink_test")
     while ispath(link_path)
-        link_path *= "1"
+        link_path *= rand('A':'Z')
     end
 
-    loglevel = logging_level(current_logger())
     try
-        disable_logging(Logging.Warn)
         symlink("foo", link_path)
         return true
     catch e
-        if isa(e, Base.IOError)
-            return false
-        end
-        rethrow(e)
+        isa(e, Base.IOError) || rethrow(e)
+        return false
     finally
-        disable_logging(loglevel-1)
         rm(link_path; force=true)
     end
 end
