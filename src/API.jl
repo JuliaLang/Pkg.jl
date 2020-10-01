@@ -937,13 +937,27 @@ function precompile(ctx::Context; internal_call::Bool=false)
             Base.PkgId(last(x), first(x)) 
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
-    end    
+    end
     
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
     for pkgid in keys(depsmap)
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
+    end
+    
+    # guarding against circular deps
+    function in_deps(pkg, deps, dmap)
+        length(deps) == 0 && return false
+        pkg in deps && return true
+        return any(map(dep->in_deps(pkg, dmap[dep], dmap), deps))
+    end
+    for (pkg, deps) in depsmap
+        if in_deps(pkg, deps, depsmap)
+            notify(was_processed[pkg])
+            Operations.precomp_suspend!(pkg)
+            !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
+        end
     end
     
     print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
