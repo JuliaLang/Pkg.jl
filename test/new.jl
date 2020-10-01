@@ -6,8 +6,6 @@ using  Pkg.Types: PkgError
 using  Pkg.Resolve: ResolverError
 using  ..Utils
 
-Pkg.DEFAULT_IO[] = IOBuffer()
-
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
 exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
 json_uuid = UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6")

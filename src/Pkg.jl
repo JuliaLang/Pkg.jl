@@ -36,9 +36,13 @@ const DEFAULT_IO = Ref{Union{Nothing,IO}}(nothing)
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
+include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
+
 include("utils.jl")
 include("GitTools.jl")
 include("PlatformEngines.jl")
+include("Versions.jl")
+include("RegistryHandling.jl")
 include("Types.jl")
 include("Resolve/Resolve.jl")
 include("BinaryPlatforms_compat.jl")

@@ -599,6 +599,42 @@ function logstr(pkgID, args...)
     end
 end
 
+"""
+    range_compressed_versionspec(pool, subset=pool)
+
+ - `pool`: all versions that exist (a superset of `subset`)
+ - `subset`: the subset of those versions that we want to include in the spec.
+
+Finds a minimal collection of ranges as a `VersionSpec`, that permits everything in the
+`subset`, but does not permit anything else from the `pool`.
+"""
+function range_compressed_versionspec(pool, subset=pool)
+    length(subset)==1 && return VersionSpec(only(subset))
+    # PREM-OPT: we keep re-sorting these, probably not required.
+    sort!(pool)
+    sort!(subset)
+    @assert subset ⊆ pool
+
+    contiguous_subsets = VersionRange[]
+
+    range_start = first(subset)
+    pool_ii = findfirst(isequal(range_start), pool) + 1  # skip-forward til we have started
+    for s in @view subset[2:end]
+        if s != pool[pool_ii]
+            range_end = pool[pool_ii-1]  # previous element was last in this range
+            push!(contiguous_subsets, VersionRange(range_start, range_end))
+            range_start = s  # start a new range
+            while (s != pool[pool_ii])  # advance til time to start
+                pool_ii+=1
+            end
+        end
+        pool_ii+=1
+    end
+    push!(contiguous_subsets, VersionRange(range_start, last(subset)))
+
+    return VersionSpec(contiguous_subsets)
+end
+
 function init_log!(data::GraphData)
     np = data.np
     pkgs = data.pkgs

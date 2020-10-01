@@ -50,37 +50,38 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
     return completions, cmp[2], !isempty(completions)
 end
 
+
 function complete_remote_package(partial)
-    cmp = String[]
-    julia_version = VERSION
-    ctx = Context()
-    for reg in Types.collect_registries()
-        data = Types.read_registry(joinpath(reg.path, "Registry.toml"))
-        for (uuid, pkginfo) in data["packages"]
-            name = pkginfo["name"]
-            if startswith(name, partial)
-                path = pkginfo["path"]::String
-                version_info = Operations.load_versions(ctx, path; include_yanked=false)
-                versions = sort!(collect(keys(version_info)))
-                compat_data = Operations.load_package_data(ctx,
-                    VersionSpec, joinpath(reg.path, path, "Compat.toml"), versions)
-                supported_julia_versions = VersionSpec()
-                found_julia_compat = false
-                for (ver_range, compats) in compat_data
-                    for (compat, v) in compats
-                        if compat == "julia"
+    isempty(partial) && return String[]
+    cmp = Set{String}()
+    for reg in Pkg.Types.collect_reachable_registries()
+        for (uuid, regpkg) in reg
+            name = regpkg.name
+            name in cmp && continue
+            if startswith(regpkg.name, partial)
+                pkg = RegistryHandling.registry_info(regpkg)
+                uncompressed_data = RegistryHandling.uncompressed_data(pkg)
+                # Filter versions
+                for (v, (uncompressed_compat, _)) in uncompressed_data
+                    RegistryHandling.isyanked(pkg, v) && continue
+                    # TODO: Filter based on offline mode
+                    supported_julia_versions = VersionSpec()
+                    found_julia_compat = false
+                    for (pkg, vspec) in uncompressed_compat
+                        if pkg == "julia"
                             found_julia_compat = true
-                            supported_julia_versions = union(supported_julia_versions, VersionSpec(v))
+                            supported_julia_versions = intersect(supported_julia_versions, vspec)
                         end
                     end
-                end
-                if VERSION in supported_julia_versions || !found_julia_compat
-                    push!(cmp, name)
+                    if VERSION in supported_julia_versions || !found_julia_compat
+                        push!(cmp, name)
+                        break
+                    end
                 end
             end
         end
     end
-    return cmp
+    return sort!(collect(cmp))
 end
 
 function complete_help(options, partial)
@@ -108,9 +109,10 @@ function complete_add_dev(options, partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)
         return comps, idx, !isempty(comps)
     end
-    comps = vcat(comps, complete_remote_package(partial))
-    comps = vcat(comps, filter(x->startswith(x,partial) && !(x in comps),
-                               collect(values(Types.stdlibs()))))
+    comps = vcat(comps, sort(complete_remote_package(partial)))
+    if !isempty(partial)
+        append!(comps, filter!(startswith(partial), collect(values(Types.stdlibs()))))
+    end
     return comps, idx, !isempty(comps)
 end
 
