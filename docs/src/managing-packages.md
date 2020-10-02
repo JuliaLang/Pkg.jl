@@ -114,6 +114,12 @@ Downloaded MacroTools ─ v0.4.1
 The dependencies of the unregistered package (here `MacroTools`) got installed.
 For unregistered packages we could have given a branch name (or commit SHA1) to track using `#`, just like for registered packages.
 
+If you want to add an unregistered package using the SSH-based `git` protocol, you have to use the [API](@ref API-Reference) with
+[PackageSpec](@ref) because the URL contains a `@`. For example,
+```julia
+import Pkg
+Pkg.add(Pkg.PackageSpec(url = "git@github.com:JuliaLang/Pkg.jl.git"))
+```
 
 ### Adding a local package
 
