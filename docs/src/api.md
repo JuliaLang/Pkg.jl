@@ -72,8 +72,6 @@ Pkg.Registry.status
 
 ```@docs
 Pkg.Artifacts.create_artifact
-Pkg.Artifacts.artifact_exists
-Pkg.Artifacts.artifact_path
 Pkg.Artifacts.remove_artifact
 Pkg.Artifacts.verify_artifact
 Pkg.Artifacts.artifact_meta
