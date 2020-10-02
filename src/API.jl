@@ -948,7 +948,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
     
     # guarding against circular deps
     function in_deps(pkg, deps, dmap)
-        length(deps) == 0 && return false
+        isempty(deps) && return false
         pkg in deps && return true
         return any(map(dep->in_deps(pkg, dmap[dep], dmap), deps))
     end
