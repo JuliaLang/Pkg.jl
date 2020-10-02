@@ -114,11 +114,17 @@ Downloaded MacroTools ─ v0.4.1
 The dependencies of the unregistered package (here `MacroTools`) got installed.
 For unregistered packages we could have given a branch name (or commit SHA1) to track using `#`, just like for registered packages.
 
-If you want to add an unregistered package using the SSH-based `git` protocol, you have to use the [API](@ref API-Reference) with
-[PackageSpec](@ref) because the URL contains a `@`. For example,
-```julia
-import Pkg
-Pkg.add(Pkg.PackageSpec(url = "git@github.com:JuliaLang/Pkg.jl.git"))
+If you want to add a package using the SSH-based `git` protocol, you have to use quotes because the URL contains a `@`. For example,
+```julia-repl
+(v1.0) pkg> add "git@github.com:fredrikekre/ImportMacros.jl.git"
+    Cloning git-repo `git@github.com:fredrikekre/ImportMacros.jl.git`
+   Updating git-repo `git@github.com:fredrikekre/ImportMacros.jl.git`
+   Updating registry at `~/.julia/registries/General`
+  Resolving package versions...
+Updating `~/.julia/environments/v1/Project.toml`
+  [92a963f6] + ImportMacros v1.0.0 `git@github.com:fredrikekre/ImportMacros.jl.git#master`
+Updating `~/.julia/environments/v1/Manifest.toml`
+  [92a963f6] + ImportMacros v1.0.0 `git@github.com:fredrikekre/ImportMacros.jl.git#master`
 ```
 
 ### Adding a local package
