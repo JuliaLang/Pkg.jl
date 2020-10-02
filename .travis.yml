@@ -1,13 +1,15 @@
 language: julia
 
 julia:
-  # - 1.0
-  # - 1.4
+  # - "1.0"
+  # - "1.6"
+  # - "1"
   - nightly
 
 os:
   - linux
   - osx
+  - windows
 
 env:
 - JULIA_PKG_SERVER="https://pkg.julialang.org"
@@ -35,6 +37,13 @@ script:
   - julia --project --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
 
 jobs:
+  exclude:
+  - os: windows
+    julia: "1.0"
+  - os: windows
+    julia: "1.6"
+  - os: windows
+    julia: "1"
   include:
     - stage: docs
       julia: nightly
