@@ -115,4 +115,65 @@ import .FakeTerminals.FakeTerminal
     end
 end
 
+@testset "Pkg.precompile" begin
+    # sequential precompile, depth-first
+    cd_tempdir() do tmp
+        path = pwd()
+        Pkg.activate(".")
+        cd(mkdir("packages")) do
+            Pkg.generate("Dep1")
+            Pkg.generate("Dep2")
+            Pkg.generate("Dep3")
+        end
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
+        
+        Pkg.activate("Dep1")
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep2"))
+        Pkg.activate("Dep2")
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep3"))
+
+        Pkg.activate(".")
+        Pkg.resolve()
+        Pkg.precompile()
+    end
+    
+    # ignoring circular deps, to avoid deadlock
+    cd_tempdir() do tmp
+        path = pwd()
+        Pkg.activate(".")
+        cd(mkdir("packages")) do
+            Pkg.generate("CircularDep1")
+            Pkg.generate("CircularDep2")
+            Pkg.generate("CircularDep3")
+        end
+        Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep1"))
+        Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep2"))
+        Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep3"))
+        
+        Pkg.activate("CircularDep1")
+        Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep2"))
+        Pkg.activate("CircularDep2")
+        Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep3"))
+        Pkg.activate("CircularDep3")
+        Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep1"))
+        
+        Pkg.activate(".")
+        Pkg.resolve()
+        precomp_task = @async Pkg.precompile()
+        
+        timer = Timer(60*2) # allow 2 minutes before assuming deadlock
+        timed_out = false
+        while true
+            istaskdone(precomp_task) && break
+            if !isopen(timer)
+                timed_out = true
+                Base.throwto(precomp_task, InterruptException())
+                break
+            end
+            sleep(0.5)
+        end
+        @test timed_out == false
+    end
+end
+
 end # module APITests
