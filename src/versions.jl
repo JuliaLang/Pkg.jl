@@ -132,12 +132,16 @@ VersionRange(t::Integer...)                  = VersionRange(VersionBound(t...))
 VersionRange(v::VersionNumber)               = VersionRange(VersionBound(v))
 VersionRange(lo::VersionNumber, hi::VersionNumber) = VersionRange(VersionBound(lo), VersionBound(hi))
 
-
+# The vast majority of VersionRanges are in practice equal to "1"
+const VersionRange_1 = VersionRange(VersionBound("1"), VersionBound("1"))
 function VersionRange(s::AbstractString)
-    m = match(r"^\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*)(?:\s*-\s*v?((?:\d+(?:\.\d+)?(?:\.\d+)?)|\*))?\s*$", s)
-    m === nothing && throw(ArgumentError("invalid version range: $(repr(s))"))
-    lower = VersionBound(m.captures[1])
-    upper = m.captures[2] !== nothing ? VersionBound(m.captures[2]) : lower
+    s == "1" && return VersionRange_1
+    p = split(s, "-")
+    if length(p) != 1 && length(p) != 2
+        throw(ArgumentError("invalid version range: $(repr(s))"))
+    end
+    lower = VersionBound(p[1])
+    upper = length(p) == 1 ? lower : VersionBound(p[2])
     return VersionRange(lower, upper)
 end
 
@@ -212,12 +216,12 @@ end
 struct VersionSpec
     ranges::Vector{VersionRange}
     VersionSpec(r::Vector{<:VersionRange}) = new(union!(r))
-    VersionSpec(vs::VersionSpec) = new(copy(vs.ranges))
+    VersionSpec(vs::VersionSpec) = vs
 end
 
-VersionSpec() = VersionSpec(VersionRange())
-VersionSpec(v::VersionNumber) = VersionSpec(VersionRange(v))
 VersionSpec(r::VersionRange) = VersionSpec(VersionRange[r])
+VersionSpec(v::VersionNumber) = VersionSpec(VersionRange(v))
+VersionSpec() = VersionSpec(VersionRange())
 VersionSpec(s::AbstractString) = VersionSpec(VersionRange(s))
 VersionSpec(v::AbstractVector) = VersionSpec(map(VersionRange, v))
 
@@ -251,12 +255,12 @@ end
 Base.intersect(a::VersionNumber, B::VersionSpec) = a in B ? VersionSpec(a) : empty_versionspec
 Base.intersect(A::VersionSpec, b::VersionNumber) = intersect(b, A)
 
-Base.union(A::VersionSpec, B::VersionSpec) = union!(copy(A), B)
-function Base.union!(A::VersionSpec, B::VersionSpec)
+function Base.union(A::VersionSpec, B::VersionSpec)
     A == B && return A
-    append!(A.ranges, B.ranges)
-    union!(A.ranges)
-    return A
+    Ar = copy(A.ranges)
+    append!(Ar, B.ranges)
+    union!(Ar)
+    return VersionSpec(Ar)
 end
 
 Base.:(==)(A::VersionSpec, B::VersionSpec) = A.ranges == B.ranges

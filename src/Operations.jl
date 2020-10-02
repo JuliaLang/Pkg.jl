@@ -165,7 +165,7 @@ end
 ####################
 
 function load_versions(ctx, path::String; include_yanked=false)
-    toml = parse_toml(joinpath(path, "Versions.toml"); fakeit=true)
+    toml = parse_toml(ctx, joinpath(path, "Versions.toml"); fakeit=true)
     versions = Dict{VersionNumber, SHA1}(
         VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml
             if !get(info, "yanked", false) || include_yanked)
@@ -179,25 +179,45 @@ function load_versions(ctx, path::String; include_yanked=false)
     return versions
 end
 
-load_package_data(::Type{T}, path::String, version::VersionNumber) where {T} =
-    get(load_package_data(T, path, [version]), version, nothing)
+load_package_data(ctx::Context, ::Type{T}, path::String, version::VersionNumber) where {T} =
+    get(load_package_data(ctx, T, path, [version]), version, nothing)
 
 # TODO: This function is very expensive. Optimize it
-function load_package_data(::Type{T}, path::String, versions::Vector{VersionNumber}) where {T}
-    compressed = parse_toml(path, fakeit=true)
+function load_package_data(ctx::Context, ::Type{T}, path::String, versions::Vector{VersionNumber}) where {T}
+    compressed = parse_toml(ctx, path; fakeit=true)
     compressed = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, compressed)
     uncompressed = Dict{VersionNumber, Dict{String,T}}()
+    # Many of the entries are repeated so we keep a cache so there is no need to re-create
+    # a bunch of identical objects
+    cache = Dict{String, T}()
     vsorted = sort(versions)
     for (vers, data) in compressed
-        vs = VersionSpec(vers)
-        for v in vsorted
-            v in vs || continue
+        vs = VersionRange(vers)
+        first = length(vsorted) + 1
+        # We find the first and last version that are in the range
+        # and since the versions are sorted, all versions in between are sorted
+        for i in eachindex(vsorted)
+            v = vsorted[i]
+            v in vs && (first = i; break)
+        end
+        last = 0
+        for i in reverse(eachindex(vsorted))
+            v = vsorted[i]
+            v in vs && (last = i; break)
+        end
+        for i in first:last
+            v = vsorted[i]
             uv = get!(() -> Dict{String, T}(), uncompressed, v)
             for (key, value) in data
                 if haskey(uv, key)
                     @warn "Overlapping ranges for $(key) in $(repr(path)) for version $v."
                 else
-                    uv[key] = T(value)
+                    Tvalue = if value isa String
+                        Tvalue = get!(()->T(value), cache, value)
+                    else
+                        Tvalue = T(value)
+                    end
+                    uv[key] = Tvalue
                 end
             end
         end
@@ -468,8 +488,8 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                 for path in registered_paths(ctx, uuid)
                     version_info = load_versions(ctx, path; include_yanked=false)
                     versions = sort!(collect(keys(version_info)))
-                    deps_data = load_package_data(UUID, joinpath(path, "Deps.toml"), versions)
-                    compat_data = load_package_data(VersionSpec, joinpath(path, "Compat.toml"), versions)
+                    deps_data = load_package_data(ctx, UUID, joinpath(path, "Deps.toml"), versions)
+                    compat_data = load_package_data(ctx, VersionSpec, joinpath(path, "Compat.toml"), versions)
 
                     union!(all_versions_u, versions)
 
