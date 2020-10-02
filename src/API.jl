@@ -950,7 +950,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
     function in_deps(pkg, deps, dmap)
         isempty(deps) && return false
         pkg in deps && return true
-        return any(map(dep->in_deps(pkg, dmap[dep], dmap), deps))
+        return any(dep->in_deps(pkg, dmap[dep], dmap), deps)
     end
     for (pkg, deps) in depsmap
         if in_deps(pkg, deps, depsmap)
