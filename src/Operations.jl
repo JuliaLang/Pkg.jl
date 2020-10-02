@@ -56,7 +56,7 @@ is_dep(ctx::Context, pkg::PackageSpec) =
 #TODO rename
 function load_version(version, fixed, preserve::PreserveLevel)
     if version === nothing
-        return VersionSpec() # stdlibs dont have a version
+        return VersionSpec() # some stdlibs dont have a version
     elseif fixed
         return version # dont change state if a package is fixed
     elseif preserve == PRESERVE_ALL || preserve == PRESERVE_DIRECT
@@ -1669,7 +1669,7 @@ function print_diff(ctx::Context, old::Union{Nothing,PackageSpec}, new::Union{No
         printstyled(ctx.io, "+ $(stat_rep(new))"; color=:light_green)
     elseif !is_instantiated(new)
         printstyled(ctx.io, "- $(stat_rep(old))"; color=:light_red)
-    elseif is_tracking_registry(old) && is_tracking_registry(new)
+    elseif is_tracking_registry(old) && is_tracking_registry(new) && new.version isa VersionNumber && old.version isa VersionNumber
         if new.version > old.version
             printstyled(ctx.io, "↑ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
         else
