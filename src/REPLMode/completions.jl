@@ -24,19 +24,20 @@ end
 
 function complete_local_dir(s, i1, i2)
     expanded_user = false
+    oldi2 = i2
     if !isempty(s) && s[1] == '~'
         expanded_user = true
         s = expanduser(s)
-        oldi2 = i2
         i2 += textwidth(homedir()) - 1
     end
+    return complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)  # easiest way to avoid #15276 from boxing `s`
+end
 
+function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
     cmp = REPL.REPLCompletions.complete_path(s, i2)
     cmp2 = cmp[2]
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
-    completions = let s=s
-        filter!(x -> isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x), completions)
-    end
+    completions = filter!(x -> isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x), completions)
     if expanded_user
         if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
             completions = [joinpath(s, "")]

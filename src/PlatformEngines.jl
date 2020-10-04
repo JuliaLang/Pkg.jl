@@ -397,11 +397,11 @@ function probe_platform_engines!(;verbose::Bool = false)
         prepend!(compression_engines, [(`7z --help`, gen_7z("7z")...)])
 
         # For purposes of in-buildtree execution, we look in `bin`
-        exe7z = joinpath(Sys.BINDIR, "7z.exe")
+        exe7z = joinpath(Sys.BINDIR::String, "7z.exe")
         prepend!(compression_engines, [(`$exe7z --help`, gen_7z(exe7z)...)])
 
         # But most commonly, we'll find `7z` sitting in `libexec`, bundled with Julia
-        exe7z = joinpath(Sys.BINDIR, "..", "libexec", "7z.exe")
+        exe7z = joinpath(Sys.BINDIR::String, "..", "libexec", "7z.exe")
         prepend!(compression_engines, [(`$exe7z --help`, gen_7z(exe7z)...)])
     end
 
@@ -598,7 +598,7 @@ function get_server_dir(url::AbstractString, server=pkg_server())
         @warn "malformed Pkg server value" server
         return
     end
-    joinpath(depots1(), "servers", m.captures[1])
+    joinpath(depots1(), "servers", m.captures[1]::AbstractString)
 end
 
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex},Any}[]
