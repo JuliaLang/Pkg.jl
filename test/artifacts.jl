@@ -268,7 +268,7 @@ end
             hash = create_artifact(p -> touch(joinpath(p, "foo")))
             tarball_path = joinpath(art_dir, "foo.tar.gz")
             archive_artifact(hash, tarball_path)
-            @test "foo" in list_tarball_files(tarball_path)
+            @test "foo" in PlatformEngines.list_tarball_files(tarball_path)
 
             # Test archiving something that doesn't exist fails
             remove_artifact(hash)

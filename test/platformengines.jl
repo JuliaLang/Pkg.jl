@@ -7,31 +7,6 @@ using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
 # CI debugging easier
 probe_platform_engines!(;verbose=true)
 
-@testset "Tarball listing parsing" begin
-    fake_7z_output = """
-	7-Zip [64] 9.20  Copyright (c) 1999-2010 Igor Pavlov  2010-11-18
-	p7zip Version 9.20 (locale=en_US.UTF-8,Utf16=on,HugeFiles=on,4 CPUs)
-	Listing archive:
-	--
-	Path =
-	Type = tar
-	   Date      Time    Attr         Size   Compressed  Name
-	------------------- ----- ------------ ------------  ------------------------
-	2017-04-10 14:45:00 D....            0            0  bin
-	2017-04-10 14:44:59 .....          211          512  bin/socrates
-	------------------- ----- ------------ ------------  ------------------------
-									   211          512  1 files, 1 folders
-	"""
-	@test parse_7z_list(fake_7z_output) == ["bin/socrates"]
-
-
-	fake_tar_output = """
-	bin/
-	bin/socrates
-	"""
-	@test parse_tar_list(fake_tar_output) == normpath.(["bin/socrates"])
-end
-
 @testset "Packaging" begin
     # Gotta set this guy up beforehand
     tarball_path = nothing
@@ -64,7 +39,7 @@ end
             @test isfile(tarball_path)
 
             # Test that we can inspect the contents of the tarball
-            contents = list_tarball_files(tarball_path)
+            contents = PlatformEngines.list_tarball_files(tarball_path)
             @test joinpath("bin", "bar.sh") in contents
             @test joinpath("lib", "baz.so") in contents
             @test joinpath("etc", "qux.conf") in contents

@@ -7,9 +7,7 @@ using SHA
 import ...Pkg: Pkg, TOML, pkg_server, depots1
 using Base.BinaryPlatforms
 
-export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
-       download_verify, unpack, package, download_verify_unpack,
-       list_tarball_files, list_tarball_symlinks
+export probe_platform_engines!, verify, unpack, package, download_verify_unpack
 
 # In this file, we setup the `gen_download_cmd()`, `gen_unpack_cmd()` and
 # `gen_package_cmd()` functions by providing methods to probe the environment
