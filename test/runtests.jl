@@ -1,5 +1,10 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
+    s = read(`curl -sLI $(server)`, String);
+    @info "Pkg Server metadata:\n$s"
+end
+
 module PkgTests
 
 import Pkg
