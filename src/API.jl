@@ -1023,9 +1023,10 @@ function precompile(ctx::Context; internal_call::Bool=false)
             wait(t)
         end
         ndeps = count(values(was_recompiled))
-        println("$(ndeps) dependencies successfully precompiled ($(length(depsmap) - ndeps - length(failed_deps)) already precompiled)")
+        print("$(ndeps) dependencies successfully precompiled")
+        !isempty(failed_deps) && print(", $(length(failed_deps)) errored")
+        println(" ($(length(depsmap) - ndeps - length(failed_deps)) already precompiled)")
     end
-
     toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
