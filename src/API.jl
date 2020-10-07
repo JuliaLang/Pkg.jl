@@ -7,6 +7,7 @@ using Printf
 import Random
 using Dates
 import LibGit2
+import Logging
 
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
@@ -922,7 +923,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         Base.PkgId(uuid, name) 
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
-    
+
     man = Pkg.Types.read_manifest(ctx.env.manifest_file)
     deps_pair_or_nothing = Iterators.map(man) do dep
         pkg = Base.PkgId(first(dep), last(dep).name)
@@ -938,10 +939,12 @@ function precompile(ctx::Context; internal_call::Bool=false)
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
     end
-    
+
+    started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
     for pkgid in keys(depsmap)
+        started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
     end
@@ -959,9 +962,77 @@ function precompile(ctx::Context; internal_call::Bool=false)
             !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
         end
     end
-    
+
+    pkg_queue = Base.PkgId[]
+    failed_direct_deps = Base.PkgId[]
+    failed_indirect_deps = Base.PkgId[]
+
     print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
-    errored = false
+    first_started = Base.Event()
+    finished = false
+    should_exit = false
+    num_deps_show = 20
+    t_print = @async begin
+        anim_chars = ["◐","◓","◑","◒"]
+        wait(first_started)
+        isempty(pkg_queue) && return
+        lock(print_lock) do 
+            printpkgstyle(ctx, :Precompiling, "project...")
+        end
+        t = Timer(0; interval=1/10)
+        i = 1
+        last_length = 0
+        while !should_exit
+            pkg_queue_show = if length(pkg_queue) > num_deps_show 
+                pkg_queue[end-num_deps_show:end]
+            else
+                pkg_queue
+            end
+            str = ""
+            if i > 1
+                str *= "\e[$(last_length)A\e[1G\e[0J"
+            end
+            for dep in pkg_queue_show
+                finished && was_recompiled[dep] && continue
+                name = dep in direct_deps ? dep.name : "  \e[38;5;244m$(dep.name)\e[0m"
+                if Operations.precomp_suspended(dep)
+                    str *= string(name, " \e[38;5;160m✗\e[0m\n")
+                elseif was_recompiled[dep]
+                    str *= string(name, " \e[38;5;46m✓\e[0m\n")
+                    @async begin 
+                        sleep(0.5); 
+                        lock(print_lock) do
+                            filter!(!isequal(dep), pkg_queue) 
+                        end
+                    end
+                elseif started[dep]
+                    anim_char = anim_chars[i % length(anim_chars) + 1]
+                    anim_char_colored = dep in direct_deps ? anim_char : "\e[38;5;244m$(anim_char)\e[0m"
+                    str *= string(name, " $anim_char_colored\n")
+                else
+                    str *= name * "\n"
+                end
+            end
+            last_length = length(pkg_queue_show)
+            lock(print_lock) do
+                print(str)
+            end
+            should_exit = finished
+            i += 1
+            wait(t)
+        end
+        ndeps = count(values(was_recompiled))
+        println("$(ndeps) dependencies successfully precompiled ($(length(depsmap) - ndeps - length(failed_indirect_deps) - length(failed_direct_deps)) already precompiled)")
+        # if !isempty(failed_indirect_deps)
+        #     println("\n\e[38;5;190mWarning:\e[0m The following indirect dependencies failed to precompile:")
+        #     println.(failed_indirect_deps)
+        # end
+        # if !isempty(failed_direct_deps)
+        #     println("\n\e[38;5;160mError:\e[0m The following direct dependencies failed to precompile:")
+        #     println.(failed_direct_deps)
+        # end
+    end
+
     toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
@@ -980,30 +1051,23 @@ function precompile(ctx::Context; internal_call::Bool=false)
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !errored && !Operations.precomp_suspended(pkg) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
-                
+            if !Operations.precomp_suspended(pkg) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
                 Base.acquire(parallel_limiter)
-                if errored # catch things queued before error occurred
-                    notify(was_processed[pkg])
-                    Base.release(parallel_limiter)
-                    return
-                end
-                is_direct_dep =  pkg in direct_deps
+                is_direct_dep = pkg in direct_deps
                 try
-                    lock(print_lock) do
-                        if !any(values(was_recompiled))
-                            printpkgstyle(ctx, :Precompiling, "project...")
-                        end
-                        was_recompiled[pkg] = true # needs to be in lock to prevent async race on printing
+                    push!(pkg_queue, pkg)
+                    notify(first_started)
+                    started[pkg] = true
+                    Logging.with_logger(Logging.NullLogger()) do 
+                        Base.compilecache(pkg, sourcepath, toml_c, false) # don't print errors from indirect deps
                     end
-                    Base.compilecache(pkg, sourcepath, toml_c, is_direct_dep) # don't print errors from indirect deps
+                    was_recompiled[pkg] = true
                 catch err
                     Operations.precomp_suspend!(pkg)
-                    if is_direct_dep # only throw errors for direct dependencies (in Project)
-                        errored = true
-                        throw(err) 
+                    if is_direct_dep 
+                        push!(failed_direct_deps, pkg)
                     else
-                        @warn "Precompilation failed for indirect dependency $(pkg)"
+                        push!(failed_indirect_deps, pkg)
                     end
                 finally
                     notify(was_processed[pkg])
@@ -1014,6 +1078,9 @@ function precompile(ctx::Context; internal_call::Bool=false)
             end
         end
     end
+    finished = true
+    notify(first_started)
+    wait(t_print)
     nothing
 end
 
