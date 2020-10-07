@@ -1030,7 +1030,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         if n_already > 0  || length(skipped_deps) > 0 
             str *= " ("
             n_already > 0 && (str *= "$n_already already precompiled")
-            !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped due to previous errors")
+            !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped in auto mode due to previous errors")
             str *= ")"
         end
         lock(print_lock) do
