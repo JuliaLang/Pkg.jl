@@ -4,6 +4,11 @@ module PkgTests
 
 import Pkg
 
+if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
+    s = read(`curl -sLI $(server)`, String);
+    @info "Pkg Server metadata:\n$s"
+end
+
 # Make sure to not start with an outdated registry
 rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
 
