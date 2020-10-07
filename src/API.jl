@@ -997,7 +997,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 end
                 for dep in pkg_queue_show
                     finished && was_recompiled[dep] && continue
-                    name = dep in direct_deps ? dep.name : "  \e[38;5;244m$(dep.name)\e[0m"
+                    name = dep in direct_deps ? dep.name : "\e[38;5;244m$(dep.name)\e[0m"
                     if dep in failed_deps
                         str *= string(name, " \e[38;5;160m✗\e[0m\n")
                     elseif was_recompiled[dep]
