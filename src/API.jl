@@ -971,7 +971,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
     first_started = Base.Event()
     finished = false
     should_exit = false
-    num_deps_show = 20
+    
     t_print = @async begin
         anim_chars = ["◐","◓","◑","◒"]
         wait(first_started)
@@ -983,38 +983,40 @@ function precompile(ctx::Context; internal_call::Bool=false)
         i = 1
         last_length = 0
         while !should_exit
-            pkg_queue_show = if length(pkg_queue) > num_deps_show 
-                pkg_queue[end-num_deps_show:end]
-            else
-                pkg_queue
-            end
-            str = ""
-            if i > 1
-                str *= "\e[$(last_length)A\e[1G\e[0J"
-            end
-            for dep in pkg_queue_show
-                finished && was_recompiled[dep] && continue
-                name = dep in direct_deps ? dep.name : "  \e[38;5;244m$(dep.name)\e[0m"
-                if Operations.precomp_suspended(dep)
-                    str *= string(name, " \e[38;5;160m✗\e[0m\n")
-                elseif was_recompiled[dep]
-                    str *= string(name, " \e[38;5;46m✓\e[0m\n")
-                    @async begin 
-                        sleep(0.5); 
-                        lock(print_lock) do
-                            filter!(!isequal(dep), pkg_queue) 
-                        end
-                    end
-                elseif started[dep]
-                    anim_char = anim_chars[i % length(anim_chars) + 1]
-                    anim_char_colored = dep in direct_deps ? anim_char : "\e[38;5;244m$(anim_char)\e[0m"
-                    str *= string(name, " $anim_char_colored\n")
-                else
-                    str *= name * "\n"
-                end
-            end
-            last_length = length(pkg_queue_show)
             lock(print_lock) do
+                term_size = Base.displaysize(stdout)::Tuple{Int,Int}
+                num_deps_show = term_size[1] - 2
+                pkg_queue_show = if !finished && length(pkg_queue) > num_deps_show 
+                    last(pkg_queue, num_deps_show)
+                else
+                    pkg_queue
+                end
+                str = ""
+                if i > 1
+                    str *= "\e[$(last_length)A\e[1G\e[0J"
+                end
+                for dep in pkg_queue_show
+                    finished && was_recompiled[dep] && continue
+                    name = dep in direct_deps ? dep.name : "  \e[38;5;244m$(dep.name)\e[0m"
+                    if Operations.precomp_suspended(dep)
+                        str *= string(name, " \e[38;5;160m✗\e[0m\n")
+                    elseif was_recompiled[dep]
+                        str *= string(name, " \e[38;5;46m✓\e[0m\n")
+                        @async begin 
+                            sleep(1); 
+                            lock(print_lock) do
+                                filter!(!isequal(dep), pkg_queue) 
+                            end
+                        end
+                    elseif started[dep]
+                        anim_char = anim_chars[i % length(anim_chars) + 1]
+                        anim_char_colored = dep in direct_deps ? anim_char : "\e[38;5;244m$(anim_char)\e[0m"
+                        str *= string(name, " $anim_char_colored\n")
+                    else
+                        str *= name * "\n"
+                    end
+                end
+                last_length = length(pkg_queue_show)
                 print(str)
             end
             should_exit = finished
@@ -1023,14 +1025,6 @@ function precompile(ctx::Context; internal_call::Bool=false)
         end
         ndeps = count(values(was_recompiled))
         println("$(ndeps) dependencies successfully precompiled ($(length(depsmap) - ndeps - length(failed_indirect_deps) - length(failed_direct_deps)) already precompiled)")
-        # if !isempty(failed_indirect_deps)
-        #     println("\n\e[38;5;190mWarning:\e[0m The following indirect dependencies failed to precompile:")
-        #     println.(failed_indirect_deps)
-        # end
-        # if !isempty(failed_direct_deps)
-        #     println("\n\e[38;5;160mError:\e[0m The following direct dependencies failed to precompile:")
-        #     println.(failed_direct_deps)
-        # end
     end
 
     toml_c = Base.TOMLCache()
