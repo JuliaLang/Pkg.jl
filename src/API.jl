@@ -964,8 +964,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
     end
 
     pkg_queue = Base.PkgId[]
-    failed_direct_deps = Base.PkgId[]
-    failed_indirect_deps = Base.PkgId[]
+    failed_deps = Base.PkgId[]
 
     print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
     first_started = Base.Event()
@@ -973,13 +972,13 @@ function precompile(ctx::Context; internal_call::Bool=false)
     should_exit = false
     
     t_print = @async begin
-        anim_chars = ["◐","◓","◑","◒"]
         wait(first_started)
         isempty(pkg_queue) && return
         lock(print_lock) do 
             printpkgstyle(ctx, :Precompiling, "project...")
         end
         t = Timer(0; interval=1/10)
+        anim_chars = ["◐","◓","◑","◒"]
         i = 1
         last_length = 0
         while !should_exit
@@ -998,14 +997,14 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 for dep in pkg_queue_show
                     finished && was_recompiled[dep] && continue
                     name = dep in direct_deps ? dep.name : "  \e[38;5;244m$(dep.name)\e[0m"
-                    if Operations.precomp_suspended(dep)
+                    if dep in failed_deps
                         str *= string(name, " \e[38;5;160m✗\e[0m\n")
                     elseif was_recompiled[dep]
                         str *= string(name, " \e[38;5;46m✓\e[0m\n")
-                        @async begin 
-                            sleep(1); 
+                        @async begin # keep successful deps visible for short period 
+                            sleep(1);
                             lock(print_lock) do
-                                filter!(!isequal(dep), pkg_queue) 
+                                filter!(!isequal(dep), pkg_queue)
                             end
                         end
                     elseif started[dep]
@@ -1024,7 +1023,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
             wait(t)
         end
         ndeps = count(values(was_recompiled))
-        println("$(ndeps) dependencies successfully precompiled ($(length(depsmap) - ndeps - length(failed_indirect_deps) - length(failed_direct_deps)) already precompiled)")
+        println("$(ndeps) dependencies successfully precompiled ($(length(depsmap) - ndeps - length(failed_deps)) already precompiled)")
     end
 
     toml_c = Base.TOMLCache()
@@ -1058,11 +1057,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                     was_recompiled[pkg] = true
                 catch err
                     Operations.precomp_suspend!(pkg)
-                    if is_direct_dep 
-                        push!(failed_direct_deps, pkg)
-                    else
-                        push!(failed_indirect_deps, pkg)
-                    end
+                    push!(failed_deps, pkg)
                 finally
                     notify(was_processed[pkg])
                     Base.release(parallel_limiter)
@@ -1073,7 +1068,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         end
     end
     finished = true
-    notify(first_started)
+    notify(first_started) # in case of no-op
     wait(t_print)
     nothing
 end
