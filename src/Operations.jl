@@ -121,6 +121,7 @@ function is_instantiated(ctx::Context)::Bool
 end
 
 function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
+    manifest_before = deepcopy(ctx.env.manifest)
     manifest = ctx.env.manifest
     empty!(manifest)
     if ctx.env.pkg !== nothing
@@ -135,8 +136,10 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
         else
             entry.deps = deps_map[pkg.uuid]
         end
+        if !haskey(manifest_before, pkg.uuid) || manifest_before[pkg.uuid] != entry
+            precomp_unsuspend!(Base.PkgId(pkg.uuid, pkg.name))
+        end
         ctx.env.manifest[pkg.uuid] = entry
-        precomp_unsuspend!(Base.PkgId(pkg.uuid, pkg.name))
     end
     prune_manifest(ctx)
 end
