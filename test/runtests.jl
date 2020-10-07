@@ -14,18 +14,26 @@ end
 # Make sure to not start with an outdated registry
 rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
 
-include("utils.jl")
-include("new.jl")
-include("pkg.jl")
-include("repl.jl")
-include("api.jl")
-include("registry.jl")
-include("subdir.jl")
-include("artifacts.jl")
-include("binaryplatforms.jl")
-include("platformengines.jl")
-include("sandbox.jl")
-include("resolve.jl")
+testfiles = [
+    "utils",
+    "new",
+    "pkg",
+    "repl",
+    "api",
+    "registry",
+    "subdir",
+    "artifacts",
+    "binaryplatforms",
+    "platformengines",
+    "sandbox",
+    "resolve",
+]
+original_project = Base.active_project()
+for testfile in testfiles
+    @info "Running test/$(testfile).jl"
+    include("$(testfile).jl")
+    Pkg.activate(original_project)
+end
 
 # clean up locally cached registry
 rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
