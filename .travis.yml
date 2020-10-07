@@ -10,7 +10,7 @@ os:
   - osx
 
 env:
-- JULIA_PKG_SERVER="https://pkg.julialang.org"
+- JULIA_PKG_SERVER="https://pkg.julialang.org" # please note: on CI, this will redirect to "https://us-east-ci.pkg.julialang.org"
 - JULIA_PKG_SERVER=""
 
 notifications:
