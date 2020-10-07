@@ -29,11 +29,7 @@ stages:
   - name: test
   - name: docs
 
-script:
-  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia test/pkg-uuid.jl
-  - julia --project -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"));'
-  - julia --project --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
+script: travis-script.sh
 
 jobs:
   include:
