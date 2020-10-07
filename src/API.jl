@@ -965,6 +965,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
 
     pkg_queue = Base.PkgId[]
     failed_deps = Base.PkgId[]
+    skipped_deps = Base.PkgId[]
 
     print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
     first_started = Base.Event()
@@ -1023,9 +1024,18 @@ function precompile(ctx::Context; internal_call::Bool=false)
             wait(t)
         end
         ndeps = count(values(was_recompiled))
-        print("$(ndeps) dependencies successfully precompiled")
-        !isempty(failed_deps) && print(", $(length(failed_deps)) errored")
-        println(" ($(length(depsmap) - ndeps - length(failed_deps)) already precompiled)")
+        str = "$(ndeps) dependencies successfully precompiled"
+        !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
+        n_already = length(depsmap) - ndeps - length(failed_deps)
+        if n_already > 0  || length(skipped_deps) > 0 
+            str *= " ("
+            n_already > 0 && (str *= "$n_already already precompiled")
+            isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) packages skipped due to previous errors")
+            str *= ")"
+        end
+        lock(print_lock) do
+            println(str)
+        end
     end
     toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
@@ -1045,27 +1055,29 @@ function precompile(ctx::Context; internal_call::Bool=false)
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !Operations.precomp_suspended(pkg) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
-                Base.acquire(parallel_limiter)
-                is_direct_dep = pkg in direct_deps
-                try
-                    push!(pkg_queue, pkg)
-                    notify(first_started)
-                    started[pkg] = true
-                    Logging.with_logger(Logging.NullLogger()) do 
-                        Base.compilecache(pkg, sourcepath, toml_c, false) # don't print errors from indirect deps
+            if !Operations.precomp_suspended(pkg) 
+                if (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
+                    Base.acquire(parallel_limiter)
+                    is_direct_dep = pkg in direct_deps
+                    try
+                        push!(pkg_queue, pkg)
+                        notify(first_started)
+                        started[pkg] = true
+                        Logging.with_logger(Logging.NullLogger()) do 
+                            Base.compilecache(pkg, sourcepath, toml_c, false) # don't print errors from indirect deps
+                        end
+                        was_recompiled[pkg] = true
+                    catch err
+                        Operations.precomp_suspend!(pkg)
+                        push!(failed_deps, pkg)
+                    finally
+                        Base.release(parallel_limiter)
                     end
-                    was_recompiled[pkg] = true
-                catch err
-                    Operations.precomp_suspend!(pkg)
-                    push!(failed_deps, pkg)
-                finally
-                    notify(was_processed[pkg])
-                    Base.release(parallel_limiter)
                 end
             else
-                notify(was_processed[pkg])
+                push!(skipped_deps, pkg)
             end
+            notify(was_processed[pkg])
         end
     end
     finished = true
