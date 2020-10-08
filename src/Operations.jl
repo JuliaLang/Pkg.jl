@@ -20,10 +20,10 @@ import ...Pkg: pkg_server
 #########
 
 const pkgs_precompile_suspended = Base.PkgId[]
-precomp_suspend!(pkg) = push!(pkgs_precompile_suspended, pkg)
-precomp_unsuspend!(pkg) = filter!(!isequal(pkg), pkgs_precompile_suspended)
+precomp_suspend!(pkg::Base.PkgId) = push!(pkgs_precompile_suspended, pkg)
+precomp_unsuspend!(pkg::Base.PkgId) = filter!(!isequal(pkg), pkgs_precompile_suspended)
 precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
-precomp_suspended(pkg) = pkg in pkgs_precompile_suspended
+precomp_suspended(pkg::Base.PkgId) = pkg in pkgs_precompile_suspended
 
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
     slug_default = Base.version_slug(uuid, sha1)
@@ -121,6 +121,7 @@ function is_instantiated(ctx::Context)::Bool
 end
 
 function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
+    manifest_before = deepcopy(ctx.env.manifest)
     manifest = ctx.env.manifest
     empty!(manifest)
     if ctx.env.pkg !== nothing
@@ -135,8 +136,10 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
         else
             entry.deps = deps_map[pkg.uuid]
         end
+        if !haskey(manifest_before, pkg.uuid) || manifest_before[pkg.uuid] != entry
+            precomp_unsuspend!(Base.PkgId(pkg.uuid, pkg.name))
+        end
         ctx.env.manifest[pkg.uuid] = entry
-        precomp_unsuspend!(pkg)
     end
     prune_manifest(ctx)
 end
