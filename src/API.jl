@@ -971,6 +971,15 @@ function precompile(ctx::Context; internal_call::Bool=false)
     first_started = Base.Event()
     finished = false
     should_exit = false
+
+    function color_string(str::String, col::Symbol)
+        enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
+        disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
+        return string(enable_ansi, str, disable_ansi)
+    end
+    ansi_moveup(n::Int) = string("\e[", n, "A")
+    ansi_movecol1 = "\e[1G"
+    ansi_cleartoend = "\e[0J"
     
     t_print = @async begin
         wait(first_started)
@@ -993,15 +1002,16 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 end
                 str = ""
                 if i > 1
-                    str *= "\e[$(last_length)A\e[1G\e[0J"
+                    str *= string(ansi_moveup(last_length), ansi_movecol1, ansi_cleartoend)
                 end
                 for dep in pkg_queue_show
                     finished && was_recompiled[dep] && continue
-                    name = dep in direct_deps ? "  $(dep.name)" : "  \e[38;5;244m$(dep.name)\e[0m"
+                    name = dep in direct_deps ? "  $(dep.name)" : string("  ", color_string(dep.name, :light_black))
                     if dep in failed_deps
-                        str *= string(name, " \e[38;5;160m✗\e[0m\n")
+                        ansi_s, ansi_e = gen_ansi(col::Symbol)
+                        str *= string(name, " ", color_string("✗", Base.error_color()), "\n")
                     elseif was_recompiled[dep]
-                        str *= string(name, " \e[38;5;46m✓\e[0m\n")
+                        str *= string(name, " ", color_string("✓", :green), "\n")
                         @async begin # keep successful deps visible for short period 
                             sleep(1);
                             lock(print_lock) do
@@ -1010,7 +1020,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                         end
                     elseif started[dep]
                         anim_char = anim_chars[i % length(anim_chars) + 1]
-                        anim_char_colored = dep in direct_deps ? anim_char : "\e[38;5;244m$(anim_char)\e[0m"
+                        anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                         str *= string(name, " $anim_char_colored\n")
                     else
                         str *= name * "\n"
