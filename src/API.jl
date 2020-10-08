@@ -910,8 +910,7 @@ function _auto_precompile()
     end
 end
 
-precompile(;internal_call::Bool=false) = precompile(Context(), internal_call=internal_call)
-function precompile(ctx::Context; internal_call::Bool=false)    
+function precompile(ctx::Context=Context(); internal_call::Bool=false, verbose::Bool=true)
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     
@@ -992,7 +991,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                 try
                     lock(print_lock) do
                         if !any(values(was_recompiled))
-                            printpkgstyle(ctx, :Precompiling, "project...")
+                            verbose && printpkgstyle(ctx, :Precompiling, "project...")
                         end
                         was_recompiled[pkg] = true # needs to be in lock to prevent async race on printing
                     end
@@ -1133,12 +1132,13 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false,shared=false)
+function activate(;temp=false,shared=false,verbose=true)
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
+    donotprint = isnothing(p) || !verbose
+    donotprint || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
     return nothing
 end
@@ -1159,7 +1159,7 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, verbose::Bool=true)
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1195,7 +1195,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
+        verbose && printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
     return nothing
