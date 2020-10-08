@@ -1,5 +1,5 @@
 name = "Pkg"
-uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+uuid = "b4ba1df2-8887-4706-8585-f0048dd7ac84"
 keywords = ["package management"]
 license = "MIT"
 desc = "The next-generation Julia package manager."

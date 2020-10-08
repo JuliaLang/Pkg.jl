@@ -682,13 +682,7 @@ function download(
     for header in get_metadata_headers(url)
         push!(headers, header)
     end
-    # TODO: once we get a new nightly, delete all but last
-    yield()
-    if applicable(Downloads.download, url, dest, headers)
-        Downloads.download(url, dest, headers)
-    else
-        Downloads.download(url, dest, headers=headers)
-    end
+    Downloads.download(url, dest, headers=headers)
 end
 
 """
