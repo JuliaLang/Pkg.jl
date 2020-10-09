@@ -913,7 +913,7 @@ function precompile_auto(ctx::Context, b::Bool)
 end
 
 function _auto_precompile()
-    if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "0")) == 1
+    if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
         Pkg.precompile(internal_call=true)
     end
 end
