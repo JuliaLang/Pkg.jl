@@ -4,6 +4,8 @@ module PkgTests
 
 import Pkg
 
+ENV["JULIA_PKG_PRECOMPILE_AUTO"] = "0"
+
 # Make sure to not start with an outdated registry
 rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
 
