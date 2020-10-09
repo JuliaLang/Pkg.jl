@@ -918,8 +918,8 @@ function _auto_precompile()
     end
 end
 
-precompile(;internal_call::Bool=false) = precompile(Context(), internal_call=internal_call)
-function precompile(ctx::Context; internal_call::Bool=false)    
+precompile(; kwargs...) = precompile(Context(); kwargs...)
+function precompile(ctx::Context; internal_call::Bool=false, io::IO=stdout)    
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     fancy_print = stdout isa Base.TTY
@@ -994,7 +994,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         wait(first_started)
         isempty(pkg_queue) && return
         fancy_print && lock(print_lock) do 
-            printpkgstyle(ctx, :Precompiling, "project...$action_help")
+            printpkgstyle(io, :Precompiling, "project...$action_help")
         end
         t = Timer(0; interval=1/10)
         anim_chars = ["◐","◓","◑","◒"]
@@ -1022,9 +1022,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                         str *= string(name, " ", color_string("✓", :green), "\n")
                         @async begin # keep successful deps visible for short period 
                             sleep(1);
-                            lock(print_lock) do
-                                filter!(!isequal(dep), pkg_queue)
-                            end
+                            filter!(!isequal(dep), pkg_queue)
                         end
                     elseif started[dep]
                         anim_char = anim_chars[i % length(anim_chars) + 1]
@@ -1035,7 +1033,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                     end
                 end
                 last_length = length(pkg_queue_show)
-                print(str)
+                print(io, str)
             end
             should_exit = finished
             i += 1
@@ -1052,7 +1050,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
             str *= ")"
         end
         lock(print_lock) do
-            println(str, "\n")
+            println(io, str, "\n")
         end
     end
     toml_c = Base.TOMLCache()
@@ -1079,7 +1077,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                     is_direct_dep = pkg in direct_deps
                     try
                         !fancy_print && lock(print_lock) do 
-                            isempty(pkg_queue) && printpkgstyle(ctx, :Precompiling, "project...$action_help")
+                            isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
                         end
                         push!(pkg_queue, pkg)
                         started[pkg] = true
@@ -1089,13 +1087,13 @@ function precompile(ctx::Context; internal_call::Bool=false)
                         end
                         !fancy_print && lock(print_lock) do 
                             str = string(pkg.name, color_string(" ✓", :green))
-                            println("  ", is_direct_dep ? str : color_string(str, :light_black))
+                            println(io, "  ", is_direct_dep ? str : color_string(str, :light_black))
                         end
                         was_recompiled[pkg] = true
                     catch err
                         !fancy_print && lock(print_lock) do 
                             str = string(pkg.name, color_string(" ✗", Base.error_color()))
-                            println("  ", is_direct_dep ? str : color_string(str, :light_black))
+                            println(io, "  ", is_direct_dep ? str : color_string(str, :light_black))s
                         end
                         Operations.precomp_suspend!(pkg)
                         push!(failed_deps, pkg)
