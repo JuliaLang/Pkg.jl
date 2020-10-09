@@ -915,7 +915,8 @@ precompile(;internal_call::Bool=false) = precompile(Context(), internal_call=int
 function precompile(ctx::Context; internal_call::Bool=false)    
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
-    
+    fancy_print = stdout isa Base.TTY
+
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     !internal_call && Operations.precomp_unsuspend!() 
     
@@ -970,7 +971,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
     print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
     first_started = Base.Event()
     finished = false
-    should_exit = false
+    should_exit = !fancy_print # exit print loop immediately if not fancy printing
 
     function color_string(str::String, col::Symbol)
         enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
@@ -984,7 +985,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
     t_print = @async begin
         wait(first_started)
         isempty(pkg_queue) && return
-        lock(print_lock) do 
+        fancy_print && lock(print_lock) do 
             printpkgstyle(ctx, :Precompiling, "project...")
         end
         t = Timer(0; interval=1/10)
@@ -1036,7 +1037,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         str = "$(ndeps) dependencies successfully precompiled"
         !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
         n_already = length(depsmap) - ndeps - length(failed_deps)
-        if n_already > 0  || length(skipped_deps) > 0 
+        if n_already > 0  || !isempty(skipped_deps) 
             str *= " ("
             n_already > 0 && (str *= "$n_already already precompiled")
             !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped in auto mode due to previous errors")
@@ -1069,14 +1070,25 @@ function precompile(ctx::Context; internal_call::Bool=false)
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     try
+                        !fancy_print && lock(print_lock) do 
+                            isempty(pkg_queue) && printpkgstyle(ctx, :Precompiling, "project...")
+                        end
                         push!(pkg_queue, pkg)
-                        notify(first_started)
                         started[pkg] = true
+                        fancy_print && notify(first_started)
                         Logging.with_logger(Logging.NullLogger()) do 
                             Base.compilecache(pkg, sourcepath, toml_c, false) # don't print errors from indirect deps
                         end
+                        !fancy_print && lock(print_lock) do 
+                            str = string(pkg, color_string(" ✓", :green))
+                            println("  ", is_direct_dep ? str : color_string(str, :light_black))
+                        end
                         was_recompiled[pkg] = true
                     catch err
+                        !fancy_print && lock(print_lock) do 
+                            str = string(pkg, color_string(" ✗", Base.error_color()))
+                            println("  ", is_direct_dep ? str : color_string(str, :light_black))
+                        end
                         Operations.precomp_suspend!(pkg)
                         push!(failed_deps, pkg)
                     finally
@@ -1090,7 +1102,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         end
     end
     finished = true
-    notify(first_started) # in case of no-op
+    notify(first_started) # in cases of no-op or !fancy_print
     wait(t_print)
     failed_direct = filter(in(direct_deps), failed_deps)
     if !isempty(failed_direct)
