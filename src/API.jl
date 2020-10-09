@@ -1118,7 +1118,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         for d in failed_direct
             failed_list *= "  $d\n"
         end
-        throw(ErrorException("The following direct dependencies failed to precompile:\n$(failed_list)"))
+        pkgerror("The following direct dependencies failed to precompile:\n$(failed_list)")
     end
     nothing
 end
