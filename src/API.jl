@@ -1008,7 +1008,6 @@ function precompile(ctx::Context; internal_call::Bool=false)
                     finished && was_recompiled[dep] && continue
                     name = dep in direct_deps ? "  $(dep.name)" : string("  ", color_string(dep.name, :light_black))
                     if dep in failed_deps
-                        ansi_s, ansi_e = gen_ansi(col::Symbol)
                         str *= string(name, " ", color_string("✗", Base.error_color()), "\n")
                     elseif was_recompiled[dep]
                         str *= string(name, " ", color_string("✓", :green), "\n")
