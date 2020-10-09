@@ -926,6 +926,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     !internal_call && Operations.precomp_unsuspend!() 
+    action_help = internal_call ? " (tip: control auto with `pkg> precompile_auto true/false`)" : ""
     
     direct_deps = [
         Base.PkgId(uuid, name) 
@@ -993,7 +994,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
         wait(first_started)
         isempty(pkg_queue) && return
         fancy_print && lock(print_lock) do 
-            printpkgstyle(ctx, :Precompiling, "project...")
+            printpkgstyle(ctx, :Precompiling, "project...$action_help")
         end
         t = Timer(0; interval=1/10)
         anim_chars = ["◐","◓","◑","◒"]
@@ -1078,7 +1079,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
                     is_direct_dep = pkg in direct_deps
                     try
                         !fancy_print && lock(print_lock) do 
-                            isempty(pkg_queue) && printpkgstyle(ctx, :Precompiling, "project...")
+                            isempty(pkg_queue) && printpkgstyle(ctx, :Precompiling, "project...$action_help")
                         end
                         push!(pkg_queue, pkg)
                         started[pkg] = true
