@@ -124,6 +124,8 @@ end
             Pkg.generate("Dep1")
             Pkg.generate("Dep2")
             Pkg.generate("Dep3")
+            Pkg.generate("Dep4")
+            Pkg.generate("Dep5")
         end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
         
@@ -135,6 +137,16 @@ end
         Pkg.activate(".")
         Pkg.resolve()
         Pkg.precompile()
+
+        iob = IOBuffer()
+        Pkg.precompile_auto(true)
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
+        Pkg.precompile(io = iob)
+        @test String(take!(iob)) == "" # test that the previous precompile was a no-op
+        Pkg.precompile_auto(false)
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
+        Pkg.precompile(io = iob)
+        @test String(take!(iob)) != "" # test that the previous precompile did some work
     end
     
     # ignoring circular deps, to avoid deadlock

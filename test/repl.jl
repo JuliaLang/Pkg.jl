@@ -160,6 +160,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     cp(p1_path, p1_new_path)
                     Pkg.REPLMode.pkgstr("develop $(p1_new_path)")
                     Pkg.REPLMode.pkgstr("build; precompile")
+                    Pkg.REPLMode.pkgstr("precompile_auto true")
+                    Pkg.REPLMode.pkgstr("precompile_auto false")
                     @test realpath(Base.find_package("UnregisteredWithProject")) == realpath(joinpath(p1_new_path, "src", "UnregisteredWithProject.jl"))
                     @test Pkg.dependencies()[UUID("58262bb0-2073-11e8-3727-4fe182c12249")].version == v"0.1.0"
                     Pkg.test("UnregisteredWithProject")
