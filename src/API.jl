@@ -1043,7 +1043,7 @@ function precompile(ctx::Context; internal_call::Bool=false)
             str *= ")"
         end
         lock(print_lock) do
-            println(str)
+            println(str, "\n")
         end
     end
     toml_c = Base.TOMLCache()
@@ -1092,6 +1092,14 @@ function precompile(ctx::Context; internal_call::Bool=false)
     finished = true
     notify(first_started) # in case of no-op
     wait(t_print)
+    failed_direct = filter(in(direct_deps), failed_deps)
+    if !isempty(failed_direct)
+        failed_list = ""
+        for d in failed_direct
+            failed_list *= "  $d\n"
+        end
+        throw(ErrorException("The following direct dependencies failed to precompile:\n$(failed_list)"))
+    end
     nothing
 end
 
