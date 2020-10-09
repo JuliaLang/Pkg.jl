@@ -922,7 +922,7 @@ precompile(; kwargs...) = precompile(Context(); kwargs...)
 function precompile(ctx::Context; internal_call::Bool=false, io::IO=stdout)    
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
-    fancy_print = stdout isa Base.TTY
+    fancy_print = io isa Base.TTY
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     !internal_call && Operations.precomp_unsuspend!() 
