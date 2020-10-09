@@ -1088,13 +1088,13 @@ function precompile(ctx::Context; internal_call::Bool=false)
                             Base.compilecache(pkg, sourcepath, toml_c, false) # don't print errors from indirect deps
                         end
                         !fancy_print && lock(print_lock) do 
-                            str = string(pkg, color_string(" ✓", :green))
+                            str = string(pkg.name, color_string(" ✓", :green))
                             println("  ", is_direct_dep ? str : color_string(str, :light_black))
                         end
                         was_recompiled[pkg] = true
                     catch err
                         !fancy_print && lock(print_lock) do 
-                            str = string(pkg, color_string(" ✗", Base.error_color()))
+                            str = string(pkg.name, color_string(" ✗", Base.error_color()))
                             println("  ", is_direct_dep ? str : color_string(str, :light_black))
                         end
                         Operations.precomp_suspend!(pkg)
