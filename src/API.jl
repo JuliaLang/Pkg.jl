@@ -67,7 +67,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
             ret = $f(Context(), pkgs; kwargs...)
-            $(f in (:add, :up, :pin, :free, :build)) && _auto_precompile()
+            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile()
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
