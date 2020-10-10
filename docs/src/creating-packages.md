@@ -280,6 +280,8 @@ may fit your package better.
 
      * `CPLEX.jl` wraps the `CPLEX` library, which can be identified easily in a web search.
      * `MATLAB.jl` provides an interface to call the MATLAB engine from within Julia.
+7. Avoid naming a package closely to an existing package
+     * `Websocket` is too close to `WebSockets` and can be confusing to users. Rather use a new name such as `SimpleWebsockets`.
 
 ### Registering packages
 
