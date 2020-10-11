@@ -11,10 +11,13 @@ import Base.string
 using REPL.TerminalMenus
 
 using TOML
-import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
-import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
+import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
 import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
+using ..Pkg: Versions
+# Why is this using below below needed?
+using .Versions
 
 import Base: SHA1
 using SHA
@@ -33,7 +36,6 @@ export UUID, SHA1, VersionRange, VersionSpec,
     RegistrySpec
 export DepsValDict, CompatValDict, VersionsDict, DepsDict, CompatDict
 
-include("versions.jl")
 
 const DepsValDict   = Dict{VersionNumber,Dict{String,UUID}}
 const CompatValDict = Dict{VersionNumber,Dict{String,VersionSpec}}
