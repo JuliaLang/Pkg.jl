@@ -139,11 +139,11 @@ end
         Pkg.precompile()
 
         iob = IOBuffer()
-        Pkg.precompile_auto(true)
+        Pkg.autoprecompile(true)
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
         Pkg.precompile(io=iob)
         @test String(take!(iob)) == "" # test that the previous precompile was a no-op
-        Pkg.precompile_auto(false)
+        Pkg.autoprecompile(false)
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
         Pkg.precompile(io=iob)
         @test String(take!(iob)) != "" # test that the previous precompile did some work

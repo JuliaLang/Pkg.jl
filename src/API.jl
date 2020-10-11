@@ -906,9 +906,9 @@ function _is_stale(paths::Vector{String}, sourcepath::String, toml_c::Base.TOMLC
     return true
 end
 
-precompile_auto(b::Union{Bool,String}) = precompile_auto(Context(), b)
-precompile_auto(ctx::Context, s::String) = precompile_auto(ctx, parse(Bool, s))
-function precompile_auto(ctx::Context, b::Bool) 
+autoprecompile(b::Union{Bool,String}) = autoprecompile(Context(), b)
+autoprecompile(ctx::Context, s::String) = autoprecompile(ctx, parse(Bool, s))
+function autoprecompile(ctx::Context, b::Bool) 
     ENV["JULIA_PKG_PRECOMPILE_AUTO"] = b ? "1" : "0"
     nothing
 end

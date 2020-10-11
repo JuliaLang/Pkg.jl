@@ -143,13 +143,13 @@ Pkg.precompile()
 const precompile = API.precompile
 
 """
-    Pkg.precompile_auto(b::Bool)
+    Pkg.autoprecompile(b::Bool)
 
 Enable or disable whether Pkg actions will auto-precompile packages, which is enabled by default.
 
-This can also be controlled by setting the environment variable `JULIA_PKG_PRECOMPILE_AUTO` to "1" or "0"
+This can also be disabled by setting the environment variable `JULIA_PKG_PRECOMPILE_AUTO` to "0"
 """
-const precompile_auto = API.precompile_auto
+const autoprecompile = API.autoprecompile
 
 """
     Pkg.rm(pkg::Union{String, Vector{String}})

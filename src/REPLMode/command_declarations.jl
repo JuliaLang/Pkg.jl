@@ -312,13 +312,13 @@ Precompile all the dependencies of the project by running `import` on all of the
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
 """,
 ],
-PSA[:name => "precompile_auto",
-    :api => API.precompile_auto,
+PSA[:name => "autoprecompile",
+    :api => API.autoprecompile,
     :arg_count => 1 => 1,
     :arg_parser => ((x,y) -> map(expanduser, unwrap(x))),
     :description => "control whether auto-precompilation is enabled during pkg activities",
     :help => md"""
-    precompile_auto
+    autoprecompile
 
 Enable or disable whether Pkg actions will auto-precompile packages, which is enabled by default.
 This can also be controlled by setting the environment variable `JULIA_PKG_PRECOMPILE_AUTO` to "1" or "0"
