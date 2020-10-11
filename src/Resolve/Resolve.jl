@@ -2,10 +2,11 @@
 
 module Resolve
 
-using ..Types
+using ..Versions
 
 using Printf
 using Random
+using UUIDs
 
 export resolve, sanity_check, Graph, pkgID
 
@@ -59,6 +60,8 @@ include("maxsum.jl")
 
 "Resolve package dependencies."
 function resolve(graph::Graph)
+    simplify_graph!(graph)
+
     # attempt trivial solution first
     greedy_ok, sol = greedysolver(graph)
 

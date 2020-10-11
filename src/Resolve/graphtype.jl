@@ -235,8 +235,8 @@ mutable struct Graph
     cavfld::Vector{FieldValue}
 
     function Graph(
-            versions::VersionsDict,
-            compat::CompatDict,
+            versions::Dict{UUID, Set{VersionNumber}},
+            compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
             fixed::Dict{UUID,Fixed},
@@ -249,7 +249,7 @@ mutable struct Graph
         if julia_version !== nothing
             fixed[uuid_julia] = Fixed(julia_version)
             versions[uuid_julia] = Set([julia_version])
-            compat[uuid_julia] = CompatValDict(julia_version => valtype(CompatValDict)())
+            compat[uuid_julia] = Dict{VersionNumber,Dict{UUID,VersionSpec}}()
         else
             versions[uuid_julia] = Set([])
         end

@@ -11,11 +11,14 @@ import Base.string
 using REPL.TerminalMenus
 
 using TOML
-import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO, ..RegistryHandling
-import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
+
+import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
 import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
-using ..Pkg.Versions
+using ..Pkg: Versions, Environments, RegistryHandling
+# Why is this using below below needed?
+using .Versions
 
 import Base: SHA1
 using SHA
@@ -33,11 +36,7 @@ export UUID, SHA1, VersionRange, VersionSpec,
     printpkgstyle, isurl,
     projectfile_path, manifestfile_path,
     RegistrySpec
-export CompatValDict, VersionsDict, CompatDict
 
-const CompatValDict = Dict{VersionNumber,Dict{UUID,VersionSpec}}
-const VersionsDict  = Dict{UUID,Set{VersionNumber}}
-const CompatDict    = Dict{UUID,CompatValDict}
 
 const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 
@@ -93,7 +92,6 @@ Base.@kwdef mutable struct PackageSpec
     repo::GitRepo = GitRepo()
     path::Union{Nothing,String} = nothing
     pinned::Bool = false
-    mode::PackageMode = PKGMODE_PROJECT
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
@@ -103,7 +101,7 @@ PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-    a.pinned == b.pinned && a.mode == b.mode
+    a.pinned == b.pinned
 end
 
 function err_rep(pkg::PackageSpec)
@@ -277,13 +275,23 @@ mutable struct EnvCache
     # What these where at creation of the EnvCache
     original_project::Project
     original_manifest::Manifest
+
     # Registris
     registries::Vector{RegistryHandling.Registry}
+
+    # envs
+    envz::Environments.Environment
+    original_envz::Environments.Environment
 end
 
 function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
     project_dir = dirname(project_file)
+
+    envz = Environments.Environment(project_dir)
+    # Does this really need to be done here..?
+    original_envz = copy(envz)
+
     # read project file
     project = read_project(project_file)
     # initialize project package
@@ -315,7 +323,9 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         deepcopy(project),
         deepcopy(manifest),
         registries,
-        )
+        envz,
+        original_envz
+    )
 
     # Save initial environment for undo/redo functionality
     if !Pkg.API.saved_initial_snapshot[]
@@ -573,7 +583,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         @assert pkg.repo.rev !== nothing
         # First, we try resolving against the manifest and current registry to avoid updating registries if at all possible.
         # This also handles the case where we _only_ wish to switch the tracking branch for a package.
-        manifest_resolve!(ctx, [pkg]; force=true)
+        manifest_resolve!(ctx, [pkg])
         if isresolved(pkg)
             entry = manifest_info(ctx, pkg.uuid)
             if entry !== nothing && entry.repo.source !== nothing # reuse source in manifest
@@ -739,7 +749,6 @@ function project_deps_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     uuids = ctx.env.project.deps
     names = Dict(uuid => name for (name, uuid) in uuids)
     for pkg in pkgs
-        pkg.mode == PKGMODE_PROJECT || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             pkg.uuid = uuids[pkg.name]
         end
@@ -750,7 +759,7 @@ function project_deps_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
 end
 
 # Disambiguate name/uuid package specifications using manifest info.
-function manifest_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec}; force=false)
+function manifest_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     uuids = Dict{String,Vector{UUID}}()
     names = Dict{UUID,String}()
     for (uuid, entry) in ctx.env.manifest
@@ -758,7 +767,6 @@ function manifest_resolve!(ctx::Context, pkgs::AbstractVector{PackageSpec}; forc
         names[uuid] = entry.name # can be duplicate but doesn't matter
     end
     for pkg in pkgs
-        force || pkg.mode == PKGMODE_MANIFEST || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             length(uuids[pkg.name]) == 1 && (pkg.uuid = uuids[pkg.name][1])
         end

@@ -305,10 +305,13 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
 end
 
 
-function project_compatibility(ctx::Context, name::String)
-    return VersionSpec(Types.semver_spec(get(ctx.env.project.compat, name, ">= 0")))
+function project_compatibility(ctx::Context, uuid::UUID)
+    dep = get(ctx.env.envz.project.deps, uuid, nothing)
+    dep === nothing && return VersionSpec()
+    return dep.compat
 end
 
+const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
@@ -317,7 +320,7 @@ end
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # compatibility
     if ctx.julia_version !== nothing
-        v = intersect(ctx.julia_version, project_compatibility(ctx, "julia"))
+        v = intersect(ctx.julia_version, project_compatibility(ctx, JULIA_UUID))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
@@ -341,7 +344,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
 
     # check compat
     for pkg in pkgs
-        compat = project_compatibility(ctx, pkg.name)
+        compat = project_compatibility(ctx, pkg.uuid)
         v = intersect(pkg.version, compat)
         if isempty(v)
             throw(Resolve.ResolverError(
@@ -410,12 +413,12 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
 
     seen = Set{UUID}()
 
-    all_versions = VersionsDict()
-    all_compat   = CompatDict()
+    all_versions = Dict{UUID,Set{VersionNumber}}()
+    all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()    # pkg -> version -> dep -> compat
 
     for (fp, fx) in fixed
         all_versions[fp] = Set([fx.version])
-        all_compat[fp]   = Dict(fx.version => valtype(CompatValDict)())
+        all_compat[fp]   = Dict(fx.version => Dict{VersionNumber,Dict{UUID,VersionSpec}}())
     end
 
     while true
@@ -507,6 +510,7 @@ function get_archive_url_for_version(url::String, ref)
     end
     return nothing
 end
+
 
 # Returns if archive successfully installed
 function install_archive(
@@ -963,17 +967,18 @@ end
 ##############
 # Operations #
 ##############
-function rm(ctx::Context, pkgs::Vector{PackageSpec})
+function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     drop = UUID[]
     # find manifest-mode drops
-    for pkg in pkgs
-        pkg.mode == PKGMODE_MANIFEST || continue
-        info = manifest_info(ctx, pkg.uuid)
-        if info !== nothing
-            pkg.uuid in drop || push!(drop, pkg.uuid)
-        else
-            str = has_name(pkg) ? pkg.name : string(pkg.uuid)
-            @warn("`$str` not in manifest, ignoring")
+    if mode == PKGMODE_MANIFEST
+        for pkg in pkgs
+            info = manifest_info(ctx, pkg.uuid)
+            if info !== nothing
+                pkg.uuid in drop || push!(drop, pkg.uuid)
+            else
+                str = has_name(pkg) ? pkg.name : string(pkg.uuid)
+                @warn("`$str` not in manifest, ignoring")
+            end
         end
     end
     # drop reverse dependencies
@@ -989,22 +994,23 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         clean && break
     end
     # find project-mode drops
-    for pkg in pkgs
-        pkg.mode == PKGMODE_PROJECT || continue
-        found = false
-        for (name::String, uuid::UUID) in ctx.env.project.deps
-            pkg.name == name || pkg.uuid == uuid || continue
-            pkg.name == name ||
-                error("project file name mismatch for `$uuid`: $(pkg.name) ≠ $name")
-            pkg.uuid == uuid ||
-                error("project file UUID mismatch for `$name`: $(pkg.uuid) ≠ $uuid")
-            uuid in drop || push!(drop, uuid)
-            found = true
-            break
+    if mode == PKGMODE_PROJECT
+        for pkg in pkgs
+            found = false
+            for (name::String, uuid::UUID) in ctx.env.project.deps
+                pkg.name == name || pkg.uuid == uuid || continue
+                pkg.name == name ||
+                    error("project file name mismatch for `$uuid`: $(pkg.name) ≠ $name")
+                pkg.uuid == uuid ||
+                    error("project file UUID mismatch for `$name`: $(pkg.uuid) ≠ $uuid")
+                uuid in drop || push!(drop, uuid)
+                found = true
+                break
+            end
+            found && continue
+            str = has_name(pkg) ? pkg.name : string(pkg.uuid)
+            @warn("`$str` not in project, ignoring")
         end
-        found && continue
-        str = has_name(pkg) ? pkg.name : string(pkg.uuid)
-        @warn("`$str` not in project, ignoring")
     end
     # delete drops from project
     n = length(ctx.env.project.deps)
@@ -1138,6 +1144,57 @@ function _resolve(ctx::Context, pkgs::Vector{PackageSpec}, preserve::PreserveLev
         tiered_resolve(ctx, pkgs) :
         targeted_resolve(ctx, pkgs, preserve)
 end
+
+
+    #=
+# pkgs are to be added to project 
+function updated_environment(env::Environments, pkgs::Vector{PackageSpec})::Environment
+    # Deal with project having no file
+    proj = copy(env.project)
+    unresolved_manifest = copy(env.manifest)
+    for pkg in pkgs
+        dep = get(env.project, pkg.uuid, nothing)
+        compat, compat_str = dep === nothing ? (VersionSpec(), "") : (dep.compat, dep.compat_str)
+        proj.pkgs[pkg.uuid] = Dependency(pkg.name, pkg.uuid, compat, compat_str)
+
+        # pinned 
+        loc_info = if pkg.path !== nothing
+            pkg.path
+        elseif pkg.repo.source !== nothing
+            r = pkg.repo
+            Environment.GitLocation(r.source, r.rev, r.subdir, pkg.tree_hash)
+        else
+
+
+        unresolved_manifest.pkgs[pkg.uuid] = ManifestPkg(pkg.name, pkg.uuid, v"0", pkg.pinned
+    end
+    return Environment(proj, unresolved_manifest)
+end
+
+
+function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
+             preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform())
+    assert_can_add(ctx, pkgs)
+
+    new_env = ...
+    manifest = resolve(new_env)
+
+    for (i, pkg) in pairs(pkgs)
+        entry = manifest_info(ctx, pkg.uuid)
+        pkgs[i] = update_package_add(ctx, pkg, entry, is_dep(ctx, pkg))
+    end
+    foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
+    # resolve
+    pkgs, deps_map = _resolve(ctx, pkgs, preserve)
+    update_manifest!(ctx, pkgs, deps_map)
+
+    write_env(ctx.env) # write env before building
+    # TODO: Add extra buildwith extra build...
+    Pkg.instantiate(ctx)
+    show_update(ctx)
+end
+=#
+
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
              preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform())
