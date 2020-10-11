@@ -920,6 +920,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     !internal_call && Operations.precomp_unsuspend!()
+    action_help = internal_call ? " (tip: to disable auto set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
     
     direct_deps = [
         Base.PkgId(uuid, name) 
@@ -987,7 +988,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
         wait(first_started)
         isempty(pkg_queue) && return
         fancy_print && lock(print_lock) do 
-            printpkgstyle(io, :Precompiling, "project...")
+            printpkgstyle(io, :Precompiling, "project...$action_help")
         end
         t = Timer(0; interval=1/10)
         anim_chars = ["◐","◓","◑","◒"]
