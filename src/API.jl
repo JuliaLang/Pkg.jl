@@ -1034,7 +1034,8 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             wait(t)
         end
         ndeps = count(values(was_recompiled))
-        str = "$(ndeps) dependencies successfully precompiled"
+        plural = ndeps == 1 ? "y" : "ies"
+        str = "$(ndeps) dependenc$(plural) successfully precompiled"
         !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
         n_already = length(depsmap) - ndeps - length(failed_deps)
         if n_already > 0  || !isempty(skipped_deps) 
