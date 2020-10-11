@@ -345,10 +345,13 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
 end
 
 
-function project_compatibility(ctx::Context, name::String)
-    return VersionSpec(Types.semver_spec(get(ctx.env.project.compat, name, ">= 0")))
+function project_compatibility(ctx::Context, uuid::UUID)
+    dep = get(ctx.env.envz.project.deps, uuid, nothing)
+    dep === nothing && return VersionSpec()
+    return dep.compat
 end
 
+const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
@@ -357,7 +360,7 @@ end
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # compatibility
     if ctx.julia_version !== nothing
-        v = intersect(ctx.julia_version, project_compatibility(ctx, "julia"))
+        v = intersect(ctx.julia_version, project_compatibility(ctx, JULIA_UUID))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
@@ -381,7 +384,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
 
     # check compat
     for pkg in pkgs
-        compat = project_compatibility(ctx, pkg.name)
+        compat = project_compatibility(ctx, pkg.uuid)
         v = intersect(pkg.version, compat)
         if isempty(v)
             throw(Resolve.ResolverError(
