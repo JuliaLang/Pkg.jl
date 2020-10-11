@@ -1,5 +1,9 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+module Versions
+
+export VersionBound, VersionRange, VersionSpec, semver_spec, range_compressed_versionspec
+
 ################
 # VersionBound #
 ################
@@ -373,7 +377,7 @@ function semver_interval(m::RegexMatch)
     end
 end
 
-const _inf = Pkg.Types.VersionBound("*")
+const _inf = VersionBound("*")
 function inequality_interval(m::RegexMatch)
     @assert length(m.captures) == 4
     typ, _major, _minor, _patch = m.captures
@@ -439,3 +443,5 @@ Pair{Regex,Any}[
                 Regex("^((?:≥\\s*)|(?:>=\\s*)|(?:=\\s*)|(?:<\\s*)|(?:=\\s*))v?$version\$")  => inequality_interval,# < 0.2 >= 0.5,2
                 Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
 ]
+
+end
