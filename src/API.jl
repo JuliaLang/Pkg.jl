@@ -66,8 +66,9 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
-            ret = $f(Context(), pkgs; kwargs...)
-            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile()
+            ctx = Context()
+            ret = $f(ctx, pkgs; kwargs...)
+            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -912,9 +913,9 @@ function precompile_auto(ctx::Context, b::Bool)
     nothing
 end
 
-function _auto_precompile()
+function _auto_precompile(ctx::Context)
     if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
-        Pkg.precompile(internal_call=true)
+        Pkg.precompile(ctx, internal_call=true)
     end
 end
 
@@ -1168,7 +1169,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx) 
-        _auto_precompile()
+        _auto_precompile(ctx)
         return
     end
 
@@ -1223,7 +1224,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
     
-    _auto_precompile()
+    _auto_precompile(ctx)
 end
 
 
