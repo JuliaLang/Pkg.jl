@@ -919,7 +919,7 @@ function _auto_precompile()
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, io::IO=stdout)    
+function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
