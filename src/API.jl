@@ -898,9 +898,9 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     Operations.build(ctx, pkgs, verbose)
 end
 
-function _is_stale(paths::Vector{String}, sourcepath::String, toml_c::Base.TOMLCache)
+function _is_stale(paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
-        staledeps = Base.stale_cachefile(sourcepath, path_to_try, toml_c)
+        staledeps = Base.stale_cachefile(sourcepath, path_to_try)
         staledeps === true ? continue : return false
     end
     return true
@@ -1048,10 +1048,9 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             println(io, str, "\n")
         end
     end
-    toml_c = Base.TOMLCache()
     @sync for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
-        sourcepath = Base.locate_package(pkg, toml_c)
+        sourcepath = Base.locate_package(pkg)
         sourcepath === nothing && continue
         # Heuristic for when precompilation is disabled
         if occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String))
@@ -1067,7 +1066,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
             if !Operations.precomp_suspended(pkg) 
-                if (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
+                if (any_dep_recompiled || _is_stale(paths, sourcepath))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     try
@@ -1078,7 +1077,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                         started[pkg] = true
                         fancy_print && notify(first_started)
                         Logging.with_logger(Logging.NullLogger()) do 
-                            Base.compilecache(pkg, sourcepath, toml_c, false) # don't print errors from indirect deps
+                            Base.compilecache(pkg, sourcepath, false) # don't print errors from indirect deps
                         end
                         !fancy_print && lock(print_lock) do 
                             str = string(pkg.name, color_string(" ✓", :green))
