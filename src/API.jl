@@ -983,69 +983,76 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
     ansi_cleartoend = "\e[0J"
-    
+    show_report = true
+
     t_print = @async begin
-        wait(first_started)
-        isempty(pkg_queue) && return
-        fancy_print && lock(print_lock) do 
-            printpkgstyle(io, :Precompiling, "project...$action_help")
-        end
-        t = Timer(0; interval=1/10)
-        anim_chars = ["◐","◓","◑","◒"]
-        i = 1
-        last_length = 0
-        while !should_exit
-            lock(print_lock) do
-                term_size = Base.displaysize(stdout)::Tuple{Int,Int}
-                num_deps_show = term_size[1] - 2
-                pkg_queue_show = if !finished && length(pkg_queue) > num_deps_show 
-                    last(pkg_queue, num_deps_show)
-                else
-                    pkg_queue
-                end
-                str = ""
-                if i > 1
-                    str *= string(ansi_moveup(last_length), ansi_movecol1, ansi_cleartoend)
-                end
-                for dep in pkg_queue_show
-                    finished && was_recompiled[dep] && continue
-                    name = dep in direct_deps ? "  $(dep.name)" : string("  ", color_string(dep.name, :light_black))
-                    if dep in failed_deps
-                        str *= string(name, " ", color_string("✗", Base.error_color()), "\n")
-                    elseif was_recompiled[dep]
-                        str *= string(name, " ", color_string("✓", :green), "\n")
-                        @async begin # keep successful deps visible for short period 
-                            sleep(1);
-                            filter!(!isequal(dep), pkg_queue)
-                        end
-                    elseif started[dep]
-                        anim_char = anim_chars[i % length(anim_chars) + 1]
-                        anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                        str *= string(name, " $anim_char_colored\n")
-                    else
-                        str *= name * "\n"
-                    end
-                end
-                last_length = length(pkg_queue_show)
-                print(io, str)
+        try
+            wait(first_started)
+            isempty(pkg_queue) && return
+            fancy_print && lock(print_lock) do 
+                printpkgstyle(io, :Precompiling, "project...$action_help")
             end
-            should_exit = finished
-            i += 1
-            wait(t)
-        end
-        ndeps = count(values(was_recompiled))
-        plural = ndeps == 1 ? "y" : "ies"
-        str = "$(ndeps) dependenc$(plural) successfully precompiled"
-        !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
-        n_already = length(depsmap) - ndeps - length(failed_deps)
-        if n_already > 0  || !isempty(skipped_deps) 
-            str *= " ("
-            n_already > 0 && (str *= "$n_already already precompiled")
-            !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped in auto mode due to previous errors")
-            str *= ")"
-        end
-        lock(print_lock) do
-            println(io, str, "\n")
+            t = Timer(0; interval=1/10)
+            anim_chars = ["◐","◓","◑","◒"]
+            i = 1
+            last_length = 0
+            while !should_exit
+                lock(print_lock) do
+                    term_size = Base.displaysize(stdout)::Tuple{Int,Int}
+                    num_deps_show = term_size[1] - 2
+                    pkg_queue_show = if !finished && length(pkg_queue) > num_deps_show 
+                        last(pkg_queue, num_deps_show)
+                    else
+                        pkg_queue
+                    end
+                    str = ""
+                    if i > 1
+                        str *= string(ansi_moveup(last_length), ansi_movecol1, ansi_cleartoend)
+                    end
+                    for dep in pkg_queue_show
+                        finished && was_recompiled[dep] && continue
+                        name = dep in direct_deps ? "  $(dep.name)" : string("  ", color_string(dep.name, :light_black))
+                        if dep in failed_deps
+                            str *= string(name, " ", color_string("✗", Base.error_color()), "\n")
+                        elseif was_recompiled[dep]
+                            str *= string(name, " ", color_string("✓", :green), "\n")
+                            @async begin # keep successful deps visible for short period 
+                                sleep(1);
+                                filter!(!isequal(dep), pkg_queue)
+                            end
+                        elseif started[dep]
+                            anim_char = anim_chars[i % length(anim_chars) + 1]
+                            anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
+                            str *= string(name, " $anim_char_colored\n")
+                        else
+                            str *= name * "\n"
+                        end
+                    end
+                    last_length = length(pkg_queue_show)
+                    print(io, str)
+                end
+                should_exit = finished
+                i += 1
+                wait(t)
+            end
+            ndeps = count(values(was_recompiled))
+            plural = ndeps == 1 ? "y" : "ies"
+            str = "$(ndeps) dependenc$(plural) successfully precompiled"
+            !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
+            n_already = length(depsmap) - ndeps - length(failed_deps)
+            if n_already > 0  || !isempty(skipped_deps) 
+                str *= " ("
+                n_already > 0 && (str *= "$n_already already precompiled")
+                !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped in auto mode due to previous errors")
+                str *= ")"
+            end
+            show_report && lock(print_lock) do
+                println(io, str, "\n")
+            end
+        catch err
+            if err isa InterruptException
+                should_exit = true
+            end
         end
     end
     @sync for (pkg, deps) in depsmap
@@ -1070,12 +1077,16 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     try
-                        !fancy_print && lock(print_lock) do 
-                            isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
+                        !fancy_print && isempty(pkg_queue) && lock(print_lock) do 
+                            printpkgstyle(io, :Precompiling, "project...$action_help")
                         end
                         push!(pkg_queue, pkg)
                         started[pkg] = true
                         fancy_print && notify(first_started)
+                        if should_exit
+                            notify(was_processed[pkg])
+                            return
+                        end
                         Logging.with_logger(Logging.NullLogger()) do 
                             Base.compilecache(pkg, sourcepath, false) # don't print errors from indirect deps
                         end
@@ -1085,12 +1096,18 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                         end
                         was_recompiled[pkg] = true
                     catch err
-                        !fancy_print && lock(print_lock) do 
-                            str = string(pkg.name, color_string(" ✗", Base.error_color()))
-                            println(io, "  ", is_direct_dep ? str : color_string(str, :light_black))s
+                        if err isa InterruptException
+                            should_exit = true
+                            show_report = false
+                            notify(was_processed[pkg])
+                        else
+                            !fancy_print && lock(print_lock) do 
+                                str = string(pkg.name, color_string(" ✗", Base.error_color()))
+                                println(io, "  ", is_direct_dep ? str : color_string(str, :light_black))
+                            end
+                            Operations.precomp_suspend!(pkg)
+                            push!(failed_deps, pkg)
                         end
-                        Operations.precomp_suspend!(pkg)
-                        push!(failed_deps, pkg)
                     finally
                         Base.release(parallel_limiter)
                     end
