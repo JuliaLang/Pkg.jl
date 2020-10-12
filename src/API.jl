@@ -1027,7 +1027,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             finished && continue
                             anim_char = anim_chars[i % length(anim_chars) + 1]
                             anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                            str *= string(name, " $anim_char_colored\n")
+                            str *= string("$anim_char_colored", name, "\n")
                         else
                             finished && continue
                             str *= name * "\n"
