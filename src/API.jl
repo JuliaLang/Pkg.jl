@@ -920,7 +920,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     !internal_call && Operations.precomp_unsuspend!()
-    action_help = internal_call ? " (tip: to disable auto set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
+    action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
     
     direct_deps = [
         Base.PkgId(uuid, name) 
@@ -974,6 +974,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     first_started = Base.Event()
     finished = false
     should_exit = !fancy_print # exit print loop immediately if not fancy printing
+    interrupted = false
 
     function color_string(str::String, col::Symbol)
         enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
@@ -996,7 +997,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             anim_chars = ["◐","◓","◑","◒"]
             i = 1
             last_length = 0
-            while !should_exit
+            while !should_exit && !interrupted
                 lock(print_lock) do
                     term_size = Base.displaysize(stdout)::Tuple{Int,Int}
                     num_deps_show = term_size[1] - 2
@@ -1010,21 +1011,23 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                         str *= string(ansi_moveup(last_length), ansi_movecol1, ansi_cleartoend)
                     end
                     for dep in pkg_queue_show
-                        finished && was_recompiled[dep] && continue
                         name = dep in direct_deps ? "  $(dep.name)" : string("  ", color_string(dep.name, :light_black))
                         if dep in failed_deps
                             str *= string(name, " ", color_string("✗", Base.error_color()), "\n")
                         elseif was_recompiled[dep]
+                            finished && continue
                             str *= string(name, " ", color_string("✓", :green), "\n")
                             @async begin # keep successful deps visible for short period 
                                 sleep(1);
                                 filter!(!isequal(dep), pkg_queue)
                             end
                         elseif started[dep]
+                            finished && continue
                             anim_char = anim_chars[i % length(anim_chars) + 1]
                             anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                             str *= string(name, " $anim_char_colored\n")
                         else
+                            finished && continue
                             str *= name * "\n"
                         end
                     end
@@ -1051,7 +1054,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             end
         catch err
             if err isa InterruptException
-                should_exit = true
+                interrupted = true
             end
         end
     end
@@ -1072,22 +1075,22 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !Operations.precomp_suspended(pkg) 
+            if !Operations.precomp_suspended(pkg)
                 if (any_dep_recompiled || _is_stale(paths, sourcepath))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     try
-                        !fancy_print && isempty(pkg_queue) && lock(print_lock) do 
-                            printpkgstyle(io, :Precompiling, "project...$action_help")
+                        !fancy_print && lock(print_lock) do
+                            isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
                         end
                         push!(pkg_queue, pkg)
                         started[pkg] = true
                         fancy_print && notify(first_started)
-                        if should_exit
+                        if interrupted
                             notify(was_processed[pkg])
                             return
                         end
-                        Logging.with_logger(Logging.NullLogger()) do 
+                        Logging.with_logger(Logging.NullLogger()) do
                             Base.compilecache(pkg, sourcepath, false) # don't print errors from indirect deps
                         end
                         !fancy_print && lock(print_lock) do 
@@ -1097,7 +1100,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                         was_recompiled[pkg] = true
                     catch err
                         if err isa InterruptException
-                            should_exit = true
+                            interrupted = true
                             show_report = false
                             notify(was_processed[pkg])
                         else
