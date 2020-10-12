@@ -139,11 +139,13 @@ end
         Pkg.precompile()
 
         iob = IOBuffer()
-        ENV["JULIA_PKG_PRECOMPILE_AUTO"]="1"
+        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
+        println("Auto precompilation enabled")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
         Pkg.precompile(io=iob)
         @test String(take!(iob)) == "" # test that the previous precompile was a no-op
-        ENV["JULIA_PKG_PRECOMPILE_AUTO"]="0"
+        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
+        println("Auto precompilation disabled")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
         Pkg.precompile(io=iob)
         @test String(take!(iob)) != "" # test that the previous precompile did some work

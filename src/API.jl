@@ -985,7 +985,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     ansi_cleartoend = "\e[0J"
     show_report = true
 
-    t_print = @async begin
+    t_print = @async begin # fancy print loop
         try
             wait(first_started)
             isempty(pkg_queue) && return
@@ -1055,7 +1055,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             end
         end
     end
-    @sync for (pkg, deps) in depsmap
+    @sync for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         sourcepath === nothing && continue
