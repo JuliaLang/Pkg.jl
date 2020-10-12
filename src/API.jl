@@ -1015,10 +1015,10 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                     for dep in pkg_queue_show
                         name = dep in direct_deps ? "  $(dep.name)" : string("  ", color_string(dep.name, :light_black))
                         if dep in failed_deps
-                            str *= string(name, " ", color_string("✗", Base.error_color()), "\n")
+                            str *= string(color_string("✗", Base.error_color()), " $name", "\n")
                         elseif was_recompiled[dep]
                             finished && continue
-                            str *= string(name, " ", color_string("✓", :green), "\n")
+                            str *= string(color_string("✓", :green), " $name", "\n")
                             @async begin # keep successful deps visible for short period 
                                 sleep(1);
                                 filter!(!isequal(dep), pkg_queue)
@@ -1027,7 +1027,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             finished && continue
                             anim_char = anim_chars[i % length(anim_chars) + 1]
                             anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                            str *= string("$anim_char_colored", name, "\n")
+                            str *= string("$anim_char_colored ", name, "\n")
                         else
                             finished && continue
                             str *= name * "\n"
