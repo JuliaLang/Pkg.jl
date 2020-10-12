@@ -120,7 +120,7 @@ function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
     end
 
     # Otherwise actually run the verification
-    return hash.bytes == GitTools.tree_hash(artifact_path(hash))
+    return all(hash.bytes .== GitTools.tree_hash(artifact_path(hash)))
 end
 
 """

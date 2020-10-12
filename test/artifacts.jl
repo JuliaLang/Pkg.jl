@@ -102,7 +102,7 @@ end
         hash = create_artifact_chmod(creator)
 
         # Ensure it hashes to the correct gitsha:
-        @test hash.bytes == hex2bytes(known_hash)
+        @test all(hash.bytes .== hex2bytes(known_hash))
 
         # Test that we can look it up and that it sits in the right place
         @test basename(dirname(artifact_path(hash))) == "artifacts"

@@ -124,6 +124,8 @@ end
             Pkg.generate("Dep1")
             Pkg.generate("Dep2")
             Pkg.generate("Dep3")
+            Pkg.generate("Dep4")
+            Pkg.generate("Dep5")
         end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
         
@@ -135,6 +137,18 @@ end
         Pkg.activate(".")
         Pkg.resolve()
         Pkg.precompile()
+
+        iob = IOBuffer()
+        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
+        println("Auto precompilation enabled")
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
+        Pkg.precompile(io=iob)
+        @test String(take!(iob)) == "" # test that the previous precompile was a no-op
+        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
+        println("Auto precompilation disabled")
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
+        Pkg.precompile(io=iob)
+        @test String(take!(iob)) != "" # test that the previous precompile did some work
     end
     
     # ignoring circular deps, to avoid deadlock

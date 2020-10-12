@@ -4,6 +4,8 @@ module PkgTests
 
 import Pkg
 
+ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
+
 if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
     s = read(`curl -sLI $(server)`, String);
     @info "Pkg Server metadata:\n$s"

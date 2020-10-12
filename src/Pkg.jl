@@ -131,6 +131,11 @@ Precompile all the dependencies of the project in parallel.
     Errors will only throw when precompiling the top-level dependencies, given that 
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
 
+!!! note
+    This method is called automatically after any Pkg action that changes the manifest.
+    Any packages that have previously errored during precompilation won't be retried in auto mode 
+    until they have changed. To disable automatic precompilation set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`
+
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3. On earlier versions
     you can use `Pkg.API.precompile()` or the `precompile` Pkg REPL command.

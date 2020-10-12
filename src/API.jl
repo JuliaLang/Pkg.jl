@@ -7,6 +7,7 @@ using Printf
 import Random
 using Dates
 import LibGit2
+import Logging
 
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
@@ -65,8 +66,9 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
-            ret = $f(Context(), pkgs; kwargs...)
-            $(f in (:add, :up, :pin, :free, :build)) && _auto_precompile()
+            ctx = Context()
+            ret = $f(ctx, pkgs; kwargs...)
+            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -896,33 +898,35 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     Operations.build(ctx, pkgs, verbose)
 end
 
-function _is_stale(paths::Vector{String}, sourcepath::String, toml_c::Base.TOMLCache)
+function _is_stale(paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
-        staledeps = Base.stale_cachefile(sourcepath, path_to_try, toml_c)
+        staledeps = Base.stale_cachefile(sourcepath, path_to_try)
         staledeps === true ? continue : return false
     end
     return true
 end
 
-function _auto_precompile()
-    if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "0")) == 1
-        Pkg.precompile(internal_call=true)
+function _auto_precompile(ctx::Context)
+    if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
+        Pkg.precompile(ctx, internal_call=true)
     end
 end
 
-precompile(;internal_call::Bool=false) = precompile(Context(), internal_call=internal_call)
-function precompile(ctx::Context; internal_call::Bool=false)    
+precompile(; kwargs...) = precompile(Context(); kwargs...)
+function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
-    
+    fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
+
     # when manually called, unsuspend all packages that were suspended due to precomp errors
-    !internal_call && Operations.precomp_unsuspend!() 
+    !internal_call && Operations.precomp_unsuspend!()
+    action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
     
     direct_deps = [
         Base.PkgId(uuid, name) 
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
-    
+
     man = Pkg.Types.read_manifest(ctx.env.manifest_file)
     deps_pair_or_nothing = Iterators.map(man) do dep
         pkg = Base.PkgId(first(dep), last(dep).name)
@@ -938,10 +942,12 @@ function precompile(ctx::Context; internal_call::Bool=false)
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
     end
-    
+
+    started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
     for pkgid in keys(depsmap)
+        started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
     end
@@ -959,13 +965,102 @@ function precompile(ctx::Context; internal_call::Bool=false)
             !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
         end
     end
-    
+
+    pkg_queue = Base.PkgId[]
+    failed_deps = Base.PkgId[]
+    skipped_deps = Base.PkgId[]
+
     print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
-    errored = false
-    toml_c = Base.TOMLCache()
-    @sync for (pkg, deps) in depsmap
+    first_started = Base.Event()
+    finished = false
+    should_exit = !fancy_print # exit print loop immediately if not fancy printing
+    interrupted = false
+
+    function color_string(str::String, col::Symbol)
+        enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
+        disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
+        return string(enable_ansi, str, disable_ansi)
+    end
+    ansi_moveup(n::Int) = string("\e[", n, "A")
+    ansi_movecol1 = "\e[1G"
+    ansi_cleartoend = "\e[0J"
+    show_report = true
+
+    t_print = @async begin # fancy print loop
+        try
+            wait(first_started)
+            isempty(pkg_queue) && return
+            fancy_print && lock(print_lock) do 
+                printpkgstyle(io, :Precompiling, "project...$action_help")
+            end
+            t = Timer(0; interval=1/10)
+            anim_chars = ["◐","◓","◑","◒"]
+            i = 1
+            last_length = 0
+            while !should_exit && !interrupted
+                lock(print_lock) do
+                    term_size = Base.displaysize(stdout)::Tuple{Int,Int}
+                    num_deps_show = term_size[1] - 2
+                    pkg_queue_show = if !finished && length(pkg_queue) > num_deps_show 
+                        last(pkg_queue, num_deps_show)
+                    else
+                        pkg_queue
+                    end
+                    str = ""
+                    if i > 1
+                        str *= string(ansi_moveup(last_length), ansi_movecol1, ansi_cleartoend)
+                    end
+                    for dep in pkg_queue_show
+                        name = dep in direct_deps ? "  $(dep.name)" : string("  ", color_string(dep.name, :light_black))
+                        if dep in failed_deps
+                            str *= string(name, " ", color_string("✗", Base.error_color()), "\n")
+                        elseif was_recompiled[dep]
+                            finished && continue
+                            str *= string(name, " ", color_string("✓", :green), "\n")
+                            @async begin # keep successful deps visible for short period 
+                                sleep(1);
+                                filter!(!isequal(dep), pkg_queue)
+                            end
+                        elseif started[dep]
+                            finished && continue
+                            anim_char = anim_chars[i % length(anim_chars) + 1]
+                            anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
+                            str *= string(name, " $anim_char_colored\n")
+                        else
+                            finished && continue
+                            str *= name * "\n"
+                        end
+                    end
+                    last_length = length(pkg_queue_show)
+                    print(io, str)
+                end
+                should_exit = finished
+                i += 1
+                wait(t)
+            end
+            ndeps = count(values(was_recompiled))
+            plural = ndeps == 1 ? "y" : "ies"
+            str = "$(ndeps) dependenc$(plural) successfully precompiled"
+            !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
+            n_already = length(depsmap) - ndeps - length(failed_deps)
+            if n_already > 0  || !isempty(skipped_deps) 
+                str *= " ("
+                n_already > 0 && (str *= "$n_already already precompiled")
+                !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped in auto mode due to previous errors")
+                str *= ")"
+            end
+            show_report && lock(print_lock) do
+                println(io, str, "\n")
+            end
+        catch err
+            if err isa InterruptException
+                interrupted = true
+            end
+        end
+    end
+    @sync for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
-        sourcepath = Base.locate_package(pkg, toml_c)
+        sourcepath = Base.locate_package(pkg)
         sourcepath === nothing && continue
         # Heuristic for when precompilation is disabled
         if occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String))
@@ -980,39 +1075,62 @@ function precompile(ctx::Context; internal_call::Bool=false)
             
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !errored && !Operations.precomp_suspended(pkg) && (any_dep_recompiled || _is_stale(paths, sourcepath, toml_c))
-                
-                Base.acquire(parallel_limiter)
-                if errored # catch things queued before error occurred
-                    notify(was_processed[pkg])
-                    Base.release(parallel_limiter)
-                    return
-                end
-                is_direct_dep =  pkg in direct_deps
-                try
-                    lock(print_lock) do
-                        if !any(values(was_recompiled))
-                            printpkgstyle(ctx, :Precompiling, "project...")
+            if !Operations.precomp_suspended(pkg)
+                if (any_dep_recompiled || _is_stale(paths, sourcepath))
+                    Base.acquire(parallel_limiter)
+                    is_direct_dep = pkg in direct_deps
+                    try
+                        !fancy_print && lock(print_lock) do
+                            isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
                         end
-                        was_recompiled[pkg] = true # needs to be in lock to prevent async race on printing
+                        push!(pkg_queue, pkg)
+                        started[pkg] = true
+                        fancy_print && notify(first_started)
+                        if interrupted
+                            notify(was_processed[pkg])
+                            return
+                        end
+                        Logging.with_logger(Logging.NullLogger()) do
+                            Base.compilecache(pkg, sourcepath, false) # don't print errors from indirect deps
+                        end
+                        !fancy_print && lock(print_lock) do 
+                            str = string(pkg.name, color_string(" ✓", :green))
+                            println(io, "  ", is_direct_dep ? str : color_string(str, :light_black))
+                        end
+                        was_recompiled[pkg] = true
+                    catch err
+                        if err isa InterruptException
+                            interrupted = true
+                            show_report = false
+                            notify(was_processed[pkg])
+                        else
+                            !fancy_print && lock(print_lock) do 
+                                str = string(pkg.name, color_string(" ✗", Base.error_color()))
+                                println(io, "  ", is_direct_dep ? str : color_string(str, :light_black))
+                            end
+                            Operations.precomp_suspend!(pkg)
+                            push!(failed_deps, pkg)
+                        end
+                    finally
+                        Base.release(parallel_limiter)
                     end
-                    Base.compilecache(pkg, sourcepath, toml_c, is_direct_dep) # don't print errors from indirect deps
-                catch err
-                    Operations.precomp_suspend!(pkg)
-                    if is_direct_dep # only throw errors for direct dependencies (in Project)
-                        errored = true
-                        throw(err) 
-                    else
-                        @warn "Precompilation failed for indirect dependency $(pkg)"
-                    end
-                finally
-                    notify(was_processed[pkg])
-                    Base.release(parallel_limiter)
                 end
             else
-                notify(was_processed[pkg])
+                push!(skipped_deps, pkg)
             end
+            notify(was_processed[pkg])
         end
+    end
+    finished = true
+    notify(first_started) # in cases of no-op or !fancy_print
+    wait(t_print)
+    failed_direct = filter(in(direct_deps), failed_deps)
+    if !isempty(failed_direct)
+        failed_list = ""
+        for d in failed_direct
+            failed_list *= "  $d\n"
+        end
+        pkgerror("The following direct dependencies failed to precompile:\n$(failed_list)")
     end
     nothing
 end
@@ -1064,7 +1182,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx) 
-        _auto_precompile()
+        _auto_precompile(ctx)
         return
     end
 
@@ -1119,7 +1237,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
     
-    _auto_precompile()
+    _auto_precompile(ctx)
 end
 
 
