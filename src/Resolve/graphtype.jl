@@ -594,7 +594,7 @@ pkgID_color(pkgID) = CONFLICT_COLORS[mod1(hash(pkgID), end)]
 logstr(pkgID) = logstr(pkgID, pkgID)
 function logstr(pkgID, args...)
     # workout the string with the color codes, check stderr to decide if color is enabled
-    return sprint(args; context=stderr) do io, iargs
+    return sprint(args; context=stderr::IO) do io, iargs
         printstyled(io, iargs...; color=pkgID_color(pkgID))
     end
 end
