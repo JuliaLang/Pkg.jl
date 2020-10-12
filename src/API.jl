@@ -953,13 +953,15 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     end
     
     # guarding against circular deps
-    function in_deps(pkg, deps, dmap)
+    circular_deps = Base.PkgId[]
+    function in_deps(pkgs, deps, dmap)
         isempty(deps) && return false
-        pkg in deps && return true
-        return any(dep->in_deps(pkg, dmap[dep], dmap), deps)
+        !isempty(intersect(pkgs,deps)) && return true 
+        return any(dep->in_deps(vcat(pkgs, dep), dmap[dep], dmap), deps)
     end
     for (pkg, deps) in depsmap
-        if in_deps(pkg, deps, depsmap)
+        if in_deps([pkg], deps, depsmap)
+            push!(circular_deps, pkg)
             notify(was_processed[pkg])
             Operations.precomp_suspend!(pkg)
             !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
@@ -1046,7 +1048,8 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             if n_already > 0  || !isempty(skipped_deps) 
                 str *= " ("
                 n_already > 0 && (str *= "$n_already already precompiled")
-                !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped in auto mode due to previous errors")
+                !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
+                !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
                 str *= ")"
             end
             show_report && lock(print_lock) do
@@ -1116,7 +1119,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                     end
                 end
             else
-                push!(skipped_deps, pkg)
+                !in(pkg, circular_deps) && push!(skipped_deps, pkg)
             end
             notify(was_processed[pkg])
         end
