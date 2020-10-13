@@ -1013,12 +1013,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                         str *= string(ansi_moveup(last_length), ansi_movecol1, ansi_cleartoend)
                     end
                     for dep in pkg_queue_show
-                        name = dep in direct_deps ? "  $(dep.name)" : string("  ", color_string(dep.name, :light_black))
+                        name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                         if dep in failed_deps
-                            str *= string(name, " ", color_string("✗", Base.error_color()), "\n")
+                            str *= string(color_string("  ✗ ", Base.error_color()), name, "\n")
                         elseif was_recompiled[dep]
                             finished && continue
-                            str *= string(name, " ", color_string("✓", :green), "\n")
+                            str *= string(color_string("  ✓ ", :green), name, "\n")
                             @async begin # keep successful deps visible for short period 
                                 sleep(1);
                                 filter!(!isequal(dep), pkg_queue)
@@ -1027,10 +1027,10 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             finished && continue
                             anim_char = anim_chars[i % length(anim_chars) + 1]
                             anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                            str *= string(name, " $anim_char_colored\n")
+                            str *= string("  $anim_char_colored ", name, "\n")
                         else
                             finished && continue
-                            str *= name * "\n"
+                            str *= "    " * name * "\n"
                         end
                     end
                     last_length = length(pkg_queue_show)
@@ -1097,8 +1097,8 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             Base.compilecache(pkg, sourcepath, false) # don't print errors from indirect deps
                         end
                         !fancy_print && lock(print_lock) do 
-                            str = string(pkg.name, color_string(" ✓", :green))
-                            println(io, "  ", is_direct_dep ? str : color_string(str, :light_black))
+                            str = string(color_string("  ✓ ", :green), pkg.name)
+                            println(io, is_direct_dep ? str : color_string(str, :light_black))
                         end
                         was_recompiled[pkg] = true
                     catch err
@@ -1108,8 +1108,8 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             notify(was_processed[pkg])
                         else
                             !fancy_print && lock(print_lock) do 
-                                str = string(pkg.name, color_string(" ✗", Base.error_color()))
-                                println(io, "  ", is_direct_dep ? str : color_string(str, :light_black))
+                                str = string(color_string("  ✗ ", Base.error_color()), pkg.name)
+                                println(io, is_direct_dep ? str : color_string(str, :light_black))
                             end
                             Operations.precomp_suspend!(pkg)
                             push!(failed_deps, pkg)
