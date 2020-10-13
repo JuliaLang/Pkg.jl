@@ -1127,14 +1127,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     finished = true
     notify(first_started) # in cases of no-op or !fancy_print
     wait(t_print)
-    failed_direct = filter(in(direct_deps), failed_deps)
-    if !isempty(failed_direct)
-        failed_list = ""
-        for d in failed_direct
-            failed_list *= "  $d\n"
-        end
-        pkgerror("The following direct dependencies failed to precompile:\n$(failed_list)")
-    end
+    
     nothing
 end
 
