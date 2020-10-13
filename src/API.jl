@@ -1143,7 +1143,7 @@ end
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
-                     platform::AbstractPlatform=HostPlatform(), kwargs...)
+                     platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
@@ -1178,7 +1178,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx) 
-        _auto_precompile(ctx)
+        allow_autoprecomp && _auto_precompile(ctx)
         return
     end
 
@@ -1233,7 +1233,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
     
-    _auto_precompile(ctx)
+    allow_autoprecomp && _auto_precompile(ctx)
 end
 
 

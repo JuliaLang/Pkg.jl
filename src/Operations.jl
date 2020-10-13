@@ -1565,7 +1565,7 @@ testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
               test_fn=nothing)
-    Pkg.instantiate(ctx)
+    Pkg.instantiate(ctx; allow_autoprecomp = false)
 
     # load manifest data
     for pkg in pkgs
