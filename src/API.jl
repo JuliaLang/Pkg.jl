@@ -969,7 +969,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     end
 
     pkg_queue = Base.PkgId[]
-    failed_deps = Base.PkgId[]
+    failed_deps = Dict{Base.PkgId, String}()
     skipped_deps = Base.PkgId[]
 
     print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
@@ -1014,7 +1014,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                     end
                     for dep in pkg_queue_show
                         name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
-                        if dep in failed_deps
+                        if haskey(failed_deps, dep)
                             str *= string(color_string("  ✗ ", Base.error_color()), name, "\n")
                         elseif was_recompiled[dep]
                             finished && continue
@@ -1039,21 +1039,6 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 should_exit = finished
                 i += 1
                 wait(t)
-            end
-            ndeps = count(values(was_recompiled))
-            plural = ndeps == 1 ? "y" : "ies"
-            str = "$(ndeps) dependenc$(plural) successfully precompiled"
-            !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
-            n_already = length(depsmap) - ndeps - length(failed_deps)
-            if n_already > 0  || !isempty(skipped_deps) 
-                str *= " ("
-                n_already > 0 && (str *= "$n_already already precompiled")
-                !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
-                !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
-                str *= ")"
-            end
-            show_report && lock(print_lock) do
-                println(io, str)
             end
         catch err
             if err isa InterruptException
@@ -1085,6 +1070,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 if (any_dep_recompiled || _is_stale(paths, sourcepath))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
+                    iob = IOBuffer()
                     try
                         !fancy_print && lock(print_lock) do
                             isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
@@ -1097,7 +1083,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             return
                         end
                         Logging.with_logger(Logging.NullLogger()) do
-                            Base.compilecache(pkg, sourcepath, false) # don't print errors from indirect deps
+                            Base.compilecache(pkg, sourcepath, iob) # don't print errors from indirect deps
                         end
                         !fancy_print && lock(print_lock) do 
                             str = string(color_string("  ✓ ", :green), pkg.name)
@@ -1113,12 +1099,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                                 println(io, " Interrupted: Exiting precompilation...")
                             end
                         else
+                            failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
                             !fancy_print && lock(print_lock) do 
                                 str = string(color_string("  ✗ ", Base.error_color()), pkg.name)
                                 println(io, is_direct_dep ? str : color_string(str, :light_black))
                             end
                             Operations.precomp_suspend!(pkg)
-                            push!(failed_deps, pkg)
                         end
                     finally
                         Base.release(parallel_limiter)
@@ -1133,6 +1119,33 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     finished = true
     notify(first_started) # in cases of no-op or !fancy_print
     wait(t_print)
+
+    ndeps = count(values(was_recompiled))
+    plural = ndeps == 1 ? "y" : "ies"
+    str = "$(ndeps) dependenc$(plural) successfully precompiled"
+    !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
+    n_already = length(depsmap) - ndeps - length(failed_deps)
+    if n_already > 0  || !isempty(skipped_deps) 
+        str *= " ("
+        n_already > 0 && (str *= "$n_already already precompiled")
+        !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
+        !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
+        str *= ")"
+    end
+    show_report && lock(print_lock) do
+        println(io, str)
+    end
+
+    err_str = ""
+    for (dep, err) in failed_deps
+        if dep in direct_deps
+            err_str *= "\n" * "$dep" * "\n\n" * err * "\n"
+        end
+    end
+    if err_str != ""
+        println(io, "")
+        pkgerror("The following direct dependencies failed to precompile:\n$(err_str)")
+    end
     
     nothing
 end
