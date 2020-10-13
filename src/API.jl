@@ -1135,16 +1135,17 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     show_report && lock(print_lock) do
         println(io, str)
     end
-
-    err_str = ""
-    for (dep, err) in failed_deps
-        if dep in direct_deps
-            err_str *= "\n" * "$dep" * "\n\n" * err * "\n"
+    if !internal_call
+        err_str = ""
+        for (dep, err) in failed_deps
+            if dep in direct_deps
+                err_str *= "\n" * "$dep" * "\n\n" * err * "\n"
+            end
         end
-    end
-    if err_str != ""
-        println(io, "")
-        pkgerror("The following direct dependencies failed to precompile:\n$(err_str)")
+        if err_str != ""
+            println(io, "")
+            pkgerror("The following direct dependencies failed to precompile:\n$(err_str)")
+        end
     end
     
     nothing
