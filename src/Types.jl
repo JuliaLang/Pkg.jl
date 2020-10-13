@@ -11,10 +11,13 @@ import Base.string
 using REPL.TerminalMenus
 
 using TOML
-import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
-import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
+import ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
 import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
+using ..Pkg: Versions, Environments
+# Why is this using below below needed?
+using .Versions
 
 import Base: SHA1
 using SHA
@@ -33,7 +36,6 @@ export UUID, SHA1, VersionRange, VersionSpec,
     RegistrySpec
 export DepsValDict, CompatValDict, VersionsDict, DepsDict, CompatDict
 
-include("versions.jl")
 
 const DepsValDict   = Dict{VersionNumber,Dict{String,UUID}}
 const CompatValDict = Dict{VersionNumber,Dict{String,VersionSpec}}
@@ -264,6 +266,10 @@ mutable struct EnvCache
     # What these where at creation of the EnvCache
     original_project::Project
     original_manifest::Manifest
+    # envs
+    envz::Environments.Environment
+    original_envz::Environments.Environment
+
     # registered package info:
     uuids::Dict{String,Vector{UUID}}
     paths::Dict{UUID,Vector{String}}
@@ -273,6 +279,11 @@ end
 function EnvCache(env::Union{Nothing,String}=nothing)
     project_file = find_project_file(env)
     project_dir = dirname(project_file)
+
+    envz = Environments.Environment(project_dir)
+    # Does this really need to be done here..?
+    original_envz = copy(envz)
+
     # read project file
     project = read_project(project_file)
     # initialize project package
@@ -304,6 +315,8 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         manifest,
         deepcopy(project),
         deepcopy(manifest),
+        envz,
+        original_envz,
         uuids,
         paths,
         names,)
