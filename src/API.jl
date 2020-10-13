@@ -914,21 +914,21 @@ end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
 function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
-    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS + 1)))
+    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS::Int + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
-    if internal_call 
+    if internal_call
         Operations.recall_suspended_packages()
     else
         Operations.precomp_unsuspend!()
     end
 
     action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
-    
+
     direct_deps = [
-        Base.PkgId(uuid, name) 
+        Base.PkgId(uuid, name)
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
 
@@ -939,11 +939,11 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
         deps = [Base.PkgId(last(x), first(x)) for x in last(dep).deps]
         return pkg => filter!(!Base.in_sysimage, deps)
     end
-    depsmap = Dict(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
-    
+    depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
+
     if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
         depsmap[Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name)] = [
-            Base.PkgId(last(x), first(x)) 
+            Base.PkgId(last(x), first(x))
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
     end
@@ -956,12 +956,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
     end
-    
+
     # guarding against circular deps
     circular_deps = Base.PkgId[]
     function in_deps(pkgs, deps, dmap)
         isempty(deps) && return false
-        !isempty(intersect(pkgs,deps)) && return true 
+        !isempty(intersect(pkgs,deps)) && return true
         return any(dep->in_deps(vcat(pkgs, dep), dmap[dep], dmap), deps)
     end
     for (pkg, deps) in depsmap
@@ -977,11 +977,11 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     failed_deps = Dict{Base.PkgId, String}()
     skipped_deps = Base.PkgId[]
 
-    print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
+    print_lock = stdout isa Base.LibuvStream ? stdout.lock::ReentrantLock : ReentrantLock()
     first_started = Base.Event()
-    finished = false
-    should_exit = !fancy_print # exit print loop immediately if not fancy printing
-    interrupted = false
+    finished::Bool = false
+    should_exit::Bool = !fancy_print # exit print loop immediately if not fancy printing
+    interrupted::Bool = false
 
     function color_string(str::String, col::Symbol)
         enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
@@ -991,13 +991,13 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
     ansi_cleartoend = "\e[0J"
-    show_report = true
+    show_report::Bool = true
 
     t_print = @async begin # fancy print loop
         try
             wait(first_started)
             isempty(pkg_queue) && return
-            fancy_print && lock(print_lock) do 
+            fancy_print && lock(print_lock) do
                 printpkgstyle(io, :Precompiling, "project...$action_help")
             end
             t = Timer(0; interval=1/10)
@@ -1008,7 +1008,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 lock(print_lock) do
                     term_size = Base.displaysize(stdout)::Tuple{Int,Int}
                     num_deps_show = term_size[1] - 2
-                    pkg_queue_show = if !finished && length(pkg_queue) > num_deps_show 
+                    pkg_queue_show = if !finished && length(pkg_queue) > num_deps_show
                         last(pkg_queue, num_deps_show)
                     else
                         pkg_queue
@@ -1024,7 +1024,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                         elseif was_recompiled[dep]
                             finished && continue
                             str *= string(color_string("  ✓ ", :green), name, "\n")
-                            @async begin # keep successful deps visible for short period 
+                            @async begin # keep successful deps visible for short period
                                 sleep(1);
                                 filter!(!isequal(dep), pkg_queue)
                             end
@@ -1063,12 +1063,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             notify(was_processed[pkg])
             continue
         end
-        
+
         @async begin
             for dep in deps # wait for deps to finish
                 wait(was_processed[dep])
             end
-            
+
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
             if !Operations.precomp_suspended(pkg)
@@ -1088,9 +1088,9 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             return
                         end
                         Logging.with_logger(Logging.NullLogger()) do
-                            Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull 
+                            Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
                         end
-                        !fancy_print && lock(print_lock) do 
+                        !fancy_print && lock(print_lock) do
                             str = string(color_string("  ✓ ", :green), pkg.name)
                             println(io, is_direct_dep ? str : color_string(str, :light_black))
                         end
@@ -1105,7 +1105,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             end
                         else
                             failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
-                            !fancy_print && lock(print_lock) do 
+                            !fancy_print && lock(print_lock) do
                                 str = string(color_string("  ✗ ", Base.error_color()), pkg.name)
                                 println(io, is_direct_dep ? str : color_string(str, :light_black))
                             end
@@ -1132,7 +1132,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
         str = "$(ndeps) dependenc$(plural) successfully precompiled"
         !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
         n_already = length(depsmap) - ndeps - length(failed_deps)
-        if n_already > 0  || !isempty(skipped_deps) 
+        if n_already > 0  || !isempty(skipped_deps)
             str *= " ("
             n_already > 0 && (str *= "$n_already already precompiled")
             !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
@@ -1207,7 +1207,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # artifacts here even though we do the same at the end of this function
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
-    if Operations.is_instantiated(ctx) 
+    if Operations.is_instantiated(ctx)
         allow_autoprecomp && _auto_precompile(ctx)
         return
     end
@@ -1262,7 +1262,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
-    
+
     allow_autoprecomp && _auto_precompile(ctx)
 end
 
