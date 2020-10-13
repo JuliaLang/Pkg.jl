@@ -1053,7 +1053,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 str *= ")"
             end
             show_report && lock(print_lock) do
-                println(io, str, "\n")
+                println(io, str)
             end
         catch err
             if err isa InterruptException
