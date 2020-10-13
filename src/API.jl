@@ -1058,6 +1058,9 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
         catch err
             if err isa InterruptException
                 interrupted = true
+                lock(print_lock) do
+                    println(io, " Interrupted: Exiting precompilation...")
+                end
             end
         end
     end
@@ -1106,6 +1109,9 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             interrupted = true
                             show_report = false
                             notify(was_processed[pkg])
+                            lock(print_lock) do
+                                println(io, " Interrupted: Exiting precompilation...")
+                            end
                         else
                             !fancy_print && lock(print_lock) do 
                                 str = string(color_string("  ✗ ", Base.error_color()), pkg.name)
