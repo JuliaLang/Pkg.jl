@@ -853,4 +853,11 @@ end
     @test range_compressed_versionspec(pool, [v"1.1.0"]) == VersionSpec("1.1.0")
 end
 
+@testset "versionspec with v" begin
+    v = VersionSpec("v1.2.3")
+    @test !(v"1.2.2" in v)
+    @test   v"1.2.3" in v
+    @test !(v"1.2.4" in v)
+end
+
 end # module
