@@ -1351,7 +1351,7 @@ function printpkgstyle(ctx::Context, cmd::Symbol, text::String, ignore_indent::B
     printpkgstyle(ctx.io, cmd, text, ignore_indent)
 end
 function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false)
-    indent = textwidth(string(:Downloading))
+    indent = textwidth(string(:Precompiling)) # "Precompiling" is the longest operation
     ignore_indent && (indent = 0)
     printstyled(io, lpad(string(cmd), indent), color=:green, bold=true)
     println(io, " ", text)
