@@ -1083,7 +1083,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             return
                         end
                         Logging.with_logger(Logging.NullLogger()) do
-                            Base.compilecache(pkg, sourcepath, iob) # don't print errors from indirect deps
+                            Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull 
                         end
                         !fancy_print && lock(print_lock) do 
                             str = string(color_string("  ✓ ", :green), pkg.name)
