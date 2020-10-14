@@ -89,7 +89,9 @@ Base.hash(r::VersionBound, h::UInt) = hash(hash(r.t, h), r.n)
 
 # Hot code
 function VersionBound(s::AbstractString)
+    s = strip(s)
     s == "*" && return VersionBound()
+    first(s) == 'v' && (s = SubString(s, 2))
     l = lastindex(s)
 
     p = findnext('.', s, 1)
