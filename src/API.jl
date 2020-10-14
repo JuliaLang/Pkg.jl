@@ -919,7 +919,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
-    !internal_call && Operations.precomp_unsuspend!()
+    if internal_call 
+        Operations.recall_suspended_packages()
+    else
+        Operations.precomp_unsuspend!()
+    end
+
     action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
     
     direct_deps = [
@@ -1269,14 +1274,12 @@ end
 
 
 function activate(;temp=false,shared=false)
-    Operations.save_suspended_packages()
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
-    Operations.recall_suspended_packages()
     return nothing
 end
 function _activate_dep(dep_name::AbstractString)
@@ -1297,7 +1300,6 @@ function _activate_dep(dep_name::AbstractString)
     end
 end
 function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
-    Operations.save_suspended_packages()
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1336,7 +1338,6 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
         printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
-    Operations.recall_suspended_packages()
     return nothing
 end
 function activate(f::Function, new_project::AbstractString)
