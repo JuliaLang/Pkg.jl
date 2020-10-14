@@ -34,11 +34,16 @@ function save_suspended_packages()
 end
 function recall_suspended_packages()
     fpath = joinpath(pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project())))
-    try
-        open(fpath) do io
-            append!(empty!(pkgs_precompile_suspended), deserialize(io))
+    if isfile(fpath) 
+        v = open(fpath) do io
+            try 
+                return deserialize(io)
+            catch
+                return Base.PkgId[]
+            end
         end
-    catch
+        append!(empty!(pkgs_precompile_suspended), v)
+    else
         empty!(pkgs_precompile_suspended)
     end
     return nothing
