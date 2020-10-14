@@ -26,7 +26,7 @@ pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
 function save_suspended_packages()
     path = pkg_scratchpath()
     fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project())))
-    mkpath(path); rm(fpath, force=true)
+    mkpath(path); Base.Filesystem.rm(fpath, force=true)
     open(fpath, "w") do io
         serialize(io, pkgs_precompile_suspended)
     end
@@ -40,7 +40,6 @@ function recall_suspended_packages()
         end
     catch
         empty!(pkgs_precompile_suspended)
-        Base.Filesystem.rm(fpath, force=true)
     end
     return nothing
 end
