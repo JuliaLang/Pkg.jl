@@ -1118,6 +1118,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     end
     finished = true
     notify(first_started) # in cases of no-op or !fancy_print
+    Operations.save_suspended_packages() # save list to scratch space
     wait(t_print)
 
     ndeps = count(values(was_recompiled))
@@ -1268,12 +1269,14 @@ end
 
 
 function activate(;temp=false,shared=false)
+    Operations.save_suspended_packages()
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
+    Operations.recall_suspended_packages()
     return nothing
 end
 function _activate_dep(dep_name::AbstractString)
@@ -1294,6 +1297,7 @@ function _activate_dep(dep_name::AbstractString)
     end
 end
 function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
+    Operations.save_suspended_packages()
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1332,6 +1336,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
         printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
+    Operations.recall_suspended_packages()
     return nothing
 end
 function activate(f::Function, new_project::AbstractString)

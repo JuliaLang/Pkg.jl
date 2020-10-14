@@ -14,12 +14,39 @@ import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server
+using Serialization
 
 #########
 # Utils #
 #########
 
+const PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 const pkgs_precompile_suspended = Base.PkgId[]
+pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
+function save_suspended_packages()
+    path = pkg_scratchpath()
+    fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project())))
+    try
+        mkpath(path); rm(fpath, force=true)
+        open(fpath, "w") do io
+            serialize(io, pkgs_precompile_suspended)
+        end
+    catch
+    end
+    return nothing
+end
+function recall_suspended_packages()
+    fpath = joinpath(pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project())))
+    try
+        open(fpath) do io
+            append!(empty!(pkgs_precompile_suspended), deserialize(io))
+        end
+    catch
+        empty!(pkgs_precompile_suspended)
+        Base.Filesystem.rm(fpath, force=true)
+    end
+    return nothing
+end
 precomp_suspend!(pkg::Base.PkgId) = push!(pkgs_precompile_suspended, pkg)
 precomp_unsuspend!(pkg::Base.PkgId) = filter!(!isequal(pkg), pkgs_precompile_suspended)
 precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
@@ -142,6 +169,7 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
         ctx.env.manifest[pkg.uuid] = entry
     end
     prune_manifest(ctx)
+    Operations.save_suspended_packages()
 end
 
 # TODO: Should be included in Base
@@ -962,8 +990,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
         entry = manifest_info(ctx, uuid)
         if entry !== nothing && entry.tree_hash !== nothing
             key = string(entry.tree_hash)
-            PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
-            scratch = joinpath(depots1(), "scratchspaces", PkgUUID, key)
+            scratch = joinpath(pkg_scratchpath(), key)
             mkpath(scratch)
             log_file = joinpath(scratch, "build.log")
             # Associate the logfile with the package beeing built
