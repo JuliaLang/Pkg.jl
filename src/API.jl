@@ -919,7 +919,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
-    !internal_call && Operations.precomp_unsuspend!()
+    if internal_call 
+        Operations.recall_suspended_packages()
+    else
+        Operations.precomp_unsuspend!()
+    end
+
     action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
     
     direct_deps = [
@@ -969,7 +974,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     end
 
     pkg_queue = Base.PkgId[]
-    failed_deps = Base.PkgId[]
+    failed_deps = Dict{Base.PkgId, String}()
     skipped_deps = Base.PkgId[]
 
     print_lock = stdout isa Base.LibuvStream ? stdout.lock : ReentrantLock()
@@ -1014,7 +1019,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                     end
                     for dep in pkg_queue_show
                         name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
-                        if dep in failed_deps
+                        if haskey(failed_deps, dep)
                             str *= string(color_string("  ✗ ", Base.error_color()), name, "\n")
                         elseif was_recompiled[dep]
                             finished && continue
@@ -1040,24 +1045,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 i += 1
                 wait(t)
             end
-            ndeps = count(values(was_recompiled))
-            plural = ndeps == 1 ? "y" : "ies"
-            str = "$(ndeps) dependenc$(plural) successfully precompiled"
-            !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
-            n_already = length(depsmap) - ndeps - length(failed_deps)
-            if n_already > 0  || !isempty(skipped_deps) 
-                str *= " ("
-                n_already > 0 && (str *= "$n_already already precompiled")
-                !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
-                !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
-                str *= ")"
-            end
-            show_report && lock(print_lock) do
-                println(io, str, "\n")
-            end
         catch err
             if err isa InterruptException
                 interrupted = true
+                lock(print_lock) do
+                    println(io, " Interrupted: Exiting precompilation...")
+                end
             end
         end
     end
@@ -1082,6 +1075,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 if (any_dep_recompiled || _is_stale(paths, sourcepath))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
+                    iob = IOBuffer()
                     try
                         !fancy_print && lock(print_lock) do
                             isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
@@ -1094,7 +1088,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             return
                         end
                         Logging.with_logger(Logging.NullLogger()) do
-                            Base.compilecache(pkg, sourcepath, false) # don't print errors from indirect deps
+                            Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull 
                         end
                         !fancy_print && lock(print_lock) do 
                             str = string(color_string("  ✓ ", :green), pkg.name)
@@ -1106,13 +1100,16 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             interrupted = true
                             show_report = false
                             notify(was_processed[pkg])
+                            lock(print_lock) do
+                                println(io, " Interrupted: Exiting precompilation...")
+                            end
                         else
+                            failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
                             !fancy_print && lock(print_lock) do 
                                 str = string(color_string("  ✗ ", Base.error_color()), pkg.name)
                                 println(io, is_direct_dep ? str : color_string(str, :light_black))
                             end
                             Operations.precomp_suspend!(pkg)
-                            push!(failed_deps, pkg)
                         end
                     finally
                         Base.release(parallel_limiter)
@@ -1126,14 +1123,40 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     end
     finished = true
     notify(first_started) # in cases of no-op or !fancy_print
+    Operations.save_suspended_packages() # save list to scratch space
     wait(t_print)
-    failed_direct = filter(in(direct_deps), failed_deps)
-    if !isempty(failed_direct)
-        failed_list = ""
-        for d in failed_direct
-            failed_list *= "  $d\n"
+
+    ndeps = count(values(was_recompiled))
+    if ndeps > 0 || !isempty(failed_deps)
+        plural = ndeps == 1 ? "y" : "ies"
+        str = "$(ndeps) dependenc$(plural) successfully precompiled"
+        !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
+        n_already = length(depsmap) - ndeps - length(failed_deps)
+        if n_already > 0  || !isempty(skipped_deps) 
+            str *= " ("
+            n_already > 0 && (str *= "$n_already already precompiled")
+            !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
+            !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
+            str *= ")"
         end
-        pkgerror("The following direct dependencies failed to precompile:\n$(failed_list)")
+        show_report && lock(print_lock) do
+            println(io, str)
+        end
+        if !internal_call
+            err_str = ""
+            n_direct_errs = 0
+            for (dep, err) in failed_deps
+                if dep in direct_deps
+                    err_str *= "\n" * "$dep" * "\n\n" * err * (n_direct_errs > 0 ? "\n" : "")
+                    n_direct_errs += 1
+                end
+            end
+            if err_str != ""
+                println(io, "")
+                plural = n_direct_errs == 1 ? "y" : "ies"
+                pkgerror("The following direct dependenc$(plural) failed to precompile:\n$(err_str)")
+            end
+        end
     end
     nothing
 end
@@ -1150,7 +1173,7 @@ end
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
-                     platform::AbstractPlatform=HostPlatform(), kwargs...)
+                     platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
@@ -1185,7 +1208,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx) 
-        _auto_precompile(ctx)
+        allow_autoprecomp && _auto_precompile(ctx)
         return
     end
 
@@ -1240,7 +1263,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
     
-    _auto_precompile(ctx)
+    allow_autoprecomp && _auto_precompile(ctx)
 end
 
 
