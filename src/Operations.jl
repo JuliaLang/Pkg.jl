@@ -21,8 +21,9 @@ using Serialization
 #########
 
 const PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
-const pkgs_precompile_suspended = Base.PkgId[]
 pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
+
+const pkgs_precompile_suspended = Base.PkgId[]
 function save_suspended_packages()
     path = pkg_scratchpath()
     fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project())))
