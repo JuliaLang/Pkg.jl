@@ -38,9 +38,9 @@ function recall_suspended_packages()
     if isfile(fpath) 
         v = open(fpath) do io
             try 
-                return deserialize(io)
+                deserialize(io)
             catch
-                return Base.PkgId[]
+                Base.PkgId[]
             end
         end
         append!(empty!(pkgs_precompile_suspended), v)
@@ -171,7 +171,6 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
         ctx.env.manifest[pkg.uuid] = entry
     end
     prune_manifest(ctx)
-    Operations.save_suspended_packages()
 end
 
 # TODO: Should be included in Base
