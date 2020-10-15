@@ -1127,33 +1127,37 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     wait(t_print)
 
     ndeps = count(values(was_recompiled))
-    plural = ndeps == 1 ? "y" : "ies"
-    str = "$(ndeps) dependenc$(plural) successfully precompiled"
-    !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
-    n_already = length(depsmap) - ndeps - length(failed_deps)
-    if n_already > 0  || !isempty(skipped_deps) 
-        str *= " ("
-        n_already > 0 && (str *= "$n_already already precompiled")
-        !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
-        !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
-        str *= ")"
-    end
-    show_report && lock(print_lock) do
-        println(io, str)
-    end
-    if !internal_call
-        err_str = ""
-        for (dep, err) in failed_deps
-            if dep in direct_deps
-                err_str *= "\n" * "$dep" * "\n\n" * err * "\n"
+    if ndeps > 0 || !isempty(failed_deps)
+        plural = ndeps == 1 ? "y" : "ies"
+        str = "$(ndeps) dependenc$(plural) successfully precompiled"
+        !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
+        n_already = length(depsmap) - ndeps - length(failed_deps)
+        if n_already > 0  || !isempty(skipped_deps) 
+            str *= " ("
+            n_already > 0 && (str *= "$n_already already precompiled")
+            !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
+            !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
+            str *= ")"
+        end
+        show_report && lock(print_lock) do
+            println(io, str)
+        end
+        if !internal_call
+            err_str = ""
+            n_direct_errs = 0
+            for (dep, err) in failed_deps
+                if dep in direct_deps
+                    err_str *= "\n" * "$dep" * "\n\n" * err * (n_direct_errs > 0 ? "\n" : "")
+                    n_direct_errs += 1
+                end
+            end
+            if err_str != ""
+                println(io, "")
+                plural = n_direct_errs == 1 ? "y" : "ies"
+                pkgerror("The following direct dependenc$(plural) failed to precompile:\n$(err_str)")
             end
         end
-        if err_str != ""
-            println(io, "")
-            pkgerror("The following direct dependencies failed to precompile:\n$(err_str)")
-        end
     end
-    
     nothing
 end
 
