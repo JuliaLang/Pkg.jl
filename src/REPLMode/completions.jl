@@ -59,7 +59,7 @@ function complete_remote_package(partial)
         for (uuid, pkginfo) in data["packages"]
             name = pkginfo["name"]
             if startswith(name, partial)
-                path = pkginfo["path"]
+                path = pkginfo["path"]::String
                 version_info = Operations.load_versions(ctx, path; include_yanked=false)
                 versions = sort!(collect(keys(version_info)))
                 compat_data = Operations.load_package_data(ctx,

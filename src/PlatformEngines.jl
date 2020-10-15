@@ -246,8 +246,8 @@ function probe_platform_engines!(;verbose::Bool = false)
             # If a drive letter is part of the filename, then tar spits out a warning on stderr:
             # "tar: Removing leading drive letter from member names"
             # Therefore we cd to tmpdir() first
-            cd(tempdir()) do
-                tarListing = read(pipeline(`$tar_cmd -cf - $(basename(tmpfile))`, `$tar_cmd -tvf -`), String)
+            tarListing = cd(tempdir()) do
+                read(pipeline(`$tar_cmd -cf - $(basename(tmpfile))`, `$tar_cmd -tvf -`), String)
             end
             # obtain the text of the line before the filename
             m = match(Regex("((?:\\S+\\s+)+?)$tmpfile"), tarListing)[1]
@@ -477,7 +477,7 @@ function get_server_dir(url::AbstractString, server=pkg_server())
         @warn "malformed Pkg server value" server
         return
     end
-    joinpath(depots1(), "servers", m.captures[1]::AbstractString)
+    joinpath(depots1(), "servers", String(m.captures[1]))
 end
 
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex},Any}[]
