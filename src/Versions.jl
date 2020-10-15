@@ -2,7 +2,7 @@
 
 module Versions
 
-export VersionBound, VersionRange, VersionSpec, semver_spec, range_compressed_versionspec
+export VersionBound, VersionRange, VersionSpec, semver_spec, range_compressed_versionspec, isjoinable
 
 ################
 # VersionBound #
