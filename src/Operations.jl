@@ -769,58 +769,65 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
     ########################################
     # Install from archives asynchronously #
     ########################################
-    jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads);
-    results = Channel(ctx.num_concurrent_downloads);
-    @async begin
-        for pkg in pkgs_to_install
-            put!(jobs, pkg)
-        end
-    end
 
-    for i in 1:ctx.num_concurrent_downloads
+    missed_packages = Tuple{PackageSpec, String}[]
+
+    @sync begin
+        jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
+        results = Channel(ctx.num_concurrent_downloads)
+
         @async begin
-            for (pkg, path) in jobs
-                if ctx.use_libgit2_for_all_downloads
-                    put!(results, (pkg, false, path))
-                    continue
-                end
-                try
-                    archive_urls = Pair{String,Bool}[]
-                    if (server = pkg_server()) !== nothing
-                        url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
-                        push!(archive_urls, url => true)
+            for pkg in pkgs_to_install
+                put!(jobs, pkg)
+            end
+        end
+
+        for i in 1:ctx.num_concurrent_downloads
+            @async begin
+                for (pkg, path) in jobs
+                    if ctx.use_libgit2_for_all_downloads
+                        put!(results, (pkg, false, path))
+                        continue
                     end
-                    for repo_url in urls[pkg.uuid]
-                        url = get_archive_url_for_version(repo_url, pkg.tree_hash)
-                        url !== nothing && push!(archive_urls, url => false)
+                    try
+                        archive_urls = Pair{String,Bool}[]
+                        if (server = pkg_server()) !== nothing
+                            url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
+                            push!(archive_urls, url => true)
+                        end
+                        for repo_url in urls[pkg.uuid]
+                            url = get_archive_url_for_version(repo_url, pkg.tree_hash)
+                            url !== nothing && push!(archive_urls, url => false)
+                        end
+                        success = install_archive(archive_urls, pkg.tree_hash, path)
+                        if success && readonly
+                            set_readonly(path) # In add mode, files should be read-only
+                        end
+                        if ctx.use_only_tarballs_for_downloads && !success
+                            pkgerror("failed to get tarball from $(urls[pkg.uuid])")
+                        end
+                        put!(results, (pkg, success, path))
+                    catch err
+                        put!(results, (pkg, err, catch_backtrace()))
                     end
-                    success = install_archive(archive_urls, pkg.tree_hash, path)
-                    if success && readonly
-                        set_readonly(path) # In add mode, files should be read-only
-                    end
-                    if ctx.use_only_tarballs_for_downloads && !success
-                        pkgerror("failed to get tarball from $(urls[pkg.uuid])")
-                    end
-                    put!(results, (pkg, success, path))
-                catch err
-                    put!(results, (pkg, err, catch_backtrace()))
                 end
             end
         end
-    end
 
-    missed_packages = Tuple{PackageSpec, String}[]
-    for i in 1:length(pkgs_to_install)
-        pkg::PackageSpec, exc_or_success, bt_or_path = take!(results)
-        exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
-                                                 sprint(Base.showerror, exc_or_success, bt_or_path))
-        success, path = exc_or_success, bt_or_path
-        if success
-            vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
-            printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
-        else
-            push!(missed_packages, (pkg, path))
+        for i in 1:length(pkgs_to_install)
+            pkg::PackageSpec, exc_or_success, bt_or_path = take!(results)
+            exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
+                                                    sprint(Base.showerror, exc_or_success, bt_or_path))
+            success, path = exc_or_success, bt_or_path
+            if success
+                vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
+                printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
+            else
+                push!(missed_packages, (pkg, path))
+            end
         end
+
+        close(jobs)
     end
 
     ##################################################

@@ -3,28 +3,15 @@
 # Content in this file is extracted from BinaryProvider.jl, see LICENSE.method
 
 module PlatformEngines
-using SHA
+using SHA, Downloads
 import ...Pkg: Pkg, TOML, pkg_server, depots1
 using Base.BinaryPlatforms
 
-export probe_platform_engines!, parse_7z_list, parse_tar_list, verify,
-       download_verify, unpack, package, download_verify_unpack,
-       list_tarball_files, list_tarball_symlinks
+export probe_platform_engines!, verify, unpack, package, download_verify_unpack
 
 # In this file, we setup the `gen_download_cmd()`, `gen_unpack_cmd()` and
 # `gen_package_cmd()` functions by providing methods to probe the environment
 # and determine the most appropriate platform binaries to call.
-
-"""
-    gen_download_cmd(url::AbstractString, out_path::AbstractString, hdrs::AbstractString...)
-
-Return a `Cmd` that will download resource located at `url` and store it at
-the location given by `out_path`.
-
-This method is initialized by `probe_platform_engines!()`.
-"""
-gen_download_cmd = (url::AbstractString, out_path::AbstractString, hdrs::AbstractString...) ->
-    error("Call `probe_platform_engines!()` before `gen_download_cmd()`")
 
 """
     gen_unpack_cmd(tarball_path::AbstractString, out_path::AbstractString;
@@ -167,33 +154,13 @@ If `verbose` is `true`, print out the various engines as they are searched.
 """
 function probe_platform_engines!(;verbose::Bool = false)
     global already_probed
-    global gen_download_cmd, gen_list_tarball_cmd, gen_package_cmd
+    global gen_list_tarball_cmd, gen_package_cmd
     global gen_unpack_cmd, parse_tarball_listing, parse_symlinks
 
     # Quick-escape for Pkg, since we do this a lot
     if already_probed
         return
     end
-
-    # download_engines is a list of (test_cmd, download_opts_functor)
-    # The probulator will check each of them by attempting to run `$test_cmd`,
-    # and if that works, will set the global download functions appropriately.
-    function helpfetcher(url, path, hdrs...)  # see https://github.com/JuliaLang/julia/issues/37058
-        isempty(hdrs) || error("`fetch` does not support passing headers")
-        `fetch -f $path $url`
-    end
-    download_engines = Tuple{Cmd,Function}[
-            (`curl --help`, (url, path, hdrs...) ->
-            `curl -H$hdrs -C - -\# -f -o $path -L $url`),
-        (`wget --help`, (url, path, hdrs...) ->
-            `wget --tries=5 --header=$hdrs -q --show-progress -c -O $path $url`),
-        (`fetch --help`, helpfetcher),
-        (`busybox wget --help`, (url, path, hdrs...) ->
-            `busybox wget --header=$hdrs -c -O $path $url`),
-    ]
-    Sys.isapple() && pushfirst!(download_engines,
-        (`/usr/bin/curl --help`, (url, path, hdrs...) ->
-            `/usr/bin/curl -H$hdrs -C - -\# -f -o $path -L $url`))
 
     # 7z is rather intensely verbose.  We also want to try running not only
     # `7z` but also a direct path to the `7z.exe` bundled with Julia on
@@ -357,42 +324,6 @@ function probe_platform_engines!(;verbose::Bool = false)
 
     # For windows, we need to tweak a few things, as the tools available differ
     @static if Sys.iswindows()
-        # For download engines, we will most likely want to use powershell.
-        # Let's generate a functor to return the necessary powershell magics
-        # to download a file, given a path to the powershell executable
-        psh_download = (psh_path) -> begin
-            return (url, path, hdrs...) -> begin
-                webclient_code = """
-                [System.Net.ServicePointManager]::SecurityProtocol =
-                    [System.Net.SecurityProtocolType]::Tls12;
-                \$webclient = (New-Object System.Net.Webclient);
-                \$webclient.UseDefaultCredentials = \$true;
-                \$webclient.Proxy.Credentials = \$webclient.Credentials;
-                \$webclient.Headers.Add("user-agent", \"Pkg.jl (https://github.com/JuliaLang/Pkg.jl)\");
-                """
-                for hdr in hdrs
-                    key, val = split(hdr, r":\s*", limit=2)
-                    webclient_code *= """
-                    \$webclient.Headers.Add($(repr(key)), $(repr(val)));
-                    """
-                end
-                webclient_code *= """
-                \$webclient.DownloadFile(\"$url\", \"$path\")
-                """
-                replace(webclient_code, "\n" => " ")
-                return `$psh_path -NoProfile -Command "$webclient_code"`
-            end
-        end
-
-        # We want to search both the `PATH`, and the direct path for powershell
-        psh_path = joinpath(get(ENV, "SYSTEMROOT", "C:\\Windows"), "System32\\WindowsPowerShell\\v1.0\\powershell.exe")
-        prepend!(download_engines, [
-            (`$psh_path -Command ""`, psh_download(psh_path))
-        ])
-        prepend!(download_engines, [
-            (`powershell -Command ""`, psh_download(`powershell`))
-        ])
-
         # We greatly prefer `7z` as a compression engine on Windows
         prepend!(compression_engines, [(`7z --help`, gen_7z("7z")...)])
 
@@ -403,26 +334,6 @@ function probe_platform_engines!(;verbose::Bool = false)
         # But most commonly, we'll find `7z` sitting in `libexec`, bundled with Julia
         exe7z = joinpath(Sys.BINDIR::String, "..", "libexec", "7z.exe")
         prepend!(compression_engines, [(`$exe7z --help`, gen_7z(exe7z)...)])
-    end
-
-    # Allow environment override
-    if haskey(ENV, "BINARYPROVIDER_DOWNLOAD_ENGINE")
-        engine = ENV["BINARYPROVIDER_DOWNLOAD_ENGINE"]
-        es = split(engine)
-        dl_ngs = let es=es
-            filter(e -> e[1].exec[1:length(es)] == es, download_engines)
-        end
-        if isempty(dl_ngs)
-            all_ngs = join([d[1].exec[1] for d in download_engines], ", ")
-            warn_msg  = "Ignoring BINARYPROVIDER_DOWNLOAD_ENGINE as its value "
-            warn_msg *= "of `$(engine)` doesn't match any known valid engines."
-            warn_msg *= " Try one of `$(all_ngs)`."
-            @warn(warn_msg)
-        else
-            # If BINARYPROVIDER_DOWNLOAD_ENGINE matches one of our download engines,
-            # then restrict ourselves to looking only at that engine
-            download_engines = dl_ngs
-        end
     end
 
     if haskey(ENV, "BINARYPROVIDER_COMPRESSION_ENGINE")
@@ -444,29 +355,7 @@ function probe_platform_engines!(;verbose::Bool = false)
         end
     end
 
-    download_found = false
     compression_found = false
-
-    if verbose
-        @info("Probing for download engine...")
-    end
-
-    # Search for a download engine
-    for (test, dl_func) in download_engines
-        if probe_cmd(`$test`; verbose=verbose)
-            # Set our download command generator
-            gen_download_cmd = (url, out_path, hdrs...) -> begin
-                isdefined(Base, :download_url) && (url = Base.download_url(url))
-                dl_func(url, out_path, hdrs...)
-            end
-            download_found = true
-
-            if verbose
-                @info("Found download engine $(test.exec[1])")
-            end
-            break
-        end
-    end
 
     if verbose
         @info("Probing for compression engine...")
@@ -492,21 +381,11 @@ function probe_platform_engines!(;verbose::Bool = false)
     end
 
     # Build informative error messages in case things go sideways
-    errmsg = ""
-    if !download_found
-        errmsg *= "No download engines found. We looked for: "
-        errmsg *= join([d[1].exec[1] for d in download_engines], ", ")
-        errmsg *= ". Install one and ensure it  is available on the path.\n"
-    end
-
     if !compression_found
+        errmsg = ""
         errmsg *= "No compression engines found. We looked for: "
         errmsg *= join([c[1].exec[1] for c in compression_engines], ", ")
         errmsg *= ". Install one and ensure it is available on the path.\n"
-    end
-
-    # Error out if we couldn't find something
-    if !download_found || !compression_found
         error(errmsg)
     end
     already_probed = true
@@ -560,7 +439,7 @@ function parse_7z_list(output::AbstractString)
 end
 
 """
-    parse_7z_list(output::AbstractString)
+    parse_tar_list(output::AbstractString)
 
 Given the output of `tar -t`, parse out the listed filenames.  This function
 used by `list_tarball_files`.
@@ -733,7 +612,8 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
         end
     end
     mv(tmp, auth_file, force=true)
-    return "Authorization: Bearer $(auth_info["access_token"]::String)"
+    token = auth_info["access_token"]::String
+    return "Authorization" => "Bearer $token"
 end
 
 # based on information in this post:
@@ -754,14 +634,14 @@ const CI_VARIABLES = [
 ]
 
 function get_metadata_headers(url::AbstractString)
-    headers = String[]
+    headers = Pair{String,String}[]
     server = pkg_server()
     server_dir = get_server_dir(url, server)
     server_dir === nothing && return headers
-    push!(headers, "Julia-Pkg-Protocol: 1.0")
-    push!(headers, "Julia-Version: $VERSION")
+    push!(headers, "Julia-Pkg-Protocol" => "1.0")
+    push!(headers, "Julia-Version" => string(VERSION))
     system = triplet(HostPlatform())
-    push!(headers, "Julia-System: $system")
+    push!(headers, "Julia-System" => system)
     ci_info = String[]
     for var in CI_VARIABLES
         val = get(ENV, var, nothing)
@@ -770,8 +650,8 @@ function get_metadata_headers(url::AbstractString)
             lowercase(val) in ("false", "f", "0", "no", "n") ? "f" : "o"
         push!(ci_info, "$var=$state")
     end
-    push!(headers, "Julia-CI-Variables: "*join(ci_info, ';'))
-    push!(headers, "Julia-Interactive: $(isinteractive())")
+    push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
+    push!(headers, "Julia-Interactive" => string(isinteractive()))
     return headers
 end
 
@@ -780,7 +660,7 @@ end
         url::AbstractString,
         dest::AbstractString;
         verbose::Bool = false,
-        auth_header::Union{AbstractString, Nothing} = nothing,
+        auth_header::Union{Pair{String,String}, Nothing} = nothing,
     )
 
 Download file located at `url`, store it at `dest`, continuing if `dest`
@@ -790,9 +670,9 @@ function download(
     url::AbstractString,
     dest::AbstractString;
     verbose::Bool = false,
-    auth_header::Union{AbstractString, Nothing} = nothing,
+    auth_header::Union{Pair{String,String}, Nothing} = nothing,
 )
-    headers = String[]
+    headers = Pair{String,String}[]
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
     end
@@ -802,18 +682,7 @@ function download(
     for header in get_metadata_headers(url)
         push!(headers, header)
     end
-    download_cmd = gen_download_cmd(url, dest, headers...)
-    if verbose
-        # @info("Downloading $(url) to $(dest)...")
-    end
-    try
-        run(download_cmd, (devnull, verbose ? stdout : devnull, verbose ? stderr : devnull))
-    catch e
-        if isa(e, InterruptException)
-            rethrow()
-        end
-        error("Could not download $(url) to $(dest):\n$(e)")
-    end
+    Downloads.download(url, dest, headers=headers)
 end
 
 """
