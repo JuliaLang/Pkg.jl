@@ -25,6 +25,7 @@ pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
 
 const pkgs_precompile_suspended = Base.PkgId[]
 function save_suspended_packages()
+    @debug "Saving precompile suspensions: $pkgs_precompile_suspended"
     path = pkg_scratchpath()
     fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project())))
     mkpath(path); Base.Filesystem.rm(fpath, force=true)
@@ -47,6 +48,7 @@ function recall_suspended_packages()
     else
         empty!(pkgs_precompile_suspended)
     end
+    @debug "Restored precompile suspensions: $pkgs_precompile_suspended"
     return nothing
 end
 precomp_suspend!(pkg::Base.PkgId) = push!(pkgs_precompile_suspended, pkg)
@@ -862,15 +864,11 @@ function prune_manifest(manifest::Dict, keep::Vector{UUID})
     while !isempty(keep)
         clean = true
         for (uuid, entry) in manifest
-            if uuid in keep
-                for dep in values(entry.deps)
-                    dep in keep && continue
-                    push!(keep, dep)
-                    clean = false
-                end
-            else
-                precomp_unsuspend!(Base.PkgId(uuid, entry.name))
-                continue
+            uuid in keep || continue
+            for dep in values(entry.deps)
+                dep in keep && continue
+                push!(keep, dep)
+                clean = false
             end
         end
         clean && break
