@@ -126,9 +126,13 @@ end
             Pkg.generate("Dep3")
             Pkg.generate("Dep4")
             Pkg.generate("Dep5")
+            Pkg.generate("BrokenDep")
+            open(joinpath("BrokenDep","src","BrokenDep.jl"), "w") do io
+                write(io, "module BrokenDep\nerror()\nend")
+            end
         end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
-        
+
         Pkg.activate("Dep1")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep2"))
         Pkg.activate("Dep2")
@@ -149,8 +153,33 @@ end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
         Pkg.precompile(io=iob)
         @test String(take!(iob)) != "" # test that the previous precompile did some work
+
+        @test isempty(Pkg.Operations.pkgs_precompile_suspended)
+        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
+        Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep")) # should trigger auto-precomp and soft-error
+        broken_packages = Pkg.Operations.pkgs_precompile_suspended
+        @test length(broken_packages) == 1
+        Pkg.activate("newpath")
+        @test isempty(Pkg.Operations.pkgs_precompile_suspended)
+
+        Pkg.activate(".") # test that going back to the project restores suspension list
+        @test Pkg.Operations.pkgs_precompile_suspended == broken_packages
+        @test_throws PkgError Pkg.precompile() # calling precompile should retry any suspended, and throw on errors
+        @test Pkg.Operations.pkgs_precompile_suspended == broken_packages
+
+        open(joinpath("packages","BrokenDep","src","BrokenDep.jl"), "w") do io
+            write(io, "module BrokenDep\n\nend") # remove error
+        end
+        Pkg.rm("BrokenDep") # should clear suspension and trigger auto-precomp
+        @test isempty(Pkg.Operations.pkgs_precompile_suspended)
+        Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep")) # should trigger auto-precomp and succeed
+        @test isempty(Pkg.Operations.pkgs_precompile_suspended)
+        Pkg.precompile(io=iob)
+        @test String(take!(iob)) == "" # test that the previous precompile was a no-op
+
+        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
     end
-    
+
     # ignoring circular deps, to avoid deadlock
     cd_tempdir() do tmp
         path = pwd()
@@ -163,18 +192,18 @@ end
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep1"))
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep2"))
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep3"))
-        
+
         Pkg.activate("CircularDep1")
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep2"))
         Pkg.activate("CircularDep2")
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep3"))
         Pkg.activate("CircularDep3")
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep1"))
-        
+
         Pkg.activate(".")
         Pkg.resolve()
         precomp_task = @async Pkg.precompile()
-        
+
         timer = Timer(60*2) # allow 2 minutes before assuming deadlock
         timed_out = false
         while true

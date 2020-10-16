@@ -60,12 +60,18 @@ function require_not_empty(pkgs, f::Symbol)
     isempty(pkgs) && pkgerror("$f requires at least one package")
 end
 
+const first_pkg_action = Ref{Bool}(true)
+
 # Provide some convenience calls
 for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
+            if first_pkg_action[]
+                first_pkg_action[] = false
+                Operations.recall_suspended_packages()
+            end
             ctx = Context()
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
@@ -919,11 +925,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
-    if internal_call
-        Operations.recall_suspended_packages()
-    else
-        Operations.precomp_unsuspend!()
-    end
+    !internal_call && Operations.precomp_unsuspend!()
 
     action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
 
@@ -1189,6 +1191,10 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
                      platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
+    if first_pkg_action[]
+        first_pkg_action[] = false
+        Operations.recall_suspended_packages()
+    end
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         deps = Dict{String,String}()
@@ -1298,6 +1304,7 @@ function activate(;temp=false,shared=false)
     p = Base.active_project()
     p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
+    Operations.recall_suspended_packages()
     return nothing
 end
 function _activate_dep(dep_name::AbstractString)
@@ -1356,11 +1363,13 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
         printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
+    Operations.recall_suspended_packages()
     return nothing
 end
 function activate(f::Function, new_project::AbstractString)
     old = Base.ACTIVE_PROJECT[]
     Base.ACTIVE_PROJECT[] = new_project
+    Operations.recall_suspended_packages()
     try
         f()
     finally

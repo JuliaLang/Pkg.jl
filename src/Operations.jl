@@ -171,6 +171,7 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
         ctx.env.manifest[pkg.uuid] = entry
     end
     prune_manifest(ctx)
+    Operations.save_suspended_packages()
 end
 
 # TODO: Should be included in Base
@@ -862,11 +863,15 @@ function prune_manifest(manifest::Dict, keep::Vector{UUID})
     while !isempty(keep)
         clean = true
         for (uuid, entry) in manifest
-            uuid in keep || continue
-            for dep in values(entry.deps)
-                dep in keep && continue
-                push!(keep, dep)
-                clean = false
+            if uuid in keep
+                for dep in values(entry.deps)
+                    dep in keep && continue
+                    push!(keep, dep)
+                    clean = false
+                end
+            else
+                precomp_unsuspend!(Base.PkgId(uuid, entry.name))
+                continue
             end
         end
         clean && break
