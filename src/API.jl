@@ -1090,6 +1090,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
+                    name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
                     try
                         !fancy_print && lock(print_lock) do
                             isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
@@ -1105,8 +1106,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
                         end
                         !fancy_print && lock(print_lock) do
-                            str = string(color_string("  ✓ ", :green), pkg.name)
-                            println(io, is_direct_dep ? str : color_string(str, :light_black))
+                            println(io, string(color_string("  ✓ ", :green), name))
                         end
                         was_recompiled[pkg] = true
                     catch err
@@ -1120,8 +1120,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                         else
                             failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
                             !fancy_print && lock(print_lock) do
-                                str = string(color_string("  ✗ ", Base.error_color()), pkg.name)
-                                println(io, is_direct_dep ? str : color_string(str, :light_black))
+                                println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
                             Operations.precomp_suspend!(pkg)
                         end
