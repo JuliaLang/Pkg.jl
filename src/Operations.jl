@@ -171,7 +171,6 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
         ctx.env.manifest[pkg.uuid] = entry
     end
     prune_manifest(ctx)
-    Operations.save_suspended_packages()
 end
 
 # TODO: Should be included in Base
