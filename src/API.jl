@@ -992,6 +992,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     ansi_movecol1 = "\e[1G"
     ansi_cleartoend = "\e[0J"
     show_report::Bool = true
+    n_done::Int = 0
 
     t_print = @async begin # fancy print loop
         try
@@ -1004,10 +1005,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             anim_chars = ["◐","◓","◑","◒"]
             i = 1
             last_length = 0
+            bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(), percentage=false, always_reprint=true)
+            bar.max = length(depsmap)
             while !should_exit && !interrupted
                 lock(print_lock) do
                     term_size = Base.displaysize(stdout)::Tuple{Int,Int}
-                    num_deps_show = term_size[1] - 2
+                    num_deps_show = term_size[1] - 3
                     pkg_queue_show = if !finished && length(pkg_queue) > num_deps_show
                         last(pkg_queue, num_deps_show)
                     else
@@ -1015,8 +1018,10 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                     end
                     str = ""
                     if i > 1
-                        str *= string(ansi_moveup(last_length), ansi_movecol1, ansi_cleartoend)
+                        str *= string(ansi_moveup(last_length+1), ansi_movecol1, ansi_cleartoend)
                     end
+                    bar.current = n_done
+                    str *= sprint(io -> Pkg.showprogress(io, bar); context=io) * '\n'
                     for dep in pkg_queue_show
                         name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                         if haskey(failed_deps, dep)
@@ -1051,6 +1056,10 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 lock(print_lock) do
                     println(io, " Interrupted: Exiting precompilation...")
                 end
+            else
+                # Comment this out if developing this code
+                # @show err
+                # rethrow(err)
             end
         end
     end
@@ -1118,6 +1127,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             else
                 !in(pkg, circular_deps) && push!(skipped_deps, pkg)
             end
+            n_done += 1
             notify(was_processed[pkg])
         end
     end
