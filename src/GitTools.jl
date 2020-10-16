@@ -8,53 +8,11 @@ import Base: SHA1
 import LibGit2
 using Printf
 
-Base.@kwdef mutable struct MiniProgressBar
-    max::Float64 = 1.0
-    header::String = ""
-    color::Symbol = :white
-    width::Int = 40
-    current::Float64 = 0.0
-    prev::Float64 = 0.0
-    has_shown::Bool = false
-    time_shown::Float64 = 0.0
-end
-
-const NONINTERACTIVE_TIME_GRANULARITY = Ref(2.0)
-const PROGRESS_BAR_PERCENTAGE_GRANULARITY = Ref(0.1)
-
-function showprogress(io::IO, p::MiniProgressBar)
-    perc = p.current / p.max * 100
-    prev_perc = p.prev / p.max * 100
-    # Bail early if we are not updating the progress bar,
-    # Saves printing to the terminal
-    if p.has_shown && !((perc - prev_perc) > PROGRESS_BAR_PERCENTAGE_GRANULARITY[])
-        return
-    end
-    if !isinteractive()
-        t = time()
-        if p.has_shown && (t - p.time_shown) < NONINTERACTIVE_TIME_GRANULARITY[]
-            return
-        end
-        p.time_shown = t
-    end
-    p.prev = p.current
-    p.has_shown = true
-    n_filled = ceil(Int, p.width * perc / 100)
-    n_left = p.width - n_filled
-    print(io, "    ")
-    printstyled(io, p.header, color=p.color, bold=true)
-    print(io, " [")
-    print(io, "="^n_filled, ">")
-    print(io, " "^n_left, "]  ", )
-    @printf io "%2.1f %%" perc
-    print(io, "\r")
-end
-
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
     @assert haskey(p, :transfer_progress)
     bar = p[:transfer_progress]
-    @assert typeof(bar) == MiniProgressBar
+    @assert typeof(bar) == Pkg.MiniProgressBar
     if progress.total_deltas != 0
         bar.header = "Resolving Deltas:"
         bar.max = progress.total_deltas
@@ -63,7 +21,7 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
         bar.max = progress.total_objects
         bar.current = progress.received_objects
     end
-    showprogress(stdout, bar)
+    Pkg.showprogress(stdout, bar)
     return Cint(0)
 end
 
@@ -127,7 +85,7 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     Pkg.Types.printpkgstyle(ctx, :Cloning, header === nothing ? "git-repo `$url`" : header)
-    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    transfer_payload = Pkg.MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
             @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
@@ -167,7 +125,7 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, cr
     end
     remoteurl = normalize_url(remoteurl)
     Pkg.Types.printpkgstyle(ctx, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
-    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    transfer_payload = Pkg.MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
             @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
