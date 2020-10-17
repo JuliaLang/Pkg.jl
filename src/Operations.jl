@@ -35,9 +35,9 @@ function save_suspended_packages()
 end
 function recall_suspended_packages()
     fpath = joinpath(pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project())))
-    if isfile(fpath) 
+    if isfile(fpath)
         v = open(fpath) do io
-            try 
+            try
                 deserialize(io)
             catch
                 Base.PkgId[]
@@ -814,17 +814,28 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
             end
         end
 
+        bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
+                                  percentage=false, always_reprint=true)
+        bar.max = length(pkgs_to_install)
+        show_progress = ctx.io isa Base.TTY
+        show_progress && Pkg.showprogress(ctx.io, bar)
+        io = stderr
         for i in 1:length(pkgs_to_install)
             pkg::PackageSpec, exc_or_success, bt_or_path = take!(results)
             exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
                                                     sprint(Base.showerror, exc_or_success, bt_or_path))
             success, path = exc_or_success, bt_or_path
-            if success
-                vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
-                printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
-            else
-                push!(missed_packages, (pkg, path))
+            success || push!(missed_packages, (pkg, path))
+            bar.current = i
+            str = sprint(; context=ctx.io) do io
+                if success
+                    show_progress && Pkg.print_progress_bottom(io)
+                    vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
+                    printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
+                    show_progress && Pkg.showprogress(io, bar)
+                end
             end
+            print(io, str)
         end
 
         close(jobs)
@@ -984,8 +995,14 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
     order = dependency_order_uuids(ctx, map(first, builds))
     sort!(builds, by = build -> order[first(build)])
     max_name = maximum(build->textwidth(build[2]), builds; init=0)
+
+    bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
+                              percentage=false, always_reprint=true)
+    bar.max = length(builds)
+    show_progress = ctx.io isa Base.TTY
+
     # build each package versions in a child process
-    for (uuid, name, source_path, version) in builds
+    for (n, (uuid, name, source_path, version)) in enumerate(builds)
         pkg = PackageSpec(;uuid=uuid, name=name, version=version)
         build_file = buildfile(source_path)
         # compatibility shim
@@ -1012,8 +1029,13 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             log_file = splitext(build_file)[1] * ".log"
         end
 
+        show_progress && Pkg.print_progress_bottom(ctx.io)
+
         printpkgstyle(ctx, :Building,
                       rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
+        bar.current = n-1
+
+        show_progress && Pkg.showprogress(ctx.io, bar)
 
         sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override) do
             flush(stdout)
@@ -1036,6 +1058,11 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve
             end
             pkgerror("Error building `$(pkg.name)`$last_lines: \n$log_show$full_log_at")
         end
+    end
+    # Clear the last line of progress
+    if show_progress
+        ansi_cleartoend = "\e[0J"
+        print(ctx.io, ansi_cleartoend)
     end
     return
 end
