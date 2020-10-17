@@ -8,6 +8,7 @@ import Random
 using Dates
 import LibGit2
 import Logging
+using Serialization
 
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
@@ -60,18 +61,12 @@ function require_not_empty(pkgs, f::Symbol)
     isempty(pkgs) && pkgerror("$f requires at least one package")
 end
 
-const first_pkg_action = Ref{Bool}(true)
-
 # Provide some convenience calls
 for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
-            if first_pkg_action[]
-                first_pkg_action[] = false
-                Operations.recall_suspended_packages()
-            end
             ctx = Context()
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
@@ -925,7 +920,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
-    !internal_call && Operations.precomp_unsuspend!()
+    internal_call ? recall_suspended_packages() : precomp_unsuspend!()
 
     action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
 
@@ -970,7 +965,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
         if in_deps([pkg], deps, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
-            Operations.precomp_suspend!(pkg)
+            precomp_suspend!(pkg)
             !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
         end
     end
@@ -1083,9 +1078,15 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 wait(was_processed[dep])
             end
 
-            # skip stale checking and force compilation if any dep was recompiled in this session
-            any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !Operations.precomp_suspended(pkg)
+            proceed = if haskey(man, pkg.uuid) # to handle the working environment uuid
+                pkgent = man[pkg.uuid]
+                !precomp_suspended(PackageSpec(uuid = pkg.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
+            else
+                true
+            end
+            if proceed
+                # skip stale checking and force compilation if any dep was recompiled in this session
+                any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
                 if (any_dep_recompiled || _is_stale(paths, sourcepath))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
@@ -1122,7 +1123,11 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                             !fancy_print && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
-                            Operations.precomp_suspend!(pkg)
+                            if haskey(man, pkg.uuid)
+                                pkgentry = man[pkg.uuid]
+                                precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
+                                                        version = pkgentry.version, tree_hash = pkgentry.tree_hash))
+                            end
                         end
                     finally
                         Base.release(parallel_limiter)
@@ -1139,7 +1144,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     end
     finished = true
     notify(first_started) # in cases of no-op or !fancy_print
-    Operations.save_suspended_packages() # save list to scratch space
+    save_suspended_packages() # save list to scratch space
     wait(t_print)
 
     ndeps = count(values(was_recompiled))
@@ -1176,6 +1181,36 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     nothing
 end
 
+const pkgs_precompile_suspended = PackageSpec[]
+function save_suspended_packages()
+    path = Operations.pkg_scratchpath()
+    fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project())))
+    mkpath(path); Base.Filesystem.rm(fpath, force=true)
+    open(fpath, "w") do io
+        serialize(io, pkgs_precompile_suspended)
+    end
+    return nothing
+end
+function recall_suspended_packages()
+    fpath = joinpath(Operations.pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project())))
+    if isfile(fpath)
+        v = open(fpath) do io
+            try
+                deserialize(io)
+            catch
+                PackageSpec[]
+            end
+        end
+        append!(empty!(pkgs_precompile_suspended), v)
+    else
+        empty!(pkgs_precompile_suspended)
+    end
+    return nothing
+end
+precomp_suspend!(pkg::PackageSpec) = push!(pkgs_precompile_suspended, pkg)
+precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
+precomp_suspended(pkg::PackageSpec) = pkg in pkgs_precompile_suspended
+
 function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
     try
         return LibGit2.GitObject(repo, tree_hash)
@@ -1190,10 +1225,6 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
                      platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
-    if first_pkg_action[]
-        first_pkg_action[] = false
-        Operations.recall_suspended_packages()
-    end
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         deps = Dict{String,String}()
@@ -1303,7 +1334,6 @@ function activate(;temp=false,shared=false)
     p = Base.active_project()
     p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
-    Operations.recall_suspended_packages()
     return nothing
 end
 function _activate_dep(dep_name::AbstractString)
@@ -1362,13 +1392,11 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
         printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
-    Operations.recall_suspended_packages()
     return nothing
 end
 function activate(f::Function, new_project::AbstractString)
     old = Base.ACTIVE_PROJECT[]
     Base.ACTIVE_PROJECT[] = new_project
-    Operations.recall_suspended_packages()
     try
         f()
     finally
