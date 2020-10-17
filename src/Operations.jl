@@ -920,7 +920,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}, verbose::Bool)
     end
     uuids = UUID[]
     _get_deps!(ctx, pkgs, uuids)
-    build_versions(ctx, uuids; might_need_to_resolve=true, verbose=verbose)
+    build_versions(ctx, uuids; verbose)
 end
 
 function dependency_order_uuids(ctx::Context, uuids::Vector{UUID})::Dict{UUID,Int}
@@ -964,7 +964,7 @@ end
 
 builddir(source_path::String) = joinpath(source_path, "deps")
 buildfile(source_path::String) = joinpath(builddir(source_path), "build.jl")
-function build_versions(ctx::Context, uuids::Vector{UUID}; might_need_to_resolve=false, verbose=false)
+function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
     # collect builds for UUIDs with `deps/build.jl` files
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
