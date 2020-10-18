@@ -543,6 +543,19 @@ Below is a comparison between the REPL version and the API version:
 """
 const RegistrySpec = Types.RegistrySpec
 
+"""
+active_pkg_server()
+
+Get the active Pkg server.
+
+## Example
+
+```julia
+julia> Pkg.active_pkg_server()
+"https://us-east.pkg.julialang.org/"
+```
+"""
+const active_pkg_server = Types.active_pkg_server
 
 function __init__()
     DEFAULT_IO[] = stderr

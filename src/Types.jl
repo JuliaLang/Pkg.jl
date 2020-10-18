@@ -20,6 +20,8 @@ using ..Pkg.Versions
 import Base: SHA1
 using SHA
 
+import Downloads
+
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
@@ -1077,11 +1079,35 @@ function remove_registries(io::IO, regs::Vector{RegistrySpec})
     return nothing
 end
 
+function active_pkg_server()
+    server = pkg_server()
+    if server !== nothing
+        request = Downloads.Request(devnull, server, Vector{Pair{String,String}}(undef, 0))
+        response = Downloads.request(request)
+        active_server = response.url
+        return active_server
+    end
+    return nothing
+end
+
+function print_active_pkg_server(ctx::Context)
+    active_server = active_pkg_server()
+    if active_server !== nothing
+        printpkgstyle(ctx, :Info, "The active Pkg server is: " * active_server)
+    end
+    return nothing
+end
+
+function is_ci()
+    return lowercase(get(ENV, "CI", "")) == "true"
+end
+
 # entry point for `registry up`
 function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registries(depots1());
                            force::Bool=false)
     Pkg.OFFLINE_MODE[] && return
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
+    UPDATED_REGISTRY_THIS_SESSION[] || (is_ci() && print_active_pkg_server(ctx))
     errors = Tuple{String, String}[]
     registry_urls = nothing
     for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{Union{UUID,Nothing}}())
