@@ -806,9 +806,11 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
         bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
                                   percentage=false, always_reprint=true)
         bar.max = length(pkgs_to_install)
+
         show_progress = ctx.io isa Base.TTY
-        show_progress && Pkg.showprogress(ctx.io, bar)
-        io = stderr
+        if length(pkgs_to_install) > 0 && show_progress
+            Pkg.showprogress(ctx.io, bar)
+        end
         for i in 1:length(pkgs_to_install)
             pkg::PackageSpec, exc_or_success, bt_or_path = take!(results)
             exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
@@ -824,7 +826,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                     show_progress && Pkg.showprogress(io, bar)
                 end
             end
-            print(io, str)
+            print(ctx.io, str)
         end
 
         close(jobs)
