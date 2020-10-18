@@ -943,6 +943,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             Base.PkgId(last(x), first(x))
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
+        push!(direct_deps, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
 
     started = Dict{Base.PkgId,Bool}()
