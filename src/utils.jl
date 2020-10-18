@@ -54,6 +54,27 @@ function showprogress(io::IO, p::MiniProgressBar)
     print(io, "\r")
 end
 
+# Useful when writing a progress bar in the bottom
+# makes the bottom progress bar not flicker
+# prog = MiniProgressBar(...)
+# prog.end = n
+# for progress in 1:n
+#     print_progree_bottom(io)
+#     println("stuff")
+#     prog.current = progress
+#     showproress(io, prog)
+#  end
+#
+function print_progress_bottom(io::IO)
+    print(io, "\e[S")
+    ansi_cleartoend = "\e[0J"
+    ansi_movecol1 = "\e[1G"
+    ansi_moveup(n::Int) = string("\e[", n, "A")
+    print(io, ansi_moveup(1))
+    print(io, ansi_movecol1)
+    print(io, ansi_cleartoend)
+end
+
 function set_readonly(path)
     for (root, dirs, files) in walkdir(path)
         for file in files

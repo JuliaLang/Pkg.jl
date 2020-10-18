@@ -639,6 +639,7 @@ function get_metadata_headers(url::AbstractString)
     server_dir = get_server_dir(url, server)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol" => "1.0")
+    push!(headers, "Julia-Pkg-Server" => server)
     push!(headers, "Julia-Version" => string(VERSION))
     system = triplet(HostPlatform())
     push!(headers, "Julia-System" => system)
