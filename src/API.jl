@@ -1184,7 +1184,7 @@ end
 const pkgs_precompile_suspended = PackageSpec[]
 function save_suspended_packages()
     path = Operations.pkg_scratchpath()
-    fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project())))
+    fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project() * string(Base.VERSION))))
     mkpath(path); Base.Filesystem.rm(fpath, force=true)
     open(fpath, "w") do io
         serialize(io, pkgs_precompile_suspended)
@@ -1192,7 +1192,7 @@ function save_suspended_packages()
     return nothing
 end
 function recall_suspended_packages()
-    fpath = joinpath(Operations.pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project())))
+    fpath = joinpath(Operations.pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project() * string(Base.VERSION))))
     if isfile(fpath)
         v = open(fpath) do io
             try
