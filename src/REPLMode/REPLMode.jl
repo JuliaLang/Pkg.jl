@@ -12,6 +12,7 @@ using ..Types, ..Operations, ..API, ..Registry, ..Resolve
 import ..Pkg: Pkg
 
 const TEST_MODE = Ref{Bool}(false)
+const PRINTED_REPL_WARNING = Ref{Bool}(false)
 
 #########################
 # Specification Structs #
@@ -373,6 +374,10 @@ end
 # Execution #
 #############
 function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
+    if !isinteractive() && !TEST_MODE[] && !PRINTED_REPL_WARNING[]
+        @warn "The Pkg REPL interface is intended for interactive use, use with caution from scripts."
+        PRINTED_REPL_WARNING[] = true
+    end
     try
         statements = parse(input)
         commands   = map(Command, statements)
