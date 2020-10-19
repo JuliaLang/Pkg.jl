@@ -1,7 +1,0 @@
-status = [
-  "continuous-integration/travis-ci/push",
-  "continuous-integration/appveyor/branch",
-]
-delete-merged-branches = true
-timeout-sec = 7200
-cut_body_after = "---"
