@@ -1099,17 +1099,17 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 is_direct_dep = pkg in direct_deps
                 iob = IOBuffer()
                 name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
+                !fancy_print && lock(print_lock) do
+                    isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
+                end
+                push!(pkg_queue, pkg)
+                started[pkg] = true
+                fancy_print && notify(first_started)
+                if interrupted
+                    notify(was_processed[pkg])
+                    return
+                end
                 try
-                    !fancy_print && lock(print_lock) do
-                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
-                    end
-                    push!(pkg_queue, pkg)
-                    started[pkg] = true
-                    fancy_print && notify(first_started)
-                    if interrupted
-                        notify(was_processed[pkg])
-                        return
-                    end
                     Logging.with_logger(Logging.NullLogger()) do
                         Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
                     end
