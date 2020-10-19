@@ -1414,8 +1414,8 @@ function with_temp_env(fn::Function, temp_env::String)
     load_path = copy(LOAD_PATH)
     active_project = Base.ACTIVE_PROJECT[]
     try
-        push!(empty!(LOAD_PATH), temp_env)
-        Base.ACTIVE_PROJECT[] = temp_env
+        push!(empty!(LOAD_PATH), "@", temp_env)
+        Base.ACTIVE_PROJECT[] = nothing
         fn()
     finally
         append!(empty!(LOAD_PATH), load_path)
@@ -1502,7 +1502,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             end
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'
-            withenv(fn, "JULIA_LOAD_PATH" => "@$(path_sep)$(tmp)")
+            withenv(fn, "JULIA_LOAD_PATH" => "@$(path_sep)$(tmp)", "JULIA_PROJECT" => nothing)
         end
     end
 end
