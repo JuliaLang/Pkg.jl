@@ -13,12 +13,19 @@ test_test(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
     # also indirectly checks that test `compat` is obeyed
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "SandboxFallback2")
-        Pkg.activate(joinpath(tmp, "SandboxFallback2"))
-        test_test("Unregistered") do
+        proj = joinpath(tmp, "SandboxFallback2")
+        Pkg.activate(proj)
+        withenv("JULIA_PROJECT" => proj) do; test_test("Unregistered") do
             json = get(Pkg.Types.Context().env.manifest, UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6"), nothing)
             @test json !== nothing
             @test json.version == v"0.20.0"
-        end
+            # test that the active project is the tmp one even though
+            # JULIA_PROJECT might be set
+            @test !haskey(ENV, "JULIA_PROJECT")
+            @test Base.active_project() != proj
+            @test Base.LOAD_PATH[1] == "@"
+            @test startswith(Base.active_project(), Base.LOAD_PATH[2])
+        end end
     end end
     # test dependencies should be preserved, when possible
     temp_pkg_dir() do project_path; mktempdir() do tmp
