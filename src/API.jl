@@ -1094,7 +1094,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
             is_stale = true
-            if (any_dep_recompiled || (!suspended && is_stale = _is_stale(paths, sourcepath)))
+            if (any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
                 Base.acquire(parallel_limiter)
                 is_direct_dep = pkg in direct_deps
                 iob = IOBuffer()
