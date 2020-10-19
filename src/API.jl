@@ -8,6 +8,7 @@ import Random
 using Dates
 import LibGit2
 import Logging
+using Serialization
 
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
@@ -68,7 +69,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
             ctx = Context()
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
+            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx; kwargs...)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -906,9 +907,9 @@ function _is_stale(paths::Vector{String}, sourcepath::String)
     return true
 end
 
-function _auto_precompile(ctx::Context)
+function _auto_precompile(ctx::Context; kwargs...)
     if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
-        Pkg.precompile(ctx, internal_call=true)
+        Pkg.precompile(ctx; internal_call=true, kwargs...)
     end
 end
 
@@ -919,11 +920,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
-    if internal_call
-        Operations.recall_suspended_packages()
-    else
-        Operations.precomp_unsuspend!()
-    end
+    internal_call ? recall_suspended_packages() : precomp_unsuspend!()
 
     action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
 
@@ -946,16 +943,23 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             Base.PkgId(last(x), first(x))
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
+        push!(direct_deps, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
 
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
+    pkg_specs = PackageSpec[]
     for pkgid in keys(depsmap)
         started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
+        if haskey(man, pkgid.uuid)
+            pkgent = man[pkgid.uuid]
+            push!(pkg_specs, PackageSpec(uuid = pkgid.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
+        end
     end
+    precomp_prune_suspended!(pkg_specs)
 
     # guarding against circular deps
     circular_deps = Base.PkgId[]
@@ -968,7 +972,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
         if in_deps([pkg], deps, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
-            Operations.precomp_suspend!(pkg)
+            precomp_suspend!(pkg)
             !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
         end
     end
@@ -1081,56 +1085,63 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 wait(was_processed[dep])
             end
 
+            suspended = if haskey(man, pkg.uuid) # to handle the working environment uuid
+                pkgent = man[pkg.uuid]
+                precomp_suspended(PackageSpec(uuid = pkg.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
+            else
+                false
+            end
             # skip stale checking and force compilation if any dep was recompiled in this session
             any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            if !Operations.precomp_suspended(pkg)
-                if (any_dep_recompiled || _is_stale(paths, sourcepath))
-                    Base.acquire(parallel_limiter)
-                    is_direct_dep = pkg in direct_deps
-                    iob = IOBuffer()
-                    try
-                        !fancy_print && lock(print_lock) do
-                            isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
-                        end
-                        push!(pkg_queue, pkg)
-                        started[pkg] = true
-                        fancy_print && notify(first_started)
-                        if interrupted
-                            notify(was_processed[pkg])
-                            return
-                        end
-                        Logging.with_logger(Logging.NullLogger()) do
-                            Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
-                        end
-                        !fancy_print && lock(print_lock) do
-                            str = string(color_string("  ✓ ", :green), pkg.name)
-                            println(io, is_direct_dep ? str : color_string(str, :light_black))
-                        end
-                        was_recompiled[pkg] = true
-                    catch err
-                        if err isa InterruptException
-                            interrupted = true
-                            show_report = false
-                            notify(was_processed[pkg])
-                            lock(print_lock) do
-                                println(io, " Interrupted: Exiting precompilation...")
-                            end
-                        else
-                            failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
-                            !fancy_print && lock(print_lock) do
-                                str = string(color_string("  ✗ ", Base.error_color()), pkg.name)
-                                println(io, is_direct_dep ? str : color_string(str, :light_black))
-                            end
-                            Operations.precomp_suspend!(pkg)
-                        end
-                    finally
-                        Base.release(parallel_limiter)
+            is_stale = true
+            if (any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
+                Base.acquire(parallel_limiter)
+                is_direct_dep = pkg in direct_deps
+                iob = IOBuffer()
+                name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
+                !fancy_print && lock(print_lock) do
+                    isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
+                end
+                push!(pkg_queue, pkg)
+                started[pkg] = true
+                fancy_print && notify(first_started)
+                if interrupted
+                    notify(was_processed[pkg])
+                    return
+                end
+                try
+                    Logging.with_logger(Logging.NullLogger()) do
+                        Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
                     end
-                else
-                    n_already_precomp += 1
+                    !fancy_print && lock(print_lock) do
+                        println(io, string(color_string("  ✓ ", :green), name))
+                    end
+                    was_recompiled[pkg] = true
+                catch err
+                    if err isa InterruptException
+                        interrupted = true
+                        show_report = false
+                        notify(was_processed[pkg])
+                        lock(print_lock) do
+                            println(io, " Interrupted: Exiting precompilation...")
+                        end
+                    else
+                        failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
+                        !fancy_print && lock(print_lock) do
+                            println(io, string(color_string("  ✗ ", Base.error_color()), name))
+                        end
+                        if haskey(man, pkg.uuid)
+                            pkgentry = man[pkg.uuid]
+                            precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
+                                                    version = pkgentry.version, tree_hash = pkgentry.tree_hash))
+                        end
+                    end
+                finally
+                    Base.release(parallel_limiter)
                 end
             else
-                !in(pkg, circular_deps) && push!(skipped_deps, pkg)
+                !is_stale && (n_already_precomp += 1)
+                suspended && !in(pkg, circular_deps) && push!(skipped_deps, pkg)
             end
             n_done += 1
             notify(was_processed[pkg])
@@ -1138,7 +1149,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     end
     finished = true
     notify(first_started) # in cases of no-op or !fancy_print
-    Operations.save_suspended_packages() # save list to scratch space
+    save_suspended_packages() # save list to scratch space
     wait(t_print)
 
     ndeps = count(values(was_recompiled))
@@ -1174,6 +1185,37 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     end
     nothing
 end
+
+const pkgs_precompile_suspended = PackageSpec[]
+function save_suspended_packages()
+    path = Operations.pkg_scratchpath()
+    fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project() * string(Base.VERSION))))
+    mkpath(path); Base.Filesystem.rm(fpath, force=true)
+    open(fpath, "w") do io
+        serialize(io, pkgs_precompile_suspended)
+    end
+    return nothing
+end
+function recall_suspended_packages()
+    fpath = joinpath(Operations.pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project() * string(Base.VERSION))))
+    if isfile(fpath)
+        v = open(fpath) do io
+            try
+                deserialize(io)
+            catch
+                PackageSpec[]
+            end
+        end
+        append!(empty!(pkgs_precompile_suspended), v)
+    else
+        empty!(pkgs_precompile_suspended)
+    end
+    return nothing
+end
+precomp_suspend!(pkg::PackageSpec) = push!(pkgs_precompile_suspended, pkg)
+precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
+precomp_suspended(pkg::PackageSpec) = pkg in pkgs_precompile_suspended
+precomp_prune_suspended!(pkgs::Vector{PackageSpec}) = filter!(in(pkgs), pkgs_precompile_suspended)
 
 function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
     try
@@ -1222,7 +1264,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx)
-        allow_autoprecomp && _auto_precompile(ctx)
+        allow_autoprecomp && _auto_precompile(ctx; kwargs...)
         return
     end
 
@@ -1277,7 +1319,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
 
-    allow_autoprecomp && _auto_precompile(ctx)
+    allow_autoprecomp && _auto_precompile(ctx; kwargs...)
 end
 
 

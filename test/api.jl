@@ -126,9 +126,13 @@ end
             Pkg.generate("Dep3")
             Pkg.generate("Dep4")
             Pkg.generate("Dep5")
+            Pkg.generate("BrokenDep")
+            open(joinpath("BrokenDep","src","BrokenDep.jl"), "w") do io
+                write(io, "module BrokenDep\nerror()\nend")
+            end
         end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
-        
+
         Pkg.activate("Dep1")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep2"))
         Pkg.activate("Dep2")
@@ -141,16 +145,56 @@ end
         iob = IOBuffer()
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
         println("Auto precompilation enabled")
-        Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"), io=iob)
+        @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
         @test String(take!(iob)) == "" # test that the previous precompile was a no-op
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
         println("Auto precompilation disabled")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
         Pkg.precompile(io=iob)
-        @test String(take!(iob)) != "" # test that the previous precompile did some work
+        @test occursin("Precompiling", String(take!(iob)))
+        @test isempty(Pkg.API.pkgs_precompile_suspended)
+
+        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
+        Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep"), io=iob) # should trigger auto-precomp and soft-error
+        @test occursin("Precompiling", String(take!(iob)))
+        broken_packages = Pkg.API.pkgs_precompile_suspended
+        @test length(broken_packages) == 1
+        Pkg.activate("newpath")
+        Pkg.precompile(io=iob)
+        @test String(take!(iob)) == "" # test that the previous precompile was a no-op
+        @test isempty(Pkg.API.pkgs_precompile_suspended)
+
+        Pkg.activate(".") # test that going back to the project restores suspension list
+        Pkg.update("BrokenDep", io=iob) # should trigger auto-precomp but do nothing due to error suspension
+        @test !occursin("Precompiling", String(take!(iob)))
+        @test length(Pkg.API.pkgs_precompile_suspended) == 1
+
+        @test_throws PkgError Pkg.precompile() # calling precompile should retry any suspended, and throw on errors
+        @test Pkg.API.pkgs_precompile_suspended == broken_packages
+
+        ptoml = joinpath("packages","BrokenDep","Project.toml")
+        lines = readlines(ptoml)
+        open(joinpath("packages","BrokenDep","src","BrokenDep.jl"), "w") do io
+            write(io, "module BrokenDep\n\nend") # remove error
+        end
+        open(ptoml, "w") do io
+            for line in lines
+                if startswith(line, "version = \"0.1.0\"")
+                    println(io, replace(line, "version = \"0.1.0\"" => "version = \"0.1.1\"", count=1)) # up version
+                else
+                    println(io, line)
+                end
+            end
+        end
+        Pkg.update("BrokenDep") # should trigger auto-precomp including the fixed BrokenDep
+        Pkg.precompile(io=iob)
+        @test String(take!(iob)) == "" # test that the previous precompile was a no-op
+
+        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
     end
-    
+
     # ignoring circular deps, to avoid deadlock
     cd_tempdir() do tmp
         path = pwd()
@@ -163,18 +207,18 @@ end
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep1"))
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep2"))
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep3"))
-        
+
         Pkg.activate("CircularDep1")
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep2"))
         Pkg.activate("CircularDep2")
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep3"))
         Pkg.activate("CircularDep3")
         Pkg.develop(Pkg.PackageSpec(path="packages/CircularDep1"))
-        
+
         Pkg.activate(".")
         Pkg.resolve()
         precomp_task = @async Pkg.precompile()
-        
+
         timer = Timer(60*2) # allow 2 minutes before assuming deadlock
         timed_out = false
         while true

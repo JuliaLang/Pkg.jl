@@ -14,7 +14,6 @@ import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server
-using Serialization
 
 #########
 # Utils #
@@ -22,37 +21,6 @@ using Serialization
 
 const PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
-
-const pkgs_precompile_suspended = Base.PkgId[]
-function save_suspended_packages()
-    path = pkg_scratchpath()
-    fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project())))
-    mkpath(path); Base.Filesystem.rm(fpath, force=true)
-    open(fpath, "w") do io
-        serialize(io, pkgs_precompile_suspended)
-    end
-    return nothing
-end
-function recall_suspended_packages()
-    fpath = joinpath(pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project())))
-    if isfile(fpath)
-        v = open(fpath) do io
-            try
-                deserialize(io)
-            catch
-                Base.PkgId[]
-            end
-        end
-        append!(empty!(pkgs_precompile_suspended), v)
-    else
-        empty!(pkgs_precompile_suspended)
-    end
-    return nothing
-end
-precomp_suspend!(pkg::Base.PkgId) = push!(pkgs_precompile_suspended, pkg)
-precomp_unsuspend!(pkg::Base.PkgId) = filter!(!isequal(pkg), pkgs_precompile_suspended)
-precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
-precomp_suspended(pkg::Base.PkgId) = pkg in pkgs_precompile_suspended
 
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
     slug_default = Base.version_slug(uuid, sha1)
@@ -164,9 +132,6 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
             entry.deps = ctx.env.project.deps
         else
             entry.deps = deps_map[pkg.uuid]
-        end
-        if !haskey(manifest_before, pkg.uuid) || manifest_before[pkg.uuid] != entry
-            precomp_unsuspend!(Base.PkgId(pkg.uuid, pkg.name))
         end
         ctx.env.manifest[pkg.uuid] = entry
     end
