@@ -949,11 +949,17 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
+    pkg_specs = PackageSpec[]
     for pkgid in keys(depsmap)
         started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
+        if haskey(man, pkgid.uuid)
+            pkgent = man[pkgid.uuid]
+            push!(pkg_specs, PackageSpec(uuid = pkgid.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
+        end
     end
+    precomp_prune_suspended!(pkg_specs)
 
     # guarding against circular deps
     circular_deps = Base.PkgId[]
@@ -1209,6 +1215,7 @@ end
 precomp_suspend!(pkg::PackageSpec) = push!(pkgs_precompile_suspended, pkg)
 precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
 precomp_suspended(pkg::PackageSpec) = pkg in pkgs_precompile_suspended
+precomp_prune_suspended!(pkgs::Vector{PackageSpec}) = filter!(in(pkgs), pkgs_precompile_suspended)
 
 function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
     try
