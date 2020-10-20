@@ -1062,17 +1062,15 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             end
             println(io, ansi_enablecursor)
         catch err
+            interrupted = true
+            show_report = false
             if err isa InterruptException
-                interrupted = true
-                show_report = false
                 lock(print_lock) do
                     print(io, ansi_enablecursor)
                     println(io, " Interrupted: Exiting precompilation...")
                 end
             else
-                # Comment this out if developing this code
-                # @show err
-                # rethrow(err)
+                rethrow(err)
             end
         end
     end
@@ -1148,16 +1146,14 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 n_done += 1
                 notify(was_processed[pkg])
             catch err_outer
+                interrupted = true
+                show_report = false
+                notify(was_processed[pkg])
                 if err_outer isa InterruptException
-                    interrupted = true
-                    show_report = false
-                    notify(was_processed[pkg])
                     lock(print_lock) do
                         println(io, " Interrupted: Exiting precompilation...")
                     end
                 else
-                    interrupted = true
-                    notify(was_processed[pkg])
                     rethrow(err_outer)
                 end
             end
