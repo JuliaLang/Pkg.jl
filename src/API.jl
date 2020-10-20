@@ -997,6 +997,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
     ansi_cleartoend = "\e[0J"
+    ansi_enablecursor = "\e[?25h"
+    ansi_disablecursor = "\e[?25l"
     show_report::Bool = true
     n_done::Int = 0
     n_already_precomp::Int = 0
@@ -1007,6 +1009,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             isempty(pkg_queue) && return
             fancy_print && lock(print_lock) do
                 printpkgstyle(io, :Precompiling, "project...$action_help")
+                print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
             anim_chars = ["◐","◓","◑","◒"]
@@ -1060,16 +1063,17 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 wait(t)
             end
         catch err
+            interrupted = true
+            show_report = false
             if err isa InterruptException
-                interrupted = true
                 lock(print_lock) do
                     println(io, " Interrupted: Exiting precompilation...")
                 end
             else
-                # Comment this out if developing this code
-                # @show err
-                # rethrow(err)
+                rethrow(err)
             end
+        finally
+            fancy_print && print(io, ansi_enablecursor)
         end
     end
     @sync for (pkg, deps) in depsmap # precompilation loop
@@ -1083,70 +1087,79 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
 
         @async begin
-            for dep in deps # wait for deps to finish
-                wait(was_processed[dep])
-            end
+            try
+                for dep in deps # wait for deps to finish
+                    wait(was_processed[dep])
+                end
 
-            suspended = if haskey(man, pkg.uuid) # to handle the working environment uuid
-                pkgent = man[pkg.uuid]
-                precomp_suspended(PackageSpec(uuid = pkg.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
-            else
-                false
-            end
-            # skip stale checking and force compilation if any dep was recompiled in this session
-            any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
-            is_stale = true
-            if (any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
-                Base.acquire(parallel_limiter)
-                is_direct_dep = pkg in direct_deps
-                iob = IOBuffer()
-                name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
-                !fancy_print && lock(print_lock) do
-                    isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
+                suspended = if haskey(man, pkg.uuid) # to handle the working environment uuid
+                    pkgent = man[pkg.uuid]
+                    precomp_suspended(PackageSpec(uuid = pkg.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
+                else
+                    false
                 end
-                push!(pkg_queue, pkg)
-                started[pkg] = true
-                fancy_print && notify(first_started)
-                if interrupted
-                    notify(was_processed[pkg])
-                    return
-                end
-                try
-                    Logging.with_logger(Logging.NullLogger()) do
-                        Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
-                    end
+                # skip stale checking and force compilation if any dep was recompiled in this session
+                any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
+                is_stale = true
+                if (any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
+                    Base.acquire(parallel_limiter)
+                    is_direct_dep = pkg in direct_deps
+                    iob = IOBuffer()
+                    name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
                     !fancy_print && lock(print_lock) do
-                        println(io, string(color_string("  ✓ ", :green), name))
+                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
                     end
-                    was_recompiled[pkg] = true
-                catch err
-                    if err isa InterruptException
-                        interrupted = true
-                        show_report = false
+                    push!(pkg_queue, pkg)
+                    started[pkg] = true
+                    fancy_print && notify(first_started)
+                    if interrupted
                         notify(was_processed[pkg])
-                        lock(print_lock) do
-                            println(io, " Interrupted: Exiting precompilation...")
-                        end
-                    else
-                        failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
-                        !fancy_print && lock(print_lock) do
-                            println(io, string(color_string("  ✗ ", Base.error_color()), name))
-                        end
-                        if haskey(man, pkg.uuid)
-                            pkgentry = man[pkg.uuid]
-                            precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
-                                                    version = pkgentry.version, tree_hash = pkgentry.tree_hash))
-                        end
+                        Base.release(parallel_limiter)
+                        return
                     end
-                finally
-                    Base.release(parallel_limiter)
+                    try
+                        Logging.with_logger(Logging.NullLogger()) do
+                            Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
+                        end
+                        !fancy_print && lock(print_lock) do
+                            println(io, string(color_string("  ✓ ", :green), name))
+                        end
+                        was_recompiled[pkg] = true
+                    catch err
+                        if err isa ErrorException
+                            failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
+                            !fancy_print && lock(print_lock) do
+                                println(io, string(color_string("  ✗ ", Base.error_color()), name))
+                            end
+                            if haskey(man, pkg.uuid)
+                                pkgentry = man[pkg.uuid]
+                                precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
+                                                        version = pkgentry.version, tree_hash = pkgentry.tree_hash))
+                            end
+                        else
+                            rethrow(err)
+                        end
+                    finally
+                        Base.release(parallel_limiter)
+                    end
+                else
+                    !is_stale && (n_already_precomp += 1)
+                    suspended && !in(pkg, circular_deps) && push!(skipped_deps, pkg)
                 end
-            else
-                !is_stale && (n_already_precomp += 1)
-                suspended && !in(pkg, circular_deps) && push!(skipped_deps, pkg)
+                n_done += 1
+                notify(was_processed[pkg])
+            catch err_outer
+                interrupted = true
+                show_report = false
+                notify(was_processed[pkg])
+                if err_outer isa InterruptException
+                    lock(print_lock) do
+                        println(io, " Interrupted: Exiting precompilation...")
+                    end
+                else
+                    rethrow(err_outer)
+                end
             end
-            n_done += 1
-            notify(was_processed[pkg])
         end
     end
     finished = true
