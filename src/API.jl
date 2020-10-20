@@ -995,6 +995,8 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
     ansi_cleartoend = "\e[0J"
+    ansi_enablecursor = "\e[?25h"
+    ansi_disablecursor = "\e[?25l"
     show_report::Bool = true
     n_done::Int = 0
     n_already_precomp::Int = 0
@@ -1005,6 +1007,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
             isempty(pkg_queue) && return
             fancy_print && lock(print_lock) do
                 printpkgstyle(io, :Precompiling, "project...$action_help")
+                print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
             anim_chars = ["◐","◓","◑","◒"]
@@ -1057,10 +1060,12 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 i += 1
                 wait(t)
             end
+            println(io, ansi_enablecursor)
         catch err
             if err isa InterruptException
                 interrupted = true
                 lock(print_lock) do
+                    print(io, ansi_enablecursor)
                     println(io, " Interrupted: Exiting precompilation...")
                 end
             else
