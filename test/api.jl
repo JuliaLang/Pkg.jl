@@ -117,7 +117,7 @@ end
 
 @testset "Pkg.precompile" begin
     # sequential precompile, depth-first
-    cd_tempdir() do tmp
+    temp_pkg_dir() do tmp; cd(tmp) do
         path = pwd()
         Pkg.activate(".")
         cd(mkdir("packages")) do
@@ -192,11 +192,14 @@ end
         Pkg.precompile(io=iob)
         @test String(take!(iob)) == "" # test that the previous precompile was a no-op
 
+        # https://github.com/JuliaLang/Pkg.jl/pull/2142
+        Pkg.build(; verbose=true)
+
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
-    end
+    end end
 
     # ignoring circular deps, to avoid deadlock
-    cd_tempdir() do tmp
+    temp_pkg_dir() do tmp; cd(tmp) do
         path = pwd()
         Pkg.activate(".")
         cd(mkdir("packages")) do
@@ -231,7 +234,7 @@ end
             sleep(0.5)
         end
         @test timed_out == false
-    end
+    end end
 end
 
 end # module APITests
