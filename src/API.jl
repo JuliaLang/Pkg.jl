@@ -69,7 +69,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
             ctx = Context()
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx; kwargs...)
+            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -907,16 +907,18 @@ function _is_stale(paths::Vector{String}, sourcepath::String)
     return true
 end
 
-function _auto_precompile(ctx::Context; kwargs...)
+function _auto_precompile(ctx::Context)
     if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
-        Pkg.precompile(ctx; internal_call=true, kwargs...)
+        Pkg.precompile(ctx; internal_call=true)
     end
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
+function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
+    Context!(ctx; kwargs...)
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS::Int + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
+    io = ctx.io
     fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
@@ -1264,7 +1266,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx)
-        allow_autoprecomp && _auto_precompile(ctx; kwargs...)
+        allow_autoprecomp && _auto_precompile(ctx)
         return
     end
 
