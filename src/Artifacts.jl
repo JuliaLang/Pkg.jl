@@ -10,7 +10,9 @@ import ..set_readonly
 import ..GitTools
 import ..TOML
 import ..Types: parse_toml, write_env_usage, printpkgstyle
-import ...Pkg: pkg_server
+import ..Pkg
+import ..Pkg: pkg_server
+import ..Pkg: MiniProgressBar, showprogress
 using ..PlatformEngines
 using SHA
 
@@ -427,8 +429,9 @@ end
 function with_show_download_info(f, name, quiet_download)
     if !quiet_download
         # Should ideally pass ctx::Context as first arg here
-        printpkgstyle(stdout, :Downloading, "artifact: $name")
-        print(stdout, "\e[?25l") # disable cursor
+        Pkg.print_progress_bottom(stderr)
+        printpkgstyle(stderr, :Downloading, "artifact: $name")
+        print(stderr, "\e[?25l") # disable cursor
     end
     try
         return f()
@@ -436,6 +439,7 @@ function with_show_download_info(f, name, quiet_download)
         if !quiet_download
             print(stdout, "\033[1A") # move cursor up one line
             print(stdout, "\033[2K") # clear line
+            printpkgstyle(stdout, :Downloaded, "artifact: $name")
             print(stdout, "\e[?25h") # put back cursor
         end
     end

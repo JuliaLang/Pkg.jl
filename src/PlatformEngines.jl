@@ -4,7 +4,7 @@
 
 module PlatformEngines
 using SHA, Downloads
-import ...Pkg: Pkg, TOML, pkg_server, depots1
+import ...Pkg: Pkg, TOML, pkg_server, depots1, MiniProgressBar, showprogress
 using Base.BinaryPlatforms
 
 export probe_platform_engines!, verify, unpack, package, download_verify_unpack
@@ -683,7 +683,18 @@ function download(
     for header in get_metadata_headers(url)
         push!(headers, header)
     end
-    Downloads.download(url, dest, headers=headers)
+    progress = if verbose
+        bar = MiniProgressBar(header="Downloading", color=Base.info_color())
+        p -> begin
+            bar.max = p.dl_total
+            bar.current = p.dl_now
+            showprogress(stderr, bar)
+        end
+    else
+        p -> nothing
+    end
+
+    Downloads.download(url, dest; headers, progress)
 end
 
 """
