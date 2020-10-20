@@ -1124,7 +1124,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                         end
                         was_recompiled[pkg] = true
                     catch err
-                        if err isa Base.PrecompileFailedException
+                        if err isa ErrorException
                             failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
                             !fancy_print && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
