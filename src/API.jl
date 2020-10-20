@@ -1071,7 +1071,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 rethrow(err)
             end
         finally
-            print(io, ansi_enablecursor)
+            fancy_print && print(io, ansi_enablecursor)
         end
     end
     @sync for (pkg, deps) in depsmap # precompilation loop
