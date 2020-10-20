@@ -1112,6 +1112,7 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                     fancy_print && notify(first_started)
                     if interrupted
                         notify(was_processed[pkg])
+                        Base.release(parallel_limiter)
                         return
                     end
                     try
