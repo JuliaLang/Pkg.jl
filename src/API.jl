@@ -1060,18 +1060,18 @@ function precompile(ctx::Context; internal_call::Bool=false, io::IO=stderr)
                 i += 1
                 wait(t)
             end
-            println(io, ansi_enablecursor)
         catch err
             interrupted = true
             show_report = false
             if err isa InterruptException
                 lock(print_lock) do
-                    print(io, ansi_enablecursor)
                     println(io, " Interrupted: Exiting precompilation...")
                 end
             else
                 rethrow(err)
             end
+        finally
+            print(io, ansi_enablecursor)
         end
     end
     @sync for (pkg, deps) in depsmap # precompilation loop
