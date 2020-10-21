@@ -551,7 +551,7 @@ function install_archive(
     tmp_objects = String[]
     url_success = false
     for (url, top) in urls
-        path = tempname() * randstring(6) * ".tar.gz"
+        path = tempname() * randstring(6)
         push!(tmp_objects, path) # for cleanup
         url_success = true
         try
