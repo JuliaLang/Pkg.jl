@@ -1,9 +1,7 @@
 language: julia
 
 julia:
-  # - 1.0
   - 1.5
-  - nightly
 
 os:
   - linux
@@ -33,24 +31,17 @@ script:
 jobs:
   include:
     - stage: docs
-      julia: 1.4
+      julia: 1.5
       os: linux
       script:
         - julia -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"))'
         - julia --project -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
         - julia --project=docs --color=yes docs/make.jl pdf
       after_success: skip
-    - name: TOML (Julia 1.3)
+    - name: TOML
       stage: test
       os: linux
-      julia: 1.3
-      script:
-        - julia --project=ext/TOML -e 'using Pkg; Pkg.test()'
-      after_success: skip
-    - name: TOML (Julia nightly)
-      stage: test
-      os: linux
-      julia: nightly
+      julia: 1.5
       script:
         - julia --project=ext/TOML -e 'using Pkg; Pkg.test()'
       after_success: skip
