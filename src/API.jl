@@ -1002,7 +1002,6 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     ansi_cleartoend = "\e[0J"
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
-    show_report::Bool = true
     n_done::Int = 0
     n_already_precomp::Int = 0
 
@@ -1067,7 +1066,6 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             end
         catch err
             interrupted = true
-            show_report = false
             if err isa InterruptException
                 lock(print_lock) do
                     println(io, " Interrupted: Exiting precompilation...")
@@ -1154,7 +1152,6 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 notify(was_processed[pkg])
             catch err_outer
                 interrupted = true
-                show_report = false
                 notify(was_processed[pkg])
                 if err_outer isa InterruptException
                     lock(print_lock) do
@@ -1168,13 +1165,22 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         push!(tasks, task)
     end
     while !interrupted && any(!istaskdone, tasks)
-        sleep(0.1)
+        try
+            sleep(0.001)
+        catch err
+            interrupted = true
+            if err isa InterruptException
+                lock(print_lock) do
+                    println(io, " Interrupted: Exiting precompilation...")
+                end
+            end
+        end
     end
     finished = true
     notify(first_started) # in cases of no-op or !fancy_print
     save_suspended_packages() # save list to scratch space
     wait(t_print)
-    !show_report && return
+    interrupted && return
     seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
     ndeps = count(values(was_recompiled))
     if ndeps > 0 || !isempty(failed_deps)
