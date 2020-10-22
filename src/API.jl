@@ -1079,7 +1079,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             fancy_print && print(io, ansi_enablecursor)
         end
     end
-    @sync for (pkg, deps) in depsmap # precompilation loop
+    tasks = Task[]
+    for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         sourcepath === nothing && continue
@@ -1089,7 +1090,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             continue
         end
 
-        @async begin
+        task = @async begin
             try
                 for dep in deps # wait for deps to finish
                     wait(was_processed[dep])
@@ -1164,11 +1165,16 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 end
             end
         end
+        push!(tasks, task)
+    end
+    while !interrupted && any(.!istaskdone.(tasks))
+        sleep(0.1)
     end
     finished = true
     notify(first_started) # in cases of no-op or !fancy_print
     save_suspended_packages() # save list to scratch space
     wait(t_print)
+    !show_report && return
     seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
     ndeps = count(values(was_recompiled))
     if ndeps > 0 || !isempty(failed_deps)
@@ -1182,7 +1188,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
             str *= ")"
         end
-        show_report && lock(print_lock) do
+        lock(print_lock) do
             println(io, str)
         end
         if !internal_call
