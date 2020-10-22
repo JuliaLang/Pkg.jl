@@ -915,6 +915,7 @@ end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
 function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
+    time_start = time_ns()
     Context!(ctx; kwargs...)
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS::Int + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
@@ -1168,11 +1169,11 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     notify(first_started) # in cases of no-op or !fancy_print
     save_suspended_packages() # save list to scratch space
     wait(t_print)
-
+    seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
     ndeps = count(values(was_recompiled))
     if ndeps > 0 || !isempty(failed_deps)
         plural = ndeps == 1 ? "y" : "ies"
-        str = "$(ndeps) dependenc$(plural) successfully precompiled"
+        str = "$(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds"
         !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
         if n_already_precomp > 0 || !isempty(skipped_deps)
             str *= " ("
