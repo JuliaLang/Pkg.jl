@@ -549,7 +549,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
         @warn "auth file without access_token field" file=auth_file
         return handle_auth_error(url, "no-access-token"; verbose=verbose)
     end
-    auth_header = "Authorization: Bearer $(auth_info["access_token"]::String)"
+    auth_header = "Authorization" => "Bearer $(auth_info["access_token"]::String)"
     # handle token expiration and refresh
     expires_at = Inf
     if haskey(auth_info, "expires_at")
