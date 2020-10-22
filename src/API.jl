@@ -1167,7 +1167,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
         push!(tasks, task)
     end
-    while !interrupted && any(.!istaskdone.(tasks))
+    while !interrupted && any(!istaskdone, tasks)
         sleep(0.1)
     end
     finished = true
