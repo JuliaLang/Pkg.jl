@@ -974,7 +974,9 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         if in_deps([pkg], deps, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
-            precomp_suspend!(pkg)
+            pkgentry = man[pkg.uuid]
+            precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
+                            version = pkgentry.version, tree_hash = pkgentry.tree_hash))
             !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
         end
     end
