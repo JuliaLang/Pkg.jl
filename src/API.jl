@@ -1203,11 +1203,13 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
             str *= ")"
         end
-        if !isempty(failed_deps)
-            str *= "\n" * color_string("$(length(failed_deps)) errored", Base.error_color())
-        end
         if !isempty(rec_restart)
-            str *= "\n" * color_string(string(length(rec_restart)), Base.warn_color()) * " may not be precompilable. Try restarting julia"
+            plural = length(rec_restart) == 1 ? "y" : "ies"
+            str *= "\n" * color_string(string(length(rec_restart)), Base.warn_color()) * " dependenc$(plural) may not be precompilable. Try restarting julia"
+        end
+        if internal_call && !isempty(failed_deps)
+            plural = length(failed_deps) == 1 ? "y" : "ies"
+            str *= "\n" * color_string("$(length(failed_deps))", Base.error_color()) * " dependenc$(plural) errored"
         end
         lock(print_lock) do
             println(io, str)
@@ -1224,7 +1226,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             if err_str != ""
                 println(io, "")
                 plural = n_direct_errs == 1 ? "y" : "ies"
-                pkgerror("The following direct dependenc$(plural) failed to precompile:\n$(err_str)")
+                pkgerror("The following $( n_direct_errs) direct dependenc$(plural) failed to precompile:\n$(err_str[1:end-1])")
             end
         end
     end
