@@ -1039,7 +1039,9 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     str *= sprint(io -> Pkg.showprogress(io, bar); context=io) * '\n'
                     for dep in pkg_queue_show
                         name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
-                        if haskey(failed_deps, dep)
+                        if dep in rec_restart
+                            str *= string(color_string("  ? ", Base.warn_color()), name, "\n")
+                        elseif haskey(failed_deps, dep)
                             str *= string(color_string("  ✗ ", Base.error_color()), name, "\n")
                         elseif was_recompiled[dep]
                             finished && continue
@@ -1124,16 +1126,13 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                         ret = Logging.with_logger(Logging.NullLogger()) do
                             Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
                         end
-                        if ret isa Base.PrecompilableError
-                            push!(rec_restart, pkg)
-                            throw(ret)
-                        end
+                        ret isa Base.PrecompilableError && throw(ret)
                         !fancy_print && lock(print_lock) do
                             println(io, string(color_string("  ✓ ", :green), name))
                         end
                         was_recompiled[pkg] = true
                     catch err
-                        if err isa ErrorException || err isa Base.PrecompilableError
+                        if err isa ErrorException
                             failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
                             !fancy_print && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
@@ -1142,6 +1141,11 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                                 pkgentry = man[pkg.uuid]
                                 precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
                                                         version = pkgentry.version, tree_hash = pkgentry.tree_hash))
+                            end
+                        elseif err isa Base.PrecompilableError
+                            push!(rec_restart, pkg)
+                            !fancy_print && lock(print_lock) do
+                                println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
                             rethrow(err)
@@ -1200,10 +1204,9 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
         if !isempty(failed_deps)
             str *= "\n" * color_string("$(length(failed_deps)) errored", Base.error_color())
-            if !isempty(rec_restart)
-                term = length(rec_restart) == length(failed_deps) ? "All" : length(rec_restart)
-                str *= " $(term) of which because they are loaded yet their cache files are missing. Try restarting julia"
-            end
+        end
+        if !isempty(rec_restart)
+            str *= "\n" * color_string(string(length(rec_restart)), Base.warn_color()) * " may not be precompilable. Try restarting julia"
         end
         lock(print_lock) do
             println(io, str)
