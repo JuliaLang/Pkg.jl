@@ -1126,26 +1126,27 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                         ret = Logging.with_logger(Logging.NullLogger()) do
                             Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
                         end
-                        ret isa Base.PrecompilableError && throw(ret)
-                        !fancy_print && lock(print_lock) do
-                            println(io, string(color_string("  ✓ ", :green), name))
+                        if ret isa Base.PrecompilableError
+                            push!(rec_restart, pkg)
+                            !fancy_print && lock(print_lock) do
+                                println(io, string(color_string("  ? ", Base.warn_color()), name))
+                            end
+                        else
+                            !fancy_print && lock(print_lock) do
+                                println(io, string(color_string("  ✓ ", :green), name))
+                            end
+                            was_recompiled[pkg] = true
                         end
-                        was_recompiled[pkg] = true
                     catch err
                         if err isa ErrorException
                             failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
                             !fancy_print && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
-                            if !in(pkg, rec_restart) && haskey(man, pkg.uuid)
+                            if haskey(man, pkg.uuid)
                                 pkgentry = man[pkg.uuid]
                                 precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
                                                         version = pkgentry.version, tree_hash = pkgentry.tree_hash))
-                            end
-                        elseif err isa Base.PrecompilableError
-                            push!(rec_restart, pkg)
-                            !fancy_print && lock(print_lock) do
-                                println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
                             rethrow(err)
