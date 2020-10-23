@@ -985,6 +985,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
     skipped_deps = Base.PkgId[]
+    rec_restart = Base.PkgId[] # packages that may succeed after a restart (i.e. loaded packages with no cache file)
 
     print_lock = stdout isa Base.LibuvStream ? stdout.lock::ReentrantLock : ReentrantLock()
     first_started = Base.Event()
@@ -1120,20 +1121,24 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                         return
                     end
                     try
-                        Logging.with_logger(Logging.NullLogger()) do
+                        ret = Logging.with_logger(Logging.NullLogger()) do
                             Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
+                        end
+                        if ret isa Base.PrecompilableError
+                            push!(rec_restart, pkg)
+                            throw(ret)
                         end
                         !fancy_print && lock(print_lock) do
                             println(io, string(color_string("  ✓ ", :green), name))
                         end
                         was_recompiled[pkg] = true
                     catch err
-                        if err isa ErrorException
+                        if err isa ErrorException || err isa Base.PrecompilableError
                             failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
                             !fancy_print && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
-                            if haskey(man, pkg.uuid)
+                            if !in(pkg, rec_restart) && haskey(man, pkg.uuid)
                                 pkgentry = man[pkg.uuid]
                                 precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
                                                         version = pkgentry.version, tree_hash = pkgentry.tree_hash))
@@ -1186,13 +1191,19 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     if ndeps > 0 || !isempty(failed_deps)
         plural = ndeps == 1 ? "y" : "ies"
         str = "$(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds"
-        !isempty(failed_deps) && (str *= ", $(length(failed_deps)) errored")
         if n_already_precomp > 0 || !isempty(skipped_deps)
             str *= " ("
             n_already_precomp > 0 && (str *= "$n_already_precomp already precompiled")
             !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
             !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
             str *= ")"
+        end
+        if !isempty(failed_deps)
+            str *= "\n" * color_string("$(length(failed_deps)) errored", Base.error_color())
+            if !isempty(rec_restart)
+                term = length(rec_restart) == length(failed_deps) ? "All" : length(rec_restart)
+                str *= " $(term) of which because they are loaded yet their cache files are missing. Try restarting julia"
+            end
         end
         lock(print_lock) do
             println(io, str)
