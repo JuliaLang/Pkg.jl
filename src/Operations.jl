@@ -244,6 +244,16 @@ end
 #######################################
 # Dependency gathering and resolution #
 #######################################
+function set_maximum_version_registry!(ctx::Context, pkg::PackageSpec)
+    pkgversions = Set{VersionNumber}()
+    for path in registered_paths(ctx, pkg.uuid)
+        pathvers = keys(load_versions(ctx, path; include_yanked=false))
+        union!(pkgversions, pathvers)
+    end
+    max_version = maximum(pkgversions; init=VersionNumber(0))
+    pkg.version = VersionNumber(max_version.major, max_version.minor, max_version.patch, max_version.prerelease, ("",))
+end
+
 function collect_project!(ctx::Context, pkg::PackageSpec, path::String,
                           deps_map::Dict{UUID,Vector{PackageSpec}})
     deps_map[pkg.uuid] = PackageSpec[]
@@ -263,7 +273,8 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String,
     if project.version !== nothing
         pkg.version = project.version
     else
-        pkgerror("project file for $(pkg.name) is missing a `version` entry")
+        # @warn "project file for $(pkg.name) is missing a `version` entry"
+        set_maximum_version_registry!(ctx, pkg)
     end
     return
 end
