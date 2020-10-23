@@ -263,7 +263,8 @@ function collect_project!(ctx::Context, pkg::PackageSpec, path::String,
     if project.version !== nothing
         pkg.version = project.version
     else
-        pkgerror("project file for $(pkg.name) is missing a `version` entry")
+        @warn("project file for $(pkg.name) is missing a `version` entry")
+        pkg.version = VersionNumber(0)
     end
     return
 end
