@@ -1184,6 +1184,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 lock(print_lock) do
                     println(io, " Interrupted: Exiting precompilation...")
                 end
+            else
+                throw(err)
             end
         end
     end
