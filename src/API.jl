@@ -1007,6 +1007,17 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     n_done::Int = 0
     n_already_precomp::Int = 0
 
+    function handle_interrupt(err)
+        interrupted = true
+        if err isa InterruptException
+            lock(print_lock) do
+                println(io, " Interrupted: Exiting precompilation...")
+            end
+        else
+            rethrow(err)
+        end
+    end
+
     t_print = @async begin # fancy print loop
         try
             wait(first_started)
@@ -1069,14 +1080,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 wait(t)
             end
         catch err
-            interrupted = true
-            if err isa InterruptException
-                lock(print_lock) do
-                    println(io, " Interrupted: Exiting precompilation...")
-                end
-            else
-                rethrow(err)
-            end
+            handle_interrupt(err)
         finally
             fancy_print && print(io, ansi_enablecursor)
         end
@@ -1162,15 +1166,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 n_done += 1
                 notify(was_processed[pkg])
             catch err_outer
-                interrupted = true
+                handle_interrupt(err_outer)
                 notify(was_processed[pkg])
-                if err_outer isa InterruptException
-                    lock(print_lock) do
-                        println(io, " Interrupted: Exiting precompilation...")
-                    end
-                else
-                    rethrow(err_outer)
-                end
             end
         end
         push!(tasks, task)
@@ -1179,14 +1176,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         try
             sleep(0.001)
         catch err
-            interrupted = true
-            if err isa InterruptException
-                lock(print_lock) do
-                    println(io, " Interrupted: Exiting precompilation...")
-                end
-            else
-                throw(err)
-            end
+            handle_interrupt(err)
         end
     end
     finished = true
