@@ -310,6 +310,7 @@ function download_artifact(
     if Sys.iswindows()
         # The destination directory we're hoping to fill:
         dest_dir = artifact_path(tree_hash; honor_overrides=false)
+        mkpath(dest_dir)
 
         # On Windows, we have some issues around stat() and chmod() that make properly
         # determining the git tree hash problematic; for this reason, we use the "unsafe"

@@ -3,467 +3,30 @@
 # Content in this file is extracted from BinaryProvider.jl, see LICENSE.method
 
 module PlatformEngines
-using SHA, Downloads
+
+using SHA, Downloads, Tar
 import ...Pkg: Pkg, TOML, pkg_server, depots1, MiniProgressBar, showprogress
 using Base.BinaryPlatforms
 
 export probe_platform_engines!, verify, unpack, package, download_verify_unpack
 
-# In this file, we setup the `gen_download_cmd()`, `gen_unpack_cmd()` and
-# `gen_package_cmd()` functions by providing methods to probe the environment
-# and determine the most appropriate platform binaries to call.
+const exe7z = Ref("")
 
-"""
-    gen_unpack_cmd(tarball_path::AbstractString, out_path::AbstractString;
-                   excludelist::Union{AbstractString, Nothing} = nothing)
-
-Return a `Cmd` that will unpack the given `tarball_path` into the given
-`out_path`.  If `out_path` is not already a directory, it will be created.
-excludlist is an optional file which contains a list of files that is not unpacked
-This option is mainyl used to exclude symlinks from extraction (see: `copyderef`)
-
-This method is initialized by `probe_platform_engines!()`.
-"""
-gen_unpack_cmd = (tarball_path::AbstractString, out_path::AbstractString,
-                  excludelist::Union{AbstractString, Nothing} = nothing) ->
-    error("Call `probe_platform_engines!()` before `gen_unpack_cmd()`")
-
-"""
-    gen_package_cmd(in_path::AbstractString, tarball_path::AbstractString)
-
-Return a `Cmd` that will package up the given `in_path` directory into a
-tarball located at `tarball_path`.
-
-This method is initialized by `probe_platform_engines!()`.
-"""
-gen_package_cmd = (in_path::AbstractString, tarball_path::AbstractString) ->
-    error("Call `probe_platform_engines!()` before `gen_package_cmd()`")
-
-"""
-    gen_list_tarball_cmd(tarball_path::AbstractString)
-
-Return a `Cmd` that will list the files contained within the tarball located at
-`tarball_path`.  The list will not include directories contained within the
-tarball.
-
-This method is initialized by `probe_platform_engines!()`.
-"""
-gen_list_tarball_cmd = (tarball_path::AbstractString) ->
-    error("Call `probe_platform_engines!()` before `gen_list_tarball_cmd()`")
-
-"""
-    parse_tarball_listing(output::AbstractString)
-
-Parses the result of `gen_list_tarball_cmd()` into something useful.
-
-This method is initialized by `probe_platform_engines!()`.
-"""
-parse_tarball_listing = (output::AbstractString) ->
-    error("Call `probe_platform_engines!()` before `parse_tarball_listing()`")
-
-"""
-    parse_symlinks(output::AbstractString)
-
-Returns a regex to parse symlinks from tarball listings.
-
-This method is initialized by `probe_platform_engines!()`.
-"""
-
-parse_symlinks = () ->
-    error("Call `probe_platform_engines!()` before `parse_symlinks()`")
-
-"""
-    probe_cmd(cmd::Cmd; verbose::Bool = false)
-
-Returns `true` if the given command executes successfully, `false` otherwise.
-"""
-function probe_cmd(cmd::Cmd; verbose::Bool = false)
-    if verbose
-        @info("Probing $(cmd.exec[1]) as a possibility...")
+function __init__()
+    exe7z[] = ""
+    name = "7z"
+    Sys.iswindows() && (name = "$name.exe")
+    for dir in (joinpath("..", "libexec"), ".")
+        path = normpath(Sys.BINDIR, dir, name)
+        isfile(path) || continue
+        exe7z[] = path
     end
-    try
-        success(cmd)
-        if verbose
-            @info("  Probe successful for $(cmd.exec[1])")
-        end
-        return true
-    catch
-        return false
-    end
+    isempty(exe7z[]) && error("7z binary not found")
 end
+__init__()
 
-already_probed = false
-
-"""
-    probe_symlink_creation(dest::AbstractString)
-
-Probes whether we can create a symlink within the given destination directory,
-to determine whether a particular filesystem is "symlink-unfriendly".
-"""
-function probe_symlink_creation(dest::AbstractString)
-    while !isdir(dest)
-        dest = dirname(dest)
-    end
-
-    # Build arbitrary (non-existent) file path name
-    link_path = joinpath(dest, "binaryprovider_symlink_test")
-    while ispath(link_path)
-        link_path *= rand('A':'Z')
-    end
-
-    try
-        symlink("foo", link_path)
-        return true
-    catch e
-        isa(e, Base.IOError) || rethrow(e)
-        return false
-    finally
-        rm(link_path; force=true)
-    end
-end
-
-"""
-    probe_platform_engines!(;verbose::Bool = false)
-
-Searches the environment for various tools needed to download, unpack, and
-package up binaries.  Searches for a download engine to be used by
-`gen_download_cmd()` and a compression engine to be used by `gen_unpack_cmd()`,
-`gen_package_cmd()`, `gen_list_tarball_cmd()` and `parse_tarball_listing()`.
-Running this function
-will set the global functions to their appropriate implementations given the
-environment this package is running on.
-
-This probing function will automatically search for download engines using a
-particular ordering; if you wish to override this ordering and use one over all
-others, set the `BINARYPROVIDER_DOWNLOAD_ENGINE` environment variable to its
-name, and it will be the only engine searched for. For example, put:
-
-    ENV["BINARYPROVIDER_DOWNLOAD_ENGINE"] = "fetch"
-
-within your `~/.juliarc.jl` file to force `fetch` to be used over `curl`.  If
-the given override does not match any of the download engines known to this
-function, a warning will be printed and the typical ordering will be performed.
-
-Similarly, if you wish to override the compression engine used, set the
-`BINARYPROVIDER_COMPRESSION_ENGINE` environment variable to its name (e.g. `7z`
-or `tar`) and it will be the only engine searched for.  If the given override
-does not match any of the compression engines known to this function, a warning
-will be printed and the typical searching will be performed.
-
-If `verbose` is `true`, print out the various engines as they are searched.
-"""
 function probe_platform_engines!(;verbose::Bool = false)
-    global already_probed
-    global gen_list_tarball_cmd, gen_package_cmd
-    global gen_unpack_cmd, parse_tarball_listing, parse_symlinks
-
-    # Quick-escape for Pkg, since we do this a lot
-    if already_probed
-        return
-    end
-
-    # 7z is rather intensely verbose.  We also want to try running not only
-    # `7z` but also a direct path to the `7z.exe` bundled with Julia on
-    # windows, so we create generator functions to spit back functors to invoke
-    # the correct 7z given the path to the executable:
-    unpack_7z = (exe7z) -> begin
-        return (tarball_path, out_path, excludelist = nothing) ->
-        pipeline(pipeline(`$exe7z x $(tarball_path) -y -so`,
-                 `$exe7z x -si -y -ttar -o$(out_path) $(excludelist === nothing ? [] : "-x@$(excludelist)")`);
-                 stdout=devnull, stderr=devnull)
-    end
-    package_7z = (exe7z) -> begin
-        return (in_path, tarball_path) ->
-            pipeline(pipeline(`$exe7z a -ttar -so a.tar "$(joinpath(".",in_path,"*"))"`,
-                     `$exe7z a -si $(tarball_path)`); stdout=devnull, stderr=devnull)
-    end
-    list_7z = (exe7z) -> begin
-        return (path; verbose = false) ->
-            pipeline(`$exe7z x $path -so`, `$exe7z l -ttar -y -si $(verbose ? ["-slt"] : [])`)
-    end
-
-    # the regex at the last position is meant for parsing the symlinks from verbose 7z-listing
-    # "Path = ([^\r\n]+)\r?\n" matches the symlink name which is followed by an optional return and a new line
-    # (?:[^\r\n]+\r?\n)+ = a group of non-empty lines (information belonging to one file is written as a block of lines followed by an empty line)
-    # more info on regex and a powerful online tester can be found at https://regex101.com
-    # Symbolic Link = ([^\r\n]+)"s) matches the source filename
-    # Demo 7z listing of tar files:
-    # 7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04
-    #
-    #
-    # Listing archive:
-    # --
-    # Path =
-    # Type = tar
-    # Code Page = UTF-8
-    #
-    # ----------
-    # Path = .
-    # Folder = +
-    # Size = 0
-    # Packed Size = 0
-    # Modified = 2018-08-22 11:44:23
-    # Mode = 0rwxrwxr-x
-    # User = travis
-    # Group = travis
-    # Symbolic Link =
-    # Hard Link =
-
-    # Path = .\lib\libpng.a
-    # Folder = -
-    # Size = 10
-    # Packed Size = 0
-    # Modified = 2018-08-22 11:44:51
-    # Mode = 0rwxrwxrwx
-    # User = travis
-    # Group = travis
-    # Symbolic Link = libpng16.a
-    # Hard Link =
-    #
-    # Path = .\lib\libpng16.a
-    # Folder = -
-    # Size = 334498
-    # Packed Size = 334848
-    # Modified = 2018-08-22 11:44:49
-    # Mode = 0rw-r--r--
-    # User = travis
-    # Group = travis
-    # Symbolic Link =
-    # Hard Link =
-    gen_7z = (p) -> (unpack_7z(p), package_7z(p), list_7z(p), parse_7z_list, r"Path = ([^\r\n]+)\r?\n(?:[^\r\n]+\r?\n)+Symbolic Link = ([^\r\n]+)"s)
-    compression_engines = Tuple{Cmd,Vararg{Any}}[]
-
-    (tmpfile, io) = mktemp()
-    write(io, "Demo file for tar listing (Pkg.jl)")
-    close(io)
-
-    for tar_cmd in [`tar`, `busybox tar`]
-        # try to determine the tar list format
-        local symlink_parser
-        try
-            # Windows 10 now has a `tar` but it needs the `-f -` flag to use stdin/stdout
-            # The Windows 10 tar does not work on substituted drives (`subst U: C:\Users`)
-            # If a drive letter is part of the filename, then tar spits out a warning on stderr:
-            # "tar: Removing leading drive letter from member names"
-            # Therefore we cd to tmpdir() first
-            tarListing = cd(tempdir()) do
-                read(pipeline(`$tar_cmd -cf - $(basename(tmpfile))`, `$tar_cmd -tvf -`), String)
-            end
-            # obtain the text of the line before the filename
-            m = match(Regex("((?:\\S+\\s+)+?)$tmpfile"), tarListing)[1]
-            # count the number of words before the filename
-            nargs = length(split(m, " "; keepempty = false))
-            # build a regex for catching the symlink:
-            # "^l" = line starting with l
-            # "(?:\S+\s+){$nargs} = nargs non-capturing groups of many non-spaces "\S+" and many spaces "\s+"
-            # "(.+?)" = a non-greedy sequence of characters: the symlink
-            # "(?: -> (.+?))?" = an optional group of " -> " followed by a non-greedy sequence of characters: the source of the link
-            # "\r?\$" = matches the end of line with an optional return character for some OSes
-            # Demo listings
-            # drwxrwxr-x  0 sabae  sabae       0 Sep  5  2018 collapse_the_symlink/
-            # lrwxrwxrwx  0 sabae  sabae       0 Sep  5  2018 collapse_the_symlink/foo -> foo.1
-            # -rw-rw-r--  0 sabae  sabae       0 Sep  5  2018 collapse_the_symlink/foo.1
-            # lrwxrwxrwx  0 sabae  sabae       0 Sep  5  2018 collapse_the_symlink/foo.1.1 -> foo.1
-            # lrwxrwxrwx  0 sabae  sabae       0 Sep  5  2018 collapse_the_symlink/broken -> obviously_broken
-            #
-            # drwxrwxr-x sabae/sabae       0 2018-09-05 18:19 collapse_the_symlink/
-            # lrwxrwxrwx sabae/sabae       0 2018-09-05 18:19 collapse_the_symlink/foo -> foo.1
-            #
-            # lrwxrwxr-x 1000/1000 498007696 2009-11-27 00:14:00 link1 -> source1
-            # lrw-rw-r-- 1000/1000 1359020032 2019-06-03 12:02:03 link2 -> sourcedir/source2
-            #
-            # now a pathological link "2009 link with blanks"
-            # this can only be tracked by determining the tar format beforehand:
-            # lrw-rw-r-- 0 1000 1000 1359020032 Jul  8 2009 2009 link with blanks -> target with blanks
-            symlink_parser = Regex("^l(?:\\S+\\s+){$nargs}(.+?)(?: -> (.+?))?\\r?\$", "m")
-        catch
-            # generic expression for symlink parsing
-            # this will fail, if the symlink contains space characters (which is highly improbable, though)
-            # "^l.+?" = a line starting with an "l" followed by a sequence of non-greedy characters
-            # \S+? the filename consisting of non-space characters, the rest as above
-            symlink_parser = r"^l.+? (\S+?)(?: -> (.+?))?\r?$"m
-        end
-        # Some tar's aren't smart enough to auto-guess decompression method. :(
-        unpack_tar = (tarball_path, out_path, excludelist = nothing) -> begin
-            Jjz = "z"
-            if endswith(tarball_path, ".xz")
-                Jjz = "J"
-            elseif endswith(tarball_path, ".bz2")
-                Jjz = "j"
-            end
-            return `$tar_cmd --no-same-owner -mx$(Jjz)f $(tarball_path) -C$(out_path) $(excludelist === nothing ? [] : "-X$(excludelist)")`
-        end
-        package_tar = (in_path, tarball_path) -> begin
-            Jjz = "z"
-            if endswith(tarball_path, ".xz")
-                Jjz = "J"
-            elseif endswith(tarball_path, ".bz2")
-                Jjz = "j"
-            end
-            return `$tar_cmd -c$(Jjz)f $tarball_path -C$(in_path) .`
-        end
-        list_tar = (in_path; verbose = false) -> begin
-            Jjz = "z"
-            if endswith(in_path, ".xz")
-                Jjz = "J"
-            elseif endswith(in_path, ".bz2")
-                Jjz = "j"
-            end
-            return `$tar_cmd $(verbose ? "-t$(Jjz)vf" : "-t$(Jjz)f") $in_path`
-        end
-        push!(compression_engines, (
-            `$tar_cmd --help`,
-            unpack_tar,
-            package_tar,
-            list_tar,
-            parse_tar_list,
-            symlink_parser
-        ))
-    end
-    rm(tmpfile, force = true)
-
-    # For windows, we need to tweak a few things, as the tools available differ
-    @static if Sys.iswindows()
-        # We greatly prefer `7z` as a compression engine on Windows
-        prepend!(compression_engines, [(`7z --help`, gen_7z("7z")...)])
-
-        # For purposes of in-buildtree execution, we look in `bin`
-        exe7z = joinpath(Sys.BINDIR::String, "7z.exe")
-        prepend!(compression_engines, [(`$exe7z --help`, gen_7z(exe7z)...)])
-
-        # But most commonly, we'll find `7z` sitting in `libexec`, bundled with Julia
-        exe7z = joinpath(Sys.BINDIR::String, "..", "libexec", "7z.exe")
-        prepend!(compression_engines, [(`$exe7z --help`, gen_7z(exe7z)...)])
-    end
-
-    if haskey(ENV, "BINARYPROVIDER_COMPRESSION_ENGINE")
-        engine = ENV["BINARYPROVIDER_COMPRESSION_ENGINE"]
-        es = split(engine)
-        comp_ngs = let es=es
-            filter(e -> e[1].exec[1:length(es)] == es, compression_engines)
-        end
-        if isempty(comp_ngs)
-            all_ngs = join([c[1].exec[1] for c in compression_engines], ", ")
-            warn_msg  = "Ignoring BINARYPROVIDER_COMPRESSION_ENGINE as its "
-            warn_msg *= "value of `$(engine)` doesn't match any known valid "
-            warn_msg *= "engines. Try one of `$(all_ngs)`."
-            @warn(warn_msg)
-        else
-            # If BINARYPROVIDER_COMPRESSION_ENGINE matches one of our download
-            # engines, then restrict ourselves to looking only at that engine
-            compression_engines = comp_ngs
-        end
-    end
-
-    compression_found = false
-
-    if verbose
-        @info("Probing for compression engine...")
-    end
-
-    # Search for a compression engine
-    for (test::Cmd, unpack, package, list, parse, symlink) in compression_engines
-        if probe_cmd(`$test`; verbose=verbose)
-            # Set our compression command generators
-            gen_unpack_cmd = unpack
-            gen_package_cmd = package
-            gen_list_tarball_cmd = list
-            parse_tarball_listing = parse
-            parse_symlinks = () -> symlink
-
-            if verbose
-                @info("Found compression engine $(test.exec[1])")
-            end
-
-            compression_found = true
-            break
-        end
-    end
-
-    # Build informative error messages in case things go sideways
-    if !compression_found
-        errmsg = ""
-        errmsg *= "No compression engines found. We looked for: "
-        errmsg *= join([c[1].exec[1] for c in compression_engines], ", ")
-        errmsg *= ". Install one and ensure it is available on the path.\n"
-        error(errmsg)
-    end
-    already_probed = true
-end
-
-"""
-    parse_7z_list(output::AbstractString)
-
-Given the output of `7z l`, parse out the listed filenames.  This funciton used
-by  `list_tarball_files`.
-"""
-function parse_7z_list(output::AbstractString)
-    lines = [chomp(l) for l in split(output, "\n")]
-
-    # If we didn't get anything, complain immediately
-    if isempty(lines)
-        return []
-    end
-
-    # Remove extraneous "\r" for windows platforms
-    for idx in 1:length(lines)
-        if endswith(lines[idx], '\r')
-            lines[idx] = lines[idx][1:end-1]
-        end
-    end
-
-    # Find index of " Name".  Have to `collect()` as `findfirst()` doesn't work with
-    # generators: https://github.com/JuliaLang/julia/issues/16884
-    header_row = findfirst(collect(occursin(" Name", l) && occursin(" Attr", l) for l in lines))
-    name_idx = findfirst("Name", lines[header_row])[1]
-    attr_idx = findfirst("Attr", lines[header_row])[1] - 1
-
-    # Filter out only the names of files, ignoring directories
-    lines = [l[name_idx:end] for l in lines if length(l) > name_idx && l[attr_idx] != 'D']
-    if isempty(lines)
-        return []
-    end
-
-    # Extract within the bounding lines of ------------
-    bounds = [i for i in 1:length(lines) if all([c for c in lines[i]] .== Ref('-'))]
-    lines = lines[bounds[1]+1:bounds[2]-1]
-
-    # Eliminate `./` prefix, if it exists
-    for idx in 1:length(lines)
-        if startswith(lines[idx], "./") || startswith(lines[idx], ".\\")
-            lines[idx] = lines[idx][3:end]
-        end
-    end
-
-    return lines
-end
-
-"""
-    parse_tar_list(output::AbstractString)
-
-Given the output of `tar -t`, parse out the listed filenames.  This function
-used by `list_tarball_files`.
-"""
-function parse_tar_list(output::AbstractString)
-    lines = [chomp(l) for l in split(output, "\n")]
-    for idx in 1:length(lines)
-        while endswith(lines[idx], '\r')
-            lines[idx] = lines[idx][1:end-1]
-        end
-    end
-
-    # Drop empty lines and and directories
-    lines = [l for l in lines if !isempty(l) && !endswith(l, '/')]
-
-    # Eliminate `./` prefix, if it exists
-    for idx in 1:length(lines)
-        if startswith(lines[idx], "./") || startswith(lines[idx], ".\\")
-            lines[idx] = lines[idx][3:end]
-        end
-    end
-
-    # make sure paths are always returned in the system's default way
-    return Sys.iswindows() ? replace.(lines, ['/' => '\\']) : lines
+    # don't do anything
 end
 
 is_secure_url(url::AbstractString) =
@@ -657,24 +220,13 @@ function get_metadata_headers(url::AbstractString)
     return headers
 end
 
-"""
-    download(
-        url::AbstractString,
-        dest::AbstractString;
-        verbose::Bool = false,
-        auth_header::Union{Pair{String,String}, Nothing} = nothing,
-    )
-
-Download file located at `url`, store it at `dest`, continuing if `dest`
-already exists and the server and download engine support it.
-"""
 function download(
     url::AbstractString,
     dest::AbstractString;
     verbose::Bool = false,
+    headers::Vector{Pair{String,String}} = Pair{String,String}[],
     auth_header::Union{Pair{String,String}, Nothing} = nothing,
 )
-    headers = Pair{String,String}[]
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
     end
@@ -684,6 +236,7 @@ function download(
     for header in get_metadata_headers(url)
         push!(headers, header)
     end
+
     progress = if verbose
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
         p -> begin
@@ -784,103 +337,27 @@ function download_verify(
     return !file_existed
 end
 
-function get_tarball_contents(path::AbstractString; verbose_tar::Bool = false)
-    if !isfile(path)
-        error("Tarball path $(path) does not exist")
-    end
-
-    # Run the listing command, then parse the output
-    cmd = gen_list_tarball_cmd(path; verbose=verbose_tar)
-    output = try
-        out_pipe = Pipe()
-        P = run(pipeline(cmd; stdout=out_pipe); wait=false)
-        close(out_pipe.in)
-        output = @async String(read(out_pipe))
-		wait(P)
-		fetch(output)
-    catch
-        error("Could not list contents of tarball $(path)")
-    end
-
-    return output
+# TODO: can probably delete this, only affects tests
+function copy_symlinks()
+    var = get(ENV, "BINARYPROVIDER_COPYDEREF", "")
+    lowercase(var) in ("true", "t", "yes", "y", "1") ? true :
+    lowercase(var) in ("false", "f", "no", "n", "0") ? false : nothing
 end
 
-"""
-    list_tarball_files(path::AbstractString; verbose::Bool = false)
+function unpack(
+    tarball_path::AbstractString,
+    dest::AbstractString;
+    verbose::Bool = false,
+)
+    Tar.extract(`$(exe7z[]) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
+end
 
-Given a `.tar.gz` filepath, list the compressed contents.
-"""
 function list_tarball_files(tarball_path::AbstractString)
-    return parse_tarball_listing(get_tarball_contents(tarball_path))
-end
-
-"""
-    list_tarball_symlinks(path::AbstractString; verbose::Bool = false)
-
-Given a `.tar.gz` filepath, return a dictionary of symlinks in the archive
-"""
-function list_tarball_symlinks(tarball_path::AbstractString)
-    output = get_tarball_contents(tarball_path; verbose_tar = true)
-    mm = [m.captures for m in eachmatch(parse_symlinks(), output)]
-    symlinks = [String(m[1]) => joinpath(dirname(m[1]), m[2]) for m in mm if m[1] !== nothing && m[2] !== nothing]
-    return symlinks
-end
-
-
-"""
-    unpack(tarball_path::AbstractString, dest::AbstractString;
-           verbose::Bool = false)
-
-Unpack tarball located at file `tarball_path` into directory `dest`.
-"""
-function unpack(tarball_path::AbstractString, dest::AbstractString;
-                verbose::Bool = false)
-    # unpack into dest
-    mkpath(dest)
-
-    # The user can force usage of our dereferencing workarounds for filesystems
-    # that don't support symlinks, but it is also autodetected.
-    copyderef = (get(ENV, "BINARYPROVIDER_COPYDEREF", "") == "true") || !probe_symlink_creation(dest)
-
-    # If we should "copyderef" what we do is to unpack everything except symlinks
-    # then copy the sources of the symlinks to the destination of the symlink instead.
-    # This is to work around filesystems that are mounted (such as SMBFS filesystems)
-    # that do not support symlinks.
-    excludelist = nothing
-
-    if copyderef
-        symlinks = list_tarball_symlinks(tarball_path)
-        if length(symlinks) > 0
-            (excludelist, io) = mktemp()
-            write(io, join([s[1] for s in symlinks], "\n"))
-            close(io)
-        end
+    names = String[]
+    Tar.list(`$(exe7z[]) x $tarball_path -so`) do hdr
+        push!(names, hdr.path)
     end
-
-    cmd = gen_unpack_cmd(tarball_path, dest, excludelist)
-    try
-        run(cmd)
-    catch e
-        if isa(e, InterruptException)
-            rethrow()
-        end
-        error("Could not unpack $(tarball_path) into $(dest)")
-    end
-
-    if copyderef && length(symlinks) > 0
-        @info("Replacing symlinks in tarball by their source files ...\n" * join(string.(symlinks),"\n"))
-        for s in symlinks
-            sourcefile = normpath(joinpath(dest, s[2]))
-            destfile   = normpath(joinpath(dest, s[1]))
-
-            if isfile(sourcefile)
-                cp(sourcefile, destfile, force = true)
-            else
-                @warn("Symlink source '$sourcefile' does not exist!")
-            end
-        end
-        rm(excludelist; force = true)
-    end
+    return names
 end
 
 """
@@ -889,19 +366,10 @@ end
 Compress `src_dir` into a tarball located at `tarball_path`.
 """
 function package(src_dir::AbstractString, tarball_path::AbstractString)
-    # For now, use environment variables to set the gzip compression factor to
-    # level 9, eventually there will be new enough versions of tar everywhere
-    # to use -I 'gzip -9', or even to switch over to .xz files.
-    withenv("GZIP" => "-9") do
-        cmd = gen_package_cmd(src_dir, tarball_path)
-        try
-            run(cmd, (devnull, devnull, devnull))
-        catch e
-            if isa(e, InterruptException)
-                rethrow()
-            end
-            error("Could not package $(src_dir) into $(tarball_path)")
-        end
+    rm(tarball_path, force=true)
+    cmd = `$(exe7z[]) a -si -tgzip -mx9 $tarball_path`
+    open(pipeline(cmd, stdout=devnull), write=true) do io
+        Tar.create(src_dir, io)
     end
 end
 
@@ -1016,7 +484,9 @@ function download_verify_unpack(
         if verbose
             @info("Unpacking $(tarball_path) into $(dest)...")
         end
-        unpack(tarball_path, dest; verbose=verbose)
+        open(`$(exe7z[]) x $tarball_path -so`) do io
+            Tar.extract(io, dest, copy_symlinks = copy_symlinks())
+        end
     finally
         if remove_tarball
             Base.rm(tarball_path)
