@@ -986,13 +986,12 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
     skipped_deps = Base.PkgId[]
-    rec_restart = Base.PkgId[] # packages that may succeed after a restart (i.e. loaded packages with no cache file)
+    precomperr_deps = Base.PkgId[] # packages that may succeed after a restart (i.e. loaded packages with no cache file)
 
     print_lock = stdout isa Base.LibuvStream ? stdout.lock::ReentrantLock : ReentrantLock()
-    first_started = Base.Event()
-    finished::Bool = false
-    should_exit::Bool = !fancy_print # exit print loop immediately if not fancy printing
-    interrupted::Bool = false
+    first_started = Base.Event() # prevents printing anything in no-op
+    printloop_should_exit::Bool = !fancy_print # exit print loop immediately if not fancy printing
+    interrupted_or_done = Base.Event()
 
     function color_string(str::String, col::Symbol)
         enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
@@ -1008,7 +1007,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     n_already_precomp::Int = 0
 
     function handle_interrupt(err)
-        interrupted = true
+        notify(interrupted_or_done)
         if err isa InterruptException
             lock(print_lock) do
                 println(io, " Interrupted: Exiting precompilation...")
@@ -1033,11 +1032,11 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(), percentage=false, always_reprint=true)
             n_total = length(depsmap)
             bar.max = n_total - n_already_precomp
-            while !should_exit && !interrupted
+            while !printloop_should_exit
                 lock(print_lock) do
                     term_size = Base.displaysize(stdout)::Tuple{Int,Int}
                     num_deps_show = term_size[1] - 3
-                    pkg_queue_show = if !finished && length(pkg_queue) > num_deps_show
+                    pkg_queue_show = if !interrupted_or_done.set && length(pkg_queue) > num_deps_show
                         last(pkg_queue, num_deps_show)
                     else
                         pkg_queue
@@ -1051,31 +1050,29 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     str *= sprint(io -> Pkg.showprogress(io, bar); context=io) * '\n'
                     for dep in pkg_queue_show
                         name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
-                        if dep in rec_restart
+                        if dep in precomperr_deps
                             str *= string(color_string("  ? ", Base.warn_color()), name, "\n")
                         elseif haskey(failed_deps, dep)
                             str *= string(color_string("  ✗ ", Base.error_color()), name, "\n")
                         elseif was_recompiled[dep]
-                            finished && continue
+                            interrupted_or_done.set && continue
                             str *= string(color_string("  ✓ ", :green), name, "\n")
                             @async begin # keep successful deps visible for short period
                                 sleep(1);
                                 filter!(!isequal(dep), pkg_queue)
                             end
                         elseif started[dep]
-                            finished && continue
                             anim_char = anim_chars[i % length(anim_chars) + 1]
                             anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                             str *= string("  $anim_char_colored ", name, "\n")
                         else
-                            finished && continue
                             str *= "    " * name * "\n"
                         end
                     end
                     last_length = length(pkg_queue_show)
                     print(io, str)
                 end
-                should_exit = finished
+                printloop_should_exit = interrupted_or_done.set
                 i += 1
                 wait(t)
             end
@@ -1122,7 +1119,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     push!(pkg_queue, pkg)
                     started[pkg] = true
                     fancy_print && notify(first_started)
-                    if interrupted
+                    if interrupted_or_done.set
                         notify(was_processed[pkg])
                         Base.release(parallel_limiter)
                         return
@@ -1132,7 +1129,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                             Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
                         end
                         if ret isa Base.PrecompilableError
-                            push!(rec_restart, pkg)
+                            push!(precomperr_deps, pkg)
                             !fancy_print && lock(print_lock) do
                                 println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
@@ -1168,22 +1165,22 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             catch err_outer
                 handle_interrupt(err_outer)
                 notify(was_processed[pkg])
+            finally
+                filter!(!istaskdone, tasks)
+                length(tasks) == 1 && notify(interrupted_or_done)
             end
         end
         push!(tasks, task)
     end
-    while !interrupted && any(!istaskdone, tasks)
-        try
-            sleep(0.001)
-        catch err
-            handle_interrupt(err)
-        end
+    try
+        wait(interrupted_or_done)
+    catch err
+        handle_interrupt(err)
     end
-    finished = true
     notify(first_started) # in cases of no-op or !fancy_print
     save_suspended_packages() # save list to scratch space
     wait(t_print)
-    interrupted && return
+    !all(istaskdone, tasks) && return # if some not finished, must have errored or been interrupted
     seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
     ndeps = count(values(was_recompiled))
     if ndeps > 0 || !isempty(failed_deps)
@@ -1196,9 +1193,9 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
             str *= ")"
         end
-        if !isempty(rec_restart)
-            plural = length(rec_restart) == 1 ? "y" : "ies"
-            str *= "\n" * color_string(string(length(rec_restart)), Base.warn_color()) * " dependenc$(plural) may not be precompilable. Try restarting julia"
+        if !isempty(precomperr_deps)
+            plural = length(precomperr_deps) == 1 ? "y" : "ies"
+            str *= "\n" * color_string(string(length(precomperr_deps)), Base.warn_color()) * " dependenc$(plural) may not be precompilable. Try restarting julia"
         end
         if internal_call && !isempty(failed_deps)
             plural = length(failed_deps) == 1 ? "y" : "ies"
