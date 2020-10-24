@@ -25,10 +25,9 @@ parsefile(project_file::AbstractString) = Base.parsed_toml(project_file, TOML_CA
     # TODO: Collapse the two dictionaries below into a single dictionary,
     # we should only need to know the `Dict{UUID, VersionSpec}` mapping
     # (therebe getting rid of the package names).
-    @lazy uncompressed_compat::Union{Dict{String, VersionSpec}}
-    @lazy uncompressed_deps::Union{Dict{String, UUID}}
+    @lazy uncompressed_compat::Union{Dict{UUID, VersionSpec}}
 end
-VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = VersionInfo(git_tree_sha1, yanked, uninit, uninit)
+VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = VersionInfo(git_tree_sha1, yanked, uninit)
 
 # This is the information that exists in e.g. General/A/ACME
 struct PkgInfo
@@ -81,6 +80,7 @@ function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Ve
     return uncompressed
 end
 
+const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 # Call this before accessing uncompressed data
 function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
 
@@ -95,29 +95,25 @@ function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info
 
     for v in versions
         vinfo = pkg.version_info[v]
-        # TODO: Use when collapsing the two fields in VersionInfo is to be implemented
-        #=
-        JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
         d = Dict{UUID, VersionSpec}()
-        uncompressed_deps_v = uncompressed_deps[v]
-        for (name, compat) in uncompressed_compat[v]
-            is_julia = name == "julia"
-            uuid = get(uncompressed_deps_v, name, nothing)
-            uuid === nothing && @assert is_julia
-            uuid = is_julia ? JULIA_UUID : uuid
-            d[uuid] = compat
+        uncompressed_deps_v = get(uncompressed_deps, v, nothing)
+        if uncompressed_deps_v !== nothing
+            uncompressed_compat_v = get(uncompressed_compat, v, nothing)
+            if uncompressed_compat_v !== nothing
+                for (name, compat) in uncompressed_compat_v
+                    uuid = name == "julia" ? JULIA_UUID : uncompressed_deps_v[name]
+                    d[uuid] = compat
+                end
+            end
         end
-        =#
-        @init! vinfo.uncompressed_compat = get(Dict{String, VersionSpec}, uncompressed_compat, v)
-        @init! vinfo.uncompressed_deps = get(Dict{String, UUID}, uncompressed_deps, v)
+        @init! vinfo.uncompressed_compat = d
     end
     return pkg
 end
 
 function uncompressed_data(pkg::PkgInfo)
     initialize_uncompressed!(pkg)
-    # This tuple feels like a bad API for some reason...
-    return Dict(v => (; compat = info.uncompressed_compat, deps = info.uncompressed_deps) for (v, info) in pkg.version_info)
+    return Dict(v => info.uncompressed_compat for (v, info) in pkg.version_info)
 end
 
 @lazy struct PkgEntry
@@ -174,6 +170,8 @@ function init_package_info!(pkg::PkgEntry)
         d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid) in data)
         deps[vr] = d
     end
+    # All packages depend on julia
+    deps[VersionRange()] = Dict("julia" => JULIA_UUID)
 
     @init! pkg.info = PkgInfo(repo, subdir, version_info, compat, deps)
 
@@ -201,7 +199,6 @@ function Registry(path::AbstractString)
         uuid = UUID(uuid::String)
         info::Dict{String, Any}
         name = info["name"]::String
-        name === "julia" && continue
         pkgpath = info["path"]::String
         pkg = PkgEntry(pkgpath, path, name, uuid, uninit)
         pkgs[uuid] = pkg
