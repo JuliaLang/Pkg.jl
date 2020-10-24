@@ -915,8 +915,11 @@ end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
 function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
-    time_start = time_ns()
     Context!(ctx; kwargs...)
+    if !Operations.is_instantiated(ctx)
+        Pkg.instantiate(ctx)
+    end
+    time_start = time_ns()
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS::Int + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     io = ctx.io
