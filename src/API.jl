@@ -1020,7 +1020,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     t_print = @async begin # fancy print loop
         try
             wait(first_started)
-            isempty(pkg_queue) && return
+            (isempty(pkg_queue) || interrupted_or_done.set) && return
             fancy_print && lock(print_lock) do
                 printpkgstyle(io, :Precompiling, "project...$action_help")
                 print(io, ansi_disablecursor)
@@ -1172,6 +1172,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
         push!(tasks, task)
     end
+    isempty(tasks) && notify(interrupted_or_done)
     try
         wait(interrupted_or_done)
     catch err
