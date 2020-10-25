@@ -12,6 +12,7 @@ using Serialization
 
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
+import ..can_fancyprint
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -909,7 +910,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS::Int + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     io = ctx.io
-    fancy_print = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
+    fancyprint = can_fancyprint(io)
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     internal_call ? recall_suspended_packages() : precomp_unsuspend!()
@@ -977,8 +978,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     precomperr_deps = Base.PkgId[] # packages that may succeed after a restart (i.e. loaded packages with no cache file)
 
     print_lock = stdout isa Base.LibuvStream ? stdout.lock::ReentrantLock : ReentrantLock()
-    first_started = Base.Event() # prevents printing anything in no-op
-    printloop_should_exit::Bool = !fancy_print # exit print loop immediately if not fancy printing
+    first_started = Base.Event()
+    printloop_should_exit::Bool = !fancyprint # exit print loop immediately if not fancy printing
     interrupted_or_done = Base.Event()
 
     function color_string(str::String, col::Symbol)
@@ -1009,7 +1010,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         try
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
-            fancy_print && lock(print_lock) do
+            fancyprint && lock(print_lock) do
                 printpkgstyle(io, :Precompiling, "project...$action_help")
                 print(io, ansi_disablecursor)
             end
@@ -1067,7 +1068,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         catch err
             handle_interrupt(err)
         finally
-            fancy_print && print(io, ansi_enablecursor)
+            fancyprint && print(io, ansi_enablecursor)
         end
     end
     tasks = Task[]
@@ -1101,12 +1102,12 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
                     name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
-                    !fancy_print && lock(print_lock) do
+                    !fancyprint && lock(print_lock) do
                         isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
                     end
                     push!(pkg_queue, pkg)
                     started[pkg] = true
-                    fancy_print && notify(first_started)
+                    fancyprint && notify(first_started)
                     if interrupted_or_done.set
                         notify(was_processed[pkg])
                         Base.release(parallel_limiter)
@@ -1118,11 +1119,11 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
-                            !fancy_print && lock(print_lock) do
+                            !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
-                            !fancy_print && lock(print_lock) do
+                            !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✓ ", :green), name))
                             end
                             was_recompiled[pkg] = true
@@ -1130,7 +1131,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     catch err
                         if err isa ErrorException
                             failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
-                            !fancy_print && lock(print_lock) do
+                            !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
                             if haskey(man, pkg.uuid)
@@ -1166,7 +1167,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     catch err
         handle_interrupt(err)
     end
-    notify(first_started) # in cases of no-op or !fancy_print
+    notify(first_started) # in cases of no-op or !fancyprint
     save_suspended_packages() # save list to scratch space
     wait(t_print)
     !all(istaskdone, tasks) && return # if some not finished, must have errored or been interrupted

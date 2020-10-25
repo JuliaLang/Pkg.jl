@@ -14,6 +14,7 @@ import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server
+import ..Pkg: can_fancyprint
 
 #########
 # Utils #
@@ -786,7 +787,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
             bar.current = i
             str = sprint(; context=ctx.io) do io
                 if success
-                    show_progress && Pkg.print_progress_bottom(io)
+                    can_fancyprint(io) && show_progress && Pkg.print_progress_bottom(io)
                     vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
                     printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
                     show_progress && Pkg.showprogress(io, bar)
@@ -957,6 +958,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
                               percentage=false, always_reprint=true)
     bar.max = length(builds)
     show_progress = ctx.io isa Base.TTY
+    fancyprint = can_fancyprint(ctx.io)
 
     # build each package versions in a child process
     for (n, (uuid, name, source_path, version)) in enumerate(builds)
@@ -986,7 +988,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
             log_file = splitext(build_file)[1] * ".log"
         end
 
-        show_progress && Pkg.print_progress_bottom(ctx.io)
+        fancyprint && show_progress && Pkg.print_progress_bottom(ctx.io)
 
         printpkgstyle(ctx, :Building,
                       rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
@@ -1017,7 +1019,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
         end
     end
     # Clear the last line of progress
-    if show_progress
+    if fancyprint && show_progress
         ansi_cleartoend = "\e[0J"
         print(ctx.io, ansi_cleartoend)
     end
