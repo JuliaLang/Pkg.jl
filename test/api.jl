@@ -148,7 +148,7 @@ end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"), io=iob)
         @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
-        @test String(take!(iob)) == "" # test that the previous precompile was a no-op
+        @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
         println("Auto precompilation disabled")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
@@ -163,7 +163,7 @@ end
         @test length(broken_packages) == 1
         Pkg.activate("newpath")
         Pkg.precompile(io=iob)
-        @test String(take!(iob)) == "" # test that the previous precompile was a no-op
+        @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
         @test isempty(Pkg.API.pkgs_precompile_suspended)
 
         Pkg.activate(".") # test that going back to the project restores suspension list
@@ -190,7 +190,7 @@ end
         end
         Pkg.update("BrokenDep") # should trigger auto-precomp including the fixed BrokenDep
         Pkg.precompile(io=iob)
-        @test String(take!(iob)) == "" # test that the previous precompile was a no-op
+        @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
 
         # https://github.com/JuliaLang/Pkg.jl/pull/2142
         Pkg.build(; verbose=true)
@@ -220,20 +220,8 @@ end
 
         Pkg.activate(".")
         Pkg.resolve()
-        precomp_task = @async Pkg.precompile()
+        Pkg.precompile()
 
-        timer = Timer(60*2) # allow 2 minutes before assuming deadlock
-        timed_out = false
-        while true
-            istaskdone(precomp_task) && break
-            if !isopen(timer)
-                timed_out = true
-                Base.throwto(precomp_task, InterruptException())
-                break
-            end
-            sleep(0.5)
-        end
-        @test timed_out == false
     end end
 end
 
