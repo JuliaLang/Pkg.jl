@@ -13,6 +13,7 @@ import ..Types: parse_toml, write_env_usage, printpkgstyle
 import ..Pkg
 import ..Pkg: pkg_server
 import ..Pkg: MiniProgressBar, showprogress
+import ..Pkg: can_fancyprint
 using ..PlatformEngines
 using SHA
 
@@ -429,19 +430,21 @@ end
 
 function with_show_download_info(f, name, quiet_download)
     if !quiet_download
+        fancyprint = can_fancyprint(stderr)
         # Should ideally pass ctx::Context as first arg here
-        Pkg.print_progress_bottom(stderr)
+        fancyprint && Pkg.print_progress_bottom(stderr)
         printpkgstyle(stderr, :Downloading, "artifact: $name")
-        print(stderr, "\e[?25l") # disable cursor
+        fancyprint && print(stderr, "\e[?25l") # disable cursor
     end
     try
         return f()
     finally
         if !quiet_download
-            print(stdout, "\033[1A") # move cursor up one line
-            print(stdout, "\033[2K") # clear line
+            fancyprint = can_fancyprint(stdout)
+            fancyprint && print(stdout, "\033[1A") # move cursor up one line
+            fancyprint && print(stdout, "\033[2K") # clear line
             printpkgstyle(stdout, :Downloaded, "artifact: $name")
-            print(stdout, "\e[?25h") # put back cursor
+            fancyprint && print(stdout, "\e[?25h") # put back cursor
         end
     end
 end

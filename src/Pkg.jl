@@ -34,6 +34,8 @@ const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
 const DEFAULT_IO = Ref{Union{Nothing,IO}}(nothing)
 
+can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
+
 include("utils.jl")
 include("GitTools.jl")
 include("PlatformEngines.jl")
@@ -128,12 +130,12 @@ const add = API.add
 
 Precompile all the dependencies of the project in parallel.
 !!! note
-    Errors will only throw when precompiling the top-level dependencies, given that 
+    Errors will only throw when precompiling the top-level dependencies, given that
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
 
 !!! note
     This method is called automatically after any Pkg action that changes the manifest.
-    Any packages that have previously errored during precompilation won't be retried in auto mode 
+    Any packages that have previously errored during precompilation won't be retried in auto mode
     until they have changed. To disable automatic precompilation set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`
 
 !!! compat "Julia 1.3"

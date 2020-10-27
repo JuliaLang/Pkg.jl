@@ -3,6 +3,7 @@
 module GitTools
 
 using ..Pkg
+import ..Pkg: can_fancyprint
 using SHA
 import Base: SHA1
 import LibGit2
@@ -92,7 +93,9 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
             transfer_payload,
         )
     )
-    print(stdout, "\e[?25l") # disable cursor
+    io = ctx.io
+    fancyprint = can_fancyprint(io)
+    fancyprint && print(io, "\e[?25l") # disable cursor
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
@@ -112,8 +115,8 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
         end
     finally
         Base.shred!(credentials)
-        print(stdout, "\033[2K") # clear line
-        print(stdout, "\e[?25h") # put back cursor
+        fancyprint && print(io, "\033[2K") # clear line
+        fancyprint && print(io, "\e[?25h") # put back cursor
     end
 end
 
@@ -123,6 +126,8 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, cr
             LibGit2.url(remote)
         end
     end
+    io = ctx.io
+    fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
     Pkg.Types.printpkgstyle(ctx, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     transfer_payload = Pkg.MiniProgressBar(header = "Fetching:", color = Base.info_color())
@@ -132,7 +137,7 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, cr
             transfer_payload,
         )
     )
-    print(stdout, "\e[?25l") # disable cursor
+    fancyprint && print(io, "\e[?25l") # disable cursor
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
@@ -147,8 +152,8 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, cr
         end
     finally
         Base.shred!(credentials)
-        print(stdout, "\033[2K") # clear line
-        print(stdout, "\e[?25h") # put back cursor
+        fancyprint && print(io, "\033[2K") # clear line
+        fancyprint && print(io, "\e[?25h") # put back cursor
     end
 end
 
