@@ -165,7 +165,7 @@ end
 function load_tree_hash!(ctx::Context, pkg::PackageSpec)
     tracking_registered_version(pkg) || return pkg
     hash = nothing
-    for reg in ctx.env.registries
+    for reg in ctx.registries
         reg_pkg = get(reg, pkg.uuid, nothing)
         reg_pkg === nothing && continue
         pkg_info = Pkg.RegistryHandling.registry_info(reg_pkg)
@@ -415,7 +415,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                     all_compat_u_vr[name] = VersionSpec()
                 end
             else
-                for reg in ctx.env.registries
+                for reg in ctx.registries
                     pkg = reg[uuid]
                     info = Pkg.RegistryHandling.registry_info(pkg)
                     for (v, uncompressed_data) in Pkg.RegistryHandling.uncompressed_data(info)
@@ -465,7 +465,7 @@ function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
         uuid = pkg.uuid
         urls[uuid] = Set{String}()
-        for reg in ctx.env.registries
+        for reg in ctx.registries
             reg_pkg = get(reg, pkg.uuid, uuid)
             reg_pkg === nothing && continue
             info = Pkg.RegistryHandling.registry_info(reg_pkg)
@@ -1070,7 +1070,7 @@ end
 function is_all_registered(ctx::Context, pkgs::Vector{PackageSpec})
     pkgs = filter(tracking_registered_version, pkgs)
     for pkg in pkgs
-        if !any(r->haskey(r, pkg.uuid), ctx.env.registries)
+        if !any(r->haskey(r, pkg.uuid), ctx.registries)
             return pkg
         end
     end

@@ -265,8 +265,6 @@ mutable struct EnvCache
     # What these where at creation of the EnvCache
     original_project::Project
     original_manifest::Manifest
-    # Registris
-    registries::Vector{RegistryHandling.Registry}
 end
 
 function EnvCache(env::Union{Nothing,String}=nothing)
@@ -292,8 +290,6 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
 
-    registries = collect_reachable_registries()
-
     env′ = EnvCache(env,
         project_file,
         manifest_file,
@@ -302,7 +298,6 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         manifest,
         deepcopy(project),
         deepcopy(manifest),
-        registries,
         )
 
     # Save initial environment for undo/redo functionality
@@ -325,6 +320,9 @@ Base.@kwdef mutable struct Context
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
     graph_verbose::Bool = false
+
+    # Registris
+    registries::Vector{RegistryHandling.Registry} = collect_reachable_registries()
 
     # The Julia Version to resolve with respect to
     julia_version::Union{VersionNumber,Nothing} = VERSION
@@ -539,7 +537,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     end
     ensure_resolved(ctx, [pkg]; registry=true)
     # We might have been given a name / uuid combo that does not have an entry in the registry
-    for reg in ctx.env.registries
+    for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
         info = Pkg.RegistryHandling.registry_info(regpkg)
@@ -870,7 +868,7 @@ function clone_default_registries(ctx::Context; only_if_empty = true)
         end
         filter!(reg -> !(reg.uuid in installed_registries), registries)
         clone_or_cp_registries(ctx, registries)
-        copy!(ctx.env.registries, collect_reachable_registries())
+        copy!(ctx.registries, collect_reachable_registries())
     end
 end
 
@@ -1190,7 +1188,7 @@ end
 
 function registered_uuids(ctx::Context, name::String)
     uuids = Set{UUID}()
-    for reg in ctx.env.registries
+    for reg in ctx.registries
         union!(uuids, RegistryHandling.uuids_from_name(reg, name))
     end
     return uuids
@@ -1235,7 +1233,7 @@ end
 
 function registered_name(ctx::Context, uuid::UUID)::Union{Nothing,String}
     name = nothing
-    for reg in ctx.env.registries
+    for reg in ctx.registries
         regpkg = get(reg, uuid, nothing)
         regpkg === nothing && continue
         name′ = regpkg.name
