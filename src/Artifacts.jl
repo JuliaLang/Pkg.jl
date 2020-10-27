@@ -431,7 +431,7 @@ end
 function with_show_download_info(f, name, quiet_download)
     if !quiet_download
         fancyprint = can_fancyprint(stderr)
-        # Should ideally pass ctx::Context as first arg here
+        # Should ideally pass an IO as first arg here
         fancyprint && Pkg.print_progress_bottom(stderr)
         printpkgstyle(stderr, :Downloading, "artifact: $name")
         fancyprint && print(stderr, "\e[?25l") # disable cursor

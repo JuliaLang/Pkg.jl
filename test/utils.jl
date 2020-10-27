@@ -26,7 +26,7 @@ function isolate(fn::Function; loaded_depot=false)
         if !isdir(REGISTRY_DIR)
             mkpath(REGISTRY_DIR)
             Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
+                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
                                                 "https://github.com/JuliaRegistries/General.git",
                     REGISTRY_DIR, credentials = creds)) do repo
                 end
@@ -84,7 +84,7 @@ function temp_pkg_dir(fn::Function;rm=true)
         generaldir = joinpath(@__DIR__, "registries", "General")
         if !isdir(generaldir)
             mkpath(generaldir)
-            LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context(),
+            LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
                                             "https://github.com/JuliaRegistries/General.git",
                 generaldir)) do repo
             end

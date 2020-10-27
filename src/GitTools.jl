@@ -64,11 +64,11 @@ function normalize_url(url::AbstractString)
     end
 end
 
-function ensure_clone(ctx, target_path, url; kwargs...)
+function ensure_clone(io::IO, target_path, url; kwargs...)
     if ispath(target_path)
         return LibGit2.GitRepo(target_path)
     else
-        return GitTools.clone(ctx, url, target_path; kwargs...)
+        return GitTools.clone(io, url, target_path; kwargs...)
     end
 end
 
@@ -82,10 +82,10 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
     end
 end
 
-function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwargs...)
+function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
-    Pkg.Types.printpkgstyle(ctx, :Cloning, header === nothing ? "git-repo `$url`" : header)
+    Pkg.Types.printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
     transfer_payload = Pkg.MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (
@@ -93,7 +93,6 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
             transfer_payload,
         )
     )
-    io = ctx.io
     fancyprint = can_fancyprint(io)
     fancyprint && print(io, "\e[?25l") # disable cursor
     if credentials === nothing
@@ -120,16 +119,15 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
     end
 end
 
-function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, kwargs...)
+function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
         end
     end
-    io = ctx.io
     fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(ctx, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
+    Pkg.Types.printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     transfer_payload = Pkg.MiniProgressBar(header = "Fetching:", color = Base.info_color())
     callbacks = LibGit2.Callbacks(
         :transfer_progress => (

@@ -28,7 +28,7 @@ function pkg_server()
 end
 
 logdir(depot = depots1()) = joinpath(depot, "logs")
-devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "dev"))
+devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depot, "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)

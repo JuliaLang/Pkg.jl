@@ -29,7 +29,7 @@ function add(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
     if isempty(regs)
         Types.clone_default_registries(ctx, only_if_empty = false)
     else
-        Types.clone_or_cp_registries(ctx, regs)
+        Types.clone_or_cp_registries(ctx.io, regs)
     end
 end
 
@@ -53,7 +53,7 @@ rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in 
 rm(regs::Vector{RegistrySpec}; kwargs...) = rm(Context(), regs; kwargs...)
 function rm(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
     Context!(ctx; kwargs...)
-    Types.remove_registries(ctx, regs)
+    Types.remove_registries(ctx.io, regs)
 end
 
 """
@@ -83,7 +83,7 @@ function update(ctx::Context,
                 kwargs...)
     isempty(regs) && (regs = Types.collect_registries(depots1()))
     Context!(ctx; kwargs...)
-    Types.update_registries(ctx, regs; force=true)
+    Types.update_registries(ctx.io, regs; force=true)
 end
 
 """
@@ -105,7 +105,7 @@ function status(ctx::Context; io::IO=stdout, as_api=false, kwargs...) # TODO spl
     regs = Types.collect_registries()
     regs = unique(r -> r.uuid, regs; seen=Set{Union{UUID,Nothing}}())
     as_api && return regs
-    Types.printpkgstyle(ctx, Symbol("Registry Status"), "")
+    Types.printpkgstyle(ctx.io, Symbol("Registry Status"), "")
     if isempty(regs)
         println(ctx.io, "  (no registries found)")
     else

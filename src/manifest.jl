@@ -14,7 +14,7 @@ end
 
 read_pinned(::Nothing) = false
 read_pinned(pinned::Bool) = pinned
-read_pinned(pinned) = pkgerror("Expected field `pinned` to be a Boolean.")
+read_pinned(::Any) = pkgerror("Expected field `pinned` to be a Boolean.")
 
 function safe_SHA1(sha::String)
     try sha = SHA1(sha)

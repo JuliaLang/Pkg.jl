@@ -20,10 +20,10 @@ using ..Artifacts: artifact_paths
 
 include("generate.jl")
 
-dependencies() = dependencies(Context())
-function dependencies(ctx::Context)
-    pkgs = Operations.load_all_deps(ctx)
-    return Dict(pkg.uuid::UUID => Operations.package_info(ctx, pkg) for pkg in pkgs)
+dependencies() = dependencies(EnvCache())
+function dependencies(env::EnvCache)
+    pkgs = Operations.load_all_deps(env)
+    return Dict(pkg.uuid::UUID => Operations.package_info(env, pkg) for pkg in pkgs)
 end
 function dependencies(fn::Function, uuid::UUID)
     dep = get(dependencies(), uuid, nothing)
@@ -33,15 +33,15 @@ function dependencies(fn::Function, uuid::UUID)
     fn(dep)
 end
 
-project() = project(Context())
-function project(ctx::Context)::ProjectInfo
+project() = project(EnvCache())
+function project(env::EnvCache)::ProjectInfo
     return ProjectInfo(
-        name         = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.name,
-        uuid         = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.uuid,
-        version      = ctx.env.pkg === nothing ? nothing : ctx.env.pkg.version,
-        ispackage    = ctx.env.pkg !== nothing,
-        dependencies = ctx.env.project.deps,
-        path         = ctx.env.project_file
+        name         = env.pkg === nothing ? nothing : env.pkg.name,
+        uuid         = env.pkg === nothing ? nothing : env.pkg.uuid,
+        version      = env.pkg === nothing ? nothing : env.pkg.version,
+        ispackage    = env.pkg !== nothing,
+        dependencies = env.project.deps,
+        path         = env.project_file
     )
 end
 
@@ -131,7 +131,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     new_git = handle_repos_develop!(ctx, pkgs, shared)
 
     for pkg in pkgs
-        if Types.collides_with_project(ctx, pkg)
+        if Types.collides_with_project(ctx.env, pkg)
             pkgerror("package $(err_rep(pkg)) has the same name or UUID as the active project")
         end
         if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
@@ -178,15 +178,15 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Types.update_registries(ctx)
+    Types.update_registries(ctx.io)
 
-    project_deps_resolve!(ctx, pkgs)
-    registry_resolve!(ctx, pkgs)
+    project_deps_resolve!(ctx.env, pkgs)
+    registry_resolve!(ctx.registries, pkgs)
     stdlib_resolve!(pkgs)
-    ensure_resolved(ctx, pkgs, registry=true)
+    ensure_resolved(ctx.env.manifest, pkgs, registry=true)
 
     for pkg in pkgs
-        if Types.collides_with_project(ctx, pkg)
+        if Types.collides_with_project(ctx.env, pkg)
             pkgerror("package $(err_rep(pkg)) has same name or UUID as the active project")
         end
         if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
@@ -216,9 +216,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
 
     Context!(ctx; kwargs...)
 
-    project_deps_resolve!(ctx, pkgs)
-    manifest_resolve!(ctx, pkgs)
-    ensure_resolved(ctx, pkgs)
+    project_deps_resolve!(ctx.env, pkgs)
+    manifest_resolve!(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx.env.manifest, pkgs)
 
     Operations.rm(ctx, pkgs)
     return
@@ -233,9 +233,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     Context!(ctx; kwargs...)
     if update_registry
         Types.clone_default_registries(ctx)
-        Types.update_registries(ctx; force=true)
+        Types.update_registries(ctx.io; force=true)
     end
-    Operations.prune_manifest(ctx)
+    Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
         if mode == PKGMODE_PROJECT
             for (name::String, uuid::UUID) in ctx.env.project.deps
@@ -247,9 +247,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             end
         end
     else
-        project_deps_resolve!(ctx, pkgs)
-        manifest_resolve!(ctx, pkgs)
-        ensure_resolved(ctx, pkgs)
+        project_deps_resolve!(ctx.env, pkgs)
+        manifest_resolve!(ctx.env.manifest, pkgs)
+        ensure_resolved(ctx.env.manifest, pkgs)
     end
     Operations.up(ctx, pkgs, level)
     return
@@ -284,8 +284,8 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     end
 
     foreach(pkg -> pkg.mode = PKGMODE_PROJECT, pkgs)
-    project_deps_resolve!(ctx, pkgs)
-    ensure_resolved(ctx, pkgs)
+    project_deps_resolve!(ctx.env, pkgs)
+    ensure_resolved(ctx.env.manifest, pkgs)
     Operations.pin(ctx, pkgs)
     return
 end
@@ -307,8 +307,8 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     end
 
     foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
-    manifest_resolve!(ctx, pkgs)
-    ensure_resolved(ctx, pkgs)
+    manifest_resolve!(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx.env.manifest, pkgs)
 
     Operations.free(ctx, pkgs)
     return
@@ -327,10 +327,10 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         ctx.env.pkg === nothing && pkgerror("trying to test unnamed project") #TODO Allow this?
         push!(pkgs, ctx.env.pkg)
     else
-        project_resolve!(ctx, pkgs)
-        project_deps_resolve!(ctx, pkgs)
-        manifest_resolve!(ctx, pkgs)
-        ensure_resolved(ctx, pkgs)
+        project_resolve!(ctx.env, pkgs)
+        project_deps_resolve!(ctx.env, pkgs)
+        manifest_resolve!(ctx.env.manifest, pkgs)
+        ensure_resolved(ctx.env.manifest, pkgs)
     end
     Operations.test(ctx, pkgs; coverage=coverage, test_fn=test_fn, julia_args=julia_args, test_args=test_args)
     return
@@ -587,7 +587,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         if do_print
             @assert file_str !== nothing
             n = length(active_index_files)
-            printpkgstyle(ctx, :Active, "$(file_str): $(n) found")
+            printpkgstyle(ctx.io, :Active, "$(file_str): $(n) found")
             if verbose
                 foreach(active_index_files) do f
                     println(ctx.io, "        $(Types.pathrepr(f))")
@@ -626,7 +626,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
 
     # Scan manifests, parse them, read in all UUIDs listed and mark those as active
-    # printpkgstyle(ctx, :Active, "manifests:")
+    # printpkgstyle(ctx.io, :Active, "manifests:")
     packages_to_keep = mark(process_manifest_pkgs, all_manifest_tomls, ctx,
         verbose=verbose, file_str="manifest files")
 
@@ -656,11 +656,11 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     # Next, do the same for artifacts.  Note that we MUST do this after calculating
     # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
     # `Artifacts.toml` files that will be deleted by the future culling operation.
-    # printpkgstyle(ctx, :Active, "artifacts:")
+    # printpkgstyle(ctx.io, :Active, "artifacts:")
     artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete),
         all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
     repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print=false)
-    # printpkgstyle(ctx, :Active, "scratchspaces:")
+    # printpkgstyle(ctx.io, :Active, "scratchspaces:")
     spaces_to_keep = mark(x -> process_scratchspace(x, packages_to_delete),
         all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
 
@@ -791,7 +791,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             @warn("Failed to delete $path", exception=e)
         end
         if verbose
-            printpkgstyle(ctx, :Deleted, Types.pathrepr(path) * " (" *
+            printpkgstyle(ctx.io, :Deleted, Types.pathrepr(path) * " (" *
                 pretty_byte_str(path_size) * ")")
         end
         return path_size
@@ -854,7 +854,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         s = ndel == 1 ? "" : "s"
         bytes_saved_string = pretty_byte_str(freed)
-        printpkgstyle(ctx, :Deleted, "$(ndel) $(name)$(s) ($bytes_saved_string)")
+        printpkgstyle(ctx.io, :Deleted, "$(ndel) $(name)$(s) ($bytes_saved_string)")
     end
     print_deleted(ndel_pkg, package_space_freed, "package installation")
     print_deleted(ndel_repo, repo_space_freed, "repo")
@@ -862,7 +862,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     print_deleted(ndel_space, scratch_space_freed, "scratchspace")
 
     if ndel_pkg == 0 && ndel_art == 0 && ndel_repo == 0 && ndel_space == 0
-        printpkgstyle(ctx, :Deleted, "no artifacts, repos, packages or scratchspaces")
+        printpkgstyle(ctx.io, :Deleted, "no artifacts, repos, packages or scratchspaces")
     end
 
     return
@@ -881,10 +881,10 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
             end
         end
     end
-    project_resolve!(ctx, pkgs)
+    project_resolve!(ctx.env, pkgs)
     foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
-    manifest_resolve!(ctx, pkgs)
-    ensure_resolved(ctx, pkgs)
+    manifest_resolve!(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx.env.manifest, pkgs)
     Operations.build(ctx, pkgs, verbose)
 end
 
@@ -1279,7 +1279,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
-    Operations.prune_manifest(ctx)
+    Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
         pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
@@ -1289,29 +1289,29 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
     # TODO: seems to be a bug in is_instantiated on the line below so we have to download
     # artifacts here even though we do the same at the end of this function
-    Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
+    Operations.download_artifacts([dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
-    if Operations.is_instantiated(ctx)
+    if Operations.is_instantiated(ctx.env)
         allow_autoprecomp && _auto_precompile(ctx)
         return
     end
 
-    pkgs = Operations.load_all_deps(ctx)
+    pkgs = Operations.load_all_deps(ctx.env)
     try
         # First try without updating the registry
-        Operations.check_registered(ctx, pkgs)
+        Operations.check_registered(ctx.registries, pkgs)
     catch e
         if !(e isa PkgError) || update_registry == false
             rethrow(e)
         end
-        Types.update_registries(ctx)
-        Operations.check_registered(ctx, pkgs)
+        Types.update_registries(ctx.io)
+        Operations.check_registered(ctx.registries, pkgs)
     end
     new_git = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
         pkg.repo.source !== nothing || continue
-        sourcepath = Operations.source_path(ctx, pkg)
+        sourcepath = Operations.source_path(ctx.env.project_file, pkg)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
@@ -1324,11 +1324,11 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
         end
         repo_path = Types.add_repo_cache_path(repo_source)
-        LibGit2.with(GitTools.ensure_clone(ctx, repo_path, pkg.repo.source; isbare=true)) do repo
+        LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, pkg.repo.source; isbare=true)) do repo
             # We only update the clone if the tree hash can't be found
             tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
             if tree_hash_object === nothing
-                GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=Types.refspecs)
+                GitTools.fetch(ctx.io, repo, pkg.repo.source; refspecs=Types.refspecs)
                 tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
             end
             if tree_hash_object === nothing
@@ -1343,7 +1343,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Install all packages
     new_apply = Operations.download_source(ctx, pkgs)
     # Install all artifacts
-    Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
+    Operations.download_artifacts(ctx.env, pkgs; platform=platform, verbose=verbose)
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
 
@@ -1381,7 +1381,7 @@ function _activate_dep(dep_name::AbstractString)
     end
     uuid = get(ctx.env.project.deps, dep_name, nothing)
     if uuid !== nothing
-        entry = manifest_info(ctx, uuid)
+        entry = manifest_info(ctx.env.manifest, uuid)
         if entry.path !== nothing
             return joinpath(dirname(ctx.env.project_file), entry.path)
         end
@@ -1423,7 +1423,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
+        printpkgstyle(stdout, :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
     return nothing
