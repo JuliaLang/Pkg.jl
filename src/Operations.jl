@@ -162,84 +162,23 @@ end
 # Registry Loading #
 ####################
 
-function load_versions(ctx, path::String; include_yanked=false)
-    toml = parse_toml(ctx, joinpath(path, "Versions.toml"); fakeit=true)
-    versions = Dict{VersionNumber, SHA1}(
-        VersionNumber(ver) => SHA1(info["git-tree-sha1"]) for (ver, info) in toml
-            if !get(info, "yanked", false) || include_yanked)
-    if Pkg.OFFLINE_MODE[] # filter out all versions that are not already downloaded
-        pkg = parse_toml(joinpath(path, "Package.toml"))
-        filter!(versions) do (v, sha)
-            pkg_spec = PackageSpec(name=pkg["name"]::String, uuid=UUID(pkg["uuid"]::String), version=v, tree_hash=sha)
-            return is_package_downloaded(ctx, pkg_spec)
+function load_tree_hash!(ctx::Context, pkg::PackageSpec)
+    tracking_registered_version(pkg) || return pkg
+    hash = nothing
+    for reg in ctx.registries
+        reg_pkg = get(reg, pkg.uuid, nothing)
+        reg_pkg === nothing && continue
+        pkg_info = Pkg.RegistryHandling.registry_info(reg_pkg)
+        version_info = get(pkg_info.version_info, pkg.version, nothing)
+        version_info === nothing && continue
+        hash′ = version_info.git_tree_sha1
+        if hash !== nothing
+            hash == hash′ || pkgerror("hash mismatch in registries for $(pkg.name) at version $(pkg.version)")
         end
+        hash = hash′
     end
-    return versions
-end
-
-load_package_data(ctx::Context, ::Type{T}, path::String, version::VersionNumber) where {T} =
-    get(load_package_data(ctx, T, path, [version]), version, nothing)
-
-# TODO: This function is very expensive. Optimize it
-function load_package_data(ctx::Context, ::Type{T}, path::String, versions::Vector{VersionNumber}) where {T}
-    compressed = parse_toml(ctx, path; fakeit=true)
-    compressed = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, compressed)
-    uncompressed = Dict{VersionNumber, Dict{String,T}}()
-    # Many of the entries are repeated so we keep a cache so there is no need to re-create
-    # a bunch of identical objects
-    cache = Dict{String, T}()
-    vsorted = sort(versions)
-    for (vers, data) in compressed
-        vs = VersionRange(vers)
-        first = length(vsorted) + 1
-        # We find the first and last version that are in the range
-        # and since the versions are sorted, all versions in between are sorted
-        for i in eachindex(vsorted)
-            v = vsorted[i]
-            v in vs && (first = i; break)
-        end
-        last = 0
-        for i in reverse(eachindex(vsorted))
-            v = vsorted[i]
-            v in vs && (last = i; break)
-        end
-        for i in first:last
-            v = vsorted[i]
-            uv = get!(() -> Dict{String, T}(), uncompressed, v)
-            for (key, value) in data
-                if haskey(uv, key)
-                    @warn "Overlapping ranges for $(key) in $(repr(path)) for version $v."
-                else
-                    Tvalue = if value isa String
-                        Tvalue = get!(()->T(value), cache, value)
-                    else
-                        Tvalue = T(value)
-                    end
-                    uv[key] = Tvalue
-                end
-            end
-        end
-    end
-    return uncompressed
-end
-
-function load_tree_hash(ctx::Context, pkg::PackageSpec)
-    hashes = SHA1[]
-    for path in registered_paths(ctx, pkg.uuid)
-        vers = load_versions(ctx, path; include_yanked=true)
-        hash = get(vers, pkg.version, nothing)
-        hash !== nothing && push!(hashes, hash)
-    end
-    isempty(hashes) && return nothing
-    length(unique!(hashes)) == 1 || pkgerror("hash mismatch")
-    return hashes[1]
-end
-
-function load_tree_hashes!(ctx::Context, pkgs::Vector{PackageSpec})
-    for pkg in pkgs
-        tracking_registered_version(pkg) || continue
-        pkg.tree_hash = load_tree_hash(ctx, pkg)
-    end
+    pkg.tree_hash = hash
+    return pkg
 end
 
 #######################################
@@ -389,7 +328,6 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
 
-    find_registered!(ctx, collect(keys(vers)))
     # update vector of package versions
     for (uuid, ver) in vers
         idx = findfirst(p -> p.uuid == uuid, pkgs)
@@ -402,11 +340,9 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
-    # TODO: We already parse the Versions.toml file for each package in deps_graph but this
-    # function ends up reparsing it. Consider caching the earlier result.
-    load_tree_hashes!(ctx, pkgs)
     final_deps_map = Dict{UUID, Dict{String, UUID}}()
     for pkg in pkgs
+        load_tree_hash!(ctx, pkg)
         deps = begin
             if pkg.uuid in keys(fixed)
                 deps_fixed = Dict{String, UUID}()
@@ -428,8 +364,14 @@ end
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed})
-    uuids = collect(union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...))
-    seen = UUID[]
+    uuids = Set{UUID}()
+    union!(uuids, keys(reqs))
+    union!(uuids, keys(fixed))
+    for fixed_uuids in map(fx->keys(fx.requires), values(fixed))
+        union!(uuids, fixed_uuids)
+    end
+
+    seen = Set{UUID}()
 
     all_versions = VersionsDict()
     all_deps     = DepsDict()
@@ -464,7 +406,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                 all_deps_u_vr = get_or_make!(all_deps_u, v)
                 for (name, other_uuid) in proj.deps
                     all_deps_u_vr[name] = other_uuid
-                    other_uuid in uuids || push!(uuids, other_uuid)
+                    push!(uuids, other_uuid)
                 end
 
                 # TODO look at compat section for stdlibs?
@@ -473,33 +415,34 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                     all_compat_u_vr[name] = VersionSpec()
                 end
             else
-                for path in registered_paths(ctx, uuid)
-                    version_info = load_versions(ctx, path; include_yanked=false)
-                    versions = sort!(collect(keys(version_info)))
-                    deps_data = load_package_data(ctx, UUID, joinpath(path, "Deps.toml"), versions)
-                    compat_data = load_package_data(ctx, VersionSpec, joinpath(path, "Compat.toml"), versions)
-
-                    union!(all_versions_u, versions)
-
-                    for (vr, dd) in deps_data
-                        all_deps_u_vr = get_or_make!(all_deps_u, vr)
-                        for (name,other_uuid) in dd
-                            # check conflicts??
-                            all_deps_u_vr[name] = other_uuid
-                            other_uuid in uuids || push!(uuids, other_uuid)
+                for reg in ctx.registries
+                    pkg = reg[uuid]
+                    info = Pkg.RegistryHandling.registry_info(pkg)
+                    for (v, uncompressed_data) in Pkg.RegistryHandling.uncompressed_data(info)
+                        # Filter yanked and if we are in offline mode also downloaded packages
+                        # TODO, pull this into a function
+                        Pkg.RegistryHandling.isyanked(info, v) && continue
+                        if Pkg.OFFLINE_MODE[]
+                            pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Pkg.RegistryHandling.treehash(info, v))
+                            is_package_downloaded(ctx, pkg_spec) || continue
                         end
-                    end
-                    for (vr, cd) in compat_data
-                        all_compat_u_vr = get_or_make!(all_compat_u, vr)
-                        for (name,vs) in cd
+
+                        push!(all_versions_u, v)
+                        all_deps_u_v = get_or_make!(all_deps_u, v)
+                        all_compat_u_v = get_or_make!(all_compat_u, v)
+                        for (name, other_uuid) in uncompressed_data.deps
                             # check conflicts??
-                            all_compat_u_vr[name] = vs
+                            all_deps_u_v[name] = other_uuid
+                            push!(uuids, other_uuid)
+                        end
+                        for (name,vs) in uncompressed_data.compat
+                            # check conflicts??
+                            all_compat_u_v[name] = vs
                         end
                     end
                 end
             end
         end
-        find_registered!(ctx, uuids)
     end
 
     for uuid in uuids
@@ -518,18 +461,19 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
 end
 
 function load_urls(ctx::Context, pkgs::Vector{PackageSpec})
-    urls = Dict{UUID,Vector{String}}()
+    urls = Dict{UUID,Set{String}}()
     for pkg in pkgs
         uuid = pkg.uuid
-        ver = pkg.version::VersionNumber
-        urls[uuid] = String[]
-        for path in registered_paths(ctx, uuid)
-            info = parse_toml(joinpath(path, "Package.toml"))
-            repo = info["repo"]
-            repo in urls[uuid] || push!(urls[uuid], repo)
+        urls[uuid] = Set{String}()
+        for reg in ctx.registries
+            reg_pkg = get(reg, pkg.uuid, uuid)
+            reg_pkg === nothing && continue
+            info = Pkg.RegistryHandling.registry_info(reg_pkg)
+            repo = info.repo
+            repo === nothing && continue
+            push!(urls[uuid], repo)
         end
     end
-    foreach(sort!, values(urls))
     return urls
 end
 
@@ -609,7 +553,7 @@ function install_git(
     uuid::UUID,
     name::String,
     hash::SHA1,
-    urls::Vector{String},
+    urls::Set{String},
     version::Union{VersionNumber,Nothing},
     version_path::String
 )::Nothing
@@ -620,8 +564,8 @@ function install_git(
         clones_dir = joinpath(depots1(), "clones")
         ispath(clones_dir) || mkpath(clones_dir)
         repo_path = joinpath(clones_dir, string(uuid))
-        repo = GitTools.ensure_clone(ctx, repo_path, urls[1]; isbare=true,
-                                     header = "[$uuid] $name from $(urls[1])")
+        repo = GitTools.ensure_clone(ctx, repo_path, first(urls); isbare=true,
+                                     header = "[$uuid] $name from $(first(urls))")
         git_hash = LibGit2.GitHash(hash.bytes)
         for url in urls
             try LibGit2.with(LibGit2.GitObject, repo, git_hash) do g
@@ -707,7 +651,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
 end
 
 function download_source(ctx::Context, pkgs::Vector{PackageSpec},
-                        urls::Dict{UUID, Vector{String}}; readonly=true)
+                        urls::Dict{UUID, Set{String}}; readonly=true)
     probe_platform_engines!()
     new_pkgs = PackageSpec[]
 
@@ -1123,13 +1067,22 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
     return pkg
 end
 
-function check_registered(ctx::Context, pkgs::Vector{PackageSpec})
+function is_all_registered(ctx::Context, pkgs::Vector{PackageSpec})
     pkgs = filter(tracking_registered_version, pkgs)
-    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     for pkg in pkgs
-        isempty(registered_paths(ctx, pkg.uuid)) || continue
+        if !any(r->haskey(r, pkg.uuid), ctx.registries)
+            return pkg
+        end
+    end
+    return true
+end
+
+function check_registered(ctx::Context, pkgs::Vector{PackageSpec})
+    pkg = is_all_registered(ctx, pkgs)
+    if pkg isa PackageSpec
         pkgerror("expected package $(err_rep(pkg)) to be registered")
     end
+    return nothing
 end
 
 # Check if the package can be added without colliding/overwriting things
@@ -1319,7 +1272,7 @@ function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::PackageEntry
         if entry.repo.source !== nothing || entry.path !== nothing
             # A pin in this case includes an implicit `free` to switch to tracking registered versions
             # First, make sure the package is registered so we have something to free to
-            if isempty(registered_paths(ctx, pkg.uuid))
+            if is_all_registered(ctx, [pkg]) !== true
                 pkgerror("unable to pin unregistered package $(err_rep(pkg)) to an arbritrary version")
             end
         end
@@ -1333,7 +1286,6 @@ end
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_pin!(ctx, pkg, manifest_info(ctx, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx, pkgs)
-    check_registered(ctx, pkgs)
 
     pkgs, deps_map = _resolve(ctx, pkgs, PRESERVE_TIERED)
     update_manifest!(ctx, pkgs, deps_map)
@@ -1356,7 +1308,7 @@ function update_package_free!(ctx::Context, pkg::PackageSpec, entry::PackageEntr
     end
     if entry.path !== nothing || entry.repo.source !== nothing
         # make sure the package is registered so we have something to free to
-        if isempty(registered_paths(ctx, pkg.uuid))
+        if is_all_registered(ctx, [pkg]) !== true
             pkgerror("unable to free unregistered package $(err_rep(pkg))")
         end
         return # -> name, uuid

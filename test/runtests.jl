@@ -14,6 +14,9 @@ end
 # Make sure to not start with an outdated registry
 rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
 
+
+Pkg.DEFAULT_IO[] = IOBuffer()
+
 include("utils.jl")
 include("new.jl")
 include("pkg.jl")

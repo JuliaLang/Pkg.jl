@@ -352,7 +352,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
         mkpath("testdir/foo/bar")
         c, r = test_complete("add ")
         @test Sys.iswindows() ? ("testdir\\\\" in c) : ("testdir/" in c)
-        @test "Example" in c
         @test apply_completion("add tes") == (Sys.iswindows() ? "add testdir\\\\" : "add testdir/")
         @test apply_completion("add ./tes") == (Sys.iswindows() ? "add ./testdir\\\\" : "add ./testdir/")
         c, r = test_complete("dev ./")

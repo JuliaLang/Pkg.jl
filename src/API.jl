@@ -69,6 +69,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
             ctx = Context()
+            Types.clone_default_registries(ctx)
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
             return ret
@@ -309,7 +310,6 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     manifest_resolve!(ctx, pkgs)
     ensure_resolved(ctx, pkgs)
 
-    find_registered!(ctx, UUID[pkg.uuid for pkg in pkgs])
     Operations.free(ctx, pkgs)
     return
 end
@@ -1258,6 +1258,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
                      platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
+    Types.clone_default_registries(ctx)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         deps = Dict{String,String}()
