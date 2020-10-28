@@ -51,6 +51,9 @@ treehash(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].git_tree_sha1
 function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Vector{VersionNumber}) where {T}
     @assert issorted(vsorted)
     uncompressed = Dict{VersionNumber, Dict{String, T}}()
+    for v in vsorted
+        uncompressed[v] = Dict{String, T}()
+    end
     for (vs, data) in compressed
         first = length(vsorted) + 1
         # We find the first and last version that are in the range
@@ -66,7 +69,7 @@ function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Ve
         end
         for i in first:last
             v = vsorted[i]
-            uv = get!(Dict{String, T}, uncompressed, v)
+            uv = uncompressed[v]
             for (key, value) in data
                 if haskey(uv, key)
                     # Change to an error?
@@ -81,9 +84,7 @@ function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Ve
 end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
-# Call this before accessing uncompressed data
 function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
-
     # Only valid to call this with existing versions of the package
     # Remove all versions we have already uncompressed
     versions = filter!(v -> !isinit(pkg.version_info[v], :uncompressed_compat), collect(versions))
@@ -95,18 +96,16 @@ function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info
 
     for v in versions
         vinfo = pkg.version_info[v]
-        d = Dict{UUID, VersionSpec}()
-        uncompressed_deps_v = get(uncompressed_deps, v, nothing)
-        if uncompressed_deps_v !== nothing
-            uncompressed_compat_v = get(uncompressed_compat, v, nothing)
-            if uncompressed_compat_v !== nothing
-                for (name, compat) in uncompressed_compat_v
-                    uuid = name == "julia" ? JULIA_UUID : uncompressed_deps_v[name]
-                    d[uuid] = compat
-                end
-            end
+        compat = Dict{UUID, VersionSpec}()
+        uncompressed_deps_v = uncompressed_deps[v]
+        # Everything depends on Julia
+        uncompressed_deps_v["julia"] = JULIA_UUID
+        uncompressed_compat_v = uncompressed_compat[v]
+        for (pkg, uuid) in uncompressed_deps_v
+            vspec = get(uncompressed_compat_v, pkg, nothing)
+            compat[uuid] = vspec === nothing ? VersionSpec() : vspec
         end
-        @init! vinfo.uncompressed_compat = d
+        @init! vinfo.uncompressed_compat = compat
     end
     return pkg
 end

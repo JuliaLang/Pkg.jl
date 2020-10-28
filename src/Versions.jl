@@ -227,7 +227,8 @@ end
 
 VersionSpec(r::VersionRange) = VersionSpec(VersionRange[r])
 VersionSpec(v::VersionNumber) = VersionSpec(VersionRange(v))
-VersionSpec() = VersionSpec(VersionRange())
+const _all_versionsspec = VersionSpec(VersionRange())
+VersionSpec() = _all_versionsspec
 VersionSpec(s::AbstractString) = VersionSpec(VersionRange(s))
 VersionSpec(v::AbstractVector) = VersionSpec(map(VersionRange, v))
 
