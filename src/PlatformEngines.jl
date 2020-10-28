@@ -239,13 +239,13 @@ function download(
 
     progress = if verbose
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
-        p -> begin
-            bar.max = p.dl_total
-            bar.current = p.dl_now
+        (total, now) -> begin
+            bar.max = total
+            bar.current = now
             showprogress(stderr, bar)
         end
     else
-        p -> nothing
+        (total, now) -> nothing
     end
 
     Downloads.download(url, dest; headers, progress)
