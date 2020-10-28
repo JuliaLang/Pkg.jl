@@ -321,4 +321,16 @@ end
     end
 end
 
+@testset "dev a package added by subdir" begin
+    isolate(loaded_depot=false) do
+        Pkg.add(url="https://github.com/DilumAluthge/FooBar.git", subdir="myfolder/Foo")
+        Pkg.develop("Foo")
+        @test isinstalled("Foo")
+        Pkg.develop("Foo")
+        @test isinstalled("Foo")
+        Pkg.develop("Foo")
+        @test isinstalled("Foo")
+    end
+end
+
 end # module

@@ -427,19 +427,36 @@ function devpath(ctx::Context, name::AbstractString, shared::Bool)
 end
 
 function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
-    # First, check if we can compute the path easily (which requires a given local path or name)
-    is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
-    if is_local_path || pkg.name !== nothing
-        dev_path = is_local_path ? pkg.repo.source : devpath(ctx, pkg.name, shared)
-        if pkg.repo.subdir !== nothing
-            dev_path = joinpath(dev_path, pkg.repo.subdir)
+    # If we dev by name and it is in the Project + tracking a repo in the source we can get the repo from the Manifest
+    if pkg.name !== nothing && pkg.uuid === nothing
+        uuid = get(ctx.env.project.deps, pkg.name, nothing)
+        if uuid !== nothing
+            entry = manifest_info(ctx, uuid)
+            if entry !== nothing
+                pkg.repo.source = entry.repo.source
+                pkg.repo.subdir = entry.repo.subdir
+                pkg.path = entry.path
+            end
         end
-        # If given an explicit local path, that needs to exist
-        if is_local_path && !isdir(dev_path)
-            if isfile(dev_path)
-                pkgerror("Dev path `$(dev_path)` is a file, but a directory is required.")
-            else
-                pkgerror("Dev path `$(dev_path)` does not exist.")
+    end
+
+    # Check if we can compute the path easily (which requires a given local path or name)
+    is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source) || pkg.path !== nothing
+    if is_local_path || pkg.name !== nothing
+        if pkg.path !== nothing
+            dev_path = pkg.path
+        else
+            dev_path = is_local_path ? pkg.repo.source : devpath(ctx, pkg.name, shared)
+            if pkg.repo.subdir !== nothing
+                dev_path = joinpath(dev_path, pkg.repo.subdir)
+            end
+            # If given an explicit local path, that needs to exist
+            if is_local_path && !isdir(dev_path)
+                if isfile(dev_path)
+                    pkgerror("Dev path `$(dev_path)` is a file, but a directory is required.")
+                else
+                    pkgerror("Dev path `$(dev_path)` does not exist.")
+                end
             end
         end
         if isdir(dev_path)
@@ -451,16 +468,6 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
                 pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
             end
             return false
-        end
-    end
-    # If we dev by name and it is in the Project + tracking a repo in the source we can get the repo from the Manifest
-    if pkg.name !== nothing && pkg.uuid === nothing
-        uuid = get(ctx.env.project.deps, pkg.name, nothing)
-        if uuid !== nothing
-            entry = manifest_info(ctx, uuid)
-            if entry !== nothing
-                pkg.repo.source = entry.repo.source
-            end
         end
     end
 
@@ -503,12 +510,13 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         end
         new = true
     end
-    if !has_uuid(pkg)
-        resolve_projectfile!(ctx, pkg, dev_path)
-    end
     pkg.path = shared ? dev_path : relative_project_path(ctx, dev_path)
     if pkg.repo.subdir !== nothing
         pkg.path = joinpath(pkg.path, pkg.repo.subdir)
+    end
+
+    if !has_uuid(pkg)
+        resolve_projectfile!(ctx, pkg, pkg.path)
     end
 
     return new
