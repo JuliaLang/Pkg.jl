@@ -162,7 +162,7 @@ function read_manifest(f_or_io::Union{String,IO})
     raw = if f_or_io isa IO
         TOML.tryparse(read(f_or_io, String))
     else
-        isfile(f_or_io) ? TOML.tryparsefile(f_or_io) : return Dict{UUID,PackageEntry}()
+        isfile(f_or_io) ? parse_toml(f_or_io) : return Dict{UUID,PackageEntry}()
     end
     if raw isa TOML.ParserError
         pkgerror("Could not parse manifest: ", sprint(showerror, raw))

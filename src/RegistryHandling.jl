@@ -14,7 +14,7 @@ using Pkg.LazilyInitializedFields
 # See loading.jl
 const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
 const TOML_LOCK = ReentrantLock()
-parsefile(project_file::AbstractString) = Base.parsed_toml(project_file, TOML_CACHE, TOML_LOCK)
+parsefile(toml_file::AbstractString) = Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK)
 
 # Info about each version of a package
 @lazy mutable struct VersionInfo
