@@ -308,8 +308,15 @@ PSA[:name => "precompile",
     :help => md"""
     precompile
 
-Precompile all the dependencies of the project by running `import` on all of them in a new process.
+Precompile all the dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
+
+Errors will only throw when precompiling the top-level dependencies, given that
+not all manifest dependencies may be loaded by the top-level dependencies on the given system.
+
+This method is called automatically after any Pkg action that changes the manifest.
+Any packages that have previously errored during precompilation won't be retried in auto mode
+until they have changed. To disable automatic precompilation set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`
 """,
 ],
 PSA[:name => "status",
