@@ -404,6 +404,9 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                 v = something(proj.version, VERSION)
                 push!(all_versions_u, v)
 
+                for (name, other_uuid) in proj.deps
+                    push!(uuids, other_uuid)
+                end
 
                 # TODO look at compat section for stdlibs?
                 all_compat_u_vr = get_or_make!(all_compat_u, v)

@@ -260,9 +260,8 @@ mutable struct Graph
         data = GraphData(versions, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
 
-        local extended_deps
-        let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
-            extended_deps = [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
+        extended_deps = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
+            [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
         end
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             n2u = Dict{String,UUID}()
