@@ -1364,9 +1364,11 @@ end
 function activate(;temp=false,shared=false)
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
-    Base.ACTIVE_PROJECT[] = nothing
+    Base.ACTIVE_PROJECT[] =
+        Base.ACTIVE_PROJECT[] === nothing ? Base.current_project() : nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
+    p === nothing ||
+        printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
     return nothing
 end
