@@ -1199,31 +1199,23 @@ function registered_uuid(ctx::Context, name::String)::Union{Nothing,UUID}
     uuids = registered_uuids(ctx, name)
     length(uuids) == 0 && return nothing
     length(uuids) == 1 && return first(uuids)
-    choices::Vector{String} = []
-    choices_cache::Vector{Tuple{UUID,String}} = []
-    # Move this to the REPL module
+    repo_infos = Tuple{String, String, UUID}[]
     for uuid in uuids
-        values = registered_info(ctx, uuid, "repo", String)
-        for value in values
-            depot = "(unknown)"
-            for d in depots()
-                r = joinpath(d, "registries")
-                startswith(value[1], r) || continue
-                depot = split(relpath(value[1], r), Base.Filesystem.path_separator_re)[1]
-                break
-            end
-            push!(choices, "Registry: $depot - Path: $(value[2])")
-            push!(choices_cache, (uuid, value[1]))
+        for reg in ctx.registries
+            pkg = get(reg, uuid, nothing)
+            pkg === nothing && continue
+            info = Pkg.RegistryHandling.registry_info(pkg)
+            info.repo === nothing && continue
+            push!(repo_infos, (reg.name, info.repo, uuid))
         end
     end
-    length(choices_cache) == 1 && return choices_cache[1][1]
+    unique!(repo_infos)
     if isinteractive()
         # prompt for which UUID was intended:
-        menu = RadioMenu(choices)
+        menu = RadioMenu(String["Registry: $(value[1]) - Repo: $(value[2]) - UUID: $(value[3])" for value in repo_infos])
         choice = request("There are multiple registered `$name` packages, choose one:", menu)
         choice == -1 && return nothing
-        ctx.env.paths[choices_cache[choice][1]] = [choices_cache[choice][2]]
-        return choices_cache[choice][1]
+        return repo_infos[choice][3]
     else
         pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
     end
