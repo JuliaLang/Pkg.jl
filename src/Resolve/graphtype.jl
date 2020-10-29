@@ -264,7 +264,6 @@ mutable struct Graph
             [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
         end
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
-            n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
             req = Dict{Int,VersionSpec}()
             uuid = pkgs[p0]
@@ -276,12 +275,6 @@ mutable struct Graph
                 # (intersecting is used by fixed packages though...)
                 req_p1 = get!(VersionSpec, req, p1)
                 req[p1] = req_p1 ∩ vs
-            end
-            # The remaining dependencies do not have compatibility constraints
-            for uuid in values(n2u)
-                p1 = pdict[uuid]
-                p1 == p0 && continue
-                get!(VersionSpec, req, p1)
             end
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
@@ -299,9 +292,8 @@ mutable struct Graph
 
         gadj = [Int[] for p0 = 1:np]
         gmsk = [BitMatrix[] for p0 = 1:np]
-        local gconstr
-        let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
-            gconstr = [trues(spp[p0]) for p0 = 1:np]
+        gconstr = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
+            [trues(spp[p0]) for p0 = 1:np]
         end
         adjdict = [Dict{Int,Int}() for p0 = 1:np]
 

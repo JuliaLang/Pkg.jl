@@ -367,6 +367,7 @@ end
 
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
+const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed})
     uuids = Set{UUID}()
     union!(uuids, keys(reqs))
@@ -434,6 +435,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
     end
 
     for uuid in uuids
+        uuid == JULIA_UUID && continue
         if !haskey(uuid_to_name, uuid)
             name = registered_name(ctx, uuid)
             name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
