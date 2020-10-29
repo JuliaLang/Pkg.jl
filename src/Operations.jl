@@ -412,7 +412,8 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
                 end
             else
                 for reg in ctx.registries
-                    pkg = reg[uuid]
+                    pkg = get(reg, uuid, nothing)
+                    pkg === nothing && continue
                     info = Pkg.RegistryHandling.registry_info(pkg)
                     for (v, uncompressed_data) in Pkg.RegistryHandling.uncompressed_data(info)
                         # Filter yanked and if we are in offline mode also downloaded packages
