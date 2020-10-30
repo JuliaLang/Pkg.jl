@@ -16,6 +16,7 @@ import ..can_fancyprint
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
+import ..DEFAULT_IO
 using ..Artifacts: artifact_paths
 
 include("generate.jl")
@@ -1366,7 +1367,7 @@ function activate(;temp=false,shared=false)
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
+    p === nothing || printpkgstyle(DEFAULT_IO[], :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
     return nothing
 end
@@ -1423,7 +1424,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(stdout, :Activating, "$(n)environment at $(pathrepr(p))")
+        printpkgstyle(DEFAULT_IO[], :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
     return nothing
