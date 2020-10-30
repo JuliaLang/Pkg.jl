@@ -21,7 +21,7 @@ function isolate(fn::Function; loaded_depot=false)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
     old_working_directory = pwd()
-    old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
+    old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
     try
         # Clone the registry only once
         if !isdir(REGISTRY_DIR)
@@ -39,7 +39,7 @@ function isolate(fn::Function; loaded_depot=false)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = REGISTRY_DIR
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = REGISTRY_DIR
         Pkg.REPLMode.TEST_MODE[] = false
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
@@ -70,7 +70,7 @@ function isolate(fn::Function; loaded_depot=false)
         Base.ACTIVE_PROJECT[] = old_active_project
         cd(old_working_directory)
         Pkg.REPLMode.TEST_MODE[] = false # reset unconditionally
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
     end
 end
 
@@ -79,7 +79,7 @@ function temp_pkg_dir(fn::Function;rm=true)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
-    old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
+    old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
     try
         # Clone the registry only once
         generaldir = joinpath(@__DIR__, "registries", "General")
@@ -94,7 +94,7 @@ function temp_pkg_dir(fn::Function;rm=true)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = generaldir
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
@@ -122,7 +122,7 @@ function temp_pkg_dir(fn::Function;rm=true)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
     end
 end
 

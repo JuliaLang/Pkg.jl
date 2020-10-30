@@ -3,8 +3,8 @@
 module GitTools
 
 using ..Pkg
-import ..Pkg: can_fancyprint
-using ..Pkg.MiniProgressBars
+using ..MiniProgressBars
+import ..can_fancyprint, ..printpkgstyle
 using SHA
 import Base: SHA1
 import LibGit2
@@ -86,8 +86,9 @@ end
 function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
-    Pkg.Types.printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
+    printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
         LibGit2.Callbacks(
@@ -131,7 +132,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     end
     fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
+    printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     callbacks = if fancyprint

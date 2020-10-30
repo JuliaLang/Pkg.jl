@@ -7,9 +7,8 @@ using Markdown, UUIDs, Dates
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..casesensitive_isdir
+import ..casesensitive_isdir, ..OFFLINE_MODE
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
-import ..Pkg: Pkg, RegistryHandling
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)
@@ -521,7 +520,7 @@ function promptf()
             end
         end
     end
-    if Pkg.OFFLINE_MODE[]
+    if OFFLINE_MODE[]
         prefix = prefix * "[offline] "
     end
     return prefix * "pkg> "

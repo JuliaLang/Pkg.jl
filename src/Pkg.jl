@@ -43,14 +43,13 @@ include("MiniProgressBars.jl")
 include("GitTools.jl")
 include("PlatformEngines.jl")
 include("Versions.jl")
-include("RegistryHandling.jl")
+include("Registry/Registry.jl")
 include("Resolve/Resolve.jl")
 include("Types.jl")
 include("BinaryPlatforms_compat.jl")
 include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
-include("Registry.jl")
 include("REPLMode/REPLMode.jl")
 
 import .REPLMode: @pkg_str
@@ -302,7 +301,7 @@ See also [`PackageSpec`](@ref)
 """
 const develop = API.develop
 
-#TODO: Will probably be deprecated for something in PkgDev
+# TODO: Will probably be deprecated for something in PkgDev
 const generate = API.generate
 
 """
@@ -541,7 +540,7 @@ Below is a comparison between the REPL version and the API version:
 | `local/path`         | `RegistrySpec(path="local/path")`               |
 | `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`        |
 """
-const RegistrySpec = Types.RegistrySpec
+const RegistrySpec = Registry.RegistrySpec
 
 
 function __init__()

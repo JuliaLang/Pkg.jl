@@ -9,11 +9,11 @@ import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, ar
 import ..set_readonly
 import ..GitTools
 import ..TOML
-import ..Types: parse_toml, write_env_usage, printpkgstyle
-import ..Pkg
-import ..Pkg: pkg_server, can_fancyprint, DEFAULT_IO
-using ..Pkg.MiniProgressBars
+using ..MiniProgressBars
 using ..PlatformEngines
+import ..pkg_server, ..can_fancyprint, ..DEFAULT_IO, ..printpkgstyle
+import ..Types: write_env_usage, parse_toml
+
 using SHA
 
 export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
@@ -145,8 +145,6 @@ function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Boo
     if !artifact_exists(hash)
         error("Unable to archive artifact $(bytes2hex(hash.bytes)): does not exist!")
     end
-
-    probe_platform_engines!()
 
     # Package it up
     package(artifact_path(hash), tarball_path)
@@ -304,9 +302,6 @@ function download_artifact(
         return true
     end
 
-    # Ensure that we're ready to download things
-    probe_platform_engines!()
-
     if Sys.iswindows()
         # The destination directory we're hoping to fill:
         dest_dir = artifact_path(tree_hash; honor_overrides=false)
@@ -431,6 +426,7 @@ function with_show_download_info(f, name, quiet_download)
     io = DEFAULT_IO[]
     fancyprint = can_fancyprint(io)
     if !quiet_download
+        # Should ideally pass an IO as first arg here
         fancyprint && print_progress_bottom(stderr)
         printpkgstyle(stderr, :Downloading, "artifact: $name")
     end
@@ -441,7 +437,6 @@ function with_show_download_info(f, name, quiet_download)
             fancyprint && print(stdout, "\033[1A") # move cursor up one line
             fancyprint && print(stdout, "\033[2K") # clear line
             fancyprint && printpkgstyle(stdout, :Downloaded, "artifact: $name")
-            
         end
     end
 end

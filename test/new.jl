@@ -32,7 +32,7 @@ simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
         # A simple `add` should set up some things for us:
         Pkg.add(name="Example", version="0.5.3")
         # - `General` should be initiated by default.
-        regs = Pkg.Registry.status(;as_api=true)
+        regs = Pkg.Registry.reachable_registries()
         @test length(regs) == 1
         reg = regs[1]
         @test reg.name == "General"
@@ -108,7 +108,7 @@ simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
             @test isdir(pkg.source) # TODO check for full git clone, have to implement saving original URL first
         end
         # Check that the original installation was undisturbed.
-        regs = Pkg.Registry.status(;as_api=true)
+        regs = Pkg.Registry.reachable_registries()
         @test length(regs) == 1
         reg = regs[1]
         @test reg.name == "General"
@@ -2432,7 +2432,7 @@ end
         mktempdir() do tmp
             ENV["JULIA_DEPOT_PATH"] = "tmp"
             Base.init_depot_path()
-            Pkg.Types.DEFAULT_REGISTRIES[1].url = Utils.REGISTRY_DIR
+            Pkg.Registry.DEFAULT_REGISTRIES[1].url = Utils.REGISTRY_DIR
             cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
             git_init_and_commit(joinpath(tmp, "BasicSandbox"))
             cd(tmp) do

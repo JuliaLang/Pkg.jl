@@ -1,4 +1,25 @@
 
+function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false)
+    indent = textwidth(string(:Precompiling)) # "Precompiling" is the longest operation
+    ignore_indent && (indent = 0)
+    printstyled(io, lpad(string(cmd), indent), color=:green, bold=true)
+    println(io, " ", text)
+end
+
+const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
+isurl(r::String) = occursin(URL_regex, r)
+
+stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
+stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
+
+function pathrepr(path::String)
+    # print stdlib paths as @stdlib/Name
+    if startswith(path, stdlib_dir())
+        path = "@stdlib/" * basename(path)
+    end
+    return "`" * Base.contractuser(path) * "`"
+end
+
 function set_readonly(path)
     for (root, dirs, files) in walkdir(path)
         for file in files

@@ -13,8 +13,7 @@ import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, RegistryHandling.Registry
-import ..Pkg: can_fancyprint
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle
 
 #########
 # Utils #
@@ -159,13 +158,13 @@ end
 # Registry Loading #
 ####################
 
-function load_tree_hash!(registries::Vector{Registry}, pkg::PackageSpec)
+function load_tree_hash!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec)
     tracking_registered_version(pkg) || return pkg
     hash = nothing
     for reg in registries
         reg_pkg = get(reg, pkg.uuid, nothing)
         reg_pkg === nothing && continue
-        pkg_info = Pkg.RegistryHandling.registry_info(reg_pkg)
+        pkg_info = Registry.registry_info(reg_pkg)
         version_info = get(pkg_info.version_info, pkg.version, nothing)
         version_info === nothing && continue
         hash′ = version_info.git_tree_sha1
@@ -283,7 +282,7 @@ end
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
 # all versioned packges should have a `tree_hash`
-function resolve_versions!(env::EnvCache, registries::Vector{Registry}, pkgs::Vector{PackageSpec}, julia_version)
+function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
     # compatibility
     if julia_version !== nothing
         v = intersect(julia_version, project_compatibility(env, "julia"))
@@ -370,7 +369,7 @@ end
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
-function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::Dict{UUID,String},
+function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID,String},
                     reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version)
     uuids = Set{UUID}()
     union!(uuids, keys(reqs))
@@ -415,18 +414,18 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
                 for reg in registries
                     pkg = get(reg, uuid, nothing)
                     pkg === nothing && continue
-                    info = Pkg.RegistryHandling.registry_info(pkg)
-                    for (v, uncompressed_data) in Pkg.RegistryHandling.uncompressed_data(info)
+                    info = Registry.registry_info(pkg)
+                    for (v, compat_info) in Registry.compat_info(info)
                         # Filter yanked and if we are in offline mode also downloaded packages
                         # TODO, pull this into a function
-                        Pkg.RegistryHandling.isyanked(info, v) && continue
+                        Registry.isyanked(info, v) && continue
                         if Pkg.OFFLINE_MODE[]
-                            pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Pkg.RegistryHandling.treehash(info, v))
+                            pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
                             is_package_downloaded(env.project_file, pkg_spec) || continue
                         end
 
-                        all_compat_u[v] = uncompressed_data
-                        union!(uuids, keys(uncompressed_data))
+                        all_compat_u[v] = compat_info
+                        union!(uuids, keys(compat_info))
                     end
                 end
             end
@@ -449,7 +448,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
            all_compat
 end
 
-function load_urls(registries::Vector{Registry}, pkgs::Vector{PackageSpec})
+function load_urls(registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec})
     urls = Dict{UUID,Set{String}}()
     for pkg in pkgs
         uuid = pkg.uuid
@@ -457,7 +456,7 @@ function load_urls(registries::Vector{Registry}, pkgs::Vector{PackageSpec})
         for reg in registries
             reg_pkg = get(reg, uuid, nothing)
             reg_pkg === nothing && continue
-            info = Pkg.RegistryHandling.registry_info(reg_pkg)
+            info = Registry.registry_info(reg_pkg)
             repo = info.repo
             repo === nothing && continue
             push!(urls[uuid], repo)
@@ -641,7 +640,6 @@ end
 
 function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                         urls::Dict{UUID, Set{String}}; readonly=true)
-    probe_platform_engines!()
     new_pkgs = PackageSpec[]
 
     pkgs_to_install = Tuple{PackageSpec, String}[]
@@ -922,7 +920,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
         fancyprint && print_progress_bottom(ctx.io)
 
         printpkgstyle(ctx.io, :Building,
-                      rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
+                      rpad(name * " ", max_name + 1, "─") * "→ " * pathrepr(log_file))
         bar.current = n-1
 
         fancyprint && show_progress(ctx.io, bar)
@@ -1052,7 +1050,7 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
     return pkg
 end
 
-function is_all_registered(registries::Vector{Registry}, pkgs::Vector{PackageSpec})
+function is_all_registered(registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec})
     pkgs = filter(tracking_registered_version, pkgs)
     for pkg in pkgs
         if !any(r->haskey(r, pkg.uuid), registries)
@@ -1062,7 +1060,7 @@ function is_all_registered(registries::Vector{Registry}, pkgs::Vector{PackageSpe
     return true
 end
 
-function check_registered(registries::Vector{Registry}, pkgs::Vector{PackageSpec})
+function check_registered(registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec})
     pkg = is_all_registered(registries, pkgs)
     if pkg isa PackageSpec
         pkgerror("expected package $(err_rep(pkg)) to be registered")
@@ -1093,7 +1091,7 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
-function tiered_resolve(env::EnvCache, registries::Vector{Registry}, pkgs::Vector{PackageSpec}, julia_version)
+function tiered_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
     try # do not modify existing subgraph
         return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version)
     catch err
@@ -1112,7 +1110,7 @@ function tiered_resolve(env::EnvCache, registries::Vector{Registry}, pkgs::Vecto
     return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
 end
 
-function targeted_resolve(env::EnvCache, registries::Vector{Registry}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     if preserve == PRESERVE_ALL
         pkgs = load_all_deps(env, pkgs)
     elseif preserve == PRESERVE_DIRECT
@@ -1128,7 +1126,7 @@ function targeted_resolve(env::EnvCache, registries::Vector{Registry}, pkgs::Vec
     return pkgs, deps_map
 end
 
-function _resolve(io::IO, env::EnvCache, registries::Vector{Registry}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     printpkgstyle(io, :Resolving, "package versions...")
     return preserve == PRESERVE_TIERED ?
         tiered_resolve(env, registries, pkgs, julia_version) :
@@ -1242,7 +1240,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
-function update_package_pin!(registries::Vector{Registry}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
+function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
     if entry === nothing
         pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
     end
@@ -1284,7 +1282,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
 
-function update_package_free!(registries::Vector{Registry}, pkg::PackageSpec, entry::PackageEntry)
+function update_package_free!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::PackageEntry)
     if entry.pinned
         pkg.pinned = false
         is_stdlib(pkg.uuid) && return # nothing left to do
@@ -1488,7 +1486,7 @@ function parse_REQUIRE(require_path::String)
 end
 
 # "targets" based test deps -> "test/Project.toml" based deps
-function gen_target_project(env::EnvCache, registries::Vector{Registry}, pkg::PackageSpec, source_path::String, target::String)
+function gen_target_project(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, source_path::String, target::String)
     test_project = Types.Project()
     if projectfile_path(source_path; strict=true) === nothing
         # no project file, assuming this is an old REQUIRE package
@@ -1607,35 +1605,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     end
 end
 
-function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
-    entry = manifest_info(env.manifest, pkg.uuid)
-    if entry === nothing
-        pkgerror("expected package $(err_rep(pkg)) to exist in the manifest",
-                 " (use `resolve` to populate the manifest)")
-    end
-    package_info(env, pkg, entry)
-end
 
-function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
-    git_source = pkg.repo.source === nothing ? nothing :
-        isurl(pkg.repo.source) ? pkg.repo.source :
-        project_rel_path(env, pkg.repo.source)
-    info = PackageInfo(
-        name                 = pkg.name,
-        version              = pkg.version != VersionSpec() ? pkg.version : nothing,
-        tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
-        is_direct_dep        = pkg.uuid in values(env.project.deps),
-        is_pinned            = pkg.pinned,
-        is_tracking_path     = pkg.path !== nothing,
-        is_tracking_repo     = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,
-        is_tracking_registry = is_tracking_registry(pkg),
-        git_revision         = pkg.repo.rev,
-        git_source           = git_source,
-        source               = project_rel_path(env, source_path(env.project_file, pkg)),
-        dependencies         = copy(entry.deps), #TODO is copy needed?
-    )
-    return info
-end
 
 # Display
 
