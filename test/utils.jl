@@ -10,8 +10,9 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT
 
 const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
-const GENERAL_REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
-const REGISTRY_DIR = joinpath(GENERAL_REGISTRY_DEPOT, "registries", "General")
+
+const REGISTRY_DIR = joinpath(@__DIR__, "registries", "General")
+
 
 function isolate(fn::Function; loaded_depot=false)
     old_load_path = copy(LOAD_PATH)
@@ -19,6 +20,7 @@ function isolate(fn::Function; loaded_depot=false)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
     old_working_directory = pwd()
+    old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
     try
         # Clone the registry only once
         if !isdir(REGISTRY_DIR)
@@ -35,17 +37,18 @@ function isolate(fn::Function; loaded_depot=false)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        # Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
+        Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
+        Pkg.Types.DEFAULT_REGISTRIES[1].url = REGISTRY_DIR
         Pkg.REPLMode.TEST_MODE[] = false
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
-            target_depot = mktempdir()
-            push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
-            push!(DEPOT_PATH, GENERAL_REGISTRY_DEPOT)
-            push!(DEPOT_PATH, target_depot)
-            loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
+            target_depot = nothing
             try
+                target_depot = mktempdir()
+                push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
+                push!(DEPOT_PATH, target_depot)
+                loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
                 fn()
             finally
                 if target_depot !== nothing && isdir(target_depot)
@@ -66,6 +69,7 @@ function isolate(fn::Function; loaded_depot=false)
         Base.ACTIVE_PROJECT[] = old_active_project
         cd(old_working_directory)
         Pkg.REPLMode.TEST_MODE[] = false # reset unconditionally
+        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
     end
 end
 
@@ -74,6 +78,7 @@ function temp_pkg_dir(fn::Function;rm=true)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
+    old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
     try
         # Clone the registry only once
         generaldir = joinpath(@__DIR__, "registries", "General")
@@ -94,10 +99,9 @@ function temp_pkg_dir(fn::Function;rm=true)
                 "JULIA_PKG_DEVDIR" => nothing) do
             env_dir = mktempdir()
             depot_dir = mktempdir()
-            push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
-            push!(DEPOT_PATH, GENERAL_REGISTRY_DEPOT)
-            push!(DEPOT_PATH, depot_dir)
             try
+                push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
+                push!(DEPOT_PATH, depot_dir)
                 fn(env_dir)
             finally
                 try
@@ -116,6 +120,7 @@ function temp_pkg_dir(fn::Function;rm=true)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
+        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
     end
 end
 
