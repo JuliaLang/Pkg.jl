@@ -217,7 +217,7 @@ isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
     source = project_rel_path(env, source_path(env.project_file, pkg))
     source_env = EnvCache(projectfile_path(source))
-    pkgs = load_all_deps(env)
+    pkgs = load_all_deps(source_env)
     for pkg in filter(is_tracking_path, pkgs)
         if any(x -> x.uuid == pkg.uuid, developed)
             continue
