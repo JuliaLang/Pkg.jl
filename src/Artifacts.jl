@@ -467,8 +467,19 @@ be provided to properly support overrides from `Overrides.toml` entries in depot
 
 If `include_lazy` is set to `true`, then lazy packages will be installed as well.
 
+This function is deprecated and should be replaced with the following snippet:
+
+    artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy)
+    for name in keys(artifacts)
+        ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=platform)
+    end
+
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3.
+
+!!! warning
+    This function is deprecated in Julia 1.6 and will be removed in a future version.
+    Use `select_downloadable_artifacts()` and `ensure_artifact_installed()` instead.
 """
 function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::AbstractPlatform = HostPlatform(),
@@ -476,6 +487,8 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
                                         include_lazy::Bool = false,
                                         verbose::Bool = false,
                                         quiet_download::Bool = false)
+    # This function should not be called anymore; use `select_downloadable_artifacts()` directly.
+    Base.depwarn("`ensure_all_artifacts_installed()` is deprecated; iterate over `select_downloadable_artifacts()` output with `ensure_artifact_installed()`.", :ensure_all_artifacts_installed)
     # Collect all artifacts we're supposed to install
     artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy, pkg_uuid)
     for name in keys(artifacts)

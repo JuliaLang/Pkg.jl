@@ -355,18 +355,22 @@ end
 
         # Install artifacts such that `c_simple` is not installed properly
         # because of the platform we requested, but `socrates` is.
-        ensure_all_artifacts_installed(artifacts_toml; platform=Platform("powerpc64le", "linux"))
+        missing_platform = Platform("powerpc64le", "linux")
+        artifacts = select_downloadable_artifacts(artifacts_toml; platform=missing_platform)
+        for name in keys(artifacts)
+            ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=missing_platform)
+        end
 
         # Test that c_simple doesn't even show up
-        c_simple_hash = artifact_hash("c_simple", artifacts_toml; platform=Platform("powerpc64le", "linux"))
+        c_simple_hash = artifact_hash("c_simple", artifacts_toml; platform=missing_platform)
         @test c_simple_hash == nothing
 
         # Test that socrates shows up, but is not installed
-        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=Platform("powerpc64le", "linux"))
+        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=missing_platform)
         @test !artifact_exists(socrates_hash)
 
         # Test that collapse_the_symlink is installed
-        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=Platform("powerpc64le", "linux"))
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=missing_platform)
         @test artifact_exists(cts_hash)
     end
 
