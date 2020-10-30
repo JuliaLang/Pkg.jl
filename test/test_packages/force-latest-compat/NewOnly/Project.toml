@@ -1,0 +1,18 @@
+name = "NewOnly"
+uuid = "2c7b3c3b-62b6-437a-a36e-3d5963db0b1f"
+authors = ["Dilum Aluthge <dilum@aluthge.com>"]
+version = "0.1.0"
+
+[deps]
+MLJModelInterface = "e80e1ace-859a-464e-9ed9-23947d8ae3ea"
+
+[compat]
+MLJModelInterface = "0.2"
+ScientificTypes = "0.6"
+
+[extras]
+ScientificTypes = "321657f4-b219-11e9-178b-2701a2544e81"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["ScientificTypes", "Test"]

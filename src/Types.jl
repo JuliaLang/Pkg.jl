@@ -1308,4 +1308,6 @@ parse_toml(path::String; fakeit::Bool=false) = parse_toml(TOML.Parser(), path; f
 parse_toml(parser::TOML.Parser, path::String; fakeit::Bool=false) =
     !fakeit || isfile(path) ? TOML.parsefile(parser, path) : Dict{String,Any}()
 
+include("force-latest-compat.jl")
+
 end # module

@@ -10,6 +10,7 @@ import REPL
 using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
+import ..Types.latest_compat, ..Types.force_latest_compat
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
 using Base.BinaryPlatforms
 import ...Pkg
@@ -1390,7 +1391,7 @@ end
 
 # ctx + pkg used to compute parent dep graph
 function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
-                 sandbox_path::String, sandbox_project_override)
+                 sandbox_path::String, sandbox_project_override; force_latest_compat::Bool=false)
     active_manifest = manifestfile_path(dirname(ctx.env.project_file))
     sandbox_project = projectfile_path(sandbox_path)
 
@@ -1403,6 +1404,10 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             Types.write_project(sandbox_project_override, tmp_project)
         elseif isfile(sandbox_project)
             cp(sandbox_project, tmp_project)
+            chmod(tmp_project, 0o600)
+        end
+        if force_latest_compat
+            Types.force_latest_compat(tmp_project)
             chmod(tmp_project, 0o600)
         end
         # create merged manifest
@@ -1521,7 +1526,7 @@ testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
-              test_fn=nothing)
+              test_fn=nothing, force_latest_compat::Bool=false)
     Pkg.instantiate(ctx; allow_autoprecomp = false)
 
     # load manifest data
@@ -1557,7 +1562,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             gen_target_project(ctx.env, ctx.registries, pkg, source_path, "test")
         # now we sandbox
         printpkgstyle(ctx.io, :Testing, pkg.name)
-        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
+        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; force_latest_compat=force_latest_compat) do
             test_fn !== nothing && test_fn()
             status(Context(); mode=PKGMODE_COMBINED)
             printpkgstyle(ctx.io, :Testing, "Running tests...")

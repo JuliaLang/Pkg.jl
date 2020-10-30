@@ -187,9 +187,13 @@ const update = API.up
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
+  - `force_latest_compat::Bool=false`: for each `[compat]` entry in the active project, only allow the latest compatible version of each dependency
 
 !!! compat "Julia 1.3"
     `julia_args` and `test_args` requires at least Julia 1.3.
+
+!!! compat "Julia 1.7"
+    `force_latest_compat` requires at least Julia 1.7.
 
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its
@@ -542,7 +546,6 @@ Below is a comparison between the REPL version and the API version:
 | `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`        |
 """
 const RegistrySpec = Types.RegistrySpec
-
 
 function __init__()
     DEFAULT_IO[] = stderr
