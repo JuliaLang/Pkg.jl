@@ -236,7 +236,6 @@ mutable struct Graph
 
     function Graph(
             versions::VersionsDict,
-            deps::DepsDict,
             compat::CompatDict,
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
@@ -244,17 +243,12 @@ mutable struct Graph
             verbose::Bool = false,
             julia_version::Union{VersionNumber,Nothing} = VERSION,
         )
-        # make sure all versions of all packages know about julia uuid
-        for (uuid,vnmap) in deps, vn in versions[uuid]
-            get!(valtype(vnmap), vnmap, vn)["julia"] = uuid_julia
-        end
 
         # Tell the resolver about julia itself
         uuid_to_name[uuid_julia] = "julia"
         if julia_version !== nothing
             fixed[uuid_julia] = Fixed(julia_version)
             versions[uuid_julia] = Set([julia_version])
-            deps[uuid_julia] = DepsValDict(julia_version => valtype(DepsValDict)())
             compat[uuid_julia] = CompatValDict(julia_version => valtype(CompatValDict)())
         else
             versions[uuid_julia] = Set([])
@@ -266,36 +260,21 @@ mutable struct Graph
         data = GraphData(versions, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
 
-        local extended_deps
-        let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
-            extended_deps = [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
+        extended_deps = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
+            [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
         end
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
-            n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
-            vnmap = get(Dict{String,UUID}, deps[pkgs[p0]], vn)
-            for (name, uuid) in vnmap
-                # check conflicts ??
-                n2u[name] = uuid
-            end
             req = Dict{Int,VersionSpec}()
             uuid = pkgs[p0]
             vnmap = get(Dict{String,VersionSpec}, compat[pkgs[p0]], vn)
-            for (name,vs) in vnmap
-                haskey(n2u, name) || error("Unknown package $name found in the compatibility requirements of $(pkgID(pkgs[p0], uuid_to_name))")
-                uuid = n2u[name]
+            for (uuid, vs) in vnmap
                 p1 = pdict[uuid]
                 p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
                 # check conflicts instead of intersecting?
                 # (intersecting is used by fixed packages though...)
                 req_p1 = get!(VersionSpec, req, p1)
                 req[p1] = req_p1 ∩ vs
-            end
-            # The remaining dependencies do not have compatibility constraints
-            for uuid in values(n2u)
-                p1 = pdict[uuid]
-                p1 == p0 && continue
-                get!(VersionSpec, req, p1)
             end
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
@@ -313,9 +292,8 @@ mutable struct Graph
 
         gadj = [Int[] for p0 = 1:np]
         gmsk = [BitMatrix[] for p0 = 1:np]
-        local gconstr
-        let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
-            gconstr = [trues(spp[p0]) for p0 = 1:np]
+        gconstr = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
+            [trues(spp[p0]) for p0 = 1:np]
         end
         adjdict = [Dict{Int,Int}() for p0 = 1:np]
 

@@ -51,6 +51,7 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
 end
 
 
+const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 function complete_remote_package(partial)
     isempty(partial) && return String[]
     cmp = Set{String}()
@@ -62,18 +63,19 @@ function complete_remote_package(partial)
                 pkg = RegistryHandling.registry_info(regpkg)
                 uncompressed_data = RegistryHandling.uncompressed_data(pkg)
                 # Filter versions
-                for (v, (uncompressed_compat, _)) in uncompressed_data
+                for (v, uncompressed_compat) in uncompressed_data
                     RegistryHandling.isyanked(pkg, v) && continue
                     # TODO: Filter based on offline mode
-                    supported_julia_versions = VersionSpec()
-                    found_julia_compat = false
-                    for (pkg, vspec) in uncompressed_compat
-                        if pkg == "julia"
+                    is_julia_compat = nothing
+                    for (pkg_uuid, vspec) in uncompressed_compat
+                        if pkg_uuid == JULIA_UUID
                             found_julia_compat = true
-                            supported_julia_versions = intersect(supported_julia_versions, vspec)
+                            is_julia_compat = VERSION in vspec
+                            is_julia_compat && continue
                         end
                     end
-                    if VERSION in supported_julia_versions || !found_julia_compat
+                    # Found a compatible version or compat on julia at all => compatible
+                    if is_julia_compat === nothing || is_julia_compat
                         push!(cmp, name)
                         break
                     end
