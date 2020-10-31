@@ -20,6 +20,9 @@ import ..DEFAULT_IO
 using ..Artifacts: artifact_paths
 using ..MiniProgressBars
 
+using TimerOutputs
+import ..Pkg: to
+
 include("generate.jl")
 
 Base.@kwdef struct PackageInfo
@@ -170,7 +173,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     end
 end
 
-function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
+@timeit to function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
     foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
@@ -216,7 +219,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     return
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
+@timeit to function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
              platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :add)
     foreach(pkg -> check_package_name(pkg.name, :add), pkgs)
@@ -271,7 +274,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     return
 end
 
-function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
+@timeit to function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
     require_not_empty(pkgs, :rm)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     foreach(pkg -> pkg.mode = mode, pkgs)
@@ -297,7 +300,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     return
 end
 
-function up(ctx::Context, pkgs::Vector{PackageSpec};
+@timeit to function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
@@ -330,12 +333,12 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
 end
 
 resolve(; io::IO=DEFAULT_IO[], kwargs...) = resolve(Context(;io); kwargs...)
-function resolve(ctx::Context; kwargs...)
+@timeit to function resolve(ctx::Context; kwargs...)
     up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+@timeit to function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     require_not_empty(pkgs, :pin)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -364,7 +367,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+@timeit to function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     require_not_empty(pkgs, :free)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -388,7 +391,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     return
 end
 
-function test(ctx::Context, pkgs::Vector{PackageSpec};
+@timeit to function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, test_fn=nothing,
               julia_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
               test_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
@@ -425,7 +428,7 @@ of `collect_delay`; which defaults to seven days.
 
 Use verbose mode (`verbose=true`) for detailed output.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, kwargs...)
+@timeit to function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, kwargs...)
     Context!(ctx; kwargs...)
     env = ctx.env
 
@@ -946,7 +949,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     return
 end
 
-function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
+@timeit to function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
@@ -983,7 +986,7 @@ function make_pkgspec(man, uuid)
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, kwargs...)
+@timeit to function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1361,7 +1364,7 @@ function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
 end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
-function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
+@timeit to function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
                      platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
@@ -1566,7 +1569,7 @@ const undo_entries = Dict{String, UndoState}()
 const max_undo_limit = 50
 const saved_initial_snapshot = Ref(false)
 
-function add_snapshot_to_undo(env=nothing)
+@timeit to function add_snapshot_to_undo(env=nothing)
     # only attempt to take a snapshot if there is
     # an active project to be found
     if env === nothing

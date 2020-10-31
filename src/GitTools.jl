@@ -10,6 +10,9 @@ import Base: SHA1
 import LibGit2
 using Printf
 
+using TimerOutputs
+import ..Pkg: to
+
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
     @assert haskey(p, :transfer_progress)
@@ -83,7 +86,7 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
     end
 end
 
-function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
+@timeit to function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
@@ -124,7 +127,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
 end
 
-function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, kwargs...)
+@timeit to function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)

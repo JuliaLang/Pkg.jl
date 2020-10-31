@@ -11,6 +11,9 @@ using Base.BinaryPlatforms, p7zip_jll
 
 export probe_platform_engines!, verify, unpack, package, download_verify_unpack
 
+using TimerOutputs
+import ..Pkg: to
+
 const EXE7Z_LOCK = ReentrantLock()
 const EXE7Z = Ref{String}()
 
@@ -236,7 +239,7 @@ function get_metadata_headers(url::AbstractString)
     return headers
 end
 
-function download(
+@timeit to function download(
     url::AbstractString,
     dest::AbstractString;
     verbose::Bool = false,

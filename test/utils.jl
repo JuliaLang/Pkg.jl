@@ -4,6 +4,7 @@ module Utils
 
 import ..Pkg
 using TOML
+using TimerOutputs
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
@@ -15,7 +16,7 @@ const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 
-function isolate(fn::Function; loaded_depot=false, linked_reg=true)
+@timeit Pkg.to function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -28,7 +29,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         # Clone the registry only once
         if !isdir(REGISTRY_DIR)
             mkpath(REGISTRY_DIR)
-            Base.shred!(LibGit2.CachedCredentials()) do creds
+            @timeit Pkg.to "clone registry" Base.shred!(LibGit2.CachedCredentials()) do creds
                 LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
                                                 "https://github.com/JuliaRegistries/General.git",
                     REGISTRY_DIR, credentials = creds)) do repo
@@ -80,7 +81,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     end
 end
 
-function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
+@timeit Pkg.to function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -92,7 +93,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
         # Clone the registry only once
         if !isdir(REGISTRY_DIR)
             mkpath(REGISTRY_DIR)
-            Base.shred!(LibGit2.CachedCredentials()) do creds
+            @timeit Pkg.to "clone registry" Base.shred!(LibGit2.CachedCredentials()) do creds
                 LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
                                                 "https://github.com/JuliaRegistries/General.git",
                     REGISTRY_DIR, credentials = creds)) do repo

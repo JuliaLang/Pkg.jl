@@ -17,6 +17,9 @@ import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: download, download_verify_unpack
 using ..Pkg.Versions
 
+using TimerOutputs
+import ..Pkg: to
+
 import Base: SHA1
 using SHA
 
