@@ -2,10 +2,11 @@
 
 module Resolve
 
-using ..Types
+using ..Versions
 
 using Printf
 using Random
+using UUIDs
 
 export resolve, sanity_check, Graph, pkgID
 
