@@ -1076,7 +1076,7 @@ end
 # entry point for `registry rm`
 function remove_registries(io::IO, regs::Vector{RegistrySpec})
     for registry in find_installed_registries(io, regs)
-        printpkgstyle(ctx.io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
+        printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         rm(registry.path; force=true, recursive=true)
     end
     return nothing
