@@ -4,6 +4,7 @@ module Utils
 
 import ..Pkg
 using TOML
+using TimerOutputs
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
