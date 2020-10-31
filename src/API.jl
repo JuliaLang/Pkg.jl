@@ -915,8 +915,6 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     internal_call ? recall_suspended_packages() : precomp_unsuspend!()
 
-    action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
-
     direct_deps = [
         Base.PkgId(uuid, name)
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
@@ -1011,7 +1009,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
             fancyprint && lock(print_lock) do
-                printpkgstyle(io, :Precompiling, "project...$action_help")
+                printpkgstyle(io, :Precompiling, "project...")
                 print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
@@ -1103,7 +1101,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     iob = IOBuffer()
                     name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
                     !fancyprint && lock(print_lock) do
-                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
+                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...")
                     end
                     push!(pkg_queue, pkg)
                     started[pkg] = true
