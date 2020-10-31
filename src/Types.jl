@@ -33,11 +33,6 @@ export UUID, SHA1, VersionRange, VersionSpec,
     printpkgstyle, isurl,
     projectfile_path, manifestfile_path,
     RegistrySpec
-export CompatValDict, VersionsDict, CompatDict
-
-const CompatValDict = Dict{VersionNumber,Dict{UUID,VersionSpec}}
-const VersionsDict  = Dict{UUID,Set{VersionNumber}}
-const CompatDict    = Dict{UUID,CompatValDict}
 
 const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 

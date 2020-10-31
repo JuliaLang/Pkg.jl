@@ -381,12 +381,13 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
 
     seen = Set{UUID}()
 
-    all_versions = VersionsDict()
-    all_compat   = CompatDict()
+    all_versions = Dict{UUID,Set{VersionNumber}}()
+    # pkg -> version -> (dependency => compat):
+    all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
 
     for (fp, fx) in fixed
         all_versions[fp] = Set([fx.version])
-        all_compat[fp]   = Dict(fx.version => valtype(CompatValDict)())
+        all_compat[fp]   = Dict(fx.version => Dict{UUID,VersionSpec}())
     end
 
     while true
