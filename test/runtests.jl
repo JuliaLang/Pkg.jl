@@ -3,6 +3,7 @@
 module PkgTests
 
 import Pkg
+using TimerOutputs
 
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
 
@@ -17,6 +18,8 @@ rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
 
 Pkg.DEFAULT_IO[] = IOBuffer()
 
+TimerOutputs.reset_timer!(Pkg.to)
+
 include("utils.jl")
 include("new.jl")
 include("pkg.jl")
@@ -29,6 +32,10 @@ include("binaryplatforms.jl")
 include("platformengines.jl")
 include("sandbox.jl")
 include("resolve.jl")
+
+TimerOutputs.print_timer(Pkg.to)
+TimerOutputs.print_timer(TimerOutputs.flatten(Pkg.to))
+
 
 # clean up locally cached registry
 rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)

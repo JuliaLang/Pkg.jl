@@ -6,6 +6,9 @@ import Random
 import REPL
 import TOML
 
+using TimerOutputs
+const to = TimerOutput()
+
 export @pkg_str
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT

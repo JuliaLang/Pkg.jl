@@ -14,7 +14,7 @@ const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
 const REGISTRY_DIR = joinpath(@__DIR__, "registries", "General")
 
 
-function isolate(fn::Function; loaded_depot=false)
+@timeit Pkg.to function isolate(fn::Function; loaded_depot=false)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -73,7 +73,7 @@ function isolate(fn::Function; loaded_depot=false)
     end
 end
 
-function temp_pkg_dir(fn::Function;rm=true)
+@timeit Pkg.to function temp_pkg_dir(fn::Function;rm=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]

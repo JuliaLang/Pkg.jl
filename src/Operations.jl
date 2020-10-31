@@ -16,6 +16,9 @@ import ...Pkg
 import ...Pkg: pkg_server, RegistryHandling.Registry
 import ..Pkg: can_fancyprint
 
+using TimerOutputs
+import ..Pkg: to
+
 #########
 # Utils #
 #########
@@ -644,7 +647,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
     return download_source(ctx, pkgs, urls; readonly=readonly)
 end
 
-function download_source(ctx::Context, pkgs::Vector{PackageSpec},
+@timeit to function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                         urls::Dict{UUID, Set{String}}; readonly=true)
     probe_platform_engines!()
     new_pkgs = PackageSpec[]

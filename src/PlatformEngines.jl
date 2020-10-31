@@ -10,6 +10,9 @@ using Base.BinaryPlatforms
 
 export probe_platform_engines!, verify, unpack, package, download_verify_unpack
 
+using TimerOutputs
+import ..Pkg: to
+
 const exe7z = Ref("")
 
 function __init__()
@@ -220,7 +223,7 @@ function get_metadata_headers(url::AbstractString)
     return headers
 end
 
-function download(
+@timeit to function download(
     url::AbstractString,
     dest::AbstractString;
     verbose::Bool = false,

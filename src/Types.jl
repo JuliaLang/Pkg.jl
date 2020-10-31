@@ -17,6 +17,9 @@ import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
 using ..Pkg.Versions
 
+using TimerOutputs
+import ..Pkg: to
+
 import Base: SHA1
 using SHA
 
@@ -1078,7 +1081,8 @@ function remove_registries(io::IO, regs::Vector{RegistrySpec})
 end
 
 # entry point for `registry up`
-function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registries(depots1());
+
+@timeit to function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registries(depots1());
                            force::Bool=false)
     Pkg.OFFLINE_MODE[] && return
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
