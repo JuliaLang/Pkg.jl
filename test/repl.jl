@@ -66,10 +66,10 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"add Example#master"
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)
-    entry = Pkg.Types.manifest_info(Context(), TEST_PKG.uuid)
+    entry = Pkg.Types.manifest_info(EnvCache().manifest, TEST_PKG.uuid)
     @test entry.repo.rev == "master"
     pkg"up --fixed"
-    entry = Pkg.Types.manifest_info(Context(), TEST_PKG.uuid)
+    entry = Pkg.Types.manifest_info(EnvCache().manifest, TEST_PKG.uuid)
     @test entry.repo.rev == "master"
 
     pkg"test Example"
@@ -269,11 +269,11 @@ temp_pkg_dir() do depot
         pkg"activate ."
         withenv("JULIA_PKG_DEVDIR" => joinpath(pwd(), "dev")) do
             pkg"dev Example"
-            @test manifest_info(Context(), uuid).path == joinpath(pwd(), "dev", "Example")
+            @test manifest_info(EnvCache().manifest, uuid).path == joinpath(pwd(), "dev", "Example")
             pkg"dev --shared Example"
-            @test manifest_info(Context(), uuid).path == joinpath(pwd(), "dev", "Example")
+            @test manifest_info(EnvCache().manifest, uuid).path == joinpath(pwd(), "dev", "Example")
             pkg"dev --local Example"
-            @test manifest_info(Context(), uuid).path == joinpath("dev", "Example")
+            @test manifest_info(EnvCache().manifest, uuid).path == joinpath("dev", "Example")
         end
     end
 end

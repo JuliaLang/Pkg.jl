@@ -4,7 +4,7 @@ import ..Pkg # ensure we are using the correct Pkg
 using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
-using Pkg.Types: PkgError, Context, manifest_info, PackageSpec
+using Pkg.Types: PkgError, manifest_info, PackageSpec, EnvCache
 
 using ..Utils
 
@@ -270,15 +270,15 @@ end
         temp_pkg_dir() do env
             Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/Test"))
             Pkg.add("Example")
-            @test manifest_info(Context(), uuid).version == v"0.5.0"
+            @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
             Pkg.update() # should not update Example
-            @test manifest_info(Context(), uuid).version == v"0.5.0"
+            @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
             @test_throws Pkg.Resolve.ResolverError Pkg.add(PackageSpec(name="Example", version=v"0.5.1"))
             Pkg.rm("Example")
             Pkg.add("JSON") # depends on Example
-            @test manifest_info(Context(), uuid).version == v"0.5.0"
+            @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
             Pkg.update()
-            @test manifest_info(Context(), uuid).version == v"0.5.0"
+            @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
         end
         # Test that Example@0.5.1 can be obtained from an existing manifest
         temp_pkg_dir() do env
@@ -295,7 +295,7 @@ end
                 """)
             Pkg.activate(env)
             Pkg.instantiate()
-            @test manifest_info(Context(), uuid).version == v"0.5.1"
+            @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
         temp_pkg_dir() do env
             Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/Test"))
@@ -317,7 +317,7 @@ end
                 """)
             Pkg.activate(env)
             Pkg.instantiate()
-            @test manifest_info(Context(), uuid).version == v"0.5.1"
+            @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
     end
 end
