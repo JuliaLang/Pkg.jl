@@ -1009,7 +1009,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
                         "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
                 end
             else
-                cp(tmp, regpath)
+                mv(tmp, regpath)
                 printpkgstyle(ctx, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
             end
         end
@@ -1118,7 +1118,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                             registry_file = joinpath(tmp, "Registry.toml")
                             registry = read_registry(registry_file; cache=false)
                             verify_registry(registry)
-                            cp(tmp, reg.path, force=true)
+                            mv(tmp, reg.path, force=true)
                         end
                     end
                 end

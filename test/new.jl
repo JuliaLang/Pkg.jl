@@ -1824,10 +1824,6 @@ end
         @test api == Pkg.precompile
         @test isempty(opts)
     end
-    # smoke test
-    isolate() do
-        Pkg.precompile()
-    end
 end
 
 #
