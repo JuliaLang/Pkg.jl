@@ -958,7 +958,7 @@ end
 pkg_server_url_hash(url::String) = split(url, '/')[end]
 
 # entry point for `registry add`
-function clone_or_cp_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
+@timeit to function clone_or_cp_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
     registry_urls = nothing
     for reg in regs
@@ -1088,10 +1088,12 @@ end
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
     registry_urls = nothing
-    for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{Union{UUID,Nothing}}())
+    @time regs_unique = unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{Union{UUID,Nothing}}())
+    for reg in regs_unique
         let reg=reg
             regpath = pathrepr(reg.path)
             if isfile(joinpath(reg.path, ".tree_info.toml"))
+                #=
                 printpkgstyle(io, :Updating, "registry at " * regpath)
                 tree_info = TOML.parsefile(joinpath(reg.path, ".tree_info.toml"))
                 old_hash = tree_info["git-tree-sha1"]
@@ -1118,6 +1120,7 @@ end
                         end
                     end
                 end
+                =#
             elseif isdir(joinpath(reg.path, ".git"))
                 printpkgstyle(io, :Updating, "registry at " * regpath)
                 # Using LibGit2.with here crashes julia when running the
@@ -1126,7 +1129,7 @@ end
                 repo = nothing
                 try
                     repo = LibGit2.GitRepo(reg.path)
-                    if LibGit2.isdirty(repo)
+                    @timeit to "LibGit2.isdirty" if LibGit2.isdirty(repo)
                         push!(errors, (regpath, "registry dirty"))
                         @goto done
                     end
@@ -1140,7 +1143,7 @@ end
                     end
                     branch = LibGit2.headname(repo)
                     try
-                        GitTools.fetch(io, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
+                        # GitTools.fetch(io, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                     catch e
                         e isa PkgError || rethrow()
                         push!(errors, (reg.path, "failed to fetch from repo"))
