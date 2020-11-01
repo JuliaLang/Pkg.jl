@@ -12,7 +12,8 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
 
 const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
 
-const REGISTRY_DIR = joinpath(@__DIR__, "registries", "General")
+const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
+const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 
 @timeit Pkg.to function isolate(fn::Function; loaded_depot=false)
@@ -103,6 +104,7 @@ end
             try
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
+                push!(DEPOT_PATH, REGISTRY_DEPOT)
                 fn(env_dir)
             finally
                 try

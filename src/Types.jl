@@ -1088,7 +1088,7 @@ end
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
     registry_urls = nothing
-    @time regs_unique = unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{Union{UUID,Nothing}}())
+    regs_unique = unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{Union{UUID,Nothing}}())
     for reg in regs_unique
         let reg=reg
             regpath = pathrepr(reg.path)
