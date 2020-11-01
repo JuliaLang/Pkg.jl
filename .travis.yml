@@ -8,6 +8,7 @@ julia:
 os:
   - linux
   - osx
+  - windows
 
 env:
 - JULIA_PKG_SERVER="https://pkg.julialang.org"
