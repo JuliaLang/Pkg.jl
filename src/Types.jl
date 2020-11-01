@@ -1014,7 +1014,7 @@ pkg_server_url_hash(url::String) = split(url, '/')[end]
                         "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
                 end
             else
-                cp(tmp, regpath)
+                mv(tmp, regpath)
                 printpkgstyle(io, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
             end
         end
