@@ -33,6 +33,7 @@ include("utils.jl")
 @timeit Pkg.to "sandbox.jl" include("sandbox.jl")
 @timeit Pkg.to "resolve.jl" include("resolve.jl")
 
+TimerOutputs.complement!(Pkg.to)
 TimerOutputs.print_timer(Pkg.to)
 TimerOutputs.print_timer(TimerOutputs.flatten(Pkg.to))
 
