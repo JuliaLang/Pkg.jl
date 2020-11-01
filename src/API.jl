@@ -18,6 +18,7 @@ using ..Types: VersionTypes
 using Base.BinaryPlatforms
 import ..DEFAULT_IO
 using ..Artifacts: artifact_paths
+using ..MiniProgressBars
 
 include("generate.jl")
 
@@ -1017,7 +1018,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             anim_chars = ["◐","◓","◑","◒"]
             i = 1
             last_length = 0
-            bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(), percentage=false, always_reprint=true)
+            bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(), percentage=false, always_reprint=true)
             n_total = length(depsmap)
             bar.max = n_total - n_already_precomp
             while !printloop_should_exit
@@ -1035,7 +1036,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     end
                     bar.current = n_done - n_already_precomp
                     bar.max = n_total - n_already_precomp
-                    str *= sprint(io -> Pkg.showprogress(io, bar); context=io) * '\n'
+                    str *= sprint(io -> show_progress(io, bar); context=io) * '\n'
                     for dep in pkg_queue_show
                         name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                         if dep in precomperr_deps

@@ -5,7 +5,8 @@
 module PlatformEngines
 
 using SHA, Downloads, Tar
-import ...Pkg: Pkg, TOML, pkg_server, depots1, MiniProgressBar, showprogress
+import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint
+using ..MiniProgressBars
 using Base.BinaryPlatforms
 
 export probe_platform_engines!, verify, unpack, package, download_verify_unpack
@@ -239,16 +240,20 @@ function download(
 
     progress = if verbose
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
+        start_progress(stderr, bar)
         (total, now) -> begin
             bar.max = total
             bar.current = now
-            showprogress(stderr, bar)
+            show_progress(stderr, bar)
         end
     else
         (total, now) -> nothing
     end
-
-    Downloads.download(url, dest; headers, progress)
+    try
+        Downloads.download(url, dest; headers, progress)
+    finally
+        verbose && end_progress(stderr, bar)
+    end
 end
 
 """
