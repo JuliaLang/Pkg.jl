@@ -4,6 +4,7 @@ module GitTools
 
 using ..Pkg
 import ..Pkg: can_fancyprint
+using ..Pkg.MiniProgressBars
 using SHA
 import Base: SHA1
 import LibGit2
@@ -13,7 +14,7 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
     @assert haskey(p, :transfer_progress)
     bar = p[:transfer_progress]
-    @assert typeof(bar) == Pkg.MiniProgressBar
+    @assert typeof(bar) == MiniProgressBar
     if progress.total_deltas != 0
         bar.header = "Resolving Deltas:"
         bar.max = progress.total_deltas
@@ -22,7 +23,7 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
         bar.max = progress.total_objects
         bar.current = progress.received_objects
     end
-    Pkg.showprogress(stdout, bar)
+    show_progress(stdout, bar)
     return Cint(0)
 end
 
@@ -85,17 +86,21 @@ end
 function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
-    Pkg.Types.printpkgstyle(ctx, :Cloning, header === nothing ? "git-repo `$url`" : header)
-    transfer_payload = Pkg.MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    callbacks = LibGit2.Callbacks(
-        :transfer_progress => (
-            @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
-            transfer_payload,
-        )
-    )
     io = ctx.io
+    Pkg.Types.printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
+    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
-    fancyprint && print(io, "\e[?25l") # disable cursor
+    callbacks = if fancyprint
+        LibGit2.Callbacks(
+            :transfer_progress => (
+                @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
+                bar,
+            )
+        )
+    else
+        LibGit2.Callbacks()
+    end
+    fancyprint && start_progress(io, bar)
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
@@ -115,8 +120,7 @@ function clone(ctx, url, source_path; header=nothing, credentials=nothing, kwarg
         end
     finally
         Base.shred!(credentials)
-        fancyprint && print(io, "\033[2K") # clear line
-        fancyprint && print(io, "\e[?25h") # put back cursor
+        fancyprint && end_progress(io, bar)
     end
 end
 
@@ -129,15 +133,20 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, cr
     io = ctx.io
     fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(ctx, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
-    transfer_payload = Pkg.MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    callbacks = LibGit2.Callbacks(
-        :transfer_progress => (
-            @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
-            transfer_payload,
+    Pkg.Types.printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
+    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    fancyprint = can_fancyprint(io)
+    callbacks = if fancyprint
+        LibGit2.Callbacks(
+            :transfer_progress => (
+                @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
+                bar,
+            )
         )
-    )
-    fancyprint && print(io, "\e[?25l") # disable cursor
+    else
+        LibGit2.Callbacks()
+    end
+    fancyprint && start_progress(io, bar)
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
@@ -152,8 +161,7 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, cr
         end
     finally
         Base.shred!(credentials)
-        fancyprint && print(io, "\033[2K") # clear line
-        fancyprint && print(io, "\e[?25h") # put back cursor
+        fancyprint && end_progress(io, bar)
     end
 end
 

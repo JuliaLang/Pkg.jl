@@ -37,6 +37,7 @@ const DEFAULT_IO = Ref{Union{Nothing,IO}}(nothing)
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
 include("utils.jl")
+include("MiniProgressBars.jl")
 include("GitTools.jl")
 include("PlatformEngines.jl")
 include("Types.jl")
