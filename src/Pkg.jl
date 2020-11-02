@@ -39,6 +39,7 @@ can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true"
 include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
 
 include("utils.jl")
+include("MiniProgressBars.jl")
 include("GitTools.jl")
 include("PlatformEngines.jl")
 include("Versions.jl")
