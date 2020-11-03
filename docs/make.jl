@@ -2,6 +2,7 @@
 
 using Documenter, DocumenterLaTeX
 using Pkg
+using Artifacts # needed for building the API reference in the docs
 
 include("generate.jl")
 
@@ -26,7 +27,7 @@ Documenter.doctest(joinpath(@__DIR__, "src"), [Pkg])
 # Build the docs
 makedocs(
     format = formats,
-    modules = [Pkg],
+    modules = [Pkg, Artifacts],
     sitename = "Pkg.jl",
     doctest = false,
     pages = Any[
