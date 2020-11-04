@@ -8,7 +8,7 @@ import LibGit2, Dates, TOML
 
 import REPL
 using REPL.TerminalMenus
-using ..Types, ..Resolve, ..PlatformEngines, ..GitTools
+using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
 using Base.BinaryPlatforms
@@ -770,33 +770,33 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
             end
         end
 
-        bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
+        bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
                                   percentage=false, always_reprint=true)
         bar.max = length(pkgs_to_install)
-
-        show_progress = ctx.io isa Base.TTY
-        if length(pkgs_to_install) > 0 && show_progress
-            Pkg.showprogress(ctx.io, bar)
-        end
-        for i in 1:length(pkgs_to_install)
-            pkg::PackageSpec, exc_or_success, bt_or_path = take!(results)
-            exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
-                                                    sprint(Base.showerror, exc_or_success, bt_or_path))
-            success, path = exc_or_success, bt_or_path
-            success || push!(missed_packages, (pkg, path))
-            bar.current = i
-            str = sprint(; context=ctx.io) do io
-                if success
-                    can_fancyprint(io) && show_progress && Pkg.print_progress_bottom(io)
-                    vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
-                    printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
-                    show_progress && Pkg.showprogress(io, bar)
+        fancyprint = can_fancyprint(ctx.io)
+        fancyprint && start_progress(ctx.io, bar)
+        try
+            for i in 1:length(pkgs_to_install)
+                pkg::PackageSpec, exc_or_success, bt_or_path = take!(results)
+                exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
+                                                        sprint(Base.showerror, exc_or_success, bt_or_path))
+                success, path = exc_or_success, bt_or_path
+                success || push!(missed_packages, (pkg, path))
+                bar.current = i
+                str = sprint(; context=ctx.io) do io
+                    if success
+                        fancyprint && print_progress_bottom(io)
+                        vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
+                        printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
+                        fancyprint && show_progress(io, bar)
+                    end
                 end
+                print(ctx.io, str)
             end
-            print(ctx.io, str)
+        finally
+            fancyprint && end_progress(ctx.io, bar)
+            close(jobs)
         end
-
-        close(jobs)
     end
 
     ##################################################
@@ -954,13 +954,14 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
     sort!(builds, by = build -> order[first(build)])
     max_name = maximum(build->textwidth(build[2]), builds; init=0)
 
-    bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
+    bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
                               percentage=false, always_reprint=true)
     bar.max = length(builds)
-    show_progress = ctx.io isa Base.TTY
     fancyprint = can_fancyprint(ctx.io)
+    fancyprint && start_progress(ctx.io, bar)
 
     # build each package versions in a child process
+    try
     for (n, (uuid, name, source_path, version)) in enumerate(builds)
         pkg = PackageSpec(;uuid=uuid, name=name, version=version)
         build_file = buildfile(source_path)
@@ -988,13 +989,13 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
             log_file = splitext(build_file)[1] * ".log"
         end
 
-        fancyprint && show_progress && Pkg.print_progress_bottom(ctx.io)
+        fancyprint && print_progress_bottom(ctx.io)
 
         printpkgstyle(ctx, :Building,
                       rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
         bar.current = n-1
 
-        show_progress && Pkg.showprogress(ctx.io, bar)
+        fancyprint && show_progress(ctx.io, bar)
 
         sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override) do
             flush(stdout)
@@ -1018,10 +1019,8 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
             pkgerror("Error building `$(pkg.name)`$last_lines: \n$log_show$full_log_at")
         end
     end
-    # Clear the last line of progress
-    if fancyprint && show_progress
-        ansi_cleartoend = "\e[0J"
-        print(ctx.io, ansi_cleartoend)
+    finally
+        fancyprint && end_progress(ctx.io, bar)
     end
     return
 end

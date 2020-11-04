@@ -963,7 +963,8 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
         # clone to tmpdir first
         mktempdir() do tmp
             url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-            if url !== nothing
+            # on Windows we prefer git cloning because untarring is so slow
+            if !Sys.iswindows() && url !== nothing
                 # download from Pkg server
                 try
                     download_verify_unpack(url, nothing, tmp, ignore_existence = true)
@@ -1008,7 +1009,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
                         "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
                 end
             else
-                cp(tmp, regpath)
+                mv(tmp, regpath)
                 printpkgstyle(ctx, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
             end
         end
@@ -1117,7 +1118,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                             registry_file = joinpath(tmp, "Registry.toml")
                             registry = read_registry(registry_file; cache=false)
                             verify_registry(registry)
-                            cp(tmp, reg.path, force=true)
+                            mv(tmp, reg.path, force=true)
                         end
                     end
                 end

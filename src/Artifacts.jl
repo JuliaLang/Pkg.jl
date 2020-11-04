@@ -11,9 +11,8 @@ import ..GitTools
 import ..TOML
 import ..Types: parse_toml, write_env_usage, printpkgstyle
 import ..Pkg
-import ..Pkg: pkg_server
-import ..Pkg: MiniProgressBar, showprogress
-import ..Pkg: can_fancyprint
+import ..Pkg: pkg_server, can_fancyprint, DEFAULT_IO
+using ..Pkg.MiniProgressBars
 using ..PlatformEngines
 using SHA
 
@@ -429,22 +428,20 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
 end
 
 function with_show_download_info(f, name, quiet_download)
+    # TODO: Use DEFAULT_IO?
+    io = stderr
+    fancyprint = can_fancyprint(io)
     if !quiet_download
-        fancyprint = can_fancyprint(stderr)
-        # Should ideally pass ctx::Context as first arg here
-        fancyprint && Pkg.print_progress_bottom(stderr)
-        printpkgstyle(stderr, :Downloading, "artifact: $name")
-        fancyprint && print(stderr, "\e[?25l") # disable cursor
+        fancyprint && print_progress_bottom(io)
+        printpkgstyle(io, :Downloading, "artifact: $name")
     end
     try
         return f()
     finally
         if !quiet_download
-            fancyprint = can_fancyprint(stdout)
-            fancyprint && print(stdout, "\033[1A") # move cursor up one line
-            fancyprint && print(stdout, "\033[2K") # clear line
-            printpkgstyle(stdout, :Downloaded, "artifact: $name")
-            fancyprint && print(stdout, "\e[?25h") # put back cursor
+            fancyprint && print(io, "\033[1A") # move cursor up one line
+            fancyprint && print(io, "\033[2K") # clear line
+            fancyprint && printpkgstyle(io, :Downloaded, "artifact: $name")
         end
     end
 end

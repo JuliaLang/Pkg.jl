@@ -17,6 +17,7 @@ using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
 using ..Artifacts: artifact_paths
+using ..MiniProgressBars
 
 include("generate.jl")
 
@@ -915,8 +916,6 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     internal_call ? recall_suspended_packages() : precomp_unsuspend!()
 
-    action_help = internal_call ? " (tip: to disable auto-precompilation set ENV[\"JULIA_PKG_PRECOMPILE_AUTO\"]=0)" : ""
-
     direct_deps = [
         Base.PkgId(uuid, name)
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
@@ -1011,14 +1010,14 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
             fancyprint && lock(print_lock) do
-                printpkgstyle(io, :Precompiling, "project...$action_help")
+                printpkgstyle(io, :Precompiling, "project...")
                 print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
             anim_chars = ["◐","◓","◑","◒"]
             i = 1
             last_length = 0
-            bar = Pkg.MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(), percentage=false, always_reprint=true)
+            bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(), percentage=false, always_reprint=true)
             n_total = length(depsmap)
             bar.max = n_total - n_already_precomp
             while !printloop_should_exit
@@ -1036,7 +1035,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     end
                     bar.current = n_done - n_already_precomp
                     bar.max = n_total - n_already_precomp
-                    str *= sprint(io -> Pkg.showprogress(io, bar); context=io) * '\n'
+                    str *= sprint(io -> show_progress(io, bar); context=io) * '\n'
                     for dep in pkg_queue_show
                         name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                         if dep in precomperr_deps
@@ -1103,7 +1102,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     iob = IOBuffer()
                     name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
                     !fancyprint && lock(print_lock) do
-                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...$action_help")
+                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...")
                     end
                     push!(pkg_queue, pkg)
                     started[pkg] = true
