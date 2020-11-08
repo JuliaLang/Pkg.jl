@@ -62,7 +62,7 @@ ProjectParseException(typ::ProjectParseExceptionTypes, data=nothing) =
 function Base.showerror(io::IO, exc::ProjectParseException)
     print(io, "invalid project file: ", repr(exc.path), ": ")
     if exc.typ == InsufficientPackageKeys
-        print(io, "expected all keys `name`, `version`, `uuid` to exist if one of them exist")
+        print(io, "expected keys `name`, `uuid` to exist if one of them exist")
     elseif exc.typ == UnexpectedType
         key, T = exc.data::Tuple{String, DataType}
         print(io, "expected value of key `", key, "` to be of type `", T, "`")
@@ -79,8 +79,8 @@ end
 @eval macro $(Symbol("try"))(expr)
     return quote
         v = $(esc(expr))
-        v isa ProjectParseException && throw(v)
-        # v isa ProjectParseException && return v
+        # v isa ProjectParseException && throw(v)
+        v isa ProjectParseException && return v
         v
     end
 end
@@ -92,24 +92,30 @@ function parse_uuid(uuid)
     return uuid′
 end
 
+function parse_version(version)
+    version === nothing && return version
+    version isa String || return ProjectParseException(UnexpectedType, ("version", String))
+    version′ = tryparse(VersionNumber, version)
+    version′ === nothing && return ProjectParseException(VersionParseError, version)
+    return version′
+end
+
 function parse_package_part!(d::Dict{String, Any})::Union{Package, Nothing, ProjectParseException}
     name        = pop!(d, "name",    nothing)
     version_str = pop!(d, "version", nothing)
     uuid_str    = pop!(d, "uuid",    nothing)
 
-    if name === nothing && version_str === nothing && uuid_str === nothing
+    if name === nothing && uuid_str === nothing
         return nothing
-    elseif !(name !== nothing && version_str !== nothing && uuid_str !== nothing)
+    elseif !(name !== nothing && uuid_str !== nothing)
         return ProjectParseException(InsufficientPackageKeys)
     end
 
     # Check fields are expected types
     name        isa String || return ProjectParseException(UnexpectedType, ("name",    String))
-    version_str isa String || return ProjectParseException(UnexpectedType, ("version", String))
 
     # Check relevant fields are parsable
-    version = tryparse(VersionNumber, version_str)
-    version === nothing && return ProjectParseException(VersionParseError, version)
+    version = @try parse_version(version_str)
 
     uuid = @try parse_uuid(uuid_str)
 

@@ -2,7 +2,7 @@ struct GitLocation
     rev::String
     url::String
     subdir::Union{Nothing, String}
-    git_tree_sha1::SHA1
+    tree_hash::SHA1
 end
 
 struct ManifestPkg{T}
@@ -94,28 +94,28 @@ function Manifest(manifest_path::String)
 
             # Location info
             path = get(info, "path", nothing)::Union{String, Nothing}
-            git_tree_sha1 = get(info, "git-tree-sha1", nothing)::Union{String, Nothing}
+            tree_hash = get(info, "git-tree-sha1", nothing)::Union{String, Nothing}
 
             if repo_rev !== nothing && path != nothing
                 # TODO: Error
             end
 
-            if repo_rev !== nothing && git_tree_sha1 !== nothing
+            if repo_rev !== nothing && tree_hash !== nothing
                 # TODO: Error
             end
 
-            if path !== nothing && git_tree_sha1 !== nothing
+            if path !== nothing && tree_hash !== nothing
                 # TODO: Error
             end
 
             location_info = nothing
 
             if repo_rev !== nothing
-                location_info = GitLocation(repo_rev, repo_url, repo_subdir, SHA1(git_tree_sha1))
+                location_info = GitLocation(repo_rev, repo_url, repo_subdir, SHA1(tree_hash))
             elseif path !== nothing
                 location_info = path
-            elseif git_tree_sha1 !== nothing
-                location_info = SHA1(git_tree_sha1)
+            elseif tree_hash !== nothing
+                location_info = SHA1(tree_hash)
             else
                 # assert stdlib?
             end
@@ -191,7 +191,7 @@ function destructure(m::Manifest)
         elseif loc isa SHA1
             d_pkg["git-tree-sha1"] = string(loc)
         elseif loc isa GitLocation
-            d_pkg["git-tree-sha1"] = string(loc.git_tree_sha1)
+            d_pkg["git-tree-sha1"] = string(loc.tree_hash)
             d_pkg["repo-rev"] = loc.rev
             d_pkg["repo-url"] = loc.url
             if loc.subdir !== nothing
@@ -230,3 +230,29 @@ function write_manifest(path::String, m::Manifest)
     end
     write(path, str)
 end
+
+# "API"
+
+function find_installed(name::String, uuid::UUID, sha1::SHA1)
+    slug_default = Base.version_slug(uuid, sha1)
+    # 4 used to be the default so look there first
+    for slug in (slug_default, Base.version_slug(uuid, sha1, 4))
+        for depot in Base.DEPOT_PATH #Pkg.depots()
+            path = abspath(depot, "packages", name, slug)
+            ispath(path) && return path
+        end
+    end
+    return nothing
+end
+
+
+
+function Base.pathof(m::ManifestPkg)
+    m.location_info isa String && return m.location_info
+    m.location_info isa GitLocation && return find_installed(m.name, m.uuid, m.location_info.tree_hash)
+    # is_stdlib(m.uuid) && return joinpath(Sys.STDLIB, pkg.name)
+    find_installed(m.name, m.uuid, m.tree_hash)
+end
+
+is_fixed(m::ManifestPkg) = m.location_info isa String || m.location_info isa GitLocation || m.pinned
+
