@@ -73,7 +73,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
             ctx = Context()
             Types.clone_default_registries(ctx)
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
+            $(f in (:add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
