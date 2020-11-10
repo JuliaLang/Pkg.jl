@@ -16,11 +16,22 @@ const exe7z = Ref("")
 function __init__()
     exe7z[] = ""
     name = "7z"
-    Sys.iswindows() && (name = "$name.exe")
-    for dir in (joinpath("..", "libexec"), ".")
-        path = normpath(Sys.BINDIR, dir, name)
-        isfile(path) || continue
-        exe7z[] = path
+    if Sys.iswindows()
+        name = "$name.exe"
+    end
+
+    paths = [
+        joinpath(Sys.BINDIR, Base.LIBEXECDIR),
+        Sys.BINDIR,
+    ]
+    PATH = get(ENV, "PATH", nothing)
+    if PATH !== nothing
+        push!(paths, PATH)
+    end
+    pathsep = @static Sys.iswindows() ? ";" : ":"
+
+    withenv("PATH" => join(paths, pathsep)) do
+        exe7z[] = something(Sys.which(name), "")
     end
     isempty(exe7z[]) && error("7z binary not found")
 end
