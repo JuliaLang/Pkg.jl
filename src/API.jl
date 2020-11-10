@@ -1185,7 +1185,10 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
         if !isempty(precomperr_deps)
             plural = length(precomperr_deps) == 1 ? "y" : "ies"
-            str *= "\n" * color_string(string(length(precomperr_deps)), Base.warn_color()) * " dependenc$(plural) may not be precompilable. Try restarting julia"
+            str *= string("\n",
+                color_string(string(length(precomperr_deps)), Base.warn_color()),
+                " dependenc$(plural) failed but may be precompilable after restarting julia"
+            )
         end
         if internal_call && !isempty(failed_deps)
             plural = length(failed_deps) == 1 ? "y" : "ies"
