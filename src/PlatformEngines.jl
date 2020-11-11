@@ -11,18 +11,24 @@ using Base.BinaryPlatforms
 
 export probe_platform_engines!, verify, unpack, package, download_verify_unpack
 
-const exe7z = Ref("")
+const _exe7z = Ref{String}()
+const exe7z_lock = ReentrantLock()
+function exe7z()
+    lock(exe7z_lock) do
+        isassigned(_exe7z) || (_exe7z[] = init_exe7z())
+        return _exe7z[]
+    end
+end
 
-function __init__()
-    exe7z[] = ""
+function init_exe7z()
     name = "7z"
     if Sys.iswindows()
         name = "$name.exe"
     end
 
     paths = [
-        joinpath(Sys.BINDIR, Base.LIBEXECDIR),
-        Sys.BINDIR,
+        joinpath(Sys.BINDIR::String, Base.LIBEXECDIR),
+        Sys.BINDIR::String,
     ]
     PATH = get(ENV, "PATH", nothing)
     if PATH !== nothing
@@ -30,12 +36,12 @@ function __init__()
     end
     pathsep = @static Sys.iswindows() ? ";" : ":"
 
-    withenv("PATH" => join(paths, pathsep)) do
-        exe7z[] = something(Sys.which(name), "")
+    exe7z = withenv("PATH" => join(paths, pathsep)) do
+        Sys.which(name)
     end
-    isempty(exe7z[]) && error("7z binary not found")
+    exe7z === nothing && error("7z binary not found")
+    return exe7z
 end
-__init__()
 
 function probe_platform_engines!(;verbose::Bool = false)
     # don't do anything
@@ -365,12 +371,12 @@ function unpack(
     dest::AbstractString;
     verbose::Bool = false,
 )
-    Tar.extract(`$(exe7z[]) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
+    Tar.extract(`$(exe7z()) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
 end
 
 function list_tarball_files(tarball_path::AbstractString)
     names = String[]
-    Tar.list(`$(exe7z[]) x $tarball_path -so`) do hdr
+    Tar.list(`$(exe7z()) x $tarball_path -so`) do hdr
         push!(names, hdr.path)
     end
     return names
@@ -383,7 +389,7 @@ Compress `src_dir` into a tarball located at `tarball_path`.
 """
 function package(src_dir::AbstractString, tarball_path::AbstractString)
     rm(tarball_path, force=true)
-    cmd = `$(exe7z[]) a -si -tgzip -mx9 $tarball_path`
+    cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
     open(pipeline(cmd, stdout=devnull), write=true) do io
         Tar.create(src_dir, io)
     end
@@ -500,7 +506,7 @@ function download_verify_unpack(
         if verbose
             @info("Unpacking $(tarball_path) into $(dest)...")
         end
-        open(`$(exe7z[]) x $tarball_path -so`) do io
+        open(`$(exe7z()) x $tarball_path -so`) do io
             Tar.extract(io, dest, copy_symlinks = copy_symlinks())
         end
     finally
