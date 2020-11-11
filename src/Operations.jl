@@ -460,7 +460,7 @@ function load_urls(registries::Vector{Registry}, pkgs::Vector{PackageSpec})
         uuid = pkg.uuid
         urls[uuid] = Set{String}()
         for reg in registries
-            reg_pkg = get(reg, pkg.uuid, uuid)
+            reg_pkg = get(reg, pkg.uuid, nothing)
             reg_pkg === nothing && continue
             info = Pkg.RegistryHandling.registry_info(reg_pkg)
             repo = info.repo
