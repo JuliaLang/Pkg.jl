@@ -1253,8 +1253,12 @@ function pathrepr(path::String)
 end
 
 function write_env(env::EnvCache; update_undo=true)
-    write_project(env)
-    write_manifest(env)
+    if env.project != env.original_project
+        write_project(env)
+    end
+    if env.manifest != env.original_manifest
+        write_manifest(env)
+    end
     update_undo && Pkg.API.add_snapshot_to_undo(env)
 end
 
