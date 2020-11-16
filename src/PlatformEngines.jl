@@ -50,7 +50,9 @@ function get_server_dir(url::AbstractString, server=pkg_server())
         @warn "malformed Pkg server value" server
         return
     end
-    joinpath(depots1(), "servers", String(m.captures[1]))
+    # normalize a few characters
+    domain = replace(m.captures[1], r"[\\\/\:\*\?\"\<\>\|]" => "-")
+    joinpath(depots1(), "servers", domain)
 end
 
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex},Any}[]

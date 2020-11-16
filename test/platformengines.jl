@@ -215,6 +215,9 @@ end
         test_server_dir("https://foo.bar/baz", "https://foo.bar/baz", "foo.bar")
         test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
         test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
+        test_server_dir("https://foo.bar:8080/baz/a", "https://foo.bar:8080/baz", "foo.bar-8080")
+        test_server_dir("https://foo.bar:8080", "https://foo.bar:8080", "foo.bar-8080")
+        @test startswith(PlatformEngines.get_server_dir("https://foo.bar:8080", "https://foo.bar:8080"), Pkg.depots1())
     end
 
     called = 0
