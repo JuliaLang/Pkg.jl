@@ -396,32 +396,40 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
-        # first try downloading from Pkg server
-        # TODO: only do this if Pkg server knows about this package
-        if (server = pkg_server()) !== nothing
-            url = "$server/artifact/$hash"
-            download_success = with_show_download_info(name, quiet_download) do
-                download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download)
-            end
-            download_success && return artifact_path(hash)
-        end
-
         # If this artifact does not exist on-disk already, ensure it has download
-        # information, then download it!
+        # if no customized url is provided, try to download it from Pkg server
+        # if customized urls are given, try to download it from given url, then the Pkg server
         if !haskey(meta, "download")
-            error("Cannot automatically install '$(name)'; no download section in '$(artifacts_toml)'")
-        end
-
-        # Attempt to download from all sources
-        for entry in meta["download"]
-            url = entry["url"]
-            tarball_hash = entry["sha256"]
-            download_success = with_show_download_info(name, quiet_download) do
-                download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download)
+            # first try downloading from Pkg server
+            # TODO: only do this if Pkg server knows about this package
+            if (server = pkg_server()) !== nothing
+                url = "$server/artifact/$hash"
+                download_success = with_show_download_info(name, quiet_download) do
+                    download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download)
+                end
+                download_success && return artifact_path(hash)
             end
-            download_success && return artifact_path(hash)
+            error("Cannot automatically install '$(name)'; no download section in '$(artifacts_toml)'")
+        else
+            # Attempt to download from all sources
+            for entry in meta["download"]
+                url = entry["url"]
+                tarball_hash = entry["sha256"]
+                download_success = with_show_download_info(name, quiet_download) do
+                    download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download)
+                end
+                download_success && return artifact_path(hash)
+            end
+            # if none of the urls is working, try Pkg server
+            if (server = pkg_server()) !== nothing
+                url = "$server/artifact/$hash"
+                download_success = with_show_download_info(name, quiet_download) do
+                    download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download)
+                end
+                download_success && return artifact_path(hash)
+            end
+            error("Unable to automatically install '$(name)' from '$(artifacts_toml)'")
         end
-        error("Unable to automatically install '$(name)' from '$(artifacts_toml)'")
     else
         return artifact_path(hash)
     end
@@ -441,7 +449,6 @@ function with_show_download_info(f, name, quiet_download)
             fancyprint && print(stdout, "\033[1A") # move cursor up one line
             fancyprint && print(stdout, "\033[2K") # clear line
             fancyprint && printpkgstyle(stdout, :Downloaded, "artifact: $name")
-            
         end
     end
 end
