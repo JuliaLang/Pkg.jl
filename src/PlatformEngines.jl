@@ -4,7 +4,7 @@
 
 module PlatformEngines
 
-using SHA, Downloads, Tar
+using SHA, UUIDs, Downloads, Tar
 import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint
 using ..MiniProgressBars
 using Base.BinaryPlatforms
@@ -207,12 +207,24 @@ const CI_VARIABLES = [
     "TRAVIS",
 ]
 
+const SESSION_ID_LOCK = ReentrantLock()
+const SESSION_ID = Ref{String}()
+
+function session_id()
+    lock(SESSION_ID_LOCK) do
+        isassigned(SESSION_ID) && return
+        SESSION_ID[] = string(uuid4())
+    end
+    return SESSION_ID[]
+end
+
 function get_metadata_headers(url::AbstractString)
     headers = Pair{String,String}[]
     server = pkg_server()
     server_dir = get_server_dir(url, server)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol" => "1.0")
+    push!(headers, "Julia-Pkg-Session" => session_id())
     push!(headers, "Julia-Pkg-Server" => server)
     push!(headers, "Julia-Version" => string(VERSION))
     system = triplet(HostPlatform())
