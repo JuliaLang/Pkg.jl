@@ -116,9 +116,7 @@ function resolve(env::Environment, regs::Vector{Registry}, extra_compat::Dict{UU
     all_versions, all_compat = deps_graph(regs, reqs, fixed_resolve)
     all_versions[JULIA_UUID] = Set([julia_version])
 
-    @show all_compat[UUID("34cfe95a-1eb2-52ea-b672-e2afdf69b78f")]
 
-    error()
     uuid_to_name = Dict{UUID, String}()
     foreach(dep -> uuid_to_name[dep.uuid] = dep.name, values(env.project.deps))
     foreach(dep -> uuid_to_name[dep.uuid] = dep.name, values(fixed))
@@ -201,12 +199,11 @@ function tree_hash(regs::Vector{Registry}, uuid::UUID)
 end
 
 
-
-
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(V, d, k)
 
 function deps_graph(registries::Vector{Registry},
-                    reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version=VERSION)
+                    reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed};
+                    julia_version::Union{Nothing, VersionNumber}=VERSION, offline_mode::Bool=false)
     uuids = Set{UUID}()
     union!(uuids, keys(reqs))
     union!(uuids, keys(fixed))
@@ -221,7 +218,7 @@ function deps_graph(registries::Vector{Registry},
     all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
 
     for (fp, fx) in fixed
-        all_versions[fp] = Set([fx.version])
+        #all_versions[fp] = Set([fx.version])
         all_compat[fp]   = Dict(fx.version => Dict{UUID,VersionSpec}())
     end
 
@@ -255,11 +252,12 @@ function deps_graph(registries::Vector{Registry},
                     for (v, uncompressed_data) in RegistryHandling.uncompressed_data(info)
                         # Filter yanked and if we are in offline mode also downloaded packages
                         # TODO, pull this into a function
+                        RegistryHandling.isyanked(info, v) && continue
                         #=
-                        Pkg.RegistryHandling.isyanked(info, v) && continue
-                        if Pkg.OFFLINE_MODE[]
-                            pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Pkg.RegistryHandling.treehash(info, v))
-                            is_package_downloaded(env.project_file, pkg_spec) || continue
+                        if offline_mode
+                            uuid=pkg.uuid
+                            tree_hash=Pkg.RegistryHandling.treehash(info, v)
+                            isdir(...) || continue
                         end
                         =#
 
@@ -271,20 +269,6 @@ function deps_graph(registries::Vector{Registry},
             end
         end
     end
-
-    #=
-    for uuid in uuids
-        uuid == JULIA_UUID && continue
-        if !haskey(uuid_to_name, uuid)
-            name = registered_name(registries, uuid)
-            name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
-            uuid_to_name[uuid] = name
-            entry = manifest_info(env.manifest, uuid)
-            entry ≡ nothing && continue
-            uuid_to_name[uuid] = entry.name
-        end
-    end
-    =#
 
     return all_versions, all_compat
 end
