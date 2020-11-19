@@ -1253,14 +1253,14 @@ end
 
 # Determine current name for a given package UUID
 
-function registered_name(ctx::Context, uuid::UUID)::Union{Nothing,String}
+function registered_name(regs::Vector{RegistryHandling.Registry}, uuid::UUID)::Union{Nothing,String}
     name = nothing
-    for reg in ctx.env.registries
+    for reg in regs
         regpkg = get(reg, uuid, nothing)
         regpkg === nothing && continue
         name′ = regpkg.name
         if name !== nothing
-            name′ == name || pkgerror("package `$uuid` has multiple registered name values: $name, $name′")
+            name′ == name || error("package `$uuid` has multiple registered name values: $name, $name′")
         end
         name = name′
     end

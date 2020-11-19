@@ -244,16 +244,6 @@ mutable struct Graph
             julia_version::Union{VersionNumber,Nothing} = VERSION,
         )
 
-        # Tell the resolver about julia itself
-        uuid_to_name[uuid_julia] = "julia"
-        if julia_version !== nothing
-            fixed[uuid_julia] = Fixed(julia_version)
-            versions[uuid_julia] = Set([julia_version])
-            compat[uuid_julia] = Dict{VersionNumber,Dict{UUID,VersionSpec}}()
-        else
-            versions[uuid_julia] = Set([])
-        end
-
         extra_uuids = union(collect(keys(reqs)), union(collect(keys(fixed)), map(fx->keys(fx.requires), values(fixed))...))
         extra_uuids ⊆ keys(versions) || error("unknown UUID found in reqs/fixed") # TODO?
 

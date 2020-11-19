@@ -372,7 +372,7 @@ function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
-            name = is_stdlib(uuid) ? stdlibs()[uuid] : registered_name(ctx, uuid)
+            name = is_stdlib(uuid) ? stdlibs()[uuid] : registered_name(ctx.registries, uuid)
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
@@ -470,7 +470,7 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
 
     for uuid in uuids
         if !haskey(uuid_to_name, uuid)
-            name = registered_name(ctx, uuid)
+            name = registered_name(ctx.registries, uuid)
             name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
             uuid_to_name[uuid] = name
             entry = manifest_info(ctx, uuid)
