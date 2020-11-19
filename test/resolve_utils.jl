@@ -39,7 +39,6 @@ function graph_from_data(deps_data)
     uuid_to_name = Dict{UUID,String}()
     uuid(p) = storeuuid(p, uuid_to_name)
     fixed = Dict{UUID,Fixed}()
-    all_versions = Dict{UUID,Set{VersionNumber}}()
     all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
 
     deps = Dict{String,Dict{VersionNumber,Dict{String,VersionSpec}}}()
@@ -58,7 +57,6 @@ function graph_from_data(deps_data)
     end
     for (p,preq) in deps
         u = uuid(p)
-        all_versions[u] = Set(keys(deps[p]))
 
         deps_pkgs = Dict{String,Set{VersionNumber}}()
         for (vn,vreq) in deps[p], rp in keys(vreq)
@@ -72,7 +70,7 @@ function graph_from_data(deps_data)
             end
         end
     end
-    return Graph(all_versions, all_compat, uuid_to_name, Requires(), fixed, VERBOSE)
+    return Graph(all_compat, uuid_to_name, Requires(), fixed, VERBOSE)
 end
 function reqs_from_data(reqs_data, graph::Graph)
     reqs = Dict{UUID,VersionSpec}()

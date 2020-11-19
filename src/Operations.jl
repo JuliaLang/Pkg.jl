@@ -381,12 +381,10 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
 
     seen = Set{UUID}()
 
-    all_versions = Dict{UUID,Set{VersionNumber}}()
     # pkg -> version -> (dependency => compat):
     all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
 
     for (fp, fx) in fixed
-        all_versions[fp] = Set([fx.version])
         all_compat[fp]   = Dict(fx.version => Dict{UUID,VersionSpec}())
     end
 
@@ -396,7 +394,6 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
         for uuid in unseen
             push!(seen, uuid)
             uuid in keys(fixed) && continue
-            all_versions_u = get_or_make!(all_versions, uuid)
             all_compat_u   = get_or_make!(all_compat,   uuid)
 
             # Collect deps + compat for stdlib
@@ -407,7 +404,6 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
                 proj = read_package(proj_file)
 
                 v = something(proj.version, VERSION)
-                push!(all_versions_u, v)
 
                 # TODO look at compat section for stdlibs?
                 all_compat_u_vr = get_or_make!(all_compat_u, v)
@@ -429,7 +425,6 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
                             is_package_downloaded(env.project_file, pkg_spec) || continue
                         end
 
-                        push!(all_versions_u, v)
                         all_compat_u[v] = uncompressed_data
                         union!(uuids, keys(uncompressed_data))
                     end
@@ -450,7 +445,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
         end
     end
 
-    return Resolve.Graph(all_versions, all_compat, uuid_to_name, reqs, fixed, false, julia_version),
+    return Resolve.Graph(all_compat, uuid_to_name, reqs, fixed, false, julia_version),
            all_compat
 end
 

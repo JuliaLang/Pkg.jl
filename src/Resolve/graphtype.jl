@@ -113,19 +113,19 @@ mutable struct GraphData
     rlog::ResolveLog
 
     function GraphData(
-            versions::Dict{UUID,Set{VersionNumber}},
+            compat::Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}},
             uuid_to_name::Dict{UUID,String},
             verbose::Bool = false
         )
         # generate pkgs
-        pkgs = sort!(collect(keys(versions)))
+        pkgs = sort!(collect(keys(compat)))
         np = length(pkgs)
 
         # generate pdict
         pdict = Dict{UUID,Int}(pkgs[p0] => p0 for p0 = 1:np)
 
         # generate spp and pvers
-        pvers = [sort!(collect(versions[pkgs[p0]])) for p0 = 1:np]
+        pvers = [sort!(collect(keys(compat[pkgs[p0]]))) for p0 = 1:np]
         spp = length.(pvers) .+ 1
 
         # generate vdict
@@ -235,7 +235,6 @@ mutable struct Graph
     cavfld::Vector{FieldValue}
 
     function Graph(
-            versions::Dict{UUID,Set{VersionNumber}},
             compat::Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}},
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
@@ -248,16 +247,14 @@ mutable struct Graph
         uuid_to_name[uuid_julia] = "julia"
         if julia_version !== nothing
             fixed[uuid_julia] = Fixed(julia_version)
-            versions[uuid_julia] = Set([julia_version])
             compat[uuid_julia] = Dict(julia_version => Dict{VersionNumber,Dict{UUID,VersionSpec}}())
         else
-            versions[uuid_julia] = Set([])
+            compat[uuid_julia] = Dict{VersionNumber,Dict{UUID,VersionSpec}}()
         end
 
         extra_uuids = union(collect(keys(reqs)), union(collect(keys(fixed)), map(fx->keys(fx.requires), values(fixed))...))
-        extra_uuids ⊆ keys(versions) || error("unknown UUID found in reqs/fixed") # TODO?
 
-        data = GraphData(versions, uuid_to_name, verbose)
+        data = GraphData(compat, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
 
         extended_deps = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
