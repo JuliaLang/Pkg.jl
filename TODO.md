@@ -1,0 +1,2 @@
+- Move path from Manifest/Project to Environment
+- Name can stay in the struct?

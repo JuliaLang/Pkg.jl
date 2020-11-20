@@ -15,13 +15,6 @@ const TOML_LOCK = ReentrantLock()
 # sure they do not modify the returned dictionary.
 parsefile(project_file::AbstractString) = copy(Base.parsed_toml(project_file, TOML_CACHE, TOML_LOCK))
 
-
-
-struct DiffEntry{T}
-    pre::Union{Nothing, Some{T}}
-    post::Union{Nothing, Some{T}}
-end
-
 include("project.jl")
 include("manifest.jl")
 
