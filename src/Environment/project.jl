@@ -162,16 +162,13 @@ function Project(project_path::String)
 end
 
 function tryparsefile(project_path::String)::Union{Project, ProjectParseException}
-
-    d = isfile(project_path) ? TOML.parsefile(project_path) : Dict{String, Any}()
+    d = isfile(project_path) ? parsefile(project_path) : Dict{String, Any}()
 
     # Package
     pkg = @try parse_package_part!(d)
 
     # Compat
-
     name_to_uuid = Dict{String, UUID}()
-
     compats_toml = @try parse_compat_part!(d)
 
     function compat_data(name)
@@ -215,8 +212,6 @@ function tryparsefile(project_path::String)::Union{Project, ProjectParseExceptio
     )
     extras = extract_deps("extras")
 
-    # Verify
-    # TODO:
     targets_toml = pop!(d, "targets", nothing)::Union{Nothing, Dict{String, Any}}
     targets = Dict{String, Vector{UUID}}()
     if targets_toml !== nothing
@@ -225,12 +220,15 @@ function tryparsefile(project_path::String)::Union{Project, ProjectParseExceptio
         end
     end
 
+    # Verify
+    # TODO:
+
     # everything that is not deleted from `d` is extra stuff that we keep around
     # so we can round trip it
     Project(basename(project_path), pkg, mdeps, extras, targets, name_to_uuid, d)
 end
 
-# Printing
+# Writing
 function destructure(p::Project)
     d = Dict{String, Any}()
 
@@ -272,10 +270,9 @@ function write_project(dir::String, p::Project)
     d = destructure(p)
 
     # Remove empty dicts
-    isempty(d["deps"])    && delete!(d, "deps")
-    isempty(d["compat"])  && delete!(d, "compat")
-    isempty(d["extras"])  && delete!(d, "extras")
-    isempty(d["targets"]) && delete!(d, "targets")
+    for s in ["deps", "compat", "extras", "targets"]
+        isempty(d[s]) && delete!(d, s)
+    end
 
     # Remove julia
     delete!(d["deps"], "julia")
@@ -283,4 +280,3 @@ function write_project(dir::String, p::Project)
     str = sprint(io -> TOML.print(io, d, sorted=true, by=key -> (project_key_order(key), key)))
     write(joinpath(dir, p.filename), str)
 end
-

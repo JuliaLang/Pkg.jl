@@ -39,6 +39,8 @@ export UUID, SHA1, VersionRange, VersionSpec,
 
 
 const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
+isurl(r::String) = occursin(URL_regex, r)
+
 
 #################
 # Pkg Error #
@@ -63,83 +65,12 @@ Base.@kwdef struct Artifact
     platform::Union{Platform,Nothing} = nothing
 end
 
+import ..Pkg: UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR
+import ..Pkg: PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE
+import ..Pkg: PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED
+import ..GitRepo, ..PackageSpec, ..err_rep, ..has_name, ..has_uuid, ..isresolved, ..VersionTypes
 
-###############
-# PackageSpec #
-###############
-@enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
-@enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
-@enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
-const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
-
-Base.@kwdef mutable struct GitRepo
-    source::Union{Nothing,String} = nothing
-    rev::Union{Nothing,String} = nothing
-    subdir::Union{String, Nothing} = nothing
-end
-
-Base.:(==)(r1::GitRepo, r2::GitRepo) =
-    r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
-
-isurl(r::String) = occursin(URL_regex, r)
-
-Base.@kwdef mutable struct PackageSpec
-    name::Union{Nothing,String} = nothing
-    uuid::Union{Nothing,UUID} = nothing
-    version::VersionTypes = VersionSpec()
-    tree_hash::Union{Nothing,SHA1} = nothing
-    repo::GitRepo = GitRepo()
-    path::Union{Nothing,String} = nothing
-    pinned::Bool = false
-end
-PackageSpec(name::AbstractString) = PackageSpec(;name=name)
-PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
-PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
-PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
-
-function Base.:(==)(a::PackageSpec, b::PackageSpec)
-    return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
-    a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-    a.pinned == b.pinned
-end
-
-function err_rep(pkg::PackageSpec)
-    x = pkg.name !== nothing && pkg.uuid !== nothing ? x = "$(pkg.name) [$(string(pkg.uuid)[1:8])]" :
-        pkg.name !== nothing ? pkg.name :
-        pkg.uuid !== nothing ? string(pkg.uuid)[1:8] :
-        pkg.repo.source
-    return "`$x`"
-end
-
-has_name(pkg::PackageSpec) = pkg.name !== nothing
-has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
-isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
-
-function Base.show(io::IO, pkg::PackageSpec)
-    vstr = repr(pkg.version)
-    f = []
-    pkg.name !== nothing && push!(f, "name" => pkg.name)
-    pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
-    pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
-    pkg.path !== nothing && push!(f, "dev/path" => pkg.path)
-    pkg.pinned && push!(f, "pinned" => pkg.pinned)
-    push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
-    if pkg.repo.source !== nothing
-        push!(f, "url/path" => string("\"", pkg.repo.source, "\""))
-    end
-    if pkg.repo.rev !== nothing
-        push!(f, "rev" => pkg.repo.rev)
-    end
-    if pkg.repo.subdir !== nothing
-        push!(f, "subdir" => pkg.repo.subdir)
-    end
-    print(io, "PackageSpec(\n")
-    for (field, value) in f
-        print(io, "  ", field, " = ", value, "\n")
-    end
-    print(io, ")")
-end
 
 ############
 # EnvCache #

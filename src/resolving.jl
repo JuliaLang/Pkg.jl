@@ -4,7 +4,9 @@ using ..Environments
 using ..RegistryHandling
 using ..Resolve
 using ..Versions
-using ..Pkg # remove
+
+import ..PackageSpec
+import ..Pkg # remove
 
 using .Environments: Environment, Project, Manifest, Dependency, is_fixed
 using .RegistryHandling: Registry
@@ -13,47 +15,30 @@ using UUIDs
 import Base: SHA1
 
 
-#=
-Base.@kwdef mutable struct GitRepo
-    source::Union{Nothing,String} = nothing
-    rev::Union{Nothing,String} = nothing
-    subdir::Union{String, Nothing} = nothing
-end
+stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
+stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
 
-Base.:(==)(r1::GitRepo, r2::GitRepo) =
-    r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
 
-isurl(r::String) = occursin(URL_regex, r)
-
-Base.@kwdef mutable struct PackageSpec
-    name::Union{Nothing,String} = nothing
-    uuid::Union{Nothing,UUID} = nothing
-    version::VersionTypes = VersionSpec()
-    tree_hash::Union{Nothing,SHA1} = nothing
-    repo::GitRepo = GitRepo()
-    path::Union{Nothing,String} = nothing
-    pinned::Bool = false
-    mode::PackageMode = PKGMODE_PROJECT
-end
-=#
-
-const STDLIBS = Dict{UUID, Project}()
+const _STDLIBS = Ref{Dict{UUID, Project}}()
 # m.uuid isa stdlib && return joinpath(Sys.STDLIB, pkg.name)
 function load_stdlibs()
-    empty!(STDLIBS)
-    for name in readdir(Sys.STDLIB)
+    isassigned(_STDLIBS) && return
+    stdlibs = Dict{UUID, Project}()
+    for name in readdir(stdlib_dir())
         # TODO Check if project file exist?
-        stdlib_path = joinpath(Sys.STDLIB, name)
-        env = Environment(joinpath(Sys.STDLIB, name))
+        path = stdlib_path(name)
+        env = Environment(path)
         env.project === nothing && continue
         if env.project.pkg === nothing
-            error("expected a project for stdlib ", name, " at ", repr(stdlib_path))
+            error("expected a project for stdlib ", name, " at ", repr(path))
         end
-        STDLIBS[env.project.pkg.uuid] = env.project
+        stdlibs[env.project.pkg.uuid] = env.project
     end
+    _STDLIBS[] = stdlibs
     return
 end
-is_stdlib(uuid::UUID) = uuid in keys(STDLIBS)
+stdlibs() = (load_stdlibs(); _STDLIBS[])
+is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
 
 # TODO: Remove
@@ -64,12 +49,18 @@ struct FixedPkg
     deps::Dict{UUID, Dependency}
 end
 
+
+#recurse_path_pkgs!(env::Environment)
+
 function collect_fixed_pkgs(env::Environment)
+    # If the environment is a package, it is fixed
     fixed_pkgs = Dict{UUID, FixedPkg}()
     pkg = env.project.pkg
     if pkg !== nothing
         fixed_pkgs[pkg.uuid] = FixedPkg(pkg.uuid, pkg.name, pkg.version, env.project.deps)
     end
+
+    # Collect all fixed packages from the manifest
     m = env.manifest
     if m !== nothing
         for (uuid, pkg) in m.pkgs
@@ -83,6 +74,10 @@ function collect_fixed_pkgs(env::Environment)
                 env = Environment(path)
                 # TODO; check if one of these deps are unknown and then if the package
                 # has a manifest and use from there
+
+             #   if env.manifest !== nothing
+
+
                 if uuid in keys(fixed_pkgs)
                     error("duplicated uuid for fixed package, ", string(uuid))
                 end
@@ -95,16 +90,28 @@ end
 
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
-function resolve(env::Environment, regs::Vector{Registry}, extra_compat::Dict{UUID, VersionSpec}=Dict{UUID, VersionSpec}())
+
+function resolve(env′::Environment, regs::Vector{Registry}, extra_packages::Vector{PackageSpec} = PackageSpec[])
     load_stdlibs() # TODO: Remove
     julia_version = VERSION
-    # @assert all extra compat is on project deps
-    @assert issubset(keys(extra_compat), keys(env.project.deps))
+
+    env = copy(env′)
+
+    # Overwrite the packages in the environment with the extra packages
+    for pkg in extra_packages
+        project = env.project
+        dep′ = get(project.deps, pkg.uuid, nothing)
+        compat, compat_str = dep′ === nothing ? (VersionSpec(), "") : (dep′.compat, dep′.compat_str)
+        dep = Environments.Dependency(pkg.name, pkg.uuid, compat, compat_str)
+        project.deps[pkg.uuid] = dep
+    end
+
+    # This collect all fixed packages, and also puts newly discovered fixed packages from
+    # recursively walking manifests into the manifest of env
     fixed = collect_fixed_pkgs(env)
 
     # TODO, resolver policy
-    reqs = Resolve.Requires(pkg.uuid => get(VersionSpec, extra_compat, pkg.uuid)
-                            for pkg in values(env.project.deps))
+    reqs = Resolve.Requires(pkg.uuid => pkg.compat for pkg in values(env.project.deps))
 
     delete!(reqs, JULIA_UUID)
     fixed_resolve = Dict{UUID,Resolve.Fixed}()
@@ -114,15 +121,16 @@ function resolve(env::Environment, regs::Vector{Registry}, extra_compat::Dict{UU
     end
 
     all_versions, all_compat = deps_graph(regs, reqs, fixed_resolve)
+    all_compat[JULIA_UUID] = Dict(julia_version => Dict{VersionNumber,Dict{UUID,VersionSpec}}())
     all_versions[JULIA_UUID] = Set([julia_version])
-
 
     uuid_to_name = Dict{UUID, String}()
     foreach(dep -> uuid_to_name[dep.uuid] = dep.name, values(env.project.deps))
     foreach(dep -> uuid_to_name[dep.uuid] = dep.name, values(fixed))
     for uuid in keys(all_compat)
+        uuid in keys(uuid_to_name) && continue
         if is_stdlib(uuid)
-            stdlib = STDLIBS[uuid]
+            stdlib = stdlibs()[uuid]
             uuid_to_name[stdlib.pkg.uuid] = stdlib.pkg.name
         else
             name = Pkg.Types.registered_name(regs, uuid)
@@ -136,31 +144,21 @@ function resolve(env::Environment, regs::Vector{Registry}, extra_compat::Dict{UU
 
     graph = Resolve.Graph(all_versions, all_compat, uuid_to_name, reqs, fixed_resolve, false, julia_version)
     resolved_versions = Resolve.resolve(graph)
-    @show resolved_versions
 
     # Create a new Project + manifest
-    
-    p_new = copy(env.project)
-    #=
-    for pkg in new_pkgs
-        push!(p_new, 
-    end
-    =#
 
-    # We can have:
+    # After the resolve step the following changes can have been made:
     #   packages can have been removed
     #   package can have changed version / changed deps
     #   packages can have been added
-    #   what can not change:
-    #       git tracking
-    #       path tracking
-    #
-    m_new = copy(env.manifest)
+    # fixed packages been changed
+
+    m_new = env.manifest
     # for pkg in input pkgs
-    # if is_fixed 
-    
-    foreach(uuid -> delete!(m_new.pkgs), keys(fixed))
-    foreach(uuid -> delete!(m_new.pkgs), keys(resolved_versions))
+    # if is_fixed
+
+    foreach(uuid -> delete!(m_new.pkgs, uuid), keys(fixed))
+    foreach(uuid -> delete!(m_new.pkgs, uuid), keys(resolved_versions))
     for (uuid, v) in resolved_versions
         uuid == JULIA_UUID && continue
         # The registry could have been changed so even if we get
@@ -168,26 +166,22 @@ function resolve(env::Environment, regs::Vector{Registry}, extra_compat::Dict{UU
         # dependencies
         pkg = get(m_new, uuid, nothing)
         name = uuid_to_name[uuid]
-        sha = tree_hash(regs, uuid)
+        sha = tree_hash(regs, uuid, v)
         pinned = pkg === nothing ? false : pkg.pinned
-        deps = keys(all_compat[uuid_resolved][v])
-        m_new[uuid] = ManifestPkg(name, uuid, sha, v, deps, false)
-
-        # else if it is fixed the deps are in
-
-        @show deps
+        deps = keys(all_compat[uuid][v])
+        m_new.pkgs[uuid] = Environments.ManifestPkg(name, uuid, sha, v, deps, pinned)
     end
 
-
+    return env
 end
 
-function tree_hash(regs::Vector{Registry}, uuid::UUID)
+function tree_hash(regs::Vector{Registry}, uuid::UUID, v::VersionNumber)
     hash = nothing
     for reg in regs
         reg_pkg = get(reg, uuid, nothing)
         reg_pkg === nothing && continue
         pkg_info = RegistryHandling.registry_info(reg_pkg)
-        version_info = get(pkg_info.version_info, pkg.version, nothing)
+        version_info = get(pkg_info.version_info, v, nothing)
         version_info === nothing && continue
         hash′ = version_info.git_tree_sha1
         if hash !== nothing
@@ -218,7 +212,7 @@ function deps_graph(registries::Vector{Registry},
     all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
 
     for (fp, fx) in fixed
-        #all_versions[fp] = Set([fx.version])
+        all_versions[fp] = Set([fx.version])
         all_compat[fp]   = Dict(fx.version => Dict{UUID,VersionSpec}())
     end
 
@@ -233,7 +227,7 @@ function deps_graph(registries::Vector{Registry},
 
             # Collect deps + compat for stdlib
             if is_stdlib(uuid)
-                proj = STDLIBS[uuid]
+                proj = stdlibs()[uuid]
 
                 v = something(proj.pkg.version, VERSION)
                 push!(all_versions_u, v)
@@ -269,7 +263,7 @@ function deps_graph(registries::Vector{Registry},
             end
         end
     end
-
     return all_versions, all_compat
 end
-end
+
+end # module

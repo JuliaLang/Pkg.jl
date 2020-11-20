@@ -5,11 +5,10 @@ struct GitLocation
     tree_hash::SHA1
 end
 
-struct ManifestPkg{T}
+struct ManifestPkg
     name::String
     uuid::UUID
     location_info::Union{Nothing, String, SHA1, GitLocation} # stdlib, path, tree_sha, git-repo
-    # make lazy..?
     version::Union{Nothing, VersionNumber} # stdlib, version
     deps::Set{UUID}
     pinned::Bool
@@ -17,14 +16,16 @@ end
 
 default_pinned() = false
 
-struct Manifest{T}
+struct Manifest
     path::String
-    pkgs::Dict{UUID, ManifestPkg{T}}
+    pkgs::Dict{UUID, ManifestPkg}
     julia_version::Union{VersionNumber, Nothing}
 end
 
 Base.get(m::Manifest, u::UUID, default) = get(m.pkgs, u, default)
 Base.getindex(m::Manifest, u::UUID) = m.pkgs[u]
+
+empty_manifest(path::String) = Manifest(path, Dict{UUID, ManifestPkg}(), nothing)
 
 function Base.copy(m::Manifest)
     Manifest(
@@ -37,7 +38,7 @@ end
 function Manifest(manifest_path::String)
     manifest_path = realpath(manifest_path)
 
-    d = TOML.parsefile(manifest_path)
+    d = parsefile(manifest_path)
 
     # We first check if we have a condensed form, in that case
     # we collect all the name => uuid mappings
@@ -50,19 +51,19 @@ function Manifest(manifest_path::String)
             continue
         end
 
-        infos::Vector{Any}
+        infos = infos::Vector{Any}
         for info in infos
-            info::Dict{String, Any}
+            info = info::Dict{String, Any}
             # We only use this in the compressed case so
             # it is fine to overwrite the key name
             name_to_uuid[name] = UUID(info["uuid"]::String)
         end
     end
 
-    pkgs = Dict{UUID, ManifestPkg{VersionNumber}}()
+    pkgs = Dict{UUID, ManifestPkg}()
     for (name, infos) in d
         for info in infos
-            info::Dict{String, Any}
+            info = info::Dict{String, Any}
 
             # UUID
             uuid = UUID(info["uuid"]::String)
@@ -74,7 +75,12 @@ function Manifest(manifest_path::String)
             uuids = Set{UUID}()
             if deps_toml isa Vector{String}
                 for dep in deps_toml
-                    push!(uuids, name_to_uuid[dep])
+                    dep_uuid = get(name_to_uuid, dep, nothing)
+                    if dep_uuid === nothing
+                        error("invalid manifest at $(repr(manifest_path)), package $(repr(name)) has $(repr(dep)) as a dependency, " *
+                              "but that package was not found in the manifest.")
+                    end
+                    push!(uuids, dep_uuid)
                 end
             elseif deps_toml isa Dict{String, Any}
                 for (_, uuid) in deps_toml
@@ -127,16 +133,18 @@ function Manifest(manifest_path::String)
             # Pinned
             pinned = get(info, "pinned", default_pinned())::Bool
 
-            pkg = ManifestPkg{VersionNumber}(name, uuid, location_info, version, uuids, pinned)
+            pkg = ManifestPkg(name, uuid, location_info, version, uuids, pinned)
             pkgs[uuid] = pkg
         end
     end
+
     # TODO: consistency check
+
     return Manifest(manifest_path, pkgs, julia_version)
 end
 
-prune_manifest!(m::Manifest, keep::Set{UUID}) = _prune_manifest!(m, copy(keep))
-function _prune_manifest!(m::Manifest, keep::Set{UUID})
+prune_manifest!(m::Manifest, keep::Set{UUID}) = _prune_manifest!(copy(keep), m)
+function _prune_manifest!(keep::Set{UUID}, m::Manifest)
     while !isempty(keep)
         clean = true
         for (uuid, pkg) in m.pkgs

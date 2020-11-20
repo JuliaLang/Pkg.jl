@@ -8,18 +8,32 @@ using ..Pkg
 
 # export Environment, Project, Manifest
 
+# See loading.jl
+const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
+const TOML_LOCK = ReentrantLock()
+# Be safe and make a copy here, if the copy is removed, all usages needs to be audited to make
+# sure they do not modify the returned dictionary.
+parsefile(project_file::AbstractString) = copy(Base.parsed_toml(project_file, TOML_CACHE, TOML_LOCK))
+
+
+
+struct DiffEntry{T}
+    pre::Union{Nothing, Some{T}}
+    post::Union{Nothing, Some{T}}
+end
+
 include("project.jl")
 include("manifest.jl")
 
 struct Environment
     path::String
     project::Union{Nothing, Project}
-    manifest::Union{Nothing, Manifest{VersionNumber}}
+    manifest::Union{Manifest}
 end
 
 function Base.copy(env::Environment)
     Environment(env.path, env.project  === nothing ? nothing : copy(env.project),
-                          env.manifest === nothing ? nothing : copy(env.manifest)
+                          copy(env.manifest)
     )
 end
 
@@ -42,7 +56,9 @@ function Environment(dir::String)
             break
         end
     end
-    manifest = manifest_path === nothing ? nothing : Manifest(manifest_path)
+    manifest = manifest_path === nothing ?
+        empty_manifest(joinpath(dir, first(Base.manifest_names))) :
+        Manifest(manifest_path)
     return Environment(dir, project, manifest)
 end
 
@@ -65,6 +81,5 @@ function write_environment(path::String, env::Environment)
     n += write_manifest(path, env.manifest)
     return n
 end
-
 
 end
