@@ -62,4 +62,6 @@ jobs:
           julia --color=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"))'
           julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
           julia --project=docs --color=yes docs/make.jl pdf
+        env:
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
 
