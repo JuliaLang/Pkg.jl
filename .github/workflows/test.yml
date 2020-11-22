@@ -17,8 +17,8 @@ jobs:
       matrix:
         julia-version: ['nightly']
         julia-arch: [x64, x86]
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-        pkg-server: ["https://pkg.julialang.org", ""]
+        os: [ubuntu-latest, macOS-latest] # windows-latest (windows has problems and the TEMP fix below doesn't work)
+        pkg-server: [""] # "https://pkg.julialang.org", (pkg server is borken right now)
         exclude:
           - os: macOS-latest
             julia-arch: x86
