@@ -20,6 +20,8 @@ using ..Pkg.Versions
 import Base: SHA1
 using SHA
 
+import Downloads
+
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
@@ -1077,6 +1079,24 @@ function remove_registries(io::IO, regs::Vector{RegistrySpec})
     return nothing
 end
 
+get_status_code(response::Downloads.Response) = response.status
+function get_status_code(url::AbstractString, timeout_seconds::Real)
+    task = @async Downloads.request(url; method = "HEAD")
+    while timeout_seconds > 0
+        if istaskdone(task)
+            response = fetch(task)
+            return get_status_code(response)
+        end
+        sleep(1)
+        timeout_seconds -= 1
+    end
+    try
+        Base.throwto(task, InterruptException())
+    catch
+    end
+    return 408
+end
+
 # entry point for `registry up`
 function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registries(depots1());
                            force::Bool=false)
@@ -1093,25 +1113,38 @@ function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registri
                 old_hash = tree_info["git-tree-sha1"]
                 url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
                 if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
-                    let new_hash=new_hash
-                        # TODO: update faster by using a diff, if available
-                        mktempdir() do tmp
-                            try
-                                download_verify_unpack(url, nothing, tmp, ignore_existence = true)
-                            catch err
-                                @warn "could not download $url"
+                    if (server = pkg_server()) === nothing
+                        old_url = nothing
+                    else
+                        old_url = "$(server)/registry/$(reg.uuid)/$(old_hash)"
+                    end
+                    if (old_url === nothing) || (get_status_code(old_url, 15) == 200)
+                        # the Pkg server knows about the old registry hash
+                        # proceed to update the registry to the new registry hash
+                        let new_hash=new_hash
+                            # TODO: update faster by using a diff, if available
+                            mktempdir() do tmp
+                                try
+                                    download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                                catch err
+                                    @warn "could not download $url"
+                                end
+                                tree_info_file = joinpath(tmp, ".tree_info.toml")
+                                ispath(tree_info_file) &&
+                                    error("tree info file $tree_info_file already exists")
+                                open(tree_info_file, write=true) do io
+                                    println(io, "git-tree-sha1 = ", repr(new_hash))
+                                end
+                                registry_file = joinpath(tmp, "Registry.toml")
+                                registry = read_registry(registry_file; cache=false)
+                                verify_registry(registry)
+                                mv(tmp, reg.path, force=true)
                             end
-                            tree_info_file = joinpath(tmp, ".tree_info.toml")
-                            ispath(tree_info_file) &&
-                                error("tree info file $tree_info_file already exists")
-                            open(tree_info_file, write=true) do io
-                                println(io, "git-tree-sha1 = ", repr(new_hash))
-                            end
-                            registry_file = joinpath(tmp, "Registry.toml")
-                            registry = read_registry(registry_file; cache=false)
-                            verify_registry(registry)
-                            mv(tmp, reg.path, force=true)
                         end
+                    else
+                        # the Pkg server does not know about the old registry hash
+                        # do not update the registry
+                        push!(errors, (regpath, "the local copy of the registry may be ahead of the Pkg server"))
                     end
                 end
             elseif isdir(joinpath(reg.path, ".git"))
