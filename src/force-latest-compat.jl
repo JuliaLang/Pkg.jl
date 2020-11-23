@@ -83,12 +83,10 @@ function is_dependabot_job()
     return any(is_dependabot_branch.(chop_refs_head.(possible_branch_names)))
 end
 
-function decide_force_latest_compat(force_latest_compat_value::Union{Bool, Symbol})
-    if force_latest_compat_value === true
-        return true
-    elseif force_latest_compat_value === false
-        return false
-    elseif force_latest_compat_value === :autodetect
+decide_force_latest_compat(force_latest_compat_value::Bool) = force_latest_compat_value
+
+function decide_force_latest_compat(force_latest_compat_value::Symbol)
+    if force_latest_compat_value === :autodetect
         return is_dependabot_job()
     else
         msg = "Invalid value for force_latest_compat: $(force_latest_compat_value)"
