@@ -1,5 +1,4 @@
 name: Run tests
-
 on:
   pull_request:
     branches:
@@ -8,15 +7,18 @@ on:
     branches:
       - master
     tags: '*'
-
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        julia-version: ['nightly']
-        julia-arch: [x64, x86]
+        julia-version:
+          # - '1.6'
+          - 'nightly'
+        julia-arch:
+          - 'x64'
+          - 'x86'
         os:
           - ubuntu-latest
           - macOS-latest
@@ -45,21 +47,22 @@ jobs:
           julia --project --color=yes --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
-      - name: Process coverage
-        run: |
-          julia --project=test/coverage --color=yes -e 'using Pkg; Pkg.instantiate();
-          using Coverage; Codecov.submit(Codecov.process_folder())'
-
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v1
+        with:
+          file: lcov.info
   docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1.0.0
       - uses: julia-actions/setup-julia@latest
         with:
+          # version: '1.6'
           version: 'nightly'
       - name: Generate docs
         run: |
           julia --color=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"))'
           julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
           julia --project=docs --color=yes docs/make.jl pdf
-
+        env:
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
