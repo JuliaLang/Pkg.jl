@@ -40,5 +40,5 @@ test_script:
   - echo "%JL_TEST_SCRIPT%"
   - C:\julia\bin\julia -e "%JL_TEST_SCRIPT%"
 
-on_success:
-  - C:\julia\bin\julia --project=test/coverage -e "using Pkg; Pkg.instantiate(); using Coverage; Codecov.submit(Codecov.process_folder())"
+# on_success:
+#   - C:\julia\bin\julia --project=test/coverage -e "using Pkg; Pkg.instantiate(); using Coverage; Codecov.submit(Codecov.process_folder())"
