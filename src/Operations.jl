@@ -10,7 +10,7 @@ import REPL
 using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
-import ..Types.latest_compat, ..Types.force_latest_compat
+import ..Types.latest_compat, ..Types.force_latest_compat, ..Types.decide_force_latest_compat
 import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_hashes, artifact_exists
 using Base.BinaryPlatforms
 import ...Pkg
@@ -1391,7 +1391,7 @@ end
 
 # ctx + pkg used to compute parent dep graph
 function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
-                 sandbox_path::String, sandbox_project_override; force_latest_compat::Bool=false)
+                 sandbox_path::String, sandbox_project_override; force_latest_compat::Union{Bool, Symbol}=:autodetect)
     active_manifest = manifestfile_path(dirname(ctx.env.project_file))
     sandbox_project = projectfile_path(sandbox_path)
 
@@ -1406,7 +1406,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             cp(sandbox_project, tmp_project)
             chmod(tmp_project, 0o600)
         end
-        if force_latest_compat
+        if Types.decide_force_latest_compat(force_latest_compat)
             Types.force_latest_compat(tmp_project)
             chmod(tmp_project, 0o600)
         end
@@ -1526,7 +1526,7 @@ testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
-              test_fn=nothing, force_latest_compat::Bool=false)
+              test_fn=nothing, force_latest_compat::Union{Bool, Symbol}=:autodetect)
     Pkg.instantiate(ctx; allow_autoprecomp = false)
 
     # load manifest data

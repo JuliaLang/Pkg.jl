@@ -52,3 +52,46 @@ function force_latest_compat(filename::AbstractString)
     end
     return nothing
 end
+
+function get_possible_branch_names()
+    possible_branch_names = [
+        get(ENV, "APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH", ""),
+        get(ENV, "APPVEYOR_REPO_BRANCH", ""),
+        get(ENV, "GITHUB_BASE_REF", ""),
+        get(ENV, "GITHUB_HEAD_REF", ""),
+        get(ENV, "GITHUB_REF", ""),
+        get(ENV, "TRAVIS_BRANCH", ""),
+        get(ENV, "TRAVIS_PULL_REQUEST_BRANCH", ""),
+    ]
+    return possible_branch_names
+end
+
+function chop_refs_head(branch_name::AbstractString)
+    if startswith(branch_name, "refs/heads/")
+        return chop(branch_name; head = 11, tail = 0)
+    else
+        return branch_name
+    end
+end
+
+function is_dependabot_branch(branch_name::AbstractString)
+    return startswith(branch_name, "dependabot/") || startswith(branch_name, "compathelper/")
+end
+
+function is_dependabot_job()
+    possible_branch_names = get_possible_branch_names()
+    return any(is_dependabot_branch.(chop_refs_head.(possible_branch_names)))
+end
+
+function decide_force_latest_compat(force_latest_compat_value::Union{Bool, Symbol})
+    if force_latest_compat_value === true
+        return true
+    elseif force_latest_compat_value === false
+        return false
+    elseif force_latest_compat_value === :autodetect
+        return is_dependabot_job()
+    else
+        msg = "Invalid value for force_latest_compat: $(force_latest_compat_value)"
+        throw(ArgumentError(msg))
+    end
+end

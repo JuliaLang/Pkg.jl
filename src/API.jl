@@ -320,7 +320,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, test_fn=nothing,
               julia_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
               test_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
-              force_latest_compat::Bool=false,
+              force_latest_compat::Union{Bool, Symbol}=:autodetect,
               kwargs...)
     julia_args = Cmd(julia_args)
     test_args = Cmd(test_args)

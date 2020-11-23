@@ -187,7 +187,7 @@ const update = API.up
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
-  - `force_latest_compat::Bool=false`: for each `[compat]` entry in the active project, only allow the latest compatible version of each dependency
+  - `force_latest_compat::Union{Bool, Symbol}=:autodetect`: for each `[compat]` entry in the active project, only allow the latest compatible version of each dependency
 
 !!! compat "Julia 1.3"
     `julia_args` and `test_args` requires at least Julia 1.3.
