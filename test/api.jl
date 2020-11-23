@@ -8,7 +8,7 @@ import Pkg.Types.PkgError, Pkg.Resolve.ResolverError
 using UUIDs
 
 using ..Utils
-
+original_path = pwd()
 @testset "Pkg.activate" begin
     temp_pkg_dir() do project_path
         cd_tempdir() do tmp
@@ -44,6 +44,7 @@ using ..Utils
         end
     end
 end
+cd(original_path)
 
 include("FakeTerminals.jl")
 import .FakeTerminals.FakeTerminal
@@ -99,11 +100,11 @@ import .FakeTerminals.FakeTerminal
         wait(repltask)
     end
 end
+cd(original_path)
 
 @testset "Pkg.precompile" begin
     # sequential precompile, depth-first
-    temp_pkg_dir() do tmp; cd(tmp) do
-        path = pwd()
+    isolate() do; temp_pkg_dir() do tmp; cd(tmp) do
         Pkg.activate(".")
         cd(mkdir("packages")) do
             Pkg.generate("Dep1")
@@ -130,7 +131,8 @@ end
         iob = IOBuffer()
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
         println("Auto precompilation enabled")
-        Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"), io=iob)
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
+        Pkg.build(io=iob) # should trigger auto-precomp
         @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
         @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
@@ -142,7 +144,8 @@ end
         @test isempty(Pkg.API.pkgs_precompile_suspended)
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
-        Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep"), io=iob) # should trigger auto-precomp and soft-error
+        Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep"))
+        Pkg.build(io=iob) # should trigger auto-precomp and soft-error
         @test occursin("Precompiling", String(take!(iob)))
         broken_packages = Pkg.API.pkgs_precompile_suspended
         @test length(broken_packages) == 1
@@ -181,11 +184,10 @@ end
         Pkg.build(; verbose=true)
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
-    end end
+    end end end
 
     # ignoring circular deps, to avoid deadlock
-    temp_pkg_dir() do tmp; cd(tmp) do
-        path = pwd()
+    isolate() do; temp_pkg_dir() do tmp; cd(tmp) do
         Pkg.activate(".")
         cd(mkdir("packages")) do
             Pkg.generate("CircularDep1")
@@ -206,8 +208,8 @@ end
         Pkg.activate(".")
         Pkg.resolve()
         Pkg.precompile()
+    end end end
 
-    end end
 end
 
 end # module APITests
