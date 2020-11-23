@@ -102,11 +102,11 @@ Add a package to the current project. This package will be available by using th
 `import` and `using` keywords in the Julia REPL, and if the current project is
 a package, also inside that package.
 
-## Resolution Tiers
-`Pkg` resolves the set of packages in your environment using an algorithm that operates in one of four
-tiers, or modes. Which of these is used can be controlled by the `preserve` keyword argument,
-which should take one of the values shown below (starting with the strictest). The command will fail if
-there is no solution preserving what you request.
+## Tiered Resolution
+`Pkg.add` resolves the set of packages in your environment using an algorithm that treats previously installed 
+packages in one of four ways. Which of these is used is chosen automatically by default, and can be controlled
+with the `preserve` keyword argument, which takes the values shown below.
+The command will fail if there is no solution preserving what you request.
 
 | Value             | Description                                                                         |
 |:------------------|:------------------------------------------------------------------------------------|
@@ -114,7 +114,7 @@ there is no solution preserving what you request.
 | `PRESERVE_DIRECT` | Preserve the state of all existing direct dependencies                              |
 | `PRESERVE_SEMVER` | Preserve semver-compatible versions of direct dependencies                          |
 | `PRESERVE_NONE`   | Do not attempt to preserve any version information                                  |
-| `PRESERVE_TIERED` | Select from the above tiers the one which preserves the most version information, while still allowing a solution. (This is the default.) |
+| `PRESERVE_TIERED` | Select from the above four the one which preserves the most version information, while allowing a solution. (This is the default.) |
 
 !!! compat "Julia 1.4"
     The `preserve` keyword argument requires at least Julia 1.4. 
