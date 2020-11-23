@@ -103,23 +103,22 @@ Add a package to the current project. This package will be available by using th
 a package, also inside that package.
 
 ## Resolution Tiers
-`Pkg` resolves the set of packages in your environment using an algorithm that operates in one of several
+`Pkg` resolves the set of packages in your environment using an algorithm that operates in one of four
 tiers, or modes. Which of these is used can be controlled by the `preserve` keyword argument,
 which should take one of the following values (in order of decreasing strictness):
 
 | Value             | Description                                                                         |
 |:------------------|:------------------------------------------------------------------------------------|
 | `PRESERVE_ALL`    | Preserve the state of all existing dependencies (including recursive dependencies)  |
-| `PRESERVE_DIRECT` | Preserve the state of all existing direct dependencies                              |
+| `PRESERVE_DIRECT` | Preserve the state of all existing direct dependencies. Error if this is impossible.|
 | `PRESERVE_SEMVER` | Preserve semver-compatible versions of direct dependencies                          |
 | `PRESERVE_NONE`   | Do not attempt to preserve any version information                                  |
-| `PRESERVE_TIERED` | Use the tier which will preserve the most version information (this is the default) |
+| `PRESERVE_TIERED` | Select from the above tiers the one which preserves the most version information, while still alowing a solution. (This is the default.) |
 
 !!! compat "Julia 1.4"
     The `preserve` keyword argument requires at least Julia 1.4. 
-
     When `Pkg.test` adds test dependencies, the resolver's behaviour on Julia 1.3 and earlier
-    is equivalent to `PRESERVE_ALL`, rather than `PRESERVE_TIERED`. This may fail if a recursive dependency 
+    is equivalent to `PRESERVE_ALL`, rather than `PRESERVE_TIERED`. This may fail if a direct or recursive dependency 
     has already been added, before testing, at a version incompatable with a test dependency.
 
 # Examples
