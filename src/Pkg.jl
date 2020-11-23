@@ -105,15 +105,16 @@ a package, also inside that package.
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using an algorithm that operates in one of four
 tiers, or modes. Which of these is used can be controlled by the `preserve` keyword argument,
-which should take one of the following values (in order of decreasing strictness):
+which should take one of the values shown below (starting with the strictest). The command will fail if
+there is no solution preserving what you request.
 
 | Value             | Description                                                                         |
 |:------------------|:------------------------------------------------------------------------------------|
 | `PRESERVE_ALL`    | Preserve the state of all existing dependencies (including recursive dependencies)  |
-| `PRESERVE_DIRECT` | Preserve the state of all existing direct dependencies. Error if this is impossible.|
+| `PRESERVE_DIRECT` | Preserve the state of all existing direct dependencies                              |
 | `PRESERVE_SEMVER` | Preserve semver-compatible versions of direct dependencies                          |
 | `PRESERVE_NONE`   | Do not attempt to preserve any version information                                  |
-| `PRESERVE_TIERED` | Select from the above tiers the one which preserves the most version information, while still alowing a solution. (This is the default.) |
+| `PRESERVE_TIERED` | Select from the above tiers the one which preserves the most version information, while still allowing a solution. (This is the default.) |
 
 !!! compat "Julia 1.4"
     The `preserve` keyword argument requires at least Julia 1.4. 
