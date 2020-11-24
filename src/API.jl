@@ -73,7 +73,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
             ctx = Context()
             Types.clone_default_registries(ctx)
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
+            $(f in (:develop, :add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -1185,10 +1185,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
         if !isempty(precomperr_deps)
             plural = length(precomperr_deps) == 1 ? "y" : "ies"
-            str *= string("\n",
-                color_string(string(length(precomperr_deps)), Base.warn_color()),
-                " dependenc$(plural) failed but may be precompilable after restarting julia"
-            )
+            str *= "\n" * color_string(string(length(precomperr_deps)), Base.warn_color()) * " dependenc$(plural) may not be precompilable. Try restarting julia"
         end
         if internal_call && !isempty(failed_deps)
             plural = length(failed_deps) == 1 ? "y" : "ies"
