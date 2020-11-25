@@ -209,7 +209,7 @@ cd(original_path)
         Pkg.resolve()
         Pkg.precompile()
     end end end
-
 end
+cd(original_path)
 
 end # module APITests
