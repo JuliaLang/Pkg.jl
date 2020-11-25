@@ -278,17 +278,12 @@ end
 end
 
 @testset "Artifact Usage" begin
-    # Do a quick little install of our ArtifactTOMLSearch example
-    include(joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch", "pkg.jl"))
-    @test ATSMod.do_test()
-
     # Don't use `temp_pkg_dir()` here because we need `Pkg.test()` to run in the
     # same package context as the one we're running in right now.  Yes, this pollutes
     # the global artifact namespace and package list, but it should be harmless.
     mktempdir() do project_path
         with_pkg_env(project_path) do
             copy_test_package(project_path, "ArtifactInstallation")
-            Pkg.activate(joinpath(project_path))
             add_this_pkg()
             Pkg.add(Pkg.Types.PackageSpec(
                 name="ArtifactInstallation",
