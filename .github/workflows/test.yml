@@ -25,7 +25,7 @@ jobs:
           # - windows-latest  # windows has problems and the TEMP fix below doesn't work)
         pkg-server:
           - ""
-          # - "https://pkg.julialang.org"  # pkg server is borken right now)
+          - "pkg.julialang.org"
         exclude:
           - os: macOS-latest
             julia-arch: x86
