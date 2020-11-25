@@ -303,10 +303,11 @@ Create a project called `pkgname` in the current folder.
 """,
 ],
 PSA[:name => "precompile",
+    :short_name => "pc",
     :api => API.precompile,
     :description => "precompile all the project dependencies",
     :help => md"""
-    precompile
+    [pc|precompile]
 
 Precompile all the dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
