@@ -49,6 +49,9 @@ end
 function check_package_name(x::AbstractString, mode=nothing)
     if !Base.isidentifier(x)
         message = "`$x` is not a valid package name"
+        if endswith(lowercase(x), ".jl")
+            message *= ". Perhaps you meant `$(chop(x; tail=3))`"
+        end
         if mode !== nothing && any(occursin.(['\\','/'], x)) # maybe a url or a path
             message *= "\nThe argument appears to be a URL or path, perhaps you meant " *
                 "`Pkg.$mode(url=\"...\")` or `Pkg.$mode(path=\"...\")`."
