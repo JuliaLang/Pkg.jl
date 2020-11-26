@@ -1,7 +1,13 @@
 environment:
   matrix:
-  # - julia_version: 1.0
-  - julia_version: nightly
+  # - julia_version: "1.6"
+  #   JULIA_PKG_SERVER: ""
+  # - julia_version: "1.6"
+  #   JULIA_PKG_SERVER: "pkg.julialang.org"
+  - julia_version: "nightly"
+    JULIA_PKG_SERVER: ""
+  - julia_version: "nightly"
+    JULIA_PKG_SERVER: "pkg.julialang.org"
 
 platform:
   - x64 # 64-bit
