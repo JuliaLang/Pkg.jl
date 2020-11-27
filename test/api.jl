@@ -75,7 +75,7 @@ import .FakeTerminals.FakeTerminal
         Base.wait(t)
         nothing
     end
-
+    pwd_before = pwd()
     fake_repl() do stdin_write, stdout_read, repl
         repltask = @async REPL.run_repl(repl)
 
@@ -99,6 +99,7 @@ import .FakeTerminals.FakeTerminal
         write(stdin_write, "\x04")
         wait(repltask)
     end
+    cd(pwd_before) # something in the precompile_script changes the working directory
 end
 cd(original_path)
 
