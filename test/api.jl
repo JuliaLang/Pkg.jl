@@ -8,43 +8,39 @@ import Pkg.Types.PkgError, Pkg.Resolve.ResolverError
 using UUIDs
 
 using ..Utils
-original_path = pwd()
 @testset "Pkg.activate" begin
-    temp_pkg_dir() do project_path
-        cd_tempdir() do tmp
-            path = pwd()
-            Pkg.activate(".")
-            mkdir("Foo")
-            cd(mkdir("modules")) do
-                Pkg.generate("Foo")
-            end
-            Pkg.develop(Pkg.PackageSpec(path="modules/Foo")) # to avoid issue #542
-            Pkg.activate("Foo") # activate path Foo over deps Foo
-            @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
-            Pkg.activate(".")
-            rm("Foo"; force=true, recursive=true)
-            Pkg.activate("Foo") # activate path from developed Foo
-            @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
-            Pkg.activate(".")
-            Pkg.activate("./Foo") # activate empty directory Foo (sidestep the developed Foo)
-            @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
-            Pkg.activate(".")
-            Pkg.activate("Bar") # activate empty directory Bar
-            @test Base.active_project() == joinpath(path, "Bar", "Project.toml")
-            Pkg.activate(".")
-            Pkg.add("Example") # non-deved deps should not be activated
-            Pkg.activate("Example")
-            @test Base.active_project() == joinpath(path, "Example", "Project.toml")
-            Pkg.activate(".")
-            cd(mkdir("tests"))
-            Pkg.activate("Foo") # activate developed Foo from another directory
-            @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
-            Pkg.activate() # activate home project
-            @test Base.ACTIVE_PROJECT[] === nothing
+    isolate() do; cd_tempdir() do tmp
+        path = pwd()
+        Pkg.activate(".")
+        mkdir("Foo")
+        cd(mkdir("modules")) do
+            Pkg.generate("Foo")
         end
-    end
+        Pkg.develop(Pkg.PackageSpec(path="modules/Foo")) # to avoid issue #542
+        Pkg.activate("Foo") # activate path Foo over deps Foo
+        @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
+        Pkg.activate(".")
+        rm("Foo"; force=true, recursive=true)
+        Pkg.activate("Foo") # activate path from developed Foo
+        @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
+        Pkg.activate(".")
+        Pkg.activate("./Foo") # activate empty directory Foo (sidestep the developed Foo)
+        @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
+        Pkg.activate(".")
+        Pkg.activate("Bar") # activate empty directory Bar
+        @test Base.active_project() == joinpath(path, "Bar", "Project.toml")
+        Pkg.activate(".")
+        Pkg.add("Example") # non-deved deps should not be activated
+        Pkg.activate("Example")
+        @test Base.active_project() == joinpath(path, "Example", "Project.toml")
+        Pkg.activate(".")
+        cd(mkdir("tests"))
+        Pkg.activate("Foo") # activate developed Foo from another directory
+        @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
+        Pkg.activate() # activate home project
+        @test Base.ACTIVE_PROJECT[] === nothing
+    end end
 end
-cd(original_path)
 
 include("FakeTerminals.jl")
 import .FakeTerminals.FakeTerminal
@@ -101,11 +97,10 @@ import .FakeTerminals.FakeTerminal
     end
     cd(pwd_before) # something in the precompile_script changes the working directory
 end
-cd(original_path)
 
 @testset "Pkg.precompile" begin
     # sequential precompile, depth-first
-    isolate() do; temp_pkg_dir() do tmp; cd(tmp) do
+    isolate() do; cd_tempdir() do tmp
         Pkg.activate(".")
         cd(mkdir("packages")) do
             Pkg.generate("Dep1")
@@ -185,10 +180,9 @@ cd(original_path)
         Pkg.build(; verbose=true)
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
-    end end end
-
+    end end
     # ignoring circular deps, to avoid deadlock
-    isolate() do; temp_pkg_dir() do tmp; cd(tmp) do
+    isolate() do; cd_tempdir() do tmp
         Pkg.activate(".")
         cd(mkdir("packages")) do
             Pkg.generate("CircularDep1")
@@ -209,8 +203,7 @@ cd(original_path)
         Pkg.activate(".")
         Pkg.resolve()
         Pkg.precompile()
-    end end end
+    end end
 end
-cd(original_path)
 
 end # module APITests
