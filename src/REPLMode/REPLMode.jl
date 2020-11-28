@@ -547,10 +547,16 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
         ok || return REPL.transition(s, :abort)
         input = String(take!(buf))
         REPL.reset(repl)
-        do_cmd(repl, input)
+        if isempty(input)
+            Pkg.precompile()
+        else
+            do_cmd(repl, input)
+        end
         REPL.prepare_next(repl)
         REPL.reset_state(s)
-        s.current_mode.sticky || REPL.transition(s, main)
+        if isempty(input) || !s.current_mode.sticky
+            REPL.transition(s, main)
+        end
     end
 
     mk = REPL.mode_keymap(main)
