@@ -37,6 +37,7 @@ makedocs(
         "creating-packages.md",
         "compatibility.md",
         "registries.md",
+        "depots.md",
         "artifacts.md",
         # "faq.md",
         "glossary.md",
