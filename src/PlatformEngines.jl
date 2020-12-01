@@ -151,7 +151,8 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     end
     verbose && @info "Refreshing expired auth token..." file=auth_file
     tmp = tempname()
-    refresh_auth = "Authorization: Bearer $(auth_info["refresh_token"]::String)"
+    refresh_token = auth_info["refresh_token"]::String
+    refresh_auth = "Authorization" => "Bearer $refresh_token"
     try download(refresh_url, tmp, auth_header=refresh_auth, verbose=verbose)
     catch err
         @warn "token refresh failure" file=auth_file url=refresh_url err=err
@@ -186,8 +187,8 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
         end
     end
     mv(tmp, auth_file, force=true)
-    token = auth_info["access_token"]::String
-    return "Authorization" => "Bearer $token"
+    access_token = auth_info["access_token"]::String
+    return "Authorization" => "Bearer $access_token"
 end
 
 # based on information in this post:
