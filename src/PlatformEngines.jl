@@ -248,13 +248,15 @@ function download(
         push!(headers, header)
     end
 
-    progress = if verbose
+    io = stderr
+    do_fancy = verbose && can_fancyprint(io)
+    progress = if do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
-        start_progress(stderr, bar)
+        start_progress(io, bar)
         (total, now) -> begin
             bar.max = total
             bar.current = now
-            show_progress(stderr, bar)
+            show_progress(io, bar)
         end
     else
         (total, now) -> nothing
@@ -262,7 +264,7 @@ function download(
     try
         Downloads.download(url, dest; headers, progress)
     finally
-        verbose && end_progress(stderr, bar)
+        do_fancy && end_progress(stderr, bar)
     end
 end
 
