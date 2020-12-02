@@ -8,41 +8,38 @@ import Pkg.Types.PkgError, Pkg.Resolve.ResolverError
 using UUIDs
 
 using ..Utils
-
 @testset "Pkg.activate" begin
-    temp_pkg_dir() do project_path
-        cd_tempdir() do tmp
-            path = pwd()
-            Pkg.activate(".")
-            mkdir("Foo")
-            cd(mkdir("modules")) do
-                Pkg.generate("Foo")
-            end
-            Pkg.develop(Pkg.PackageSpec(path="modules/Foo")) # to avoid issue #542
-            Pkg.activate("Foo") # activate path Foo over deps Foo
-            @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
-            Pkg.activate(".")
-            rm("Foo"; force=true, recursive=true)
-            Pkg.activate("Foo") # activate path from developed Foo
-            @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
-            Pkg.activate(".")
-            Pkg.activate("./Foo") # activate empty directory Foo (sidestep the developed Foo)
-            @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
-            Pkg.activate(".")
-            Pkg.activate("Bar") # activate empty directory Bar
-            @test Base.active_project() == joinpath(path, "Bar", "Project.toml")
-            Pkg.activate(".")
-            Pkg.add("Example") # non-deved deps should not be activated
-            Pkg.activate("Example")
-            @test Base.active_project() == joinpath(path, "Example", "Project.toml")
-            Pkg.activate(".")
-            cd(mkdir("tests"))
-            Pkg.activate("Foo") # activate developed Foo from another directory
-            @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
-            Pkg.activate() # activate home project
-            @test Base.ACTIVE_PROJECT[] === nothing
+    isolate() do; cd_tempdir() do tmp
+        path = pwd()
+        Pkg.activate(".")
+        mkdir("Foo")
+        cd(mkdir("modules")) do
+            Pkg.generate("Foo")
         end
-    end
+        Pkg.develop(Pkg.PackageSpec(path="modules/Foo")) # to avoid issue #542
+        Pkg.activate("Foo") # activate path Foo over deps Foo
+        @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
+        Pkg.activate(".")
+        rm("Foo"; force=true, recursive=true)
+        Pkg.activate("Foo") # activate path from developed Foo
+        @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
+        Pkg.activate(".")
+        Pkg.activate("./Foo") # activate empty directory Foo (sidestep the developed Foo)
+        @test Base.active_project() == joinpath(path, "Foo", "Project.toml")
+        Pkg.activate(".")
+        Pkg.activate("Bar") # activate empty directory Bar
+        @test Base.active_project() == joinpath(path, "Bar", "Project.toml")
+        Pkg.activate(".")
+        Pkg.add("Example") # non-deved deps should not be activated
+        Pkg.activate("Example")
+        @test Base.active_project() == joinpath(path, "Example", "Project.toml")
+        Pkg.activate(".")
+        cd(mkdir("tests"))
+        Pkg.activate("Foo") # activate developed Foo from another directory
+        @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
+        Pkg.activate() # activate home project
+        @test Base.ACTIVE_PROJECT[] === nothing
+    end end
 end
 
 include("FakeTerminals.jl")
@@ -74,7 +71,7 @@ import .FakeTerminals.FakeTerminal
         Base.wait(t)
         nothing
     end
-
+    pwd_before = pwd()
     fake_repl() do stdin_write, stdout_read, repl
         repltask = @async REPL.run_repl(repl)
 
@@ -98,12 +95,12 @@ import .FakeTerminals.FakeTerminal
         write(stdin_write, "\x04")
         wait(repltask)
     end
+    cd(pwd_before) # something in the precompile_script changes the working directory
 end
 
 @testset "Pkg.precompile" begin
     # sequential precompile, depth-first
-    temp_pkg_dir() do tmp; cd(tmp) do
-        path = pwd()
+    isolate() do; cd_tempdir() do tmp
         Pkg.activate(".")
         cd(mkdir("packages")) do
             Pkg.generate("Dep1")
@@ -130,7 +127,8 @@ end
         iob = IOBuffer()
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
         println("Auto precompilation enabled")
-        Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"), io=iob)
+        Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
+        Pkg.build(io=iob) # should trigger auto-precomp
         @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
         @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
@@ -142,7 +140,8 @@ end
         @test isempty(Pkg.API.pkgs_precompile_suspended)
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
-        Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep"), io=iob) # should trigger auto-precomp and soft-error
+        Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep"))
+        Pkg.build(io=iob) # should trigger auto-precomp and soft-error
         @test occursin("Precompiling", String(take!(iob)))
         broken_packages = Pkg.API.pkgs_precompile_suspended
         @test length(broken_packages) == 1
@@ -182,10 +181,8 @@ end
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
     end end
-
     # ignoring circular deps, to avoid deadlock
-    temp_pkg_dir() do tmp; cd(tmp) do
-        path = pwd()
+    isolate() do; cd_tempdir() do tmp
         Pkg.activate(".")
         cd(mkdir("packages")) do
             Pkg.generate("CircularDep1")
@@ -206,7 +203,6 @@ end
         Pkg.activate(".")
         Pkg.resolve()
         Pkg.precompile()
-
     end end
 end
 
