@@ -1,7 +1,13 @@
 environment:
   matrix:
-  # - julia_version: 1.0
-  - julia_version: nightly
+  # - julia_version: "1.6"
+  #   JULIA_PKG_SERVER: ""
+  # - julia_version: "1.6"
+  #   JULIA_PKG_SERVER: "pkg.julialang.org"
+  - julia_version: "nightly"
+    JULIA_PKG_SERVER: ""
+  - julia_version: "nightly"
+    JULIA_PKG_SERVER: "pkg.julialang.org"
 
 platform:
   - x64 # 64-bit
@@ -40,5 +46,5 @@ test_script:
   - echo "%JL_TEST_SCRIPT%"
   - C:\julia\bin\julia -e "%JL_TEST_SCRIPT%"
 
-on_success:
-  - C:\julia\bin\julia --project=test/coverage -e "using Pkg; Pkg.instantiate(); using Coverage; Codecov.submit(Codecov.process_folder())"
+# on_success:
+#   - C:\julia\bin\julia --project=test/coverage -e "using Pkg; Pkg.instantiate(); using Coverage; Codecov.submit(Codecov.process_folder())"

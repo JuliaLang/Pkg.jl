@@ -11,20 +11,29 @@ using Base.BinaryPlatforms
 
 export probe_platform_engines!, verify, unpack, package, download_verify_unpack
 
-const exe7z = Ref("")
+const EXE7Z_LOCK = ReentrantLock()
+const EXE7Z = Ref{String}()
 
-function __init__()
-    exe7z[] = ""
+function exe7z()
+    lock(EXE7Z_LOCK) do
+        if !isassigned(EXE7Z)
+            EXE7Z[] = find7z()
+        end
+        return EXE7Z[]
+    end
+end
+
+function find7z()
     name = "7z"
     Sys.iswindows() && (name = "$name.exe")
     for dir in (joinpath("..", "libexec"), ".")
         path = normpath(Sys.BINDIR, dir, name)
-        isfile(path) || continue
-        exe7z[] = path
+        isfile(path) && return path
     end
-    isempty(exe7z[]) && error("7z binary not found")
+    path = Sys.which(name)
+    path !== nothing && return path
+    error("7z binary not found")
 end
-__init__()
 
 function probe_platform_engines!(;verbose::Bool = false)
     # don't do anything
@@ -142,7 +151,8 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     end
     verbose && @info "Refreshing expired auth token..." file=auth_file
     tmp = tempname()
-    refresh_auth = "Authorization: Bearer $(auth_info["refresh_token"]::String)"
+    refresh_token = auth_info["refresh_token"]::String
+    refresh_auth = "Authorization" => "Bearer $refresh_token"
     try download(refresh_url, tmp, auth_header=refresh_auth, verbose=verbose)
     catch err
         @warn "token refresh failure" file=auth_file url=refresh_url err=err
@@ -177,8 +187,8 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
         end
     end
     mv(tmp, auth_file, force=true)
-    token = auth_info["access_token"]::String
-    return "Authorization" => "Bearer $token"
+    access_token = auth_info["access_token"]::String
+    return "Authorization" => "Bearer $access_token"
 end
 
 # based on information in this post:
@@ -238,13 +248,15 @@ function download(
         push!(headers, header)
     end
 
-    progress = if verbose
+    io = stderr
+    do_fancy = verbose && can_fancyprint(io)
+    progress = if do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
-        start_progress(stderr, bar)
+        start_progress(io, bar)
         (total, now) -> begin
             bar.max = total
             bar.current = now
-            show_progress(stderr, bar)
+            show_progress(io, bar)
         end
     else
         (total, now) -> nothing
@@ -252,7 +264,7 @@ function download(
     try
         Downloads.download(url, dest; headers, progress)
     finally
-        verbose && end_progress(stderr, bar)
+        do_fancy && end_progress(stderr, bar)
     end
 end
 
@@ -354,12 +366,12 @@ function unpack(
     dest::AbstractString;
     verbose::Bool = false,
 )
-    Tar.extract(`$(exe7z[]) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
+    Tar.extract(`$(exe7z()) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
 end
 
 function list_tarball_files(tarball_path::AbstractString)
     names = String[]
-    Tar.list(`$(exe7z[]) x $tarball_path -so`) do hdr
+    Tar.list(`$(exe7z()) x $tarball_path -so`) do hdr
         push!(names, hdr.path)
     end
     return names
@@ -372,7 +384,7 @@ Compress `src_dir` into a tarball located at `tarball_path`.
 """
 function package(src_dir::AbstractString, tarball_path::AbstractString)
     rm(tarball_path, force=true)
-    cmd = `$(exe7z[]) a -si -tgzip -mx9 $tarball_path`
+    cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
     open(pipeline(cmd, stdout=devnull), write=true) do io
         Tar.create(src_dir, io)
     end
@@ -489,7 +501,7 @@ function download_verify_unpack(
         if verbose
             @info("Unpacking $(tarball_path) into $(dest)...")
         end
-        open(`$(exe7z[]) x $tarball_path -so`) do io
+        open(`$(exe7z()) x $tarball_path -so`) do io
             Tar.extract(io, dest, copy_symlinks = copy_symlinks())
         end
     finally

@@ -948,7 +948,10 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         was_recompiled[pkgid] = false
         if haskey(man, pkgid.uuid)
             pkgent = man[pkgid.uuid]
-            push!(pkg_specs, PackageSpec(uuid = pkgid.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
+            # If we have an unusual situation such as an un-versioned package (like an stdlib that
+            # is being overridden) its `version` may be `nothing`.
+            pkgver = something(pkgent.version, VersionSpec())
+            push!(pkg_specs, PackageSpec(uuid = pkgid.uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash))
         end
     end
     precomp_prune_suspended!(pkg_specs)
@@ -1322,11 +1325,11 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
         end
         repo_path = Types.add_repo_cache_path(repo_source)
-        LibGit2.with(GitTools.ensure_clone(ctx, repo_path, pkg.repo.source; isbare=true)) do repo
+        LibGit2.with(GitTools.ensure_clone(ctx, repo_path, repo_source; isbare=true)) do repo
             # We only update the clone if the tree hash can't be found
             tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
             if tree_hash_object === nothing
-                GitTools.fetch(ctx, repo, pkg.repo.source; refspecs=Types.refspecs)
+                GitTools.fetch(ctx, repo, repo_source; refspecs=Types.refspecs)
                 tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
             end
             if tree_hash_object === nothing
