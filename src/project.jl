@@ -133,7 +133,7 @@ function read_project(f_or_io::Union{String, IO})
         end
     catch e
         if e isa TOML.ParserError
-            pkgerror("Could not parse project: ", sprint(showerror, raw))
+            pkgerror("Could not parse project: ", sprint(showerror, e))
         end
         rethrow()
     end
