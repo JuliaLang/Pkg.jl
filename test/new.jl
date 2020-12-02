@@ -2319,11 +2319,7 @@ tree_hash(root::AbstractString) = bytes2hex(@inferred Pkg.GitTools.tree_hash(roo
         chmod(file, 0o654) # group x bit doesn't matter
         @test "0a890bd10328d68f6d85efd2535e3a4c588ee8e6" == tree_hash(dir)
         chmod(file, 0o744) # user x bit matters
-        if Sys.iswindows()
-            @test_broken "952cfce0fb589c02736482fa75f9f9bb492242f8" == tree_hash(dir)
-        else
-            @test "952cfce0fb589c02736482fa75f9f9bb492242f8" == tree_hash(dir)
-        end
+        @test "952cfce0fb589c02736482fa75f9f9bb492242f8" == tree_hash(dir)
     end
 
     # Test for empty directory hashing
