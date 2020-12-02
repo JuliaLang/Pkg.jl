@@ -1435,7 +1435,8 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 Pkg.resolve(; io=devnull)
                 @debug "Using _parent_ dep graph"
             catch err# TODO
-                @error err
+                @debug err
+                @warn "Could not use exact versions of packages in manifest, re-resolving"
                 temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
                 Pkg.resolve(temp_ctx; io=devnull)
                 @debug "Using _clean_ dep graph"
