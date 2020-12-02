@@ -1382,8 +1382,11 @@ end
 
 function abspath!(env::EnvCache, manifest::Dict{UUID,PackageEntry})
     for (uuid, entry) in manifest
-        entry.path !== nothing || continue
-        entry.path = project_rel_path(env, entry.path)
+        if is_stdlib(uuid)
+            entry.path = Types.stdlib_path(entry.name)
+        elseif entry.path !== nothing
+            entry.path = project_rel_path(env, entry.path)
+        end
     end
     return manifest
 end
