@@ -948,7 +948,10 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         was_recompiled[pkgid] = false
         if haskey(man, pkgid.uuid)
             pkgent = man[pkgid.uuid]
-            push!(pkg_specs, PackageSpec(uuid = pkgid.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
+            # If we have an unusual situation such as an un-versioned package (like an stdlib that
+            # is being overridden) its `version` may be `nothing`.
+            pkgver = something(pkgent.version, VersionSpec())
+            push!(pkg_specs, PackageSpec(uuid = pkgid.uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash))
         end
     end
     precomp_prune_suspended!(pkg_specs)
