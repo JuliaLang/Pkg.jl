@@ -1444,8 +1444,11 @@ abspath!(ctx::Context, manifest::Dict{UUID,PackageEntry}) =
     abspath!(dirname(ctx.env.project_file), manifest)
 function abspath!(project::String, manifest::Dict{UUID,PackageEntry})
     for (uuid, entry) in manifest
-        entry.path !== nothing || continue
-        entry.path = project_rel_path(project, entry.path)
+        if is_stdlib(uuid)
+            entry.path = Types.stdlib_path(entry.name)
+        elseif entry.path !== nothing
+            entry.path = project_rel_path(project, entry.path)
+        end
     end
     return manifest
 end
