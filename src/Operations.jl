@@ -1444,8 +1444,9 @@ abspath!(ctx::Context, manifest::Dict{UUID,PackageEntry}) =
     abspath!(dirname(ctx.env.project_file), manifest)
 function abspath!(project::String, manifest::Dict{UUID,PackageEntry})
     for (uuid, entry) in manifest
-        entry.path !== nothing || continue
-        entry.path = project_rel_path(project, entry.path)
+        if entry.path !== nothing
+            entry.path = project_rel_path(project, entry.path)
+        end
     end
     return manifest
 end
@@ -1487,21 +1488,33 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 end
             end
         end
+
         Types.write_manifest(working_manifest, tmp_manifest)
         # sandbox
         with_temp_env(tmp) do
             temp_ctx = Context()
             temp_ctx.env.project.deps[target.name] = target.uuid
-            write_env(temp_ctx.env, update_undo = false)
+
             try
-                Pkg.resolve(; io=devnull)
+                Pkg.resolve(temp_ctx; io=devnull)
                 @debug "Using _parent_ dep graph"
             catch err# TODO
-                @error err
+                err isa Resolve.ResolverError || rethrow()
+                @debug err
+                @warn "Could not use exact versions of packages in manifest, re-resolving"
                 temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
                 Pkg.resolve(temp_ctx; io=devnull)
                 @debug "Using _clean_ dep graph"
             end
+
+            # Absolutify stdlibs paths
+            for (uuid, entry) in temp_ctx.env.manifest
+                if is_stdlib(uuid)
+                    entry.path = Types.stdlib_path(entry.name)
+                end
+            end
+            write_env(temp_ctx.env, update_undo = false)
+
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'
             withenv(fn, "JULIA_LOAD_PATH" => "@$(path_sep)$(tmp)", "JULIA_PROJECT" => nothing)
