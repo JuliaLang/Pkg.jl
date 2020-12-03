@@ -103,7 +103,8 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(),
+                 kwargs...)
     require_not_empty(pkgs, :develop)
     foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
@@ -183,11 +184,11 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Types.update_registries(ctx.io)
+    Types.update_registries(ctx.io; ctx.stdlib_dir)
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
-    stdlib_resolve!(pkgs)
+    stdlib_resolve!(pkgs, ctx.stdlib_dir)
     ensure_resolved(ctx.env.manifest, pkgs, registry=true)
 
     for pkg in pkgs
@@ -238,7 +239,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     Context!(ctx; kwargs...)
     if update_registry
         Types.clone_default_registries(ctx)
-        Types.update_registries(ctx.io; force=true)
+        Types.update_registries(ctx.io; force=true, ctx.stdlib_dir)
     end
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
@@ -595,7 +596,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             printpkgstyle(ctx.io, :Active, "$(file_str): $(n) found")
             if verbose
                 foreach(active_index_files) do f
-                    println(ctx.io, "        $(Types.pathrepr(f))")
+                    println(ctx.io, "        $(Types.pathrepr(f, ctx.stdlib_dir))")
                 end
             end
         end
@@ -796,7 +797,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             @warn("Failed to delete $path", exception=e)
         end
         if verbose
-            printpkgstyle(ctx.io, :Deleted, Types.pathrepr(path) * " (" *
+            printpkgstyle(ctx.io, :Deleted, Types.pathrepr(path, ctx.stdlib_dir) * " (" *
                 pretty_byte_str(path_size) * ")")
         end
         return path_size
@@ -1318,14 +1319,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         if !(e isa PkgError) || update_registry == false
             rethrow(e)
         end
-        Types.update_registries(ctx.io)
+        Types.update_registries(ctx.io; ctx.stdlib_dir)
         Operations.check_registered(ctx.registries, pkgs)
     end
     new_git = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
         pkg.repo.source !== nothing || continue
-        sourcepath = Operations.source_path(ctx.env.project_file, pkg)
+        sourcepath = Operations.source_path(ctx.env.project_file, pkg, ctx.stdlib_dir)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
@@ -1375,12 +1376,12 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false,shared=false)
+function activate(;temp=false,shared=false, stdlib_dir::String=Types.default_stdlib_dir())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(DEFAULT_IO[], :Activating, "environment at $(pathrepr(p))")
+    p === nothing || printpkgstyle(DEFAULT_IO[], :Activating, "environment at $(pathrepr(p, stdlib_dir))")
     add_snapshot_to_undo()
     return nothing
 end
@@ -1401,7 +1402,7 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, stdlib_dir::String=Types.default_stdlib_dir())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1437,7 +1438,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(DEFAULT_IO[], :Activating, "$(n)environment at $(pathrepr(p))")
+        printpkgstyle(DEFAULT_IO[], :Activating, "$(n)environment at $(pathrepr(p, stdlib_dir))")
     end
     add_snapshot_to_undo()
     return nothing

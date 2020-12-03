@@ -342,6 +342,8 @@ Base.@kwdef mutable struct Context
 
     # The Julia Version to resolve with respect to
     julia_version::Union{VersionNumber,Nothing} = VERSION
+    # The stdlib dir to resolve with respect to
+    stdlib_dir::String = default_stdlib_dir()
     # test instrumenting
     status_io::Union{IO,Nothing} = nothing
 end
@@ -358,14 +360,14 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 ###########
 # Context #
 ###########
-stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
-stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
+default_stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
+stdlib_path(stdlib::String, stdlib_dir::String=default_stdlib_dir()) = joinpath(stdlib_dir, stdlib)
 
 const STDLIB = Ref{Dict{UUID,String}}()
-function load_stdlib()
+function load_stdlib(stdlib_dir::String)
     stdlib = Dict{UUID,String}()
-    for name in readdir(stdlib_dir())
-        projfile = projectfile_path(stdlib_path(name); strict=true)
+    for name in readdir(stdlib_dir)
+        projfile = projectfile_path(stdlib_path(name, stdlib_dir); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
         uuid = get(project, "uuid", nothing)
@@ -375,13 +377,13 @@ function load_stdlib()
     return stdlib
 end
 
-function stdlibs()
+function stdlibs(stdlib_dir::String=default_stdlib_dir())
     if !isassigned(STDLIB)
-        STDLIB[] = load_stdlib()
+        STDLIB[] = load_stdlib(stdlib_dir)
     end
     return STDLIB[]
 end
-is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
+is_stdlib(uuid::UUID, stdlib_dir::String=default_stdlib_dir()) = uuid in keys(stdlibs(stdlib_dir))
 
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
@@ -543,11 +545,11 @@ end
 
 add_repo_cache_path(url::String) = joinpath(depots1(), "clones", string(hash(url)))
 
-function set_repo_source_from_registry!(ctx, pkg)
+function set_repo_source_from_registry!(ctx::Context, pkg)
     registry_resolve!(ctx.registries, pkg)
     # Didn't find the package in the registry, but maybe it exists in the updated registry
     if !isresolved(pkg)
-        update_registries(ctx.io)
+        update_registries(ctx.io; stdlib_dir=ctx.stdlib_dir)
         registry_resolve!(ctx.registries, pkg)
     end
     ensure_resolved(ctx.env.manifest, [pkg]; registry=true)
@@ -645,7 +647,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
             if has_uuid(pkg)
-                version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg)
+                version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.stdlib_dir)
                 isdir(version_path) && return false
             end
 
@@ -655,7 +657,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
             # check to see if the package exists at its canonical path.
-            version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg)
+            version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.stdlib_dir)
             isdir(version_path) && return false
 
             # Otherwise, move the temporary path into its correct place and set read only
@@ -788,16 +790,16 @@ function registry_resolve!(registries::Vector{RegistryHandling.Registry}, pkgs::
     return pkgs
 end
 
-function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
+function stdlib_resolve!(pkgs::AbstractVector{PackageSpec}, stdlib_dir::String=default_stdlib_dir())
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in stdlibs()
+            for (uuid, name) in stdlibs(stdlib_dir)
                 name == pkg.name && (pkg.uuid = uuid)
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name = get(stdlibs(), pkg.uuid, nothing)
+            name = get(stdlibs(stdlib_dir), pkg.uuid, nothing)
             nothing !== name && (pkg.name = name)
         end
     end
@@ -873,7 +875,7 @@ function clone_default_registries(ctx::Context; only_if_empty = true)
     # Only clone if there are no installed registries, unless called
     # with false keyword argument.
     if isempty(installed_registries) || !only_if_empty
-        printpkgstyle(ctx.io, :Installing, "known registries into $(pathrepr(depots1()))")
+        printpkgstyle(ctx.io, :Installing, "known registries into $(pathrepr(depots1(), ctx.stdlib_dir))")
         registries = copy(DEFAULT_REGISTRIES)
         for uuid in keys(pkg_server_registry_urls())
             if !(uuid in (reg.uuid for reg in registries))
@@ -1102,14 +1104,14 @@ end
 
 # entry point for `registry up`
 function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registries(depots1());
-                           force::Bool=false)
+                           force::Bool=false, stdlib_dir::String)
     Pkg.OFFLINE_MODE[] && return
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
     errors = Tuple{String, String}[]
     registry_urls = nothing
     for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{Union{UUID,Nothing}}())
         let reg=reg
-            regpath = pathrepr(reg.path)
+            regpath = pathrepr(reg.path, stdlib_dir)
             if isfile(joinpath(reg.path, ".tree_info.toml"))
                 printpkgstyle(io, :Updating, "registry at " * regpath)
                 tree_info = parse_toml(joinpath(reg.path, ".tree_info.toml"))
@@ -1267,9 +1269,9 @@ function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=fa
 end
 
 
-function pathrepr(path::String)
+function pathrepr(path::String, stdlib_dir::String=default_stdlib_dir())
     # print stdlib paths as @stdlib/Name
-    if startswith(path, stdlib_dir())
+    if startswith(path, stdlib_dir)
         path = "@stdlib/" * basename(path)
     end
     return "`" * Base.contractuser(path) * "`"
