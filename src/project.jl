@@ -125,13 +125,17 @@ function Project(raw::Dict)
 end
 
 function read_project(f_or_io::Union{String, IO})
-    raw = if f_or_io isa IO
-        TOML.tryparse(read(f_or_io, String))
-    else
-        isfile(f_or_io) ? TOML.tryparsefile(f_or_io) : return Project()
-    end
-    if raw isa TOML.ParserError
-        pkgerror("Could not parse project: ", sprint(showerror, raw))
+    raw = try
+        if f_or_io isa IO
+            TOML.parse(read(f_or_io, String))
+        else
+            isfile(f_or_io) ? parse_toml(f_or_io) : return Project()
+        end
+    catch e
+        if e isa TOML.ParserError
+            pkgerror("Could not parse project: ", sprint(showerror, e))
+        end
+        rethrow()
     end
     return Project(raw)
 end

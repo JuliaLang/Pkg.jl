@@ -36,6 +36,30 @@ export UUID, SHA1, VersionRange, VersionSpec,
 
 const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 
+deepcopy_toml(x) = x
+function deepcopy_toml(@nospecialize(x::Vector))
+    d = similar(x)
+    for (i, v) in enumerate(x)
+        d[i] = deepcopy_toml(v)
+    end
+    return d
+end
+function deepcopy_toml(x::Dict{String, Any})
+    d = Dict{String, Any}()
+    sizehint!(d, length(x))
+    for (k, v) in x
+        d[k] = deepcopy_toml(v)
+    end
+    return d
+end
+
+# See loading.jl
+const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
+const TOML_LOCK = ReentrantLock()
+# Some functions mutate the returning Dict so return a copy of the cached value here
+parse_toml(toml_file::AbstractString) =
+    Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
+
 #################
 # Pkg Error #
 #################
@@ -318,7 +342,6 @@ Base.@kwdef mutable struct Context
 
     # The Julia Version to resolve with respect to
     julia_version::Union{VersionNumber,Nothing} = VERSION
-    parser::TOML.Parser = TOML.Parser()
     # test instrumenting
     status_io::Union{IO,Nothing} = nothing
 end
@@ -344,7 +367,7 @@ function load_stdlib()
     for name in readdir(stdlib_dir())
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
-        project = TOML.parsefile(projfile)
+        project = parse_toml(projfile)
         uuid = get(project, "uuid", nothing)
         nothing === uuid && continue
         stdlib[UUID(uuid)] = name
@@ -1020,7 +1043,7 @@ function clone_or_cp_registries(io::IO, regs::Vector{RegistrySpec}, depot::Strin
 end
 
 function read_registry(reg_file; cache=true)
-    return TOML.parsefile(reg_file)
+    return parse_toml(reg_file)
 end
 
 # verify that the registry looks like a registry
@@ -1089,7 +1112,7 @@ function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registri
             regpath = pathrepr(reg.path)
             if isfile(joinpath(reg.path, ".tree_info.toml"))
                 printpkgstyle(io, :Updating, "registry at " * regpath)
-                tree_info = TOML.parsefile(joinpath(reg.path, ".tree_info.toml"))
+                tree_info = parse_toml(joinpath(reg.path, ".tree_info.toml"))
                 old_hash = tree_info["git-tree-sha1"]
                 url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
                 if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
@@ -1300,12 +1323,5 @@ Base.@kwdef struct ProjectInfo
     path::String
 end
 
-# TOML stuff
-
-parse_toml(ctx::Context, path::String; fakeit::Bool=false) =
-    parse_toml(ctx.parser, path; fakeit)
-parse_toml(path::String; fakeit::Bool=false) = parse_toml(TOML.Parser(), path; fakeit)
-parse_toml(parser::TOML.Parser, path::String; fakeit::Bool=false) =
-    !fakeit || isfile(path) ? TOML.parsefile(parser, path) : Dict{String,Any}()
 
 end # module

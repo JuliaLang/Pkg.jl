@@ -158,14 +158,18 @@ function Manifest(raw::Dict)::Manifest
     return validate_manifest(stage1)
 end
 
-function read_manifest(f_or_io::Union{String,IO})
-    raw = if f_or_io isa IO
-        TOML.tryparse(read(f_or_io, String))
-    else
-        isfile(f_or_io) ? TOML.tryparsefile(f_or_io) : return Dict{UUID,PackageEntry}()
-    end
-    if raw isa TOML.ParserError
-        pkgerror("Could not parse manifest: ", sprint(showerror, raw))
+function read_manifest(f_or_io::Union{String, IO})
+    raw = try
+        if f_or_io isa IO
+            TOML.parse(read(f_or_io, String))
+        else
+            isfile(f_or_io) ? parse_toml(f_or_io) : return Manifest()
+        end
+    catch e
+        if e isa TOML.ParserError
+            pkgerror("Could not parse manifest: ", sprint(showerror, e))
+        end
+        rethrow()
     end
     return Manifest(raw)
 end
