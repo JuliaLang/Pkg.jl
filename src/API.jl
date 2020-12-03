@@ -103,7 +103,8 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(),
+                 kwargs...)
     require_not_empty(pkgs, :develop)
     foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
@@ -183,11 +184,11 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Types.update_registries(ctx.io)
+    Types.update_registries(ctx.io; ctx.stdlib_dir)
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
-    stdlib_resolve!(pkgs)
+    stdlib_resolve!(pkgs, ctx.stdlib_dir)
     ensure_resolved(ctx.env.manifest, pkgs, registry=true)
 
     for pkg in pkgs
@@ -238,7 +239,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     Context!(ctx; kwargs...)
     if update_registry
         Types.clone_default_registries(ctx)
-        Types.update_registries(ctx.io; force=true)
+        Types.update_registries(ctx.io; force=true, ctx.stdlib_dir)
     end
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
@@ -595,7 +596,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             printpkgstyle(ctx.io, :Active, "$(file_str): $(n) found")
             if verbose
                 foreach(active_index_files) do f
-                    println(ctx.io, "        $(Types.pathrepr(f))")
+                    println(ctx.io, "        $(Types.pathrepr(f, ctx.stdlib_dir))")
                 end
             end
         end
@@ -796,7 +797,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             @warn("Failed to delete $path", exception=e)
         end
         if verbose
-            printpkgstyle(ctx.io, :Deleted, Types.pathrepr(path) * " (" *
+            printpkgstyle(ctx.io, :Deleted, Types.pathrepr(path, ctx.stdlib_dir) * " (" *
                 pretty_byte_str(path_size) * ")")
         end
         return path_size
@@ -1318,14 +1319,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         if !(e isa PkgError) || update_registry == false
             rethrow(e)
         end
-        Types.update_registries(ctx.io)
+        Types.update_registries(ctx.io; ctx.stdlib_dir)
         Operations.check_registered(ctx.registries, pkgs)
     end
     new_git = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
         pkg.repo.source !== nothing || continue
-        sourcepath = Operations.source_path(ctx.env.project_file, pkg)
+        sourcepath = Operations.source_path(ctx.env.project_file, pkg, ctx.stdlib_dir)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source

@@ -37,14 +37,14 @@ end
 
 # more accurate name is `should_be_tracking_registered_version`
 # the only way to know for sure is to key into the registries
-tracking_registered_version(pkg) =
-    !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.source === nothing
+tracking_registered_version(pkg, stdlib_dir::String=Types.default_stdlib_dir()) =
+    !is_stdlib(pkg.uuid, stdlib_dir) && pkg.path === nothing && pkg.repo.source === nothing
 
-function source_path(project_file::String, pkg::PackageSpec)
-    return is_stdlib(pkg.uuid)      ? Types.stdlib_path(pkg.name) :
-        pkg.path        !== nothing ? joinpath(dirname(project_file), pkg.path) :
-        pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
+function source_path(project_file::String, pkg::PackageSpec, stdlib_dir::String=Types.default_stdlib_dir())
+    return is_stdlib(pkg.uuid, stdlib_dir) ? Types.stdlib_path(pkg.name, stdlib_dir) :
+        pkg.path        !== nothing        ? joinpath(dirname(project_file), pkg.path) :
+        pkg.repo.source !== nothing        ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
+        pkg.tree_hash   !== nothing        ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         nothing
 end
 
@@ -115,7 +115,7 @@ function is_instantiated(env::EnvCache)::Bool
     return all(pkg -> is_package_downloaded(env.project_file, pkg), pkgs)
 end
 
-function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map)
+function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, stdlib_dir::String=Types.default_stdlib_dir())
     manifest_before = deepcopy(env.manifest)
     manifest = env.manifest
     empty!(manifest)
@@ -125,7 +125,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map)
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
                              tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo)
-        is_stdlib(pkg.uuid) && (entry.version = nothing) # do not set version for stdlibs
+        is_stdlib(pkg.uuid, stdlib_dir) && (entry.version = nothing) # do not set version for stdlibs
         if Types.is_project(env, pkg)
             entry.deps = env.project.deps
         else
@@ -159,8 +159,8 @@ end
 # Registry Loading #
 ####################
 
-function load_tree_hash!(registries::Vector{Registry}, pkg::PackageSpec)
-    tracking_registered_version(pkg) || return pkg
+function load_tree_hash!(registries::Vector{Registry}, pkg::PackageSpec, stdlib_dir::String=Types.default_stdlib_dir())
+    tracking_registered_version(pkg, stdlib_dir) || return pkg
     hash = nothing
     for reg in registries
         reg_pkg = get(reg, pkg.uuid, nothing)
@@ -214,8 +214,8 @@ is_tracking_repo(pkg) = pkg.repo.source !== nothing
 is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
-function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
-    source = project_rel_path(env, source_path(env.project_file, pkg))
+function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec}, stdlib_dir::String=Types.default_stdlib_dir())
+    source = project_rel_path(env, source_path(env.project_file, pkg, stdlib_dir))
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_all_deps(source_env)
     for pkg in filter(is_tracking_path, pkgs)
@@ -225,7 +225,7 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
         # normalize path
         pkg.path = Types.relative_project_path(env.project_file,
                    project_rel_path(source_env,
-                   source_path(source_env.project_file, pkg)))
+                   source_path(source_env.project_file, pkg, stdlib_dir)))
         push!(developed, pkg)
         collect_developed!(env, pkg, developed)
     end
@@ -239,7 +239,7 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     return developed
 end
 
-function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
+function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, stdlib_dir::String=Types.default_stdlib_dir())
     deps_map = Dict{UUID,Vector{PackageSpec}}()
     if env.pkg !== nothing
         pkg = env.pkg
@@ -247,7 +247,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         names[pkg.uuid] = pkg.name
     end
     for pkg in pkgs
-        path = project_rel_path(env, source_path(env.project_file, pkg))
+        path = project_rel_path(env, source_path(env.project_file, pkg, stdlib_dir))
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
         end
@@ -283,7 +283,7 @@ end
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
 # all versioned packges should have a `tree_hash`
-function resolve_versions!(env::EnvCache, registries::Vector{Registry}, pkgs::Vector{PackageSpec}, julia_version)
+function resolve_versions!(env::EnvCache, registries::Vector{Registry}, pkgs::Vector{PackageSpec}, julia_version, stdlib_dir::String=Types.default_stdlib_dir())
     # compatibility
     if julia_version !== nothing
         v = intersect(julia_version, project_compatibility(env, "julia"))
@@ -291,7 +291,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry}, pkgs::Ve
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
     end
-    names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
+    names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs(stdlib_dir))
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
     # But we only want to use information for those packages that we don't know about
@@ -338,7 +338,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry}, pkgs::Ve
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
-            name = is_stdlib(uuid) ? stdlibs()[uuid] : registered_name(registries, uuid)
+            name = is_stdlib(uuid, stdlib_dir) ? stdlibs(stdlib_dir)[uuid] : registered_name(registries, uuid)
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
@@ -371,7 +371,7 @@ get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::Dict{UUID,String},
-                    reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version)
+                    reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version, stdlib_dir::String=Types.default_stdlib_dir())
     uuids = Set{UUID}()
     union!(uuids, keys(reqs))
     union!(uuids, keys(fixed))
@@ -397,8 +397,8 @@ function deps_graph(env::EnvCache, registries::Vector{Registry}, uuid_to_name::D
             all_compat_u   = get_or_make!(all_compat,   uuid)
 
             # Collect deps + compat for stdlib
-            if is_stdlib(uuid)
-                path = Types.stdlib_path(stdlibs()[uuid])
+            if is_stdlib(uuid, stdlib_dir)
+                path = Types.stdlib_path(stdlibs(stdlib_dir)[uuid], stdlib_dir)
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
                 proj = read_package(proj_file)
@@ -583,12 +583,12 @@ function install_git(
 end
 
 function download_artifacts(env::EnvCache, pkgs::Vector{PackageSpec}; platform::AbstractPlatform=HostPlatform(),
-                            verbose::Bool=false)
+                            verbose::Bool=false, stdlib_dir::String=Types.default_stdlib_dir())
     # Filter out packages that have no source_path()
     # pkg_roots = String[p for p in source_path.((env.project_file,), pkgs) if p !== nothing]  # this runs up against inference limits?
     pkg_roots = String[]
     for pkg in pkgs
-        p = source_path(env.project_file, pkg)
+        p = source_path(env.project_file, pkg, stdlib_dir)
         p !== nothing && push!(pkg_roots, p)
     end
     return download_artifacts(pkg_roots; platform=platform, verbose=verbose)
@@ -634,7 +634,7 @@ end
 
 # install & update manifest
 function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
-    pkgs = filter(tracking_registered_version, pkgs)
+    pkgs = filter(x->tracking_registered_version(x, ctx.stdlib_dir), pkgs)
     urls = load_urls(ctx.registries, pkgs)
     return download_source(ctx, pkgs, urls; readonly=readonly)
 end
@@ -646,7 +646,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
 
     pkgs_to_install = Tuple{PackageSpec, String}[]
     for pkg in pkgs
-        path = source_path(ctx.env.project_file, pkg)
+        path = source_path(ctx.env.project_file, pkg, ctx.stdlib_dir)
         ispath(path) && continue
         push!(pkgs_to_install, (pkg, path))
         push!(new_pkgs, pkg)
@@ -783,9 +783,9 @@ end
 #########
 # Build #
 #########
-function _get_deps!(env::EnvCache, pkgs::Vector{PackageSpec}, uuids::Vector{UUID})
+function _get_deps!(env::EnvCache, pkgs::Vector{PackageSpec}, uuids::Vector{UUID}, stdlib_dir::String=Types.default_stdlib_dir())
     for pkg in pkgs
-        is_stdlib(pkg.uuid) && continue
+        is_stdlib(pkg.uuid, stdlib_dir) && continue
         pkg.uuid in uuids && continue
         push!(uuids, pkg.uuid)
         if Types.is_project(env, pkg)
@@ -811,12 +811,12 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}, verbose::Bool)
     build_versions(ctx, uuids; verbose)
 end
 
-function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID,Int}
+function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID}, stdlib_dir::String=Types.default_stdlib_dir())::Dict{UUID,Int}
     order = Dict{UUID,Int}()
     seen = UUID[]
     k = 0
     function visit(uuid::UUID)
-        is_stdlib(uuid) && return
+        is_stdlib(uuid, stdlib_dir) && return
         uuid in seen &&
             return @warn("Dependency graph not a DAG, linearizing anyway")
         haskey(order, uuid) && return
@@ -856,7 +856,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
     # collect builds for UUIDs with `deps/build.jl` files
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
-        is_stdlib(uuid) && continue
+        is_stdlib(uuid, ctx.stdlib_dir) && continue
         if Types.is_project_uuid(ctx.env, uuid)
             path = dirname(ctx.env.project_file)
             name = ctx.env.pkg.name
@@ -922,7 +922,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
         fancyprint && print_progress_bottom(ctx.io)
 
         printpkgstyle(ctx.io, :Building,
-                      rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file))
+                      rpad(name * " ", max_name + 1, "─") * "→ " * Types.pathrepr(log_file, ctx.stdlib_dir))
         bar.current = n-1
 
         fancyprint && show_progress(ctx.io, bar)
@@ -1040,7 +1040,7 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
     if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
         return pkg # overwrite everything, nothing to copy over
     end
-    if is_stdlib(pkg.uuid)
+    if is_stdlib(pkg.uuid, ctx.stdlib_dir)
         return pkg # stdlibs are not versioned like other packages
     elseif is_dep && ((isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
                       (!isa(pkg.version, VersionNumber) && entry.version ∈ pkg.version))
@@ -1052,8 +1052,8 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
     return pkg
 end
 
-function is_all_registered(registries::Vector{Registry}, pkgs::Vector{PackageSpec})
-    pkgs = filter(tracking_registered_version, pkgs)
+function is_all_registered(registries::Vector{Registry}, pkgs::Vector{PackageSpec}, stdlib_dir::String=Types.default_stdlib_dir())
+    pkgs = filter(x->tracking_registered_version(x, stdlib_dir), pkgs)
     for pkg in pkgs
         if !any(r->haskey(r, pkg.uuid), registries)
             return pkg
@@ -1147,7 +1147,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
     # resolve
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-    update_manifest!(ctx.env, pkgs, deps_map)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.stdlib_dir)
     new_apply = download_source(ctx, pkgs)
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
@@ -1169,7 +1169,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     end
     # resolve & apply package versions
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-    update_manifest!(ctx.env, pkgs, deps_map)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.stdlib_dir)
     new_apply = download_source(ctx, pkgs; readonly=true)
     download_artifacts(ctx.env, pkgs; platform=platform)
     write_env(ctx.env) # write env before building
@@ -1234,7 +1234,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
     check_registered(ctx.registries, pkgs)
     deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version)
-    update_manifest!(ctx.env, pkgs, deps_map)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.stdlib_dir)
     new_apply = download_source(ctx, pkgs)
     download_artifacts(ctx.env, pkgs)
     write_env(ctx.env) # write env before building
@@ -1242,7 +1242,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
-function update_package_pin!(registries::Vector{Registry}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
+function update_package_pin!(registries::Vector{Registry}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry}, stdlib_dir::String=Types.default_stdlib_dir())
     if entry === nothing
         pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
     end
@@ -1252,7 +1252,7 @@ function update_package_pin!(registries::Vector{Registry}, pkg::PackageSpec, ent
     #end
     # update pinned package
     pkg.pinned = true
-    if is_stdlib(pkg.uuid)
+    if is_stdlib(pkg.uuid, stdlib_dir)
         return nothing # nothing left to do
     elseif pkg.version == VersionSpec()
         pkg.version = entry.version # pin at current version
@@ -1275,7 +1275,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     pkgs = load_direct_deps(ctx.env, pkgs)
 
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
-    update_manifest!(ctx.env, pkgs, deps_map)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.stdlib_dir)
 
     new = download_source(ctx, pkgs)
     download_artifacts(ctx.env, pkgs)
@@ -1284,10 +1284,10 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
 
-function update_package_free!(registries::Vector{Registry}, pkg::PackageSpec, entry::PackageEntry)
+function update_package_free!(registries::Vector{Registry}, pkg::PackageSpec, entry::PackageEntry, stdlib_dir::String=Types.default_stdlib_dir())
     if entry.pinned
         pkg.pinned = false
-        is_stdlib(pkg.uuid) && return # nothing left to do
+        is_stdlib(pkg.uuid, stdlib_dir) && return # nothing left to do
         pkg.version = entry.version
         pkg.repo = entry.repo
         pkg.tree_hash = entry.tree_hash
@@ -1313,7 +1313,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         pkgs = load_direct_deps(ctx.env, pkgs)
         check_registered(ctx.registries, pkgs)
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
-        update_manifest!(ctx.env, pkgs, deps_map)
+        update_manifest!(ctx.env, pkgs, deps_map, ctx.stdlib_dir)
         new = download_source(ctx, pkgs)
         download_artifacts(ctx.env, new)
         write_env(ctx.env) # write env before building
@@ -1447,8 +1447,8 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
 
             # Absolutify stdlibs paths
             for (uuid, entry) in temp_ctx.env.manifest
-                if is_stdlib(uuid)
-                    entry.path = Types.stdlib_path(entry.name)
+                if is_stdlib(uuid, ctx.stdlib_dir)
+                    entry.path = Types.stdlib_path(entry.name, ctx.stdlib_dir)
                 end
             end
             write_env(temp_ctx.env, update_undo = false)
@@ -1460,8 +1460,8 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
     end
 end
 
-function update_package_test!(pkg::PackageSpec, entry::PackageEntry)
-    is_stdlib(pkg.uuid) && return
+function update_package_test!(pkg::PackageSpec, entry::PackageEntry, stdlib_dir::String=Types.default_stdlib_dir())
+    is_stdlib(pkg.uuid, stdlib_dir) && return
     pkg.version = entry.version
     pkg.tree_hash = entry.tree_hash
     pkg.repo = entry.repo
@@ -1488,7 +1488,7 @@ function parse_REQUIRE(require_path::String)
 end
 
 # "targets" based test deps -> "test/Project.toml" based deps
-function gen_target_project(env::EnvCache, registries::Vector{Registry}, pkg::PackageSpec, source_path::String, target::String)
+function gen_target_project(env::EnvCache, registries::Vector{Registry}, pkg::PackageSpec, source_path::String, target::String, stdlib_dir::String=Types.default_stdlib_dir())
     test_project = Types.Project()
     if projectfile_path(source_path; strict=true) === nothing
         # no project file, assuming this is an old REQUIRE package
@@ -1500,7 +1500,7 @@ function gen_target_project(env::EnvCache, registries::Vector{Registry}, pkg::Pa
                 test_pkgs = parse_REQUIRE(test_REQUIRE_path)
                 package_specs = [PackageSpec(name=pkg) for pkg in test_pkgs]
                 registry_resolve!(registries, package_specs)
-                stdlib_resolve!(package_specs)
+                stdlib_resolve!(package_specs, stdlib_dir)
                 ensure_resolved(env.manifest, package_specs, registry=true)
                 for spec in package_specs
                     test_project.deps[spec.name] = spec.uuid
@@ -1551,7 +1551,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     missing_runtests = String[]
     source_paths     = String[]
     for pkg in pkgs
-        sourcepath = project_rel_path(ctx.env, source_path(ctx.env.project_file, pkg)) # TODO
+        sourcepath = project_rel_path(ctx.env, source_path(ctx.env.project_file, pkg, ctx.stdlib_dir)) # TODO
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
         push!(source_paths, sourcepath)
     end
@@ -1616,7 +1616,7 @@ function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
     package_info(env, pkg, entry)
 end
 
-function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
+function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry, stdlib_dir::String=Types.default_stdlib_dir())::PackageInfo
     git_source = pkg.repo.source === nothing ? nothing :
         isurl(pkg.repo.source) ? pkg.repo.source :
         project_rel_path(env, pkg.repo.source)
@@ -1631,7 +1631,7 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
         is_tracking_registry = is_tracking_registry(pkg),
         git_revision         = pkg.repo.rev,
         git_source           = git_source,
-        source               = project_rel_path(env, source_path(env.project_file, pkg)),
+        source               = project_rel_path(env, source_path(env.project_file, pkg, stdlib_dir)),
         dependencies         = copy(entry.deps), #TODO is copy needed?
     )
     return info
@@ -1639,7 +1639,7 @@ end
 
 # Display
 
-function stat_rep(x::PackageSpec; name=true)
+function stat_rep(x::PackageSpec; name=true, stdlib_dir::String=Types.default_stdlib_str())
     name = name ? "$(x.name)" : ""
     version = x.version == VersionSpec() ? "" : "v$(x.version)"
     rev = ""
@@ -1648,7 +1648,7 @@ function stat_rep(x::PackageSpec; name=true)
     end
     subdir_str = x.repo.subdir === nothing ? "" : ":$(x.repo.subdir)"
     repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
-    path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
+    path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path, stdlib_dir))" : ""
     pinned = x.pinned ? "⚲" : ""
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
 end
@@ -1656,7 +1656,7 @@ end
 print_single(io::IO, pkg::PackageSpec) = printstyled(io, stat_rep(pkg); color=:white)
 
 is_instantiated(::Nothing) = false
-is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)
+is_instantiated(x::PackageSpec, stdlib_dir::String=Types.default_stdlib_dir()) = x.version != VersionSpec() || is_stdlib(x.uuid, stdlib_dir)
 function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec})
     if !is_instantiated(old) && is_instantiated(new)
         printstyled(io, "+ $(stat_rep(new))"; color=:light_green)
@@ -1690,8 +1690,8 @@ function diff_array(old_ctx::Union{Context,Nothing}, new_ctx::Context; manifest=
     return Tuple{T,S,S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T,S,S} for uuid in all_uuids]
 end
 
-function is_package_downloaded(project_file::String, pkg::PackageSpec)
-    sourcepath = source_path(project_file, pkg)
+function is_package_downloaded(project_file::String, pkg::PackageSpec, stdlib_dir::String=Types.default_stdlib_dir())
+    sourcepath = source_path(project_file, pkg, stdlib_dir)
     @assert sourcepath !== nothing
     isdir(sourcepath) || return false
     check_artifacts_downloaded(sourcepath) || return false
@@ -1707,25 +1707,25 @@ function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Sym
     xs = diff_array(old_ctx, ctx; manifest=manifest)
     # filter and return early if possible
     if isempty(xs) && !diff
-        printpkgstyle(ctx.io, header, "$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file)) (empty " *
+        printpkgstyle(ctx.io, header, "$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file, ctx.stdlib_dir)) (empty " *
                       (manifest ? "manifest" : "project") * ")", true)
         return nothing
     end
     xs = !diff ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if old != new]
     if isempty(xs)
-        printpkgstyle(ctx.io, Symbol("No Changes"), "to $(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))", true)
+        printpkgstyle(ctx.io, Symbol("No Changes"), "to $(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file, ctx.stdlib_dir))", true)
         return nothing
     end
     xs = !filter ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
     if isempty(xs)
         printpkgstyle(ctx.io, Symbol("No Matches"),
-                      "in $(diff ? "diff for " : "")$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file))", true)
+                      "in $(diff ? "diff for " : "")$(pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file, ctx.stdlib_dir))", true)
         return nothing
     end
     # main print
-    printpkgstyle(ctx.io, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file), true)
+    printpkgstyle(ctx.io, header, pathrepr(manifest ? ctx.env.manifest_file : ctx.env.project_file, ctx.stdlib_dir), true)
     # Sort stdlibs and _jlls towards the end in status output
-    xs = sort!(xs, by = (x -> (is_stdlib(x[1]), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
+    xs = sort!(xs, by = (x -> (is_stdlib(x[1], ctx.stdlib_dir), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
     all_packages_downloaded = true
     for (uuid, old, new) in xs
         if Types.is_project_uuid(ctx.env, uuid)

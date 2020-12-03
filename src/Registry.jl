@@ -24,10 +24,10 @@ Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add([RegistrySpec(name = name) for name in regs]; kwargs...)
 add(regs::Vector{RegistrySpec}; kwargs...) = add(Context(), regs; kwargs...)
-function add(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
+function add(ctx::Context, regs::Vector{RegistrySpec};kwargs...)
     Context!(ctx; kwargs...)
     if isempty(regs)
-        Types.clone_default_registries(ctx, only_if_empty = false)
+        Types.clone_default_registries(ctx; only_if_empty = false)
     else
         Types.clone_or_cp_registries(ctx.io, regs)
     end
@@ -83,7 +83,7 @@ function update(ctx::Context,
                 kwargs...)
     isempty(regs) && (regs = Types.collect_registries(depots1()))
     Context!(ctx; kwargs...)
-    Types.update_registries(ctx.io, regs; force=true)
+    Types.update_registries(ctx.io, regs; force=true, ctx.stdlib_dir)
 end
 
 """
