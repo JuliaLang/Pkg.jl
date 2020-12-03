@@ -108,6 +108,10 @@ end
             Pkg.generate("Dep3")
             Pkg.generate("Dep4")
             Pkg.generate("Dep5")
+            Pkg.generate("NoVersion")
+            open(joinpath("NoVersion","Project.toml"), "w") do io
+                write(io, "name = \"NoVersion\"\nuuid = \"$(UUIDs.uuid4())\"")
+            end
             Pkg.generate("BrokenDep")
             open(joinpath("BrokenDep","src","BrokenDep.jl"), "w") do io
                 write(io, "module BrokenDep\nerror()\nend")
@@ -128,6 +132,7 @@ end
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
         println("Auto precompilation enabled")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
+        Pkg.develop(Pkg.PackageSpec(path="packages/NoVersion")) # a package with no version number
         Pkg.build(io=iob) # should trigger auto-precomp
         @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
