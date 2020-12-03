@@ -1027,6 +1027,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(), percentage=false, always_reprint=true)
             n_total = length(depsmap)
             bar.max = n_total - n_already_precomp
+            final_loop = false
             while !printloop_should_exit
                 lock(print_lock) do
                     term_size = Base.displaysize(stdout)::Tuple{Int,Int}
@@ -1067,7 +1068,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     last_length = length(pkg_queue_show)
                     print(io, str)
                 end
-                printloop_should_exit = interrupted_or_done.set
+                printloop_should_exit = interrupted_or_done.set && final_loop
+                final_loop = interrupted_or_done.set # ensures one more loop to tidy last task after finish
                 i += 1
                 wait(t)
             end
