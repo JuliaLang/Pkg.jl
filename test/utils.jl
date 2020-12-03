@@ -206,7 +206,7 @@ end
 function git_init_package(tmp, path)
     base = basename(path)
     pkgpath = joinpath(tmp, base)
-    cp(pkgpath, path)
+    cp(path, pkgpath)
     git_init_and_commit(pkgpath)
     return pkgpath
 end
