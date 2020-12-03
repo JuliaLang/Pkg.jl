@@ -1004,7 +1004,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 println(io, " Interrupted: Exiting precompilation...")
             end
         else
-            rethrow(err)
+            @error "Pkg.precompile error" exception=(err, catch_backtrace())
         end
     end
 
@@ -1023,6 +1023,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(), percentage=false, always_reprint=true)
             n_total = length(depsmap)
             bar.max = n_total - n_already_precomp
+            final_loop = false
             while !printloop_should_exit
                 lock(print_lock) do
                     term_size = Base.displaysize(stdout)::Tuple{Int,Int}
@@ -1053,7 +1054,9 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                                 filter!(!isequal(dep), pkg_queue)
                             end
                         elseif started[dep]
-                            anim_char = anim_chars[i % length(anim_chars) + 1]
+                            # Offset each spinner animation using the first character in the package name as the seed.
+                            # If not offset, on larger terminal fonts it looks odd that they all sync-up
+                            anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
                             anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                             str *= string("  $anim_char_colored ", name, "\n")
                         else
@@ -1063,7 +1066,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                     last_length = length(pkg_queue_show)
                     print(io, str)
                 end
-                printloop_should_exit = interrupted_or_done.set
+                printloop_should_exit = interrupted_or_done.set && final_loop
+                final_loop = interrupted_or_done.set # ensures one more loop to tidy last task after finish
                 i += 1
                 wait(t)
             end
@@ -1092,7 +1096,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
 
                 suspended = if haskey(man, pkg.uuid) # to handle the working environment uuid
                     pkgent = man[pkg.uuid]
-                    precomp_suspended(PackageSpec(uuid = pkg.uuid, name = pkgent.name, version = pkgent.version, tree_hash = pkgent.tree_hash))
+                    pkgver = something(pkgent.version, VersionSpec())
+                    precomp_suspended(PackageSpec(uuid = pkg.uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash))
                 else
                     false
                 end
