@@ -2311,6 +2311,7 @@ tree_hash(root::AbstractString) = bytes2hex(@inferred Pkg.GitTools.tree_hash(roo
         open(file, write=true) do io
             println(io, "Hello, world.")
         end
+        chmod(file, 0o644)
         # reference hash generated with command-line git
         @test "0a890bd10328d68f6d85efd2535e3a4c588ee8e6" == tree_hash(dir)
         # test with various executable bits set
