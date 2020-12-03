@@ -1376,12 +1376,12 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false,shared=false)
+function activate(;temp=false,shared=false, stdlib_dir::String=Types.default_stdlib_dir())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(DEFAULT_IO[], :Activating, "environment at $(pathrepr(p))")
+    p === nothing || printpkgstyle(DEFAULT_IO[], :Activating, "environment at $(pathrepr(p, stdlib_dir))")
     add_snapshot_to_undo()
     return nothing
 end
@@ -1402,7 +1402,7 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, stdlib_dir::String=Types.default_stdlib_dir())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1438,7 +1438,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(DEFAULT_IO[], :Activating, "$(n)environment at $(pathrepr(p))")
+        printpkgstyle(DEFAULT_IO[], :Activating, "$(n)environment at $(pathrepr(p, stdlib_dir))")
     end
     add_snapshot_to_undo()
     return nothing

@@ -1639,7 +1639,7 @@ end
 
 # Display
 
-function stat_rep(x::PackageSpec; name=true, stdlib_dir::String=Types.default_stdlib_str())
+function stat_rep(x::PackageSpec; name=true, stdlib_dir::String=Types.default_stdlib_dir())
     name = name ? "$(x.name)" : ""
     version = x.version == VersionSpec() ? "" : "v$(x.version)"
     rev = ""
@@ -1653,23 +1653,23 @@ function stat_rep(x::PackageSpec; name=true, stdlib_dir::String=Types.default_st
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
 end
 
-print_single(io::IO, pkg::PackageSpec) = printstyled(io, stat_rep(pkg); color=:white)
+print_single(io::IO, pkg::PackageSpec; stdlib_dir::String=Types.default_stdlib_dir()) = printstyled(io, stat_rep(pkg; stdlib_dir); color=:white)
 
 is_instantiated(::Nothing) = false
 is_instantiated(x::PackageSpec, stdlib_dir::String=Types.default_stdlib_dir()) = x.version != VersionSpec() || is_stdlib(x.uuid, stdlib_dir)
-function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec})
+function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec}; stdlib_dir::String=Types.default_stdlib_dir())
     if !is_instantiated(old) && is_instantiated(new)
-        printstyled(io, "+ $(stat_rep(new))"; color=:light_green)
+        printstyled(io, "+ $(stat_rep(new; stdlib_dir))"; color=:light_green)
     elseif !is_instantiated(new)
-        printstyled(io, "- $(stat_rep(old))"; color=:light_red)
+        printstyled(io, "- $(stat_rep(old; stdlib_dir))"; color=:light_red)
     elseif is_tracking_registry(old) && is_tracking_registry(new) && new.version isa VersionNumber && old.version isa VersionNumber
         if new.version > old.version
-            printstyled(io, "↑ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
+            printstyled(io, "↑ $(stat_rep(old; stdlib_dir)) ⇒ $(stat_rep(new; name=false, stdlib_dir))"; color=:light_yellow)
         else
-            printstyled(io, "↓ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_magenta)
+            printstyled(io, "↓ $(stat_rep(old; stdlib_dir)) ⇒ $(stat_rep(new; name=false, stdlib_dir))"; color=:light_magenta)
         end
     else
-        printstyled(io, "~ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
+        printstyled(io, "~ $(stat_rep(old; stdlib_dir)) ⇒ $(stat_rep(new; name=false, stdlib_dir))"; color=:light_yellow)
     end
 end
 
@@ -1735,7 +1735,7 @@ function print_status(ctx::Context, old_ctx::Union{Nothing,Context}, header::Sym
         all_packages_downloaded &= pkg_downloaded
         print(ctx.io, pkg_downloaded ? " " : not_installed_indicator)
         printstyled(ctx.io, " [", string(uuid)[1:8], "] "; color = :light_black)
-        diff ? print_diff(ctx.io, old, new) : print_single(ctx.io, new)
+        diff ? print_diff(ctx.io, old, new; stdlib_dir=ctx.stdlib_dir) : print_single(ctx.io, new; stdlib_dir=ctx.stdlib_dir)
         println(ctx.io)
     end
     if !all_packages_downloaded

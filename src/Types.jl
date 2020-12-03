@@ -361,7 +361,7 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 default_stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
-stdlib_path(stdlib::String, stdlib_dir::String) = joinpath(stdlib_dir, stdlib)
+stdlib_path(stdlib::String, stdlib_dir::String=default_stdlib_dir()) = joinpath(stdlib_dir, stdlib)
 
 const STDLIB = Ref{Dict{UUID,String}}()
 function load_stdlib(stdlib_dir::String)
@@ -549,7 +549,7 @@ function set_repo_source_from_registry!(ctx::Context, pkg)
     registry_resolve!(ctx.registries, pkg)
     # Didn't find the package in the registry, but maybe it exists in the updated registry
     if !isresolved(pkg)
-        update_registries(ctx.io, ctx.stdlib_dir)
+        update_registries(ctx.io; stdlib_dir=ctx.stdlib_dir)
         registry_resolve!(ctx.registries, pkg)
     end
     ensure_resolved(ctx.env.manifest, [pkg]; registry=true)
@@ -790,7 +790,7 @@ function registry_resolve!(registries::Vector{RegistryHandling.Registry}, pkgs::
     return pkgs
 end
 
-function stdlib_resolve!(pkgs::AbstractVector{PackageSpec}, stdlib_dir::String)
+function stdlib_resolve!(pkgs::AbstractVector{PackageSpec}, stdlib_dir::String=default_stdlib_dir())
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
@@ -1269,7 +1269,7 @@ function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=fa
 end
 
 
-function pathrepr(path::String, stdlib_dir)
+function pathrepr(path::String, stdlib_dir::String=default_stdlib_dir())
     # print stdlib paths as @stdlib/Name
     if startswith(path, stdlib_dir)
         path = "@stdlib/" * basename(path)
