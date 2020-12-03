@@ -377,13 +377,13 @@ function load_stdlib(stdlib_dir::String)
     return stdlib
 end
 
-function stdlibs(stdlib_dir::String)
+function stdlibs(stdlib_dir::String=default_stdlib_dir())
     if !isassigned(STDLIB)
         STDLIB[] = load_stdlib(stdlib_dir)
     end
     return STDLIB[]
 end
-is_stdlib(uuid::UUID, stdlib_dir::String) = uuid in keys(stdlibs(stdlib_dir))
+is_stdlib(uuid::UUID, stdlib_dir::String=default_stdlib_dir()) = uuid in keys(stdlibs(stdlib_dir))
 
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
