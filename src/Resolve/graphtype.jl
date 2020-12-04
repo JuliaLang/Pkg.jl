@@ -710,7 +710,9 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
 
     other_p, other_entry = pkgs[p0], rlog.pool[pkgs[p0]]
     other_id = pkgID(other_p, rlog)
-    if any(vmask)
+    # If all values of vmask is true i.e. all versions are allowed,
+    # don't need to print restriced by
+    if !all(vmask) && any(vmask) 
         msg = "restricted by "
         if other_p == uuid_julia
             msg *= "julia compatibility requirements "

@@ -10,3 +10,4 @@ docs/build
 .DS_Store
 /test/registries/*
 /test/loaded_depot/*
+.vscode
