@@ -1,11 +1,7 @@
-module RegistryHandling
-
-export isyanked, treehash, uncompressed_data, registry_info
-
-using Base: UUID, SHA1, RefValue
+using Base: UUID, SHA1
 using TOML
-using Pkg.Versions: VersionSpec, VersionRange
-using Pkg.LazilyInitializedFields
+using ..Versions: VersionSpec, VersionRange
+using ..LazilyInitializedFields
 
 # The content of a registry is assumed to be constant during the
 # lifetime of a `Registry`. Create a new `Registry` if you want to have
@@ -20,11 +16,6 @@ parsefile(toml_file::AbstractString) = Base.parsed_toml(toml_file, TOML_CACHE, T
 @lazy mutable struct VersionInfo
     git_tree_sha1::Base.SHA1
     yanked::Bool
-
-    # This is the uncompressed info and is lazily computed because it is kinda expensive
-    # TODO: Collapse the two dictionaries below into a single dictionary,
-    # we should only need to know the `Dict{UUID, VersionSpec}` mapping
-    # (therebe getting rid of the package names).
     @lazy uncompressed_compat::Union{Dict{UUID, VersionSpec}}
 end
 VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = VersionInfo(git_tree_sha1, yanked, uninit)
@@ -110,7 +101,7 @@ function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info
     return pkg
 end
 
-function uncompressed_data(pkg::PkgInfo)
+function compat_info(pkg::PkgInfo)
     initialize_uncompressed!(pkg)
     return Dict(v => info.uncompressed_compat for (v, info) in pkg.version_info)
 end
@@ -178,7 +169,7 @@ function init_package_info!(pkg::PkgEntry)
 end
 
 
-struct Registry
+struct RegistryInstance
     path::String
     name::String
     uuid::UUID
@@ -191,16 +182,18 @@ struct Registry
     name_to_uuids::Dict{String, Vector{UUID}}
 end
 
-function Registry(path::AbstractString)
+function RegistryInstance(path::AbstractString; parse_packages::Bool=true)
     d = parsefile(joinpath(path, "Registry.toml"))
     pkgs = Dict{UUID, PkgEntry}()
-    for (uuid, info) in d["packages"]::Dict{String, Any}
-        uuid = UUID(uuid::String)
-        info::Dict{String, Any}
-        name = info["name"]::String
-        pkgpath = info["path"]::String
-        pkg = PkgEntry(pkgpath, path, name, uuid, uninit)
-        pkgs[uuid] = pkg
+    if parse_packages
+        for (uuid, info) in d["packages"]::Dict{String, Any}
+            uuid = UUID(uuid::String)
+            info::Dict{String, Any}
+            name = info["name"]::String
+            pkgpath = info["path"]::String
+            pkg = PkgEntry(pkgpath, path, name, uuid, uninit)
+            pkgs[uuid] = pkg
+        end
     end
     tree_info_file = joinpath(path, ".tree_info.toml")
     tree_info = if isfile(tree_info_file)
@@ -208,7 +201,7 @@ function Registry(path::AbstractString)
     else
         nothing
     end
-    return Registry(
+    return RegistryInstance(
         path,
         d["name"]::String,
         UUID(d["uuid"]::String),
@@ -221,7 +214,7 @@ function Registry(path::AbstractString)
     )
 end
 
-function Base.show(io::IO, ::MIME"text/plain", r::Registry)
+function Base.show(io::IO, ::MIME"text/plain", r::RegistryInstance)
     println(io, "Registry: $(repr(r.name)) at $(repr(r.path)):")
     println(io, "  uuid: ", r.uuid)
     println(io, "  repo: ", r.repo)
@@ -231,12 +224,12 @@ function Base.show(io::IO, ::MIME"text/plain", r::Registry)
     println(io, "  packages: ", length(r.pkgs))
 end
 
-function uuids_from_name(r::Registry, name::String)
+function uuids_from_name(r::RegistryInstance, name::String)
     create_name_uuid_mapping!(r)
     return get(Vector{UUID}, r.name_to_uuids, name)
 end
 
-function create_name_uuid_mapping!(r::Registry)
+function create_name_uuid_mapping!(r::RegistryInstance)
     isempty(r.name_to_uuids) || return
     for (uuid, pkg) in r.pkgs
         uuids = get!(Vector{UUID}, r.name_to_uuids, pkg.name)
@@ -245,22 +238,38 @@ function create_name_uuid_mapping!(r::Registry)
     return
 end
 
+function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT_PATH, parse_packages::Bool=true)
+    # collect registries
+    if depots isa String
+        depots = [depots]
+    end
+    registries = RegistryInstance[]
+    for d in depots
+        isdir(d) || continue
+        reg_dir = joinpath(d, "registries")
+        isdir(reg_dir) || continue
+        for name in readdir(reg_dir)
+            file = joinpath(reg_dir, name, "Registry.toml")
+            isfile(file) || continue
+            push!(registries, RegistryInstance(joinpath(reg_dir, name); parse_packages))
+        end
+    end
+    return registries
+end
+
 # Dict interface
 
-function Base.haskey(r::Registry, uuid::UUID)
+function Base.haskey(r::RegistryInstance, uuid::UUID)
     return haskey(r.pkgs, uuid)
 end
 
-function Base.keys(r::Registry)
+function Base.keys(r::RegistryInstance)
     return keys(r.pkgs)
 end
 
-Base.getindex(r::Registry, uuid::UUID) = r.pkgs[uuid]
+Base.getindex(r::RegistryInstance, uuid::UUID) = r.pkgs[uuid]
 
-Base.get(r::Registry, uuid::UUID, default) = get(r.pkgs, uuid, default)
+Base.get(r::RegistryInstance, uuid::UUID, default) = get(r.pkgs, uuid, default)
 
-Base.iterate(r::Registry) = iterate(r.pkgs)
-Base.iterate(r::Registry, state) = iterate(r.pkgs, state)
-
-end # module
-
+Base.iterate(r::RegistryInstance) = iterate(r.pkgs)
+Base.iterate(r::RegistryInstance, state) = iterate(r.pkgs, state)

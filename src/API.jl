@@ -10,9 +10,9 @@ import LibGit2
 import Logging
 using Serialization
 
-import ..depots, ..depots1, ..logdir, ..devdir
-import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
-import ..can_fancyprint
+import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
+import ..Operations, ..GitTools, ..Pkg, ..Registry
+import ..can_fancyprint, ..pathrepr, ..isurl
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -22,10 +22,65 @@ using ..MiniProgressBars
 
 include("generate.jl")
 
+Base.@kwdef struct PackageInfo
+    name::String
+    version::Union{Nothing,VersionNumber}
+    tree_hash::Union{Nothing,String}
+    is_direct_dep::Bool
+    is_pinned::Bool
+    is_tracking_path::Bool
+    is_tracking_repo::Bool
+    is_tracking_registry::Bool
+    git_revision::Union{Nothing,String}
+    git_source::Union{Nothing,String}
+    source::String
+    dependencies::Dict{String,UUID}
+end
+
+function Base.:(==)(a::PackageInfo, b::PackageInfo)
+    return a.name == b.name && a.version == b.version && a.tree_hash == b.tree_hash &&
+        a.is_direct_dep == b.is_direct_dep &&
+        a.is_pinned == b.is_pinned && a.is_tracking_path == b.is_tracking_path &&
+        a.is_tracking_repo == a.is_tracking_repo &&
+        a.is_tracking_registry == b.is_tracking_registry &&
+        a.git_revision == b.git_revision && a.git_source == b.git_source &&
+        a.source == b.source && a.dependencies == b.dependencies
+end
+
+function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
+    entry = manifest_info(env.manifest, pkg.uuid)
+    if entry === nothing
+        pkgerror("expected package $(err_rep(pkg)) to exist in the manifest",
+                 " (use `resolve` to populate the manifest)")
+    end
+    package_info(env, pkg, entry)
+end
+
+function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
+    git_source = pkg.repo.source === nothing ? nothing :
+        isurl(pkg.repo.source) ? pkg.repo.source :
+        Operations.project_rel_path(env, pkg.repo.source)
+    info = PackageInfo(
+        name                 = pkg.name,
+        version              = pkg.version != VersionSpec() ? pkg.version : nothing,
+        tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
+        is_direct_dep        = pkg.uuid in values(env.project.deps),
+        is_pinned            = pkg.pinned,
+        is_tracking_path     = pkg.path !== nothing,
+        is_tracking_repo     = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,
+        is_tracking_registry = Operations.is_tracking_registry(pkg),
+        git_revision         = pkg.repo.rev,
+        git_source           = git_source,
+        source               = Operations.project_rel_path(env, Operations.source_path(env.project_file, pkg)),
+        dependencies         = copy(entry.deps), #TODO is copy needed?
+    )
+    return info
+end
+
 dependencies() = dependencies(EnvCache())
 function dependencies(env::EnvCache)
     pkgs = Operations.load_all_deps(env)
-    return Dict(pkg.uuid::UUID => Operations.package_info(env, pkg) for pkg in pkgs)
+    return Dict(pkg.uuid::UUID => package_info(env, pkg) for pkg in pkgs)
 end
 function dependencies(fn::Function, uuid::UUID)
     dep = get(dependencies(), uuid, nothing)
@@ -33,6 +88,16 @@ function dependencies(fn::Function, uuid::UUID)
         pkgerror("depenendency with UUID `$uuid` does not exist")
     end
     fn(dep)
+end
+
+
+Base.@kwdef struct ProjectInfo
+    name::Union{Nothing,String}
+    uuid::Union{Nothing,UUID}
+    version::Union{Nothing,VersionNumber}
+    ispackage::Bool
+    dependencies::Dict{String,UUID}
+    path::String
 end
 
 project() = project(EnvCache())
@@ -73,8 +138,8 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
+            Registry.download_default_registries(DEFAULT_IO[])
             ctx = Context()
-            Types.clone_default_registries(ctx)
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
             return ret
@@ -183,7 +248,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Types.update_registries(ctx.io)
+    Registry.update(; io=ctx.io, force=false)
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
@@ -237,8 +302,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
 
     Context!(ctx; kwargs...)
     if update_registry
-        Types.clone_default_registries(ctx)
-        Types.update_registries(ctx.io; force=true)
+        Registry.download_default_registries(ctx.io)
+        Registry.update(; io=ctx.io, force=true)
+        copy!(ctx.registries, Registry.reachable_registries())
     end
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
@@ -595,7 +661,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             printpkgstyle(ctx.io, :Active, "$(file_str): $(n) found")
             if verbose
                 foreach(active_index_files) do f
-                    println(ctx.io, "        $(Types.pathrepr(f))")
+                    println(ctx.io, "        $(pathrepr(f))")
                 end
             end
         end
@@ -796,7 +862,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             @warn("Failed to delete $path", exception=e)
         end
         if verbose
-            printpkgstyle(ctx.io, :Deleted, Types.pathrepr(path) * " (" *
+            printpkgstyle(ctx.io, :Deleted, pathrepr(path) * " (" *
                 pretty_byte_str(path_size) * ")")
         end
         return path_size
@@ -1272,7 +1338,9 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
                      platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
-    Types.clone_default_registries(ctx)
+    if Registry.download_default_registries(ctx.io)
+        copy!(ctx.registries, Registry.reachable_registries())
+    end
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         deps = Dict{String,String}()
@@ -1318,7 +1386,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         if !(e isa PkgError) || update_registry == false
             rethrow(e)
         end
-        Types.update_registries(ctx.io)
+        Registry.update(; io=ctx.io, force=false)
         Operations.check_registered(ctx.registries, pkgs)
     end
     new_git = UUID[]

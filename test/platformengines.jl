@@ -3,9 +3,6 @@ import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
 
-# Explicitly probe platform engines in verbose mode to get coverage and make
-# CI debugging easier
-probe_platform_engines!(;verbose=true)
 
 @testset "Packaging" begin
     # Gotta set this guy up beforehand

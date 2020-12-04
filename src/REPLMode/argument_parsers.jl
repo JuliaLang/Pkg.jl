@@ -1,4 +1,4 @@
-import ..isdir_nothrow
+import ..isdir_nothrow, ..Registry.RegistrySpec, ..isurl
 
 ###############
 # PackageSpec #

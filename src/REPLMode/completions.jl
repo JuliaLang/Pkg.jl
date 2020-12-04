@@ -55,16 +55,16 @@ const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 function complete_remote_package(partial)
     isempty(partial) && return String[]
     cmp = Set{String}()
-    for reg in Pkg.Types.collect_reachable_registries()
+    for reg in Registry.reachable_registries()
         for (uuid, regpkg) in reg
             name = regpkg.name
             name in cmp && continue
             if startswith(regpkg.name, partial)
-                pkg = RegistryHandling.registry_info(regpkg)
-                uncompressed_data = RegistryHandling.uncompressed_data(pkg)
+                pkg = Registry.registry_info(regpkg)
+                compat_info = Registry.compat_info(pkg)
                 # Filter versions
-                for (v, uncompressed_compat) in uncompressed_data
-                    RegistryHandling.isyanked(pkg, v) && continue
+                for (v, uncompressed_compat) in compat_info
+                    Registry.isyanked(pkg, v) && continue
                     # TODO: Filter based on offline mode
                     is_julia_compat = nothing
                     for (pkg_uuid, vspec) in uncompressed_compat

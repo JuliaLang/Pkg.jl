@@ -11,30 +11,28 @@ import Base.string
 using REPL.TerminalMenus
 
 using TOML
-import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO, ..RegistryHandling
-import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
+import ..Pkg, ..DEFAULT_IO, ..Registry
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl
 import Base.BinaryPlatforms: Platform
-import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
+import ..PlatformEngines: download, download_verify_unpack
 using ..Pkg.Versions
 
 import Base: SHA1
 using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
-    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, Manifest, Project, err_rep,
+    PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
-   project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
+    project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
-    read_project, read_package, read_manifest, pathrepr,
+    read_project, read_package, read_manifest,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
-    printpkgstyle, isurl,
-    projectfile_path, manifestfile_path,
-    RegistrySpec
+    projectfile_path, manifestfile_path
 
-const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
+
 
 deepcopy_toml(x) = x
 function deepcopy_toml(@nospecialize(x::Vector))
@@ -88,7 +86,6 @@ end
 Base.:(==)(r1::GitRepo, r2::GitRepo) =
     r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
 
-isurl(r::String) = occursin(URL_regex, r)
 
 Base.@kwdef mutable struct PackageSpec
     name::Union{Nothing,String} = nothing
@@ -252,21 +249,6 @@ function Base.show(io::IO, pkg::PackageEntry)
     print(io, ")")
 end
 
-function collect_reachable_registries(; depots=Base.DEPOT_PATH)
-    # collect registries
-    registries = RegistryHandling.Registry[]
-    for d in depots
-        isdir(d) || continue
-        reg_dir = joinpath(d, "registries")
-        isdir(reg_dir) || continue
-        for name in readdir(reg_dir)
-            file = joinpath(reg_dir, name, "Registry.toml")
-            isfile(file) || continue
-            push!(registries, RegistryHandling.Registry(joinpath(reg_dir, name)))
-        end
-    end
-    return registries
-end
 
 mutable struct EnvCache
     # environment info:
@@ -332,13 +314,13 @@ include("manifest.jl")
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
-    io::IO = something(DEFAULT_IO[], stderr)
+    io::IO = something(DEFAULT_IO[])
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
 
     # Registris
-    registries::Vector{RegistryHandling.Registry} = collect_reachable_registries()
+    registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()
 
     # The Julia Version to resolve with respect to
     julia_version::Union{VersionNumber,Nothing} = VERSION
@@ -358,8 +340,6 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 ###########
 # Context #
 ###########
-stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
-stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
 
 const STDLIB = Ref{Dict{UUID,String}}()
 function load_stdlib()
@@ -547,7 +527,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     registry_resolve!(ctx.registries, pkg)
     # Didn't find the package in the registry, but maybe it exists in the updated registry
     if !isresolved(pkg)
-        update_registries(ctx.io)
+        Registry.update(; io=ctx.io, force=false)
         registry_resolve!(ctx.registries, pkg)
     end
     ensure_resolved(ctx.env.manifest, [pkg]; registry=true)
@@ -555,7 +535,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
-        info = Pkg.RegistryHandling.registry_info(regpkg)
+        info = Pkg.Registry.registry_info(regpkg)
         url = info.repo
         url === nothing && continue
         pkg.repo.source = url
@@ -769,8 +749,8 @@ function manifest_resolve!(manifest::Manifest, pkgs::AbstractVector{PackageSpec}
 end
 
 # Disambiguate name/uuid package specifications using registry info.
-registry_resolve!(registries::Vector{RegistryHandling.Registry}, pkg::PackageSpec) = registry_resolve!(registries, [pkg])
-function registry_resolve!(registries::Vector{RegistryHandling.Registry}, pkgs::AbstractVector{PackageSpec})
+registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec) = registry_resolve!(registries, [pkg])
+function registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
     # collect all names and uuids since we're looking anyway
@@ -847,370 +827,15 @@ function ensure_resolved(manifest::Manifest,
     pkgerror(msg)
 end
 
-##############
-# Registries #
-##############
-
-mutable struct RegistrySpec
-    name::Union{String,Nothing}
-    uuid::Union{UUID,Nothing}
-    url::Union{String,Nothing}
-    # the path field can be a local source when adding a registry
-    # otherwise it is the path where the registry is installed
-    path::Union{String,Nothing}
-    RegistrySpec(name::String) = RegistrySpec(name = name)
-    RegistrySpec(;name=nothing, uuid=nothing, url=nothing, path=nothing) =
-        new(name, isa(uuid, String) ? UUID(uuid) : uuid, url, path)
-end
-
-const DEFAULT_REGISTRIES =
-    RegistrySpec[RegistrySpec(name = "General",
-                              uuid = UUID("23338594-aafe-5451-b93e-139f81909106"),
-                              url = "https://github.com/JuliaRegistries/General.git")]
-
-function clone_default_registries(ctx::Context; only_if_empty = true)
-    installed_registries = [reg.uuid::UUID for reg in collect_registries()]
-    # Only clone if there are no installed registries, unless called
-    # with false keyword argument.
-    if isempty(installed_registries) || !only_if_empty
-        printpkgstyle(ctx.io, :Installing, "known registries into $(pathrepr(depots1()))")
-        registries = copy(DEFAULT_REGISTRIES)
-        for uuid in keys(pkg_server_registry_urls())
-            if !(uuid in (reg.uuid for reg in registries))
-                push!(registries, RegistrySpec(uuid = uuid))
-            end
-        end
-        filter!(reg -> !(reg.uuid in installed_registries), registries)
-        clone_or_cp_registries(ctx.io, registries)
-        copy!(ctx.registries, collect_reachable_registries())
-    end
-end
-
-# Return `RegistrySpec`s of each registry in a depot
-function collect_registries(depot::String)
-    d = joinpath(depot, "registries")
-    regs = RegistrySpec[]
-    ispath(d) || return regs
-    for name in readdir(d)
-        file = joinpath(d, name, "Registry.toml")
-        if isfile(file)
-            registry = read_registry(file)
-            verify_registry(registry)
-            spec = RegistrySpec(name = registry["name"]::String,
-                                uuid = UUID(registry["uuid"]::String),
-                                url = get(registry, "repo", nothing)::Union{String,Nothing},
-                                path = dirname(file))
-            push!(regs, spec)
-        end
-    end
-    return regs
-end
-# Return `RegistrySpec`s of all registries in all depots
-function collect_registries()
-    isempty(depots()) && return RegistrySpec[]
-    return RegistrySpec[r for d in depots() for r in collect_registries(d)]
-end
-
-# Hacky way to make e.g. `registry add General` work.
-function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
-    known_registries = DEFAULT_REGISTRIES # TODO: Some way to add stuff here?
-    for reg in registries, known in known_registries
-        if reg.uuid !== nothing
-            if reg.uuid === known.uuid
-                reg.url = known.url
-            end
-        elseif reg.name !== nothing
-            if reg.name == known.name
-                named_regs = filter(r -> r.name == reg.name, known_registries)
-                if !all(r -> r.uuid == first(named_regs).uuid, named_regs)
-                    pkgerror("multiple registries with name `$(reg.name)`, please specify with uuid.")
-                end
-                reg.url = known.url
-                reg.uuid = known.uuid
-            end
-        end
-    end
-end
-
-# Use the pattern
-#
-# registry_urls = nothing
-# for ...
-#     url, registry_urls = pkg_server_registry_url(uuid, registry_urls)
-# end
-#
-# to query the pkg server at most once for registries.
-pkg_server_registry_url(uuid::UUID, ::Nothing) =
-    pkg_server_registry_url(uuid, pkg_server_registry_urls())
-
-pkg_server_registry_url(uuid::UUID, registry_urls::Dict{UUID, String}) =
-    get(registry_urls, uuid, nothing), registry_urls
-
-pkg_server_registry_url(::Nothing, registry_urls) = nothing, registry_urls
-
-function pkg_server_registry_urls()
-    registry_urls = Dict{UUID, String}()
-    server = pkg_server()
-    server === nothing && return registry_urls
-    probe_platform_engines!()
-    tmp_path = tempname()
-    download_ok = false
-    try
-        download("$server/registries", tmp_path, verbose=false)
-        download_ok = true
-    catch err
-        @warn "could not download $server/registries"
-    end
-    download_ok || return registry_urls
-    open(tmp_path) do io
-        for line in eachline(io)
-            if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
-                uuid = UUID(m.captures[1])
-                hash = String(m.captures[2])
-                registry_urls[uuid] = "$server/registry/$uuid/$hash"
-            end
-        end
-    end
-    rm(tmp_path, force=true)
-    return registry_urls
-end
-
-pkg_server_url_hash(url::String) = split(url, '/')[end]
-
-# entry point for `registry add`
-function clone_or_cp_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
-    populate_known_registries_with_urls!(regs)
-    registry_urls = nothing
-    for reg in regs
-        if reg.path !== nothing && reg.url !== nothing
-            pkgerror("ambiguous registry specification; both url and path is set.")
-        end
-        # clone to tmpdir first
-        mktempdir() do tmp
-            url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-            # on Windows we prefer git cloning because untarring is so slow
-            if !Sys.iswindows() && url !== nothing
-                # download from Pkg server
-                try
-                    download_verify_unpack(url, nothing, tmp, ignore_existence = true)
-                catch err
-                    pkgerror("could not download $url")
-                end
-                tree_info_file = joinpath(tmp, ".tree_info.toml")
-                ispath(tree_info_file) &&
-                    error("tree info file $tree_info_file already exists")
-                open(tree_info_file, write=true) do io
-                    hash = pkg_server_url_hash(url)
-                    println(io, "git-tree-sha1 = ", repr(hash))
-                end
-            elseif reg.path !== nothing # copy from local source
-                printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
-                cp(reg.path, tmp; force=true)
-            elseif reg.url !== nothing # clone from url
-                LibGit2.with(GitTools.clone(io, reg.url, tmp; header = "registry from $(repr(reg.url))")) do repo
-                end
-            else
-                pkgerror("no path or url specified for registry")
-            end
-            # verify that the clone looks like a registry
-            if !isfile(joinpath(tmp, "Registry.toml"))
-                pkgerror("no `Registry.toml` file in cloned registry.")
-            end
-            registry = read_registry(joinpath(tmp, "Registry.toml"); cache=false) # don't cache this tmp registry
-            verify_registry(registry)
-            # copy to `depot`
-            # slug = Base.package_slug(UUID(registry["uuid"]))
-            regpath = joinpath(depot, "registries", registry["name"]::String#=, slug=#)
-            ispath(dirname(regpath)) || mkpath(dirname(regpath))
-            if Pkg.isdir_nothrow(regpath)
-                existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
-                if registry["uuid"] == existing_registry["uuid"]
-                    println(io,
-                            "registry `$(registry["name"])` already exist in `$(Base.contractuser(regpath))`.")
-                else
-                    throw(PkgError("registry `$(registry["name"])=\"$(registry["uuid"])\"` conflicts with " *
-                        "existing registry `$(existing_registry["name"])=\"$(existing_registry["uuid"])\"`. " *
-                        "To install it you can clone it manually into e.g. " *
-                        "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
-                end
-            else
-                mv(tmp, regpath)
-                printpkgstyle(io, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
-            end
-        end
-    end
-    return nothing
-end
-
-function read_registry(reg_file; cache=true)
-    return parse_toml(reg_file)
-end
-
-# verify that the registry looks like a registry
-const REQUIRED_REGISTRY_ENTRIES = ("name", "uuid", "repo", "packages") # ??
-
-function verify_registry(registry::Dict{String, Any})
-    for key in REQUIRED_REGISTRY_ENTRIES
-        haskey(registry, key) || pkgerror("no `$key` entry in `Registry.toml`.")
-    end
-end
-
-# Search for the input registries among installed ones
-function find_installed_registries(io::IO,
-                                   needles::Vector{RegistrySpec},
-                                   haystack::Vector{RegistrySpec}=collect_registries())
-    output = RegistrySpec[]
-    for needle in needles
-        if needle.name === nothing && needle.uuid === nothing
-            pkgerror("no name or uuid specified for registry.")
-        end
-        found = false
-        for candidate in haystack
-            if needle.uuid !== nothing
-                if needle.uuid == candidate.uuid
-                    push!(output, candidate)
-                    found = true
-                end
-            elseif needle.name !== nothing
-                if needle.name == candidate.name
-                    named_regs = filter(r -> r.name == needle.name, haystack)
-                    if !all(r -> r.uuid == first(named_regs).uuid, named_regs)
-                        pkgerror("multiple registries with name `$(needle.name)`, please specify with uuid.")
-                    end
-                    push!(output, candidate)
-                    found = true
-                end
-            end
-        end
-        if !found
-            println(io, "registry `$(needle.name === nothing ? needle.uuid :
-                                         needle.uuid === nothing ? needle.name :
-                                         "$(needle.name)=$(needle.uuid)")` not found.")
-        end
-    end
-    return output
-end
-
-# entry point for `registry rm`
-function remove_registries(io::IO, regs::Vector{RegistrySpec})
-    for registry in find_installed_registries(io, regs)
-        printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
-        rm(registry.path; force=true, recursive=true)
-    end
-    return nothing
-end
-
-# entry point for `registry up`
-function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registries(depots1());
-                           force::Bool=false)
-    Pkg.OFFLINE_MODE[] && return
-    !force && UPDATED_REGISTRY_THIS_SESSION[] && return
-    errors = Tuple{String, String}[]
-    registry_urls = nothing
-    for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{Union{UUID,Nothing}}())
-        let reg=reg
-            regpath = pathrepr(reg.path)
-            if isfile(joinpath(reg.path, ".tree_info.toml"))
-                printpkgstyle(io, :Updating, "registry at " * regpath)
-                tree_info = parse_toml(joinpath(reg.path, ".tree_info.toml"))
-                old_hash = tree_info["git-tree-sha1"]
-                url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-                if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
-                    let new_hash=new_hash
-                        # TODO: update faster by using a diff, if available
-                        mktempdir() do tmp
-                            try
-                                download_verify_unpack(url, nothing, tmp, ignore_existence = true)
-                            catch err
-                                @warn "could not download $url"
-                            end
-                            tree_info_file = joinpath(tmp, ".tree_info.toml")
-                            ispath(tree_info_file) &&
-                                error("tree info file $tree_info_file already exists")
-                            open(tree_info_file, write=true) do io
-                                println(io, "git-tree-sha1 = ", repr(new_hash))
-                            end
-                            registry_file = joinpath(tmp, "Registry.toml")
-                            registry = read_registry(registry_file; cache=false)
-                            verify_registry(registry)
-                            mv(tmp, reg.path, force=true)
-                        end
-                    end
-                end
-            elseif isdir(joinpath(reg.path, ".git"))
-                printpkgstyle(io, :Updating, "registry at " * regpath)
-                # Using LibGit2.with here crashes julia when running the
-                # tests for PkgDev wiht "Unreachable reached".
-                # This seems to work around it.
-                repo = nothing
-                try
-                    repo = LibGit2.GitRepo(reg.path)
-                    if LibGit2.isdirty(repo)
-                        push!(errors, (regpath, "registry dirty"))
-                        @goto done
-                    end
-                    if !LibGit2.isattached(repo)
-                        push!(errors, (regpath, "registry detached"))
-                        @goto done
-                    end
-                    if !("origin" in LibGit2.remotes(repo))
-                        push!(errors, (regpath, "origin not in the list of remotes"))
-                        @goto done
-                    end
-                    branch = LibGit2.headname(repo)
-                    try
-                        GitTools.fetch(io, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
-                    catch e
-                        e isa PkgError || rethrow()
-                        push!(errors, (reg.path, "failed to fetch from repo"))
-                        @goto done
-                    end
-                    ff_succeeded = try
-                        LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
-                    catch e
-                        e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
-                        push!(errors, (reg.path, "branch origin/$branch not found"))
-                        @goto done
-                    end
-
-                    if !ff_succeeded
-                        try LibGit2.rebase!(repo, "origin/$branch")
-                        catch e
-                            e isa LibGit2.GitError || rethrow()
-                            push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
-                            @goto done
-                        end
-                    end
-                    @label done
-                finally
-                    if repo isa LibGit2.GitRepo
-                        close(repo)
-                    end
-                end
-            end
-        end
-    end
-    if !isempty(errors)
-        warn_str = "Some registries failed to update:"
-        for (reg, err) in errors
-            warn_str *= "\n    — $reg — $err"
-        end
-        @warn warn_str
-    end
-    UPDATED_REGISTRY_THIS_SESSION[] = true
-    return
-end
-
-function registered_uuids(registries::Vector{RegistryHandling.Registry}, name::String)
+function registered_uuids(registries::Vector{Registry.RegistryInstance}, name::String)
     uuids = Set{UUID}()
     for reg in registries
-        union!(uuids, RegistryHandling.uuids_from_name(reg, name))
+        union!(uuids, Registry.uuids_from_name(reg, name))
     end
     return uuids
 end
-
 # Determine a single UUID for a given name, prompting if needed
-function registered_uuid(registries::Vector{RegistryHandling.Registry}, name::String)::Union{Nothing,UUID}
+function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::String)::Union{Nothing,UUID}
     uuids = registered_uuids(registries, name)
     length(uuids) == 0 && return nothing
     length(uuids) == 1 && return first(uuids)
@@ -1219,7 +844,7 @@ function registered_uuid(registries::Vector{RegistryHandling.Registry}, name::St
         for reg in registries
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
-            info = Pkg.RegistryHandling.registry_info(pkg)
+            info = Pkg.Registry.registry_info(pkg)
             info.repo === nothing && continue
             push!(repo_infos, (reg.name, info.repo, uuid))
         end
@@ -1238,7 +863,7 @@ end
 
 # Determine current name for a given package UUID
 
-function registered_name(registries::Vector{RegistryHandling.Registry}, uuid::UUID)::Union{Nothing,String}
+function registered_name(registries::Vector{Registry.RegistryInstance}, uuid::UUID)::Union{Nothing,String}
     name = nothing
     for reg in registries
         regpkg = get(reg, uuid, nothing)
@@ -1258,70 +883,12 @@ function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry,Nothi
     #any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
     return get(manifest, uuid, nothing)
 end
-
-function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false)
-    indent = textwidth(string(:Precompiling)) # "Precompiling" is the longest operation
-    ignore_indent && (indent = 0)
-    printstyled(io, lpad(string(cmd), indent), color=:green, bold=true)
-    println(io, " ", text)
-end
-
-
-function pathrepr(path::String)
-    # print stdlib paths as @stdlib/Name
-    if startswith(path, stdlib_dir())
-        path = "@stdlib/" * basename(path)
-    end
-    return "`" * Base.contractuser(path) * "`"
-end
-
 function write_env(env::EnvCache; update_undo=true)
     write_project(env)
     write_manifest(env)
     update_undo && Pkg.API.add_snapshot_to_undo(env)
 end
 
-###
-### PackageInfo
-###
-
-Base.@kwdef struct PackageInfo
-    name::String
-    version::Union{Nothing,VersionNumber}
-    tree_hash::Union{Nothing,String}
-    is_direct_dep::Bool
-    is_pinned::Bool
-    is_tracking_path::Bool
-    is_tracking_repo::Bool
-    is_tracking_registry::Bool
-    git_revision::Union{Nothing,String}
-    git_source::Union{Nothing,String}
-    source::String
-    dependencies::Dict{String,UUID}
-end
-
-function Base.:(==)(a::PackageInfo, b::PackageInfo)
-    return a.name == b.name && a.version == b.version && a.tree_hash == b.tree_hash &&
-        a.is_direct_dep == b.is_direct_dep &&
-        a.is_pinned == b.is_pinned && a.is_tracking_path == b.is_tracking_path &&
-        a.is_tracking_repo == a.is_tracking_repo &&
-        a.is_tracking_registry == b.is_tracking_registry &&
-        a.git_revision == b.git_revision && a.git_source == b.git_source &&
-        a.source == b.source && a.dependencies == b.dependencies
-end
-
-###
-### ProjectInfo
-###
-
-Base.@kwdef struct ProjectInfo
-    name::Union{Nothing,String}
-    uuid::Union{Nothing,UUID}
-    version::Union{Nothing,VersionNumber}
-    ispackage::Bool
-    dependencies::Dict{String,UUID}
-    path::String
-end
 
 
 end # module

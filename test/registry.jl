@@ -47,17 +47,14 @@ end
 function test_installed(registries)
     @test setdiff(
         UUID[r.uuid for r in registries],
-        UUID[r.uuid for r in Pkg.Types.collect_registries()]
+        UUID[r.uuid for r in Pkg.Registry.reachable_registries()]
         ) == UUID[]
 end
 
 function is_pkg_available(pkg::PackageSpec)
-    uuids = UUID[]
-    for registry in Pkg.Types.collect_registries()
-        reg_dict = Pkg.Types.read_registry(joinpath(registry.path, "Registry.toml"))
-        for (uuid, pkginfo) in reg_dict["packages"]
-            push!(uuids, UUID(uuid))
-        end
+    uuids = Set{UUID}()
+    for registry in Pkg.Registry.reachable_registries() 
+        union!(uuids, keys(registry))
     end
     return in(pkg.uuid, uuids)
 end
@@ -75,7 +72,7 @@ end
         # set up registries
         regdir = mktempdir()
         setup_test_registries(regdir)
-        generalurl = Pkg.Types.DEFAULT_REGISTRIES[1].url # hehe
+        generalurl = Pkg.Registry.DEFAULT_REGISTRIES[1].url # hehe
         General = RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106",
             url = generalurl)
         Foo1 = RegistrySpec(name = "RegistryFoo", uuid = "e9fceed0-5623-4384-aff0-6db4c442647a",
@@ -87,7 +84,6 @@ end
         Example  = PackageSpec(name = "Example",  uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
         Example1 = PackageSpec(name = "Example1", uuid = UUID("c5f1542f-b8aa-45da-ab42-05303d706c66"))
         Example2 = PackageSpec(name = "Example2", uuid = UUID("d7897d3a-8e65-4b65-bdc8-28ce4e859565"))
-
 
         # Add General registry
         ## Pkg REPL
@@ -255,13 +251,13 @@ end
     # only clone default registry if there are no registries installed at all
     temp_pkg_dir() do depot1; mktempdir() do depot2
         append!(empty!(DEPOT_PATH), [depot1, depot2])
-        @test length(Pkg.Types.collect_registries()) == 0
+        @test length(Pkg.Registry.reachable_registries()) == 0
         Pkg.add("Example")
-        @test length(Pkg.Types.collect_registries()) == 1
+        @test length(Pkg.Registry.reachable_registries()) == 1
         Pkg.rm("Example")
         DEPOT_PATH[1:2] .= DEPOT_PATH[2:-1:1]
         Pkg.add("Example") # should not trigger a clone of default registries
-        @test length(Pkg.Types.collect_registries()) == 1
+        @test length(Pkg.Registry.reachable_registries()) == 1
     end end
 
     @testset "yanking" begin
