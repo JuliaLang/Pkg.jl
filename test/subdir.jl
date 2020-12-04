@@ -210,7 +210,6 @@ end
         pkg"rm Dep"
 
         # Add from path at branch, REPL subdir syntax
-        @show "add $(packages_dir):julia#master"
         pkgstr("add $(packages_dir):julia#master")
         @test isinstalled("Package")
         @test !isinstalled("Dep")

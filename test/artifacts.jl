@@ -414,7 +414,7 @@ end
             generate_flooblegrank_artifacts(ap_path)
 
             Pkg.activate(ap_path)
-            add_this_pkg()
+
             if flooblecrank_status == "engaged"
                 right_hash = engaged_hash
                 wrong_hash = disengaged_hash
@@ -423,12 +423,8 @@ end
                 wrong_hash = engaged_hash
             end
 
-            @test !isdir(artifact_path(right_hash))
-            @test !isdir(artifact_path(wrong_hash))
-
-            # Instantiate with this environment variable, to install the proper one
             withenv("FLOOBLECRANK" => flooblecrank_status) do
-                Pkg.instantiate()
+                add_this_pkg()
                 @test isdir(artifact_path(right_hash))
                 @test !isdir(artifact_path(wrong_hash))
             end
@@ -464,17 +460,13 @@ end
         generate_flooblegrank_artifacts(ap_path)
 
         Pkg.activate(ap_path)
-        add_this_pkg()
-        @test !isdir(artifact_path(engaged_hash))
-        @test !isdir(artifact_path(disengaged_hash))
-
+    
         # Instantiate with the environment variable set, but with an explicit
         # tag set in the platform object, which overrides.
         withenv("FLOOBLECRANK" => "disengaged") do
             p = HostPlatform()
             p["flooblecrank"] = "engaged"
-            Pkg.instantiate(;platform=p)
-
+            add_this_pkg(; platform=p)
             @test isdir(artifact_path(engaged_hash))
             @test !isdir(artifact_path(disengaged_hash))
         end

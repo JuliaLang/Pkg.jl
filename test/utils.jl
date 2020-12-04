@@ -255,7 +255,7 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
     return target
 end
 
-function add_this_pkg()
+function add_this_pkg(; platform=Base.BinaryPlatforms.HostPlatform())
     pkg_dir = dirname(@__DIR__)
     pkg_uuid = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
     spec = Pkg.PackageSpec(
@@ -263,7 +263,7 @@ function add_this_pkg()
         uuid=UUID(pkg_uuid),
         path=pkg_dir,
     )
-    Pkg.develop(spec)
+    Pkg.develop(spec; platform)
 end
 
 end
