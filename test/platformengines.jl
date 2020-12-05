@@ -1,7 +1,7 @@
 module PlatformEngineTests
 import ..Pkg # ensure we are using the correct Pkg
 
-using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
+using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA, Tar
 
 
 @testset "Packaging" begin
@@ -43,6 +43,23 @@ using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
         end
     end
 
+    @testset "Issue #2185" begin
+        mktempdir() do dir
+            target = joinpath("lib", "icu", "67.1")
+            link = joinpath("lib", "icu", "current")
+            mode = 0o755
+            mkpath(joinpath(dir, target))
+            chmod(joinpath(dir, target), mode)
+            symlink(basename(target), joinpath(dir, link))
+            package(dir, joinpath(dir, "test.tar.gz"))
+
+            run(pipeline(`$(PlatformEngines.exe7z()) x $(joinpath(dir, "test.tar.gz")) -o$(dir)`; stdout=devnull))
+            files = Tar.list(joinpath(dir, "test.tar"))
+            # Make sure the directory and the link have expected permissions.
+            @test Tar.Header(replace(target, "\\" => "/"), :directory, mode, 0, "") in files
+            @test Tar.Header(replace(link, "\\" => "/"), :symlink, mode, 0, basename(target)) in files
+        end
+    end
 end
 
 
