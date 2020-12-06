@@ -172,11 +172,21 @@ Base.string(mode::GitMode) = string(UInt32(mode); base=8)
 Base.print(io::IO, mode::GitMode) = print(io, string(mode))
 
 function gitmode(path::AbstractString)
+    # Windows doens't deal with executable permissions in quite the same way,
+    # `stat()` gives a different answer than we actually want, so we use
+    # `isexecutable()` which uses `uv_fs_access()` internally.  On other
+    # platforms however, we just want to check via `stat()`.
+    function isexec(p)
+        @static if Sys.iswindows()
+            return Sys.isexecutable(p)
+        end
+        return !iszero(filemode(p) & 0o100)
+    end
     if islink(path)
         return mode_symlink
     elseif isdir(path)
         return mode_dir
-    elseif Sys.isexecutable(path)
+    elseif isexec(path)
         return mode_executable
     else
         return mode_normal
