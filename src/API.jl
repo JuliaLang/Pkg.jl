@@ -903,6 +903,14 @@ function _auto_precompile(ctx::Context)
     end
 end
 
+function make_pkgspec(man, uuid)
+    pkgent = man[uuid]
+    # If we have an unusual situation such as an un-versioned package (like an stdlib that
+    # is being overridden) its `version` may be `nothing`.
+    pkgver = something(pkgent.version, VersionSpec())
+    return PackageSpec(uuid = uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash)
+end
+
 precompile(; kwargs...) = precompile(Context(); kwargs...)
 function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
@@ -947,11 +955,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
         if haskey(man, pkgid.uuid)
-            pkgent = man[pkgid.uuid]
-            # If we have an unusual situation such as an un-versioned package (like an stdlib that
-            # is being overridden) its `version` may be `nothing`.
-            pkgver = something(pkgent.version, VersionSpec())
-            push!(pkg_specs, PackageSpec(uuid = pkgid.uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash))
+            push!(pkg_specs, make_pkgspec(man, pkgid.uuid))
         end
     end
     precomp_prune_suspended!(pkg_specs)
@@ -967,9 +971,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         if in_deps([pkg], deps, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
-            pkgentry = man[pkg.uuid]
-            precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
-                            version = pkgentry.version, tree_hash = pkgentry.tree_hash))
+            precomp_suspend!(make_pkgspec(man, pkg.uuid))
             !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
         end
     end
@@ -1095,9 +1097,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 end
 
                 suspended = if haskey(man, pkg.uuid) # to handle the working environment uuid
-                    pkgent = man[pkg.uuid]
-                    pkgver = something(pkgent.version, VersionSpec())
-                    precomp_suspended(PackageSpec(uuid = pkg.uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash))
+                    precomp_suspended(make_pkgspec(man, pkg.uuid))
                 else
                     false
                 end
@@ -1142,9 +1142,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
                             if haskey(man, pkg.uuid)
-                                pkgentry = man[pkg.uuid]
-                                precomp_suspend!(PackageSpec(uuid = pkg.uuid, name = pkgentry.name,
-                                                        version = pkgentry.version, tree_hash = pkgentry.tree_hash))
+                                precomp_suspend!(make_pkgspec(man, pkg.uuid))
                             end
                         else
                             rethrow(err)
