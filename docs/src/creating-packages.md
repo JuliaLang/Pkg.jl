@@ -3,7 +3,7 @@
 A package is a project with a `name`, `uuid` and `version` entry in the `Project.toml` file, and a `src/PackageName.jl` file that defines the module `PackageName`.
 This file is executed when the package is loaded.
 
-### Generating files for a package
+## Generating files for a package
 
 !!! note
     The [PkgTemplates](https://github.com/invenia/PkgTemplates.jl) package offers a very easy, repeatable, and 
@@ -62,7 +62,7 @@ julia> HelloWorld.greet()
 Hello World!
 ```
 
-### Adding dependencies to the project
+## Adding dependencies to the project
 
 Let’s say we want to use the standard library package `Random` and the registered package `JSON` in our project.
 We simply `add` these packages (note how the prompt now shows the name of the newly generated project,
@@ -105,7 +105,7 @@ julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
 
-### Adding a build step to the package
+## Adding a build step to the package
 
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
 A package is built by executing the file `deps/build.jl`.
@@ -145,7 +145,7 @@ error("Ooops")
 └ @ Pkg.Operations Operations.jl:938
 ```
 
-### Adding tests to the package
+## Adding tests to the package
 
 When a package is tested the file `test/runtests.jl` is executed:
 
@@ -163,7 +163,7 @@ Testing...
 Tests are run in a new Julia process, where the package itself, and any
 test-specific dependencies, are available, see below.
 
-#### Test-specific dependencies in Julia 1.2 and above
+### Test-specific dependencies in Julia 1.2 and above
 
 !!! compat "Julia 1.2"
     This section only applies to Julia 1.2 and above. For specifying test dependencies
@@ -218,7 +218,7 @@ using Test
    Testing HelloWorld tests passed```
 ```
 
-#### Test-specific dependencies in Julia 1.0 and 1.1
+### Test-specific dependencies in Julia 1.0 and 1.1
 
 !!! note
     The method of adding test-specific dependencies described in this section will
@@ -238,7 +238,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Markdown", "Test"]
 ```
 
-### Package naming guidelines
+## Package naming guidelines
 
 Package names should be sensible to most Julia users, *even to those who are not domain experts*.
 The following guidelines applies to the `General` registry, but may be useful for other package
@@ -283,7 +283,7 @@ may fit your package better.
 7. Avoid naming a package closely to an existing package
      * `Websocket` is too close to `WebSockets` and can be confusing to users. Rather use a new name such as `SimpleWebsockets`.
 
-### Registering packages
+## Registering packages
 
 Once a package is ready it can be registered with the [General Registry](https://github.com/JuliaRegistries/General).
 Currently packages are submitted via [`Registrator`](https://juliaregistrator.github.io/).
