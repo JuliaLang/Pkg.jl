@@ -165,9 +165,41 @@ function init_package_info!(pkg::PkgEntry)
 
     @init! pkg.info = PkgInfo(repo, subdir, version_info, compat, deps)
 
+    override_compat!(pkg)
+
     return pkg.info
 end
 
+function override_compat!(pkg::PkgEntry)
+    filename = compat_override_filename()
+    if isfile(filename)
+        @info "Using compat override file at \"$(filename)\"" maxlog = 1
+        all_overrides = TOML.parsefile(filename)
+        if haskey(all_overrides, string(pkg.uuid))
+            pkg_override = all_overrides[string(pkg.uuid)]
+            initialize_uncompressed!(pkg.info)
+            version_info = pkg.info.version_info
+            for version_number in keys(version_info)
+                version_number_info = version_info[version_number]
+                if haskey(pkg_override, string(version_number))
+                    override = pkg_override[string(version_number)]
+                    uncompressed_compat = version_number_info.uncompressed_compat
+                    for uuid in keys(uncompressed_compat)
+                        if haskey(override, string(uuid))
+                            new_compat = Pkg.Types.semver_spec(override[string(uuid)])
+                            uncompressed_compat[uuid] = new_compat
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return pkg
+end
+
+function compat_override_filename()
+    return joinpath(homedir(), ".julia", "config", "compat-overrides.toml")
+end
 
 struct RegistryInstance
     path::String
