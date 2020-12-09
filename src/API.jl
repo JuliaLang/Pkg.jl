@@ -1520,9 +1520,8 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
-                io::IO=stdout, kwargs...)
-    Operations.status(ctx.env, pkgs, mode=mode, git_diff=diff, io=io)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, compat::Bool=false, io::IO=stdout, kwargs...)
+    Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, compat)
     return nothing
 end
 
@@ -1662,7 +1661,7 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
     write_env(ctx.env; update_undo=false)
-    Operations.show_update(ctx.env; io=ctx.io)
+    Operations.show_update(ctx.env, ctx.registries; io=ctx.io)
 end
 
 

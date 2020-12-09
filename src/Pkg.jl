@@ -384,15 +384,34 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
 
 Print out the status of the project/manifest.
 If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
 that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`,
 print status also about those in the manifest (recursive dependencies). If there are
 any packages listed as arguments, the output will be limited to those packages.
+
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
+
+Setting `compat=true` will only show packages that are not on the latest version,
+their maximum version and why they are not on the latest version (either due to other
+packages holding them back due to compatibility constraints, or due to compatibility in the project file).
+As an example, a status output like:
+```
+pkg> st -c -m
+Status `Manifest.toml`
+ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
+ [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
+ [2ab3a3ac] LogExpFunctions v0.2.5 (<v0.3.0): SpecialFunctions
+```
+means that the latest version of Crayons is 4.0.4 but the latest version compatible
+with the `[compat]` section in the current project is 3.0.0.
+The latest version of NearestNeighbors is 0.4.9 but due to compat constrains in the project
+it is held back to 0.4.8.
+The latest version of LogExpFunctions is 0.3.0 but SpecialFunctions
+is holding it back to 0.2.5.
 
 See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
@@ -401,8 +420,11 @@ status as a Julia object instead of printing it.
     `Pkg.status` with package arguments requires at least Julia 1.1.
 
 !!! compat "Julia 1.3"
-    The `diff` keyword argument requires Julia 1.3. In earlier versions `diff=true`
+    The `diff` keyword argument requires at least Julia 1.3. In earlier versions `diff=true`
     is the default for environments in git repositories.
+
+!!! compat "Julia 1.8"
+    The `compat` keyword argument reguires at least Julia 1.8
 """
 const status = API.status
 

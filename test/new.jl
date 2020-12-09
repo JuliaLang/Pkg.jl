@@ -2135,7 +2135,7 @@ end
         @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
         ## non-empty project + non-empty diff
         Pkg.rm("Markdown")
-        Pkg.add( name="Example", version="0.3.0")
+        Pkg.add(name="Example", version="0.3.0")
         ## diff project
         Pkg.status(; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -2161,6 +2161,26 @@ end
         ## manifest diff + empty filter
         Pkg.status("FooBar"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"No Matches in diff for `.+Manifest.toml`", readline(io))
+    end
+    # Compat API
+    isolate(loaded_depot=true) do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
+        Pkg.add("Example"; io=devnull)
+        v = Pkg.dependencies()[exuuid].version
+        io = IOBuffer()
+        Pkg.add(Pkg.PackageSpec(name="Example", version="0.4.0"); io=devnull)
+        Pkg.status(; compat=true, io=io)
+        str = String(take!(io))
+        @test occursin("[7876af07] Example v0.4.0 (<v$v)", str)
+        open(Base.active_project(), "a") do io
+            write(io, """
+                  [compat]
+                  Example = "0.4.1"
+            """)
+        end
+        Pkg.status(; compat=true, io=io)
+        str = String(take!(io))
+        @test occursin("[7876af07] Example v0.4.0 [<v0.4.1], (<v$v)", str)
     end
 end
 
