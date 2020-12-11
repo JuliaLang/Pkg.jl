@@ -37,11 +37,11 @@ end
 
 # more accurate name is `should_be_tracking_registered_version`
 # the only way to know for sure is to key into the registries
-tracking_registered_version(pkg) =
-    !is_stdlib(pkg.uuid) && pkg.path === nothing && pkg.repo.source === nothing
+tracking_registered_version(pkg, julia_version = VERSION) =
+    !is_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
 
 function source_path(ctx, pkg::PackageSpec)
-    return is_stdlib(pkg.uuid)      ? Types.stdlib_path(pkg.name) :
+    return is_stdlib(pkg.uuid, ctx.julia_version) ? Types.stdlib_path(pkg.name) :
         pkg.path        !== nothing ? joinpath(dirname(ctx.env.project_file), pkg.path) :
         pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
@@ -128,7 +128,10 @@ function update_manifest!(ctx::Context, pkgs::Vector{PackageSpec}, deps_map)
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
                              tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo)
-        is_stdlib(pkg.uuid) && (entry.version = nothing) # do not set version for stdlibs
+        if is_stdlib(pkg.uuid, ctx.julia_version)
+            # do not set version for stdlibs
+            entry.version = nothing
+        end
         if Types.is_project(ctx, pkg)
             entry.deps = ctx.env.project.deps
         else
@@ -237,7 +240,7 @@ end
 
 function load_tree_hashes!(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
-        tracking_registered_version(pkg) || continue
+        tracking_registered_version(pkg, ctx.julia_version) || continue
         pkg.tree_hash = load_tree_hash(ctx, pkg)
     end
 end
@@ -451,8 +454,10 @@ function deps_graph(ctx::Context, uuid_to_name::Dict{UUID,String}, reqs::Resolve
             all_deps_u     = get_or_make!(all_deps,     uuid)
             all_compat_u   = get_or_make!(all_compat,   uuid)
 
-            # Collect deps + compat for stdlib
-            if is_stdlib(uuid)
+            # If we're requesting resolution of a package that is an stdlib and is not registered,
+            # we must special-case it here.  This is further complicated by the fact that we can
+            # ask this question relative to a particular Julia version.
+            if is_unregistered_stdlib(uuid) || is_stdlib(uuid, ctx.julia_version)
                 path = Types.stdlib_path(stdlibs()[uuid])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
@@ -649,7 +654,9 @@ function install_git(
     end
 end
 
-function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec}; platform::AbstractPlatform=HostPlatform(),
+function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
+                            platform::AbstractPlatform=HostPlatform(),
+                            julia_version = VERSION,
                             verbose::Bool=false)
     # Filter out packages that have no source_path()
     # pkg_roots = String[p for p in source_path.((ctx,), pkgs) if p !== nothing]  # this runs up against inference limits?
@@ -661,7 +668,8 @@ function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec}; platform::A
     return download_artifacts(ctx, pkg_roots; platform=platform, verbose=verbose)
 end
 
-function download_artifacts(ctx::Context, pkg_roots::Vector{String}; platform::AbstractPlatform=HostPlatform(),
+function download_artifacts(ctx::Context, pkg_roots::Vector{String};
+                            platform::AbstractPlatform=HostPlatform(),
                             verbose::Bool=false)
     # List of Artifacts.toml files that we're going to download from
     artifacts_tomls = String[]
@@ -701,20 +709,21 @@ end
 
 # install & update manifest
 function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
-    pkgs = filter(tracking_registered_version, pkgs)
+    pkgs = filter(p -> tracking_registered_version(p, ctx.julia_version), pkgs)
     urls = load_urls(ctx, pkgs)
     return download_source(ctx, pkgs, urls; readonly=readonly)
 end
 
 function download_source(ctx::Context, pkgs::Vector{PackageSpec},
-                        urls::Dict{UUID, Vector{String}}; readonly=true)
-    probe_platform_engines!()
+                         urls::Dict{UUID, Vector{String}}; readonly=true)
     new_pkgs = PackageSpec[]
 
     pkgs_to_install = Tuple{PackageSpec, String}[]
     for pkg in pkgs
         path = source_path(ctx, pkg)
-        ispath(path) && continue
+        if ispath(path)
+            continue
+        end
         push!(pkgs_to_install, (pkg, path))
         push!(new_pkgs, pkg)
     end
