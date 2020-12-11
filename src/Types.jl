@@ -22,7 +22,7 @@ using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
+    PkgError, pkgerror, has_name, has_uuid, is_stdlib, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
@@ -32,7 +32,8 @@ export UUID, SHA1, VersionRange, VersionSpec,
     PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
     projectfile_path, manifestfile_path
 
-
+# Load in data about historical stdlibs
+include("HistoricalStdlibs.jl")
 
 deepcopy_toml(x) = x
 function deepcopy_toml(@nospecialize(x::Vector))
@@ -363,6 +364,36 @@ function stdlibs()
 end
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
+# Allow asking if something is an stdlib for a particular version of Julia
+function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
+    # If this UUID is known to be unregistered, always return `true`
+    if haskey(UNREGISTERED_STDLIBS, uuid)
+        return true
+    end
+
+    # Otherwise, if the `julia_version` is `nothing`, all registered stdlibs
+    # will be treated like normal packages.
+    if julia_version === nothing
+        return false
+    end
+
+    # If we are given an actual version, find the entry in `STDLIBS_BY_VERSION`
+    # that corresponds to the requested version, and use that.
+    last_stdlibs = Dict{UUID,String}()
+    for (version, stdlibs) in STDLIBS_BY_VERSION
+        if julia_version < version
+            break
+        end
+        last_stdlibs = stdlibs
+    end
+
+    # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
+    # fall through with an empty `last_stdlibs`, which will always return `false`.
+    return uuid in keys(last_stdlibs)
+end
+
+is_unregistered_stdlib(uuid::UUID) = haskey(UNREGISTERED_STDLIBS, uuid)
+
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
 function Context!(ctx::Context; kwargs...)
@@ -625,7 +656,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
             if has_uuid(pkg)
-                version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg)
+                version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
                 isdir(version_path) && return false
             end
 
@@ -635,7 +666,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
             # check to see if the package exists at its canonical path.
-            version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg)
+            version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
             isdir(version_path) && return false
 
             # Otherwise, move the temporary path into its correct place and set read only

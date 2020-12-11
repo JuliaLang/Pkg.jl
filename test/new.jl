@@ -1,9 +1,10 @@
 module NewTests
 
-using  Test, UUIDs, Dates
+using  Test, UUIDs, Dates, TOML
 import ..Pkg, LibGit2
 using  Pkg.Types: PkgError
 using  Pkg.Resolve: ResolverError
+import Pkg.Artifacts: artifact_meta, artifact_path
 using  ..Utils
 
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
@@ -2444,6 +2445,109 @@ end
                 Pkg.add(path="BasicSandbox")
             end
         end
+    end
+end
+
+using Pkg.Types: is_stdlib
+@testset "is_stdlib() across versions" begin
+    networkoptions_uuid = UUID("ca575930-c2e3-43a9-ace4-1e988b2c1908")
+    pkg_uuid = UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
+
+    # Assume we're running on v1.6+
+    @test is_stdlib(networkoptions_uuid)
+    @test is_stdlib(networkoptions_uuid, v"1.6")
+    @test !is_stdlib(networkoptions_uuid, v"1.5")
+    @test !is_stdlib(networkoptions_uuid, v"1.0.0")
+    @test !is_stdlib(networkoptions_uuid, v"0.7")
+    @test !is_stdlib(networkoptions_uuid, nothing)
+
+    # Pkg is an unregistered stdlib
+    @test is_stdlib(pkg_uuid)
+    @test is_stdlib(pkg_uuid, v"1.0")
+    @test is_stdlib(pkg_uuid, v"1.6")
+    @test is_stdlib(pkg_uuid, v"999.999.999")
+    @test is_stdlib(pkg_uuid, v"0.7")
+    @test is_stdlib(pkg_uuid, nothing)
+end
+
+@testset "STDLIBS_BY_VERSION up-to-date" begin
+    test_result = Pkg.Types.STDLIBS_BY_VERSION[end][2] == Pkg.Types.load_stdlib()
+    if !test_result
+        @error("STDLIBS_BY_VERSION out of date!  Re-run generate_historical_stdlibs.jl!")
+    end
+    @test test_result
+end
+
+@testset "Pkg.add() with julia_version" begin
+    # A package with artifacts that went from normal package -> stdlib
+    gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
+    # A package that has always only ever been an stdlib
+    linalg_uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+    # A package that went from normal package - >stdlib
+    networkoptions_uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
+
+    function get_manifest_block(name)
+        manifest_path = joinpath(dirname(Base.active_project()), "Manifest.toml")
+        @test isfile(manifest_path)
+        manifest = TOML.parsefile(manifest_path)
+        @test haskey(manifest, name)
+        return first(manifest[name])
+    end
+
+    isolate(loaded_depot=true) do
+        # Test that adding `NetworkOptions` results in a `Manifest.toml` with no version
+        # which means that it was treated as a standard library
+        Pkg.add("NetworkOptions")
+        block = get_manifest_block("NetworkOptions")
+        @test haskey(block, "uuid")
+        @test block["uuid"] == networkoptions_uuid
+        @test !haskey(block, "version")
+    end
+
+    isolate(loaded_depot=true) do
+        # Next, test that if we ask for `v1.5` it DOES have a version, and that GMP_jll installs v6.1.X
+        Pkg.add(["NetworkOptions", "GMP_jll"]; julia_version=v"1.5")
+        no_block = get_manifest_block("NetworkOptions")
+        @test haskey(no_block, "uuid")
+        @test no_block["uuid"] == networkoptions_uuid
+        @test haskey(no_block, "version")
+
+        gmp_block = get_manifest_block("GMP_jll")
+        @test haskey(gmp_block, "uuid")
+        @test gmp_block["uuid"] == gmp_jll_uuid
+        @test haskey(gmp_block, "version")
+        @test startswith(gmp_block["version"], "6.1.2")
+
+        # Test that the artifact of GMP_jll contains the right library
+        @test haskey(gmp_block, "git-tree-sha1")
+        gmp_jll_dir = Pkg.Operations.find_installed("GMP_jll", Base.UUID(gmp_jll_uuid), Base.SHA1(gmp_block["git-tree-sha1"]))
+        @test isdir(gmp_jll_dir)
+        artifacts_toml = joinpath(gmp_jll_dir, "Artifacts.toml")
+        @test isfile(artifacts_toml)
+        meta = artifact_meta("GMP", artifacts_toml)
+        @test meta != nothing
+
+        gmp_artifact_path = artifact_path(Base.SHA1(meta["git-tree-sha1"]))
+        @test isdir(gmp_artifact_path)
+
+        # On linux, we can check the filename to ensure it's grabbing the correct library
+        if Sys.islinux()
+            libgmp_filename = joinpath(gmp_artifact_path, "lib", "libgmp.so.10.3.2")
+            @test isfile(libgmp_filename)
+        end
+    end
+
+    isolate(loaded_depot=true) do
+        # Next, test that if we ask for `nothing`, NetworkOptions has a `version` but `LinearAlgebra` does.
+        Pkg.add(["LinearAlgebra", "NetworkOptions"]; julia_version=nothing)
+        no_block = get_manifest_block("NetworkOptions")
+        @test haskey(no_block, "uuid")
+        @test no_block["uuid"] == networkoptions_uuid
+        @test haskey(no_block, "version")
+        linalg_block = get_manifest_block("LinearAlgebra")
+        @test haskey(linalg_block, "uuid")
+        @test linalg_block["uuid"] == linalg_uuid
+        @test !haskey(linalg_block, "version")
     end
 end
 
