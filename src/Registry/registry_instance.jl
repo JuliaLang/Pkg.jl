@@ -174,6 +174,7 @@ function override_compat!(pkg::PkgEntry)
     filename = compat_override_filename()
     if isfile(filename)
         @info "Using compat override file at \"$(filename)\"" maxlog = 1
+        @warn "You are using the compat override feature. Use of this feature may cause packages to break. It is the responsibility of the user (not the maintainers of any packages) to solve any problems that arise from the use of this feature." maxlog = 1
         all_overrides = TOML.parsefile(filename)
         if haskey(all_overrides, string(pkg.uuid))
             pkg_override = all_overrides[string(pkg.uuid)]
