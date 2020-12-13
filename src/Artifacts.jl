@@ -55,7 +55,7 @@ function create_artifact(f::Function)
         new_path = artifact_path(artifact_hash; honor_overrides=false)
         if !isdir(new_path)
             # Move this generated directory to its final destination, set it to read-only
-            mv(temp_dir, new_path)
+            mv(temp_dir, new_path; force=true)
             chmod(new_path, filemode(dirname(new_path)))
             set_readonly(new_path)
         end
