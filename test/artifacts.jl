@@ -114,6 +114,36 @@ end
             @test verify_artifact(hash)
         end
     end
+
+    @testset "File permissions" begin
+        mktempdir() do artifacts_dir
+            with_artifacts_directory(artifacts_dir) do
+                subdir = "subdir"
+                file1 = "file1"
+                file2 = "file2"
+                dir_link = "dir_link"
+                file_link = "file_link"
+                hash = create_artifact() do dir
+                    # Create files, links, and directories
+                    mkpath(joinpath(dir, subdir))
+                    touch(joinpath(dir, subdir, file1))
+                    touch(joinpath(dir, subdir, file2))
+                    symlink(basename(subdir), joinpath(dir, dir_link))
+                    symlink(basename(file1), joinpath(dir, subdir, file_link))
+                end
+                artifact_dir = artifact_path(hash)
+                # Make sure only files are read-only
+                @test iszero(filemode(joinpath(artifact_dir, file1)) & 0o222)
+                @test iszero(filemode(joinpath(artifact_dir, file2)) & 0o222)
+                @test iszero(filemode(joinpath(artifact_dir, file_link)) & 0o222)
+                @test !iszero(filemode(joinpath(artifact_dir, subdir)) & 0o222)
+                @test !iszero(filemode(joinpath(artifact_dir, dir_link)) & 0o222)
+                # Make sure we can delete the artifact directory without having
+                # to manually change permissions
+                rm(artifact_dir; recursive=true)
+            end
+        end
+    end
 end
 
 @testset "with_artifacts_directory()" begin
