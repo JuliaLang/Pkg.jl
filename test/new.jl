@@ -683,9 +683,14 @@ end
         # We add the package using a relative path.
         cd(path) do
             Pkg.add(path=".")
+            manifest = Pkg.Types.read_manifest(joinpath(dirname(Base.active_project()), "Manifest.toml"))
+            # Test that the relative path is canonicalized.
+            repo = string("../../../", basename(tempdir), "/EmptyPackage")
+            @test manifest[empty_package].repo.source == repo
         end
         # Now we try to find the package.
         rm(joinpath(DEPOT_PATH[1], "packages"); recursive=true)
+        rm(joinpath(DEPOT_PATH[1], "clones"); recursive=true)
         Pkg.instantiate()
         # Test that Operations.is_instantiated works with relative path
         @test Pkg.Operations.is_instantiated(Pkg.Types.Context())
