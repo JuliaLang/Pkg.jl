@@ -287,7 +287,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     if julia_version !== nothing
         v = intersect(julia_version, project_compatibility(env, "julia"))
         if isempty(v)
-            @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
+            Types.pkgerror("julia version requirement for project not satisfied")
         end
     end
     names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
