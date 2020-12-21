@@ -1382,7 +1382,7 @@ function Base.:(==)(a::PackageInfo, b::PackageInfo)
     return a.name == b.name && a.version == b.version && a.tree_hash == b.tree_hash &&
         a.is_direct_dep == b.is_direct_dep &&
         a.is_pinned == b.is_pinned && a.is_tracking_path == b.is_tracking_path &&
-        a.is_tracking_repo == a.is_tracking_repo &&
+        a.is_tracking_repo == b.is_tracking_repo &&
         a.is_tracking_registry == b.is_tracking_registry &&
         a.git_revision == b.git_revision && a.git_source == b.git_source &&
         a.source == b.source && a.dependencies == b.dependencies
