@@ -66,7 +66,7 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs = copy(pkgs)
     for (name::String, uuid::UUID) in env.project.deps
-        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        !occursin(pkg -> pkg.uuid == uuid, pkgs) || continue # do not duplicate packages
         entry = manifest_info(env.manifest, uuid)
         push!(pkgs, entry === nothing ?
               PackageSpec(;uuid=uuid, name=name) :
@@ -87,7 +87,7 @@ function load_manifest_deps(manifest::Manifest, pkgs::Vector{PackageSpec}=Packag
                             preserve::PreserveLevel=PRESERVE_ALL)
     pkgs = copy(pkgs)
     for (uuid, entry) in manifest
-        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        !occursin(pkg -> pkg.uuid == uuid, pkgs) || continue # do not duplicate packages
         push!(pkgs, PackageSpec(
             uuid      = uuid,
             name      = entry.name,
