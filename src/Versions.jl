@@ -243,8 +243,7 @@ end
 Base.copy(vs::VersionSpec) = VersionSpec(vs)
 
 const empty_versionspec = VersionSpec(VersionRange[])
-# Windows console doesn't like Unicode
-const _empty_symbol = @static Sys.iswindows() ? "empty" : "∅"
+const _empty_symbol = "∅"
 
 Base.isempty(s::VersionSpec) = all(isempty, s.ranges)
 @assert isempty(empty_versionspec)
