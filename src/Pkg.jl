@@ -561,6 +561,7 @@ function __init__()
             end
         end
     end
+    push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
     OFFLINE_MODE[] = get(ENV, "JULIA_PKG_OFFLINE", nothing) == "true"
     return nothing
 end
@@ -671,6 +672,7 @@ const precompile_script = """
     Pkg.add("TestPkg")
     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
     Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
+    Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
     ] add Te\t\t$CTRL_C
     ] st
     $CTRL_C

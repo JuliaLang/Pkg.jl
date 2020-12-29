@@ -667,4 +667,9 @@ end
     @inferred Pkg.REPLMode.CompoundSpecs(Pair{String,Vector{Pkg.REPLMode.CommandDeclaration}}[])
 end
 
+@testset "REPL missing package install hook" begin
+    @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+    # cannot test installation of findable packages given requires user input to stdin on the prompt
+end
+
 end # module
