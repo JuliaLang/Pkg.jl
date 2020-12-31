@@ -549,7 +549,9 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
         do_cmd(repl, input)
         REPL.prepare_next(repl)
         REPL.reset_state(s)
-        s.current_mode.sticky || REPL.transition(s, main)
+        if isempty(input) || !s.current_mode.sticky
+            REPL.transition(s, main)
+        end
     end
 
     mk = REPL.mode_keymap(main)
