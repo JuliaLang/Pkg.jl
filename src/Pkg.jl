@@ -419,6 +419,9 @@ Pkg.activate("local/path")
 Pkg.activate("MyDependency")
 Pkg.activate(; temp=true)
 ```
+
+!!! compat "Julia 1.4"
+    the `temp` option requires at least Julia 1.4.
 """
 const activate = API.activate
 
