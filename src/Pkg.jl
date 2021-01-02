@@ -401,7 +401,7 @@ The logic for what path is activated is as follows:
     in the depot stack will be activated. If no such environment exists,
     create and activate that environment in the first depot.
   * If `temp` is `true` this will create and activate a temporary enviroment which will
-    be deleted when the julia process is exitted. The `s` argument must not be passed
+    be deleted when the julia process is exited. The `s` argument must not be passed
     with the `temp` option set to `true`.
   * If `s` is an existing path, then activate the environment at that path.
   * If `s` is a package in the current project and `s` is tracking a path, then
