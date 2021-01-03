@@ -257,7 +257,7 @@ When the option `--shared` is given, `path` will be assumed to be a directory na
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
 it will be placed in the first depot of the stack.
 Use the `--temp` option to create temporary environments which are removed when the julia
-process is exited. This is useful for experimenting with packages.
+process is exited.
 """ ,
 ],
 PSA[:name => "update",
