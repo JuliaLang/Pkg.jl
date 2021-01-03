@@ -256,7 +256,8 @@ The active environment is the environment that is modified by executing package 
 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
 it will be placed in the first depot of the stack.
-Use the `temp` option to create temporary environments. This should be useful for experimenting with packages.
+Use the `--temp` option to create temporary environments which are removed when the julia
+process is exited.
 """ ,
 ],
 PSA[:name => "update",

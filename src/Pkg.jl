@@ -392,6 +392,7 @@ const status = API.status
 
 """
     Pkg.activate([s::String]; shared::Bool=false)
+    Pkg.activate(; temp::Bool=false)
 
 Activate the environment at `s`. The active environment is the environment
 that is modified by executing package commands.
@@ -400,6 +401,8 @@ The logic for what path is activated is as follows:
   * If `shared` is `true`, the first existing environment named `s` from the depots
     in the depot stack will be activated. If no such environment exists,
     create and activate that environment in the first depot.
+  * If `temp` is `true` this will create and activate a temporary enviroment which will
+    be deleted when the julia process is exited.
   * If `s` is an existing path, then activate the environment at that path.
   * If `s` is a package in the current project and `s` is tracking a path, then
     activate the environment at the tracked path.
@@ -414,7 +417,11 @@ the julia executable, or the `JULIA_PROJECT` environment variable.
 Pkg.activate()
 Pkg.activate("local/path")
 Pkg.activate("MyDependency")
+Pkg.activate(; temp=true)
 ```
+
+!!! compat "Julia 1.4"
+    the `temp` option requires at least Julia 1.4.
 """
 const activate = API.activate
 
