@@ -41,12 +41,6 @@ since that could conflict with the configuration of the main application.
     2. **Packages** should have UUIDs, applications can have a UUIDs but don't need them.
     3. **Applications** can provide global configuration, whereas packages cannot.
 
-**Library (future work):** a compiled binary dependency (not written in Julia)
-packaged to be used by a Julia project. These are currently typically built in-
-place by a `deps/build.jl` script in a project’s source tree, but in the future
-we plan to make libraries first-class entities directly installed and upgraded
-by the package manager.
-
 **Environment:** the combination of the top-level name map provided by a project
 file combined with the dependency graph and map from packages to their entry points
 provided by a manifest file. For more detail see the manual section on code loading.
