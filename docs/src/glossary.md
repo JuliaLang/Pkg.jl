@@ -73,11 +73,7 @@ registered package providing the following metadata about it:
 
 - name – e.g. `DataFrames`
 - UUID – e.g. `a93c6f00-e57d-5684-b7b6-d8193f3e46c0`
-- authors – e.g. `Jane Q. Developer <jane@example.com>`
-- license – e.g. MIT, BSD3, or GPLv2
 - repository – e.g. `https://github.com/JuliaData/DataFrames.jl.git`
-- description – a block of text summarizing the functionality of a package
-- keywords – e.g. `data`, `tabular`, `analysis`, `statistics`
 - versions – a list of all registered version tags
 
 For each registered version of a package, the following information is provided:
