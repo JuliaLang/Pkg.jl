@@ -96,7 +96,7 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
                      "but no such entry exists in the manifest.")
         end
         # should have used dict format instead of vector format
-        length(infos) == 1 || pkgerror("Invalid manfiest format. ",
+        length(infos) == 1 || pkgerror("Invalid manifest format. ",
                                        "`$name=$uuid`'s dependency on `$dep` is ambiguous.")
         final[dep] = infos[1].uuid
     end
