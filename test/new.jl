@@ -1257,7 +1257,7 @@ end
         @test haskey(Pkg.project().dependencies, "Example")
         @test haskey(Pkg.project().dependencies, "Unicode")
     end end
-    # `instantiate` lonely manfiest
+    # `instantiate` lonely manifest
     isolate(loaded_depot=true) do
         manifest_dir = joinpath(@__DIR__, "manifest", "noproject")
         cd(manifest_dir) do
@@ -1944,7 +1944,7 @@ end
     # Manifest Status API
     isolate(loaded_depot=true) do
         io = PipeBuffer()
-        ## empty manfiest
+        ## empty manifest
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest\.toml` \(empty manifest\)", readline(io))
         # loaded manifest
