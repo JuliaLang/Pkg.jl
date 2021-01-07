@@ -1238,7 +1238,7 @@ function precompile(ctx::Context; internal_call::Bool=false, debugmode::Bool=occ
                 n_done += 1
                 notify(was_processed[pkg])
                 if debugmode
-                    println(io, "Remaining:\n", filter(e->!(last(e).set), was_processed))
+                    println(io, "Remaining:\n", keys(filter(e->!(last(e).set), was_processed)))
                 end
             catch err_outer
                 handle_interrupt(err_outer)
