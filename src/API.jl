@@ -1016,6 +1016,12 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         push!(direct_deps, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
 
+    @debug "List of deps to be precompiled"
+    @debug keys(depsmap)
+
+    @debug "Full depsmap:"
+    @debug depsmap
+
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
@@ -1045,6 +1051,9 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
         end
     end
+
+    @debug "Packages determined to have circular dependency"
+    @debug circular_deps
 
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
