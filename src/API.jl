@@ -982,14 +982,14 @@ function make_pkgspec(man, uuid)
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
+function precompile(ctx::Context; internal_call::Bool=false, debugmode::Bool=occursin("Pkg", get(ENV, "JULIA_DEBUG", "")), kwargs...)
     Context!(ctx; kwargs...)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS::Int + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     io = ctx.io
-    fancyprint = can_fancyprint(io)
+    fancyprint = can_fancyprint(io) && !debugmode
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     internal_call ? recall_suspended_packages() : precomp_unsuspend!()
@@ -1089,7 +1089,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
     end
 
-    t_print = @async begin # fancy print loop
+    # FANCY PRINT LOOP
+    t_print = @async begin
         try
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
@@ -1159,7 +1160,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
     end
     tasks = Task[]
-    for (pkg, deps) in depsmap # precompilation loop
+    # PRECOMPILATION LOOP
+    for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         sourcepath === nothing && continue
@@ -1235,6 +1237,9 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 end
                 n_done += 1
                 notify(was_processed[pkg])
+                if debugmode
+                    println(io, "Remaining:\n", filter(e->!(last(e).set), was_processed))
+                end
             catch err_outer
                 handle_interrupt(err_outer)
                 notify(was_processed[pkg])
@@ -1251,6 +1256,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     catch err
         handle_interrupt(err)
     end
+
+    # FINISHING UP AND REPORTING
     notify(first_started) # in cases of no-op or !fancyprint
     save_suspended_packages() # save list to scratch space
     wait(t_print)
