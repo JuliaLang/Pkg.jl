@@ -1016,11 +1016,12 @@ function precompile(ctx::Context; internal_call::Bool=false, debugmode::Bool=occ
         push!(direct_deps, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
 
-    @debug "List of deps to be precompiled"
-    @debug keys(depsmap)
-
-    @debug "Full depsmap:"
-    @debug depsmap
+    if debugmode
+        str = sprint() do io
+            show(io, MIME"text/plain"(), depsmap)
+        end
+        @debug "Full depsmap:\n$str"
+    end
 
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
