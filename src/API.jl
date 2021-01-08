@@ -982,7 +982,7 @@ function make_pkgspec(man, uuid)
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, debugmode::Bool=occursin("Pkg", get(ENV, "JULIA_DEBUG", "")), kwargs...)
+function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1016,13 +1016,7 @@ function precompile(ctx::Context; internal_call::Bool=false, debugmode::Bool=occ
         push!(direct_deps, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
 
-    if debugmode
-        str = sprint() do io
-            show(io, MIME"text/plain"(), depsmap)
-        end
-        @debug "Full depsmap:\n$str"
-    end
-
+    @debug "Precompilation dependency map" depsmap=sprint(show, MIME"text/plain"(), depsmap)
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
@@ -1053,8 +1047,7 @@ function precompile(ctx::Context; internal_call::Bool=false, debugmode::Bool=occ
         end
     end
 
-    @debug "Packages determined to have circular dependency"
-    @debug circular_deps
+    @debug "Packages determined to have circular dependency" circular_deps
 
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
@@ -1238,9 +1231,7 @@ function precompile(ctx::Context; internal_call::Bool=false, debugmode::Bool=occ
                 end
                 n_done += 1
                 notify(was_processed[pkg])
-                if debugmode
-                    println(io, "Remaining: ", keys(filter(e->!(last(e).set), was_processed)))
-                end
+                @debug "Precompilation: remaining packages" remaining=keys(filter(e->!(last(e).set), was_processed))
             catch err_outer
                 handle_interrupt(err_outer)
                 notify(was_processed[pkg])
