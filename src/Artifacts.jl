@@ -349,10 +349,22 @@ function download_artifact(
             msg  = "Tree Hash Mismatch!\n"
             msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
             msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+            # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
+            # and Pkg.jl#2317 so we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
+            # error and move the artifact to the expected location and return true
+            ignore_hash = get(ENV, "JULIA_PKG_IGNORE_HASHES", nothing) == "1"
+            if ignore_hash
+                msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
+            end
             @error(msg)
-            # Tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
-            # so we return true here and only raise the warning on the lines above.
-            # return false
+            if ignore_hash
+                # Move it to the location we expected
+                src = artifact_path(calc_hash; honor_overrides=false)
+                dst = artifact_path(tree_hash; honor_overrides=false)
+                mv(src, dst; force=true)
+                return true
+            end
+            return false
         end
     end
 

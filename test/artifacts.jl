@@ -268,17 +268,20 @@ end
 
     # Next, test incorrect download errors
     if !Sys.iswindows()
-        mktempdir() do dir
+        for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
             with_artifacts_directory(dir) do
                 @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
                 @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
-                    # Only warn on wrong tree hash for now (see Pkg.jl#1885)
-                    # @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                    path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                    @test endswith(path, "0000000000000000000000000000000000000000")
+                    if !ignore_hash
+                        @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                    else
+                        path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                        @test endswith(path, "0000000000000000000000000000000000000000")
+                        @test isdir(path)
+                    end
                 end
             end
-        end
+        end end end
     end
 
     mktempdir() do dir
