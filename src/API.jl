@@ -1233,7 +1233,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 end
                 n_done += 1
                 notify(was_processed[pkg])
-                @debug "Precompilation: remaining packages\n$(sprint(show, MIME"text/plain"(), collect(keys(filter(e->!(last(e).set), was_processed)))))"
+                @debug "Precompilation: finished processing $(pkg.name). Remaining packages:\n$(sprint(show, MIME"text/plain"(), collect(keys(filter(e->!(last(e).set), was_processed)))))"
             catch err_outer
                 handle_interrupt(err_outer)
                 notify(was_processed[pkg])
