@@ -1018,7 +1018,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         push!(direct_deps, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
     end
 
-    @debug "Precompilation dependency map" depsmap=sprint(show, MIME"text/plain"(), depsmap)
+    @debug "Precompilation dependency map\n$(sprint(show, MIME"text/plain"(), depsmap))"
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
@@ -1049,7 +1049,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
         end
     end
 
-    @debug "Packages determined to have circular dependency" circular_deps
+    @debug "Packages determined to have circular dependency\n$(sprint(show, MIME"text/plain"(), circular_deps))"
 
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
@@ -1233,7 +1233,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                 end
                 n_done += 1
                 notify(was_processed[pkg])
-                @debug "Precompilation: remaining packages" remaining=keys(filter(e->!(last(e).set), was_processed))
+                @debug "Precompilation: remaining packages\n$(sprint(show, MIME"text/plain"(), keys(filter(e->!(last(e).set), was_processed))))"
             catch err_outer
                 handle_interrupt(err_outer)
                 notify(was_processed[pkg])
