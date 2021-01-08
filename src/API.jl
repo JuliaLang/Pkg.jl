@@ -989,7 +989,9 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS::Int + 1)))
     parallel_limiter = Base.Semaphore(num_tasks)
     io = ctx.io
-    fancyprint = can_fancyprint(io) && !debugmode
+
+    fancyprint = can_fancyprint(io)
+    @debug fancyprint = false # disable fancy printing in debug mode
 
     # when manually called, unsuspend all packages that were suspended due to precomp errors
     internal_call ? recall_suspended_packages() : precomp_unsuspend!()
