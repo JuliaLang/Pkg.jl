@@ -406,7 +406,7 @@ function read_package(path::String)
     return project
 end
 
-const refspecs = ["+refs/*:refs/remotes/cache/*"]
+const refspecs = ["+refs/heads/*:refs/remotes/cache/*"]
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
