@@ -1023,7 +1023,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     prune_manifest(ctx.env)
     # update project & manifest
     write_env(ctx.env)
-    show_update(ctx, ignore_indent=false)
+    show_update(ctx)
 end
 
 update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
@@ -1153,7 +1153,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
     download_artifacts(ctx.env, pkgs; platform=platform)
 
     write_env(ctx.env) # write env before building
-    show_update(ctx, ignore_indent=false)
+    show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
@@ -1171,7 +1171,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     new_apply = download_source(ctx, pkgs; readonly=true)
     download_artifacts(ctx.env, pkgs; platform=platform)
     write_env(ctx.env) # write env before building
-    show_update(ctx, ignore_indent=false)
+    show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
@@ -1236,7 +1236,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     new_apply = download_source(ctx, pkgs)
     download_artifacts(ctx.env, pkgs)
     write_env(ctx.env) # write env before building
-    show_update(ctx, ignore_indent=false)
+    show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
 end
 
@@ -1278,7 +1278,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     new = download_source(ctx, pkgs)
     download_artifacts(ctx.env, pkgs)
     write_env(ctx.env) # write env before building
-    show_update(ctx, ignore_indent=false)
+    show_update(ctx)
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
 end
 
@@ -1315,12 +1315,12 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         new = download_source(ctx, pkgs)
         download_artifacts(ctx.env, new)
         write_env(ctx.env) # write env before building
-        show_update(ctx, ignore_indent=false)
+        show_update(ctx)
         build_versions(ctx, UUID[pkg.uuid for pkg in new])
     else
         foreach(pkg -> manifest_info(ctx.env.manifest, pkg.uuid).pinned = false, pkgs)
         write_env(ctx.env)
-        show_update(ctx, ignore_indent=false)
+        show_update(ctx)
     end
 end
 
