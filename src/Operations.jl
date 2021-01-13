@@ -925,7 +925,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
 
         fancyprint && show_progress(ctx.io, bar)
 
-        sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override) do
+        sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override, false) do
             flush(stdout)
             ok = open(log_file, "w") do log
                 std = verbose ? ctx.io : log
@@ -1389,7 +1389,7 @@ end
 
 # ctx + pkg used to compute parent dep graph
 function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
-                 sandbox_path::String, sandbox_project_override)
+                 sandbox_path::String, sandbox_project_override, allow_autoprecomp::Bool)
     active_manifest = manifestfile_path(dirname(ctx.env.project_file))
     sandbox_project = projectfile_path(sandbox_path)
 
@@ -1450,6 +1450,8 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 end
             end
             write_env(temp_ctx.env, update_undo = false)
+
+            allow_autoprecomp && _auto_precompile(temp_ctx)
 
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'
@@ -1532,8 +1534,8 @@ testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
-              test_fn=nothing)
-    Pkg.instantiate(ctx; allow_autoprecomp = false)
+              test_fn=nothing, allow_autoprecomp::Bool=true)
+    Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later in sandbox
 
     # load manifest data
     for pkg in pkgs
@@ -1568,7 +1570,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             gen_target_project(ctx.env, ctx.registries, pkg, source_path, "test")
         # now we sandbox
         printpkgstyle(ctx.io, :Testing, pkg.name)
-        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
+        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override, allow_autoprecomp) do
             test_fn !== nothing && test_fn()
             status(Context(); mode=PKGMODE_COMBINED)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
