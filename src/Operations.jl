@@ -1451,7 +1451,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             end
             write_env(temp_ctx.env, update_undo = false)
 
-            allow_autoprecomp && _auto_precompile(temp_ctx)
+            allow_autoprecomp && Pkg._auto_precompile(temp_ctx)
 
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'
@@ -1535,7 +1535,7 @@ testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
               test_fn=nothing, allow_autoprecomp::Bool=true)
-    Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later in sandbox
+    Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
     # load manifest data
     for pkg in pkgs
