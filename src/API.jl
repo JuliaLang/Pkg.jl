@@ -1395,7 +1395,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Handling packages tracking repos
     for pkg in pkgs
         pkg.repo.source !== nothing || continue
-        sourcepath = Operations.source_path(ctx.env.project_file, pkg)
+        sourcepath = Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
