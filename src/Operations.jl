@@ -110,7 +110,11 @@ end
 function is_instantiated(env::EnvCache)::Bool
     # Load everything
     pkgs = load_all_deps(env)
-    # Make sure all paths exist
+    # If the top-level project is a package, ensure it is instantiated as well
+    if env.pkg !== nothing
+        push!(pkgs, Types.PackageSpec(name=env.pkg.name, uuid=env.pkg.uuid, version=env.pkg.version, path=dirname(env.project_file)))
+    end
+    # Make sure all paths/artifacts exist
     return all(pkg -> is_package_downloaded(env.project_file, pkg), pkgs)
 end
 
