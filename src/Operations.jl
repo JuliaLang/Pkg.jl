@@ -1429,6 +1429,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         # sandbox
         with_temp_env(tmp) do
             temp_ctx = Context()
+            original_io = ctx.io
             temp_ctx.env.project.deps[target.name] = target.uuid
 
             try
@@ -1451,6 +1452,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             end
             write_env(temp_ctx.env, update_undo = false)
 
+            temp_ctx.io = original_io # restore given resolve step suppresses io
             allow_autoprecomp && Pkg._auto_precompile(temp_ctx)
 
             # Run sandboxed code
