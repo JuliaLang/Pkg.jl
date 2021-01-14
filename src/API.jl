@@ -1083,7 +1083,11 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
-        sourcepath === nothing && continue
+        if sourcepath === nothing
+            failed_deps[pkg] = "Error: Missing source file for $(pkg)"
+            notify(was_processed[pkg])
+            continue
+        end
         # Heuristic for when precompilation is disabled
         if occursin(r"\b__precompile__\(\s*false\s*\)", read(sourcepath, String))
             notify(was_processed[pkg])
