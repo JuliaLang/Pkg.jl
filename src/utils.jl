@@ -1,8 +1,8 @@
 
-function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false)
+function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false; color=:green)
     indent = textwidth(string(:Precompiling)) # "Precompiling" is the longest operation
     ignore_indent && (indent = 0)
-    printstyled(io, lpad(string(cmd), indent), color=:green, bold=true)
+    printstyled(io, lpad(string(cmd), indent), color=color, bold=true)
     println(io, " ", text)
 end
 
