@@ -381,7 +381,7 @@ function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
     # that corresponds to the requested version, and use that.
     last_stdlibs = Dict{UUID,String}()
     for (version, stdlibs) in STDLIBS_BY_VERSION
-        if julia_version < version
+        if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
             break
         end
         last_stdlibs = stdlibs
