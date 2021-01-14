@@ -21,7 +21,7 @@ using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, range_compressed_versionspec, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
+    PkgError, pkgerror, has_name, has_uuid, is_stdlib, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
     read_project, read_package, read_manifest, pathrepr, registries,
@@ -40,6 +40,9 @@ const CompatValDict = Dict{VersionNumber,Dict{String,VersionSpec}}
 const VersionsDict  = Dict{UUID,Set{VersionNumber}}
 const DepsDict      = Dict{UUID,DepsValDict}
 const CompatDict    = Dict{UUID,CompatValDict}
+
+# Load in data about historical stdlibs
+include("HistoricalStdlibs.jl")
 
 const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 
@@ -358,6 +361,36 @@ function stdlibs()
     return STDLIB[]
 end
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
+
+# Allow asking if something is an stdlib for a particular version of Julia
+function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
+    # If this UUID is known to be unregistered, always return `true`
+    if haskey(UNREGISTERED_STDLIBS, uuid)
+        return true
+    end
+
+    # Otherwise, if the `julia_version` is `nothing`, all registered stdlibs
+    # will be treated like normal packages.
+    if julia_version === nothing
+        return false
+    end
+
+    # If we are given an actual version, find the entry in `STDLIBS_BY_VERSION`
+    # that corresponds to the requested version, and use that.
+    last_stdlibs = Dict{UUID,String}()
+    for (version, stdlibs) in STDLIBS_BY_VERSION
+        if julia_version < version
+            break
+        end
+        last_stdlibs = stdlibs
+    end
+
+    # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
+    # fall through with an empty `last_stdlibs`, which will always return `false`.
+    return uuid in keys(last_stdlibs)
+end
+
+is_unregistered_stdlib(uuid::UUID) = haskey(UNREGISTERED_STDLIBS, uuid)
 
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
