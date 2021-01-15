@@ -186,7 +186,6 @@ const update = API.up
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
-  - `allow_autoprecomp::Bool=true`: allow auto-precompilation to be done in test environment, if not disabled globally
 
 !!! compat "Julia 1.3"
     `julia_args` and `test_args` requires at least Julia 1.3.
