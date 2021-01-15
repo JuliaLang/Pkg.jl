@@ -598,7 +598,7 @@ end
 ##################
 
 function _auto_precompile(ctx::Types.Context)
-    if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
+    if tryparse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
         Pkg.precompile(ctx; internal_call=true)
     end
 end
