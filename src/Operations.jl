@@ -1606,7 +1606,7 @@ testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
               test_fn=nothing)
-    Pkg.instantiate(ctx; allow_autoprecomp = false)
+    Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
     # load manifest data
     for pkg in pkgs
@@ -1643,7 +1643,9 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         printpkgstyle(ctx, :Testing, pkg.name)
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
             test_fn !== nothing && test_fn()
-            status(Context(); mode=PKGMODE_COMBINED)
+            sandbox_ctx = Context()
+            status(sandbox_ctx; mode=PKGMODE_COMBINED)
+            Pkg._auto_precompile(sandbox_ctx)
             printpkgstyle(ctx, :Testing, "Running tests...")
             flush(stdout)
             cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)

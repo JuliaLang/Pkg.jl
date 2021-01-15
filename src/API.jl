@@ -71,7 +71,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(pkgs::Vector{PackageSpec}; kwargs...)
             ctx = Context()
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:add, :up, :pin, :free, :build)) && _auto_precompile(ctx)
+            $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -897,12 +897,6 @@ function _is_stale(paths::Vector{String}, sourcepath::String)
     return true
 end
 
-function _auto_precompile(ctx::Context)
-    if parse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
-        Pkg.precompile(ctx; internal_call=true)
-    end
-end
-
 function make_pkgspec(man, uuid)
     pkgent = man[uuid]
     # If we have an unusual situation such as an un-versioned package (like an stdlib that
@@ -1303,7 +1297,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx)
-        allow_autoprecomp && _auto_precompile(ctx)
+        allow_autoprecomp && Pkg._auto_precompile(ctx)
         return
     end
 
@@ -1358,7 +1352,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
 
-    allow_autoprecomp && _auto_precompile(ctx; kwargs...)
+    allow_autoprecomp && Pkg._auto_precompile(ctx; kwargs...)
 end
 
 
