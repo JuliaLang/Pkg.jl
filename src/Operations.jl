@@ -925,7 +925,7 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
 
         fancyprint && show_progress(ctx.io, bar)
 
-        sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override, false) do
+        sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override) do
             flush(stdout)
             ok = open(log_file, "w") do log
                 std = verbose ? ctx.io : log
@@ -1389,7 +1389,7 @@ end
 
 # ctx + pkg used to compute parent dep graph
 function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
-                 sandbox_path::String, sandbox_project_override, allow_autoprecomp::Bool)
+                 sandbox_path::String, sandbox_project_override)
     active_manifest = manifestfile_path(dirname(ctx.env.project_file))
     sandbox_project = projectfile_path(sandbox_path)
 
@@ -1429,7 +1429,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         # sandbox
         with_temp_env(tmp) do
             temp_ctx = Context()
-            original_io = ctx.io
             temp_ctx.env.project.deps[target.name] = target.uuid
 
             try
@@ -1451,9 +1450,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 end
             end
             write_env(temp_ctx.env, update_undo = false)
-
-            temp_ctx.io = original_io # restore given resolve step suppresses io
-            allow_autoprecomp && Pkg._auto_precompile(temp_ctx)
 
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'
@@ -1536,7 +1532,7 @@ testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
-              test_fn=nothing, allow_autoprecomp::Bool=true)
+              test_fn=nothing)
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
     # load manifest data
@@ -1572,9 +1568,11 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             gen_target_project(ctx.env, ctx.registries, pkg, source_path, "test")
         # now we sandbox
         printpkgstyle(ctx.io, :Testing, pkg.name)
-        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override, allow_autoprecomp) do
+        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
             test_fn !== nothing && test_fn()
-            status(Context(); mode=PKGMODE_COMBINED)
+            sandbox_ctx = Context()
+            status(sandbox_ctx; mode=PKGMODE_COMBINED)
+            Pkg._auto_precompile(sandbox_ctx)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(stdout)
             cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
