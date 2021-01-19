@@ -846,12 +846,12 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
                     try
                         size += lstat(path).size
                     catch ex
-                        @warn("Failed to calculate size of $path", ex)
+                        @error("Failed to calculate size of $path", exception=ex)
                     end
                 end
             end
         catch ex
-            @warn("Failed to calculate size of $path", ex)
+            @error("Failed to calculate size of $path", exception=ex)
         end
         return size
     end
