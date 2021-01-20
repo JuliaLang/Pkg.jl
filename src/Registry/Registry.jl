@@ -298,7 +298,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[]
                 if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
                     let new_hash = new_hash
                         # TODO: update faster by using a diff, if available
-                        mktempdir() do tmp
+                        mktempdir(cleanup=false) do tmp # no cleanup since we mv it
                             try
                                 download_verify_unpack(url, nothing, tmp, ignore_existence = true)
                             catch err
@@ -307,7 +307,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[]
                             tree_info_file = joinpath(tmp, ".tree_info.toml")
                             hash = pkg_server_url_hash(url)
                             write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
-                            cp(tmp, reg.path, force=true)
+                            mv(tmp, reg.path, force=true)
                         end
                     end
                 end
