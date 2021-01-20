@@ -325,7 +325,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[]
                     try
                         GitTools.fetch(io, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                     catch e
-                        e isa Pkg.PkgError || rethrow()
+                        e isa Pkg.Types.PkgError || rethrow()
                         push!(errors, (reg.path, "failed to fetch from repo"))
                         @goto done
                     end
