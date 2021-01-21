@@ -293,16 +293,17 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[]
                 if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
                     let new_hash = new_hash
                         # TODO: update faster by using a diff, if available
-                        tmp = mktempdir(cleanup=false) # no cleanup since we mv it
-                        try
-                            download_verify_unpack(url, nothing, tmp, ignore_existence = true)
-                        catch err
-                            @error "could not download $url" exception=err
+                        mktempdir() do tmp
+                            try
+                                download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                            catch err
+                                @error "could not download $url" exception=err
+                            end
+                            tree_info_file = joinpath(tmp, ".tree_info.toml")
+                            hash = pkg_server_url_hash(url)
+                            write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
+                            mv(tmp, reg.path, force=true)
                         end
-                        tree_info_file = joinpath(tmp, ".tree_info.toml")
-                        hash = pkg_server_url_hash(url)
-                        write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
-                        mv(tmp, reg.path, force=true)
                     end
                 end
             elseif isdir(joinpath(reg.path, ".git"))
