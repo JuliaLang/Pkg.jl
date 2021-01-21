@@ -186,12 +186,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                         "`$(Base.contractuser(joinpath(depot, "registries", registry.name*"-2")))`."))
                 end
             else
-                try
-                    mv(tmp, regpath)
-                catch e
-                    isdir(regpath) && rm(regpath, recursive=true, force=true) # don't leave an incomplete registry
-                    rethrow()
-                end
+                mv(tmp, regpath)
                 printpkgstyle(io, :Added, "registry `$(registry.name)` to `$(Base.contractuser(regpath))`")
             end
         end
