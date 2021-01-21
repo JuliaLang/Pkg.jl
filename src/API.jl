@@ -839,15 +839,19 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
     function recursive_dir_size(path)
         size = 0
-        for (root, dirs, files) in walkdir(path)
-            for file in files
-                path = joinpath(root, file)
-                try
-                    size += lstat(path).size
-                catch
-                    @warn "Failed to calculate size of $path"
+        try
+            for (root, dirs, files) in walkdir(path)
+                for file in files
+                    path = joinpath(root, file)
+                    try
+                        size += lstat(path).size
+                    catch ex
+                        @error("Failed to calculate size of $path", exception=ex)
+                    end
                 end
             end
+        catch ex
+            @error("Failed to calculate size of $path", exception=ex)
         end
         return size
     end
