@@ -112,7 +112,12 @@ function is_instantiated(env::EnvCache)::Bool
     pkgs = load_all_deps(env)
     # If the top-level project is a package, ensure it is instantiated as well
     if env.pkg !== nothing
-        push!(pkgs, Types.PackageSpec(name=env.pkg.name, uuid=env.pkg.uuid, version=env.pkg.version, path=dirname(env.project_file)))
+        # Top-level project may already be in the manifest (cyclic deps)
+        # so only add it if it isn't there
+        idx = findfirst(x -> x.uuid == env.pkg.uuid, pkgs)
+        if idx === nothing
+            push!(pkgs, Types.PackageSpec(name=env.pkg.name, uuid=env.pkg.uuid, version=env.pkg.version, path=dirname(env.project_file)))
+        end
     end
     # Make sure all paths/artifacts exist
     return all(pkg -> is_package_downloaded(env.project_file, pkg), pkgs)
