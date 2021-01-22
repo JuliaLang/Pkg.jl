@@ -769,15 +769,19 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
     function recursive_dir_size(path)
         size = 0
-        for (root, dirs, files) in walkdir(path)
-            for file in files
-                path = joinpath(root, file)
-                try
-                    size += lstat(path).size
-                catch
-                    @warn "Failed to calculate size of $path"
+        try
+            for (root, dirs, files) in walkdir(path)
+                for file in files
+                    path = joinpath(root, file)
+                    try
+                        size += lstat(path).size
+                    catch ex
+                        @error("Failed to calculate size of $path", exception=ex)
+                    end
                 end
             end
+        catch ex
+            @error("Failed to calculate size of $path", exception=ex)
         end
         return size
     end
@@ -1292,9 +1296,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
                  " Finally, run `Pkg.instantiate()` again.")
     end
-    # TODO: seems to be a bug in is_instantiated on the line below so we have to download
-    # artifacts here even though we do the same at the end of this function
-    Operations.download_artifacts(ctx, [dirname(ctx.env.manifest_file)]; platform=platform, verbose=verbose)
+
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx)
         allow_autoprecomp && Pkg._auto_precompile(ctx)
@@ -1347,10 +1349,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
 
     # Install all packages
     new_apply = Operations.download_source(ctx, pkgs)
-    # Install all artifacts
-    Operations.download_artifacts(ctx, pkgs; platform=platform, verbose=verbose)
+    # Install artifacts for deps and artifacts for current package, if applicable
+    art_pkgs = copy(pkgs)
+    if ctx.env.pkg !== nothing
+        push!(art_pkgs, ctx.env.pkg)
+    end
+    Operations.download_artifacts(ctx, art_pkgs; platform, verbose)
     # Run build scripts
-    Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose=verbose)
+    Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose)
 
     allow_autoprecomp && Pkg._auto_precompile(ctx; kwargs...)
 end

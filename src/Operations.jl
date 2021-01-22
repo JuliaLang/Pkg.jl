@@ -114,7 +114,13 @@ end
 function is_instantiated(ctx::Context)::Bool
     # Load everything
     pkgs = load_all_deps(ctx)
-    # Make sure all paths exist
+    # If the top-level project is a package, ensure it is instantiated as well
+    if ctx.env.pkg !== nothing
+        push!(pkgs, Types.PackageSpec(
+            name=ctx.env.pkg.name, uuid=ctx.env.pkg.uuid, version=ctx.env.pkg.version, path=dirname(ctx.env.project_file)
+        ))
+    end
+    # Make sure all paths/artifacts exist
     return all(pkg -> is_package_downloaded(ctx, pkg), pkgs)
 end
 
