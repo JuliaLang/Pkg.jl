@@ -400,6 +400,7 @@ end
         force::Bool = false,
         verbose::Bool = false,
         quiet_download::Bool = false,
+        io::IO=stdout,
     )
 
 Helper method to download tarball located at `url`, verify it matches the
@@ -434,6 +435,7 @@ function download_verify_unpack(
     force::Bool = false,
     verbose::Bool = false,
     quiet_download::Bool = false,
+    io::IO=stdout,
 )
     # First, determine whether we should keep this tarball around
     remove_tarball = false
