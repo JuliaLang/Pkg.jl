@@ -710,7 +710,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                             set_readonly(path) # In add mode, files should be read-only
                         end
                         if ctx.use_only_tarballs_for_downloads && !success
-                            pkgerror("failed to get tarball from $(urls[pkg.uuid])")
+                            pkgerror("failed to get tarball for $(urls[pkg.uuid]) from $(first.(archive_urls))")
                         end
                         put!(results, (pkg, success, path))
                     catch err
