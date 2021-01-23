@@ -410,14 +410,16 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
+        first_attempt = true
         # first try downloading from Pkg server
         # TODO: only do this if Pkg server knows about this package
         if (server = pkg_server()) !== nothing
             url = "$server/artifact/$hash"
-            download_success = with_show_download_info(io, name, quiet_download) do
+            download_success = with_show_download_info(io, name, url, quiet_download, first_attempt) do
                 download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download, io=io)
             end
             download_success && return artifact_path(hash)
+            first_attempt = false
         end
 
         # If this artifact does not exist on-disk already, ensure it has download
@@ -430,10 +432,11 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         for entry in meta["download"]
             url = entry["url"]
             tarball_hash = entry["sha256"]
-            download_success = with_show_download_info(io, name, quiet_download) do
+            download_success = with_show_download_info(io, name, url, quiet_download, first_attempt) do
                 download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download, io=io)
             end
             download_success && return artifact_path(hash)
+            first_attempt = false
         end
         error("Unable to automatically install '$(name)' from '$(artifacts_toml)'")
     else
@@ -441,23 +444,32 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
     end
 end
 
-function with_show_download_info(f, name, quiet_download)
-    io = DEFAULT_IO[]
+function with_show_download_info(f, io, name, url, quiet_download, first_attempt)
     fancyprint = can_fancyprint(io)
     if !quiet_download
-        # Should ideally pass an IO as first arg here
-        fancyprint && print_progress_bottom(stderr)
-        printpkgstyle(stderr, :Downloading, "artifact: $name")
+        fancyprint && print_progress_bottom(io)
+        printpkgstyle(io, :Downloading, "artifact: $name")
     end
-    try
-        return f()
-    finally
-        if !quiet_download
-            fancyprint && print(stdout, "\033[1A") # move cursor up one line
-            fancyprint && print(stdout, "\033[2K") # clear line
-            fancyprint && printpkgstyle(stdout, :Downloaded, "artifact: $name")
+    ret = f()
+    if !quiet_download && fancyprint
+        str = sprint(context = :color => get(io, :color, false)) do iob
+            print(iob, "\033[1A") # move cursor up one line
+            print(iob, "\033[2K") # clear line
+            m = match(r"^(?:https?:\/\/)?(?:[^@\/\n]+@)?(?:www\.)?([^:\/?\n]+)", url)
+            domain = isnothing(m) ? url : first(m.captures) # if the domain isn't found, show the whole url
+            if ret === false
+                printpkgstyle(iob, :Failed, "to download artifact: $name from $domain", color=:red)
+            else
+                if first_attempt
+                    printpkgstyle(iob, :Downloaded, "artifact: $name")
+                else
+                    printpkgstyle(iob, :Downloaded, "artifact: $name from $domain")
+                end
+            end
         end
+        print(io, str)
     end
+    return ret
 end
 
 """
