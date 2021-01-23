@@ -22,6 +22,11 @@ const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-2369062
 const PackageSpec = Pkg.Types.PackageSpec
 
 import Pkg.Types: semver_spec, VersionSpec
+
+@testset "Basic download" begin
+    download("https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714")
+end
+
 @testset "semver notation" begin
     @test semver_spec("^1.2.3") == VersionSpec("1.2.3-1")
     @test semver_spec("^1.2")   == VersionSpec("1.2.0-1")
