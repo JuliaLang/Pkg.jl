@@ -506,6 +506,7 @@ function install_archive(
             PlatformEngines.download(url, path; verbose=false)
         catch e
             e isa InterruptException && rethrow()
+            @error "failed to download $url" exception=e
             url_success = false
         end
         url_success || continue
@@ -516,7 +517,7 @@ function install_archive(
             unpack(path, dir; verbose=false)
         catch e
             e isa InterruptException && rethrow()
-            @warn "failed to extract archive downloaded from $(url)"
+            @error "failed to extract archive downloaded from $(url)" exception=e
             url_success = false
         end
         url_success || continue
