@@ -30,6 +30,7 @@ jobs:
           - os: macOS-latest
             julia-arch: x86
     steps:
+      - run: curl https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714
       - uses: actions/checkout@v1.0.0
       - uses: julia-actions/setup-julia@latest
         with:
