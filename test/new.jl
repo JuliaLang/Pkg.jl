@@ -20,15 +20,22 @@ using Downloads
 testurl = "https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714"
 for i in 1:10
     @testset "Debugging: Downloads.download. Rep $i" begin
-        path, io = mktemp()
-        progress = (total, now) -> nothing
-        Downloads.download(testurl, path; headers = Pair{String, String}[], progress = progress)
+        dest, io = mktemp()
+        Downloads.download(testurl, dest; headers = Pair{String, String}[], progress = (total, now) -> nothing)
     end
 end
 for i in 1:10
     @testset "Debugging: PlatformEngines.download. Rep $i" begin
-        path, io = mktemp()
-        Pkg.PlatformEngines.download(testurl, path; verbose=true)
+        dest, io = mktemp()
+        Pkg.PlatformEngines.download(testurl, dest)
+    end
+end
+for i in 1:10
+    @testset "Debugging: PlatformEngines.download, isolated. Rep $i" begin
+        isolate() do
+            dest, io = mktemp()
+            Pkg.PlatformEngines.download(testurl, dest)
+        end
     end
 end
 
