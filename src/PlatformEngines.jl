@@ -263,7 +263,8 @@ function download(
     end
     @show url, dest, headers
     try
-        Downloads.download(url, dest; headers, progress)
+        println(@which Downloads.download(url, dest; headers, progress))
+        @time Downloads.download(url, dest; headers, progress)
     finally
         do_fancy && end_progress(stderr, bar)
     end
