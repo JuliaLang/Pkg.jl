@@ -503,7 +503,7 @@ function install_archive(
         push!(tmp_objects, path) # for cleanup
         url_success = true
         try
-            PlatformEngines.download(url, path; verbose=false)
+            PlatformEngines.download(url, path; verbose=true)
         catch e
             e isa InterruptException && rethrow()
             @warn "failed to download archive from $(url)" exception=e
