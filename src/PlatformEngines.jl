@@ -261,6 +261,7 @@ function download(
     else
         (total, now) -> nothing
     end
+    @show url, dest, headers
     try
         Downloads.download(url, dest; headers, progress)
     finally
