@@ -17,9 +17,15 @@ unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 
 using Downloads
-@testset "Debugging: Basic download" begin
-    Downloads.download("https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714")
+testurl = "https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714"
+@testset "Debugging: Downloads.download" begin
+    Downloads.download(testurl)
 end
+@testset "Debugging: PlatformEngines.download" begin
+    path, io = mktemp()
+    Pkg.PlatformEngines.download(testurl, path; verbose=true)
+end
+
 for i in 1:10
     @testset "Debugging: downloads. Rep $i" begin
         # libgit2 downloads
