@@ -20,25 +20,27 @@ using Downloads
 @testset "Debugging: Basic download" begin
     Downloads.download("https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714")
 end
-@testset "Debugging: downloads" begin
-    # libgit2 downloads
-    isolate() do
-        Pkg.add("Example"; use_libgit2_for_all_downloads=true)
-        @test haskey(Pkg.dependencies(), exuuid)
-        @eval import $(Symbol(TEST_PKG.name))
-        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
-        Pkg.rm(TEST_PKG.name)
-    end
-    isolate() do
-        @testset "libgit2 downloads" begin
-            Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
-            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+for i in 1:10
+    @testset "Debugging: downloads. Rep $i" begin
+        # libgit2 downloads
+        isolate() do
+            Pkg.add("Example"; use_libgit2_for_all_downloads=true)
+            @test haskey(Pkg.dependencies(), exuuid)
+            @eval import $(Symbol(TEST_PKG.name))
+            @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
             Pkg.rm(TEST_PKG.name)
         end
-        @testset "tarball downloads" begin
-            Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
-            @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
-            Pkg.rm("JSON")
+        isolate() do
+            @testset "libgit2 downloads" begin
+                Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
+                @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                Pkg.rm(TEST_PKG.name)
+            end
+            @testset "tarball downloads" begin
+                Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
+                @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
+                Pkg.rm("JSON")
+            end
         end
     end
 end
