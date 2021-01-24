@@ -21,28 +21,17 @@ testurl = "https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c7
 @testset "Debugging: Downloads.download" begin
     Downloads.download(testurl)
 end
-@testset "Debugging: PlatformEngines.download" begin
-    @show Pkg.PlatformEngines.get_auth_header(testurl, verbose=true)
-    path, io = mktemp()
-    Pkg.PlatformEngines.download(testurl, path; verbose=true)
+for i in 1:10
+    @testset "Debugging: PlatformEngines.download" begin
+        @show Pkg.PlatformEngines.get_auth_header(testurl, verbose=true)
+        path, io = mktemp()
+        Pkg.PlatformEngines.download(testurl, path; verbose=true)
+    end
 end
 
 for i in 1:10
     @testset "Debugging: downloads. Rep $i" begin
-        # libgit2 downloads
-        # isolate() do
-        #     Pkg.add("Example"; use_libgit2_for_all_downloads=true)
-        #     @test haskey(Pkg.dependencies(), exuuid)
-        #     @eval import $(Symbol(TEST_PKG.name))
-        #     @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
-        #     Pkg.rm(TEST_PKG.name)
-        # end
         isolate() do
-            # @testset "libgit2 downloads" begin
-            #     Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
-            #     @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-            #     Pkg.rm(TEST_PKG.name)
-            # end
             @testset "tarball downloads" begin
                 Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
                 @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
