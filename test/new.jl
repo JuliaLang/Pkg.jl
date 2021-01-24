@@ -22,6 +22,7 @@ testurl = "https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c7
     Downloads.download(testurl)
 end
 @testset "Debugging: PlatformEngines.download" begin
+    @show Pkg.PlatformEngines.get_auth_header(testurl, verbose=true)
     path, io = mktemp()
     Pkg.PlatformEngines.download(testurl, path; verbose=true)
 end
