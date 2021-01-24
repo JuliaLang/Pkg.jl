@@ -18,8 +18,12 @@ simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 
 using Downloads
 testurl = "https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714"
-@testset "Debugging: Downloads.download" begin
-    Downloads.download(testurl)
+for i in 1:10
+    @testset "Debugging: Downloads.download. Rep $i" begin
+        path, io = mktemp()
+        progress = (total, now) -> nothing
+        Downloads.download(testurl, path; headers = Pair{String, String}[], progress = progress)
+    end
 end
 for i in 1:10
     @testset "Debugging: PlatformEngines.download. Rep $i" begin
