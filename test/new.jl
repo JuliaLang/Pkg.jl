@@ -22,48 +22,48 @@ testurl2 = "https://api.github.com/repos/JuliaIO/JSON.jl/tarball/81690084b6198a2
 
 precompile(Pkg.add, (String,))
 
-for i in 1:1
-    @testset "Debugging: Downloads.download. Rep $i" begin
-        dest, io = mktemp()
-        Downloads.download(testurl1, dest; headers = Pair{String, String}[], progress = (total, now) -> nothing, verbose = true)
+@testset "Debugging: Downloads.download" begin
+    dest, io = mktemp()
+    Downloads.download(testurl1, dest; headers = Pair{String, String}[], progress = (total, now) -> nothing, verbose = true)
+end
+
+@testset "Debugging: Downloads.download, multiple async." begin
+    Base.Experimental.@sync begin
+        dest1, io = mktemp()
+        @async Pkg.PlatformEngines.download(testurl1, dest1, verbose = true)
+        dest2, io = mktemp()
+        @async Pkg.PlatformEngines.download(testurl2, dest2, verbose = true)
     end
 end
-for i in 1:1
-    @testset "Debugging: PlatformEngines.download. Rep $i" begin
+
+
+@testset "Debugging: PlatformEngines.download" begin
+    dest, io = mktemp()
+    Pkg.PlatformEngines.download(testurl1, dest, verbose = true)
+end
+@testset "Debugging: PlatformEngines.download, isolated" begin
+    isolate() do
         dest, io = mktemp()
         Pkg.PlatformEngines.download(testurl1, dest, verbose = true)
     end
 end
-for i in 1:1
-    @testset "Debugging: PlatformEngines.download, isolated. Rep $i" begin
-        isolate() do
-            dest, io = mktemp()
-            Pkg.PlatformEngines.download(testurl1, dest, verbose = true)
+
+@testset "Debugging: PlatformEngines.download, isolated, multiple async." begin
+    isolate() do
+        Base.Experimental.@sync begin
+            dest1, io = mktemp()
+            @async Pkg.PlatformEngines.download(testurl1, dest1, verbose = true)
+            dest2, io = mktemp()
+            @async Pkg.PlatformEngines.download(testurl2, dest2, verbose = true)
         end
     end
 end
-
-for i in 1:1
-    @testset "Debugging: PlatformEngines.download, isolated, multiple in scope. Rep $i" begin
-        isolate() do
-            Base.Experimental.@sync begin
-                dest1, io = mktemp()
-                @async Pkg.PlatformEngines.download(testurl1, dest1, verbose = true)
-                dest2, io = mktemp()
-                @async Pkg.PlatformEngines.download(testurl2, dest2, verbose = true)
-            end
-        end
-    end
-end
-
-for i in 1:1
-    @testset "Debugging: downloads. Rep $i" begin
-        isolate() do
-            @testset "tarball downloads" begin
-                Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
-                @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
-                Pkg.rm("JSON")
-            end
+@testset "Debugging: Pkg.add(\"JSON\"; use_only_tarballs_for_downloads=true)" begin
+    isolate() do
+        @testset "tarball downloads" begin
+            Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
+            @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
+            Pkg.rm("JSON")
         end
     end
 end
