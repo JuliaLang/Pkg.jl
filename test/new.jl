@@ -41,6 +41,16 @@ end
     dest, io = mktemp()
     Pkg.PlatformEngines.download(testurl1, dest, verbose = true)
 end
+@testset "Debugging: PlatformEngines.download, multiple async." begin
+    Base.Experimental.@sync begin
+        dest1, io = mktemp()
+        @async Pkg.PlatformEngines.download(testurl1, dest1, verbose = true)
+        dest2, io = mktemp()
+        @async Pkg.PlatformEngines.download(testurl2, dest2, verbose = true)
+    end
+end
+
+
 @testset "Debugging: PlatformEngines.download, isolated" begin
     isolate() do
         dest, io = mktemp()
