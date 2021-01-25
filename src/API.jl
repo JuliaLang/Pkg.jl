@@ -980,7 +980,7 @@ function make_pkgspec(man, uuid)
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
+function precompile(ctx::Context; internal_call::Bool=false, fail_indirect_deps::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1209,7 +1209,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                         end
                     catch err
                         if err isa ErrorException
-                            failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
+                            failed_deps[pkg] = (fail_indirect_deps || is_direct_dep) ? String(take!(iob)) : ""
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
@@ -1278,7 +1278,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             err_str = ""
             n_direct_errs = 0
             for (dep, err) in failed_deps
-                if dep in direct_deps
+                if fail_indirect_deps || (dep in direct_deps)
                     err_str *= "\n" * "$dep" * "\n\n" * err * (n_direct_errs > 0 ? "\n" : "")
                     n_direct_errs += 1
                 end
