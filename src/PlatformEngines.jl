@@ -263,7 +263,7 @@ function download(
     end
     @show url, dest, headers
     try
-        @time Downloads.download(url, dest; headers, progress)
+        Downloads.download(url, dest; headers, progress, verbose)
     finally
         do_fancy && end_progress(stderr, bar)
     end

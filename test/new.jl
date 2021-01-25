@@ -24,20 +24,20 @@ precompile(Pkg.add, (String,))
 for i in 1:10
     @testset "Debugging: Downloads.download. Rep $i" begin
         dest, io = mktemp()
-        Downloads.download(testurl, dest; headers = Pair{String, String}[], progress = (total, now) -> nothing)
+        Downloads.download(testurl, dest; headers = Pair{String, String}[], progress = (total, now) -> nothing, verbose = true)
     end
 end
 for i in 1:10
     @testset "Debugging: PlatformEngines.download. Rep $i" begin
         dest, io = mktemp()
-        Pkg.PlatformEngines.download(testurl, dest)
+        Pkg.PlatformEngines.download(testurl, dest, verbose = true)
     end
 end
 for i in 1:10
     @testset "Debugging: PlatformEngines.download, isolated. Rep $i" begin
         isolate() do
             dest, io = mktemp()
-            Pkg.PlatformEngines.download(testurl, dest)
+            Pkg.PlatformEngines.download(testurl, dest, verbose = true)
         end
     end
 end
