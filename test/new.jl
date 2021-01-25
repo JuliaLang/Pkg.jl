@@ -17,27 +17,41 @@ unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 
 using Downloads
-testurl = "https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714"
+testurl1 = "https://api.github.com/repos/JuliaData/Parsers.jl/tarball/50c9a9ed8c714945e01cd53a21007ed3865ed714"
+testurl2 = "https://api.github.com/repos/JuliaIO/JSON.jl/tarball/81690084b6198a2e1da36fcfda16eeca9f9f24e4"
 
 precompile(Pkg.add, (String,))
 
 for i in 1:1
     @testset "Debugging: Downloads.download. Rep $i" begin
         dest, io = mktemp()
-        Downloads.download(testurl, dest; headers = Pair{String, String}[], progress = (total, now) -> nothing, verbose = true)
+        Downloads.download(testurl1, dest; headers = Pair{String, String}[], progress = (total, now) -> nothing, verbose = true)
     end
 end
 for i in 1:1
     @testset "Debugging: PlatformEngines.download. Rep $i" begin
         dest, io = mktemp()
-        Pkg.PlatformEngines.download(testurl, dest, verbose = true)
+        Pkg.PlatformEngines.download(testurl1, dest, verbose = true)
     end
 end
 for i in 1:1
     @testset "Debugging: PlatformEngines.download, isolated. Rep $i" begin
         isolate() do
             dest, io = mktemp()
-            Pkg.PlatformEngines.download(testurl, dest, verbose = true)
+            Pkg.PlatformEngines.download(testurl1, dest, verbose = true)
+        end
+    end
+end
+
+for i in 1:1
+    @testset "Debugging: PlatformEngines.download, isolated, multiple in scope. Rep $i" begin
+        isolate() do
+            Base.Experimental.@sync begin
+                dest1, io = mktemp()
+                @async Pkg.PlatformEngines.download(testurl1, dest1, verbose = true)
+                dest2, io = mktemp()
+                @async Pkg.PlatformEngines.download(testurl2, dest2, verbose = true)
+            end
         end
     end
 end
