@@ -176,7 +176,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             # copy to `depot`
             regpath = joinpath(depot, "registries", registry.name)
             ispath(dirname(regpath)) || mkpath(dirname(regpath))
-            if isdir_nothrow(regpath)
+            if isfile(joinpath(regpath, "Registry.toml"))
                 existing_registry = Registry.RegistryInstance(regpath; parse_packages=false)
                 if registry.uuid == existing_registry.uuid
                     println(io,
@@ -188,7 +188,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                         "`$(Base.contractuser(joinpath(depot, "registries", registry.name*"-2")))`."))
                 end
             else
-                mv(tmp, regpath)
+                # if the dir doesn't exist, or exists but doesn't contain a Registry.toml
+                mv(tmp, regpath, force=true)
                 printpkgstyle(io, :Added, "registry `$(registry.name)` to `$(Base.contractuser(regpath))`")
             end
         end
