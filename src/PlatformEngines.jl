@@ -27,7 +27,7 @@ function find7z()
     name = "7z"
     Sys.iswindows() && (name = "$name.exe")
     for dir in (joinpath("..", "libexec"), ".")
-        path = normpath(Sys.BINDIR, dir, name)
+        path = normpath(Sys.BINDIR::String, dir, name)
         isfile(path) && return path
     end
     path = Sys.which(name)

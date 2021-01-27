@@ -164,7 +164,7 @@ open(output_fname, "w") do io
 
     # Julia standard libraries with duplicate entries removed so as to store only the
     # first release in a set of releases that all contain the same set of stdlibs.
-    STDLIBS_BY_VERSION = [
+    const STDLIBS_BY_VERSION = [
     """)
     for v in sorted_versions
         print(io, "    $(repr(v)) => ")
@@ -176,7 +176,7 @@ open(output_fname, "w") do io
     # Next, we also embed a list of stdlibs that must _always_ be treated as stdlibs,
     # because they cannot be resolved in the registry; they have only ever existed within
     # the Julia stdlib source tree, and because of that, trying to resolve them will fail.
-    UNREGISTERED_STDLIBS = Dict(
+    const UNREGISTERED_STDLIBS = Dict(
     """)
     for (uuid, name) in unregistered_stdlibs
         println(io, "    $(repr(uuid)) => $(repr(name)),")
