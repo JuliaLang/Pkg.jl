@@ -286,7 +286,7 @@ Update `pkg` within the constraints of the indicated version
 specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
 any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
 In `--project` mode, package specifications only match project packages, while
-in `manifest` mode they match any manifest package. Bound level options force
+in `--manifest` mode they match any manifest package. Bound level options force
 the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
