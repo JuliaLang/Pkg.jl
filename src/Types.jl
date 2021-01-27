@@ -986,6 +986,9 @@ end
 
 pkg_server_url_hash(url::String) = split(url, '/')[end]
 
+registry_use_pkg_server() =
+    !Sys.iswindows() || haskey(ENV, "JULIA_PKG_SERVER")
+
 # entry point for `registry add`
 function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
@@ -998,7 +1001,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
         mktempdir() do tmp
             url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
             # on Windows we prefer git cloning because untarring is so slow
-            if !Sys.iswindows() && url !== nothing
+            if url !== nothing && registry_use_pkg_server()
                 # download from Pkg server
                 try
                     download_verify_unpack(url, nothing, tmp, ignore_existence = true)
