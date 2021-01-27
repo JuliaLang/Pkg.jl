@@ -1031,7 +1031,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             # slug = Base.package_slug(UUID(registry["uuid"]))
             regpath = joinpath(depot, "registries", registry["name"]::String#=, slug=#)
             ispath(dirname(regpath)) || mkpath(dirname(regpath))
-            if Pkg.isdir_nothrow(regpath)
+            if isfile(joinpath(regpath, "Registry.toml"))
                 existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
                 if registry["uuid"] == existing_registry["uuid"]
                     println(ctx.io,
@@ -1043,7 +1043,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
                         "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
                 end
             else
-                mv(tmp, regpath)
+                mv(tmp, regpath, force=true)
                 printpkgstyle(ctx, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
             end
         end
