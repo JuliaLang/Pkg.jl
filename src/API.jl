@@ -1286,8 +1286,8 @@ function precompile(ctx::Context; internal_call::Bool=false, throw_indirect_deps
             if err_str != ""
                 println(io, "")
                 plural = n_direct_errs == 1 ? "y" : "ies"
-                direct = throw_indirect_deps ? "" : "direct"
-                pkgerror("The following $n_direct_errs $direct dependenc$(plural) failed to precompile:\n$(err_str[1:end-1])")
+                direct = throw_indirect_deps ? "" : "direct "
+                pkgerror("The following $n_direct_errs $(direct)dependenc$(plural) failed to precompile:\n$(err_str[1:end-1])")
             end
         end
     end
