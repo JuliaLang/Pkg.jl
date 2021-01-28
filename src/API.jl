@@ -984,7 +984,12 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
-    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(Sys.CPU_THREADS::Int + 1)))
+
+    # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
+    # TODO: Investigate why this happens in windows and restore the full task limit
+    default_num_tasks = Sys.iswindows() ? div(Sys.CPU_THREADS::Int, 2) + 1 : Sys.CPU_THREADS::Int + 1
+
+    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(default_num_tasks)))
     parallel_limiter = Base.Semaphore(num_tasks)
     io = ctx.io
     fancyprint = can_fancyprint(io)
