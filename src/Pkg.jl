@@ -136,7 +136,7 @@ Precompile all the dependencies of the project in parallel.
 !!! note
     Errors will only throw when precompiling the top-level dependencies, given that
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
-    This can be overridden by setting `throw_indirect_deps=true`
+    This can be overridden by setting the kwarg `throw_indirect_deps` to `true`
 
 !!! note
     This method is called automatically after any Pkg action that changes the manifest.
