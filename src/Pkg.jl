@@ -127,12 +127,13 @@ See also [`PackageSpec`](@ref).
 const add = API.add
 
 """
-    Pkg.precompile()
+    Pkg.precompile(; strict::Bool=false)
 
 Precompile all the dependencies of the project in parallel.
 !!! note
     Errors will only throw when precompiling the top-level dependencies, given that
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
+    This can be overridden to make errors in all dependencies throw by setting the kwarg `strict` to `true`
 
 !!! note
     This method is called automatically after any Pkg action that changes the manifest.

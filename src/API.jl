@@ -910,7 +910,7 @@ function make_pkgspec(man, uuid)
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
+function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1144,7 +1144,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
                         end
                     catch err
                         if err isa ErrorException
-                            failed_deps[pkg] = is_direct_dep ? String(take!(iob)) : ""
+                            failed_deps[pkg] = (strict || is_direct_dep) ? String(take!(iob)) : ""
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
@@ -1213,7 +1213,7 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             err_str = ""
             n_direct_errs = 0
             for (dep, err) in failed_deps
-                if dep in direct_deps
+                if strict || (dep in direct_deps)
                     err_str *= "\n" * "$dep" * "\n\n" * err * (n_direct_errs > 0 ? "\n" : "")
                     n_direct_errs += 1
                 end
@@ -1221,7 +1221,8 @@ function precompile(ctx::Context; internal_call::Bool=false, kwargs...)
             if err_str != ""
                 println(io, "")
                 plural = n_direct_errs == 1 ? "y" : "ies"
-                pkgerror("The following $( n_direct_errs) direct dependenc$(plural) failed to precompile:\n$(err_str[1:end-1])")
+                direct = strict ? "" : "direct "
+                pkgerror("The following $n_direct_errs $(direct)dependenc$(plural) failed to precompile:\n$(err_str[1:end-1])")
             end
         end
     end
