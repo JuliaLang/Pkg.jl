@@ -31,6 +31,10 @@ function do_test()
         joinpath(artifact"c_simple", "lib", "libc_simple.so")
     end
 
+    run(`ls -la $(dirname(libc_simple_path))`)
+    if Sys.iswindows()
+        run(`icacls $(libc_simple_path)`)
+    end
     libc_simple = dlopen(libc_simple_path)
     @test libc_simple != nothing
     @test ccall(dlsym(libc_simple, :my_add), Cint, (Cint, Cint), 2, 3) == 5
