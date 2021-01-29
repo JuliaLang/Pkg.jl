@@ -303,70 +303,47 @@ function download_artifact(
         return true
     end
 
-    if Sys.iswindows()
-        # The destination directory we're hoping to fill:
-        dest_dir = artifact_path(tree_hash; honor_overrides=false)
-        mkpath(dest_dir)
-
-        # On Windows, we have some issues around stat() and chmod() that make properly
-        # determining the git tree hash problematic; for this reason, we use the "unsafe"
-        # artifact unpacking method, which does not properly verify unpacked git tree
-        # hash.  This will be fixed in a future Julia release which will properly interrogate
-        # the filesystem ACLs for executable permissions, which git tree hashes care about.
-        try
-            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
-                                   verbose=verbose, quiet_download=quiet_download)
-        catch e
-            # Clean that destination directory out if something went wrong
-            rm(dest_dir; force=true, recursive=true)
-
-            if isa(e, InterruptException)
-                rethrow(e)
-            end
-            return false
+    # We download by using `create_artifact()`.  We do this because the download may
+    # be corrupted or even malicious; we don't want to clobber someone else's artifact
+    # by trusting the tree hash that has been given to us; we will instead download it
+    # to a temporary directory, calculate the true tree hash, then move it to the proper
+    # location only after knowing what it is, and if something goes wrong in the process,
+    # everything should be cleaned up.  Luckily, that is precisely what our
+    # `create_artifact()` wrapper does, so we use that here.
+    calc_hash = try
+        create_artifact() do dir
+            download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose, quiet_download=quiet_download)
         end
-    else
-        # We download by using `create_artifact()`.  We do this because the download may
-        # be corrupted or even malicious; we don't want to clobber someone else's artifact
-        # by trusting the tree hash that has been given to us; we will instead download it
-        # to a temporary directory, calculate the true tree hash, then move it to the proper
-        # location only after knowing what it is, and if something goes wrong in the process,
-        # everything should be cleaned up.  Luckily, that is precisely what our
-        # `create_artifact()` wrapper does, so we use that here.
-        calc_hash = try
-            create_artifact() do dir
-                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose, quiet_download=quiet_download)
-            end
-        catch e
-            if isa(e, InterruptException)
-                rethrow(e)
-            end
-            # If something went wrong during download, return false
-            return false
+    catch e
+        if isa(e, InterruptException)
+            rethrow(e)
         end
+        @error "failed to download tarball from $(repr(tarball_url))" *
+               (tarball_hash === nothing ? "" : " with expected hash $(repr(tarball_hash))") exception=e
+        # If something went wrong during download, return false
+        return false
+    end
 
-        # Did we get what we expected?  If not, freak out.
-        if calc_hash.bytes != tree_hash.bytes
-            msg  = "Tree Hash Mismatch!\n"
-            msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
-            msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
-            # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
-            # and Pkg.jl#2317 so we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
-            # error and move the artifact to the expected location and return true
-            ignore_hash = get(ENV, "JULIA_PKG_IGNORE_HASHES", nothing) == "1"
-            if ignore_hash
-                msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
-            end
-            @error(msg)
-            if ignore_hash
-                # Move it to the location we expected
-                src = artifact_path(calc_hash; honor_overrides=false)
-                dst = artifact_path(tree_hash; honor_overrides=false)
-                mv(src, dst; force=true)
-                return true
-            end
-            return false
+    if calc_hash.bytes != tree_hash.bytes
+        msg  = "Tree Hash Mismatch!\n"
+        msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
+        msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+        # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
+        # and Pkg.jl#2317 so we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
+        # error and move the artifact to the expected location and return true
+        ignore_hash = get(ENV, "JULIA_PKG_IGNORE_HASHES", nothing) == "1"
+        if ignore_hash
+            msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
         end
+        @error(msg)
+        if ignore_hash
+            # Move it to the location we expected
+            src = artifact_path(calc_hash; honor_overrides=false)
+            dst = artifact_path(tree_hash; honor_overrides=false)
+            mv(src, dst; force=true)
+            return true
+        end
+        return false
     end
 
     return true
@@ -443,10 +420,12 @@ function with_show_download_info(f, name, quiet_download)
         fancyprint && print_progress_bottom(stderr)
         printpkgstyle(stderr, :Downloading, "artifact: $name")
     end
+    local ret
     try
-        return f()
+        ret = f()
+        return ret
     finally
-        if !quiet_download
+        if ret && !quiet_download
             fancyprint && print(stdout, "\033[1A") # move cursor up one line
             fancyprint && print(stdout, "\033[2K") # clear line
             fancyprint && printpkgstyle(stdout, :Downloaded, "artifact: $name")
