@@ -127,16 +127,22 @@ function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
 end
 
 """
-    archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
+    archive_artifact(hash::SHA1, tarball_path::String;
+                     honor_overrides::Bool=false,
+                     package::Function=package)
 
 Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256 of the
 resultant tarball as a hexidecimal string. Throws an error if the artifact does not
-exist.  If the artifact is overridden, throws an error unless `honor_overrides` is set.
+exist.  If the artifact is overridden, throws an error unless `honor_overrides` is set.  A
+`package(src_dir, tarball_path)` function may be specified to use a custom compression
+method.
 
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3.
 """
-function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
+function archive_artifact(hash::SHA1, tarball_path::String;
+                          honor_overrides::Bool=false,
+                          package::Function=package)
     if !honor_overrides
         if query_override(hash) !== nothing
             error("Will not archive an overridden artifact unless `honor_overrides` is set!")
