@@ -302,6 +302,13 @@ end
             tarball_path = joinpath(art_dir, "foo.tar.gz")
             archive_artifact(hash, tarball_path)
             @test "foo" in PlatformEngines.list_tarball_files(tarball_path)
+            rm(tarball_path)
+
+            # Test custom `package` function and ensure failure if no `tarball_path` file
+            # is created.
+            package_alt(src_dir, tarball_path) = nothing
+            @test !isfile(tarball_path)
+            @test_throws SystemError archive_artifact(hash, tarball_path, package=package_alt)
 
             # Test archiving something that doesn't exist fails
             remove_artifact(hash)
