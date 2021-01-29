@@ -313,6 +313,11 @@ function download_artifact(
     calc_hash = try
         create_artifact() do dir
             download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose, quiet_download=quiet_download)
+            f = joinpath(dir, "lib", "libc_simple.dll")
+            if isfile(f)
+                @info("immediate post-extraction")
+                run(`icacls $(f)`)
+            end
         end
     catch e
         if isa(e, InterruptException)
