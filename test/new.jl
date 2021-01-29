@@ -2413,6 +2413,21 @@ end
             Pkg.add(path="A")
         end
     end
+    # test #2302
+    isolate(loaded_depot=true) do
+        cd_tempdir() do dir
+            Pkg.generate("A")
+            Pkg.generate("B")
+            git_init_and_commit("B")
+            Pkg.develop(path="B")
+            Pkg.activate("A")
+            Pkg.add(path="B")
+            git_init_and_commit("A")
+            Pkg.activate("B")
+            # This shouldn't error even though A has a dependency on B
+            Pkg.add(path="A")
+        end
+    end
 end
 
 @testset "Offline mode" begin

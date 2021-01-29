@@ -116,9 +116,15 @@ function is_instantiated(ctx::Context)::Bool
     pkgs = load_all_deps(ctx)
     # If the top-level project is a package, ensure it is instantiated as well
     if ctx.env.pkg !== nothing
-        push!(pkgs, Types.PackageSpec(
-            name=ctx.env.pkg.name, uuid=ctx.env.pkg.uuid, version=ctx.env.pkg.version, path=dirname(ctx.env.project_file)
-        ))
+        # Top-level project may already be in the manifest (cyclic deps)
+        # so only add it if it isn't there
+        idx = findfirst(x -> x.uuid == ctx.env.pkg.uuid, pkgs)
+        if idx === nothing
+            push!(pkgs, Types.PackageSpec(
+                name=ctx.env.pkg.name, uuid=ctx.env.pkg.uuid, version=ctx.env.pkg.version,
+                path=dirname(ctx.env.project_file)
+            ))
+        end
     end
     # Make sure all paths/artifacts exist
     return all(pkg -> is_package_downloaded(ctx, pkg), pkgs)

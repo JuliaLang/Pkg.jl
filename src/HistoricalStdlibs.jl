@@ -4,7 +4,7 @@ using Base: UUID
 
 # Julia standard libraries with duplicate entries removed so as to store only the
 # first release in a set of releases that all contain the same set of stdlibs.
-STDLIBS_BY_VERSION = [
+const STDLIBS_BY_VERSION = [
     v"1.0.0" => Dict(
         UUID("2a0f44e3-6c83-55bd-87e4-b1978d98bd5f") => "Base64",
         UUID("8bf52ea8-c179-5cab-976a-9e18b702a9bc") => "CRC32c",
@@ -99,7 +99,7 @@ STDLIBS_BY_VERSION = [
 # Next, we also embed a list of stdlibs that must _always_ be treated as stdlibs,
 # because they cannot be resolved in the registry; they have only ever existed within
 # the Julia stdlib source tree, and because of that, trying to resolve them will fail.
-UNREGISTERED_STDLIBS = Dict(
+const UNREGISTERED_STDLIBS = Dict(
     UUID("9a3f8284-a2c9-5f02-9a11-845980a1fd5c") => "Random",
     UUID("10745b16-79ce-11e8-11f9-7d13ad32a3b2") => "Statistics",
     UUID("8bb1440f-4735-579b-a4ab-409b98df4dab") => "DelimitedFiles",
