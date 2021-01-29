@@ -247,6 +247,7 @@ function download(
     for header in get_metadata_headers(url)
         push!(headers, header)
     end
+    push!(headers, "User-Agent" => Downloads.Curl.USER_AGENT)
 
     io = stderr
     do_fancy = verbose && can_fancyprint(io)
