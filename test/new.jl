@@ -2311,8 +2311,6 @@ end
     end
 end
 
-tree_hash(root::AbstractString) = bytes2hex(@inferred Pkg.GitTools.tree_hash(root))
-
 @testset "git tree hash computation" begin
     mktempdir() do dir
         # test "well known" empty tree hash
