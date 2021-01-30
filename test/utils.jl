@@ -207,9 +207,9 @@ function git_init_package(tmp, path)
     base = basename(path)
     pkgpath = joinpath(tmp, base)
     cp(path, pkgpath)
-    @assert tree_hash(path) == tree_hash(pkgpath)
+    @assert Pkg.tree_hash(path) == Pkg.tree_hash(pkgpath)
     git_init_and_commit(pkgpath)
-    @assert tree_hash(path) == tree_hash(pkgpath)
+    @assert Pkg.tree_hash(path) == Pkg.tree_hash(pkgpath)
     return pkgpath
 end
 
