@@ -1800,6 +1800,7 @@ end
         @test isfile(log_file_add)
         for i in 1:10
             try
+                @show log_file_add
                 @show isdir(dirname(log_file_add))
                 @show isfile(log_file_add)
                 @show occursin("oops", read(log_file_add, String))
