@@ -13,33 +13,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        julia-version:
-          # - '1.6'
-          - 'nightly'
+        os:
+          - ubuntu-latest
+          - macOS-latest
+          - windows-latest
         julia-arch:
           - 'x64'
           - 'x86'
-        os:
-          # - ubuntu-latest
-          # - macOS-latest
-          - windows-latest
         pkg-server:
           - ""
           - "pkg.julialang.org"
-        # exclude:
-          # - os: macOS-latest
-          #   julia-arch: x86
+        julia-version:
+          # - '1.6'
+          - 'nightly'
+        exclude:
+          - os: macOS-latest
+            julia-arch: x86
     steps:
       - uses: actions/checkout@v1.0.0
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
-      # - name: Fix TEMP on windows
-      #   if: matrix.os == 'windows-latest'
-      #   run: |
-      #     # See https://github.com/actions/virtual-environments/issues/712
-      #     set TMP=%USERPROFILE%\AppData\Local\Temp
-      #     set TEMP=%USERPROFILE%\AppData\Local\Temp
+      - name: Fix TEMP on windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          # See https://github.com/actions/virtual-environments/issues/712
+          echo "TMP=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
+          echo "TEMP=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
       - name: Run tests
         run: |
           julia test/pkg-uuid.jl
