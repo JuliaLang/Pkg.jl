@@ -16,6 +16,16 @@ unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
 unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 
+
+tree_hash(root::AbstractString) = bytes2hex(@inferred Pkg.GitTools.tree_hash(root))
+
+#
+# # Sanity checks
+#
+pkg_path = joinpath(dirname(@__DIR__))
+@info "Pkg.jl path: $pkg_path"
+@info "Tree hash of Pkg.jl repo: $(tree_hash(pkg_path))"
+
 #
 # # Depot Changes
 #
@@ -2310,8 +2320,6 @@ end
         @test_throws PkgError Pkg.pkg"rm --project --manifest"
     end
 end
-
-tree_hash(root::AbstractString) = bytes2hex(@inferred Pkg.GitTools.tree_hash(root))
 
 @testset "git tree hash computation" begin
     mktempdir() do dir
