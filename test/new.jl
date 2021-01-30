@@ -1782,6 +1782,10 @@ end
     # Build log location
     isolate(loaded_depot=true) do; mktempdir() do tmp
         path = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "FailBuild"))
+        @show stat(joinpath(path, "src", "FailBuild.jl"))
+        @show filemode(joinpath(path, "src", "FailBuild.jl"))
+        @show stat(joinpath(path, "deps", "build.jl"))
+        @show filemode(joinpath(path, "deps", "build.jl"))
         # Log file in the directory when it is deved
         Pkg.develop(path=path; io=devnull)
         log_file_dev = joinpath(path, "deps", "build.log")
@@ -1800,7 +1804,7 @@ end
         # @test isfile(log_file_add)
         for i in 1:10
             try
-                @show "Try $i, (after $(i-1) seconds)"
+                @info "Try $i, (after $(i-1) seconds)"
                 @show log_file_add
                 @show isdir(dirname(log_file_add))
                 @show isfile(log_file_add)
