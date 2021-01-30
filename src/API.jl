@@ -994,8 +994,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     io = ctx.io
     fancyprint = can_fancyprint(io)
 
-    # when manually called, unsuspend all packages that were suspended due to precomp errors
-    internal_call ? recall_suspended_packages() : precomp_unsuspend!()
+    recall_precompile_state() # recall suspended and force-queued packages
+    !internal_call && precomp_unsuspend!() # when manually called, unsuspend all packages that were suspended due to precomp errors
 
     direct_deps = [
         Base.PkgId(uuid, name)
@@ -1173,15 +1173,17 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     wait(was_processed[dep])
                 end
 
-                suspended = if haskey(man, pkg.uuid) # to handle the working environment uuid
-                    precomp_suspended(make_pkgspec(man, pkg.uuid))
+                if haskey(man, pkg.uuid) # to handle the working environment uuid
+                    suspended = precomp_suspended(make_pkgspec(man, pkg.uuid))
+                    queued = precomp_queued(make_pkgspec(man, pkg.uuid))
                 else
-                    false
+                    suspended = false
+                    queued = false
                 end
                 # skip stale checking and force compilation if any dep was recompiled in this session
                 any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
                 is_stale = true
-                if (any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
+                if (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
@@ -1203,10 +1205,12 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
+                            haskey(man, pkg.uuid) && precomp_queue!(make_pkgspec(man, pkg.uuid))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
+                            queued && (haskey(man, pkg.uuid) && precomp_dequeue!(make_pkgspec(man, pkg.uuid)))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✓ ", :green), name))
                             end
@@ -1219,6 +1223,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
                             if haskey(man, pkg.uuid)
+                                queued && precomp_dequeue!(make_pkgspec(man, pkg.uuid))
                                 precomp_suspend!(make_pkgspec(man, pkg.uuid))
                             end
                         else
@@ -1250,7 +1255,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         handle_interrupt(err)
     end
     notify(first_started) # in cases of no-op or !fancyprint
-    save_suspended_packages() # save list to scratch space
+    save_precompile_state() # save lists to scratch space
     wait(t_print)
     !all(istaskdone, tasks) && return # if some not finished, must have errored or been interrupted
     seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
@@ -1299,29 +1304,34 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     nothing
 end
 
-const pkgs_precompile_suspended = PackageSpec[]
-function save_suspended_packages()
+const pkgs_precompile_suspended = PackageSpec[] # packages that shouldn't be retried during autoprecomp
+const pkgs_precompile_pending = PackageSpec[] # packages that need to be retried after restart
+function save_precompile_state()
     path = Operations.pkg_scratchpath()
-    fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project() * string(Base.VERSION))))
-    mkpath(path); Base.Filesystem.rm(fpath, force=true)
-    open(fpath, "w") do io
-        serialize(io, pkgs_precompile_suspended)
+    for (prefix, store) in (("suspend_cache_", pkgs_precompile_suspended), ("pending_cache_", pkgs_precompile_pending))
+        fpath = joinpath(path, string(prefix, hash(Base.active_project() * string(Base.VERSION))))
+        mkpath(path); Base.Filesystem.rm(fpath, force=true)
+        open(fpath, "w") do io
+            serialize(io, store)
+        end
     end
     return nothing
 end
-function recall_suspended_packages()
-    fpath = joinpath(Operations.pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project() * string(Base.VERSION))))
-    if isfile(fpath)
-        v = open(fpath) do io
-            try
-                deserialize(io)
-            catch
-                PackageSpec[]
+function recall_precompile_state()
+    for (prefix, store) in (("suspend_cache_", pkgs_precompile_suspended), ("pending_cache_", pkgs_precompile_pending))
+        fpath = joinpath(Operations.pkg_scratchpath(), string(prefix, hash(Base.active_project() * string(Base.VERSION))))
+        if isfile(fpath)
+            v = open(fpath) do io
+                try
+                    deserialize(io)
+                catch
+                    PackageSpec[]
+                end
             end
+            append!(empty!(store), v)
+        else
+            empty!(store)
         end
-        append!(empty!(pkgs_precompile_suspended), v)
-    else
-        empty!(pkgs_precompile_suspended)
     end
     return nothing
 end
@@ -1329,6 +1339,10 @@ precomp_suspend!(pkg::PackageSpec) = push!(pkgs_precompile_suspended, pkg)
 precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
 precomp_suspended(pkg::PackageSpec) = pkg in pkgs_precompile_suspended
 precomp_prune_suspended!(pkgs::Vector{PackageSpec}) = filter!(in(pkgs), pkgs_precompile_suspended)
+
+precomp_queue!(pkg::PackageSpec) = push!(pkgs_precompile_pending, pkg)
+precomp_dequeue!(pkg::PackageSpec) = filter!(!isequal(pkg), pkgs_precompile_pending)
+precomp_queued(pkg::PackageSpec) = pkg in pkgs_precompile_pending
 
 function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
     try
