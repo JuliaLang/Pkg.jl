@@ -203,7 +203,7 @@ function git_init_and_commit(path; msg = "initial commit")
     end
 end
 
-tree_hash(root::AbstractString) = bytes2hex(@inferred Pkg.GitTools.tree_hash(root))
+tree_hash(root::AbstractString) = bytes2hex(Pkg.GitTools.tree_hash(root))
 
 function git_init_package(tmp, path)
     base = basename(path)
