@@ -26,7 +26,7 @@ jobs:
         pkg-server:
           - ""
           - "pkg.julialang.org"
-        exclude:
+        # exclude:
           # - os: macOS-latest
           #   julia-arch: x86
     steps:
