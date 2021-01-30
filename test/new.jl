@@ -1800,20 +1800,8 @@ end
         @test !isfile(joinpath(Base.find_package("FailBuild"), "..", "..", "deps", "build.log"))
         log_file_add = joinpath(DEPOT_PATH[1], "scratchspaces",
             "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log")
-        # @test isdir(dirname(log_file_add))
-        # @test isfile(log_file_add)
-        for i in 1:10
-            try
-                @info "Try $i, (after $(i-1) seconds)"
-                @show log_file_add
-                @show isdir(dirname(log_file_add))
-                @show isfile(log_file_add)
-                @show occursin("oops", read(log_file_add, String))
-                sleep(1)
-            catch e
-                @error exception=e
-            end
-        end
+        @test isdir(dirname(log_file_add))
+        @test isfile(log_file_add)
         @test occursin("oops", read(log_file_add, String))
     end end
 end
