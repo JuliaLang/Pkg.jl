@@ -150,7 +150,7 @@ function write_build(path, content)
 end
 
 function with_current_env(f)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(".")
     try
         f()
@@ -160,7 +160,7 @@ function with_current_env(f)
 end
 
 function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
@@ -178,7 +178,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
 end
 
 function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(path)
     try
         if change_dir
@@ -207,7 +207,9 @@ function git_init_package(tmp, path)
     base = basename(path)
     pkgpath = joinpath(tmp, base)
     cp(path, pkgpath)
+    @assert tree_hash(path) == tree_hash(pkgpath)
     git_init_and_commit(pkgpath)
+    @assert tree_hash(path) == tree_hash(pkgpath)
     return pkgpath
 end
 
