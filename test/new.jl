@@ -1800,7 +1800,9 @@ end
         @test isfile(log_file_add)
         for i in 1:10
             try
-                @test occursin("oops", read(log_file_add, String))
+                @show isdir(dirname(log_file_add))
+                @show isfile(log_file_add)
+                @show occursin("oops", read(log_file_add, String))
                 sleep(1)
             catch e
                 @error "Try $i, (after $(i-1) seconds)" exception=e
