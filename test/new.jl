@@ -1796,6 +1796,7 @@ end
         @test !isfile(joinpath(Base.find_package("FailBuild"), "..", "..", "deps", "build.log"))
         log_file_add = joinpath(DEPOT_PATH[1], "scratchspaces",
             "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log")
+        @test isdir(dirname(log_file_add))
         @test isfile(log_file_add)
         @test occursin("oops", read(log_file_add, String))
     end end
