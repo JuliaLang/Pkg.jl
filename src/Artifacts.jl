@@ -55,10 +55,28 @@ function create_artifact(f::Function)
         # unless the user has been very unwise, but let's be cautious.
         new_path = artifact_path(artifact_hash; honor_overrides=false)
         if !isdir(new_path)
+            f = joinpath(temp_dir, "lib", "libc_simple.dll")
+            if isfile(f)
+                @info("pre-move")
+                run(`icacls $(f)`)
+            end
             # Move this generated directory to its final destination, set it to read-only
             mv(temp_dir, new_path)
+            f = joinpath(new_path, "lib", "libc_simple.dll")
+            if isfile(f)
+                @info("post-move")
+                run(`icacls $(f)`)
+            end
             chmod(new_path, filemode(dirname(new_path)))
+            if isfile(f)
+                @info("post-parent-dir-chmod")
+                run(`icacls $(f)`)
+            end
             set_readonly(new_path)
+            if isfile(f)
+                @info("post-set_readonly")
+                run(`icacls $(f)`)
+            end
         end
 
         # Give the people what they want
