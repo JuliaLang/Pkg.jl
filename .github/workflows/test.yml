@@ -31,8 +31,6 @@ jobs:
             julia-arch: x86
     steps:
       - uses: actions/checkout@v1.0.0
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
@@ -40,13 +38,16 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           # See https://github.com/actions/virtual-environments/issues/712
-          echo "TMP=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
-          echo "TEMP=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
-      - name: Run tests
+          set TMP=%USERPROFILE%\AppData\Local\Temp
+          set TEMP=%USERPROFILE%\AppData\Local\Temp
+      - name: Prepare local Pkg for tests
         run: |
           julia test/pkg-uuid.jl
-          julia --project --color=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"));'
-          julia --project --color=yes --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
+          julia --project --color=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"));'s
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+      - name: Run tests
+        run: julia --project --color=yes --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
       - uses: julia-actions/julia-processcoverage@v1
