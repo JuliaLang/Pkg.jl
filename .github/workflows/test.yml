@@ -46,7 +46,7 @@ jobs:
       - name: Prepare local Pkg for tests
         run: |
           julia test/pkg-uuid.jl
-          julia --project --color=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"));'s
+          julia --project --color=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"));'
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
       - name: Run tests
