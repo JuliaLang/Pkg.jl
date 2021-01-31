@@ -33,9 +33,6 @@ jobs:
         #   - os: macOS-latest
         #     julia-arch: x86
     steps:
-      - name: Force git symlink support in Windows
-        run: git config --add core.symlinks true
-        if: matrix.os == 'windows-latest'
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@latest
         with:
