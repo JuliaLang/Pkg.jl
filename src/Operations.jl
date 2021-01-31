@@ -963,8 +963,6 @@ function build_versions(ctx::Context, uuids::Vector{UUID}; verbose=false)
                 success(pipeline(gen_build_code(buildfile(source_path)),
                                  stdout=std, stderr=std))
             end
-            @info "Immediately after creating log file $log_file"
-            @show isfile(log_file)
             ok && return
             n_lines = isinteractive() ? 100 : 5000
             # TODO: Extract last n  lines more efficiently

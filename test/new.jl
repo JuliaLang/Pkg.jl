@@ -1792,10 +1792,8 @@ end
     # Build log location
     isolate(loaded_depot=true) do; mktempdir() do tmp
         path = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "FailBuild"))
-        @show stat(joinpath(path, "src", "FailBuild.jl"))
-        @show filemode(joinpath(path, "src", "FailBuild.jl"))
-        @show stat(joinpath(path, "deps", "build.jl"))
-        @show filemode(joinpath(path, "deps", "build.jl"))
+        @show filemode(joinpath(path, "src", "FailBuild.jl")), sizeof(joinpath(path, "src", "FailBuild.jl"))
+        @show stat(joinpath(path, "deps", "build.jl")), sizeof(joinpath(path, "deps", "build.jl"))
         # Log file in the directory when it is deved
         Pkg.develop(path=path; io=devnull)
         log_file_dev = joinpath(path, "deps", "build.log")
@@ -1808,7 +1806,10 @@ end
         log_file_add = joinpath(path, "deps", "build.log")
         @test_throws PkgError Pkg.add(path=path; io=devnull)
         @test !isfile(joinpath(Base.find_package("FailBuild"), "..", "..", "deps", "build.log"))
+
+        # Should be "f99d57aad0e5eb2434491b47bac92bb88d463001", but differs on windows
         treehash = tree_hash(dirname(dirname(Base.find_package("FailBuild"))))
+
         log_file_add = joinpath(DEPOT_PATH[1], "scratchspaces",
             "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", treehash, "build.log")
         @test isdir(dirname(log_file_add))
