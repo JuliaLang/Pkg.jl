@@ -1809,6 +1809,7 @@ end
 
         # Should be "f99d57aad0e5eb2434491b47bac92bb88d463001", but differs on windows
         treehash = tree_hash(dirname(dirname(Base.find_package("FailBuild"))))
+        @info "Tree hash for $(dirname(dirname(Base.find_package("FailBuild")))) should be f99d57aad0e5eb2434491b47bac92bb88d463001. Calculated: $treehash"
 
         log_file_add = joinpath(DEPOT_PATH[1], "scratchspaces",
             "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", treehash, "build.log")
