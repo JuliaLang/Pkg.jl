@@ -299,7 +299,7 @@ end
     mktempdir() do art_dir
         with_artifacts_directory(art_dir) do
             hash = create_artifact(p -> touch(joinpath(p, "foo")))
-            tarball_path = joinpath(art_dir, "foo.tar.gz")
+            tarball_path = joinpath(art_dir, "foo.tar.xz")
             archive_artifact(hash, tarball_path)
             @test "foo" in PlatformEngines.list_tarball_files(tarball_path)
 

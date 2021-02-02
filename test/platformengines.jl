@@ -29,9 +29,9 @@ using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
             write(f, "use_julia=true\n")
         end
 
-        # Next, package it up as a .tar.gz file
+        # Next, package it up as a .tar.xz file
         mktempdir() do output_dir
-            tarball_path =  joinpath(output_dir, "foo.tar.gz")
+            tarball_path =  joinpath(output_dir, "foo.tar.xz")
             package(prefix, tarball_path)
             @test isfile(tarball_path)
 
