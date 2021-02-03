@@ -1011,7 +1011,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     end
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
 
-    if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
+    if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name::String * ".jl") )
         depsmap[Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name)] = [
             Base.PkgId(last(x), first(x))
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
@@ -1108,7 +1108,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     else
                         pkg_queue
                     end
-                    str = ""
+                    local str::String = ""
                     if i > 1
                         str *= string(ansi_moveup(last_length+1), ansi_movecol1, ansi_cleartoend)
                     end
@@ -1257,7 +1257,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     ndeps = count(values(was_recompiled))
     if ndeps > 0 || !isempty(failed_deps)
         plural = ndeps == 1 ? "y" : "ies"
-        str = "$(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds"
+        str::String = "$(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds"
         if n_already_precomp > 0 || !isempty(skipped_deps)
             str *= " ("
             n_already_precomp > 0 && (str *= "$n_already_precomp already precompiled")
@@ -1280,7 +1280,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
             println(io, str)
         end
         if !internal_call
-            err_str = ""
+            err_str::String = ""
             n_direct_errs = 0
             for (dep, err) in failed_deps
                 if strict || (dep in direct_deps)

@@ -506,7 +506,7 @@ function promptf()
     catch
         nothing
     end
-    prefix = ""
+    prefix::String = ""
     if project_file !== nothing
         if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)
             prefix = prev_prefix
