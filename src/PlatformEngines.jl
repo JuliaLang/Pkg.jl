@@ -378,13 +378,15 @@ function list_tarball_files(tarball_path::AbstractString)
 end
 
 """
-    package(src_dir::AbstractString, tarball_path::AbstractString)
+    package(src_dir::AbstractString, tarball_path::AbstractString;
+            format::AbstractString="gzip")
 
-Compress `src_dir` into a tarball located at `tarball_path`.
+Compress `src_dir` into a tarball located at `tarball_path` using the `format`.
 """
-function package(src_dir::AbstractString, tarball_path::AbstractString)
+function package(src_dir::AbstractString, tarball_path::AbstractString;
+                 format::AbstractString="gzip")
     rm(tarball_path, force=true)
-    cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
+    cmd = `$(exe7z()) a -si -t$format -mx9 $tarball_path`
     open(pipeline(cmd, stdout=devnull), write=true) do io
         Tar.create(src_dir, io)
     end

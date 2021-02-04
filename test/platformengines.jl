@@ -29,17 +29,19 @@ using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
             write(f, "use_julia=true\n")
         end
 
-        # Next, package it up as a .tar.gz file
+        # Next, package it up as a compressed tarball
         mktempdir() do output_dir
-            tarball_path =  joinpath(output_dir, "foo.tar.gz")
-            package(prefix, tarball_path)
-            @test isfile(tarball_path)
+            for (format, ext) in [("gzip", "gz"), ("xz", "xz")]
+                tarball_path =  joinpath(output_dir, "foo.tar.$ext")
+                package(prefix, tarball_path; format=format)
+                @test isfile(tarball_path)
 
-            # Test that we can inspect the contents of the tarball
-            contents = PlatformEngines.list_tarball_files(tarball_path)
-            @test "bin/bar.sh" in contents
-            @test "lib/baz.so" in contents
-            @test "etc/qux.conf" in contents
+                # Test that we can inspect the contents of the tarball
+                contents = PlatformEngines.list_tarball_files(tarball_path)
+                @test "bin/bar.sh" in contents
+                @test "lib/baz.so" in contents
+                @test "etc/qux.conf" in contents
+            end
         end
     end
 
