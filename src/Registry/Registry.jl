@@ -136,8 +136,7 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
     end
 end
 
-registry_use_pkg_server() =
-    !Sys.iswindows() || haskey(ENV, "JULIA_PKG_SERVER")
+registry_use_pkg_server() = haskey(ENV, "JULIA_PKG_SERVER")
 
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
