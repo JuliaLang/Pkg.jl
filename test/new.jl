@@ -1799,9 +1799,11 @@ end
         for (root, dirs, files) in walkdir(r)
             for dir in dirs
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
+                @show stat(joinpath(root, dir))
             end
             for file in files
                 println(joinpath(root, file), " ", sizeof(joinpath(root, file)), " 0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
+                @show stat(joinpath(root, file))
             end
         end
 
@@ -1836,9 +1838,11 @@ end
         for (root, dirs, files) in walkdir(r)
             for dir in dirs
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
+                @show stat(joinpath(root, dir))
             end
             for file in files
                 println(joinpath(root, file), " ", sizeof(joinpath(root, file)), " 0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
+                @show stat(joinpath(root, file))
             end
         end
 
