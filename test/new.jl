@@ -1793,8 +1793,10 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tmp
 
         # debugging
-        @info "File tree for source package $(joinpath(@__DIR__, "test_packages", "FailBuild"))"
-        for (root, dirs, files) in walkdir(joinpath(@__DIR__, "test_packages", "FailBuild"))
+        r = joinpath(@__DIR__, "test_packages", "FailBuild")
+        @info "File tree for source package $r"
+        println(r, " ", "0o$(string(filemode(stat(r)), base = 8, pad = 6))")
+        for (root, dirs, files) in walkdir(r)
             for dir in dirs
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
             end
@@ -1828,8 +1830,10 @@ end
             "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log")
 
         # debugging
-        @info "File tree for package add-ed into depot $(dirname(dirname(Base.find_package("FailBuild"))))"
-        for (root, dirs, files) in walkdir(dirname(dirname(Base.find_package("FailBuild"))))
+        r = dirname(dirname(Base.find_package("FailBuild")))
+        @info "File tree for package add-ed into depot $r"
+        println(r, " ", "0o$(string(filemode(stat(r)), base = 8, pad = 6))")
+        for (root, dirs, files) in walkdir(r)
             for dir in dirs
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
             end
