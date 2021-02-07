@@ -37,7 +37,7 @@ build_script:
       using UUIDs;
       before = read(\"Project.toml\", String);
       after = replace(before, \"uuid = \\\"44cfe95a-1eb2-52ea-b672-e2afdf69b78f\\\"\" =>
-                              \"uuid = \\\"44cfe95a-1eb2-52ea-b672-e2afdf69b79f\\\"\");
+                              \"uuid = \\\"54cfe95a-1eb2-52ea-b672-e2afdf69b78f\\\"\");
       write(\"Project.toml\", after);
       import Pkg; Pkg.build()"
 
