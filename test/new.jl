@@ -1815,7 +1815,7 @@ end
             "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log")
 
         # debugging
-        for (root, dirs, files) in walkdir(joinpath(Base.find_package("FailBuild"), "..", ".."))
+        for (root, dirs, files) in walkdir(dirname(dirname(Base.find_package("FailBuild"))))
             for dir in dirs
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
             end
