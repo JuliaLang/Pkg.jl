@@ -1802,8 +1802,10 @@ end
                 @show stat(joinpath(root, dir))
             end
             for file in files
-                println(joinpath(root, file), " ", sizeof(joinpath(root, file)), " 0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
-                @show stat(joinpath(root, file))
+                fp = joinpath(root, file)
+                println(fp, " ", sizeof(fp), " 0o$(string(filemode(stat(fp)), base = 8, pad = 6))")
+                @show stat(fp)
+                @show read(fp, String)
             end
         end
 
@@ -1841,8 +1843,10 @@ end
                 @show stat(joinpath(root, dir))
             end
             for file in files
-                println(joinpath(root, file), " ", sizeof(joinpath(root, file)), " 0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
-                @show stat(joinpath(root, file))
+                fp = joinpath(root, file)
+                println(fp, " ", sizeof(fp), " 0o$(string(filemode(stat(fp)), base = 8, pad = 6))")
+                @show stat(fp)
+                @show read(fp, String)
             end
         end
 
