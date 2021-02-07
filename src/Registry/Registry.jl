@@ -136,7 +136,13 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
     end
 end
 
-registry_use_pkg_server() = haskey(ENV, "JULIA_PKG_SERVER")
+function registry_use_pkg_server(url)
+    if url === nothing
+        return false
+    else
+        return haskey(ENV, "JULIA_PKG_SERVER")
+    end
+end
 
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
@@ -148,7 +154,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
         # clone to tmpdir first
         mktempdir() do tmp
             url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-            if url !== nothing && registry_use_pkg_server()
+            if registry_use_pkg_server(url)
                 # download from Pkg server
                 try
                     download_verify_unpack(url, nothing, tmp, ignore_existence = true)
