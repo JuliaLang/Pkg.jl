@@ -1812,8 +1812,19 @@ end
         @info "Tree hash for $(dirname(dirname(Base.find_package("FailBuild")))) should be f99d57aad0e5eb2434491b47bac92bb88d463001. Calculated: $treehash"
 
         log_file_add = joinpath(DEPOT_PATH[1], "scratchspaces",
-            "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", treehash, "build.log")
-        @test isdir(dirname(log_file_add))
+            "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log")
+
+        # debugging
+        for (root, dirs, files) in walkdir(joinpath(Base.find_package("FailBuild"), "..", ".."))
+            for dir in dirs
+                println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
+            end
+
+            for file in files
+                println(joinpath(root, file), " ", "0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
+            end
+        end
+
         @test isfile(log_file_add)
         @test occursin("oops", read(log_file_add, String))
     end end
