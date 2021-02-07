@@ -1801,7 +1801,7 @@ end
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
             end
             for file in files
-                println(joinpath(root, file), " ", "0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
+                println(joinpath(root, file), " ", sizeof(joinpath(root, file)), " 0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
             end
         end
 
@@ -1838,7 +1838,7 @@ end
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
             end
             for file in files
-                println(joinpath(root, file), " ", "0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
+                println(joinpath(root, file), " ", sizeof(joinpath(root, file)), " 0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
             end
         end
 
