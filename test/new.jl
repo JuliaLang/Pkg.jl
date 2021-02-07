@@ -1792,6 +1792,7 @@ end
     # Build log location
     isolate(loaded_depot=true) do; mktempdir() do tmp
         path = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "FailBuild"))
+        @show tmp, joinpath(@__DIR__, "test_packages", "FailBuild"), path
         @show filemode(joinpath(path, "src", "FailBuild.jl")), sizeof(joinpath(path, "src", "FailBuild.jl"))
         @show stat(joinpath(path, "deps", "build.jl")), sizeof(joinpath(path, "deps", "build.jl"))
         # Log file in the directory when it is deved
