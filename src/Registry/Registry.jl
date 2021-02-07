@@ -144,6 +144,20 @@ function registry_use_pkg_server(url)
     end
 end
 
+function check_registry_state(reg, url)
+    reg_currently_uses_pkg_server = reg.tree_info !== nothing
+    reg_should_use_pkg_server = registry_use_pkg_server(url)
+    if reg_currently_uses_pkg_server && !reg_should_use_pkg_server
+        msg = string(
+            "Your registry may be outdated. We recommend that you run the ",
+            "following command: ",
+            "using Pkg; Pkg.Registry.rm(\"$(reg.name)\"); Pkg.Registry.add(\"$(reg.name)\")",
+        )
+        @warn(msg)
+    end
+    return nothing
+end
+
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
     registry_urls = nothing
@@ -298,6 +312,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[]
                 printpkgstyle(io, :Updating, "registry at " * regpath)
                 old_hash = reg.tree_info
                 url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
+                check_registry_state(reg, url)
                 if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
                     let new_hash = new_hash
                         # TODO: update faster by using a diff, if available
