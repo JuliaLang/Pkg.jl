@@ -1791,6 +1791,18 @@ end
 
     # Build log location
     isolate(loaded_depot=true) do; mktempdir() do tmp
+
+        # debugging
+        @info "File tree for source package $(joinpath(@__DIR__, "test_packages", "FailBuild"))"
+        for (root, dirs, files) in walkdir(joinpath(@__DIR__, "test_packages", "FailBuild"))
+            for dir in dirs
+                println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
+            end
+            for file in files
+                println(joinpath(root, file), " ", "0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
+            end
+        end
+
         path = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "FailBuild"))
         @show tmp, joinpath(@__DIR__, "test_packages", "FailBuild"), path
         @show filemode(joinpath(path, "src", "FailBuild.jl")), sizeof(joinpath(path, "src", "FailBuild.jl"))
@@ -1816,11 +1828,11 @@ end
             "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log")
 
         # debugging
+        @info "File tree for package add-ed into depot $(dirname(dirname(Base.find_package("FailBuild"))))"
         for (root, dirs, files) in walkdir(dirname(dirname(Base.find_package("FailBuild"))))
             for dir in dirs
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
             end
-
             for file in files
                 println(joinpath(root, file), " ", "0o$(string(filemode(stat(joinpath(root, file))), base = 8, pad = 6))")
             end
