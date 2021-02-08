@@ -17,7 +17,7 @@ unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 
 
-tree_hash(root::AbstractString) = bytes2hex(@inferred Pkg.GitTools.tree_hash(root))
+tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tree_hash(root; kwargs...))
 
 #
 # # Sanity checks
