@@ -33,6 +33,11 @@ jobs:
         #   - os: macOS-latest
         #     julia-arch: x86
     steps:
+      - name: Set git to use LF
+        if: matrix.os == 'windows-latest'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
       - name: Determine filesystem of drives on windows
         if: matrix.os == 'windows-latest'
         run: get-volume
