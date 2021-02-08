@@ -257,30 +257,42 @@ end
 
 Calculate the git tree hash of a given path.
 """
-function tree_hash(::Type{HashType}, root::AbstractString) where HashType
+function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,Nothing} = nothing, indent::Int=0) where HashType
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
-    for f in readdir(root)
+    for f in sort(readdir(root; join=true); by = f -> isdir(f) ? f*"/" : f)
         # Skip `.git` directories
         if f == ".git"
             continue
         end
 
-        filepath = abspath(root, f)
+        filepath = abspath(f)
         mode = gitmode(filepath)
         if mode == mode_dir
             # If this directory contains no files, then skip it
             contains_files(filepath) || continue
 
             # Otherwise, hash it up!
-            hash = tree_hash(HashType, filepath)
+            child_stream = nothing
+            if debug_out !== nothing
+                child_stream = IOBuffer()
+            end
+            hash = tree_hash(HashType, filepath; debug_out=child_stream, indent=indent+1)
+            if debug_out !== nothing
+                indent_str = "| "^indent
+                println(debug_out, "$(indent_str)+ [D] $(basename(filepath)) - $(bytes2hex(hash))")
+                print(debug_out, String(take!(child_stream)))
+                println(debug_out, indent_str)
+            end
         else
             hash = blob_hash(HashType, filepath)
+            if debug_out !== nothing
+                indent_str = "| "^indent
+                mode_str = mode == mode_normal ? "F" : "X"
+                println(debug_out, "$(indent_str)[$(mode_str)] $(basename(filepath)) - $(bytes2hex(hash))")
+            end
         end
         push!(entries, (f, hash, mode))
     end
-
-    # Sort entries by name (with trailing slashes for directories)
-    sort!(entries, by = ((name, hash, mode),) -> mode == mode_dir ? name*"/" : name)
 
     content_size = 0
     for (n, h, m) in entries
@@ -296,7 +308,7 @@ function tree_hash(::Type{HashType}, root::AbstractString) where HashType
     end
     return SHA.digest!(ctx)
 end
-tree_hash(root::AbstractString) = tree_hash(SHA.SHA1_CTX, root)
+tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing) = tree_hash(SHA.SHA1_CTX, root; debug_out)
 
 function check_valid_HEAD(repo)
     try LibGit2.head(repo)
