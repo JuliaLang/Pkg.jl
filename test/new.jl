@@ -1817,6 +1817,7 @@ end
                 @show Sys.isexecutable(fp)
                 @show run(`icacls $fp`)
                 @show read(fp, String)
+                @show sha256(read(fp, String))
             end
         end
 
