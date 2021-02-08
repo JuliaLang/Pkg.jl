@@ -48,19 +48,19 @@ jobs:
         uses: julia-actions/install-julia-from-url@main
         with:
           # url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/winnt/x64/1.7/julia-a6df655fea-win64.tar.gz
-          url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/winnt/x64/1.7/julia-6b45b2dc5d-win64.tar.gz #statstruct
+          url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/winnt/x64/1.7/julia-850d42a7ec-win64.tar.gz #statstruct
       - name: Install Julia from URL (ubuntu)
         if: matrix.os == 'ubuntu-latest'
         uses: julia-actions/install-julia-from-url@main
         with:
-          # url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/linux/x64/1.7/julia-6492b7b217-linux64.tar.gz
-          url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/linux/x64/1.7/julia-6b45b2dc5d-linux64.tar.gz #statstruct
+          # url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/linux/x64/1.7/julia-a6df655fea-linux64.tar.gz
+          url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/linux/x64/1.7/julia-850d42a7ec-linux64.tar.gz #statstruct
       # - name: Install Julia from URL (macos)
       #   if: matrix.os == 'macOS-latest'
       #   uses: julia-actions/install-julia-from-url@main
       #   with:
-      #     url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/mac/x64/1.7/julia-6492b7b217-mac64.tar.gz
-
+      #     url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/mac/x64/1.7/julia-a6df655fea-mac64.tar.gz
+      #     url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/linux/x64/1.7/julia-850d42a7ec-linux64.tar.gz #statstruct
       - name: Show versioninfo()
         run: julia -e "using InteractiveUtils; versioninfo()"
 
