@@ -1808,6 +1808,8 @@ end
                 fp = joinpath(root, file)
                 println(fp, " ", filesize(fp), " 0o$(string(filemode(stat(fp)), base = 8, pad = 6))")
                 @show stat(fp)
+                @show Sys.isexecutable(fp)
+                @show run(`icacls $fp`)
                 @show read(fp, String)
             end
         end
