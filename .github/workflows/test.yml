@@ -30,7 +30,12 @@ jobs:
           - os: macOS-latest
             julia-arch: x86
     steps:
-      - uses: actions/checkout@v1.0.0
+      - name: Set git to use LF
+        if: matrix.os == 'windows-latest'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+      - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
