@@ -7,7 +7,7 @@ module PlatformEngines
 using SHA, Downloads, Tar
 import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint
 using ..MiniProgressBars
-using Base.BinaryPlatforms
+using Base.BinaryPlatforms, p7zip_jll
 
 export probe_platform_engines!, verify, unpack, package, download_verify_unpack
 
@@ -15,11 +15,16 @@ const EXE7Z_LOCK = ReentrantLock()
 const EXE7Z = Ref{String}()
 
 function exe7z()
+    # If the JLL is available, use the wrapper function defined in there
+    if p7zip_jll.is_available()
+        return p7zip_jll.p7zip()
+    end
+
     lock(EXE7Z_LOCK) do
         if !isassigned(EXE7Z)
             EXE7Z[] = find7z()
         end
-        return EXE7Z[]
+        return Cmd([EXE7Z[]])
     end
 end
 
