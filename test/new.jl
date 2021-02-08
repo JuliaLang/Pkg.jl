@@ -1791,6 +1791,12 @@ end
 
     # Build log location
     isolate(loaded_depot=true) do; mktempdir() do tmp
+        @info("Dumping permission inheritance chain for test_packages")
+        r = joinpath(@__DIR__, "test_packages")
+        while dirname(r) != r
+            run(`icacls $r`)
+            r = dirname(r)
+        end
 
         # debugging
         r = joinpath(@__DIR__, "test_packages", "FailBuild")
