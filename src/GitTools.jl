@@ -291,7 +291,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,N
                 println(debug_out, "$(indent_str)[$(mode_str)] $(basename(filepath)) - $(bytes2hex(hash))")
             end
         end
-        push!(entries, (f, hash, mode))
+        push!(entries, (basename(filepath), hash, mode))
     end
 
     content_size = 0
