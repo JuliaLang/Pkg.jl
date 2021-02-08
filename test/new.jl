@@ -1796,6 +1796,9 @@ end
         r = joinpath(@__DIR__, "test_packages", "FailBuild")
         @info "File tree for source package $r"
         println(r, " ", "0o$(string(filemode(stat(r)), base = 8, pad = 6))")
+        @info "Checking tree hash of $r"
+        @show tree_hash(r; debug_out=stdout)
+
         for (root, dirs, files) in walkdir(r)
             for dir in dirs
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
@@ -1837,6 +1840,8 @@ end
         r = dirname(dirname(Base.find_package("FailBuild")))
         @info "File tree for package add-ed into depot $r"
         println(r, " ", "0o$(string(filemode(stat(r)), base = 8, pad = 6))")
+        @info "Checking tree hash of $r"
+        @show tree_hash(r; debug_out=stdout)
         for (root, dirs, files) in walkdir(r)
             for dir in dirs
                 println(joinpath(root, dir), " ", "0o$(string(filemode(stat(joinpath(root, dir))), base = 8, pad = 6))")
