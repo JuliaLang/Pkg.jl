@@ -1803,7 +1803,7 @@ end
             end
             for file in files
                 fp = joinpath(root, file)
-                println(fp, " ", sizeof(fp), " 0o$(string(filemode(stat(fp)), base = 8, pad = 6))")
+                println(fp, " ", filesize(fp), " 0o$(string(filemode(stat(fp)), base = 8, pad = 6))")
                 @show stat(fp)
                 @show read(fp, String)
             end
@@ -1811,8 +1811,8 @@ end
 
         path = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "FailBuild"))
         @show tmp, joinpath(@__DIR__, "test_packages", "FailBuild"), path
-        @show filemode(joinpath(path, "src", "FailBuild.jl")), sizeof(joinpath(path, "src", "FailBuild.jl"))
-        @show stat(joinpath(path, "deps", "build.jl")), sizeof(joinpath(path, "deps", "build.jl"))
+        @show filemode(joinpath(path, "src", "FailBuild.jl")), filesize(joinpath(path, "src", "FailBuild.jl"))
+        @show stat(joinpath(path, "deps", "build.jl")), filesize(joinpath(path, "deps", "build.jl"))
         # Log file in the directory when it is deved
         Pkg.develop(path=path; io=devnull)
         log_file_dev = joinpath(path, "deps", "build.log")
@@ -1844,7 +1844,7 @@ end
             end
             for file in files
                 fp = joinpath(root, file)
-                println(fp, " ", sizeof(fp), " 0o$(string(filemode(stat(fp)), base = 8, pad = 6))")
+                println(fp, " ", filesize(fp), " 0o$(string(filemode(stat(fp)), base = 8, pad = 6))")
                 @show stat(fp)
                 @show read(fp, String)
             end
