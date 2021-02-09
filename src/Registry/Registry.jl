@@ -136,8 +136,27 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
     end
 end
 
-registry_use_pkg_server() =
-    !Sys.iswindows() || haskey(ENV, "JULIA_PKG_SERVER")
+function registry_use_pkg_server(url)
+    if url === nothing
+        return false
+    else
+        return haskey(ENV, "JULIA_PKG_SERVER")
+    end
+end
+
+function check_registry_state(reg, url)
+    reg_currently_uses_pkg_server = reg.tree_info !== nothing
+    reg_should_use_pkg_server = registry_use_pkg_server(url)
+    if reg_currently_uses_pkg_server && !reg_should_use_pkg_server
+        msg = string(
+            "Your registry may be outdated. We recommend that you run the ",
+            "following command: ",
+            "using Pkg; Pkg.Registry.rm(\"$(reg.name)\"); Pkg.Registry.add(\"$(reg.name)\")",
+        )
+        @warn(msg)
+    end
+    return nothing
+end
 
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
@@ -149,7 +168,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
         # clone to tmpdir first
         mktempdir() do tmp
             url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-            if url !== nothing && registry_use_pkg_server()
+            if registry_use_pkg_server(url)
                 # download from Pkg server
                 try
                     download_verify_unpack(url, nothing, tmp, ignore_existence = true)
@@ -293,6 +312,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[]
                 printpkgstyle(io, :Updating, "registry at " * regpath)
                 old_hash = reg.tree_info
                 url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
+                check_registry_state(reg, url)
                 if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
                     let new_hash = new_hash
                         # TODO: update faster by using a diff, if available
