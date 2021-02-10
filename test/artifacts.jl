@@ -137,7 +137,10 @@ end
                 @test iszero(filemode(joinpath(artifact_dir, file2)) & 0o222)
                 @test iszero(filemode(joinpath(artifact_dir, file_link)) & 0o222)
                 @test !iszero(filemode(joinpath(artifact_dir, subdir)) & 0o222)
-                # @test !iszero(filemode(joinpath(artifact_dir, dir_link)) & 0o222)
+                if !Sys.iswindows() || !haskey(ENV, "GITHUB_ACTIONS")
+                    @test !iszero(filemode(joinpath(artifact_dir, dir_link)) & 0o222)
+                end
+                # 
                 # Make sure we can delete the artifact directory without having
                 # to manually change permissions
                 rm(artifact_dir; recursive=true)
