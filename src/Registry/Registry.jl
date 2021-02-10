@@ -171,7 +171,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             if registry_use_pkg_server(url)
                 # download from Pkg server
                 try
-                    download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                    download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
                 catch err
                     Pkg.Types.pkgerror("could not download $url")
                 end
@@ -318,7 +318,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[]
                         # TODO: update faster by using a diff, if available
                         mktempdir() do tmp
                             try
-                                download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                                download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
                             catch err
                                 @error "could not download $url" exception=err
                             end
