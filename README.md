@@ -24,7 +24,7 @@ If you need to build Julia from source with a git checkout of Pkg, then instead 
 [docs-v1-img]: https://img.shields.io/badge/docs-v1-blue.svg
 [docs-v1-url]: https://julialang.github.io/Pkg.jl/v1/
 
-[ci-img]: https://github.com/JuliaLang/Pkg.jl/workflows/Run%20tests/badge.svg
+[ci-img]: https://github.com/JuliaLang/Pkg.jl/workflows/Run%20tests/badge.svg?branch=master
 [ci-url]: https://github.com/JuliaLang/Pkg.jl/actions?query=workflow%3A%22Run+tests%22
 
 [appveyor-img]: https://ci.appveyor.com/api/projects/status/cgno2xgwapugpg4t/branch/master?svg=true
