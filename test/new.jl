@@ -17,6 +17,14 @@ unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 
 #
+# Sanity Check
+#
+
+@testset "Ensure we're testing the correct Pkg" begin
+    @test realpath(dirname(dirname(Base.pathof(Pkg)))) == realpath(dirname(@__DIR__))
+end
+
+#
 # # Depot Changes
 #
 
