@@ -140,7 +140,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(pkgs::Vector{PackageSpec}; io::IO=DEFAULT_IO[], kwargs...)
             Registry.download_default_registries(io)
             ctx = Context()
-            ctx.io = io
+            kwargs = merge((;kwargs...), (:io => io,))
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             return ret
