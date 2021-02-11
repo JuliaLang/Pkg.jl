@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, DEFAULT_IO
 
 #########
 # Utils #
