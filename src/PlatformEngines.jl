@@ -5,7 +5,7 @@
 module PlatformEngines
 
 using SHA, Downloads, Tar
-import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint
+import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, DEFAULT_IO
 using ..MiniProgressBars
 using Base.BinaryPlatforms, p7zip_jll
 
@@ -242,6 +242,7 @@ function download(
     verbose::Bool = false,
     headers::Vector{Pair{String,String}} = Pair{String,String}[],
     auth_header::Union{Pair{String,String}, Nothing} = nothing,
+    io::IO=DEFAULT_IO[]
 )
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
@@ -253,7 +254,6 @@ function download(
         push!(headers, header)
     end
 
-    io = stderr
     do_fancy = verbose && can_fancyprint(io)
     progress = if do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
@@ -269,7 +269,7 @@ function download(
     try
         Downloads.download(url, dest; headers, progress)
     finally
-        do_fancy && end_progress(stderr, bar)
+        do_fancy && end_progress(io, bar)
     end
 end
 
@@ -405,7 +405,7 @@ end
         force::Bool = false,
         verbose::Bool = false,
         quiet_download::Bool = false,
-        io::IO=stdout,
+        io::IO=DEFAULT_IO[],
     )
 
 Helper method to download tarball located at `url`, verify it matches the
@@ -440,7 +440,7 @@ function download_verify_unpack(
     force::Bool = false,
     verbose::Bool = false,
     quiet_download::Bool = false,
-    io::IO=stdout,
+    io::IO=DEFAULT_IO[],
 )
     # First, determine whether we should keep this tarball around
     remove_tarball = false

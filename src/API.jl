@@ -137,9 +137,10 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-        function $f(pkgs::Vector{PackageSpec}; kwargs...)
-            Registry.download_default_registries(DEFAULT_IO[])
+        function $f(pkgs::Vector{PackageSpec}; io::IO=DEFAULT_IO[], kwargs...)
+            Registry.download_default_registries(io)
             ctx = Context()
+            ctx.io = io
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             return ret
@@ -1443,7 +1444,7 @@ end
 @deprecate status(mode::PackageMode) status(mode=mode)
 
 function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
-                io::IO=stdout, kwargs...)
+                io::IO=DEFAULT_IO[], kwargs...)
     Context!(ctx; io=io, kwargs...)
     Operations.status(ctx, pkgs, mode=mode, git_diff=diff)
     return nothing
