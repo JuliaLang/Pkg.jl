@@ -1444,7 +1444,7 @@ end
 @deprecate status(mode::PackageMode) status(mode=mode)
 
 function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
-                io::IO=DEFAULT_IO[], kwargs...)
+                io::IO=stdout, kwargs...)
     Context!(ctx; io=io, kwargs...)
     Operations.status(ctx, pkgs, mode=mode, git_diff=diff)
     return nothing
