@@ -1918,6 +1918,7 @@ end
     end
     # Project Status API
     isolate(loaded_depot=true) do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         io = PipeBuffer()
         ## empty project
         Pkg.status(;io=io)
@@ -1936,6 +1937,7 @@ end
     end
     ## status warns when package not installed
     isolate() do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         Pkg.activate(joinpath(@__DIR__, "test_packages", "Status"))
         io = PipeBuffer()
         Pkg.status(; io=io)
@@ -1952,6 +1954,7 @@ end
     end
     # Manifest Status API
     isolate(loaded_depot=true) do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         io = PipeBuffer()
         ## empty manifest
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
@@ -1967,6 +1970,7 @@ end
     end
     # Diff API
     isolate(loaded_depot=true) do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         io = PipeBuffer()
         projdir = dirname(Pkg.project().path)
         mkpath(projdir)
