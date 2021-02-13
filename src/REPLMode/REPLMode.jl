@@ -514,7 +514,7 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
-                prefix = string("(", project_name, ") ")
+                prefix = "($(project_name)) "
                 prev_prefix = prefix
                 prev_project_timestamp = mtime(project_file)
                 prev_project_file = project_file
@@ -522,9 +522,9 @@ function promptf()
         end
     end
     if Pkg.OFFLINE_MODE[]
-        prefix = prefix * "[offline] "
+        prefix = "$(prefix)[offline] "
     end
-    return prefix * "pkg> "
+    return "$(prefix)pkg> "
 end
 
 # Set up the repl Pkg REPLMode
