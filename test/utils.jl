@@ -15,13 +15,15 @@ const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 
-function isolate(fn::Function; loaded_depot=false)
+function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
     old_working_directory = pwd()
     old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
+    old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
+    old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
         # Clone the registry only once
         if !isdir(REGISTRY_DIR)
@@ -39,7 +41,9 @@ function isolate(fn::Function; loaded_depot=false)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-        Pkg.Registry.DEFAULT_REGISTRIES[1].url = REGISTRY_DIR
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
+        Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
+        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         Pkg.REPLMode.TEST_MODE[] = false
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
@@ -70,31 +74,38 @@ function isolate(fn::Function; loaded_depot=false)
         Base.ACTIVE_PROJECT[] = old_active_project
         cd(old_working_directory)
         Pkg.REPLMode.TEST_MODE[] = false # reset unconditionally
+        Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
         Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = old_general_registry_linked
     end
 end
 
-function temp_pkg_dir(fn::Function;rm=true)
+function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
     old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
+    old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
+    old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
         # Clone the registry only once
-        generaldir = joinpath(@__DIR__, "registries", "General")
-        if !isdir(generaldir)
-            mkpath(generaldir)
-            LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
-                                            "https://github.com/JuliaRegistries/General.git",
-                generaldir)) do repo
+        if !isdir(REGISTRY_DIR)
+            mkpath(REGISTRY_DIR)
+            Base.shred!(LibGit2.CachedCredentials()) do creds
+                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
+                                                "https://github.com/JuliaRegistries/General.git",
+                    REGISTRY_DIR, credentials = creds)) do repo
+                end
             end
         end
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        Pkg.Registry.DEFAULT_REGISTRIES[1].url = generaldir
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
+        Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
+        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
@@ -103,7 +114,6 @@ function temp_pkg_dir(fn::Function;rm=true)
             try
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
-                push!(DEPOT_PATH, REGISTRY_DEPOT)
                 fn(env_dir)
             finally
                 try
@@ -122,7 +132,9 @@ function temp_pkg_dir(fn::Function;rm=true)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
+        Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
         Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = old_general_registry_linked
     end
 end
 
@@ -150,7 +162,7 @@ function write_build(path, content)
 end
 
 function with_current_env(f)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(".")
     try
         f()
@@ -160,7 +172,7 @@ function with_current_env(f)
 end
 
 function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
@@ -178,7 +190,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
 end
 
 function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(path)
     try
         if change_dir
