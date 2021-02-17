@@ -1771,13 +1771,58 @@ function show_update(ctx::Context; ignore_indent=false)
     old_env = EnvCache()
     old_env.project = ctx.env.original_project
     old_env.manifest = ctx.env.original_manifest
-    status(ctx; header=:Updating, mode=PKGMODE_COMBINED, env_diff=old_env, ignore_indent=ignore_indent)
+
+    # when showing an add or update, we always use `format=:compact`, even if
+    # we are on CI
+    status(
+        ctx; header=:Updating, mode=PKGMODE_COMBINED, env_diff=old_env,
+        ignore_indent=ignore_indent, format=:compact,
+    )
     return nothing
 end
 
+function _is_ci()
+    ci = lowercase(strip(get(ENV, "CI", "")))
+    return ci == "true" || ci == "yes" || ci == "1"
+end
+
 function status(ctx::Context, pkgs::Vector{PackageSpec}=PackageSpec[];
-                header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=false)
+                header=nothing, mode::PackageMode=PKGMODE_PROJECT,
+                git_diff::Bool=false, env_diff=nothing, ignore_indent=false,
+                format::Symbol = :autodetect)
     ctx.io == Base.devnull && return
+
+    if format === :autodetect
+        if _is_ci()
+            format = :toml
+        else
+            format = :compact
+        end
+    end
+    if format === :toml
+        if mode == PKGMODE_PROJECT
+            toml_file = ctx.env.project_file
+        else
+            toml_file = ctx.env.manifest_file
+        end
+        if isfile(toml_file)
+            toml_contents = read(toml_file, String)
+            println(ctx.io, "# Begin TOML file: $(toml_file)")
+            println(ctx.io)
+            println(ctx.io, toml_contents)
+            println(ctx.io)
+            println(ctx.io, "# End TOML file: $(toml_file)")
+            return nothing
+        else
+            msg = "The file \"$(toml_file)\" does not exist. Falling back to `format = :compact`."
+            @debug(msg)
+            format = :compact
+        end
+    end
+    if format !== :compact
+        pkgerror("format must be :compact, :toml, or :autodetect")
+    end
+
     # if a package, print header
     if header === nothing && ctx.env.pkg !== nothing
        printpkgstyle(ctx.io, :Project, string(ctx.env.pkg.name, " v", ctx.env.pkg.version); color=Base.info_color())

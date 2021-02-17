@@ -1921,14 +1921,14 @@ end
         Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         io = PipeBuffer()
         ## empty project
-        Pkg.status(;io=io)
+        Pkg.status(;io=io,format=:compact)
         @test occursin(r"Status `.+Project.toml` \(empty project\)", readline(io))
         ## loaded project
         Pkg.add("Markdown")
         Pkg.add( name="JSON", version="0.18.0")
         Pkg.develop("Example")
         Pkg.add(url="https://github.com/00vareladavid/Unregistered.jl")
-        Pkg.status(; io = io)
+        Pkg.status(; io=io, format=:compact)
         @test occursin(r"Status `.+Project\.toml`", readline(io))
         @test occursin(r"\[7876af07\] Example v\d\.\d\.\d `.+`", readline(io))
         @test occursin(r"\[682c06a0\] JSON v0.18.0", readline(io))
@@ -1940,12 +1940,12 @@ end
         Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         Pkg.activate(joinpath(@__DIR__, "test_packages", "Status"))
         io = PipeBuffer()
-        Pkg.status(; io=io)
+        Pkg.status(; io=io, format=:compact)
         @test occursin(r"Status `.+Project.toml`", readline(io))
         @test occursin(r"→ \[7876af07\] Example v\d\.\d\.\d", readline(io))
         @test occursin(r"\[d6f4376e\] Markdown", readline(io))
         @test "Info packages marked with → not downloaded, use `instantiate` to download" == strip(readline(io))
-        Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
+        Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST, format=:compact)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"→ \[7876af07\] Example v\d\.\d\.\d", readline(io))
         @test occursin(r"\[2a0f44e3\] Base64", readline(io))
@@ -1957,12 +1957,12 @@ end
         Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         io = PipeBuffer()
         ## empty manifest
-        Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
+        Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST, format=:compact)
         @test occursin(r"Status `.+Manifest\.toml` \(empty manifest\)", readline(io))
         # loaded manifest
         Pkg.add( name="Example", version="0.3.0")
         Pkg.add("Markdown")
-        Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST)
+        Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, format=:compact)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"\[7876af07\] Example v0\.3\.0", readline(io))
         @test occursin(r"\[2a0f44e3\] Base64", readline(io))
@@ -1976,50 +1976,50 @@ end
         mkpath(projdir)
         git_init_and_commit(projdir)
         ## empty project + empty diff
-        Pkg.status(; io=io, diff=true)
+        Pkg.status(; io=io, diff=true, format=:compact)
         @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
-        Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
+        Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true, format=:compact)
         @test occursin(r"No Changes to `.+Manifest\.toml`", readline(io))
         ### empty diff + filter
-        Pkg.status("Example"; io=io, diff=true)
+        Pkg.status("Example"; io=io, diff=true, format=:compact)
         @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
         ## non-empty project but empty diff
         Pkg.add("Markdown")
         git_init_and_commit(dirname(Pkg.project().path))
-        Pkg.status(; io=io, diff=true)
+        Pkg.status(; io=io, diff=true, format=:compact)
         @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
-        Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
+        Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true, format=:compact)
         @test occursin(r"No Changes to `.+Manifest\.toml`", readline(io))
         ### filter should still show "empty diff"
-        Pkg.status("Example"; io=io, diff=true)
+        Pkg.status("Example"; io=io, diff=true, format=:compact)
         @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
         ## non-empty project + non-empty diff
         Pkg.rm("Markdown")
         Pkg.add( name="Example", version="0.3.0")
         ## diff project
-        Pkg.status(; io=io, diff=true)
+        Pkg.status(; io=io, diff=true, format=:compact)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
         @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
         ## diff manifest
-        Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
+        Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true, format=:compact)
         @test occursin(r"Diff `.+Manifest.toml`", readline(io))
         @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
         @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
         ## diff project with filtering
-        Pkg.status("Markdown"; io=io, diff=true)
+        Pkg.status("Markdown"; io=io, diff=true, format=:compact)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
         ## empty diff + filter
-        Pkg.status("Base64"; io=io, diff=true)
+        Pkg.status("Base64"; io=io, diff=true, format=:compact)
         @test occursin(r"No Matches in diff for `.+Project\.toml`", readline(io))
         ## diff manifest with filtering
-        Pkg.status("Base64"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
+        Pkg.status("Base64"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true, format=:compact)
         @test occursin(r"Diff `.+Manifest.toml`", readline(io))
         @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
         ## manifest diff + empty filter
-        Pkg.status("FooBar"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
+        Pkg.status("FooBar"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true, format=:compact)
         @test occursin(r"No Matches in diff for `.+Manifest.toml`", readline(io))
     end
 end

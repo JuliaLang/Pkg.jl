@@ -205,3 +205,10 @@ function do_preserve(x::String)
     x == "tiered" && return Types.PRESERVE_TIERED
     pkgerror("`$x` is not a valid argument for `--preserve`.")
 end
+
+function do_status_format(x::String)
+    x == "autodetect" && return :autodetect
+    x == "compact"    && return :compact
+    x == "toml"       && return :toml
+    pkgerror("`$x` is not a valid argument for `--format`. Valid options are: autodetect, compat, toml")
+end

@@ -620,11 +620,11 @@ end
         status -m Example
         """
         # --diff option
-        @test_logs (:warn, r"diff option only available") pkg"status --diff"
-        @test_logs (:warn, r"diff option only available") pkg"status -d"
+        @test_logs (:warn, r"diff option only available") pkg"status --diff --format=compact"
+        @test_logs (:warn, r"diff option only available") pkg"status -d --format=compact"
         git_init_and_commit(project_path)
-        @test_logs () pkg"status --diff"
-        @test_logs () pkg"status -d"
+        @test_logs () pkg"status --diff --format=compact"
+        @test_logs () pkg"status -d --format=compact"
     end
 end
 
