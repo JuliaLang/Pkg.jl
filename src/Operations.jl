@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, DEFAULT_IO
 
 #########
 # Utils #
@@ -495,7 +495,8 @@ end
 function install_archive(
     urls::Vector{Pair{String,Bool}},
     hash::SHA1,
-    version_path::String
+    version_path::String;
+    io::IO=DEFAULT_IO[]
 )::Bool
     tmp_objects = String[]
     url_success = false
@@ -504,7 +505,7 @@ function install_archive(
         push!(tmp_objects, path) # for cleanup
         url_success = true
         try
-            PlatformEngines.download(url, path; verbose=false)
+            PlatformEngines.download(url, path; verbose=false, io=io)
         catch e
             e isa InterruptException && rethrow()
             url_success = false
@@ -625,24 +626,26 @@ end
 function download_artifacts(env::EnvCache, pkgs::Vector{PackageSpec};
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
-                            verbose::Bool=false)
+                            verbose::Bool=false,
+                            io::IO=DEFAULT_IO[])
     pkg_roots = String[]
     for pkg in pkgs
         p = source_path(env.project_file, pkg, julia_version)
         p !== nothing && push!(pkg_roots, p)
     end
-    return download_artifacts(pkg_roots; platform, verbose)
+    return download_artifacts(pkg_roots; platform, verbose, io)
 end
 
 function download_artifacts(pkg_roots::Vector{String};
                             platform::AbstractPlatform=HostPlatform(),
-                            verbose::Bool=false)
+                            verbose::Bool=false,
+                            io::IO=DEFAULT_IO[])
     for pkg_root in pkg_roots
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
                 ensure_artifact_installed(name, artifacts[name], artifacts_toml;
-                                            verbose, quiet_download=!(stderr isa Base.TTY))
+                                            verbose, quiet_download=!(io isa Base.TTY), io=io)
             end
             write_env_usage(artifacts_toml, "artifact_usage.toml")
         end
@@ -718,7 +721,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                             url = get_archive_url_for_version(repo_url, pkg.tree_hash)
                             url !== nothing && push!(archive_urls, url => false)
                         end
-                        success = install_archive(archive_urls, pkg.tree_hash, path)
+                        success = install_archive(archive_urls, pkg.tree_hash, path, io=ctx.io)
                         if success && readonly
                             set_readonly(path) # In add mode, files should be read-only
                         end
@@ -1181,7 +1184,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
-    download_artifacts(ctx.env, pkgs; platform=platform, julia_version=ctx.julia_version)
+    download_artifacts(ctx.env, pkgs; platform=platform, julia_version=ctx.julia_version, io=ctx.io)
 
     write_env(ctx.env) # write env before building
     show_update(ctx)
@@ -1200,7 +1203,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx, pkgs; readonly=true)
-    download_artifacts(ctx.env, pkgs; platform=platform, julia_version=ctx.julia_version)
+    download_artifacts(ctx.env, pkgs; platform=platform, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1265,7 +1268,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx, pkgs)
-    download_artifacts(ctx.env, pkgs; julia_version=ctx.julia_version)
+    download_artifacts(ctx.env, pkgs; julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1307,7 +1310,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
 
     new = download_source(ctx, pkgs)
-    download_artifacts(ctx.env, pkgs; julia_version=ctx.julia_version)
+    download_artifacts(ctx.env, pkgs; julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx)
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
@@ -1344,7 +1347,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
         new = download_source(ctx, pkgs)
-        download_artifacts(ctx.env, new; julia_version=ctx.julia_version)
+        download_artifacts(ctx.env, new; julia_version=ctx.julia_version, io=ctx.io)
         write_env(ctx.env) # write env before building
         show_update(ctx)
         build_versions(ctx, UUID[pkg.uuid for pkg in new])
