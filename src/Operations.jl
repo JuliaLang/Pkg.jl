@@ -14,7 +14,8 @@ import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server
-import ..Pkg: can_fancyprint
+import ...Pkg: can_fancyprint, DEFAULT_IO
+import ..Types: printpkgstyle
 
 #########
 # Utils #
@@ -565,7 +566,8 @@ end
 function install_archive(
     urls::Vector{Pair{String,Bool}},
     hash::SHA1,
-    version_path::String
+    version_path::String;
+    io::IO=DEFAULT_IO[]
 )::Bool
     tmp_objects = String[]
     url_success = false
@@ -574,7 +576,7 @@ function install_archive(
         push!(tmp_objects, path) # for cleanup
         url_success = true
         try
-            PlatformEngines.download(url, path; verbose=false)
+            PlatformEngines.download(url, path; verbose=false, io=io)
         catch e
             e isa InterruptException && rethrow()
             url_success = false
@@ -669,7 +671,8 @@ end
 function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
-                            verbose::Bool=false)
+                            verbose::Bool=false,
+                            io::IO=DEFAULT_IO[])
     # Filter out packages that have no source_path()
     # pkg_roots = String[p for p in source_path.((ctx,), pkgs) if p !== nothing]  # this runs up against inference limits?
     pkg_roots = String[]
@@ -677,12 +680,13 @@ function download_artifacts(ctx::Context, pkgs::Vector{PackageSpec};
         p = source_path(ctx, pkg)
         p !== nothing && push!(pkg_roots, p)
     end
-    return download_artifacts(ctx, pkg_roots; platform=platform, verbose=verbose)
+    return download_artifacts(ctx, pkg_roots; platform=platform, verbose=verbose, io=io)
 end
 
 function download_artifacts(ctx::Context, pkg_roots::Vector{String};
                             platform::AbstractPlatform=HostPlatform(),
-                            verbose::Bool=false)
+                            verbose::Bool=false,
+                            io::IO=DEFAULT_IO[])
     # List of Artifacts.toml files that we're going to download from
     artifacts_tomls = String[]
 
@@ -776,7 +780,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                             url = get_archive_url_for_version(repo_url, pkg.tree_hash)
                             url !== nothing && push!(archive_urls, url => false)
                         end
-                        success = install_archive(archive_urls, pkg.tree_hash, path)
+                        success = install_archive(archive_urls, pkg.tree_hash, path, io=ctx.io)
                         if success && readonly
                             set_readonly(path) # In add mode, files should be read-only
                         end
@@ -1232,7 +1236,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=UUID[];
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
-    download_artifacts(ctx, pkgs; platform=platform)
+    download_artifacts(ctx, pkgs; platform=platform, io=ctx.io)
 
     write_env(ctx.env) # write env before building
     show_update(ctx)
@@ -1251,7 +1255,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Vector{UUID};
     pkgs, deps_map = _resolve(ctx, pkgs, preserve)
     update_manifest!(ctx, pkgs, deps_map)
     new_apply = download_source(ctx, pkgs; readonly=true)
-    download_artifacts(ctx, pkgs; platform=platform)
+    download_artifacts(ctx, pkgs; platform=platform, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1316,7 +1320,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     deps_map = resolve_versions!(ctx, pkgs)
     update_manifest!(ctx, pkgs, deps_map)
     new_apply = download_source(ctx, pkgs)
-    download_artifacts(ctx, pkgs)
+    download_artifacts(ctx, pkgs; io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx)
     build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git))
@@ -1359,7 +1363,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     update_manifest!(ctx, pkgs, deps_map)
 
     new = download_source(ctx, pkgs)
-    download_artifacts(ctx, pkgs)
+    download_artifacts(ctx, pkgs; io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx)
     build_versions(ctx, UUID[pkg.uuid for pkg in new])
@@ -1396,7 +1400,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         pkgs, deps_map = _resolve(ctx, pkgs, PRESERVE_TIERED)
         update_manifest!(ctx, pkgs, deps_map)
         new = download_source(ctx, pkgs)
-        download_artifacts(ctx, new)
+        download_artifacts(ctx, new; io=ctx.io)
         write_env(ctx.env) # write env before building
         show_update(ctx)
         build_versions(ctx, UUID[pkg.uuid for pkg in new])

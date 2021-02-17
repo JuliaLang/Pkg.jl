@@ -1009,7 +1009,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             if url !== nothing && registry_use_pkg_server()
                 # download from Pkg server
                 try
-                    download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                    download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = ctx.io)
                 catch err
                     pkgerror("could not download $url")
                 end
@@ -1147,7 +1147,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                         # TODO: update faster by using a diff, if available
                         mktempdir() do tmp
                             try
-                                download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                                download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = ctx.io)
                             catch err
                                 @warn "could not download $url"
                             end

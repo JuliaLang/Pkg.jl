@@ -12,7 +12,7 @@ using Serialization
 
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
-import ..can_fancyprint
+import ..can_fancyprint, ..DEFAULT_IO
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -73,8 +73,9 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-        function $f(pkgs::Vector{PackageSpec}; kwargs...)
+        function $f(pkgs::Vector{PackageSpec}; io::IO=DEFAULT_IO[], kwargs...)
             ctx = Context()
+            kwargs = merge((;kwargs...), (:io => io,))
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             return ret
@@ -1369,7 +1370,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if ctx.env.pkg !== nothing
         push!(art_pkgs, ctx.env.pkg)
     end
-    Operations.download_artifacts(ctx, art_pkgs; platform, verbose)
+    Operations.download_artifacts(ctx, art_pkgs; platform, verbose, io=ctx.io)
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose)
 
@@ -1387,12 +1388,12 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false,shared=false)
+function activate(;temp=false,shared=false, io::IO=DEFAULT_IO[])
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
+    p === nothing || printpkgstyle(io, :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
     return nothing
 end
@@ -1413,7 +1414,7 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=DEFAULT_IO[])
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1449,7 +1450,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
+        printpkgstyle(io, :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
     return nothing

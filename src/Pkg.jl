@@ -32,7 +32,7 @@ devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "de
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
-const DEFAULT_IO = Ref{Union{Nothing,IO}}(nothing)
+const DEFAULT_IO = Ref{IO}()
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
@@ -543,6 +543,7 @@ const RegistrySpec = Types.RegistrySpec
 
 
 function __init__()
+    DEFAULT_IO[] = stderr
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
