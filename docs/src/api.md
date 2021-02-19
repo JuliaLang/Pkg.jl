@@ -16,7 +16,7 @@ For example, `Pkg.add("Example"; io=devnull)` will discard any output produced b
 
 ## Package API Reference
 
-In the REPL mode, packages (with associated version, UUID, URL etc) are parsed from strings,
+In the Pkg REPL mode, packages (with associated version, UUID, URL etc) are parsed from strings,
 for example `"Package#master"`,`"Package@v0.1"`, `"www.mypkg.com/MyPkg#my/feature"`.
 
 In the functional API, it is possible to use strings as arguments for simple commands (like `Pkg.add(["PackageA", "PackageB"])`,
