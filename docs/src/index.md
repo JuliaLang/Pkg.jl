@@ -5,7 +5,7 @@ The documentation covers many things, for example managing package
 installations, developing packages, working with package registries and more.
 
 Throughout the manual the REPL interface to Pkg is used in the examples.
-There is also a functional API interface, which is preferred when not working
+There is also a functional API, which is preferred when not working
 interactively. This API is documented in the [API Reference](@ref) section.
 
 ## Background and Design
