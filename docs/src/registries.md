@@ -11,7 +11,7 @@ is the default one, and is installed automatically.
     Pkg's registry handling requires at least Julia 1.1.
 
 Registries can be added, removed and updated from either the Pkg REPL
-or by using the function based API. In this section we will describe the
+or by using the functional API. In this section we will describe the
 REPL interface. The registry API is documented in
 the [Registry API Reference](@ref) section.
 

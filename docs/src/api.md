@@ -1,7 +1,7 @@
 # [**12.** API Reference](@id API-Reference)
 
-This section describes the function interface,
-for interacting with Pkg.jl. The function API is recommended
+This section describes the functional interface,
+for interacting with Pkg.jl. The "functional API" is recommended
 for non-interactive usage, for example in scripts.
 
 ## General API Reference
@@ -54,7 +54,7 @@ Pkg.redo
 !!! compat "Julia 1.1"
     Pkg's registry handling requires at least Julia 1.1.
 
-The function API for registries uses [`RegistrySpec`](@ref)s, similar to
+The functional API for registries uses [`RegistrySpec`](@ref)s, similar to
 [`PackageSpec`](@ref).
 
 ```@docs
