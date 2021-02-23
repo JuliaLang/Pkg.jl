@@ -2501,6 +2501,8 @@ end
     test_result = Pkg.Types.STDLIBS_BY_VERSION[end][2] == Pkg.Types.load_stdlib()
     if !test_result
         @error("STDLIBS_BY_VERSION out of date!  Re-run generate_historical_stdlibs.jl!")
+        @show length(Pkg.Types.STDLIBS_BY_VERSION[end][2]) length(Pkg.Types.load_stdlib())
+        @show setdiff(Pkg.Types.STDLIBS_BY_VERSION[end][2], Pkg.Types.load_stdlib())
     end
     @test test_result
 end

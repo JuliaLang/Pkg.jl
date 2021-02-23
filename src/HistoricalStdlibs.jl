@@ -55,7 +55,6 @@ const STDLIBS_BY_VERSION = [
         UUID("deac9b47-8bc7-5906-a0fe-35ac56dc84c0") => "LibCURL_jll",
         UUID("76f85450-5226-5b5a-8eaa-529ad045b433") => "LibGit2",
         UUID("e37daf67-58a4-590a-8e99-b0245dd2ffc5") => "LibGit2_jll",
-        UUID("a83860b7-747b-57cf-bf1f-3e79990d037f") => "LibOSXUnwind_jll",
         UUID("29816b5a-b9ab-546f-933c-edad1886dfa8") => "LibSSH2_jll",
         UUID("183b4373-6708-53ba-ad28-60e28bb38547") => "LibUV_jll",
         UUID("745a5e78-f969-53e9-954f-d19f2f74f4e3") => "LibUnwind_jll",
