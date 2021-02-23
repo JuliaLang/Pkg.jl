@@ -329,7 +329,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(; kwargs...) = resolve(Context(); kwargs...)
+resolve(; io::IO=DEFAULT_IO[], kwargs...) = resolve(Context(;io); kwargs...)
 function resolve(ctx::Context; kwargs...)
     up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
     return nothing
