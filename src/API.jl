@@ -1457,7 +1457,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose)
 
-    allow_autoprecomp && Pkg._auto_precompile(ctx; kwargs...)
+    allow_autoprecomp && Pkg._auto_precompile(ctx)
 end
 
 
