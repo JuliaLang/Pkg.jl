@@ -60,6 +60,7 @@ const STDLIBS_BY_VERSION = [
         UUID("745a5e78-f969-53e9-954f-d19f2f74f4e3") => "LibUnwind_jll",
         UUID("8f399da3-3557-5675-b5ff-fb832c97cbdb") => "Libdl",
         UUID("37e2e46d-f89d-539d-b4ee-838fcccc9c8e") => "LinearAlgebra",
+        UUID("47c5dbc3-30ba-59ef-96a6-123e260183d9") => "LLVMLibUnwind_jll"
         UUID("56ddb016-857b-54e1-b83d-db4d58db5568") => "Logging",
         UUID("3a97d323-0669-5f0c-9066-3539efd106a3") => "MPFR_jll",
         UUID("d6f4376e-aef5-505a-96c1-9c027394607a") => "Markdown",
