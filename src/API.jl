@@ -1471,7 +1471,7 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false,shared=false, io::IO=DEFAULT_IO[])
+function activate(;temp=false, shared=false, io::IO=DEFAULT_IO[])
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
