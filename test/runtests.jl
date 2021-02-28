@@ -4,6 +4,12 @@ module PkgTests
 
 import Pkg
 
+using Test
+
+@testset "Ensure we're testing the correct Pkg" begin
+    @test realpath(dirname(dirname(Base.pathof(Pkg)))) == realpath(dirname(@__DIR__))
+end
+
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
 
 if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
