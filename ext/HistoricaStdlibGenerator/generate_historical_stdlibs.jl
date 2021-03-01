@@ -34,7 +34,7 @@ function generate_nightly_url(major, minor, host = HostPlatform())
     # Map arch
     arch_str = Dict("x86_64" => "x64", "i686" => "x86", "aarch64" => "aarch64", "armv7l" => "armv7l", "ppc64le" => "ppc64le")[arch(host)]
     # Map OS name
-    os_str = Dict("linux" => "linux", "windows" => "winnt", "macos" => "macos", "freebsd" => "freebsd")[os(host)]    
+    os_str = Dict("linux" => "linux", "windows" => "winnt", "macos" => "mac", "freebsd" => "freebsd")[os(host)]
     # Map wordsize tag
     wordsize_str = Dict("x86_64" => "64", "i686" => "32", "aarch64" => "aarch64", "armv7l" => "armv7l", "ppc64le" => "ppc64")[arch(host)]
 
@@ -48,7 +48,7 @@ function generate_nightly_url(major, minor, host = HostPlatform())
         string(major), ".", string(minor), "/",
         "julia-latest-",
         # linux64
-        os(host), wordsize_str,
+        os_str, wordsize_str,
         ".tar.gz",
     )
 end
@@ -68,20 +68,56 @@ function get_stdlibs(scratch_dir, julia_installer_name)
     installer_path = joinpath(scratch_dir, julia_installer_name)
     mktempdir() do dir
         @info("Extracting $(julia_installer_name)")
-        run(`tar -C $(dir) --strip-components=1 -zxf $(installer_path)`)
+        mount_dir = joinpath(dir, "mount_dir")
+        try
+            if endswith(installer_path, ".dmg")
+                mkdir(mount_dir)
+                # Try to mount many times, as this seems to fail randomly
+                mount_cmd = `hdiutil mount $(installer_path) -mountpoint $(mount_dir)`
+                tries = 0
+                while !success(mount_cmd)
+                    if tries > 10
+                        error("Unable to mount via hdiutil!")
+                    end
+                    sleep(0.1)
+                    tries += 1
+                end
+                #@show readdir(mount_dir; join=true)
+                app_dir = first(filter(d -> startswith(basename(d), "Julia-"), readdir(mount_dir; join=true)))
+                symlink(joinpath(app_dir, "Contents", "Resources", "julia", "bin"), joinpath(dir, "bin"))
+            elseif endswith(installer_path, ".exe")
+                error("This script doesn't work with `.exe` downloads")
+            else
+                run(`tar -C $(dir) --strip-components=1 -zxf $(installer_path)`)
+            end
 
-        jlexe = joinpath(dir, "bin", @static Sys.iswindows() ? "julia.exe" : "julia")
-        jlflags = ["--startup-file=no", "-O0"]
-        jlvers = VersionNumber(readchomp(`$(jlexe) $(jlflags) -e 'print(VERSION)'`))
-        jlvers = VersionNumber(jlvers.major, jlvers.minor, jlvers.patch)
-        @info("Auto-detected Julia version $(jlvers)")
+            jlexe = joinpath(dir, "bin", @static Sys.iswindows() ? "julia.exe" : "julia")
+            jlflags = ["--startup-file=no", "-O0"]
+            jlvers = VersionNumber(readchomp(`$(jlexe) $(jlflags) -e 'print(VERSION)'`))
+            jlvers = VersionNumber(jlvers.major, jlvers.minor, jlvers.patch)
+            @info("Auto-detected Julia version $(jlvers)")
 
-        if jlvers < v"1.1"
-            stdlibs_str = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; println(repr(Pkg.Types.gather_stdlib_uuids()))'`)
-        else
-            stdlibs_str = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; println(repr(Pkg.Types.load_stdlib()))'`)
+            if jlvers < v"1.1"
+                stdlibs_str = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; println(repr(Pkg.Types.gather_stdlib_uuids()))'`)
+            else
+                stdlibs_str = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; println(repr(Pkg.Types.load_stdlib()))'`)
+            end
+
+            return (jlvers, stdlibs_str)
+        finally
+            # Clean up mounted directories
+            if isdir(mount_dir)
+                unmount_cmd = `hdiutil detach $(mount_dir)`
+                tries = 0
+                while !success(unmount_cmd)
+                    if tries > 10
+                        error("Unable to unmount $(mount_dir)")
+                    end
+                    sleep(0.1)
+                    tries += 1
+                end
+            end
         end
-        return (jlvers, stdlibs_str)
     end
 end
 
@@ -101,21 +137,35 @@ versions_dict = Dict()
     for _ in 1:num_concurrent_downloads
         @async begin
             for (url, hash) in jobs
-                fname = joinpath(scratch_dir, basename(url))
-                if !isfile(fname)
-                    @info("Downloading $(url)")
-                    Downloads.download(url, fname)
-                end
-
-                if !isempty(hash)
-                    calc_hash = bytes2hex(open(io -> sha256(io), fname, "r"))
-                    if calc_hash != hash
-                        @error("Hash mismatch on $(fname)")
+                try
+                    fname = joinpath(scratch_dir, basename(url))
+                    if !isfile(fname)
+                        @info("Downloading $(url)")
+                        Downloads.download(url, fname)
                     end
-                end
 
-                version, stdlibs = get_stdlibs(scratch_dir, basename(url))
-                versions_dict[version] = eval(Meta.parse(stdlibs))
+                    if !isempty(hash)
+                        calc_hash = bytes2hex(open(io -> sha256(io), fname, "r"))
+                        if calc_hash != hash
+                            @error("Hash mismatch on $(fname); deleting and re-downloading")
+                            rm(fname; force=true)
+                            Downloads.download(url, fname)
+                            calc_hash = bytes2hex(open(io -> sha256(io), fname, "r"))
+                            if calc_hash != hash
+                                @error("Hash mismatch on $(fname); re-download failed!")
+                                continue
+                            end
+                        end
+                    end
+
+                    version, stdlibs = get_stdlibs(scratch_dir, basename(url))
+                    versions_dict[version] = eval(Meta.parse(stdlibs))
+                catch e
+                    if isa(e, InterruptException)
+                        rethrow()
+                    end
+                    @error(e, exception=(e, catch_backtrace()))
+                end
             end
         end
     end
@@ -145,12 +195,12 @@ unregistered_stdlibs = filter(all_stdlibs) do (uuid, name)
 end
 
 # Helper function for getting these printed out in a nicely-sorted order
-function print_sorted(io::IO, d::Dict)
+function print_sorted(io::IO, d::Dict; indent::Int=0)
     println(io, "Dict(")
     for pair in sort(collect(d), by = kv-> kv[2])
-        println(io, "        ", pair, ",")
+        println(io, " "^indent, pair, ",")
     end
-    println(io, "    ),")
+    print(io, " "^(max(indent - 4, 0)), ")")
 end
 
 output_fname = joinpath(dirname(dirname(@__DIR__)), "src", "HistoricalStdlibs.jl")
@@ -168,7 +218,8 @@ open(output_fname, "w") do io
     """)
     for v in sorted_versions
         print(io, "    $(repr(v)) => ")
-        print_sorted(io, versions_dict[v])
+        print_sorted(io, versions_dict[v]; indent=8)
+        println(io, ",")
     end
     println(io, "]")
 
@@ -176,10 +227,7 @@ open(output_fname, "w") do io
     # Next, we also embed a list of stdlibs that must _always_ be treated as stdlibs,
     # because they cannot be resolved in the registry; they have only ever existed within
     # the Julia stdlib source tree, and because of that, trying to resolve them will fail.
-    const UNREGISTERED_STDLIBS = Dict(
-    """)
-    for (uuid, name) in unregistered_stdlibs
-        println(io, "    $(repr(uuid)) => $(repr(name)),")
-    end
-    println(io, ")")
+    const UNREGISTERED_STDLIBS = """)
+    print_sorted(io, unregistered_stdlibs; indent=4)
+    println(io)
 end
