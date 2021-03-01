@@ -457,7 +457,7 @@ in the vector.
     Many functions that take a `PackageSpec` or a `Vector{PackageSpec}` can be called with a more concise notation with `NamedTuple`s.
     For example, `Pkg.add` can be called either as the explicit or concise versions as:
 
-    | Explicit                                                            | Concise
+    | Explicit                                                            | Concise                                        |
     |:--------------------------------------------------------------------|:-----------------------------------------------|
     | `Pkg.add(PackageSpec(name="Package))`                               | `Pkg.add(name = "Package")`                    |
     | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
