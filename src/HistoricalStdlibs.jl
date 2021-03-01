@@ -95,6 +95,9 @@ const STDLIBS_BY_VERSION = [
         UUID("8e850ede-7688-5339-a07c-302acd2aaf8d") => "nghttp2_jll",
         UUID("3f19e933-33d8-53b3-aaab-bd5110c3b7a0") => "p7zip_jll",
     ),
+    v"1.7.0-" => Dict(
+        UUID("8e850b90-86db-534c-a0d3-1478176c7d93") => "libblastrampoline_jll",
+    ),
 ]
 # Next, we also embed a list of stdlibs that must _always_ be treated as stdlibs,
 # because they cannot be resolved in the registry; they have only ever existed within
