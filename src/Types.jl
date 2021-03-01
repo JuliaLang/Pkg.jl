@@ -365,6 +365,11 @@ is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
 # Allow asking if something is an stdlib for a particular version of Julia
 function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
+    # Only use the cache if we are asking for stdlibs in a custom Julia version
+    if julia_version == VERSION
+        return is_stdlib(uuid)
+    end
+
     # If this UUID is known to be unregistered, always return `true`
     if haskey(UNREGISTERED_STDLIBS, uuid)
         return true
