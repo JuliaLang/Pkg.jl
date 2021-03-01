@@ -30,7 +30,7 @@ function select_url_hash(data, host = HostPlatform())
 end
 version_urls = sort(select_url_hash.(values(versions)), by = pair -> pair[1])
 
-function generate_nightly_url(major, minor, host = HostPlatform())
+function generate_nightly_url(jlver, host = HostPlatform())
     # Map arch
     arch_str = Dict("x86_64" => "x64", "i686" => "x86", "aarch64" => "aarch64", "armv7l" => "armv7l", "ppc64le" => "ppc64le")[arch(host)]
     # Map OS name
@@ -38,14 +38,20 @@ function generate_nightly_url(major, minor, host = HostPlatform())
     # Map wordsize tag
     wordsize_str = Dict("x86_64" => "64", "i686" => "32", "aarch64" => "aarch64", "armv7l" => "armv7l", "ppc64le" => "ppc64")[arch(host)]
 
+    # If `jlver` is nothing, we don't namespace by version and just get the absolute latest version
+    ver_str = ""
+    if jlver !== nothing
+        ver_str = string(jlver.major, ".", jlver.minor, "/")
+    end
+
     return string(
         "https://julialangnightlies-s3.julialang.org/bin/",
         # linux/
         os_str, "/",
         # x64/
         arch_str, "/",
-        # 1.6/
-        string(major), ".", string(minor), "/",
+        # 1.6/ (or nothing, if `jlver === nothing`)
+        ver_str,
         "julia-latest-",
         # linux64
         os_str, wordsize_str,
@@ -53,8 +59,9 @@ function generate_nightly_url(major, minor, host = HostPlatform())
     )
 end
 highest_release = maximum(VersionNumber.(string.(keys(versions))))
-next_release_url = generate_nightly_url(highest_release.major, highest_release.minor + 1)
-push!(version_urls, (next_release_url, ""))
+next_release = VersionNumber(highest_release.major, highest_release.minor + 1, 0)
+push!(version_urls, (generate_nightly_url(next_release), ""))
+push!(version_urls, (generate_nightly_url(nothing),      ""))
 @info("Identified $(length(version_urls)) versions to try...")
 
 # Next, we're going to download each of these to a scratch space
@@ -138,7 +145,9 @@ versions_dict = Dict()
         @async begin
             for (url, hash) in jobs
                 try
-                    fname = joinpath(scratch_dir, basename(url))
+                    # We might try to download two files that have the same basename
+                    url_tag = bytes2hex(sha256(url))
+                    fname = joinpath(scratch_dir, string(url_tag, "-", basename(url)))
                     if !isfile(fname)
                         @info("Downloading $(url)")
                         Downloads.download(url, fname)
@@ -158,7 +167,7 @@ versions_dict = Dict()
                         end
                     end
 
-                    version, stdlibs = get_stdlibs(scratch_dir, basename(url))
+                    version, stdlibs = get_stdlibs(scratch_dir, basename(fname))
                     versions_dict[version] = eval(Meta.parse(stdlibs))
                 catch e
                     if isa(e, InterruptException)
