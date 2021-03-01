@@ -2505,7 +2505,7 @@ end
         @show setdiff(Pkg.Types.STDLIBS_BY_VERSION[end][2], Pkg.Types.load_stdlib())
         @show setdiff(Pkg.Types.load_stdlib(), Pkg.Types.STDLIBS_BY_VERSION[end][2])
     end
-    @test_broken test_result # TODO: fix this test
+    @test test_result
 end
 
 @testset "Pkg.add() with julia_version" begin
