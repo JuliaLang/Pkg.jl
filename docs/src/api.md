@@ -1,7 +1,7 @@
 # [**12.** API Reference](@id API-Reference)
 
-This section describes the functional interface,
-for interacting with Pkg.jl. The "functional API" is recommended
+This section describes the functional API for interacting with Pkg.jl.
+It is recommended to use the functional API, rather than the Pkg REPL mode,
 for non-interactive usage, for example in scripts.
 
 ## General API Reference
