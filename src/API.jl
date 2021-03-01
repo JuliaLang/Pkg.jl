@@ -261,7 +261,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(; kwargs...) = resolve(Context(); kwargs...)
+resolve(; io::IO=DEFAULT_IO[], kwargs...) = resolve(Context(;io); kwargs...)
 function resolve(ctx::Context; kwargs...)
     up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
     return nothing
@@ -1390,7 +1390,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose)
 
-    allow_autoprecomp && Pkg._auto_precompile(ctx; kwargs...)
+    allow_autoprecomp && Pkg._auto_precompile(ctx)
 end
 
 
@@ -1404,7 +1404,7 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false,shared=false, io::IO=DEFAULT_IO[])
+function activate(;temp=false, shared=false, io::IO=DEFAULT_IO[])
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
