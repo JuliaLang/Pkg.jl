@@ -68,7 +68,6 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - run: echo ${{needs.test.result}}
       - name: Notify Slack on CI failure
         if: needs.test.result != 'success' # && github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
         env:
