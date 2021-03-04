@@ -63,6 +63,20 @@ jobs:
       - uses: codecov/codecov-action@v1
         with:
           file: lcov.info
+  notify_slack_on_ci_failure:
+    needs: test
+    if: failure() || cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack on CI failure
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFICATIONS_BOT_TOKEN }}
+        uses: voxmedia/github-action-slack-notify-build@v1
+        with:
+          channel: ci-failures-stdlib
+          status: FAILED
+          color: danger
   docs:
     runs-on: ubuntu-latest
     steps:
