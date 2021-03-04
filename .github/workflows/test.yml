@@ -65,9 +65,10 @@ jobs:
           file: lcov.info
   notify_slack_on_ci_failure:
     needs: test
-    if: failure() || cancelled()
+    if: always()
     runs-on: ubuntu-latest
     steps:
+      - run: echo ${{needs.test.result}}
       - name: Notify Slack on CI failure
         if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
         env:
