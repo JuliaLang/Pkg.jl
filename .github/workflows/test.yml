@@ -70,7 +70,7 @@ jobs:
     steps:
       - run: echo ${{needs.test.result}}
       - name: Notify Slack on CI failure
-        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        if: needs.test.result != 'success' # && github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFICATIONS_BOT_TOKEN }}
         uses: voxmedia/github-action-slack-notify-build@v1
