@@ -1328,14 +1328,14 @@ function recall_precompile_state()
     for (prefix, store) in (("suspend_cache_", pkgs_precompile_suspended), ("pending_cache_", pkgs_precompile_pending))
         fpath = joinpath(Operations.pkg_scratchpath(), string(prefix, hash(string(Base.active_project(), Base.VERSION))))
         if isfile(fpath)
-            v = open(fpath) do io
+            open(fpath) do io
                 try
-                    deserialize(io)
+                    pkgspecs = deserialize(io)
+                    append!(empty!(store), pkgspecs)
                 catch
-                    PackageSpec[]
+                    empty!(store)
                 end
             end
-            append!(empty!(store), v)
         else
             empty!(store)
         end
