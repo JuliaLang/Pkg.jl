@@ -20,18 +20,14 @@ const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 
 @timeit Pkg.to function init_reg()
     url, _ = Pkg.Registry.pkg_server_registry_url(GENERAL_UUID, nothing)
+    mkpath(REGISTRY_DIR)
     if Pkg.Registry.registry_use_pkg_server(url)
         @info "Downloading General registry from $url"
-        try
-            Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
-        catch err
-            Pkg.Types.pkgerror("could not download $url")
-        end
+        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
         tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")
         hash = Pkg.Registry.pkg_server_url_hash(url)
         write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
     else
-        mkpath(REGISTRY_DIR)
         Base.shred!(LibGit2.CachedCredentials()) do creds
             LibGit2.with(Pkg.GitTools.clone(
                 stderr,
