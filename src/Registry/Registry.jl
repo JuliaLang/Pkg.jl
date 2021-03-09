@@ -195,7 +195,12 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
             elseif reg.path !== nothing # copy from local source
                 printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
-                cp(reg.path, tmp; force=true) # has to be cp given we're copying
+                isfile(joinpath(reg.path, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in source directory.")
+                registry = Registry.RegistryInstance(reg.path; parse_packages=false)
+                regpath = joinpath(depot, "registries", registry.name)
+                cp(reg.path, regpath; force=true) # has to be cp given we're copying
+                printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
+                return
             elseif reg.url !== nothing # clone from url
                 repo = GitTools.clone(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
                 LibGit2.close(repo)
