@@ -23,7 +23,7 @@ const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
     if Pkg.Registry.registry_use_pkg_server(url)
         @info "Downloading General registry from $url"
         try
-            Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = io)
+            Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
         catch err
             Pkg.Types.pkgerror("could not download $url")
         end
