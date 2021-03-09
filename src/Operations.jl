@@ -16,9 +16,6 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, DEFAULT_IO
 
-using TimerOutputs
-import ..Pkg: to
-
 #########
 # Utils #
 #########
@@ -674,7 +671,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
     return download_source(ctx, pkgs, urls; readonly=readonly)
 end
 
-@timeit to function download_source(ctx::Context, pkgs::Vector{PackageSpec},
+function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                          urls::Dict{UUID, Set{String}}; readonly=true)
     new_pkgs = PackageSpec[]
 

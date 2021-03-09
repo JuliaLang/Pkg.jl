@@ -4,7 +4,6 @@ module Utils
 
 import ..Pkg
 using TOML
-using TimerOutputs
 using UUIDs
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
@@ -18,7 +17,7 @@ const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 
-@timeit Pkg.to function init_reg()
+function init_reg()
     url, _ = Pkg.Registry.pkg_server_registry_url(GENERAL_UUID, nothing)
     mkpath(REGISTRY_DIR)
     if Pkg.Registry.registry_use_pkg_server(url)
@@ -39,7 +38,7 @@ const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
     end
 end
 
-@timeit Pkg.to function isolate(fn::Function; loaded_depot=false, linked_reg=true)
+function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -98,7 +97,7 @@ end
     end
 end
 
-@timeit Pkg.to function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
+function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]

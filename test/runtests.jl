@@ -19,9 +19,6 @@ end
 
 Pkg.DEFAULT_IO[] = IOBuffer()
 
-using TimerOutputs
-TimerOutputs.reset_timer!(Pkg.to)
-
 include("utils.jl")
 
 # Clean slate. Make sure to not start with an outdated registry
@@ -41,10 +38,6 @@ include("platformengines.jl")
 include("sandbox.jl")
 include("resolve.jl")
 include("misc.jl")
-
-TimerOutputs.print_timer(Pkg.to)
-TimerOutputs.print_timer(TimerOutputs.flatten(Pkg.to))
-
 
 # clean up locally cached registry
 rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
