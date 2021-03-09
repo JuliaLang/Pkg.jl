@@ -5,6 +5,7 @@ module Utils
 import ..Pkg
 using TOML
 using TimerOutputs
+using UUIDs
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
@@ -15,6 +16,32 @@ const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
 const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
+const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
+
+@timeit Pkg.to function init_reg()
+    url, _ = Pkg.Registry.pkg_server_registry_url(GENERAL_UUID, nothing)
+    if Pkg.Registry.registry_use_pkg_server(url)
+        @info "Downloading General registry from $url"
+        try
+            Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = io)
+        catch err
+            Pkg.Types.pkgerror("could not download $url")
+        end
+        tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")
+        hash = Pkg.Registry.pkg_server_url_hash(url)
+        write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
+    else
+        mkpath(REGISTRY_DIR)
+        Base.shred!(LibGit2.CachedCredentials()) do creds
+            LibGit2.with(Pkg.GitTools.clone(
+                stderr,
+                "https://github.com/JuliaRegistries/General.git",
+                REGISTRY_DIR,
+                credentials = creds)) do repo
+            end
+        end
+    end
+end
 
 @timeit Pkg.to function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
@@ -26,15 +53,9 @@ const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
     old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
     old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
-        # Clone the registry only once
+        # Clone/download the registry only once
         if !isdir(REGISTRY_DIR)
-            mkpath(REGISTRY_DIR)
-            @timeit Pkg.to "clone registry" Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
-                                                "https://github.com/JuliaRegistries/General.git",
-                    REGISTRY_DIR, credentials = creds)) do repo
-                end
-            end
+            init_reg()
         end
 
         empty!(LOAD_PATH)
@@ -90,16 +111,11 @@ end
     old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
     old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
-        # Clone the registry only once
+        # Clone/download the registry only once
         if !isdir(REGISTRY_DIR)
-            mkpath(REGISTRY_DIR)
-            @timeit Pkg.to "clone registry" Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
-                                                "https://github.com/JuliaRegistries/General.git",
-                    REGISTRY_DIR, credentials = creds)) do repo
-                end
-            end
+            init_reg()
         end
+
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing

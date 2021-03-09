@@ -179,9 +179,9 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
                 isdir(dirname(regpath)) || mkpath(dirname(regpath))
                 symlink(reg.path, regpath)
-                !isfile(joinpath(regpath, "Registry.toml")) && Pkg.Types.pkgerror("no `Registry.toml` file in linked registry.")
+                isfile(joinpath(regpath, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in linked registry.")
                 registry = Registry.RegistryInstance(regpath; parse_packages=false)
-                printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` from `reg.path` to `$(Base.contractuser(regpath))`")
+                printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                 return
             elseif registry_use_pkg_server(url)
                 # download from Pkg server
