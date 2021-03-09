@@ -173,7 +173,13 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
         # clone to tmpdir first
         mktempdir() do tmp
             url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-            if registry_use_pkg_server(url)
+            if reg.path !== nothing && reg.linked == true # symlink to local source
+                registry = Registry.RegistryInstance(reg.path; parse_packages=false)
+                regpath = joinpath(depot, "registries", registry.name)
+                printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
+                isdir(dirname(regpath)) || mkpath(dirname(regpath))
+                symlink(reg.path, regpath)
+            elseif registry_use_pkg_server(url)
                 # download from Pkg server
                 try
                     download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
@@ -185,12 +191,6 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
                 registry = Registry.RegistryInstance(tmp; parse_packages=false)
                 regpath = joinpath(depot, "registries", registry.name)
-            elseif reg.path !== nothing && reg.linked == true # symlink to local source
-                registry = Registry.RegistryInstance(reg.path; parse_packages=false)
-                regpath = joinpath(depot, "registries", registry.name)
-                printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
-                isdir(dirname(regpath)) || mkpath(dirname(regpath))
-                symlink(reg.path, regpath)
             elseif reg.path !== nothing # copy from local source
                 printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
                 cp(reg.path, tmp; force=true) # has to be cp given we're copying
