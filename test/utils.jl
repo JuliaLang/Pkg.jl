@@ -20,7 +20,7 @@ const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 function init_reg()
     url, _ = Pkg.Registry.pkg_server_registry_url(GENERAL_UUID, nothing)
     mkpath(REGISTRY_DIR)
-    if Pkg.Registry.registry_use_pkg_server(url)
+    if Pkg.Registry.registry_use_pkg_server()
         @info "Downloading General registry from $url"
         Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
         tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")

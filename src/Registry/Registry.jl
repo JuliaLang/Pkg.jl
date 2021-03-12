@@ -1,9 +1,10 @@
 module Registry
 
 import ..Pkg
-using ..Pkg: depots1, printpkgstyle, stdout_f, stderr_f, isdir_nothrow, pathrepr, pkg_server, GitTools
-using ..Pkg.PlatformEngines: download_verify_unpack, download
-using UUIDs, LibGit2
+using ..Pkg: depots1, printpkgstyle, DEFAULT_IO, isdir_nothrow, pathrepr, pkg_server,
+             GitTools, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
+using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z
+using UUIDs, LibGit2, TOML
 
 include("registry_instance.jl")
 
@@ -18,7 +19,7 @@ mutable struct RegistrySpec
 end
 RegistrySpec(name::String) = RegistrySpec(name = name)
 RegistrySpec(;name::Union{String,Nothing}=nothing, uuid::Union{String,UUID,Nothing}=nothing,
-              url::Union{String,Nothing}=nothing, path::Union{String,Nothing}=nothing, linked::Union{Bool,Nothing}=nothing) =
+url::Union{String,Nothing}=nothing, path::Union{String,Nothing}=nothing, linked::Union{Bool,Nothing}=nothing) =
     RegistrySpec(name, isa(uuid, String) ? UUID(uuid) : uuid, url, path, linked)
 
 """
@@ -39,7 +40,7 @@ Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.
 """
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
-function add(regs::Vector{RegistrySpec}; io::IO=stderr_f())
+function add(regs::Vector{RegistrySpec}; io::IO=DEFAULT_IO[])
     if isempty(regs)
         download_default_registries(io, only_if_empty = false)
     else
@@ -140,17 +141,16 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
     end
 end
 
-function registry_use_pkg_server(url)
-    if url === nothing
-        return false
-    else
-        return haskey(ENV, "JULIA_PKG_SERVER")
-    end
+function registry_use_pkg_server()
+    get(ENV, "JULIA_PKG_SERVER", nothing) !== ""
 end
 
-function check_registry_state(reg, url)
+registry_read_from_tarball() = 
+    registry_use_pkg_server() && get(ENV, "JULIA_PKG_UNPACK_REGISTRY", "") != "true"
+
+function check_registry_state(reg)
     reg_currently_uses_pkg_server = reg.tree_info !== nothing
-    reg_should_use_pkg_server = registry_use_pkg_server(url)
+    reg_should_use_pkg_server = registry_use_pkg_server()
     if reg_currently_uses_pkg_server && !reg_should_use_pkg_server
         msg = string(
             "Your registry may be outdated. We recommend that you run the ",
@@ -171,66 +171,88 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
         if reg.path !== nothing && reg.url !== nothing
             Pkg.Types.pkgerror("ambiguous registry specification; both url and path is set.")
         end
-        # clone to tmpdir first
-        mktempdir() do tmp
-            url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-            if reg.path !== nothing && reg.linked == true # symlink to local source
-                registry = Registry.RegistryInstance(reg.path)
-                regpath = joinpath(regdir, registry.name)
-                printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
-                isdir(dirname(regpath)) || mkpath(dirname(regpath))
-                symlink(reg.path, regpath)
-                isfile(joinpath(regpath, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in linked registry.")
-                registry = Registry.RegistryInstance(regpath)
-                printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
-                return
-            elseif registry_use_pkg_server(url)
-                # download from Pkg server
-                try
-                    download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
-                catch err
-                    Pkg.Types.pkgerror("could not download $url")
-                end
-                tree_info_file = joinpath(tmp, ".tree_info.toml")
-                hash = pkg_server_url_hash(url)
-                write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
-            elseif reg.path !== nothing # copy from local source
-                printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
-                isfile(joinpath(reg.path, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in source directory.")
-                registry = Registry.RegistryInstance(reg.path)
-                regpath = joinpath(regdir, registry.name)
-                cp(reg.path, regpath; force=true) # has to be cp given we're copying
-                printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
-                return
-            elseif reg.url !== nothing # clone from url
-                repo = GitTools.clone(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
-                LibGit2.close(repo)
-            else
-                Pkg.Types.pkgerror("no path or url specified for registry")
+        url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
+        if url !== nothing && registry_read_from_tarball()
+            tmp = tempname()
+            try
+                download_verify(url, nothing, tmp)
+            catch err
+                Pkg.Types.pkgerror("could not download $url")
             end
-            # verify that the clone looks like a registry
-            if !isfile(joinpath(tmp, "Registry.toml"))
-                Pkg.Types.pkgerror("no `Registry.toml` file in cloned registry.")
+            if reg.name === nothing
+                # Need to look up the registry name here
+                reg_unc = uncompress_registry(tmp)
+                reg.name = TOML.parse(reg_unc["Registry.toml"])["name"]::String
             end
-            registry = Registry.RegistryInstance(tmp)
-            regpath = joinpath(regdir, registry.name)
-            # copy to `depot`
-            ispath(dirname(regpath)) || mkpath(dirname(regpath))
-            if isfile(joinpath(regpath, "Registry.toml"))
-                existing_registry = Registry.RegistryInstance(regpath)
-                if registry.uuid == existing_registry.uuid
-                    println(io,
-                            "registry `$(registry.name)` already exist in `$(Base.contractuser(regpath))`.")
+            regpath = joinpath(regdir, reg.name)
+            Base.rm(regpath; recursive=true, force=true)
+            mkpath(regpath)
+            mv(tmp, joinpath(regpath, reg.name * ".tar.gz"); force=true)
+            hash = pkg_server_url_hash(url)
+            reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "filename" => reg.name * ".tar.gz")
+            open(joinpath(regpath, ".registry_info.toml"), "w") do io
+                TOML.print(io, reg_info)
+            end
+        else
+            mktempdir() do tmp
+                if reg.path !== nothing && reg.linked == true # symlink to local source
+                    registry = Registry.RegistryInstance(reg.path)
+                    regpath = joinpath(regdir, registry.name)
+                    printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
+                    isdir(dirname(regpath)) || mkpath(dirname(regpath))
+                    symlink(reg.path, regpath)
+                    isfile(joinpath(regpath, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in linked registry.")
+                    registry = Registry.RegistryInstance(regpath)
+                    printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
+                    return
+                elseif url !== nothing && registry_use_pkg_server()
+                    # download from Pkg server
+                    try
+                        download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
+                    catch err
+                        Pkg.Types.pkgerror("could not download $url")
+                    end
+                    tree_info_file = joinpath(tmp, ".tree_info.toml")
+                    hash = pkg_server_url_hash(url)
+                    write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
+                elseif reg.path !== nothing # copy from local source
+                    printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
+                    isfile(joinpath(reg.path, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in source directory.")
+                    registry = Registry.RegistryInstance(reg.path)
+                    regpath = joinpath(regdir, registry.name)
+                    cp(reg.path, regpath; force=true) # has to be cp given we're copying
+                    printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
+                    return
+                elseif reg.url !== nothing # clone from url
+                    repo = GitTools.clone(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
+                    LibGit2.close(repo)
                 else
-                    throw(Pkg.Types.PkgError("registry `$(registry.name)=\"$(registry.uuid)\"` conflicts with " *
-                        "existing registry `$(existing_registry.name)=\"$(existing_registry.uuid)\"`. " *
-                        "To install it you can clone it manually into e.g. " *
-                        "`$(Base.contractuser(joinpath(regdir, registry.name*"-2")))`."))
+                    Pkg.Types.pkgerror("no path or url specified for registry")
                 end
-            elseif registry_use_pkg_server(url) || reg.linked !== true
-                # if the dir doesn't exist, or exists but doesn't contain a Registry.toml
-                mv(tmp, regpath, force=true)
-                printpkgstyle(io, :Added, "registry `$(registry.name)` to `$(Base.contractuser(regpath))`")
+                # verify that the clone looks like a registry
+                if !isfile(joinpath(tmp, "Registry.toml"))
+                    Pkg.Types.pkgerror("no `Registry.toml` file in cloned registry.")
+                end
+                registry = Registry.RegistryInstance(tmp)
+                regpath = joinpath(regdir, registry.name)
+                # copy to `depot`
+                ispath(dirname(regpath)) || mkpath(dirname(regpath))
+                if isfile(joinpath(regpath, "Registry.toml"))
+                    existing_registry = Registry.RegistryInstance(regpath)
+                    if registry.uuid == existing_registry.uuid
+                        println(io,
+                                "registry `$(registry.name)` already exist in `$(Base.contractuser(regpath))`.")
+                    else
+                        throw(Pkg.Types.PkgError("registry `$(registry.name)=\"$(registry.uuid)\"` conflicts with " *
+                            "existing registry `$(existing_registry.name)=\"$(existing_registry.uuid)\"`. " *
+                            "To install it you can clone it manually into e.g. " *
+                            "`$(Base.contractuser(joinpath(regdir, registry.name*"-2")))`."))
+                    end
+                elseif (url !== nothing && registry_use_pkg_server()) || reg.linked !== true
+                    # if the dir doesn't exist, or exists but doesn't contain a Registry.toml
+                    mv(tmp, regpath, force=true)
+                    printpkgstyle(io, :Added, "registry `$(registry.name)` to `$(Base.contractuser(regpath))`")
+                end
             end
         end
     end
@@ -254,7 +276,7 @@ Pkg.Registry.rm(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 rm(reg::Union{String,RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
 rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
-function rm(regs::Vector{RegistrySpec}; io::IO=stderr_f())
+function rm(regs::Vector{RegistrySpec}; io::IO=DEFAULT_IO[])
     for registry in find_installed_registries(io, regs)
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         Base.rm(registry.path; force=true, recursive=true)
@@ -319,7 +341,10 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f())
+function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[], force::Bool=true)
+    OFFLINE_MODE[] && return
+    !force && UPDATED_REGISTRY_THIS_SESSION[] && return
+
     isempty(regs) && (regs = reachable_registries(; depots=depots1()))
     errors = Tuple{String, String}[]
     registry_urls = nothing
@@ -330,20 +355,40 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f())
                 printpkgstyle(io, :Updating, "registry at " * regpath)
                 old_hash = reg.tree_info
                 url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-                check_registry_state(reg, url)
+                if url !== nothing
+                    check_registry_state(reg)
+                end
                 if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
+                    # TODO: update faster by using a diff, if available
+                    # TODO: DRY with the code in `download_default_registries`
                     let new_hash = new_hash
-                        # TODO: update faster by using a diff, if available
-                        mktempdir() do tmp
+                        if registry_read_from_tarball()
+                            tmp = tempname()
                             try
-                                download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
+                                download_verify(url, nothing, tmp)
                             catch err
                                 @error "could not download $url" exception=err
                             end
-                            tree_info_file = joinpath(tmp, ".tree_info.toml")
+                            Base.rm(reg.path; recursive=true, force=true)
+                            mkpath(reg.path)
+                            mv(tmp, joinpath(reg.path, reg.name * ".tar.gz"))
                             hash = pkg_server_url_hash(url)
-                            write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
-                            mv(tmp, reg.path, force=true)
+                            reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "filename" => reg.name * ".tar.gz")
+                            open(joinpath(reg.path, ".registry_info.toml"), "w") do io
+                                TOML.print(io, reg_info)
+                            end
+                        else
+                            mktempdir() do tmp
+                                try
+                                    download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
+                                catch err
+                                    @error "could not download $url" exception=err
+                                end
+                                tree_info_file = joinpath(tmp, ".tree_info.toml")
+                                hash = pkg_server_url_hash(url)
+                                write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
+                                mv(tmp, reg.path, force=true)
+                            end
                         end
                     end
                 end
@@ -398,12 +443,13 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f())
         end
         @error warn_str
     end
+    UPDATED_REGISTRY_THIS_SESSION[] = true
     return
 end
 
 
 """
-    Pkg.Registry.status(; io=stdout)
+    Pkg.Registry.status()
 
 Display information about available registries.
 
@@ -415,7 +461,7 @@ Display information about available registries.
 Pkg.Registry.status()
 ```
 """
-function status(io::IO=stdout_f())
+function status(io::IO=DEFAULT_IO[])
     regs = reachable_registries()
     regs = unique(r -> r.uuid, regs; seen=Set{Union{UUID,Nothing}}())
     printpkgstyle(io, Symbol("Registry Status"), "")
