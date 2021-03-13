@@ -60,16 +60,18 @@ PSA[:name => "remove",
     :short_name => "rm",
     :api => API.rm,
     :should_splat => false,
-    :arg_count => 1 => Inf,
+    :arg_count => 0 => Inf,
     :arg_parser => parse_package,
     :option_spec => [
         PSA[:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
+        PSA[:name => "all", :api => :all_pkgs => true],
     ],
     :completions => complete_installed_packages,
     :description => "remove packages from project or manifest",
     :help => md"""
     [rm|remove] [-p|--project] pkg[=uuid] ...
+    [rm|remove] [-p|--project] [--all]
 
 Remove package `pkg` from the project file. Since the name `pkg` can only
 refer to one package in a project this is unambiguous, but you can specify
@@ -78,14 +80,16 @@ and UUID do not match. When a package is removed from the project file, it
 may still remain in the manifest if it is required by some other package in
 the project. Project mode operation is the default, so passing `-p` or
 `--project` is optional unless it is preceded by the `-m` or `--manifest`
-options at some earlier point.
+options at some earlier point. All packages can be removed by passing `--all`.
 
     [rm|remove] [-m|--manifest] pkg[=uuid] ...
+    [rm|remove] [-m|--manifest] [--all]
 
 Remove package `pkg` from the manifest file. If the name `pkg` refers to
 multiple packages in the manifest, `uuid` disambiguates it. Removing a package
 from the manifest forces the removal of all packages that depend on it, as well
 as any no-longer-necessary manifest packages due to project package removals.
+All packages can be removed by passing `--all`.
 """,
 ],
 PSA[:name => "add",
@@ -176,26 +180,34 @@ pkg> develop --local Example
 PSA[:name => "free",
     :api => API.free,
     :should_splat => false,
-    :arg_count => 1 => Inf,
+    :arg_count => 0 => Inf,
+    :option_spec => [
+        PSA[:name => "all", :api => :all_pkgs => true],
+    ],
     :arg_parser => parse_package,
     :completions => complete_installed_packages,
     :description => "undoes a `pin`, `develop`, or stops tracking a repo",
     :help => md"""
     free pkg[=uuid] ...
+    free [--all]
 
-Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
+Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
 makes the package no longer being checked out.
 """,
 ],
 PSA[:name => "pin",
     :api => API.pin,
     :should_splat => false,
-    :arg_count => 1 => Inf,
+    :arg_count => 0 => Inf,
+    :option_spec => [
+        PSA[:name => "all", :api => :all_pkgs => true],
+    ],
     :arg_parser => parse_package,
     :completions => complete_installed_packages,
     :description => "pins the version of packages",
     :help => md"""
     pin pkg[=uuid] ...
+    pin [--all]
 
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
 A pinned package has the symbol `⚲` next to its version in the status list.
@@ -205,6 +217,7 @@ A pinned package has the symbol `⚲` next to its version in the status list.
 pkg> pin Example
 pkg> pin Example@0.5.0
 pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
+pkg> pin --all
 ```
 """,
 ],
