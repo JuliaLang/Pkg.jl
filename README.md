@@ -19,10 +19,10 @@ If you want to develop this package do the following steps:
 If you need to build Julia from source with a git checkout of Pkg, then instead use `make DEPS_GIT=Pkg` when building Julia. The `Pkg` repo is in `stdlib/Pkg`, and created initially with a detached `HEAD`. If you're doing this from a pre-existing Julia repository, you may need to `make clean` beforehand.
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
-[docs-dev-url]: https://julialang.github.io/Pkg.jl/dev/
+[docs-dev-url]: https://pkgdocs.julialang.org/dev/
 
 [docs-v1-img]: https://img.shields.io/badge/docs-v1-blue.svg
-[docs-v1-url]: https://julialang.github.io/Pkg.jl/v1/
+[docs-v1-url]: https://pkgdocs.julialang.org/v1/
 
 [ci-img]: https://github.com/JuliaLang/Pkg.jl/workflows/Run%20tests/badge.svg?branch=master
 [ci-url]: https://github.com/JuliaLang/Pkg.jl/actions?query=workflow%3A%22Run+tests%22
