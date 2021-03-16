@@ -326,8 +326,6 @@ Base.@kwdef mutable struct Context
 
     # The Julia Version to resolve with respect to
     julia_version::Union{VersionNumber,Nothing} = VERSION
-    # test instrumenting
-    status_io::Union{IO,Nothing} = nothing
 end
 
 project_uuid(env::EnvCache) = env.pkg === nothing ? nothing : env.pkg.uuid

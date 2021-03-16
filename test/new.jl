@@ -16,13 +16,6 @@ unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
 unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 
-#
-# Sanity Check
-#
-
-@testset "Ensure we're testing the correct Pkg" begin
-    @test realpath(dirname(dirname(Base.pathof(Pkg)))) == realpath(dirname(@__DIR__))
-end
 
 #
 # # Depot Changes
@@ -1874,47 +1867,54 @@ end
     end
     # State changes
     isolate(loaded_depot=true) do
-        io = PipeBuffer()
+        io = IOBuffer()
         # Basic Add
-        Pkg.add(Pkg.PackageSpec(; name="Example", version="0.3.0"); status_io=io)
-        @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
-        @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
+        Pkg.add(Pkg.PackageSpec(; name="Example", version="0.3.0"); io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project\.toml`", output)
+        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", output)
+        @test occursin(r"Updating `.+Manifest\.toml`", output)
+        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", output)
         # Double add should not claim "Updating"
-        Pkg.add(Pkg.PackageSpec(; name="Example", version="0.3.0"); status_io=io)
-        @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
-        @test occursin(r"No Changes to `.+Manifest\.toml`", readline(io))
+        Pkg.add(Pkg.PackageSpec(; name="Example", version="0.3.0"); io=io)
+        output = String(take!(io))
+        @test occursin(r"No Changes to `.+Project\.toml`", output)
+        @test occursin(r"No Changes to `.+Manifest\.toml`", output)
         # From tracking registry to tracking repo
-        Pkg.add(Pkg.PackageSpec(; name="Example", rev="master"); status_io=io)
-        @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master`", readline(io))
-        @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
+        Pkg.add(Pkg.PackageSpec(; name="Example", rev="master"); io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project\.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master`", output)
+        @test occursin(r"Updating `.+Manifest\.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v0\.3\.0 ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", output)
         # From tracking repo to tracking path
-        Pkg.develop("Example"; status_io=io)
-        @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master` ⇒ v\d\.\d\.\d `.+`", readline(io))
-        @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master` ⇒ v\d\.\d\.\d `.+`", readline(io))
+        Pkg.develop("Example"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project\.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master` ⇒ v\d\.\d\.\d `.+`", output)
+        @test occursin(r"Updating `.+Manifest\.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github\.com/JuliaLang/Example\.jl\.git#master` ⇒ v\d\.\d\.\d `.+`", output)
         # From tracking path to tracking repo
-        Pkg.add(Pkg.PackageSpec(; name="Example", rev="master"); status_io=io)
-        @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `.+` ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
-        @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `.+` ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", readline(io))
+        Pkg.add(Pkg.PackageSpec(; name="Example", rev="master"); io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project\.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `.+` ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", output)
+        @test occursin(r"Updating `.+Manifest\.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `.+` ⇒ v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master`", output)
         # From tracking repo to tracking registered version
-        Pkg.free("Example"; status_io=io)
-        @test occursin(r"Updating `.+Project\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
-        @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
+        Pkg.free("Example"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project\.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", output)
+        @test occursin(r"Updating `.+Manifest\.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", output)
         # Removing registered version
-        Pkg.rm("Example"; status_io=io)
-        @test occursin(r"Updating `.+Project.toml`", readline(io))
-        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", readline(io))
-        @test occursin(r"Updating `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", readline(io))
+        Pkg.rm("Example"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
+        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", output)
     end
     # Project Status API
     isolate(loaded_depot=true) do

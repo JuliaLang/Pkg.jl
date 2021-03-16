@@ -1465,8 +1465,7 @@ end
 
 function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
                 io::IO=stdout, kwargs...)
-    Context!(ctx; io=io, kwargs...)
-    Operations.status(ctx, pkgs, mode=mode, git_diff=diff)
+    Operations.status(ctx.env, pkgs, mode=mode, git_diff=diff, io=io)
     return nothing
 end
 
@@ -1603,7 +1602,7 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
     write_env(ctx.env; update_undo=false)
-    Operations.show_update(ctx)
+    Operations.show_update(ctx.env; io=ctx.io)
 end
 
 
