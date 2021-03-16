@@ -374,7 +374,7 @@ end
 #############
 function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     if !isinteractive() && !TEST_MODE[] && !PRINTED_REPL_WARNING[]
-        @warn "The Pkg REPL interface is intended for interactive use, use with caution from scripts."
+        @warn "The Pkg REPL mode is intended for interactive use only, and should not be used from scripts. It is recommended to use the functional API instead."
         PRINTED_REPL_WARNING[] = true
     end
     try

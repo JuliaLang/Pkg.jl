@@ -1,7 +1,7 @@
 # [**12.** API Reference](@id API-Reference)
 
-This section describes the function interface, or "API mode",
-for interacting with Pkg.jl. The function API is recommended
+This section describes the functional API for interacting with Pkg.jl.
+It is recommended to use the functional API, rather than the Pkg REPL mode,
 for non-interactive usage, for example in scripts.
 
 ## General API Reference
@@ -16,10 +16,10 @@ For example, `Pkg.add("Example"; io=devnull)` will discard any output produced b
 
 ## Package API Reference
 
-In the REPL mode, packages (with associated version, UUID, URL etc) are parsed from strings,
+In the Pkg REPL mode, packages (with associated version, UUID, URL etc) are parsed from strings,
 for example `"Package#master"`,`"Package@v0.1"`, `"www.mypkg.com/MyPkg#my/feature"`.
 
-In the API mode, it is possible to use strings as arguments for simple commands (like `Pkg.add(["PackageA", "PackageB"])`,
+In the functional API, it is possible to use strings as arguments for simple commands (like `Pkg.add(["PackageA", "PackageB"])`,
 but more complicated commands, which e.g. specify URLs or version range, require the use of a more structured format over strings.
 This is done by creating an instance of [`PackageSpec`](@ref) which is passed in to functions.
 
@@ -54,7 +54,7 @@ Pkg.redo
 !!! compat "Julia 1.1"
     Pkg's registry handling requires at least Julia 1.1.
 
-The function API for registries uses [`RegistrySpec`](@ref)s, similar to
+The functional API for registries uses [`RegistrySpec`](@ref)s, similar to
 [`PackageSpec`](@ref).
 
 ```@docs

@@ -473,7 +473,7 @@ in the vector.
     | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
     |` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
 
-Below is a comparison between the REPL version and the API version:
+Below is a comparison between the REPL mode and the functional API:
 
 | `REPL`               | `API`                                                 |
 |:---------------------|:------------------------------------------------------|
@@ -540,7 +540,7 @@ on all the registries in the vector.
 
 # Examples
 
-Below is a comparison between the REPL version and the API version:
+Below is a comparison between the REPL mode and the functional API::
 
 | `REPL`               | `API`                                           |
 |:---------------------|:------------------------------------------------|
