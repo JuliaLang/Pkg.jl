@@ -118,11 +118,14 @@ end
 # additionally valid for add/develop are: local path, url
 function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
     if add_or_develop && casesensitive_isdir(expanduser(word))
-        if !occursin(Base.Filesystem.path_separator_re, word)
+        if occursin(name_re, word)
+            @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
+        else
             @info "Resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
+            return PackageSpec(repo=Types.GitRepo(source=normpath(expanduser(word))))
         end
-        return PackageSpec(repo=Types.GitRepo(source=expanduser(word)))
-    elseif occursin(uuid_re, word)
+    end
+    if occursin(uuid_re, word)
         return PackageSpec(uuid=UUID(word))
     elseif occursin(name_re, word)
         return PackageSpec(String(match(name_re, word).captures[1]))

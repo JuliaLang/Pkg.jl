@@ -33,21 +33,21 @@ temp_pkg_dir() do project_path
 
         @test_throws PkgError pkg"generate 2019Julia"
         pkg"generate Foo"
-        pkg"dev Foo"
+        pkg"dev ./Foo"
         mv(joinpath("Foo", "src", "Foo.jl"), joinpath("Foo", "src", "Foo2.jl"))
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
         ###
         mv(joinpath("Foo", "src", "Foo2.jl"), joinpath("Foo", "src", "Foo.jl"))
         write(joinpath("Foo", "Project.toml"), """
             name = "Foo"
         """
         )
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
         write(joinpath("Foo", "Project.toml"), """
             uuid = "b7b78b08-812d-11e8-33cd-11188e330cbe"
         """
         )
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
     end
 end
 
@@ -179,7 +179,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 with_current_env() do
                     uuid1 = Pkg.generate("SubModule1")["SubModule1"]
                     uuid2 = Pkg.generate("SubModule2")["SubModule2"]
-                    pkg"develop SubModule1"
+                    pkg"develop ./SubModule1"
                     mkdir("tests")
                     cd("tests")
                     pkg"develop ../SubModule2"
@@ -418,10 +418,10 @@ temp_pkg_dir() do project_path; cd(project_path) do
         with_current_env() do
             # the command below also tests multiline input
             pkg"""
-                dev RecursiveDep2
-                dev RecursiveDep
-                dev SubModule
-                dev SubModule2
+                dev ./RecursiveDep2
+                dev ./RecursiveDep
+                dev ./SubModule
+                dev ./SubModule2
                 add Random
                 add Example
                 add JSON

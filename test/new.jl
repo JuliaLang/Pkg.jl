@@ -848,13 +848,17 @@ end
     # check casesensitive resolution of paths
     isolate() do; cd_tempdir() do dir
         Pkg.REPLMode.TEST_MODE[] = true
-        # Add using UUID syntax
         mkdir("example")
         api, args, opts = first(Pkg.pkg"add Example")
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;name="Example")]
         @test isempty(opts)
         api, args, opts = first(Pkg.pkg"add example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="example")]
+        @test isempty(opts)
+        @test_throws PkgError Pkg.pkg"add ./Example"
+        api, args, opts = first(Pkg.pkg"add ./example")
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;path="example")]
         @test isempty(opts)
@@ -1100,11 +1104,11 @@ end
             @test pkg.is_tracking_path
         end
     end end
-    # bare directory name
+    # Local directory name. This must be prepended by "./".
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "SimplePackage")
         cd(dirname(path)) do
-            Pkg.pkg"develop SimplePackage"
+            Pkg.pkg"develop ./SimplePackage"
         end
         Pkg.dependencies(simple_package_uuid) do pkg
             @test pkg.name == "SimplePackage"
