@@ -930,4 +930,6 @@ end
 
 
 
+include("force-latest-compat.jl")
+
 end # module

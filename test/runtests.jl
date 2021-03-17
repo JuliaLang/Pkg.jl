@@ -37,6 +37,7 @@ include("binaryplatforms.jl")
 include("platformengines.jl")
 include("sandbox.jl")
 include("resolve.jl")
+include("force-latest-compat.jl")
 include("misc.jl")
 
 # clean up locally cached registry
