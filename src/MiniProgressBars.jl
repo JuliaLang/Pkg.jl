@@ -21,25 +21,6 @@ end
 const NONINTERACTIVE_TIME_GRANULARITY = Ref(2.0)
 const PROGRESS_BAR_PERCENTAGE_GRANULARITY = Ref(0.1)
 
-function pretend_cursor()
-    io = stderr
-    bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
-    percentage=false, always_reprint=true)
-    bar.max = 40
-    start_progress(io, bar)
-    sleep(0.5)
-    for i in 1:40
-        bar.current = i
-        print_progress_bottom(io)
-        println("Downloading ... $i")
-        show_progress(io, bar)
-        x = randstring(7)
-        sleep(0.01)
-    end
-    end_progress(io, bar)
-    print("Hello!")
-end
-
 function start_progress(io::IO, _::MiniProgressBar)
     ansi_disablecursor = "\e[?25l"
     print(io, ansi_disablecursor)
@@ -67,18 +48,22 @@ function show_progress(io::IO, p::MiniProgressBar)
     end
     p.prev = p.current
     p.has_shown = true
-    n_filled = ceil(Int, p.width * perc / 100)
-    n_left = p.width - n_filled
+
+    progress_text = if p.percentage
+        @sprintf "%2.1f %%" perc
+    else
+        sprint(p.current, "/",  p.max)
+    end
+
+    max_progress_width = max(0, min(displaysize(io)[2] - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
+    n_filled = ceil(Int, max_progress_width * perc / 100)
+    n_left = max_progress_width - n_filled
     print(io, " "^p.indent)
     printstyled(io, p.header, color=p.color, bold=true)
     print(io, " [")
     print(io, "="^n_filled, ">")
     print(io, " "^n_left, "]  ", )
-    if p.percentage
-        @printf io "%2.1f %%" perc
-    else
-        print(io, p.current, "/",  p.max)
-    end
+    print(io, progress_text)
     print(io, "\r")
 end
 
