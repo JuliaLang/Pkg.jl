@@ -174,13 +174,13 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
         mktempdir() do tmp
             url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
             if reg.path !== nothing && reg.linked == true # symlink to local source
-                registry = Registry.RegistryInstance(reg.path; parse_packages=false)
+                registry = Registry.RegistryInstance(reg.path)
                 regpath = joinpath(depot, "registries", registry.name)
                 printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
                 isdir(dirname(regpath)) || mkpath(dirname(regpath))
                 symlink(reg.path, regpath)
                 isfile(joinpath(regpath, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in linked registry.")
-                registry = Registry.RegistryInstance(regpath; parse_packages=false)
+                registry = Registry.RegistryInstance(regpath)
                 printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                 return
             elseif registry_use_pkg_server(url)
@@ -196,7 +196,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             elseif reg.path !== nothing # copy from local source
                 printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
                 isfile(joinpath(reg.path, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in source directory.")
-                registry = Registry.RegistryInstance(reg.path; parse_packages=false)
+                registry = Registry.RegistryInstance(reg.path)
                 regpath = joinpath(depot, "registries", registry.name)
                 cp(reg.path, regpath; force=true) # has to be cp given we're copying
                 printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
@@ -211,12 +211,12 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             if !isfile(joinpath(tmp, "Registry.toml"))
                 Pkg.Types.pkgerror("no `Registry.toml` file in cloned registry.")
             end
-            registry = Registry.RegistryInstance(tmp; parse_packages=false)
+            registry = Registry.RegistryInstance(tmp)
             regpath = joinpath(depot, "registries", registry.name)
             # copy to `depot`
             ispath(dirname(regpath)) || mkpath(dirname(regpath))
             if isfile(joinpath(regpath, "Registry.toml"))
-                existing_registry = Registry.RegistryInstance(regpath; parse_packages=false)
+                existing_registry = Registry.RegistryInstance(regpath)
                 if registry.uuid == existing_registry.uuid
                     println(io,
                             "registry `$(registry.name)` already exist in `$(Base.contractuser(regpath))`.")
@@ -264,7 +264,7 @@ end
 # Search for the input registries among installed ones
 function find_installed_registries(io::IO,
                                    needles::Union{Vector{Registry.RegistryInstance}, Vector{RegistrySpec}})
-    haystack = reachable_registries(; parse_packages=false)
+    haystack = reachable_registries()
     output = Registry.RegistryInstance[]
     for needle in needles
         if needle.name === nothing && needle.uuid === nothing
