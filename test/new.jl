@@ -1761,6 +1761,41 @@ end
 end
 
 #
+# # `all` operations
+#
+@testset "all" begin
+    # pin all, free all, rm all packages
+    isolate(loaded_depot=true) do
+        Pkg.add("Example")
+        Pkg.pin(all_pkgs = true)
+        Pkg.free(all_pkgs = true)
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.name == "Example"
+            @test !pkg.is_pinned
+        end
+        Pkg.rm(all_pkgs = true)
+        @test !haskey(Pkg.dependencies(), exuuid)
+    end
+    isolate() do
+        Pkg.REPLMode.TEST_MODE[] = true
+        api, args, opts = first(Pkg.pkg"pin --all")
+        @test api == Pkg.pin
+        @test isempty(args)
+        @test opts == Dict(:all_pkgs => true)
+
+        api, args, opts = first(Pkg.pkg"free --all")
+        @test api == Pkg.free
+        @test isempty(args)
+        @test opts == Dict(:all_pkgs => true)
+
+        api, args, opts = first(Pkg.pkg"rm --all")
+        @test api == Pkg.rm
+        @test isempty(args)
+        @test opts == Dict(:all_pkgs => true)
+    end
+end
+
+#
 # # build
 #
 @testset "build" begin

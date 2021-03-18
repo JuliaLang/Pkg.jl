@@ -271,7 +271,11 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     return
 end
 
-function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwargs...)
+function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_pkgs::Bool=false, kwargs...)
+    if all_pkgs
+        !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
+        append_all_pkgs!(pkgs, ctx, mode)
+    end
     require_not_empty(pkgs, :rm)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     foreach(pkg -> pkg.mode = mode, pkgs)
@@ -297,6 +301,20 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, kwarg
     return
 end
 
+function append_all_pkgs!(pkgs, ctx, mode)
+    if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
+        for (name::String, uuid::UUID) in ctx.env.project.deps
+            push!(pkgs, PackageSpec(name=name, uuid=uuid))
+        end
+    end
+    if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
+        for (uuid, entry) in ctx.env.manifest
+            push!(pkgs, PackageSpec(name=entry.name, uuid=uuid))
+        end
+    end
+    return
+end
+
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
@@ -311,15 +329,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     end
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
-        if mode == PKGMODE_PROJECT
-            for (name::String, uuid::UUID) in ctx.env.project.deps
-                push!(pkgs, PackageSpec(name=name, uuid=uuid))
-            end
-        elseif mode == PKGMODE_MANIFEST
-            for (uuid, entry) in ctx.env.manifest
-                push!(pkgs, PackageSpec(name=entry.name, uuid=uuid))
-            end
-        end
+        append_all_pkgs!(pkgs, ctx, mode)
     else
         project_deps_resolve!(ctx.env, pkgs)
         manifest_resolve!(ctx.env.manifest, pkgs)
@@ -335,7 +345,11 @@ function resolve(ctx::Context; kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+    if all_pkgs
+        !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
+        append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+    end
     require_not_empty(pkgs, :pin)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
@@ -364,7 +378,11 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+    if all_pkgs
+        !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
+        append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+    end
     require_not_empty(pkgs, :free)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
