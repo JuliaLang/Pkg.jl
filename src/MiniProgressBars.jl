@@ -52,7 +52,7 @@ function show_progress(io::IO, p::MiniProgressBar)
     progress_text = if p.percentage
         @sprintf "%2.1f %%" perc
     else
-        sprint(p.current, "/",  p.max)
+        string(p.current, "/",  p.max)
     end
 
     max_progress_width = max(0, min(displaysize(io)[2] - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
