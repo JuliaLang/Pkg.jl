@@ -182,10 +182,10 @@ struct RegistryInstance
     name_to_uuids::Dict{String, Vector{UUID}}
 end
 
-const REGISTRY_CACHE = Dict{Tuple{String, UUID}, Tuple{Base.SHA1, RegistryInstance}}()
+const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, RegistryInstance}}()
 
-function get_cached_registry(path, uuid::UUID, tree_info::Base.SHA1)
-    v = get(REGISTRY_CACHE, (path, uuid), nothing)
+function get_cached_registry(path::AbstractString, tree_info::Base.SHA1)
+    v = get(REGISTRY_CACHE, path, nothing)
     if v !== nothing
         cached_tree_info, reg = v
         if cached_tree_info == tree_info
@@ -196,7 +196,7 @@ function get_cached_registry(path, uuid::UUID, tree_info::Base.SHA1)
     length(REGISTRY_CACHE) > 20 && empty!(REGISTRY_CACHE)
     return nothing
 end
-    
+
 
 function RegistryInstance(path::AbstractString)
     d = parsefile(joinpath(path, "Registry.toml"))
@@ -207,10 +207,10 @@ function RegistryInstance(path::AbstractString)
         nothing
     end
     reg_uuid = UUID(d["uuid"]::String)
-    
+
     # Reuse an existing cached registry if it exists for this content
     if tree_info !== nothing
-        reg = get_cached_registry(path, reg_uuid, tree_info)
+        reg = get_cached_registry(path, tree_info)
         if reg isa RegistryInstance
             return reg
         end
@@ -236,7 +236,7 @@ function RegistryInstance(path::AbstractString)
         Dict{String, UUID}(),
     )
     if tree_info !== nothing
-        REGISTRY_CACHE[(path, reg_uuid)] = (tree_info, reg)
+        REGISTRY_CACHE[path] = (tree_info, reg)
     end
     return reg
 end
