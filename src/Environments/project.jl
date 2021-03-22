@@ -1,3 +1,19 @@
+Base.@kwdef mutable struct Project
+    other::Dict{String,Any} = Dict{String,Any}()
+    # Fields
+    name::Union{String, Nothing} = nothing
+    uuid::Union{UUID, Nothing} = nothing
+    version::Union{VersionNumber, Nothing} = nothing
+    manifest::Union{String, Nothing} = nothing
+    # Sections
+    deps::Dict{String,UUID} = Dict{String,UUID}()
+    extras::Dict{String,UUID} = Dict{String,UUID}()
+    targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
+    compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
+end
+Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
+Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
+
 #########
 # UTILS #
 #########
@@ -140,6 +156,21 @@ function read_project(f_or_io::Union{String, IO})
     return Project(raw)
 end
 
+function read_package(path::String)
+    project = read_project(path)
+    if project.name === nothing
+        pkgerror("expected a `name` entry in project file at `$(abspath(path))`")
+    end
+    if project.uuid === nothing
+        pkgerror("expected a `uuid` entry in project file at `$(abspath(path))`")
+    end
+    name = project.name
+    if !isfile(joinpath(dirname(path), "src", "$name.jl"))
+        pkgerror("expected the file `src/$name.jl` to exist for package `$name` at `$(dirname(path))`")
+    end
+    return project
+end
+
 
 ###########
 # WRITING #
@@ -166,10 +197,7 @@ _project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "co
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
-function write_project(env::EnvCache)
-    mkpath(dirname(env.project_file))
-    write_project(env.project, env.project_file)
-end
+
 write_project(project::Project, project_file::AbstractString) =
     write_project(destructure(project), project_file)
 function write_project(project::Dict, project_file::AbstractString)

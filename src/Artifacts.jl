@@ -12,7 +12,7 @@ import ..TOML
 using ..MiniProgressBars
 using ..PlatformEngines
 import ..pkg_server, ..can_fancyprint, ..DEFAULT_IO, ..printpkgstyle
-import ..Types: write_env_usage, parse_toml
+import ..Types: write_env_usage
 
 using SHA
 
@@ -185,7 +185,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         force::Bool = false)
     # First, check to see if this artifact is already bound:
     if isfile(artifacts_toml)
-        artifact_dict = parse_toml(artifacts_toml)
+        artifact_dict = Base.parsed_toml(artifacts_toml)
 
         if !force && haskey(artifact_dict, name)
             meta = artifact_dict[name]
@@ -263,7 +263,7 @@ Silently fails if no such binding exists within the file.
 """
 function unbind_artifact!(artifacts_toml::String, name::String;
                          platform::Union{AbstractPlatform,Nothing} = nothing)
-    artifact_dict = parse_toml(artifacts_toml)
+    artifact_dict = Base.parsed(artifacts_toml)
     if !haskey(artifact_dict, name)
         return
     end

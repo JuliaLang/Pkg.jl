@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, DEFAULT_IO
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, DEFAULT_IO, PreserveLevel
 
 #########
 # Utils #
@@ -193,7 +193,7 @@ end
 #######################################
 # Dependency gathering and resolution #
 #######################################
-function collect_project!(pkg::PackageSpec, path::String,
+function collect_project!(pkg::Union{PackageSpec, PackageEntry}, path::String,
                           deps_map::Dict{UUID,Vector{PackageSpec}})
     deps_map[pkg.uuid] = PackageSpec[]
     project_file = projectfile_path(path; strict=true)
@@ -1483,7 +1483,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                     entry.path = Types.stdlib_path(entry.name)
                 end
             end
-            write_env(temp_ctx.env, update_undo = false)
+            write_env(temp_ctx.env)
 
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'

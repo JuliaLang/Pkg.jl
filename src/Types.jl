@@ -35,29 +35,16 @@ export UUID, SHA1, VersionRange, VersionSpec,
 # Load in data about historical stdlibs
 include("HistoricalStdlibs.jl")
 
-deepcopy_toml(x) = x
-function deepcopy_toml(@nospecialize(x::Vector))
-    d = similar(x)
-    for (i, v) in enumerate(x)
-        d[i] = deepcopy_toml(v)
-    end
-    return d
-end
-function deepcopy_toml(x::Dict{String, Any})
-    d = Dict{String, Any}()
-    sizehint!(d, length(x))
-    for (k, v) in x
-        d[k] = deepcopy_toml(v)
-    end
-    return d
-end
+using ..Pkg: PackageSpec, has_name, has_uuid, isresolved,
+    PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
+    UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
+    PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE
 
-# See loading.jl
-const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
-const TOML_LOCK = ReentrantLock()
-# Some functions mutate the returning Dict so return a copy of the cached value here
-parse_toml(toml_file::AbstractString) =
-    Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
+
+using ..Environments: EnvCache, Project, Manifest, GitRepo,
+    project_uuid, is_project_name, is_project_uuid, PackageEntry, write_project, write_manifest, manifestfile_path, write_env_usage,
+    projectfile_path, read_package, read_project, read_manifest, manifest_info, write_env
+
 
 #################
 # Pkg Error #
@@ -69,249 +56,17 @@ pkgerror(msg::String...) = throw(PkgError(join(msg)))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 
 
-###############
-# PackageSpec #
-###############
-@enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
-@enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
-@enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
-const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
-
-Base.@kwdef mutable struct GitRepo
-    source::Union{Nothing,String} = nothing
-    rev::Union{Nothing,String} = nothing
-    subdir::Union{String, Nothing} = nothing
-end
-
-Base.:(==)(r1::GitRepo, r2::GitRepo) =
-    r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
+collides_with_project(env::EnvCache, pkg::PackageSpec) =
+    is_project_name(env, pkg.name) || is_project_uuid(env, pkg.uuid)
+is_project(env::EnvCache, pkg::PackageSpec) = is_project_uuid(env, pkg.uuid)
 
 
-Base.@kwdef mutable struct PackageSpec
-    name::Union{Nothing,String} = nothing
-    uuid::Union{Nothing,UUID} = nothing
-    version::VersionTypes = VersionSpec()
-    tree_hash::Union{Nothing,SHA1} = nothing
-    repo::GitRepo = GitRepo()
-    path::Union{Nothing,String} = nothing
-    pinned::Bool = false
-    mode::PackageMode = PKGMODE_PROJECT
-end
-PackageSpec(name::AbstractString) = PackageSpec(;name=name)
-PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
-PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
-PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
-
-function Base.:(==)(a::PackageSpec, b::PackageSpec)
-    return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
-    a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-    a.pinned == b.pinned && a.mode == b.mode
-end
-
-function err_rep(pkg::PackageSpec)
-    x = pkg.name !== nothing && pkg.uuid !== nothing ? x = "$(pkg.name) [$(string(pkg.uuid)[1:8])]" :
-        pkg.name !== nothing ? pkg.name :
-        pkg.uuid !== nothing ? string(pkg.uuid)[1:8] :
-        pkg.repo.source
-    return "`$x`"
-end
-
-has_name(pkg::PackageSpec) = pkg.name !== nothing
-has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
-isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
-
-function Base.show(io::IO, pkg::PackageSpec)
-    vstr = repr(pkg.version)
-    f = []
-    pkg.name !== nothing && push!(f, "name" => pkg.name)
-    pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
-    pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
-    pkg.path !== nothing && push!(f, "dev/path" => pkg.path)
-    pkg.pinned && push!(f, "pinned" => pkg.pinned)
-    push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
-    if pkg.repo.source !== nothing
-        push!(f, "url/path" => string("\"", pkg.repo.source, "\""))
-    end
-    if pkg.repo.rev !== nothing
-        push!(f, "rev" => pkg.repo.rev)
-    end
-    if pkg.repo.subdir !== nothing
-        push!(f, "subdir" => pkg.repo.subdir)
-    end
-    print(io, "PackageSpec(\n")
-    for (field, value) in f
-        print(io, "  ", field, " = ", value, "\n")
-    end
-    print(io, ")")
-end
-
-############
-# EnvCache #
-############
-
-function projectfile_path(env_path::String; strict=false)
-    for name in Base.project_names
-        maybe_file = joinpath(env_path, name)
-        isfile(maybe_file) && return maybe_file
-    end
-    return strict ? nothing : joinpath(env_path, "Project.toml")
-end
-
-function manifestfile_path(env_path::String; strict=false)
-    for name in Base.manifest_names
-        maybe_file = joinpath(env_path, name)
-        isfile(maybe_file) && return maybe_file
-    end
-    if strict
-        return nothing
-    else
-        project = basename(projectfile_path(env_path))
-        idx = findfirst(x -> x == project, Base.project_names)
-        @assert idx !== nothing
-        return joinpath(env_path, Base.manifest_names[idx])
-    end
-end
-
-function find_project_file(env::Union{Nothing,String}=nothing)
-    project_file = nothing
-    if env isa Nothing
-        project_file = Base.active_project()
-        project_file === nothing && pkgerror("no active project")
-    elseif startswith(env, '@')
-        project_file = Base.load_path_expand(env)
-        project_file === nothing && pkgerror("package environment does not exist: $env")
-    elseif env isa String
-        if isdir(env)
-            isempty(readdir(env)) || pkgerror("environment is a package directory: $env")
-            project_file = joinpath(env, Base.project_names[end])
-        else
-            project_file = endswith(env, ".toml") ? abspath(env) :
-                abspath(env, Base.project_names[end])
-        end
-    end
-    @assert project_file isa String &&
-        (isfile(project_file) || !ispath(project_file) ||
-         isdir(project_file) && isempty(readdir(project_file)))
-    return Pkg.safe_realpath(project_file)
-end
-
-Base.@kwdef mutable struct Project
-    other::Dict{String,Any} = Dict{String,Any}()
-    # Fields
-    name::Union{String, Nothing} = nothing
-    uuid::Union{UUID, Nothing} = nothing
-    version::Union{VersionTypes, Nothing} = nothing
-    manifest::Union{String, Nothing} = nothing
-    # Sections
-    deps::Dict{String,UUID} = Dict{String,UUID}()
-    extras::Dict{String,UUID} = Dict{String,UUID}()
-    targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
-    compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
-end
-Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
-Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
 
-Base.@kwdef mutable struct PackageEntry
-    name::Union{String,Nothing} = nothing
-    version::Union{VersionNumber,Nothing} = nothing
-    path::Union{String,Nothing} = nothing
-    pinned::Bool = false
-    repo::GitRepo = GitRepo()
-    tree_hash::Union{Nothing,SHA1} = nothing
-    deps::Dict{String,UUID} = Dict{String,UUID}()
-    other::Union{Dict,Nothing} = nothing
-end
-Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
-    t1.version == t2.version &&
-    t1.path == t2.path &&
-    t1.pinned == t2.pinned &&
-    t1.repo == t2.repo &&
-    t1.tree_hash == t2.tree_hash &&
-    t1.deps == t2.deps   # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps], init=h)  # omits `other`
-const Manifest = Dict{UUID,PackageEntry}
-
-function Base.show(io::IO, pkg::PackageEntry)
-    f = []
-    pkg.name        !== nothing && push!(f, "name"      => pkg.name)
-    pkg.version     !== nothing && push!(f, "version"   => pkg.version)
-    pkg.tree_hash   !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
-    pkg.path        !== nothing && push!(f, "dev/path"  => pkg.path)
-    pkg.pinned                  && push!(f, "pinned"    => pkg.pinned)
-    pkg.repo.source !== nothing && push!(f, "url/path"  => "`$(pkg.repo.source)`")
-    pkg.repo.rev    !== nothing && push!(f, "rev"       => pkg.repo.rev)
-    pkg.repo.subdir !== nothing && push!(f, "subdir"    => pkg.repo.subdir)
-    print(io, "PackageEntry(\n")
-    for (field, value) in f
-        print(io, "  ", field, " = ", value, "\n")
-    end
-    print(io, ")")
-end
-
-
-mutable struct EnvCache
-    # environment info:
-    env::Union{Nothing,String}
-    # paths for files:
-    project_file::String
-    manifest_file::String
-    # name / uuid of the project
-    pkg::Union{PackageSpec, Nothing}
-    # cache of metadata:
-    project::Project
-    manifest::Manifest
-    # What these where at creation of the EnvCache
-    original_project::Project
-    original_manifest::Manifest
-end
-
-function EnvCache(env::Union{Nothing,String}=nothing)
-    project_file = find_project_file(env)
-    project_dir = dirname(project_file)
-    # read project file
-    project = read_project(project_file)
-    # initialize project package
-    if project.name !== nothing && project.uuid !== nothing
-        project_package = PackageSpec(
-            name = project.name,
-            uuid = project.uuid,
-            version = something(project.version, VersionNumber("0.0")),
-            path = project_dir,
-        )
-    else
-        project_package = nothing
-    end
-    # determine manifest file
-    dir = abspath(project_dir)
-    manifest_file = project.manifest
-    manifest_file = manifest_file !== nothing ?
-        abspath(manifest_file) : manifestfile_path(dir)::String
-    write_env_usage(manifest_file, "manifest_usage.toml")
-    manifest = read_manifest(manifest_file)
-
-    env′ = EnvCache(env,
-        project_file,
-        manifest_file,
-        project_package,
-        project,
-        manifest,
-        deepcopy(project),
-        deepcopy(manifest),
-        )
-
-    # Save initial environment for undo/redo functionality
-    if !Pkg.API.saved_initial_snapshot[]
-        Pkg.API.add_snapshot_to_undo(env′)
-        Pkg.API.saved_initial_snapshot[] = true
-    end
-
-    return env′
-end
-
-include("project.jl")
-include("manifest.jl")
+###########
+# Context #
+###########
 
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
@@ -321,25 +76,13 @@ Base.@kwdef mutable struct Context
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
 
-    # Registris
+    # Registries
     registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()
 
     # The Julia Version to resolve with respect to
     julia_version::Union{VersionNumber,Nothing} = VERSION
 end
 
-project_uuid(env::EnvCache) = env.pkg === nothing ? nothing : env.pkg.uuid
-collides_with_project(env::EnvCache, pkg::PackageSpec) =
-    is_project_name(env, pkg.name) || is_project_uuid(env, pkg.uuid)
-is_project(env::EnvCache, pkg::PackageSpec) = is_project_uuid(env, pkg.uuid)
-is_project_name(env::EnvCache, name::String) =
-    env.pkg !== nothing && env.pkg.name == name
-is_project_name(env::EnvCache, name::Nothing) = false
-is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
-
-###########
-# Context #
-###########
 
 const STDLIB = Ref{Dict{UUID,String}}()
 function load_stdlib()
@@ -347,7 +90,7 @@ function load_stdlib()
     for name in readdir(stdlib_dir())
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
-        project = parse_toml(projfile)
+        project = Base.parsed_toml(projfile)
         uuid = get(project, "uuid", nothing)
         nothing === uuid && continue
         stdlib[UUID(uuid)] = name
@@ -405,40 +148,6 @@ function Context!(ctx::Context; kwargs...)
         setfield!(ctx, k, v)
     end
     return ctx
-end
-
-function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
-    # Don't record ghost usage
-    !isfile(source_file) && return
-
-    # Ensure that log dir exists
-    !ispath(logdir()) && mkpath(logdir())
-
-    # Generate entire entry as a string first
-    entry = sprint() do io
-        TOML.print(io, Dict(source_file => [Dict("time" => now())]))
-    end
-
-    # Append entry to log file in one chunk
-    usage_file = joinpath(logdir(), usage_filepath)
-    open(usage_file, append=true) do io
-        write(io, entry)
-    end
-end
-
-function read_package(path::String)
-    project = read_project(path)
-    if project.name === nothing
-        pkgerror("expected a `name` entry in project file at `$(abspath(path))`")
-    end
-    if project.uuid === nothing
-        pkgerror("expected a `uuid` entry in project file at `$(abspath(path))`")
-    end
-    name = project.name
-    if !isfile(joinpath(dirname(path), "src", "$name.jl"))
-        pkgerror("expected the file `src/$name.jl` to exist for package `$name` at `$(dirname(path))`")
-    end
-    return project
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
@@ -911,23 +620,5 @@ function registered_name(registries::Vector{Registry.RegistryInstance}, uuid::UU
     end
     return name
 end
-
-# Find package by UUID in the manifest file
-manifest_info(::Manifest, uuid::Nothing) = nothing
-function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry,Nothing}
-    #any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
-    return get(manifest, uuid, nothing)
-end
-function write_env(env::EnvCache; update_undo=true)
-    if env.project != env.original_project
-        write_project(env)
-    end
-    if env.manifest != env.original_manifest
-        write_manifest(env)
-    end
-    update_undo && Pkg.API.add_snapshot_to_undo(env)
-end
-
-
 
 end # module

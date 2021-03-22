@@ -1,3 +1,5 @@
+const Manifest = Dict{UUID,PackageEntry}
+
 ###########
 # READING #
 ###########
@@ -227,10 +229,13 @@ function destructure(manifest::Manifest)::Dict
     return raw
 end
 
-function write_manifest(env::EnvCache)
-    mkpath(dirname(env.manifest_file))
-    write_manifest(env.manifest, env.manifest_file)
+# Find package by UUID in the manifest file
+manifest_info(::Manifest, uuid::Nothing) = nothing
+function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry,Nothing}
+    #any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
+    return get(manifest, uuid, nothing)
 end
+
 write_manifest(manifest::Manifest, manifest_file::AbstractString) =
     write_manifest(destructure(manifest), manifest_file)
 function write_manifest(manifest::Dict, manifest_file::AbstractString)

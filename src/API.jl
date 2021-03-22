@@ -12,9 +12,8 @@ using Serialization
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl
+import ..can_fancyprint, ..pathrepr, ..isurl, ..VersionTypes, ..PreserveLevel
 using ..Types, ..TOML
-using ..Types: VersionTypes
 using Base.BinaryPlatforms
 import ..DEFAULT_IO
 using ..Artifacts: artifact_paths
@@ -143,7 +142,13 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
             Registry.download_default_registries(io)
             ctx = Context()
             kwargs = merge((;kwargs...), (:io => io,))
+            # Save initial environment for undo/redo functionality
+            if !saved_initial_snapshot[]
+                add_snapshot_to_undo(ctx.env)
+                saved_initial_snapshot[] = true
+            end
             ret = $f(ctx, pkgs; kwargs...)
+            add_snapshot_to_undo(ctx.env)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             return ret
         end
@@ -1619,7 +1624,7 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     state.idx += direction
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
-    write_env(ctx.env; update_undo=false)
+    write_env(ctx.env)
     Operations.show_update(ctx.env; io=ctx.io)
 end
 

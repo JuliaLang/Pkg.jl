@@ -8,7 +8,7 @@ import REPL
 import REPL: LineEdit, REPLCompletions
 
 import ..casesensitive_isdir, ..OFFLINE_MODE
-using ..Types, ..Operations, ..API, ..Registry, ..Resolve
+using ..Environments, ..Types, ..Operations, ..API, ..Registry, ..Resolve
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)
@@ -502,10 +502,10 @@ end
 function promptf()
     global prev_project_timestamp, prev_prefix, prev_project_file
     project_file = try
-        Types.find_project_file()
+        Environments.find_project_file()
     catch
-        nothing
-    end
+       nothing
+   end
     prefix = ""
     if project_file !== nothing
         if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)

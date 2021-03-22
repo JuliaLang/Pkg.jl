@@ -45,6 +45,133 @@ include("PlatformEngines.jl")
 include("Versions.jl")
 include("Registry/Registry.jl")
 include("Resolve/Resolve.jl")
+
+
+# TODO: This should be moved
+
+
+Base.@kwdef mutable struct GitRepo
+    source::Union{Nothing,String} = nothing
+    rev::Union{Nothing,String} = nothing
+    subdir::Union{String, Nothing} = nothing
+end
+
+Base.:(==)(r1::GitRepo, r2::GitRepo) =
+    r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
+
+###############
+# PackageSpec #
+###############
+@enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
+@enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
+@enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
+using UUIDs
+using Base: SHA1
+const VersionTypes = Union{VersionNumber,Versions.VersionSpec,UpgradeLevel}
+
+"""
+    PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
+    PackageSpec(; name, url, path, subdir, rev, version, mode, level)
+
+A `PackageSpec` is a representation of a package with various metadata.
+This includes:
+
+  * The `name` of the package.
+  * The package's unique `uuid`.
+  * A `version` (for example when adding a package). When upgrading, can also be an instance of
+   the enum [`UpgradeLevel`](@ref).
+  * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
+  * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
+  * A `subdir` which can be used when adding a package that is not in the root of a repository.
+  * A `mode`, which is an instance of the enum [`PackageMode`](@ref), with possible values `PKGMODE_PROJECT`
+   (the default) or `PKGMODE_MANIFEST`. Used in e.g. [`Pkg.rm`](@ref).
+
+Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
+in the vector.
+
+!!! compat "Julia 1.5"
+    Many functions that take a `PackageSpec` or a `Vector{PackageSpec}` can be called with a more concise notation with `NamedTuple`s.
+    For example, `Pkg.add` can be called either as the explicit or concise versions as:
+
+    | Explicit                                                            | Concise                                        |
+    |:--------------------------------------------------------------------|:-----------------------------------------------|
+    | `Pkg.add(PackageSpec(name="Package))`                               | `Pkg.add(name = "Package")`                    |
+    | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
+    |` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
+
+Below is a comparison between the REPL mode and the functional API:
+
+| `REPL`               | `API`                                                 |
+|:---------------------|:------------------------------------------------------|
+| `Package`            | `PackageSpec("Package")`                              |
+| `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
+| `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
+| `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
+| `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
+| `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
+| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
+| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
+
+"""
+Base.@kwdef mutable struct PackageSpec
+    name::Union{Nothing,String} = nothing
+    uuid::Union{Nothing,UUID} = nothing
+    version::VersionTypes = Versions.VersionSpec()
+    tree_hash::Union{Nothing,SHA1} = nothing
+    repo::GitRepo = GitRepo()
+    path::Union{Nothing,String} = nothing
+    pinned::Bool = false
+    mode::PackageMode = PKGMODE_PROJECT
+end
+PackageSpec(name::AbstractString) = PackageSpec(;name=name)
+PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
+PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
+PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
+
+function Base.:(==)(a::PackageSpec, b::PackageSpec)
+    return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
+    a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
+    a.pinned == b.pinned && a.mode == b.mode
+end
+
+function err_rep(pkg::PackageSpec)
+    x = pkg.name !== nothing && pkg.uuid !== nothing ? x = "$(pkg.name) [$(string(pkg.uuid)[1:8])]" :
+        pkg.name !== nothing ? pkg.name :
+        pkg.uuid !== nothing ? string(pkg.uuid)[1:8] :
+        pkg.repo.source
+    return "`$x`"
+end
+
+has_name(pkg::PackageSpec) = pkg.name !== nothing
+has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
+isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
+
+function Base.show(io::IO, pkg::PackageSpec)
+    vstr = repr(pkg.version)
+    f = []
+    pkg.name !== nothing && push!(f, "name" => pkg.name)
+    pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
+    pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
+    pkg.path !== nothing && push!(f, "dev/path" => pkg.path)
+    pkg.pinned && push!(f, "pinned" => pkg.pinned)
+    push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
+    if pkg.repo.source !== nothing
+        push!(f, "url/path" => string("\"", pkg.repo.source, "\""))
+    end
+    if pkg.repo.rev !== nothing
+        push!(f, "rev" => pkg.repo.rev)
+    end
+    if pkg.repo.subdir !== nothing
+        push!(f, "subdir" => pkg.repo.subdir)
+    end
+    print(io, "PackageSpec(\n")
+    for (field, value) in f
+        print(io, "  ", field, " = ", value, "\n")
+    end
+    print(io, ")")
+end
+
+include("Environments/Environments.jl")
 include("Types.jl")
 include("BinaryPlatforms_compat.jl")
 include("Artifacts.jl")
@@ -53,9 +180,9 @@ include("API.jl")
 include("REPLMode/REPLMode.jl")
 
 import .REPLMode: @pkg_str
-import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
+#import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
-import .Types: PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
+#import .Types: PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 
 # Import artifacts API
 using .Artifacts, .PlatformEngines
@@ -90,7 +217,6 @@ Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.update`
 """
 const UpgradeLevel = Types.UpgradeLevel
 
-const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
@@ -443,51 +569,7 @@ set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
 """
 offline(b::Bool=true) = (OFFLINE_MODE[] = b; nothing)
 
-"""
-    PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
-    PackageSpec(; name, url, path, subdir, rev, version, mode, level)
 
-A `PackageSpec` is a representation of a package with various metadata.
-This includes:
-
-  * The `name` of the package.
-  * The package's unique `uuid`.
-  * A `version` (for example when adding a package). When upgrading, can also be an instance of
-   the enum [`UpgradeLevel`](@ref).
-  * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
-  * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
-  * A `subdir` which can be used when adding a package that is not in the root of a repository.
-  * A `mode`, which is an instance of the enum [`PackageMode`](@ref), with possible values `PKGMODE_PROJECT`
-   (the default) or `PKGMODE_MANIFEST`. Used in e.g. [`Pkg.rm`](@ref).
-
-Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
-in the vector.
-
-!!! compat "Julia 1.5"
-    Many functions that take a `PackageSpec` or a `Vector{PackageSpec}` can be called with a more concise notation with `NamedTuple`s.
-    For example, `Pkg.add` can be called either as the explicit or concise versions as:
-
-    | Explicit                                                            | Concise                                        |
-    |:--------------------------------------------------------------------|:-----------------------------------------------|
-    | `Pkg.add(PackageSpec(name="Package))`                               | `Pkg.add(name = "Package")`                    |
-    | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
-    |` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
-
-Below is a comparison between the REPL mode and the functional API:
-
-| `REPL`               | `API`                                                 |
-|:---------------------|:------------------------------------------------------|
-| `Package`            | `PackageSpec("Package")`                              |
-| `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
-| `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
-| `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
-| `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
-| `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
-| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
-| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
-
-"""
-const PackageSpec = API.Package
 
 """
     setprotocol!(;
