@@ -3,7 +3,7 @@ module Environments
 using UUIDs, TOML, Dates, ..Versions
 using Base: SHA1
 import ..Pkg
-import ..logdir, ..safe_realpath, ..GitRepo, ..PackageSpec
+import ..logdir, ..safe_realpath, ..GitRepo, ..Bleh.PackageSpec, ..PkgError, ..pkgerror, ..parse_toml
 
 Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
@@ -40,32 +40,6 @@ function Base.show(io::IO, pkg::PackageEntry)
     end
     print(io, ")")
 end
-
-
-deepcopy_toml(x) = x
-function deepcopy_toml(@nospecialize(x::Vector))
-    d = similar(x)
-    for (i, v) in enumerate(x)
-        d[i] = deepcopy_toml(v)
-    end
-    return d
-end
-function deepcopy_toml(x::Dict{String, Any})
-    d = Dict{String, Any}()
-    sizehint!(d, length(x))
-    for (k, v) in x
-        d[k] = deepcopy_toml(v)
-    end
-    return d
-end
-
-# See loading.jl
-const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
-const TOML_LOCK = ReentrantLock()
-# Some functions mutate the returning Dict so return a copy of the cached value here
-parse_toml(toml_file::AbstractString) =
-    Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
-
 
 include("project.jl")
 include("manifest.jl")

@@ -35,7 +35,12 @@ export UUID, SHA1, VersionRange, VersionSpec,
 # Load in data about historical stdlibs
 include("HistoricalStdlibs.jl")
 
-using ..Pkg: PackageSpec, has_name, has_uuid, isresolved,
+using ..Bleh: PackageSpec, has_name, has_uuid, isresolved, err_rep
+
+import ..PkgError, ..pkgerror, ..parse_toml
+
+
+using ..Pkg: 
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE
@@ -44,18 +49,6 @@ using ..Pkg: PackageSpec, has_name, has_uuid, isresolved,
 using ..Environments: EnvCache, Project, Manifest, GitRepo,
     project_uuid, is_project_name, is_project_uuid, PackageEntry, write_project, write_manifest, manifestfile_path, write_env_usage,
     projectfile_path, read_package, read_project, read_manifest, manifest_info, write_env
-
-
-#################
-# Pkg Error #
-#################
-struct PkgError <: Exception
-    msg::String
-end
-pkgerror(msg::String...) = throw(PkgError(join(msg)))
-Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
-
-
 
 collides_with_project(env::EnvCache, pkg::PackageSpec) =
     is_project_name(env, pkg.name) || is_project_uuid(env, pkg.uuid)

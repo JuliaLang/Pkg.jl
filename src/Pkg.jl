@@ -36,6 +36,43 @@ const DEFAULT_IO = Ref{IO}()
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
+#################
+# Pkg Error #
+#################
+struct PkgError <: Exception
+    msg::String
+end
+pkgerror(msg::String...) = throw(PkgError(join(msg)))
+Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
+
+
+deepcopy_toml(x) = x
+function deepcopy_toml(@nospecialize(x::Vector))
+    d = similar(x)
+    for (i, v) in enumerate(x)
+        d[i] = deepcopy_toml(v)
+    end
+    return d
+end
+function deepcopy_toml(x::Dict{String, Any})
+    d = Dict{String, Any}()
+    sizehint!(d, length(x))
+    for (k, v) in x
+        d[k] = deepcopy_toml(v)
+    end
+    return d
+end
+
+
+# See loading.jl
+const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
+const TOML_LOCK = ReentrantLock()
+
+# Some functions mutate the returning Dict so return a copy of the cached value here
+parse_toml(toml_file::AbstractString) =
+    Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
+
+
 include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
 
 include("utils.jl")
@@ -69,50 +106,12 @@ using UUIDs
 using Base: SHA1
 const VersionTypes = Union{VersionNumber,Versions.VersionSpec,UpgradeLevel}
 
-"""
-    PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
-    PackageSpec(; name, url, path, subdir, rev, version, mode, level)
+module Bleh
+using UUIDs
+using Base: SHA1
+using ..Versions
+import ..VersionTypes, ..UpgradeLevel, ..PreserveLevel, ..PackageMode, ..GitRepo, ..PKGMODE_PROJECT
 
-A `PackageSpec` is a representation of a package with various metadata.
-This includes:
-
-  * The `name` of the package.
-  * The package's unique `uuid`.
-  * A `version` (for example when adding a package). When upgrading, can also be an instance of
-   the enum [`UpgradeLevel`](@ref).
-  * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
-  * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
-  * A `subdir` which can be used when adding a package that is not in the root of a repository.
-  * A `mode`, which is an instance of the enum [`PackageMode`](@ref), with possible values `PKGMODE_PROJECT`
-   (the default) or `PKGMODE_MANIFEST`. Used in e.g. [`Pkg.rm`](@ref).
-
-Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
-in the vector.
-
-!!! compat "Julia 1.5"
-    Many functions that take a `PackageSpec` or a `Vector{PackageSpec}` can be called with a more concise notation with `NamedTuple`s.
-    For example, `Pkg.add` can be called either as the explicit or concise versions as:
-
-    | Explicit                                                            | Concise                                        |
-    |:--------------------------------------------------------------------|:-----------------------------------------------|
-    | `Pkg.add(PackageSpec(name="Package))`                               | `Pkg.add(name = "Package")`                    |
-    | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
-    |` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
-
-Below is a comparison between the REPL mode and the functional API:
-
-| `REPL`               | `API`                                                 |
-|:---------------------|:------------------------------------------------------|
-| `Package`            | `PackageSpec("Package")`                              |
-| `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
-| `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
-| `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
-| `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
-| `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
-| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
-| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
-
-"""
 Base.@kwdef mutable struct PackageSpec
     name::Union{Nothing,String} = nothing
     uuid::Union{Nothing,UUID} = nothing
@@ -170,6 +169,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     end
     print(io, ")")
 end
+end # module
 
 include("Environments/Environments.jl")
 include("Types.jl")
@@ -495,6 +495,52 @@ Update the current manifest with potential changes to the dependency graph
 from packages that are tracking a path.
 """
 const resolve = API.resolve
+
+"""
+    PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
+    PackageSpec(; name, url, path, subdir, rev, version, mode, level)
+
+A `PackageSpec` is a representation of a package with various metadata.
+This includes:
+
+  * The `name` of the package.
+  * The package's unique `uuid`.
+  * A `version` (for example when adding a package). When upgrading, can also be an instance of
+   the enum [`UpgradeLevel`](@ref).
+  * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
+  * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
+  * A `subdir` which can be used when adding a package that is not in the root of a repository.
+  * A `mode`, which is an instance of the enum [`PackageMode`](@ref), with possible values `PKGMODE_PROJECT`
+   (the default) or `PKGMODE_MANIFEST`. Used in e.g. [`Pkg.rm`](@ref).
+
+Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
+in the vector.
+
+!!! compat "Julia 1.5"
+    Many functions that take a `PackageSpec` or a `Vector{PackageSpec}` can be called with a more concise notation with `NamedTuple`s.
+    For example, `Pkg.add` can be called either as the explicit or concise versions as:
+
+    | Explicit                                                            | Concise                                        |
+    |:--------------------------------------------------------------------|:-----------------------------------------------|
+    | `Pkg.add(PackageSpec(name="Package))`                               | `Pkg.add(name = "Package")`                    |
+    | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
+    |` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
+
+Below is a comparison between the REPL mode and the functional API:
+
+| `REPL`               | `API`                                                 |
+|:---------------------|:------------------------------------------------------|
+| `Package`            | `PackageSpec("Package")`                              |
+| `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
+| `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
+| `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
+| `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
+| `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
+| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
+| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
+
+"""
+const PackageSpec = API.Package
 
 """
     Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, io::IO=stdout)

@@ -11,8 +11,8 @@ import Logging
 using Serialization
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
-import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..VersionTypes, ..PreserveLevel
+import ..Operations, ..GitTools, ..Pkg, ..Registry, ..Environments
+import ..can_fancyprint, ..pathrepr, ..isurl, ..VersionTypes, ..PreserveLeve, ..parse_toml
 using ..Types, ..TOML
 using Base.BinaryPlatforms
 import ..DEFAULT_IO
@@ -181,7 +181,6 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
     pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
-
     for pkg in pkgs
         if pkg.name == "julia" # if julia is passed as a package the solver gets tricked
             pkgerror("`julia` is not a valid package name")
