@@ -144,6 +144,7 @@ function Manifest(raw::Dict)::Manifest
             entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
             entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
             entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
+            entry.uuid        = uuid
             deps = read_deps(get(info::Dict, "deps", nothing))
         catch
             # TODO: Should probably not unconditionally log something

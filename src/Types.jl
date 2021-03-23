@@ -221,6 +221,7 @@ Base.@kwdef mutable struct PackageEntry
     repo::GitRepo = GitRepo()
     tree_hash::Union{Nothing,SHA1} = nothing
     deps::Dict{String,UUID} = Dict{String,UUID}()
+    uuid::Union{Nothing, UUID} = nothing
     other::Union{Dict,Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
@@ -229,8 +230,10 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.pinned == t2.pinned &&
     t1.repo == t2.repo &&
     t1.tree_hash == t2.tree_hash &&
-    t1.deps == t2.deps   # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps], init=h)  # omits `other`
+    t1.deps == t2.deps &&
+    t1.uuid == t2.uuid
+    # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.uuid], init=h)  # omits `other`
 const Manifest = Dict{UUID,PackageEntry}
 
 function Base.show(io::IO, pkg::PackageEntry)
@@ -545,7 +548,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
 end
 
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, shared::Bool)
-    new_uuids = UUID[]
+    new_uuids = Set{UUID}()
     for pkg in pkgs
         new = handle_repo_develop!(ctx, pkg, shared)
         new && push!(new_uuids, pkg.uuid)
@@ -683,7 +686,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 end
 
 function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
-    new_uuids = UUID[]
+    new_uuids = Set{UUID}()
     for pkg in pkgs
         handle_repo_add!(ctx, pkg) && push!(new_uuids, pkg.uuid)
         @assert pkg.name !== nothing && pkg.uuid !== nothing && pkg.tree_hash !== nothing
@@ -915,7 +918,6 @@ end
 # Find package by UUID in the manifest file
 manifest_info(::Manifest, uuid::Nothing) = nothing
 function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry,Nothing}
-    #any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
     return get(manifest, uuid, nothing)
 end
 function write_env(env::EnvCache; update_undo=true)
