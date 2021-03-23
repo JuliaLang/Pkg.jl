@@ -1954,6 +1954,21 @@ end
         @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", output)
         @test occursin(r"Updating `.+Manifest.toml`", output)
         @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", output)
+
+        # Pinning a registered package
+        Pkg.add("Example")
+        Pkg.pin("Example"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d ⇒ v\d\.\d\.\d ⚲", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
+
+        # Free a pinned package
+        Pkg.free("Example"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d ⚲ ⇒ v\d\.\d\.\d", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
     end
     # Project Status API
     isolate(loaded_depot=true) do
