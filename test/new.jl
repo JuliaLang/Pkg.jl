@@ -1914,11 +1914,28 @@ end
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
         @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
         # Removing registered version
+
         Pkg.rm("Example"; status_io=io)
-        @test occursin(r"Updating `.+Project.toml`", readline(io))
-        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", readline(io))
-        @test occursin(r"Updating `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", readline(io))
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
+        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", output)
+
+        # Pinning a registered package
+        Pkg.add("Example")
+        Pkg.pin("Example"; status_io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d ⇒ v\d\.\d\.\d ⚲", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
+
+        # Free a pinned package
+        Pkg.free("Example"; status_io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d ⚲ ⇒ v\d\.\d\.\d", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
     end
     # Project Status API
     isolate(loaded_depot=true) do

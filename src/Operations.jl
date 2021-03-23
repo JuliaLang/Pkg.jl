@@ -1744,12 +1744,14 @@ print_single(ctx::Context, pkg::PackageSpec) = printstyled(ctx.io, stat_rep(pkg)
 
 is_instantiated(::Nothing) = false
 is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)
+# Compare an old and new node of the dependency graph and print a single line to summarize the change
 function print_diff(ctx::Context, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec})
     if !is_instantiated(old) && is_instantiated(new)
         printstyled(ctx.io, "+ $(stat_rep(new))"; color=:light_green)
     elseif !is_instantiated(new)
         printstyled(ctx.io, "- $(stat_rep(old))"; color=:light_red)
-    elseif is_tracking_registry(old) && is_tracking_registry(new) && new.version isa VersionNumber && old.version isa VersionNumber
+    elseif is_tracking_registry(old) && is_tracking_registry(new) &&
+            new.version isa VersionNumber && old.version isa VersionNumber && new.version != old.version
         if new.version > old.version
             printstyled(ctx.io, "↑ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
         else
