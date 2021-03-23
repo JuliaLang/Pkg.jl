@@ -804,14 +804,6 @@ function prune_manifest(manifest::Dict, keep::Vector{UUID})
     return Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
 end
 
-function any_package_not_installed(manifest::Manifest)
-    for (uuid, entry) in manifest
-        if Base.locate_package(Base.PkgId(uuid, entry.name)) === nothing
-            return true
-        end
-    end
-    return false
-end
 
 #########
 # Build #
@@ -836,7 +828,7 @@ function _get_deps!(env::EnvCache, pkgs::Vector{PackageSpec}, uuids::Vector{UUID
 end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}, verbose::Bool)
-    if any_package_not_installed(ctx.env.manifest) || !isfile(ctx.env.manifest_file)
+    if !is_instantiated(ctx.env) || !isfile(ctx.env.manifest_file)
         Pkg.instantiate(ctx)
     end
     uuids = UUID[]
