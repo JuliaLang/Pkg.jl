@@ -182,29 +182,52 @@ struct RegistryInstance
     name_to_uuids::Dict{String, Vector{UUID}}
 end
 
-function RegistryInstance(path::AbstractString; parse_packages::Bool=true)
-    d = parsefile(joinpath(path, "Registry.toml"))
-    pkgs = Dict{UUID, PkgEntry}()
-    if parse_packages
-        for (uuid, info) in d["packages"]::Dict{String, Any}
-            uuid = UUID(uuid::String)
-            info::Dict{String, Any}
-            name = info["name"]::String
-            pkgpath = info["path"]::String
-            pkg = PkgEntry(pkgpath, path, name, uuid, uninit)
-            pkgs[uuid] = pkg
+const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, RegistryInstance}}()
+
+function get_cached_registry(path::AbstractString, tree_info::Base.SHA1)
+    v = get(REGISTRY_CACHE, path, nothing)
+    if v !== nothing
+        cached_tree_info, reg = v
+        if cached_tree_info == tree_info
+            return reg
         end
     end
+    # Prevent hogging up memory indefinitely
+    length(REGISTRY_CACHE) > 20 && empty!(REGISTRY_CACHE)
+    return nothing
+end
+
+
+function RegistryInstance(path::AbstractString)
+    d = parsefile(joinpath(path, "Registry.toml"))
     tree_info_file = joinpath(path, ".tree_info.toml")
     tree_info = if isfile(tree_info_file)
         Base.SHA1(parsefile(tree_info_file)["git-tree-sha1"]::String)
     else
         nothing
     end
-    return RegistryInstance(
+    reg_uuid = UUID(d["uuid"]::String)
+
+    # Reuse an existing cached registry if it exists for this content
+    if tree_info !== nothing
+        reg = get_cached_registry(path, tree_info)
+        if reg isa RegistryInstance
+            return reg
+        end
+    end
+    pkgs = Dict{UUID, PkgEntry}()
+    for (uuid, info) in d["packages"]::Dict{String, Any}
+        uuid = UUID(uuid::String)
+        info::Dict{String, Any}
+        name = info["name"]::String
+        pkgpath = info["path"]::String
+        pkg = PkgEntry(pkgpath, path, name, uuid, uninit)
+        pkgs[uuid] = pkg
+    end
+    reg = RegistryInstance(
         path,
         d["name"]::String,
-        UUID(d["uuid"]::String),
+        reg_uuid,
         get(d, "url", nothing)::Union{String, Nothing},
         get(d, "repo", nothing)::Union{String, Nothing},
         get(d, "description", nothing)::Union{String, Nothing},
@@ -212,6 +235,10 @@ function RegistryInstance(path::AbstractString; parse_packages::Bool=true)
         tree_info,
         Dict{String, UUID}(),
     )
+    if tree_info !== nothing
+        REGISTRY_CACHE[path] = (tree_info, reg)
+    end
+    return reg
 end
 
 function Base.show(io::IO, ::MIME"text/plain", r::RegistryInstance)
@@ -238,7 +265,7 @@ function create_name_uuid_mapping!(r::RegistryInstance)
     return
 end
 
-function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT_PATH, parse_packages::Bool=true)
+function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT_PATH)
     # collect registries
     if depots isa String
         depots = [depots]
@@ -251,7 +278,7 @@ function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT
         for name in readdir(reg_dir)
             file = joinpath(reg_dir, name, "Registry.toml")
             isfile(file) || continue
-            push!(registries, RegistryInstance(joinpath(reg_dir, name); parse_packages))
+            push!(registries, RegistryInstance(joinpath(reg_dir, name)))
         end
     end
     return registries
