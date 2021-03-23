@@ -171,6 +171,49 @@ end
 #######################################
 # Dependency gathering and resolution #
 #######################################
+function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+    printpkgstyle(io, :Resolving, "package versions...")
+    return preserve == PRESERVE_TIERED ?
+        tiered_resolve(env, registries, pkgs, julia_version) :
+        targeted_resolve(env, registries, pkgs, preserve, julia_version)
+end
+
+function tiered_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
+    try # do not modify existing subgraph
+        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version)
+    catch err
+        err isa Resolve.ResolverError || rethrow()
+    end
+    try # do not modify existing direct deps
+        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version)
+    catch err
+        err isa Resolve.ResolverError || rethrow()
+    end
+    try
+        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version)
+    catch err
+        err isa Resolve.ResolverError || rethrow()
+    end
+    return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
+end
+
+function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+    if preserve == PRESERVE_ALL
+        pkgs = load_all_deps(env, pkgs)
+    elseif preserve == PRESERVE_DIRECT
+        pkgs = load_direct_deps(env, pkgs)
+    elseif preserve == PRESERVE_SEMVER
+        pkgs = load_direct_deps(env, pkgs; preserve=preserve)
+    elseif preserve == PRESERVE_NONE
+        pkgs = load_direct_deps(env, pkgs; preserve=preserve)
+    end
+    check_registered(registries, pkgs)
+
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version)
+    return pkgs, deps_map
+end
+
+
 function collect_project!(pkg::PackageSpec, path::String,
                           deps_map::Dict{UUID,Vector{PackageSpec}})
     deps_map[pkg.uuid] = PackageSpec[]
@@ -1015,29 +1058,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
     show_update(ctx.env; io=ctx.io)
 end
 
-update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
-function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
-    if entry.pinned
-        if pkg.version == VersionSpec()
-            println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
-        end
-        return PackageSpec(; uuid=pkg.uuid, name=pkg.name, pinned=true,
-                           version=entry.version, tree_hash=entry.tree_hash)
-    end
-    if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
-        return pkg # overwrite everything, nothing to copy over
-    end
-    if is_stdlib(pkg.uuid)
-        return pkg # stdlibs are not versioned like other packages
-    elseif is_dep && ((isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
-                      (!isa(pkg.version, VersionNumber) && entry.version ∈ pkg.version))
-        # leave the package as is at the installed version
-        return PackageSpec(; uuid=pkg.uuid, name=pkg.name, version=entry.version,
-                           tree_hash=entry.tree_hash)
-    end
-    # adding a new version not compatible with the old version, so we just overwrite
-    return pkg
-end
+
 
 function is_all_registered(registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec})
     pkgs = filter(tracking_registered_version, pkgs)
@@ -1080,56 +1101,30 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
-function tiered_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
-    try # do not modify existing subgraph
-        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version)
-    catch err
-        err isa Resolve.ResolverError || rethrow()
-    end
-    try # do not modify existing direct deps
-        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version)
-    catch err
-        err isa Resolve.ResolverError || rethrow()
-    end
-    try
-        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version)
-    catch err
-        err isa Resolve.ResolverError || rethrow()
-    end
-    return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
-end
-
-function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
-    if preserve == PRESERVE_ALL
-        pkgs = load_all_deps(env, pkgs)
-    elseif preserve == PRESERVE_DIRECT
-        pkgs = load_direct_deps(env, pkgs)
-    elseif preserve == PRESERVE_SEMVER
-        pkgs = load_direct_deps(env, pkgs; preserve=preserve)
-    elseif preserve == PRESERVE_NONE
-        pkgs = load_direct_deps(env, pkgs; preserve=preserve)
-    end
-    check_registered(registries, pkgs)
-
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version)
-    return pkgs, deps_map
-end
-
-function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
-    printpkgstyle(io, :Resolving, "package versions...")
-    return preserve == PRESERVE_TIERED ?
-        tiered_resolve(env, registries, pkgs, julia_version) :
-        targeted_resolve(env, registries, pkgs, preserve, julia_version)
-end
-
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
              preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform())
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
+        entry === nothing && continue
+        if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
+            continue
+        end
         is_dep = any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
-        pkgs[i] = update_package_add(ctx, pkg, entry, is_dep)
+        if entry.pinned
+            if pkg.version == VersionSpec()
+                println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
+            end
+            pkg.pinned = true
+            pkg.version = entry.version
+            pkg.tree_hash = entry.tree_hash
+        elseif is_dep && ((isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
+                        (!isa(pkg.version, VersionNumber) && entry.version ∈ pkg.version))
+            # leave the package as is at the installed version
+            pkg.version = entry.version
+            pkg.tree_hash = entry.tree_hash
+        end
     end
     foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
     # resolve
@@ -1164,59 +1159,45 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     build_versions(ctx, union(new_apply, new_git))
 end
 
-# load version constraint
-# if version isa VersionNumber -> set tree_hash too
-up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, level::UpgradeLevel) = false
-function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, level::UpgradeLevel)
-    entry.version !== nothing || return false # no version to set
-    if entry.pinned || level == UPLEVEL_FIXED
-        pkg.version = entry.version
-        pkg.tree_hash = entry.tree_hash
-    elseif entry.repo.source !== nothing # repo packages have a version but are treated special
-        pkg.repo = entry.repo
-        if level == UPLEVEL_MAJOR
-            # Updating a repo package is equivalent to adding it
-            new = Types.handle_repo_add!(ctx, pkg)
-            pkg.version = entry.version
-            if pkg.tree_hash != entry.tree_hash
-                # TODO parse find_installed and set new version
-            end
-            return new
-        else
-            pkg.version = entry.version
-            pkg.tree_hash = entry.tree_hash
-        end
-    else
-        ver = entry.version
-        r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
-            level == UPLEVEL_MINOR ? VersionRange(ver.major) :
-            level == UPLEVEL_MAJOR ? VersionRange() :
-                error("unexpected upgrade level: $level")
-        pkg.version = VersionSpec(r)
-    end
-    return false
-end
-
-up_load_manifest_info!(pkg::PackageSpec, ::Nothing) = nothing
-function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
-    pkg.name = entry.name # TODO check name is same
-    pkg.repo = entry.repo # TODO check that repo is same
-    pkg.path = entry.path
-    pkg.pinned = entry.pinned
-    # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
-end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
     for pkg in pkgs
-        new = up_load_versions!(ctx, pkg, manifest_info(ctx.env.manifest, pkg.uuid), level)
-        new && push!(new_git, pkg.uuid) #TODO put download + push! in utility function
-    end
-    # load rest of manifest data (except for version info)
-    for pkg in pkgs
-        up_load_manifest_info!(pkg, manifest_info(ctx.env.manifest, pkg.uuid))
+        entry = manifest_info(ctx.env.manifest, pkg.uuid)
+        entry === nothing && continue
+        entry.version !== nothing || return false # no version to set
+        if entry.pinned || level == UPLEVEL_FIXED
+            pkg.version = entry.version
+            pkg.tree_hash = entry.tree_hash
+        elseif entry.repo.source !== nothing # repo packages have a version but are treated special
+            pkg.repo = entry.repo
+            if level == UPLEVEL_MAJOR
+                # Updating a repo package is equivalent to adding it
+                new = Types.handle_repo_add!(ctx, pkg)
+                pkg.version = entry.version
+                if pkg.tree_hash != entry.tree_hash
+                    # TODO parse find_installed and set new version
+                end
+                new && push!(new_git, pkg.uuid)
+            else
+                pkg.version = entry.version
+                pkg.tree_hash = entry.tree_hash
+            end
+        else
+            ver = entry.version
+            r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
+                level == UPLEVEL_MINOR ? VersionRange(ver.major) :
+                level == UPLEVEL_MAJOR ? VersionRange() :
+                    error("unexpected upgrade level: $level")
+            pkg.version = VersionSpec(r)
+        end
+  
+        pkg.name = entry.name # TODO check name is same
+        pkg.repo = entry.repo # TODO check that repo is same
+        pkg.path = entry.path
+        pkg.pinned = entry.pinned
     end
     pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
     check_registered(ctx.registries, pkgs)
@@ -1229,36 +1210,34 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     build_versions(ctx, union(new_apply, new_git))
 end
 
-function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
-    if entry === nothing
-        pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
-    end
 
-    #if entry.pinned && pkg.version == VersionSpec()
-    #    println(ctx.io, "package $(err_rep(pkg)) already pinned")
-    #end
-    # update pinned package
-    pkg.pinned = true
-    if is_stdlib(pkg.uuid)
-        return nothing # nothing left to do
-    elseif pkg.version == VersionSpec()
-        pkg.version = entry.version # pin at current version
-        pkg.repo = entry.repo
-        pkg.tree_hash = entry.tree_hash
-        pkg.path = entry.path
-    else # given explicit registered version
-        if entry.repo.source !== nothing || entry.path !== nothing
-            # A pin in this case includes an implicit `free` to switch to tracking registered versions
-            # First, make sure the package is registered so we have something to free to
-            if is_all_registered(registries, [pkg]) !== true
-                pkgerror("unable to pin unregistered package $(err_rep(pkg)) to an arbritrary version")
+function pin(ctx::Context, pkgs::Vector{PackageSpec})    
+    for pkg in pkgs
+        entry = manifest_info(ctx.env.manifest, pkg.uuid)
+        if entry === nothing
+            pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
+        end
+
+        # update pinned package
+        pkg.pinned = true
+        if is_stdlib(pkg.uuid)
+            return nothing # nothing left to do
+        elseif pkg.version == VersionSpec()
+            pkg.version = entry.version # pin at current version
+            pkg.repo = entry.repo
+            pkg.tree_hash = entry.tree_hash
+            pkg.path = entry.path
+        else # given explicit registered version
+            if entry.repo.source !== nothing || entry.path !== nothing
+                # A pin in this case includes an implicit `free` to switch to tracking registered versions
+                # First, make sure the package is registered so we have something to free to
+                if is_all_registered(registries, [pkg]) !== true
+                    pkgerror("unable to pin unregistered package $(err_rep(pkg)) to an arbritrary version")
+                end
             end
         end
     end
-end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec})
-    foreach(pkg -> update_package_pin!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx.env, pkgs)
 
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
@@ -1271,30 +1250,30 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     build_versions(ctx, new)
 end
 
-function update_package_free!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::PackageEntry)
-    if entry.pinned
-        pkg.pinned = false
-        is_stdlib(pkg.uuid) && return # nothing left to do
-        pkg.version = entry.version
-        pkg.repo = entry.repo
-        pkg.tree_hash = entry.tree_hash
-        return
-    end
-    if entry.path !== nothing || entry.repo.source !== nothing
-        # make sure the package is registered so we have something to free to
-        if is_all_registered(registries, [pkg]) !== true
-            pkgerror("unable to free unregistered package $(err_rep(pkg))")
-        end
-        return # -> name, uuid
-    end
-    pkgerror("expected package $(err_rep(pkg)) to be pinned, tracking a path,",
-             " or tracking a repository")
-end
 
 # TODO: this is two techinically different operations with the same name
 # split into two subfunctions ...
 function free(ctx::Context, pkgs::Vector{PackageSpec})
-    foreach(pkg -> update_package_free!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
+    for pkg in pkgs
+        is_stdlib(pkg.uuid) && continue # nothing left to do
+        entry = manifest_info(ctx.env.manifest, pkg.uuid)
+        if entry.pinned
+            pkg.pinned = false
+            pkg.version = entry.version
+            pkg.repo = entry.repo
+            pkg.tree_hash = entry.tree_hash
+            return
+        end
+        if entry.path !== nothing || entry.repo.source !== nothing
+            # make sure the package is registered so we have something to free to
+            if is_all_registered(ctx.registries, [pkg]) !== true
+                pkgerror("unable to free unregistered package $(err_rep(pkg))")
+            end
+        else
+            pkgerror("expected package $(err_rep(pkg)) to be pinned, tracking a path,",
+                    " or tracking a repository")
+        end
+    end
 
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
         pkgs = load_direct_deps(ctx.env, pkgs)
