@@ -415,6 +415,9 @@ end
 
             Pkg.activate(ap_path)
 
+            @test !isdir(artifact_path(engaged_hash))
+            @test !isdir(artifact_path(disengaged_hash))
+
             if flooblecrank_status == "engaged"
                 right_hash = engaged_hash
                 wrong_hash = disengaged_hash
@@ -460,6 +463,8 @@ end
         generate_flooblegrank_artifacts(ap_path)
 
         Pkg.activate(ap_path)
+        @test !isdir(artifact_path(engaged_hash))
+        @test !isdir(artifact_path(disengaged_hash))
     
         # Instantiate with the environment variable set, but with an explicit
         # tag set in the platform object, which overrides.

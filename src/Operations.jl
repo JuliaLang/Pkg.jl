@@ -599,8 +599,6 @@ function download_artifacts(env::EnvCache;
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
-                @show name, artifacts[name], artifacts_toml
-
                 ensure_artifact_installed(name, artifacts[name], artifacts_toml;
                                             verbose, quiet_download=!(io isa Base.TTY), io=io)
             end
