@@ -729,7 +729,7 @@ function download_source(ctx::Context; readonly=true)
     for (pkg, urls, path) in missed_packages
         uuid = pkg.uuid
         install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
-        set_readonly(path)
+        readonly && set_readonly(path)
         vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
         printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
