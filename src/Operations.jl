@@ -1750,15 +1750,15 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, header::S
 end
 
 function git_head_env(env, project_dir)
-    env = EnvCache()
+    new_env = EnvCache()
     try
         LibGit2.with(LibGit2.GitRepo(project_dir)) do repo
             git_path = LibGit2.path(repo)
             project_path = relpath(env.project_file, git_path)
             manifest_path = relpath(env.manifest_file, git_path)
-            env.project = read_project(GitTools.git_file_stream(repo, "HEAD:$project_path", fakeit=true))
-            env.manifest = read_manifest(GitTools.git_file_stream(repo, "HEAD:$manifest_path", fakeit=true))
-            return env
+            new_env.project = read_project(GitTools.git_file_stream(repo, "HEAD:$project_path", fakeit=true))
+            new_env.manifest = read_manifest(GitTools.git_file_stream(repo, "HEAD:$manifest_path", fakeit=true))
+            return new_env
         end
     catch err
         err isa PkgError || rethrow(err)
