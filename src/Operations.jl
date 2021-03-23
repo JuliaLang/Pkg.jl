@@ -148,24 +148,6 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
     prune_manifest(env)
 end
 
-# TODO: Should be included in Base
-function signal_name(signal::Integer)
-    if signal == Base.SIGHUP
-        "HUP"
-    elseif signal == Base.SIGINT
-        "INT"
-    elseif signal == Base.SIGQUIT
-        "QUIT"
-    elseif signal == Base.SIGKILL
-        "KILL"
-    elseif signal == Base.SIGPIPE
-        "PIPE"
-    elseif signal == Base.SIGTERM
-        "TERM"
-    else
-        string(signal)
-    end
-end
 
 ####################
 # Registry Loading #
@@ -463,23 +445,6 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
            all_compat
 end
 
-function load_urls(registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec})
-    urls = Dict{UUID,Set{String}}()
-    for pkg in pkgs
-        uuid = pkg.uuid
-        urls[uuid] = Set{String}()
-        for reg in registries
-            reg_pkg = get(reg, uuid, nothing)
-            reg_pkg === nothing && continue
-            info = Registry.registry_info(reg_pkg)
-            repo = info.repo
-            repo === nothing && continue
-            push!(urls[uuid], repo)
-        end
-    end
-    return urls
-end
-
 ########################
 # Package installation #
 ########################
@@ -665,14 +630,23 @@ function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform
 end
 
 # install & update manifest
-function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
-    pkgs = filter(p -> tracking_registered_version(p, ctx.julia_version), pkgs)
-    urls = load_urls(ctx.registries, pkgs)
-    return download_source(ctx, pkgs, urls; readonly=readonly)
+
+function load_urls(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec)
+    urls = Set{String}()
+    for reg in registries
+        reg_pkg = get(reg, pkg.uuid, nothing)
+        reg_pkg === nothing && continue
+        info = Registry.registry_info(reg_pkg)
+        repo = info.repo
+        repo === nothing && continue
+        push!(urls, repo)
+    end
+    return urls
 end
 
-function download_source(ctx::Context, pkgs::Vector{PackageSpec},
-                         urls::Dict{UUID, Set{String}}; readonly=true)
+function download_source(ctx::Context, pkgs::Vector{PackageSpec}; readonly=true)
+    pkgs = filter(p -> tracking_registered_version(p, ctx.julia_version), pkgs)
+
     new_pkgs = PackageSpec[]
 
     pkgs_to_install = Tuple{PackageSpec, String}[]
@@ -685,15 +659,16 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
         push!(new_pkgs, pkg)
     end
 
-    widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
-    max_name = maximum(widths; init=0)
-
     ########################################
     # Install from archives asynchronously #
     ########################################
 
+    urls = Dict(pkg.uuid => load_urls(ctx.registries, pkg) for pkg in pkgs)
     missed_packages = Tuple{PackageSpec, String}[]
 
+    widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
+    max_name = maximum(widths; init=0)
+    
     @sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
         results = Channel(ctx.num_concurrent_downloads)
@@ -726,7 +701,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                             set_readonly(path) # In add mode, files should be read-only
                         end
                         if ctx.use_only_tarballs_for_downloads && !success
-                            pkgerror("failed to get tarball from $(urls[pkg.uuid])")
+                            pkgerror("failed to get tarball from $(urls[uuid])")
                         end
                         put!(results, (pkg, success, path))
                     catch err
@@ -1492,14 +1467,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
     end
 end
 
-function update_package_test!(pkg::PackageSpec, entry::PackageEntry)
-    is_stdlib(pkg.uuid) && return
-    pkg.version = entry.version
-    pkg.tree_hash = entry.tree_hash
-    pkg.repo = entry.repo
-    pkg.path = entry.path
-    pkg.pinned = entry.pinned
-end
 
 # Mostly here to give PkgEval some more coverage for packages
 # that still use test/REQUIRE. Ignores version bounds
@@ -1571,11 +1538,17 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 
     # load manifest data
     for pkg in pkgs
+        is_stdlib(pkg.uuid) && continue
         if Types.is_project_uuid(ctx.env, pkg.uuid)
             pkg.path = dirname(ctx.env.project_file)
             pkg.version = ctx.env.pkg.version
         else
-            update_package_test!(pkg, manifest_info(ctx.env.manifest, pkg.uuid))
+            entry = manifest_info(ctx.env.manifest, pkg.uuid)
+            pkg.version = entry.version
+            pkg.tree_hash = entry.tree_hash
+            pkg.repo = entry.repo
+            pkg.path = entry.path
+            pkg.pinned = entry.pinned
         end
     end
 
@@ -1616,6 +1589,25 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             else
                 push!(pkgs_errored, (pkg.name, p))
             end
+        end
+    end
+
+    # TODO: Should be included in Base
+    function signal_name(signal::Integer)
+        if signal == Base.SIGHUP
+            "HUP"
+        elseif signal == Base.SIGINT
+            "INT"
+        elseif signal == Base.SIGQUIT
+            "QUIT"
+        elseif signal == Base.SIGKILL
+            "KILL"
+        elseif signal == Base.SIGPIPE
+            "PIPE"
+        elseif signal == Base.SIGTERM
+            "TERM"
+        else
+            string(signal)
         end
     end
 
