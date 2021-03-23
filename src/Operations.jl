@@ -628,19 +628,9 @@ function download_artifacts(env::EnvCache, pkgs::Vector{PackageSpec};
                             julia_version = VERSION,
                             verbose::Bool=false,
                             io::IO=DEFAULT_IO[])
-    pkg_roots = String[]
     for pkg in pkgs
-        p = source_path(env.project_file, pkg, julia_version)
-        p !== nothing && push!(pkg_roots, p)
-    end
-    return download_artifacts(pkg_roots; platform, verbose, io)
-end
-
-function download_artifacts(pkg_roots::Vector{String};
-                            platform::AbstractPlatform=HostPlatform(),
-                            verbose::Bool=false,
-                            io::IO=DEFAULT_IO[])
-    for pkg_root in pkg_roots
+        pkg_root = source_path(env.project_file, pkg, julia_version)
+        pkg_root === nothing && continue
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
