@@ -997,17 +997,15 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         println(ctx.io, "No changes")
         return
     end
-    # only declare `compat` for direct dependencies
+    # only declare `compat` for remaining direct or `extra` dependencies
     # `julia` is always an implicit direct dependency
     filter!(ctx.env.project.compat) do (name, _)
-        name == "julia" || name in keys(ctx.env.project.deps)
+        name == "julia" || name in keys(ctx.env.project.deps) || name in keys(ctx.env.project.extras)
     end
-    deps_names = append!(collect(keys(ctx.env.project.deps)),
-                         collect(keys(ctx.env.project.extras)))
+    deps_names = union(keys(ctx.env.project.deps), keys(ctx.env.project.extras))
     filter!(ctx.env.project.targets) do (target, deps)
         !isempty(filter!(in(deps_names), deps))
     end
-
     # only keep reachable manifest entires
     prune_manifest(ctx.env)
     # update project & manifest
