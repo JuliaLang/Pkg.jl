@@ -104,9 +104,14 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
-    mkpath(source_path)
     try
-        return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+        if true
+            run(`git clone --quiet $url $source_path`)
+            return LibGit2.GitRepo(source_path)
+        else
+            mkpath(source_path)
+            return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+        end
     catch err
         rm(source_path; force=true, recursive=true)
         err isa LibGit2.GitError || err isa InterruptException || rethrow()
@@ -124,7 +129,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
 end
 
-function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, kwargs...)
+function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, refspecs=[""], kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
@@ -150,7 +155,13 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
         credentials = LibGit2.CachedCredentials()
     end
     try
-        return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
+        if true
+            cd(LibGit2.path(repo)) do
+                run(`git fetch -q $remoteurl $(only(refspecs))`)
+            end
+        else
+            return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
+        end
     catch err
         err isa LibGit2.GitError || rethrow()
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
