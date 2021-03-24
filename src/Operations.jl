@@ -666,7 +666,7 @@ function download_source(ctx::Context; readonly=true)
         for i in 1:ctx.num_concurrent_downloads
             @async begin
                 for (pkg, urls, path) in jobs
-                    if ctx.use_libgit2_for_all_downloads
+                    if ctx.use_git_for_all_downloads
                         put!(results, (pkg, false, (urls, path)))
                         continue
                     end

@@ -10,6 +10,8 @@ import Base: SHA1
 import LibGit2
 using Printf
 
+use_cli_git() = get(ENV, "JULIA_PKG_USE_CLI_GIT", "") == "true"
+
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
     @assert haskey(p, :transfer_progress)
@@ -105,7 +107,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
         credentials = LibGit2.CachedCredentials()
     end
     try
-        if true
+        if use_cli_git()
             run(`git clone --quiet $url $source_path`)
             return LibGit2.GitRepo(source_path)
         else
@@ -155,12 +157,12 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
         credentials = LibGit2.CachedCredentials()
     end
     try
-        if true
+        if use_cli_git()
             cd(LibGit2.path(repo)) do
                 run(`git fetch -q $remoteurl $(only(refspecs))`)
             end
         else
-            return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
+            return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
         end
     catch err
         err isa LibGit2.GitError || rethrow()
