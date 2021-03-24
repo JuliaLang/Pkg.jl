@@ -286,6 +286,23 @@ end
 
 # Autocompletions
 temp_pkg_dir() do project_path; cd(project_path) do
+    @testset "tab completion while offline" begin
+        # No registry and no network connection
+        Pkg.offline()
+        pkg"activate ."
+        c, r = test_complete("add Exam")
+        @test isempty(c)
+        Pkg.offline(false)
+        # Existing registry but no network connection
+        pkg"registry add General" # instantiate the `General` registry to complete remote package names
+        Pkg.offline(true)
+        c, r = test_complete("add Exam")
+        @test "Example" in c
+        Pkg.offline(false)
+    end
+end end
+
+temp_pkg_dir() do project_path; cd(project_path) do
     @testset "tab completion" begin
         pkg"registry add General" # instantiate the `General` registry to complete remote package names
         pkg"activate ."
