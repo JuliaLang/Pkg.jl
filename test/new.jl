@@ -1719,6 +1719,16 @@ end
         @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         @test haskey(Pkg.Types.Context().env.project.compat, "julia")
     end end
+    # rm should not unnecessarily remove compat entries
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "CompatExtras")
+        Pkg.activate(path)
+        @test haskey(Pkg.Types.Context().env.project.compat, "Aqua")
+        @test haskey(Pkg.Types.Context().env.project.compat, "DataFrames")
+        Pkg.rm("DataFrames")
+        @test !haskey(Pkg.Types.Context().env.project.compat, "DataFrames")
+        @test haskey(Pkg.Types.Context().env.project.compat, "Aqua")
+    end end
     # rm removes unused recursive depdencies
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "SimplePackage")
