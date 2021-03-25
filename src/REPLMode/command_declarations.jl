@@ -262,7 +262,8 @@ PSA[:name => "activate",
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
     activate
-    activate [--shared|--temp] [path]
+    activate [--shared] path
+    activate --temp
 
 Activate the environment at the given `path`, or the home project environment if no `path` is specified.
 The active environment is the environment that is modified by executing package commands.
