@@ -8,6 +8,7 @@ import LibGit2, Dates, TOML
 
 import REPL
 using REPL.TerminalMenus
+using Downloads
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
@@ -468,8 +469,11 @@ function install_archive(
         try
             PlatformEngines.download(url, path; verbose=false, io=io)
         catch e
-            e isa InterruptException && rethrow()
-            url_success = false
+            if e isa Downloads.Response && e.response.status == 404
+                url_success = false
+            else
+                rethrow()
+            end
         end
         url_success || continue
         dir = joinpath(tempdir(), randstring(12))
@@ -479,7 +483,7 @@ function install_archive(
             unpack(path, dir; verbose=false)
         catch e
             e isa InterruptException && rethrow()
-            @warn "failed to extract archive downloaded from $(url)"
+            @error "failed to extract archive downloaded from $(url)" exception=e
             url_success = false
         end
         url_success || continue
@@ -702,8 +706,7 @@ function download_source(ctx::Context; readonly=true)
         try
             for i in 1:length(pkgs_to_install)
                 pkg::PackageEntry, exc_or_success, bt_or_pathurls = take!(results)
-                exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
-                                                        sprint(Base.showerror, exc_or_success, bt_or_pathurls))
+                exc_or_success isa Bool || throw(exc_or_success)
                 success, (urls, path) = exc_or_success, bt_or_pathurls
                 success || push!(missed_packages, (; pkg, urls, path))
                 bar.current = i

@@ -79,7 +79,7 @@ function pkg_server_registry_urls()
         download("$server/registries", tmp_path, verbose=false)
         download_ok = true
     catch err
-        @warn "could not download $server/registries" exception=err
+        @error "could not download $server/registries" exception=err
     end
     download_ok || return registry_urls
     open(tmp_path) do io
@@ -188,7 +188,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 try
                     download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
                 catch err
-                    Pkg.Types.pkgerror("could not download $url")
+                    @error "could not download $url" exception=e
                 end
                 tree_info_file = joinpath(tmp, ".tree_info.toml")
                 hash = pkg_server_url_hash(url)

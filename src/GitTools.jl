@@ -211,22 +211,15 @@ function blob_hash(::Type{HashType}, path::AbstractString) where HashType
     # Next, read data in in chunks of 4KB
     buff = Vector{UInt8}(undef, 4*1024)
 
-    try
-        if islink(path)
-            update!(ctx, Vector{UInt8}(readlink(path)))
-        else
-            open(path, "r") do io
-                while !eof(io)
-                    num_read = readbytes!(io, buff)
-                    update!(ctx, buff, num_read)
-                end
+    if islink(path)
+        update!(ctx, Vector{UInt8}(readlink(path)))
+    else
+        open(path, "r") do io
+            while !eof(io)
+                num_read = readbytes!(io, buff)
+                update!(ctx, buff, num_read)
             end
         end
-    catch e
-        if isa(e, InterruptException)
-            rethrow(e)
-        end
-        @warn("Unable to open $(path) for hashing; git-tree-sha1 likely suspect")
     end
 
     # Finish it off and return the digest!

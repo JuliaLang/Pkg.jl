@@ -2,6 +2,7 @@ module Artifacts
 
 import Base: get, SHA1
 using Base.BinaryPlatforms
+using Downloads
 using Artifacts
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
                   artifacts_dirs, pack_platform!, unpack_platform, load_artifacts_toml,
@@ -320,9 +321,11 @@ function download_artifact(
         catch e
             # Clean that destination directory out if something went wrong
             rm(dest_dir; force=true, recursive=true)
-
             if isa(e, InterruptException)
                 rethrow(e)
+            end
+            if !(e isa Downloads.Response && e.response.status == 404)
+                @error "Failed to download artifact" exception=e
             end
             return false
         end
@@ -342,6 +345,9 @@ function download_artifact(
         catch e
             if isa(e, InterruptException)
                 rethrow(e)
+            end
+            if !(e isa Downloads.Response && e.response.status == 404)
+                @error "Failed to download artifact" exception=e
             end
             # If something went wrong during download, return false
             return false
