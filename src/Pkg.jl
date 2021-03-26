@@ -70,7 +70,7 @@ An enum with the instances
   * `PKGMODE_PROJECT`
 
 Determines if operations should be made on a project or manifest level.
-Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.rm`](@ref).
+Used as an argument to [`Pkg.rm`](@ref), [`Pkg.update`](@ref) and [`Pkg.status`](@ref).
 """
 const PackageMode = Types.PackageMode
 
@@ -155,10 +155,10 @@ Pkg.precompile()
 const precompile = API.precompile
 
 """
-    Pkg.rm(pkg::Union{String, Vector{String}})
-    Pkg.rm(pkg::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.rm(pkg::Union{String, Vector{String}}; mode::PackageMode = PKGMODE_PROJECT)
+    Pkg.rm(pkg::Union{PackageSpec, Vector{PackageSpec}}; mode::PackageMode = PKGMODE_PROJECT)
 
-Remove a package from the current project. If the `mode` of `pkg` is
+Remove a package from the current project. If `mode` is equal to
 `PKGMODE_MANIFEST` also remove it from the manifest including all
 recursive dependencies of `pkg`.
 
@@ -457,8 +457,6 @@ This includes:
   * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
   * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
   * A `subdir` which can be used when adding a package that is not in the root of a repository.
-  * A `mode`, which is an instance of the enum [`PackageMode`](@ref), with possible values `PKGMODE_PROJECT`
-   (the default) or `PKGMODE_MANIFEST`. Used in e.g. [`Pkg.rm`](@ref).
 
 Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
 in the vector.
@@ -483,7 +481,6 @@ Below is a comparison between the REPL mode and the functional API:
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
 | `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
 | `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
-| `--manifest Package` | `PackageSpec(name="Package", mode=PKGSPEC_MANIFEST)`  |
 | `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
 
 """

@@ -945,17 +945,18 @@ end
 ##############
 # Operations #
 ##############
-function rm(ctx::Context, pkgs::Vector{PackageSpec})
+function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     drop = UUID[]
     # find manifest-mode drops
-    for pkg in pkgs
-        pkg.mode == PKGMODE_MANIFEST || continue
-        info = manifest_info(ctx.env.manifest, pkg.uuid)
-        if info !== nothing
-            pkg.uuid in drop || push!(drop, pkg.uuid)
-        else
-            str = has_name(pkg) ? pkg.name : string(pkg.uuid)
-            @warn("`$str` not in manifest, ignoring")
+    if mode == PKGMODE_MANIFEST
+        for pkg in pkgs
+            info = manifest_info(ctx.env.manifest, pkg.uuid)
+            if info !== nothing
+                pkg.uuid in drop || push!(drop, pkg.uuid)
+            else
+                str = has_name(pkg) ? pkg.name : string(pkg.uuid)
+                @warn("`$str` not in manifest, ignoring")
+            end
         end
     end
     # drop reverse dependencies
@@ -971,22 +972,23 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec})
         clean && break
     end
     # find project-mode drops
-    for pkg in pkgs
-        pkg.mode == PKGMODE_PROJECT || continue
-        found = false
-        for (name::String, uuid::UUID) in ctx.env.project.deps
-            pkg.name == name || pkg.uuid == uuid || continue
-            pkg.name == name ||
-                error("project file name mismatch for `$uuid`: $(pkg.name) ≠ $name")
-            pkg.uuid == uuid ||
-                error("project file UUID mismatch for `$name`: $(pkg.uuid) ≠ $uuid")
-            uuid in drop || push!(drop, uuid)
-            found = true
-            break
+    if mode == PKGMODE_PROJECT
+        for pkg in pkgs
+            found = false
+            for (name::String, uuid::UUID) in ctx.env.project.deps
+                pkg.name == name || pkg.uuid == uuid || continue
+                pkg.name == name ||
+                    error("project file name mismatch for `$uuid`: $(pkg.name) ≠ $name")
+                pkg.uuid == uuid ||
+                    error("project file UUID mismatch for `$name`: $(pkg.uuid) ≠ $uuid")
+                uuid in drop || push!(drop, uuid)
+                found = true
+                break
+            end
+            found && continue
+            str = has_name(pkg) ? pkg.name : string(pkg.uuid)
+            @warn("`$str` not in project, ignoring")
         end
-        found && continue
-        str = has_name(pkg) ? pkg.name : string(pkg.uuid)
-        @warn("`$str` not in project, ignoring")
     end
     # delete drops from project
     n = length(ctx.env.project.deps)

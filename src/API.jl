@@ -151,10 +151,8 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
                       url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
-            pkg = Package(name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, mode=mode, subdir=subdir)
-            # Pkg.status takes a mode argument as well which is a bit ambiguous with the
-            # mode argument to the PackageSpec but probably not a problem in practice
-            if $f === status
+            pkg = Package(name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, subdir=subdir)
+            if $f === status || $f === rm || $f === up
                 kwargs = merge((;kwargs...), (:mode => mode,))
             end
             # Handle $f() case
@@ -278,7 +276,6 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
     end
     require_not_empty(pkgs, :rm)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-    foreach(pkg -> pkg.mode = mode, pkgs)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -293,11 +290,11 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
 
     Context!(ctx; kwargs...)
 
-    project_deps_resolve!(ctx.env, pkgs)
-    manifest_resolve!(ctx.env.manifest, pkgs)
+    mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
+    mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx.env.manifest, pkgs)
 
-    Operations.rm(ctx, pkgs)
+    Operations.rm(ctx, pkgs; mode)
     return
 end
 
@@ -319,7 +316,6 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
     pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-    foreach(pkg -> pkg.mode = mode, pkgs)
 
     Context!(ctx; kwargs...)
     if update_registry
@@ -331,6 +327,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     if isempty(pkgs)
         append_all_pkgs!(pkgs, ctx, mode)
     else
+        mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
+        mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
         project_deps_resolve!(ctx.env, pkgs)
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx.env.manifest, pkgs)
@@ -371,7 +369,6 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
         end
     end
 
-    foreach(pkg -> pkg.mode = PKGMODE_PROJECT, pkgs)
     project_deps_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env.manifest, pkgs)
     Operations.pin(ctx, pkgs)
@@ -398,7 +395,6 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
         end
     end
 
-    foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx.env.manifest, pkgs)
 
@@ -978,7 +974,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
         end
     end
     project_resolve!(ctx.env, pkgs)
-    foreach(pkg -> pkg.mode = PKGMODE_MANIFEST, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx.env.manifest, pkgs)
     Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
@@ -1634,7 +1629,7 @@ end
 function Package(;name::Union{Nothing,AbstractString} = nothing,
                  uuid::Union{Nothing,String,UUID} = nothing,
                  version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
-                 url = nothing, rev = nothing, path=nothing, mode::PackageMode = PKGMODE_PROJECT,
+                 url = nothing, rev = nothing, path=nothing,
                  subdir = nothing)
     if path !== nothing && url !== nothing
         pkgerror("`path` and `url` are conflicting specifications")
@@ -1642,7 +1637,7 @@ function Package(;name::Union{Nothing,AbstractString} = nothing,
     repo = Types.GitRepo(rev = rev, source = url !== nothing ? url : path, subdir = subdir)
     version = version === nothing ? VersionSpec() : VersionSpec(version)
     uuid = uuid isa String ? UUID(uuid) : uuid
-    PackageSpec(;name=name, uuid=uuid, version=version, mode=mode, path=nothing,
+    PackageSpec(;name=name, uuid=uuid, version=version, path=nothing,
                 repo=repo, tree_hash=nothing)
 end
 Package(name::AbstractString) = PackageSpec(name)
