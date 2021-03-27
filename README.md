@@ -1,13 +1,19 @@
 # Pkg
 
+Development repository for Julia's package manager,
+shipped with Julia v1.0 and above.
+
 | **Documentation**                                                 | **Build Status**                                                                                |
 |:-----------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
 | [![][docs-v1-img]][docs-v1-url] [![][docs-dev-img]][docs-dev-url] | [![][ci-img]][ci-url] [![][appveyor-img]][appveyor-url] [![][codecov-img]][codecov-url] |
 
-Development repository for Julia's package manager,
-shipped with Julia v1.0 and above.
+## Synchronization with the Julia repo
 
-#### Using the development version of Pkg.jl
+To check which commit julia master uses see [JuliaLang/julia/stdlib/Pkg.version](https://github.com/JuliaLang/julia/blob/master/stdlib/Pkg.version).
+
+To open a PR to update this to the latest commit the [JuliaPackaging/BumpStdlibs.jl](https://github.com/JuliaPackaging/BumpStdlibs.jl) github actions bot is recommended.
+
+## Using the development version of Pkg.jl
 
 If you want to develop this package do the following steps:
 - Clone the repo anywhere.
