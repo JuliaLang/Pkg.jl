@@ -1121,6 +1121,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
             n_total = length(depsmap)
             bar.max = n_total - n_already_precomp
             final_loop = false
+            n_print_rows = 0
             while !printloop_should_exit
                 lock(print_lock) do
                     term_size = Base.displaysize(stdout)::Tuple{Int,Int}
@@ -1132,11 +1133,11 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     end
                     str = sprint() do iostr
                         if i > 1
-                            print(iostr, ansi_moveup(last_length+1), ansi_movecol1, ansi_cleartoend)
+                            print(iostr, ansi_moveup(n_print_rows), ansi_movecol1, ansi_cleartoend)
                         end
                         bar.current = n_done - n_already_precomp
                         bar.max = n_total - n_already_precomp
-                        print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
+                        final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
                         for dep in pkg_queue_show
                             name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                             if dep in precomperr_deps
@@ -1162,6 +1163,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         end
                     end
                     last_length = length(pkg_queue_show)
+                    n_print_rows = count("\n", str)
                     print(io, str)
                 end
                 printloop_should_exit = interrupted_or_done.set && final_loop
