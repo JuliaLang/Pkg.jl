@@ -1288,7 +1288,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     if ndeps > 0 || !isempty(failed_deps)
         plural = ndeps == 1 ? "y" : "ies"
         str = sprint() do iostr
-            print(iostr, "$(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
+            print(iostr, "  $(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
             if n_already_precomp > 0 || !isempty(skipped_deps)
                 print(iostr, " (")
                 n_already_precomp > 0 && (print(iostr, "$n_already_precomp already precompiled"))
@@ -1298,14 +1298,14 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
             end
             if !isempty(precomperr_deps)
                 plural = length(precomperr_deps) == 1 ? "y" : "ies"
-                print(iostr, "\n",
+                print(iostr, "\n  ",
                     color_string(string(length(precomperr_deps)), Base.warn_color()),
                     " dependenc$(plural) failed but may be precompilable after restarting julia"
                 )
             end
             if internal_call && !isempty(failed_deps)
                 plural = length(failed_deps) == 1 ? "y" : "ies"
-                print(iostr, "\n", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural) errored")
+                print(iostr, "\n  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural) errored")
             end
         end
         lock(print_lock) do
