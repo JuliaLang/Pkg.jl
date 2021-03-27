@@ -7,12 +7,6 @@ shipped with Julia v1.0 and above.
 |:-----------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
 | [![][docs-v1-img]][docs-v1-url] [![][docs-dev-img]][docs-dev-url] | [![][ci-img]][ci-url] [![][appveyor-img]][appveyor-url] [![][codecov-img]][codecov-url] |
 
-## Synchronization with the Julia repo
-
-To check which commit julia master uses see [JuliaLang/julia/stdlib/Pkg.version](https://github.com/JuliaLang/julia/blob/master/stdlib/Pkg.version).
-
-To open a PR to update this to the latest commit the [JuliaPackaging/BumpStdlibs.jl](https://github.com/JuliaPackaging/BumpStdlibs.jl) github actions bot is recommended.
-
 ## Using the development version of Pkg.jl
 
 If you want to develop this package do the following steps:
@@ -23,6 +17,12 @@ If you want to develop this package do the following steps:
 - To test your changes, simply do `include("test/runtests.jl")`.
 
 If you need to build Julia from source with a git checkout of Pkg, then instead use `make DEPS_GIT=Pkg` when building Julia. The `Pkg` repo is in `stdlib/Pkg`, and created initially with a detached `HEAD`. If you're doing this from a pre-existing Julia repository, you may need to `make clean` beforehand.
+
+## Synchronization with the Julia repo
+
+To check which commit julia master uses see [JuliaLang/julia/stdlib/Pkg.version](https://github.com/JuliaLang/julia/blob/master/stdlib/Pkg.version).
+
+To open a PR to update this to the latest commit the [JuliaPackaging/BumpStdlibs.jl](https://github.com/JuliaPackaging/BumpStdlibs.jl) github actions bot is recommended.
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://pkgdocs.julialang.org/dev/
