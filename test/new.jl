@@ -140,6 +140,20 @@ end
 inside_test_sandbox(fn, name; kwargs...) = Pkg.test(name; test_fn=fn, kwargs...)
 inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
 
+@testset "test: printing" begin
+    isolate(loaded_depot=true) do
+        Pkg.add(name="Example")
+        io = IOBuffer()
+        Pkg.test("Example"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Testing Example", output)
+        @test occursin(r"Status `.+Project\.toml`", output)
+        @test occursin(r"Status `.+Manifest\.toml`", output)
+        @test occursin(r"Testing Running tests...", output)
+        @test occursin(r"Testing Example tests passed", output)
+    end
+end
+
 @testset "test: sandboxing" begin
     # explicit test dependencies and the tested project are available within the test sandbox
     isolate(loaded_depot=true) do; mktempdir() do tempdir
