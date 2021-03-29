@@ -477,7 +477,6 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         end
         if isdir(dev_path)
             resolve_projectfile!(ctx.env, pkg, dev_path)
-            println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
             if is_local_path
                 pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
             else
