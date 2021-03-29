@@ -320,7 +320,7 @@ include("manifest.jl")
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
     io::IO = something(DEFAULT_IO[])
-    use_libgit2_for_all_downloads::Bool = false
+    use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
 

@@ -2321,24 +2321,28 @@ end
 #
 # Note: these tests should be run on clean depots
 @testset "downloads" begin
-    # libgit2 downloads
-    isolate() do
-        Pkg.add("Example"; use_libgit2_for_all_downloads=true)
-        @test haskey(Pkg.dependencies(), exuuid)
-        @eval import $(Symbol(TEST_PKG.name))
-        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
-        Pkg.rm(TEST_PKG.name)
-    end
-    isolate() do
-        @testset "libgit2 downloads" begin
-            Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
-            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-            Pkg.rm(TEST_PKG.name)
-        end
-        @testset "tarball downloads" begin
-            Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
-            @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
-            Pkg.rm("JSON")
+    for v in (nothing, "true")
+        withenv("JULIA_PKG_USE_CLI_GIT" => v) do
+            # libgit2 downloads
+            isolate() do
+                Pkg.add("Example"; use_git_for_all_downloads=true)
+                @test haskey(Pkg.dependencies(), exuuid)
+                @eval import $(Symbol(TEST_PKG.name))
+                @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
+                Pkg.rm(TEST_PKG.name)
+            end
+            isolate() do
+                @testset "libgit2 downloads" begin
+                    Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                    @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                    Pkg.rm(TEST_PKG.name)
+                end
+                @testset "tarball downloads" begin
+                    Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
+                    @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
+                    Pkg.rm("JSON")
+                end
+            end
         end
     end
 end
