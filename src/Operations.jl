@@ -770,7 +770,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
         for i in 1:ctx.num_concurrent_downloads
             @async begin
                 for (pkg, path) in jobs
-                    if ctx.use_libgit2_for_all_downloads
+                    if ctx.use_git_for_all_downloads
                         put!(results, (pkg, false, path))
                         continue
                     end
