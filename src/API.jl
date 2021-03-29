@@ -1307,7 +1307,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                 plural1 = length(failed_deps) == 1 ? "y" : "ies"
                 plural2 = length(failed_deps) == 1 ? "" : "s"
                 print(iostr, "\n  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural1) errored. ")
-                print(iostr, "To see a full report either call `pkg> precompile` or load the package$(plural2)")
+                print(iostr, "To see a full report either call `import Pkg; Pkg.precompile()` or load the package$(plural2)")
             end
         end
         lock(print_lock) do
