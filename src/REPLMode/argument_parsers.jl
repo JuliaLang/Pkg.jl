@@ -117,12 +117,18 @@ end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
-    if add_or_develop && casesensitive_isdir(expanduser(word))
-        if occursin(name_re, word)
+    if add_or_develop
+        if isurl(word)
+            return PackageSpec(repo=Types.GitRepo(source=word))
+        elseif any(occursin.(['\\','/'], word)) || word == "." || word == ".."
+            if casesensitive_isdir(expanduser(word))
+                return PackageSpec(repo=Types.GitRepo(source=normpath(expanduser(word))))
+            else
+                pkgerror("`$word` appears to be a local path, but directory does not exist")
+            end
+        end
+        if occursin(name_re, word) && casesensitive_isdir(expanduser(word))
             @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
-        else
-            @info "Resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
-            return PackageSpec(repo=Types.GitRepo(source=normpath(expanduser(word))))
         end
     end
     if occursin(uuid_re, word)
@@ -132,8 +138,6 @@ function parse_package_identifier(word::AbstractString; add_or_develop=false)::P
     elseif occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
-    elseif add_or_develop && isurl(word)
-        return PackageSpec(repo=Types.GitRepo(source=word))
     else
         pkgerror("Unable to parse `$word` as a package.")
     end

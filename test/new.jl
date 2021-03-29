@@ -861,6 +861,14 @@ end
         @test args == [Pkg.PackageSpec(;path=".")]
         @test isempty(opts)
     end end
+    isolate() do; cd_tempdir() do dir
+        # adding a nonexistent directory
+        @test_throws PkgError("`some/really/random/Dir` appears to be a local path, but directory does not exist"
+                              ) Pkg.pkg"add some/really/random/Dir"
+        # warn if not explicit about adding directory
+        mkdir("Example")
+        @test_logs (:info, r"Use `./Example` to add or develop the local directory at `.*`.") Pkg.pkg"add Example"
+    end end
 end
 
 #
