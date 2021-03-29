@@ -1657,7 +1657,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         printpkgstyle(ctx, :Testing, pkg.name)
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
             test_fn !== nothing && test_fn()
-            sandbox_ctx = Context()
+            sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx; mode=PKGMODE_COMBINED)
             Pkg._auto_precompile(sandbox_ctx)
             printpkgstyle(ctx, :Testing, "Running tests...")
