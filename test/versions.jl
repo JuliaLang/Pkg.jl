@@ -12,7 +12,7 @@ function roundtrip_to_semver_spec(str_1::AbstractString)
     spec_2 = Pkg.Versions.semver_spec(str_2)
     str_3 = Pkg.Versions.to_semver_spec(spec_2)
     spec_3 = Pkg.Versions.semver_spec(str_3)
-    result = (spec_1 == spec_1) && (spec_1 == spec_2) && (spec_2 == spec_3)
+    result = (spec_1 == spec_2) && (spec_1 == spec_3) && (spec_2 == spec_3)
     if !result
         @info("", spec_1, spec_2, spec_3, str_1, str_2, str_3)
     end
