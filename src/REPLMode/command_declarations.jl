@@ -160,12 +160,16 @@ PSA[:name => "develop",
     :description => "clone the full package repo locally for development",
     :help => md"""
     [dev|develop] [--shared|--local] pkg[=uuid] ...
+    [dev|develop] path
 
 Make a package available for development. If `pkg` is an existing local path, that path will be recorded in
 the manifest and used. Otherwise, a full git clone of `pkg` is made. The location of the clone is
 controlled by the `--shared` (default) and `--local` arguments. The `--shared` location defaults to
-`~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable. When `--local` is given,
-the clone is placed in a `dev` folder in the current project.
+`~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable.
+
+When `--local` is given, the clone is placed in a `dev` folder in the current project. This
+is not supported for paths, only registered packages.
+
 This operation is undone by `free`.
 
 **Examples**
