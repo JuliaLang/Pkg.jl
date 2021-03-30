@@ -81,8 +81,14 @@ we can explicitly track that branch (or commit) by appending `#branchname` (or `
 ```
 
 The status output now shows that we are tracking the `master` branch of `Example`.
-When updating packages, we will pull updates from that branch.
+When updating packages, updates are pulled from that branch.
 
+!!! note
+    If we would specify a commit id instead of a branch name, e.g.
+    `add Example#025cf7e`, then we would effectively "pin" the package
+    to that commit. This is because the commit id always point to the same
+    thing unlike a branch, which may be updated.
+    
 To go back to tracking the registry version of `Example`, the command `free` is used:
 
 ```julia-repl
