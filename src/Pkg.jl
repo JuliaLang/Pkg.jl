@@ -187,9 +187,21 @@ const update = API.up
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
+  - `force_latest_compatible_version::Bool=false`: [EXPERIMENTAL] force the latest compatible version of each direct dependency.
+  - `allow_earlier_backwards_compatible_versions::Bool=false`: [EXPERIMENTAL] allow any version that is backwards-compatible with the latest compatible version of a direct dependency. If `force_latest_compatible_version` is `false`, then the value of `force_latest_compatible_version` has no effect.
 
 !!! compat "Julia 1.3"
     `julia_args` and `test_args` requires at least Julia 1.3.
+
+!!! compat "Julia 1.7"
+    `force_latest_compatible_version` and
+    `allow_earlier_backwards_compatible_versions` require at least Julia 1.7.
+
+!!! note
+    The `force_latest_compatible_version` and
+    `allow_earlier_backwards_compatible_versions` keyword arguments are
+    experimental features. The behavior is subject to change or removal in minor
+    or patch releases of Julia.
 
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its

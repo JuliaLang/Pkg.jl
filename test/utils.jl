@@ -97,6 +97,19 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     end
 end
 
+function isolate_and_pin_registry(fn::Function; registry_url::String, registry_commit::String)
+    isolate(loaded_depot = false, linked_reg = true) do
+        this_gen_reg_path = joinpath(last(Base.DEPOT_PATH), "registries", "General")
+        rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
+        run(`git clone $(registry_url) $(this_gen_reg_path)`)
+        cd(this_gen_reg_path) do
+            run(`git checkout $(registry_commit)`)
+        end
+        fn()
+    end
+    return nothing
+end
+
 function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)

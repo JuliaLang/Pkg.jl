@@ -652,7 +652,7 @@ function download_source(ctx::Context; readonly=true)
     missed_packages = eltype(pkgs_to_install)[]
     widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
     max_name = maximum(widths; init=0)
-    
+
     @sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
         results = Channel(ctx.num_concurrent_downloads)
@@ -1377,7 +1377,9 @@ end
 
 # ctx + pkg used to compute parent dep graph
 function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
-                 sandbox_path::String, sandbox_project_override)
+                 sandbox_path::String, sandbox_project_override;
+                 force_latest_compatible_version::Bool=false,
+                 allow_earlier_backwards_compatible_versions::Bool=true)
     active_manifest = manifestfile_path(dirname(ctx.env.project_file))
     sandbox_project = projectfile_path(sandbox_path)
 
@@ -1438,6 +1440,17 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 end
             end
             write_env(temp_ctx.env, update_undo = false)
+
+            if force_latest_compatible_version
+                result = check_force_latest_compatible_version(
+                    temp_ctx;
+                    target_name = target.name,
+                    allow_earlier_backwards_compatible_versions,
+                )
+                if !result
+                    pkgerror("One or more direct dependencies is not at the latest compatible version")
+                end
+            end
 
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'
@@ -1512,7 +1525,9 @@ testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
-              test_fn=nothing)
+              test_fn=nothing,
+              force_latest_compatible_version::Bool=false,
+              allow_earlier_backwards_compatible_versions::Bool=true)
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
     # load manifest data
@@ -1554,7 +1569,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             gen_target_project(ctx.env, ctx.registries, pkg, source_path, "test")
         # now we sandbox
         printpkgstyle(ctx.io, :Testing, pkg.name)
-        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
+        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; force_latest_compatible_version, allow_earlier_backwards_compatible_versions) do
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env; mode=PKGMODE_COMBINED, io=sandbox_ctx.io)
@@ -1780,6 +1795,95 @@ function status(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         print_status(env, old_env, header, filter_uuids, filter_names; diff=diff, ignore_indent=ignore_indent, io=io)
     end
+end
+
+function check_force_latest_compatible_version(ctx::Types.Context;
+                                               target_name = nothing,
+                                               allow_earlier_backwards_compatible_versions::Bool = true)
+    direct_deps = load_direct_deps(ctx.env)
+    direct_deps_uuids = [dep.uuid for dep in direct_deps]
+    uuid_list = filter(!is_stdlib, direct_deps_uuids)
+    isempty(uuid_list) && return true
+    results = check_force_latest_compatible_version.(
+        Ref(ctx),
+        uuid_list;
+        target_name,
+        allow_earlier_backwards_compatible_versions,
+    )
+    return all(results)
+end
+
+function check_force_latest_compatible_version(ctx::Types.Context,
+                                               uuid::Base.UUID;
+                                               target_name= nothing,
+                                               allow_earlier_backwards_compatible_versions::Bool = true)
+    dep = ctx.env.manifest[uuid]
+    name = dep.name
+    active_version = dep.version
+    has_compat = haskey(ctx.env.project.compat, name)
+    if !has_compat
+        if name != target_name
+            @warn(
+                "Package does not have a [compat] entry",
+                name, uuid, active_version, target_name,
+            )
+        end
+        return true
+    end
+    compat_entry_string = ctx.env.project.compat[name]
+    latest_compatible_version = get_latest_compatible_version(
+        ctx,
+        uuid,
+        compat_entry_string,
+    )
+    earliest_backwards_compatible_version = get_earliest_backwards_compatible_version(latest_compatible_version)
+    if allow_earlier_backwards_compatible_versions
+        result = active_version >= earliest_backwards_compatible_version
+    else
+        result = active_version >= latest_compatible_version
+    end
+    if !result
+        @error(
+            "Package is not at the latest compatible version",
+            name,
+            uuid,
+            compat_entry_string,
+            active_version,
+            latest_compatible_version,
+            earliest_backwards_compatible_version,
+            allow_earlier_backwards_compatible_versions,
+        )
+    end
+    return result
+end
+
+function get_earliest_backwards_compatible_version(ver::Base.VersionNumber)
+    (ver.major > 0) && return Base.VersionNumber(ver.major, 0, 0)
+    (ver.minor > 0) && return Base.VersionNumber(0, ver.minor, 0)
+    return Base.VersionNumber(0, 0, ver.patch)
+end
+
+function get_latest_compatible_version(ctx::Types.Context,
+                                       uuid::Base.UUID,
+                                       compat_entry_string::AbstractString)
+    all_registered_versions = get_all_registered_versions(ctx, uuid)
+    compat_spec = Pkg.Types.semver_spec(compat_entry_string)
+    compatible_versions = filter(in(compat_spec), all_registered_versions)
+    latest_compatible_version = maximum(compatible_versions)
+    return latest_compatible_version
+end
+
+function get_all_registered_versions(ctx::Types.Context,
+                                     uuid::Base.UUID)
+    versions = Set{VersionNumber}()
+    for reg in ctx.registries
+        pkg = get(reg, uuid, nothing)
+        if pkg !== nothing
+            info = Registry.registry_info(pkg)
+            union!(versions, keys(info.version_info))
+        end
+    end
+    return versions
 end
 
 end # module
