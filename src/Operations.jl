@@ -787,9 +787,19 @@ function _get_deps!(collected_uuids::Set{UUID}, env::EnvCache, new_uuids)
     return collected_uuids
 end
 
+# TODO: This function should be replacable with `is_instantiated` but
+# see https://github.com/JuliaLang/Pkg.jl/issues/2470
+function any_package_not_installed(manifest::Manifest)
+    for (uuid, entry) in manifest
+        if Base.locate_package(Base.PkgId(uuid, entry.name)) === nothing
+            return true
+        end
+    end
+    return false
+end
 
 function build(ctx::Context, uuids::Set{UUID}, verbose::Bool)
-    if !is_instantiated(ctx.env) || !isfile(ctx.env.manifest_file)
+    if any_package_not_installed(ctx.env.manifest) || !isfile(ctx.env.manifest_file)
         Pkg.instantiate(ctx)
     end
     all_uuids = get_deps(ctx.env, uuids)
