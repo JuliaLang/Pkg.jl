@@ -1421,6 +1421,14 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             temp_ctx = Context()
             temp_ctx.env.project.deps[target.name] = target.uuid
 
+            if force_latest_compatible_version
+                set_force_latest_compatible_version!(
+                    temp_ctx;
+                    allow_earlier_backwards_compatible_versions,
+                    target_name = target.name,
+                )
+            end
+
             try
                 Pkg.resolve(temp_ctx; io=devnull)
                 @debug "Using _parent_ dep graph"
@@ -1440,17 +1448,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 end
             end
             write_env(temp_ctx.env, update_undo = false)
-
-            if force_latest_compatible_version
-                result = check_force_latest_compatible_version(
-                    temp_ctx;
-                    target_name = target.name,
-                    allow_earlier_backwards_compatible_versions,
-                )
-                if !result
-                    pkgerror("One or more direct dependencies is not at the latest compatible version")
-                end
-            end
 
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'
@@ -1797,77 +1794,89 @@ function status(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
     end
 end
 
-function check_force_latest_compatible_version(ctx::Types.Context;
-                                               target_name = nothing,
-                                               allow_earlier_backwards_compatible_versions::Bool = true)
-    direct_deps = load_direct_deps(ctx.env)
-    direct_deps_uuids = [dep.uuid for dep in direct_deps]
-    uuid_list = filter(!is_stdlib, direct_deps_uuids)
-    isempty(uuid_list) && return true
-    results = check_force_latest_compatible_version.(
-        Ref(ctx),
-        uuid_list;
-        target_name,
-        allow_earlier_backwards_compatible_versions,
-    )
-    return all(results)
-end
-
-function check_force_latest_compatible_version(ctx::Types.Context,
-                                               uuid::Base.UUID;
-                                               target_name= nothing,
-                                               allow_earlier_backwards_compatible_versions::Bool = true)
-    dep = ctx.env.manifest[uuid]
-    name = dep.name
-    active_version = dep.version
-    has_compat = haskey(ctx.env.project.compat, name)
-    if !has_compat
-        if name != target_name
-            @warn(
-                "Package does not have a [compat] entry",
-                name, uuid, active_version, target_name,
+function set_force_latest_compatible_version!(ctx::Types.Context;
+                                              allow_earlier_backwards_compatible_versions::Bool = true,
+                                              target_name = nothing)
+    for dep in load_direct_deps(ctx.env)
+        if !is_stdlib(dep.uuid)
+            set_force_latest_compatible_version!(
+                ctx,
+                dep.name,
+                dep.uuid;
+                allow_earlier_backwards_compatible_versions,
+                target_name,
             )
         end
-        return true
     end
-    compat_entry_string = ctx.env.project.compat[name]
-    latest_compatible_version = get_latest_compatible_version(
-        ctx,
-        uuid,
-        compat_entry_string,
-    )
-    earliest_backwards_compatible_version = get_earliest_backwards_compatible_version(latest_compatible_version)
-    if allow_earlier_backwards_compatible_versions
-        result = active_version >= earliest_backwards_compatible_version
-    else
-        result = active_version >= latest_compatible_version
-    end
-    if !result
-        @error(
-            "Package is not at the latest compatible version",
-            name,
-            uuid,
-            compat_entry_string,
-            active_version,
-            latest_compatible_version,
-            earliest_backwards_compatible_version,
-            allow_earlier_backwards_compatible_versions,
-        )
-    end
-    return result
+    return nothing
 end
 
-function get_earliest_backwards_compatible_version(ver::Base.VersionNumber)
-    (ver.major > 0) && return Base.VersionNumber(ver.major, 0, 0)
-    (ver.minor > 0) && return Base.VersionNumber(0, ver.minor, 0)
-    return Base.VersionNumber(0, 0, ver.patch)
+function set_force_latest_compatible_version!(ctx::Types.Context,
+                                              dep_name::String,
+                                              dep_uuid::Base.UUID;
+                                              allow_earlier_backwards_compatible_versions::Bool = true,
+                                              target_name = nothing)
+    has_compat = haskey(ctx.env.project.compat, dep_name)
+    if has_compat
+        old_compat_entry_string = ctx.env.project.compat[dep_name]
+        old_compat_entry_spec = Types.semver_spec(old_compat_entry_string)
+        all_registered_versions = get_all_registered_versions(ctx, dep_uuid)
+        latest_compatible_version = get_latest_compatible_version(
+            ctx,
+            dep_uuid,
+            old_compat_entry_spec,
+            all_registered_versions,
+        )
+        earliest_backwards_compatible_version = get_earliest_backwards_compatible_version(latest_compatible_version)
+        all_compatible_earliest_to_latest = get_all_compatible_earliest_to_latest(
+            old_compat_entry_spec,
+            earliest_backwards_compatible_version,
+            latest_compatible_version,
+            all_registered_versions,
+        )
+        if allow_earlier_backwards_compatible_versions
+            new_compat_entry_string = join(string.(Ref("="), all_compatible_earliest_to_latest), ", ")
+        else
+            new_compat_entry_string = "=$(latest_compatible_version)"
+        end
+        ctx.env.project.compat[dep_name] = new_compat_entry_string
+        @info("Setting new `[compat]` entry: `$(dep_name) = \"$(new_compat_entry_string)\"`")
+    else
+        if dep_name != target_name
+            @warn(
+                "Package does not have a [compat] entry",
+                dep_name, dep_uuid, target_name,
+            )
+        end
+    end
+    return nothing
+end
+
+function get_all_compatible_earliest_to_latest(compat_spec::VersionSpec,
+                                               earliest_ver::VersionNumber,
+                                               latest_ver::VersionNumber,
+                                               all_registered_versions::Set{VersionNumber})
+    compatible_versions = Set{VersionNumber}()
+    for ver in all_registered_versions
+        if earliest_ver <= ver <= latest_ver
+            if ver in compat_spec
+                push!(compatible_versions, ver)
+            end
+        end
+    end
+    return sort(collect(compatible_versions))
+end
+
+function get_earliest_backwards_compatible_version(ver::VersionNumber)
+    (ver.major > 0) && return VersionNumber(ver.major, 0, 0)
+    (ver.minor > 0) && return VersionNumber(0, ver.minor, 0)
+    return VersionNumber(0, 0, ver.patch)
 end
 
 function get_latest_compatible_version(ctx::Types.Context,
                                        uuid::Base.UUID,
-                                       compat_entry_string::AbstractString)
-    all_registered_versions = get_all_registered_versions(ctx, uuid)
-    compat_spec = Pkg.Types.semver_spec(compat_entry_string)
+                                       compat_spec::VersionSpec,
+                                       all_registered_versions::Set{VersionNumber})
     compatible_versions = filter(in(compat_spec), all_registered_versions)
     latest_compatible_version = maximum(compatible_versions)
     return latest_compatible_version

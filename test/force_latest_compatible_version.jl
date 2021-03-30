@@ -6,9 +6,8 @@ import ..Pkg # ensure we are using the correct Pkg
 import ..Utils
 using Test
 
-const expected_message_1 = "One or more direct dependencies is not at the latest compatible version"
-const expected_message_2 = "Package is not at the latest compatible version"
-const expected_message_3 = "Package does not have a [compat] entry"
+const expected_message_1 = "Unsatisfiable requirements detected"
+const expected_message_2 = "Package does not have a [compat] entry"
 
 const test_package_parent_dir = joinpath(
     @__DIR__,
@@ -84,25 +83,24 @@ const test_package_parent_dir = joinpath(
                             ) == nothing
                         )
                         @test_throws(
-                            Pkg.Types.PkgError(expected_message_1),
+                            Pkg.Resolve.ResolverError,
                             Pkg.test(;
                                 force_latest_compatible_version = true,
                                 allow_earlier_backwards_compatible_versions = false,
                             ),
                         )
-                        @test_logs(
-                            (:error, expected_message_2),
-                            match_mode=:any,
-                            begin
-                                try
-                                    Pkg.test(;
-                                        force_latest_compatible_version = true,
-                                        allow_earlier_backwards_compatible_versions = false,
-                                    )
-                                catch
-                                end
-                            end,
-                        )
+                        let
+                            ex = try
+                                Pkg.test(;
+                                    force_latest_compatible_version = true,
+                                    allow_earlier_backwards_compatible_versions = false,
+                                )
+                            catch ex
+                                ex
+                            end
+                            @test ex isa Pkg.Resolve.ResolverError
+                            @test occursin(lowercase(strip(expected_message_1)), lowercase(strip(ex.msg)))
+                        end
                     end
 
                     @testset "`allow_earlier_backwards_compatible_versions` = true" begin
@@ -135,23 +133,22 @@ const test_package_parent_dir = joinpath(
                             ) == nothing
                         )
                         @test_throws(
-                            Pkg.Types.PkgError(expected_message_1),
+                            Pkg.Resolve.ResolverError,
                             Pkg.test(;
                                 force_latest_compatible_version = true,
                             ),
                         )
-                        @test_logs(
-                            (:error, expected_message_2),
-                            match_mode=:any,
-                            begin
-                                try
-                                    Pkg.test(;
-                                        force_latest_compatible_version = true,
-                                    )
-                                catch
-                                end
-                            end,
-                        )
+                        let
+                            ex = try
+                                Pkg.test(;
+                                    force_latest_compatible_version = true,
+                                )
+                            catch ex
+                                ex
+                            end
+                            @test ex isa Pkg.Resolve.ResolverError
+                            @test occursin(lowercase(strip(expected_message_1)), lowercase(strip(ex.msg)))
+                        end
                     end
 
                     @testset "provide a value for `allow_earlier_backwards_compatible_versions`" begin
@@ -163,25 +160,24 @@ const test_package_parent_dir = joinpath(
                                 ) == nothing
                             )
                             @test_throws(
-                                Pkg.Types.PkgError(expected_message_1),
+                                Pkg.Resolve.ResolverError,
                                 Pkg.test(;
                                     force_latest_compatible_version = true,
                                     allow_earlier_backwards_compatible_versions,
                                 ),
                             )
-                            @test_logs(
-                                (:error, expected_message_2),
-                                match_mode=:any,
-                                begin
-                                    try
-                                        Pkg.test(;
-                                            force_latest_compatible_version = true,
-                                            allow_earlier_backwards_compatible_versions,
-                                        )
-                                    catch
-                                    end
-                                end,
-                            )
+                            let
+                                ex = try
+                                    Pkg.test(;
+                                        force_latest_compatible_version = true,
+                                        allow_earlier_backwards_compatible_versions,
+                                    )
+                                catch ex
+                                    ex
+                                end
+                                @test ex isa Pkg.Resolve.ResolverError
+                                @test occursin(lowercase(strip(expected_message_1)), lowercase(strip(ex.msg)))
+                            end
                         end
                     end
                 end
@@ -205,6 +201,17 @@ const test_package_parent_dir = joinpath(
                                     force_latest_compatible_version,
                                 ),
                             )
+                            let
+                                ex = try
+                                    Pkg.test(;
+                                        force_latest_compatible_version,
+                                    )
+                                catch ex
+                                    ex
+                                end
+                                @test ex isa Pkg.Resolve.ResolverError
+                                @test occursin(lowercase(strip(expected_message_1)), lowercase(strip(ex.msg)))
+                            end
                         end
 
                         @testset "provide a value for `allow_earlier_backwards_compatible_versions`" begin
@@ -216,6 +223,18 @@ const test_package_parent_dir = joinpath(
                                         allow_earlier_backwards_compatible_versions,
                                     ),
                                 )
+                                let
+                                    ex = try
+                                        Pkg.test(;
+                                            force_latest_compatible_version,
+                                            allow_earlier_backwards_compatible_versions,
+                                        )
+                                    catch ex
+                                        ex
+                                    end
+                                    @test ex isa Pkg.Resolve.ResolverError
+                                    @test occursin(lowercase(strip(expected_message_1)), lowercase(strip(ex.msg)))
+                                end
                             end
                         end
                     end
@@ -269,7 +288,7 @@ const test_package_parent_dir = joinpath(
                                 ) == nothing
                             )
                             @test_logs(
-                                (:warn, expected_message_3),
+                                (:warn, expected_message_2),
                                 match_mode=:any,
                                 Pkg.test(;
                                     force_latest_compatible_version = true,
@@ -286,7 +305,7 @@ const test_package_parent_dir = joinpath(
                                     ) == nothing
                                 )
                                 @test_logs(
-                                    (:warn, expected_message_3),
+                                    (:warn, expected_message_2),
                                     match_mode=:any,
                                     Pkg.test(;
                                         force_latest_compatible_version = true,
