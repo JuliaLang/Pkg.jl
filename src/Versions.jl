@@ -179,6 +179,19 @@ function Base.print(io::IO, r::VersionRange)
 end
 Base.show(io::IO, r::VersionRange) = print(io, "VersionRange(\"", r, "\")")
 
+function to_semver_spec(r::VersionRange)
+    m, n = r.lower.n, r.upper.n
+    if (m, n) == (0, 0)
+        return "≥0"
+    elseif m == 0
+        throw(ArgumentError("This version range cannot be represented using SemVer notation"))
+    elseif n == 0
+        return string("≥", join(r.lower.t, "."),)
+    else
+        return string(join(r.lower.t[1:m], "."), " - ", join(r.upper.t[1:n], "."))
+    end
+end
+
 Base.in(v::VersionNumber, r::VersionRange) = r.lower ≲ v ≲ r.upper
 
 Base.intersect(a::VersionRange, b::VersionRange) = VersionRange(stricterlower(a.lower, b.lower), stricterupper(a.upper, b.upper))
@@ -305,6 +318,13 @@ function semver_spec(s::String)
         push!(ranges, range)
     end
     return VersionSpec(ranges)
+end
+
+function to_semver_spec(spec::VersionSpec)
+    ranges = spec.ranges
+    isempty(ranges) && return "1 - 0"
+    specs = to_semver_spec.(ranges)
+    return join(specs, ", ")
 end
 
 function semver_interval(m::RegexMatch)
