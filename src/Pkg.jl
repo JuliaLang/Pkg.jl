@@ -481,7 +481,7 @@ in the vector.
 
     | Explicit                                                            | Concise                                        |
     |:--------------------------------------------------------------------|:-----------------------------------------------|
-    | `Pkg.add(PackageSpec(name="Package))`                               | `Pkg.add(name = "Package")`                    |
+    | `Pkg.add(PackageSpec(name="Package"))`                              | `Pkg.add(name = "Package")`                    |
     | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
     |` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
 
