@@ -96,7 +96,6 @@ Base.@kwdef mutable struct PackageSpec
     repo::GitRepo = GitRepo()
     path::Union{Nothing,String} = nothing
     pinned::Bool = false
-    mode::PackageMode = PKGMODE_PROJECT
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
@@ -106,7 +105,7 @@ PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-    a.pinned == b.pinned && a.mode == b.mode
+    a.pinned == b.pinned
 end
 
 function err_rep(pkg::PackageSpec)
@@ -756,7 +755,6 @@ function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     uuids = env.project.deps
     names = Dict(uuid => name for (name, uuid) in uuids)
     for pkg in pkgs
-        pkg.mode == PKGMODE_PROJECT || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             pkg.uuid = uuids[pkg.name]
         end
@@ -775,7 +773,6 @@ function manifest_resolve!(manifest::Manifest, pkgs::AbstractVector{PackageSpec}
         names[uuid] = entry.name # can be duplicate but doesn't matter
     end
     for pkg in pkgs
-        force || pkg.mode == PKGMODE_MANIFEST || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             length(uuids[pkg.name]) == 1 && (pkg.uuid = uuids[pkg.name][1])
         end

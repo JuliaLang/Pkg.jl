@@ -1765,6 +1765,20 @@ end
         @test !haskey(Pkg.dependencies(), exuuid)
         @test haskey(Pkg.dependencies(), json_uuid)
     end end
+    # rm manifest mode
+    isolate(loaded_depot=true) do
+        Pkg.add("Example")
+        Pkg.add(name="JSON", version="0.18.0")
+        Pkg.rm("Random"; mode=Pkg.PKGMODE_MANIFEST)
+        @test haskey(Pkg.dependencies(), exuuid)
+        @test !haskey(Pkg.dependencies(), json_uuid)
+    end
+    # rm nonexistent packages warns but does not error
+    isolate(loaded_depot=true) do
+        Pkg.add("Example")
+        @test_logs (:warn, r"not in project, ignoring") Pkg.rm(name="FooBar", uuid=UUIDs.UUID(0))
+        @test_logs (:warn, r"not in manifest, ignoring") Pkg.rm(name="FooBar", uuid=UUIDs.UUID(0); mode=Pkg.PKGMODE_MANIFEST)
+    end
 end
 
 @testset "rm: REPL" begin
