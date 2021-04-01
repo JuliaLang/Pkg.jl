@@ -91,11 +91,15 @@ Base.:(==)(r1::GitRepo, r2::GitRepo) =
 Base.@kwdef mutable struct PackageSpec
     name::Union{Nothing,String} = nothing
     uuid::Union{Nothing,UUID} = nothing
-    version::VersionTypes = VersionSpec()
+    version::Union{Nothing,VersionTypes,String} = VersionSpec()
     tree_hash::Union{Nothing,SHA1} = nothing
     repo::GitRepo = GitRepo()
     path::Union{Nothing,String} = nothing
     pinned::Bool = false
+    # used for input only
+    url = nothing
+    rev = nothing
+    subdir = nothing
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
@@ -126,17 +130,20 @@ function Base.show(io::IO, pkg::PackageSpec)
     pkg.name !== nothing && push!(f, "name" => pkg.name)
     pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
     pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
-    pkg.path !== nothing && push!(f, "dev/path" => pkg.path)
+    pkg.path !== nothing && push!(f, "path" => pkg.path)
+    pkg.url !== nothing && push!(f, "url" => pkg.url)
+    pkg.rev !== nothing && push!(f, "rev" => pkg.rev)
+    pkg.subdir !== nothing && push!(f, "subdir" => pkg.subdir)
     pkg.pinned && push!(f, "pinned" => pkg.pinned)
     push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
     if pkg.repo.source !== nothing
-        push!(f, "url/path" => string("\"", pkg.repo.source, "\""))
+        push!(f, "repo/source" => string("\"", pkg.repo.source, "\""))
     end
     if pkg.repo.rev !== nothing
-        push!(f, "rev" => pkg.repo.rev)
+        push!(f, "repo/rev" => pkg.repo.rev)
     end
     if pkg.repo.subdir !== nothing
-        push!(f, "subdir" => pkg.repo.subdir)
+        push!(f, "repo/subdir" => pkg.repo.subdir)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
@@ -821,7 +828,7 @@ end
 function ensure_resolved(manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
         registry::Bool=false,)::Nothing
-        unresolved_uuids = Dict{String,Vector{UUID}}()
+    unresolved_uuids = Dict{String,Vector{UUID}}()
     for pkg in pkgs
         has_uuid(pkg) && continue
         uuids = [uuid for (uuid, entry) in manifest if entry.name == pkg.name]

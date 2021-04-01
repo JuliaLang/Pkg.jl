@@ -143,6 +143,8 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
             Registry.download_default_registries(io)
             ctx = Context()
             kwargs = merge((;kwargs...), (:io => io,))
+            pkgs = deepcopy(pkgs) # don't mutate input
+            foreach(pkg -> handle_package_input!(pkg), pkgs)
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             return ret
@@ -151,19 +153,19 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
                       url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
-            pkg = Package(name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, subdir=subdir)
+            pkg = PackageSpec(; name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, subdir=subdir)
             if $f === status || $f === rm || $f === up
                 kwargs = merge((;kwargs...), (:mode => mode,))
             end
             # Handle $f() case
-            if pkg == Package()
+            if unique([name,uuid,version,url,rev,path,subdir]) == [nothing]
                 $f(PackageSpec[]; kwargs...)
             else
                 $f(pkg; kwargs...)
             end
         end
         function $f(pkgs::Vector{<:NamedTuple}; kwargs...)
-            $f([Package(;pkg...) for pkg in pkgs]; kwargs...)
+            $f([PackageSpec(;pkg...) for pkg in pkgs]; kwargs...)
         end
     end
 end
@@ -171,15 +173,13 @@ end
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
-    foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
-    pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
+        check_package_name(pkg.name, "develop")
         if pkg.name == "julia" # if julia is passed as a package the solver gets tricked
             pkgerror("`julia` is not a valid package name")
         end
-        pkg.name === nothing || check_package_name(pkg.name, "develop")
         if pkg.name === nothing && pkg.uuid === nothing && pkg.repo.source === nothing
             pkgerror("name, UUID, URL, or filesystem path specification required when calling `develop`")
         end
@@ -217,18 +217,16 @@ end
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
              platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :add)
-    foreach(pkg -> check_package_name(pkg.name, :add), pkgs)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
+        check_package_name(pkg.name, "add")
         if pkg.name == "julia" # if julia is passed as a package the solver gets tricked
             pkgerror("`julia` is not a valid package name")
         end
         if pkg.name === nothing && pkg.uuid === nothing && pkg.repo.source === nothing
             pkgerror("name, UUID, URL, or filesystem path specification required when calling `add`")
         end
-        pkg.name === nothing || check_package_name(pkg.name, "add")
         if pkg.repo.source !== nothing || pkg.repo.rev !== nothing
             if pkg.version != VersionSpec()
                 pkgerror("version specification invalid when tracking a repository:",
@@ -270,12 +268,12 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
 end
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_pkgs::Bool=false, kwargs...)
+    Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, mode)
     end
     require_not_empty(pkgs, :rm)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -287,8 +285,6 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
             pkgerror("packages may only be specified by name or UUID when calling `rm`")
         end
     end
-
-    Context!(ctx; kwargs...)
 
     mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
     mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
@@ -315,8 +311,6 @@ end
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-
     Context!(ctx; kwargs...)
     if update_registry
         Registry.download_default_registries(ctx.io)
@@ -344,13 +338,12 @@ function resolve(ctx::Context; kwargs...)
 end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+    Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
     end
     require_not_empty(pkgs, :pin)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-    Context!(ctx; kwargs...)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -376,13 +369,12 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
 end
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+    Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
     end
     require_not_empty(pkgs, :free)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-    Context!(ctx; kwargs...)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -411,8 +403,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
               kwargs...)
     julia_args = Cmd(julia_args)
     test_args = Cmd(test_args)
-    pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
+
     if isempty(pkgs)
         ctx.env.pkg === nothing && pkgerror("trying to test unnamed project") #TODO Allow this?
         push!(pkgs, ctx.env.pkg)
@@ -972,7 +964,6 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
@@ -1640,23 +1631,16 @@ end
 
 @deprecate setprotocol!(proto::Union{Nothing, AbstractString}) setprotocol!(protocol = proto) false
 
-# API constructor
-function Package(;name::Union{Nothing,AbstractString} = nothing,
-                 uuid::Union{Nothing,String,UUID} = nothing,
-                 version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
-                 url = nothing, rev = nothing, path=nothing,
-                 subdir = nothing)
-    if path !== nothing && url !== nothing
+function handle_package_input!(pkg::PackageSpec)
+    if pkg.path !== nothing && pkg.url !== nothing
         pkgerror("`path` and `url` are conflicting specifications")
     end
-    repo = Types.GitRepo(rev = rev, source = url !== nothing ? url : path, subdir = subdir)
-    version = version === nothing ? VersionSpec() : VersionSpec(version)
-    uuid = uuid isa String ? UUID(uuid) : uuid
-    PackageSpec(;name=name, uuid=uuid, version=version, path=nothing,
-                repo=repo, tree_hash=nothing)
+    pkg.repo = Types.GitRepo(rev = pkg.rev, source = pkg.url !== nothing ? pkg.url : pkg.path,
+                         subdir = pkg.subdir)
+    pkg.path = nothing
+    pkg.tree_hash = nothing
+    pkg.version = pkg.version === nothing ? VersionSpec() : VersionSpec(pkg.version)
+    pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
-Package(name::AbstractString) = PackageSpec(name)
-Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
-Package(name::AbstractString, uuid::UUID, version::VersionTypes) = PackageSpec(name, uuid, version)
 
 end # module
