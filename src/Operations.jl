@@ -171,6 +171,12 @@ end
 #######################################
 # Dependency gathering and resolution #
 #######################################
+get_compat(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].val : Types.VersionSpec()
+get_compat_str(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].str : nothing
+function set_compat(proj::Project, name::String, compat::String)
+    proj.compat[name] = Types.Compat(Types.semver_spec(compat), compat)
+end
+
 function collect_project!(pkg::PackageSpec, path::String,
                           deps_map::Dict{UUID,Vector{PackageSpec}})
     deps_map[pkg.uuid] = PackageSpec[]
@@ -179,15 +185,15 @@ function collect_project!(pkg::PackageSpec, path::String,
         pkgerror("could not find project file for package $(err_rep(pkg)) at `$path`")
     end
     project = read_package(project_file)
-    julia_compat = get(project.compat, "julia", nothing)
+    julia_compat = get_compat(project, "julia")
     #=
     # TODO, this should either error or be quiet
-    if julia_compat !== nothing && !(VERSION in Types.semver_spec(julia_compat))
+    if julia_compat !== nothing && !(VERSION in julia_compat)
         println(io, "julia version requirement for package $(err_rep(pkg)) not satisfied")
     end
     =#
     for (name, uuid) in project.deps
-        vspec = Types.semver_spec(get(project.compat, name, ">= 0"))
+        vspec = get_compat(project, name)
         push!(deps_map[pkg.uuid], PackageSpec(name, uuid, vspec))
     end
     if project.version !== nothing
@@ -264,10 +270,6 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
 end
 
 
-function project_compatibility(env::EnvCache, name::String)
-    return VersionSpec(Types.semver_spec(get(env.project.compat, name, ">= 0")))
-end
-
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
@@ -276,7 +278,7 @@ end
 function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
     # compatibility
     if julia_version !== nothing
-        v = intersect(julia_version, project_compatibility(env, "julia"))
+        v = intersect(julia_version, get_compat(env.project, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
@@ -300,7 +302,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
 
     # check compat
     for pkg in pkgs
-        compat = project_compatibility(env, pkg.name)
+        compat = get_compat(env.project, pkg.name)
         v = intersect(pkg.version, compat)
         if isempty(v)
             throw(Resolve.ResolverError(
@@ -1432,7 +1434,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         with_temp_env(tmp) do
             temp_ctx = Context()
             temp_ctx.env.project.deps[target.name] = target.uuid
-
             try
                 Pkg.resolve(temp_ctx; io=devnull)
                 @debug "Using _parent_ dep graph"
@@ -1526,9 +1527,9 @@ function gen_target_project(env::EnvCache, registries::Vector{Registry.RegistryI
     end
     # collect compat entries
     for (name, uuid) in test_project.deps
-        compat = get(source_env.project.compat, name, nothing)
+        compat = get_compat_str(source_env.project, name)
         compat === nothing && continue
-        test_project.compat[name] = compat
+        set_compat(test_project, name, compat)
     end
     return test_project
 end
@@ -1842,11 +1843,11 @@ function check_force_latest_compatible_version(ctx::Types.Context,
         end
         return true
     end
-    compat_entry_string = ctx.env.project.compat[name]
+    compat_entry = ctx.env.project.compat[name].val
     latest_compatible_version = get_latest_compatible_version(
         ctx,
         uuid,
-        compat_entry_string,
+        compat_entry,
     )
     earliest_backwards_compatible_version = get_earliest_backwards_compatible_version(latest_compatible_version)
     if allow_earlier_backwards_compatible_versions
@@ -1859,7 +1860,7 @@ function check_force_latest_compatible_version(ctx::Types.Context,
             "Package is not at the latest compatible version",
             name,
             uuid,
-            compat_entry_string,
+            compat_entry,
             active_version,
             latest_compatible_version,
             earliest_backwards_compatible_version,
@@ -1877,9 +1878,8 @@ end
 
 function get_latest_compatible_version(ctx::Types.Context,
                                        uuid::Base.UUID,
-                                       compat_entry_string::AbstractString)
+                                       compat_spec::VersionSpec)
     all_registered_versions = get_all_registered_versions(ctx, uuid)
-    compat_spec = Pkg.Types.semver_spec(compat_entry_string)
     compatible_versions = filter(in(compat_spec), all_registered_versions)
     latest_compatible_version = maximum(compatible_versions)
     return latest_compatible_version
