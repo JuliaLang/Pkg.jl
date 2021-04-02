@@ -195,6 +195,11 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     return Pkg.safe_realpath(project_file)
 end
 
+Base.@kwdef mutable struct Compat
+    val::VersionSpec
+    str::String
+end
+
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
     # Fields
@@ -206,7 +211,7 @@ Base.@kwdef mutable struct Project
     deps::Dict{String,UUID} = Dict{String,UUID}()
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
-    compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
+    compat::Dict{String,Compat} = Dict{String,Compat}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
