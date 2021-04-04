@@ -151,7 +151,9 @@ function destructure(project::Project)::Dict
 
     # sanity check for consistency between compat value and string representation
     for (name, compat) in project.compat
-        @assert compat.val == semver_spec(compat.str) "inconsistency between compat values and string representation"
+        if compat.val != semver_spec(compat.str)
+            throw(ErrorException("inconsistency between compat values and string representation"))
+        end
     end
 
     # if a field is set to its default value, don't include it in the write
