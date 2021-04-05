@@ -326,6 +326,18 @@ end
     end
 end
 
+@testset "activate" begin
+    isolate(loaded_depot=true) do
+        io = IOBuffer()
+        Pkg.activate("Foo"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Activating.*project at.*`.*Foo`", output)
+        Pkg.activate(; io=io, temp=true)
+        output = String(take!(io))
+        @test occursin(r"Activating new project at `.*`", output)
+    end
+end
+
 #
 # # Add
 #
