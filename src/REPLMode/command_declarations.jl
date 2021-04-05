@@ -155,12 +155,13 @@ PSA[:name => "develop",
         PSA[:name => "strict", :api => :strict => true],
         PSA[:name => "local", :api => :shared => false],
         PSA[:name => "shared", :api => :shared => true],
+        PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
     :completions => complete_add_dev,
     :description => "clone the full package repo locally for development",
     :help => md"""
-    [dev|develop] [--shared|--local] pkg[=uuid] ...
-    [dev|develop] path
+    [dev|develop] [--preserve=<opt>] [--shared|--local] pkg[=uuid] ...
+    [dev|develop] [--preserve=<opt>] path
 
 Make a package available for development. If `pkg` is an existing local path, that path will be recorded in
 the manifest and used. Otherwise, a full git clone of `pkg` is made. The location of the clone is
