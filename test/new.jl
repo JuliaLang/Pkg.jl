@@ -2603,12 +2603,13 @@ using Pkg.Types: is_stdlib
 end
 
 @testset "STDLIBS_BY_VERSION up-to-date" begin
-    test_result = Pkg.Types.STDLIBS_BY_VERSION[end][2] == Pkg.Types.load_stdlib()
+    last_stdlibs = Pkg.Types.get_last_stdlibs(VERSION)
+    test_result = last_stdlibs == Pkg.Types.load_stdlib()
     if !test_result
         @error("STDLIBS_BY_VERSION out of date!  Manually fix given the info below, or re-run generate_historical_stdlibs.jl!")
-        @show length(Pkg.Types.STDLIBS_BY_VERSION[end][2]) length(Pkg.Types.load_stdlib())
-        @show setdiff(Pkg.Types.STDLIBS_BY_VERSION[end][2], Pkg.Types.load_stdlib())
-        @show setdiff(Pkg.Types.load_stdlib(), Pkg.Types.STDLIBS_BY_VERSION[end][2])
+        @show length(last_stdlibs) length(Pkg.Types.load_stdlib())
+        @show setdiff(last_stdlibs, Pkg.Types.load_stdlib())
+        @show setdiff(Pkg.Types.load_stdlib(), last_stdlibs)
     end
     @test test_result
 end
