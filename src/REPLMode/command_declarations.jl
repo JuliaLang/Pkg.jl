@@ -318,7 +318,7 @@ PSA[:name => "generate",
     :help => md"""
     generate pkgname
 
-Create a project called `pkgname` in the current folder.
+Create a minimal project called `pkgname` in the current folder. For more featureful package creation, please see `PkgTemplates.jl`.
 """,
 ],
 PSA[:name => "precompile",

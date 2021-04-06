@@ -314,7 +314,11 @@ See also [`PackageSpec`](@ref)
 """
 const develop = API.develop
 
-# TODO: Will probably be deprecated for something in PkgDev
+"""
+    Pkg.generate(pkgname::String)
+
+Create a minimal project called `pkgname` in the current folder. For more featureful package creation, please see `PkgTemplates.jl`.
+"""
 const generate = API.generate
 
 """
