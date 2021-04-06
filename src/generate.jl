@@ -1,24 +1,27 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 function generate(path::String; io::IO=DEFAULT_IO[])
-    dir, pkg = dirname(path), basename(path)
+    base = basename(path)
+    pkg = endswith(lowercase(base), ".jl") ? chop(base, tail=3) : base
     Base.isidentifier(pkg) || pkgerror("$(repr(pkg)) is not a valid package name")
     isdir(path) && pkgerror("$(abspath(path)) already exists")
     printpkgstyle(io, :Generating, " project $pkg:")
-    uuid = project(io, pkg, dir)
-    entrypoint(io, pkg, dir)
+    uuid = project(io, pkg, path)
+    entrypoint(io, pkg, path)
     return Dict(pkg => uuid)
 end
 
-function genfile(f::Function, io::IO, pkg::String, dir::String, file::String)
-    path = joinpath(dir, pkg, file)
+function genfile(f::Function, io::IO, dir::AbstractString, file::AbstractString)
+    path = joinpath(dir, file)
     println(io, "    $(Base.contractuser(path))")
     mkpath(dirname(path))
     open(f, path, "w")
     return
 end
 
-function project(io::IO, pkg::String, dir::String)
+function project(io::IO, pkg::AbstractString, dir::AbstractString)
+    mkpath(dir)
+
     name = email = nothing
     gitname = LibGit2.getconfig("user.name", "")
     isempty(gitname) || (name = gitname)
@@ -44,20 +47,20 @@ function project(io::IO, pkg::String, dir::String)
     authors = ["$name " * (email === nothing ? "" : "<$email>")]
 
     uuid = UUIDs.uuid4()
-    genfile(io, pkg, dir, "Project.toml") do io
+    genfile(io, dir, "Project.toml") do file_io
         toml = Dict{String,Any}("authors" => authors,
                                 "name" => pkg,
                                 "uuid" => string(uuid),
                                 "version" => "0.1.0",
                                 )
-        TOML.print(io, toml, sorted=true, by=key -> (Types.project_key_order(key), key))
+        TOML.print(file_io, toml, sorted=true, by=key -> (Types.project_key_order(key), key))
     end
     return uuid
 end
 
-function entrypoint(io::IO, pkg::String, dir)
-    genfile(io, pkg, dir, "src/$pkg.jl") do io
-        print(io,
+function entrypoint(io::IO, pkg::AbstractString, dir)
+    genfile(io, dir, "src/$pkg.jl") do file_io
+        print(file_io,
            """
             module $pkg
 
