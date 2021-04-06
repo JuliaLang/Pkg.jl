@@ -1,10 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-function generate_deprecated(varargs...; kwargs...)
-    Base.depwarn("Pkg.generate is deprecated. Please use PkgTemplates.jl instead.", Symbol("Pkg.generate"))
-    return generate(varargs...; kwargs...)
-end
-
 generate(path::String; kwargs...) = generate(Context(), path; kwargs...)
 function generate(ctx::Context, path::String; kwargs...)
     Context!(ctx; kwargs...)

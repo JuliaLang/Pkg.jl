@@ -311,7 +311,7 @@ packages will not be upgraded at all.
 """,
 ],
 PSA[:name => "generate",
-    :api => API.generate_deprecated,
+    :api => API.generate,
     :arg_count => 1 => 1,
     :arg_parser => ((x,y) -> map(expanduser, unwrap(x))),
     :description => "generate files for a new project",

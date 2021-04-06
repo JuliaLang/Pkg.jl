@@ -1924,7 +1924,7 @@ end
     isolate() do
         Pkg.REPLMode.TEST_MODE[] = true
         api, arg, opts = first(Pkg.pkg"generate Foo")
-        @test api == Pkg.API.generate_deprecated
+        @test api == Pkg.API.generate
         @test arg == "Foo"
         @test isempty(opts)
         mktempdir() do dir
