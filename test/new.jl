@@ -1217,6 +1217,11 @@ end
         @test api == Pkg.develop
         @test args == [Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl")]
         @test isempty(opts)
+        # develop using preserve option
+        api, args, opts = first(Pkg.pkg"dev --preserve=none Example")
+        @test api == Pkg.develop
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test opts == Dict(:preserve => Pkg.PRESERVE_NONE)
     end
 end
 
