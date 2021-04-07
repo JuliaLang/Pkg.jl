@@ -858,6 +858,11 @@ function ensure_resolved(manifest::Manifest,
                     print(io, " in manifest but not in project")
                 end
                 println(io, ")")
+                if !isempty(name) && !isuppercase(first(name))
+                    println(io, ") Package names are case-sensitive. Did you mean: \"$(uppercasefirst(name))\"?")
+                else
+                    println(io, ")")
+                end
             end
         end
         if !isempty(unresolved_names)
