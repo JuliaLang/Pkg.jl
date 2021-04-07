@@ -857,7 +857,6 @@ function ensure_resolved(manifest::Manifest,
                     join(io, uuids, ", ", " or ")
                     print(io, " in manifest but not in project")
                 end
-                println(io, ")")
                 if !isempty(name) && !isuppercase(first(name))
                     println(io, ") Package names are case-sensitive. Did you mean: \"$(uppercasefirst(name))\"?")
                 else
