@@ -288,3 +288,26 @@ may fit your package better.
 Once a package is ready it can be registered with the [General Registry](https://github.com/JuliaRegistries/General).
 Currently packages are submitted via [`Registrator`](https://juliaregistrator.github.io/).
 In addition to `Registrator`, [`TagBot`](https://github.com/apps/julia-tagbot) helps manage the process of tagging releases.
+
+## Best Practices
+
+Packages should avoid mutating their own state (writing to files within their package directory).
+Packages should, in general, not assume that they are located in a writable location (e.g. if installed as part of a system-wide depot) or even a stable one (e.g. if they are bundled into a system image by [PackageCompiler.jl](https://github.com/JuliaLang/PackageCompiler.jl)).
+To support the various usecases in the Julia package ecosystem, the Pkg developers have created a number of auxilliary packages and techniques to help package authors create self-contained, immutable and relocatable packages:
+
+* [`Artifacts`](https://pkgdocs.julialang.org/v1/artifacts/) can be used to bundle chunks of data alongside your package, or even allow them to be downloaded on-demand.
+  Prefer artifacts over attempting to open a file via a path such as `joinpath(@__DIR__, "data", "my_dataset.csv")` as this is non-relocatable.
+  Once your package has been precompiled, the result of `@__DIR__` will have been baked into your precompiled package data, and if you attempt to distribute this package, it will attempt to load files at the wrong location.
+  Artifacts can be bundled and accessed easily using the `artifact"name"` string macro.
+  Artifacts are available from Julia 1.3 onward.
+
+* [`Scratch.jl`](https://github.com/JuliaPackaging/Scratch.jl) provides the notion of "scratch spaces", mutable containers of data for packages.
+  Scratch spaces are designed for data caches that are completely managed by a package and should be removed when the package itself is uninstalled.
+  For important user-generated data, packages should continue to write out to a user-specified path that is not managed by Julia or Pkg.
+  Scratch is usable from Julia 1.5 onward.
+  
+* [`Preferences.jl`](https://github.com/JuliaPackaging/Preferences.jl) allows packages to read and write preferences to the top-level `Project.toml`.
+  These preferences can be read at runtime or compile-time, to enable or disable different aspects of package behavior.
+  Packages previously would write out files to their own package directories to record options set by the user or environment, but this is highly discouraged now that `Preferences` is available.
+  Preferences are available from Juilia 1.6 onward.
+ 
