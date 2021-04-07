@@ -1496,10 +1496,10 @@ end
 
 function activate(;temp=false, shared=false, io::IO=DEFAULT_IO[])
     shared && pkgerror("Must give a name for a shared environment")
-    temp && return activate(mktempdir())
+    temp && return activate(mktempdir(); io=io)
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(io, :Activating, "environment at $(pathrepr(p))")
+    p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
     add_snapshot_to_undo()
     return nothing
 end
@@ -1556,7 +1556,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(io, :Activating, "$(n)environment at $(pathrepr(p))")
+        printpkgstyle(io, :Activating, "$(n)project at $(pathrepr(dirname(p)))")
     end
     add_snapshot_to_undo()
     return nothing
