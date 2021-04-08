@@ -64,9 +64,9 @@ function entrypoint(io::IO, pkg::AbstractString, dir)
            """
             module $pkg
 
-            greet() = print("Hello World!")
+            # module contents
 
-            end # module
+            end
             """
         )
     end
