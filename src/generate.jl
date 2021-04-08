@@ -66,7 +66,7 @@ function entrypoint(io::IO, pkg::AbstractString, dir)
 
             # module contents
 
-            end
+            end # module
             """
         )
     end
