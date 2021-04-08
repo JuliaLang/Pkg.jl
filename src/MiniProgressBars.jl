@@ -18,7 +18,7 @@ Base.@kwdef mutable struct MiniProgressBar
     indent::Int = 4
 end
 
-const NONINTERACTIVE_TIME_GRANULARITY = Ref(2.0)
+const PROGRESS_BAR_TIME_GRANULARITY = Ref(1 / 30.0) # 30 fps
 const PROGRESS_BAR_PERCENTAGE_GRANULARITY = Ref(0.1)
 
 function start_progress(io::IO, _::MiniProgressBar)
@@ -39,13 +39,11 @@ function show_progress(io::IO, p::MiniProgressBar)
     if !p.always_reprint && p.has_shown && !((perc - prev_perc) > PROGRESS_BAR_PERCENTAGE_GRANULARITY[])
         return
     end
-    if !isinteractive()
-        t = time()
-        if p.has_shown && (t - p.time_shown) < NONINTERACTIVE_TIME_GRANULARITY[]
-            return
-        end
-        p.time_shown = t
+    t = time()
+    if p.has_shown && (t - p.time_shown) < PROGRESS_BAR_TIME_GRANULARITY[]
+        return
     end
+    p.time_shown = t
     p.prev = p.current
     p.has_shown = true
 
@@ -54,24 +52,26 @@ function show_progress(io::IO, p::MiniProgressBar)
     else
         string(p.current, "/",  p.max)
     end
-
     max_progress_width = max(0, min(displaysize(io)[2] - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
     n_filled = ceil(Int, max_progress_width * perc / 100)
     n_left = max_progress_width - n_filled
-    print(io, " "^p.indent)
-    printstyled(io, p.header, color=p.color, bold=true)
-    print(io, " [")
-    print(io, "="^n_filled, ">")
-    print(io, " "^n_left, "]  ", )
-    print(io, progress_text)
-    print(io, "\r")
+    to_print = sprint(; context=io) do io
+        print(io, " "^p.indent)
+        printstyled(io, p.header, color=p.color, bold=true)
+        print(io, " [")
+        print(io, "="^n_filled, ">")
+        print(io, " "^n_left, "]  ", )
+        print(io, progress_text)
+        print(io, "\r")
+    end
+    # Print everything in one call
+    print(io, to_print)
 end
 
 function end_progress(io, p::MiniProgressBar)
     ansi_enablecursor = "\e[?25h"
     ansi_clearline = "\e[2K"
-    print(io, ansi_enablecursor)
-    print(io, ansi_clearline)
+    print(io, ansi_enablecursor * ansi_clearline)
 end
 
 # Useful when writing a progress bar in the bottom
@@ -86,13 +86,10 @@ end
 #  end
 #
 function print_progress_bottom(io::IO)
-    print(io, "\e[S")
     ansi_clearline = "\e[2K"
     ansi_movecol1 = "\e[1G"
     ansi_moveup(n::Int) = string("\e[", n, "A")
-    print(io, ansi_moveup(1))
-    print(io, ansi_clearline)
-    print(io, ansi_movecol1)
+    print(io, "\e[S" * ansi_moveup(1) * ansi_clearline * ansi_movecol1)
 end
 
 end
