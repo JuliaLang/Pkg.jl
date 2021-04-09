@@ -1008,6 +1008,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     ansi_disablecursor = "\e[?25l"
     n_done::Int = 0
     n_already_precomp::Int = 0
+    n_loaded::Int = 0
 
     function handle_interrupt(err)
         notify(interrupted_or_done)
@@ -1054,15 +1055,16 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         bar.max = n_total - n_already_precomp
                         final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
                         for dep in pkg_queue_show
+                            loaded = haskey(Base.loaded_modules, dep)
                             name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                             if dep in precomperr_deps
                                 print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
                             elseif haskey(failed_deps, dep)
                                 print(iostr, color_string("  ✗ ", Base.error_color()), name, "\n")
                             elseif was_recompiled[dep]
-                                interrupted_or_done.set && continue
-                                print(iostr, color_string("  ✓ ", :green), name, "\n")
-                                @async begin # keep successful deps visible for short period
+                                !loaded && interrupted_or_done.set && continue
+                                print(iostr, color_string("  ✓ ", loaded ? Base.warn_color() : :green), name, "\n")
+                                loaded || @async begin # keep successful deps visible for short period
                                     sleep(1);
                                     filter!(!isequal(dep), pkg_queue)
                                 end
@@ -1109,6 +1111,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
 
         task = @async begin
             try
+                loaded = haskey(Base.loaded_modules, pkg)
                 for dep in deps # wait for deps to finish
                     wait(was_processed[dep])
                 end
@@ -1141,7 +1144,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     end
                     try
                         ret = Logging.with_logger(Logging.NullLogger()) do
-                            Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
+                            # capture stderr, send stdout to devnull, don't skip loaded modules
+                            Base.compilecache(pkg, sourcepath, iob, devnull, false)
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
@@ -1152,10 +1156,11 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         else
                             queued && (haskey(man, pkg.uuid) && precomp_dequeue!(make_pkgspec(man, pkg.uuid)))
                             !fancyprint && lock(print_lock) do
-                                println(io, string(color_string("  ✓ ", :green), name))
+                                println(io, string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name))
                             end
                             was_recompiled[pkg] = true
                         end
+                        loaded && (n_loaded += 1)
                     catch err
                         if err isa ErrorException
                             failed_deps[pkg] = (strict || is_direct_dep) ? String(take!(iob)) : ""
@@ -1210,6 +1215,15 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                 !isempty(circular_deps) && (print(iostr, ", $(length(circular_deps)) skipped due to circular dependency"))
                 !isempty(skipped_deps) && (print(iostr, ", $(length(skipped_deps)) skipped during auto due to previous errors"))
                 print(iostr, ")")
+            end
+            if n_loaded > 0
+                plural1 = n_loaded == 1 ? "y" : "ies"
+                plural2 = n_loaded == 1 ? "a different version is" : "different versions are"
+                plural3 = n_loaded == 1 ? "" : "s"
+                print(iostr, "\n  ",
+                    color_string(string(n_loaded), Base.warn_color()),
+                    " dependenc$(plural1) precompiled but $(plural2) currently loaded. Restart julia to access the new version$(plural3)"
+                )
             end
             if !isempty(precomperr_deps)
                 plural = length(precomperr_deps) == 1 ? "y" : "ies"
