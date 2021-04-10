@@ -637,7 +637,7 @@ function _run_precompilation_script_setup()
     write("registries/Registry/T/TestPkg/Package.toml", """
         name = "TestPkg"
         uuid = "$uuid"
-        repo = "$tmp/TestPkg.jl"
+        repo = "$(escape_string(tmp))/TestPkg.jl"
         """)
     return tmp
 end
