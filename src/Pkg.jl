@@ -496,7 +496,7 @@ Below is a comparison between the REPL mode and the functional API:
 | `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
 
 """
-const PackageSpec = API.Package
+const PackageSpec = Types.PackageSpec
 
 """
     setprotocol!(;

@@ -316,12 +316,12 @@ end
     # the global artifact namespace and package list, but it should be harmless.
     mktempdir() do project_path
         with_pkg_env(project_path) do
-            copy_test_package(project_path, "ArtifactInstallation")
+            path = git_init_package(project_path, joinpath(@__DIR__, "test_packages", "ArtifactInstallation"))
             add_this_pkg()
             Pkg.add(Pkg.Types.PackageSpec(
                 name="ArtifactInstallation",
                 uuid=Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"),
-                path=joinpath(project_path, "ArtifactInstallation"),
+                path=path,
             ))
 
             # Run test harness
@@ -635,6 +635,7 @@ end
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
             copy_test_package(depot_container, "ArtifactOverrideLoading")
+            git_init_and_commit(joinpath(depot_container, "ArtifactOverrideLoading"))
             add_this_pkg()
             Pkg.add(Pkg.Types.PackageSpec(
                 name="ArtifactOverrideLoading",
