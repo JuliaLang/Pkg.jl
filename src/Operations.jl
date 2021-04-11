@@ -177,6 +177,16 @@ function set_compat(proj::Project, name::String, compat::String)
     proj.compat[name] = Types.Compat(Types.semver_spec(compat), compat)
 end
 
+function reset_all_compat!(proj::Project)
+    for name in keys(proj.compat)
+        compat = proj.compat[name]
+        if compat.val != Types.semver_spec(compat.str)
+            proj.compat[name] = Types.Compat(Types.semver_spec(compat.str), compat.str)
+        end
+    end
+    return nothing
+end
+
 function collect_project!(pkg::PackageSpec, path::String,
                           deps_map::Dict{UUID,Vector{PackageSpec}})
     deps_map[pkg.uuid] = PackageSpec[]
@@ -1218,7 +1228,8 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
 
-function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
+function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
+            skip_writing_project::Bool=false)
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
@@ -1236,7 +1247,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
     download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
-    write_env(ctx.env) # write env before building
+    write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env; io=ctx.io)
     build_versions(ctx, union(new_apply, new_git))
 end
@@ -1439,16 +1450,18 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             end
 
             try
-                Pkg.resolve(temp_ctx; io=devnull)
+                Pkg.resolve(temp_ctx; io=devnull, skip_writing_project=true)
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 err isa Resolve.ResolverError || rethrow()
                 @debug err
                 @warn "Could not use exact versions of packages in manifest, re-resolving"
                 temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
-                Pkg.resolve(temp_ctx; io=devnull)
+                Pkg.resolve(temp_ctx; io=devnull, skip_writing_project=true)
                 @debug "Using _clean_ dep graph"
             end
+
+            reset_all_compat!(temp_ctx.env.project)
 
             # Absolutify stdlibs paths
             for (uuid, entry) in temp_ctx.env.manifest

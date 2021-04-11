@@ -149,11 +149,10 @@ end
 function destructure(project::Project)::Dict
     raw = deepcopy(project.other)
 
-    # update the string representation if it does not match the compat value
+    # sanity check for consistency between compat value and string representation
     for (name, compat) in project.compat
-        if semver_spec(compat.str) != compat.val
-            compat.str = Versions.semver_spec_string(compat.val)
-            (semver_spec(compat.str) != compat.val) && throw(ErrorException("failed to roundtrip the compat entry"))
+        if compat.val != semver_spec(compat.str)
+            pkgerror("inconsistency between compat values and string representation")
         end
     end
 
