@@ -36,6 +36,10 @@ const DEFAULT_IO = Ref{IO}()
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
+function _auto_precompile_enabled()
+    return (Base.JLOptions().use_compiled_modules == 1) && (tryparse(Bool, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) === true)
+end
+
 include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
 
 include("utils.jl")
@@ -607,7 +611,7 @@ end
 ##################
 
 function _auto_precompile(ctx::Types.Context)
-    if Base.JLOptions().use_compiled_modules == 1 && tryparse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
+    if _auto_precompile_enabled()
         Pkg.precompile(ctx; internal_call=true)
     end
 end

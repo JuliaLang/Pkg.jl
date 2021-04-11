@@ -10,6 +10,7 @@ import REPL
 using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
+import .._auto_precompile_enabled
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
@@ -1134,8 +1135,17 @@ function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryIns
         targeted_resolve(env, registries, pkgs, preserve, julia_version)
 end
 
+function _check_resolver_only(resolver_only::Bool)
+    if _auto_precompile_enabled() && resolver_only
+        pkgerror("In order to use the `resolver_only=true` option, you must disable auto-precompilation.")
+    end
+    return nothing
+end
+
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
-             preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform())
+             preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(),
+             resolver_only::Bool=false)
+    _check_resolver_only(resolver_only)
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -1147,20 +1157,24 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     # resolve
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
-    new_apply = download_source(ctx)
+    if !resolver_only
+        new_apply = download_source(ctx)
+    end
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
-    download_artifacts(ctx.env, platform=platform, julia_version=ctx.julia_version, io=ctx.io)
+    resolver_only || download_artifacts(ctx.env, platform=platform, julia_version=ctx.julia_version, io=ctx.io)
 
     write_env(ctx.env) # write env before building
     show_update(ctx.env; io=ctx.io)
-    build_versions(ctx, union(new_apply, new_git))
+    resolver_only || build_versions(ctx, union(new_apply, new_git))
 end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform())
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(),
+                 resolver_only::Bool=false)
+    _check_resolver_only(resolver_only)
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
@@ -1169,11 +1183,13 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     # resolve & apply package versions
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
-    new_apply = download_source(ctx)
-    download_artifacts(ctx.env; platform=platform, julia_version=ctx.julia_version, io=ctx.io)
+    if !resolver_only
+        new_apply = download_source(ctx)
+    end
+    resolver_only || download_artifacts(ctx.env; platform=platform, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx.env; io=ctx.io)
-    build_versions(ctx, union(new_apply, new_git))
+    resolver_only || build_versions(ctx, union(new_apply, new_git))
 end
 
 # load version constraint
@@ -1218,7 +1234,9 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
 
-function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
+function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
+            resolver_only::Bool=false)
+    _check_resolver_only(resolver_only)
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
@@ -1234,11 +1252,13 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     check_registered(ctx.registries, pkgs)
     deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
-    new_apply = download_source(ctx)
-    download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
+    if !resolver_only
+        new_apply = download_source(ctx)
+    end
+    resolver_only || download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx.env; io=ctx.io)
-    build_versions(ctx, union(new_apply, new_git))
+    resolver_only || build_versions(ctx, union(new_apply, new_git))
 end
 
 function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
@@ -1269,18 +1289,22 @@ function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg:
     end
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec})
+function pin(ctx::Context, pkgs::Vector{PackageSpec};
+             resolver_only::Bool=false)
+    _check_resolver_only(resolver_only)
     foreach(pkg -> update_package_pin!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx.env, pkgs)
 
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
 
-    new = download_source(ctx)
-    download_artifacts(ctx.env; julia_version=ctx.julia_version, io=ctx.io)
+    if !resolver_only
+        new = download_source(ctx)
+    end
+    resolver_only || download_artifacts(ctx.env; julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx.env; io=ctx.io)
-    build_versions(ctx, new)
+    resolver_only || build_versions(ctx, new)
 end
 
 function update_package_free!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::PackageEntry)
@@ -1305,7 +1329,8 @@ end
 
 # TODO: this is two techinically different operations with the same name
 # split into two subfunctions ...
-function free(ctx::Context, pkgs::Vector{PackageSpec})
+function free(ctx::Context, pkgs::Vector{PackageSpec}; resolver_only::Bool=false)
+    _check_resolver_only(resolver_only)
     foreach(pkg -> update_package_free!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
 
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
@@ -1313,12 +1338,14 @@ function free(ctx::Context, pkgs::Vector{PackageSpec})
         check_registered(ctx.registries, pkgs)
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
-        update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
-        new = download_source(ctx)
-        download_artifacts(ctx.env, io=ctx.io)
+        update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)    
+        if !resolver_only
+            new = download_source(ctx)
+        end
+        resolver_only || download_artifacts(ctx.env, io=ctx.io)
         write_env(ctx.env) # write env before building
         show_update(ctx.env; io=ctx.io)
-        build_versions(ctx, new)
+        resolver_only || build_versions(ctx, new)
     else
         foreach(pkg -> manifest_info(ctx.env.manifest, pkg.uuid).pinned = false, pkgs)
         write_env(ctx.env)

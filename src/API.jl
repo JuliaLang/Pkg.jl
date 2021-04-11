@@ -171,7 +171,8 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
+                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(),
+                 resolver_only::Bool=false, kwargs...)
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
 
@@ -210,12 +211,13 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         end
     end
 
-    Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    Operations.develop(ctx, pkgs, new_git; preserve, platform, resolver_only)
     return
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
-             platform::AbstractPlatform=HostPlatform(), kwargs...)
+             platform::AbstractPlatform=HostPlatform(), resolver_only::Bool=false,
+             kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
 
@@ -263,7 +265,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
         end
     end
 
-    Operations.add(ctx, pkgs, new_git; preserve, platform)
+    Operations.add(ctx, pkgs, new_git; preserve, platform, resolver_only)
     return
 end
 
@@ -310,7 +312,7 @@ end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
-            update_registry::Bool=true, kwargs...)
+            update_registry::Bool=true, resolver_only::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if update_registry
         Registry.download_default_registries(ctx.io)
@@ -327,7 +329,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx.env.manifest, pkgs)
     end
-    Operations.up(ctx, pkgs, level)
+    Operations.up(ctx, pkgs, level; resolver_only)
     return
 end
 
@@ -337,7 +339,8 @@ function resolve(ctx::Context; kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false,
+             resolver_only::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -364,11 +367,12 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
 
     project_deps_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx.env.manifest, pkgs)
-    Operations.pin(ctx, pkgs)
+    Operations.pin(ctx, pkgs; resolver_only)
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false,
+              resolver_only::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -390,7 +394,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx.env.manifest, pkgs)
 
-    Operations.free(ctx, pkgs)
+    Operations.free(ctx, pkgs; resolver_only)
     return
 end
 
