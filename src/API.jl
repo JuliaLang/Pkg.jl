@@ -102,11 +102,12 @@ end
 
 project() = project(EnvCache())
 function project(env::EnvCache)::ProjectInfo
+    pkg = env.pkg
     return ProjectInfo(
-        name         = env.pkg === nothing ? nothing : env.pkg.name,
-        uuid         = env.pkg === nothing ? nothing : env.pkg.uuid,
-        version      = env.pkg === nothing ? nothing : env.pkg.version,
-        ispackage    = env.pkg !== nothing,
+        name         = pkg === nothing ? nothing : pkg.name,
+        uuid         = pkg === nothing ? nothing : pkg.uuid,
+        version      = pkg === nothing ? nothing : pkg.version::VersionNumber,
+        ispackage    = pkg !== nothing,
         dependencies = env.project.deps,
         path         = env.project_file
     )
@@ -1589,7 +1590,7 @@ mutable struct UndoState
     idx::Int
     entries::Vector{UndoSnapshot}
 end
-UndoState() = UndoState(0, UndoState[])
+UndoState() = UndoState(0, UndoSnapshot[])
 const undo_entries = Dict{String, UndoState}()
 const max_undo_limit = 50
 const saved_initial_snapshot = Ref(false)
