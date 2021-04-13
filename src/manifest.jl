@@ -113,6 +113,27 @@ function validate_manifest(stage1::Dict{String,Vector{Stage1}})
     for (name, infos) in stage1, info in infos
         manifest[info.uuid] = info.entry
     end
+    # check that stdlibs are missing versions, and non-stdlibs have versions
+    for (entry_uuid, entry) in manifest
+        if is_stdlib(entry_uuid)
+            if entry.version != nothing
+                err = string("Incompatible manifest.toml from different julia version detected. ",
+                        "`$(entry.name)=$(entry_uuid)` is a stdlib in julia $(Base.VERSION) ",
+                        "but the current manifest lists it with a version number. ",
+                        "Unexpected errors may occur. Delete the manifest file and re-resolve to fix the issue.")
+                @warn err
+            end
+        else
+            if entry.version == nothing
+                err = string("Incompatible manifest.toml from different julia version detected. ",
+                        "`$(entry.name)=$(entry_uuid)` is a not a stdlib in julia $(Base.VERSION) ",
+                        "but the current manifest lists it without a version number. ",
+                        "Unexpected errors may occur. Delete the manifest file and re-resolve to fix the issue.")
+                @warn err
+            end
+        end
+    end
+
     # now just verify the graph structure
     for (entry_uuid, entry) in manifest, (name, uuid) in entry.deps
         dep_entry = get(manifest, uuid, nothing)
