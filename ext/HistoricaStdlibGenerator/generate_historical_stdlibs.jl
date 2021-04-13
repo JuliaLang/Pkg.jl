@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-using Downloads, JSON3, Base.BinaryPlatforms, Scratch, SHA, Pkg
+using Downloads, JSON3, Base.BinaryPlatforms, Scratch, SHA, Pkg, TOML
 using Base: UUID
 
 # Download versions.json, start iterating over Julia versions
@@ -105,12 +105,29 @@ function get_stdlibs(scratch_dir, julia_installer_name)
             @info("Auto-detected Julia version $(jlvers)")
 
             if jlvers < v"1.1"
-                stdlibs_str = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; println(repr(Pkg.Types.gather_stdlib_uuids()))'`)
+                stdlibs_str = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; print(repr(Pkg.Types.gather_stdlib_uuids()))'`)
             else
-                stdlibs_str = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; println(repr(Pkg.Types.load_stdlib()))'`)
+                stdlibs_str = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; print(repr(Pkg.Types.load_stdlib()))'`)
             end
 
-            return (jlvers, stdlibs_str)
+            # This will give us a dictionary of UUID => (name, version) mappings for all standard libraries
+            stdlibs = Dict{Base.UUID, Tuple}(uuid => (name, nothing) for (uuid, name) in eval(Meta.parse(stdlibs_str)))
+
+            # We're going to try and get versions for each stdlib:
+            stdlib_path = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; print(Pkg.Types.stdlib_path(""))'`)
+            for uuid in keys(stdlibs)
+                # If this stdlib has a `Project.toml`, try to parse it for its version field
+                name = first(stdlibs[uuid])
+                project_path = joinpath(stdlib_path, name, "Project.toml")
+                if isfile(project_path)
+                    d = TOML.parsefile(project_path)
+                    if haskey(d, "version")
+                        stdlibs[uuid] = (name, VersionNumber(d["version"]))
+                    end
+                end
+            end
+
+            return (jlvers, stdlibs)
         finally
             # Clean up mounted directories
             if isdir(mount_dir)
@@ -168,7 +185,7 @@ versions_dict = Dict()
                     end
 
                     version, stdlibs = get_stdlibs(scratch_dir, basename(fname))
-                    versions_dict[version] = eval(Meta.parse(stdlibs))
+                    versions_dict[version] = stdlibs
                 catch e
                     if isa(e, InterruptException)
                         rethrow()
@@ -193,7 +210,7 @@ for v in versions_to_drop
 end
 
 # Next, figure out which stdlibs are actually unresolvable, because they've never been registered
-all_stdlibs = Dict{UUID,String}()
+all_stdlibs = Dict{UUID,Tuple}()
 for (julia_ver, stdlibs) in versions_dict
     merge!(all_stdlibs, stdlibs)
 end
@@ -206,8 +223,8 @@ end
 # Helper function for getting these printed out in a nicely-sorted order
 function print_sorted(io::IO, d::Dict; indent::Int=0)
     println(io, "Dict(")
-    for pair in sort(collect(d), by = kv-> kv[2])
-        println(io, " "^indent, pair, ",")
+    for pair in sort(collect(d), by = kv-> kv[2][1])
+        println(io, " "^indent, repr(pair[1]), " => ", repr(pair[2]), ",")
     end
     print(io, " "^(max(indent - 4, 0)), ")")
 end
