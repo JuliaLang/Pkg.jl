@@ -2485,8 +2485,11 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
         mkdir(joinpath(dir, "FooGit"))
         mkdir(joinpath(dir, "FooGit", ".git"))
         write(joinpath(dir, "Foo", "foo"), "foo")
+        chmod(joinpath(dir, "Foo", "foo"), 0o644)
         write(joinpath(dir, "FooGit", "foo"), "foo")
+        chmod(joinpath(dir, "FooGit", "foo"), 0o644)
         write(joinpath(dir, "FooGit", ".git", "foo"), "foo")
+        chmod(joinpath(dir, "FooGit", ".git", "foo"), 0o644)
         @test tree_hash(joinpath(dir, "Foo")) == 
               tree_hash(joinpath(dir, "FooGit")) ==
               "2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33"
