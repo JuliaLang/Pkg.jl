@@ -172,7 +172,7 @@ function manifestfile_path(env_path::String; strict=false)
     if strict
         return nothing
     else
-        project = basename(projectfile_path(env_path))
+        project = basename(projectfile_path(env_path)::String)
         idx = findfirst(x -> x == project, Base.project_names)
         @assert idx !== nothing
         return joinpath(env_path, Base.manifest_names[idx])
