@@ -32,7 +32,7 @@ devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "de
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
-const DEFAULT_IO = Ref{Union{Nothing,IO}}(nothing)
+const DEFAULT_IO = Ref{IO}()
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
@@ -215,7 +215,7 @@ by starting julia with `--inline=no`.
 const test = API.test
 
 """
-    Pkg.gc()
+    Pkg.gc(; io::IO=DEFAULT_IO[])
 
 Garbage collect packages that are no longer reachable from any project.
 Only packages that are tracked by version are deleted, so no packages
@@ -225,9 +225,9 @@ const gc = API.gc
 
 
 """
-    Pkg.build(; verbose = false)
-    Pkg.build(pkg::Union{String, Vector{String}}; verbose = false)
-    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false)
+    Pkg.build(; verbose = false, io::IO=DEFAULT_IO[])
+    Pkg.build(pkg::Union{String, Vector{String}}; verbose = false, io::IO=DEFAULT_IO[])
+    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false, io::IO=DEFAULT_IO[])
 
 Run the build script in `deps/build.jl` for `pkg` and all of its dependencies in
 depth-first recursive order.
@@ -241,8 +241,8 @@ redirecting to the `build.log` file.
 const build = API.build
 
 """
-    Pkg.pin(pkg::Union{String, Vector{String}})
-    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=DEFAULT_IO[])
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=DEFAULT_IO[])
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
 git revision. A pinned package is never updated.
@@ -256,8 +256,8 @@ Pkg.pin(name="Example", version="0.3.1")
 const pin = API.pin
 
 """
-    Pkg.free(pkg::Union{String, Vector{String}})
-    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=DEFAULT_IO[])
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=DEFAULT_IO[])
 
 If `pkg` is pinned, remove the pin.
 If `pkg` is tracking a path,
@@ -272,8 +272,8 @@ const free = API.free
 
 
 """
-    Pkg.develop(pkg::Union{String, Vector{String}})
-    Pkg.develop(pkgs::Union{Packagespec, Vector{Packagespec}})
+    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=DEFAULT_IO[])
+    Pkg.develop(pkgs::Union{Packagespec, Vector{Packagespec}}; io::IO=DEFAULT_IO[])
 
 Make a package available for development by tracking it by path.
 If `pkg` is given with only a name or by a URL, the package will be downloaded
@@ -346,7 +346,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false)
+    Pkg.instantiate(; verbose = false, io::IO=DEFAULT_IO[])
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -360,7 +360,7 @@ dependencies in the manifest and instantiate the resulting project.
 const instantiate = API.instantiate
 
 """
-    Pkg.resolve()
+    Pkg.resolve(; io::IO=DEFAULT_IO[])
 
 Update the current manifest with potential changes to the dependency graph
 from packages that are tracking a path.
@@ -368,7 +368,7 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false)
+    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, io::IO=stdout)
 
 Print out the status of the project/manifest.
 If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
@@ -389,7 +389,7 @@ const status = API.status
 
 
 """
-    Pkg.activate([s::String]; shared::Bool=false)
+    Pkg.activate([s::String]; shared::Bool=false, io::IO=DEFAULT_IO[])
 
 Activate the environment at `s`. The active environment is the environment
 that is modified by executing package commands.
@@ -543,6 +543,7 @@ const RegistrySpec = Types.RegistrySpec
 
 
 function __init__()
+    DEFAULT_IO[] = stderr
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
@@ -636,7 +637,7 @@ function _run_precompilation_script_setup()
     write("registries/Registry/T/TestPkg/Package.toml", """
         name = "TestPkg"
         uuid = "$uuid"
-        repo = "$tmp/TestPkg.jl"
+        repo = "$(escape_string(tmp))/TestPkg.jl"
         """)
     return tmp
 end

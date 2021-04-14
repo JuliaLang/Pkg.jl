@@ -12,7 +12,7 @@ using Serialization
 
 import ..depots, ..depots1, ..logdir, ..devdir
 import ..Operations, ..GitTools, ..Pkg, ..UPDATED_REGISTRY_THIS_SESSION
-import ..can_fancyprint
+import ..can_fancyprint, ..DEFAULT_IO
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -46,12 +46,17 @@ function project(ctx::Context)::ProjectInfo
     )
 end
 
-function check_package_name(x::AbstractString, mode=nothing)
+function check_package_name(x::AbstractString, mode::Union{Nothing,String,Symbol}=nothing)
     if !Base.isidentifier(x)
-        message = "`$x` is not a valid package name"
-        if mode !== nothing && any(occursin.(['\\','/'], x)) # maybe a url or a path
-            message *= "\nThe argument appears to be a URL or path, perhaps you meant " *
-                "`Pkg.$mode(url=\"...\")` or `Pkg.$mode(path=\"...\")`."
+        message = sprint() do iostr
+            print(iostr, "`$x` is not a valid package name")
+            if endswith(lowercase(x), ".jl")
+                print(iostr, ". Perhaps you meant `$(chop(x; tail=3))`")
+            end
+            if mode !== nothing && any(occursin.(['\\','/'], x)) # maybe a url or a path
+                print(iostr, "\nThe argument appears to be a URL or path, perhaps you meant ",
+                    "`Pkg.$mode(url=\"...\")` or `Pkg.$mode(path=\"...\")`.")
+            end
         end
         pkgerror(message)
     end
@@ -68,8 +73,9 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-        function $f(pkgs::Vector{PackageSpec}; kwargs...)
+        function $f(pkgs::Vector{PackageSpec}; io::IO=DEFAULT_IO[], kwargs...)
             ctx = Context()
+            kwargs = merge((;kwargs...), (:io => io,))
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             return ret
@@ -255,7 +261,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(; kwargs...) = resolve(Context(); kwargs...)
+resolve(; io::IO=DEFAULT_IO[], kwargs...) = resolve(Context(;io); kwargs...)
 function resolve(ctx::Context; kwargs...)
     up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
     return nothing
@@ -924,8 +930,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     io = ctx.io
     fancyprint = can_fancyprint(io)
 
-    # when manually called, unsuspend all packages that were suspended due to precomp errors
-    internal_call ? recall_suspended_packages() : precomp_unsuspend!()
+    recall_precompile_state() # recall suspended and force-queued packages
+    !internal_call && precomp_unsuspend!() # when manually called, unsuspend all packages that were suspended due to precomp errors
 
     direct_deps = [
         Base.PkgId(uuid, name)
@@ -941,12 +947,13 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     end
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
 
-    if ctx.env.pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", ctx.env.pkg.name * ".jl") )
-        depsmap[Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name)] = [
+    ctx_env_pkg = ctx.env.pkg
+    if ctx_env_pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", "$(ctx_env_pkg.name).jl") )
+        depsmap[Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name)] = [
             Base.PkgId(last(x), first(x))
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
-        push!(direct_deps, Base.PkgId(ctx.env.pkg.uuid, ctx.env.pkg.name))
+        push!(direct_deps, Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name))
     end
 
     started = Dict{Base.PkgId,Bool}()
@@ -1029,6 +1036,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
             n_total = length(depsmap)
             bar.max = n_total - n_already_precomp
             final_loop = false
+            n_print_rows = 0
             while !printloop_should_exit
                 lock(print_lock) do
                     term_size = Base.displaysize(stdout)::Tuple{Int,Int}
@@ -1038,37 +1046,39 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     else
                         pkg_queue
                     end
-                    str = ""
-                    if i > 1
-                        str *= string(ansi_moveup(last_length+1), ansi_movecol1, ansi_cleartoend)
-                    end
-                    bar.current = n_done - n_already_precomp
-                    bar.max = n_total - n_already_precomp
-                    str *= sprint(io -> show_progress(io, bar); context=io) * '\n'
-                    for dep in pkg_queue_show
-                        name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
-                        if dep in precomperr_deps
-                            str *= string(color_string("  ? ", Base.warn_color()), name, "\n")
-                        elseif haskey(failed_deps, dep)
-                            str *= string(color_string("  ✗ ", Base.error_color()), name, "\n")
-                        elseif was_recompiled[dep]
-                            interrupted_or_done.set && continue
-                            str *= string(color_string("  ✓ ", :green), name, "\n")
-                            @async begin # keep successful deps visible for short period
-                                sleep(1);
-                                filter!(!isequal(dep), pkg_queue)
+                    str = sprint() do iostr
+                        if i > 1
+                            print(iostr, ansi_moveup(n_print_rows), ansi_movecol1, ansi_cleartoend)
+                        end
+                        bar.current = n_done - n_already_precomp
+                        bar.max = n_total - n_already_precomp
+                        final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
+                        for dep in pkg_queue_show
+                            name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
+                            if dep in precomperr_deps
+                                print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
+                            elseif haskey(failed_deps, dep)
+                                print(iostr, color_string("  ✗ ", Base.error_color()), name, "\n")
+                            elseif was_recompiled[dep]
+                                interrupted_or_done.set && continue
+                                print(iostr, color_string("  ✓ ", :green), name, "\n")
+                                @async begin # keep successful deps visible for short period
+                                    sleep(1);
+                                    filter!(!isequal(dep), pkg_queue)
+                                end
+                            elseif started[dep]
+                                # Offset each spinner animation using the first character in the package name as the seed.
+                                # If not offset, on larger terminal fonts it looks odd that they all sync-up
+                                anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
+                                anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
+                                print(iostr, "  $anim_char_colored $name\n")
+                            else
+                                print(iostr, "    $name\n")
                             end
-                        elseif started[dep]
-                            # Offset each spinner animation using the first character in the package name as the seed.
-                            # If not offset, on larger terminal fonts it looks odd that they all sync-up
-                            anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
-                            anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                            str *= string("  $anim_char_colored ", name, "\n")
-                        else
-                            str *= "    " * name * "\n"
                         end
                     end
                     last_length = length(pkg_queue_show)
+                    n_print_rows = count("\n", str)
                     print(io, str)
                 end
                 printloop_should_exit = interrupted_or_done.set && final_loop
@@ -1103,15 +1113,17 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     wait(was_processed[dep])
                 end
 
-                suspended = if haskey(man, pkg.uuid) # to handle the working environment uuid
-                    precomp_suspended(make_pkgspec(man, pkg.uuid))
+                if haskey(man, pkg.uuid) # to handle the working environment uuid
+                    suspended = precomp_suspended(make_pkgspec(man, pkg.uuid))
+                    queued = precomp_queued(make_pkgspec(man, pkg.uuid))
                 else
-                    false
+                    suspended = false
+                    queued = false
                 end
                 # skip stale checking and force compilation if any dep was recompiled in this session
                 any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
                 is_stale = true
-                if (any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
+                if (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
@@ -1133,10 +1145,12 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
+                            haskey(man, pkg.uuid) && precomp_queue!(make_pkgspec(man, pkg.uuid))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
+                            queued && (haskey(man, pkg.uuid) && precomp_dequeue!(make_pkgspec(man, pkg.uuid)))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✓ ", :green), name))
                             end
@@ -1149,6 +1163,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
                             if haskey(man, pkg.uuid)
+                                queued && precomp_dequeue!(make_pkgspec(man, pkg.uuid))
                                 precomp_suspend!(make_pkgspec(man, pkg.uuid))
                             end
                         else
@@ -1180,31 +1195,35 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         handle_interrupt(err)
     end
     notify(first_started) # in cases of no-op or !fancyprint
-    save_suspended_packages() # save list to scratch space
+    save_precompile_state() # save lists to scratch space
     wait(t_print)
     !all(istaskdone, tasks) && return # if some not finished, must have errored or been interrupted
     seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
     ndeps = count(values(was_recompiled))
     if ndeps > 0 || !isempty(failed_deps)
         plural = ndeps == 1 ? "y" : "ies"
-        str = "$(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds"
-        if n_already_precomp > 0 || !isempty(skipped_deps)
-            str *= " ("
-            n_already_precomp > 0 && (str *= "$n_already_precomp already precompiled")
-            !isempty(circular_deps) && (str *= ", $(length(circular_deps)) skipped due to circular dependency")
-            !isempty(skipped_deps) && (str *= ", $(length(skipped_deps)) skipped during auto due to previous errors")
-            str *= ")"
-        end
-        if !isempty(precomperr_deps)
-            plural = length(precomperr_deps) == 1 ? "y" : "ies"
-            str *= string("\n",
-                color_string(string(length(precomperr_deps)), Base.warn_color()),
-                " dependenc$(plural) failed but may be precompilable after restarting julia"
-            )
-        end
-        if internal_call && !isempty(failed_deps)
-            plural = length(failed_deps) == 1 ? "y" : "ies"
-            str *= "\n" * color_string("$(length(failed_deps))", Base.error_color()) * " dependenc$(plural) errored"
+        str = sprint() do iostr
+            print(iostr, "  $(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
+            if n_already_precomp > 0 || !isempty(skipped_deps)
+                print(iostr, " (")
+                n_already_precomp > 0 && (print(iostr, "$n_already_precomp already precompiled"))
+                !isempty(circular_deps) && (print(iostr, ", $(length(circular_deps)) skipped due to circular dependency"))
+                !isempty(skipped_deps) && (print(iostr, ", $(length(skipped_deps)) skipped during auto due to previous errors"))
+                print(iostr, ")")
+            end
+            if !isempty(precomperr_deps)
+                plural = length(precomperr_deps) == 1 ? "y" : "ies"
+                print(iostr, "\n  ",
+                    color_string(string(length(precomperr_deps)), Base.warn_color()),
+                    " dependenc$(plural) failed but may be precompilable after restarting julia"
+                )
+            end
+            if internal_call && !isempty(failed_deps)
+                plural1 = length(failed_deps) == 1 ? "y" : "ies"
+                plural2 = length(failed_deps) == 1 ? "" : "s"
+                print(iostr, "\n  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural1) errored. ")
+                print(iostr, "To see a full report either run `import Pkg; Pkg.precompile()` or load the package$(plural2)")
+            end
         end
         lock(print_lock) do
             println(io, str)
@@ -1214,7 +1233,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
             n_direct_errs = 0
             for (dep, err) in failed_deps
                 if strict || (dep in direct_deps)
-                    err_str *= "\n" * "$dep" * "\n\n" * err * (n_direct_errs > 0 ? "\n" : "")
+                    err_str = string(err_str, "\n$dep\n\n$err", (n_direct_errs > 0 ? "\n" : ""))
                     n_direct_errs += 1
                 end
             end
@@ -1229,29 +1248,34 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     nothing
 end
 
-const pkgs_precompile_suspended = PackageSpec[]
-function save_suspended_packages()
+const pkgs_precompile_suspended = PackageSpec[] # packages that shouldn't be retried during autoprecomp
+const pkgs_precompile_pending = PackageSpec[] # packages that need to be retried after restart
+function save_precompile_state()
     path = Operations.pkg_scratchpath()
-    fpath = joinpath(path, string("suspend_cache_", hash(Base.active_project() * string(Base.VERSION))))
-    mkpath(path); Base.Filesystem.rm(fpath, force=true)
-    open(fpath, "w") do io
-        serialize(io, pkgs_precompile_suspended)
+    for (prefix, store) in (("suspend_cache_", pkgs_precompile_suspended), ("pending_cache_", pkgs_precompile_pending))
+        fpath = joinpath(path, string(prefix, hash(string(Base.active_project(), Base.VERSION))))
+        mkpath(path); Base.Filesystem.rm(fpath, force=true)
+        open(fpath, "w") do io
+            serialize(io, store)
+        end
     end
     return nothing
 end
-function recall_suspended_packages()
-    fpath = joinpath(Operations.pkg_scratchpath(), string("suspend_cache_", hash(Base.active_project() * string(Base.VERSION))))
-    if isfile(fpath)
-        v = open(fpath) do io
-            try
-                deserialize(io)
-            catch
-                PackageSpec[]
+function recall_precompile_state()
+    for (prefix, store) in (("suspend_cache_", pkgs_precompile_suspended), ("pending_cache_", pkgs_precompile_pending))
+        fpath = joinpath(Operations.pkg_scratchpath(), string(prefix, hash(string(Base.active_project(), Base.VERSION))))
+        if isfile(fpath)
+            open(fpath) do io
+                try
+                    pkgspecs = deserialize(io)
+                    append!(empty!(store), pkgspecs)
+                catch
+                    empty!(store)
+                end
             end
+        else
+            empty!(store)
         end
-        append!(empty!(pkgs_precompile_suspended), v)
-    else
-        empty!(pkgs_precompile_suspended)
     end
     return nothing
 end
@@ -1259,6 +1283,10 @@ precomp_suspend!(pkg::PackageSpec) = push!(pkgs_precompile_suspended, pkg)
 precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
 precomp_suspended(pkg::PackageSpec) = pkg in pkgs_precompile_suspended
 precomp_prune_suspended!(pkgs::Vector{PackageSpec}) = filter!(in(pkgs), pkgs_precompile_suspended)
+
+precomp_queue!(pkg::PackageSpec) = push!(pkgs_precompile_pending, pkg)
+precomp_dequeue!(pkg::PackageSpec) = filter!(!isequal(pkg), pkgs_precompile_pending)
+precomp_queued(pkg::PackageSpec) = pkg in pkgs_precompile_pending
 
 function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
     try
@@ -1360,11 +1388,11 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if ctx.env.pkg !== nothing
         push!(art_pkgs, ctx.env.pkg)
     end
-    Operations.download_artifacts(ctx, art_pkgs; platform, verbose)
+    Operations.download_artifacts(ctx, art_pkgs; platform, verbose, io=ctx.io)
     # Run build scripts
     Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose)
 
-    allow_autoprecomp && Pkg._auto_precompile(ctx; kwargs...)
+    allow_autoprecomp && Pkg._auto_precompile(ctx)
 end
 
 
@@ -1378,12 +1406,12 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false,shared=false)
+function activate(;temp=false, shared=false, io::IO=DEFAULT_IO[])
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(Context(), :Activating, "environment at $(pathrepr(p))")
+    p === nothing || printpkgstyle(io, :Activating, "environment at $(pathrepr(p))")
     add_snapshot_to_undo()
     return nothing
 end
@@ -1404,7 +1432,7 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=DEFAULT_IO[])
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1440,7 +1468,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false)
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(Context(), :Activating, "$(n)environment at $(pathrepr(p))")
+        printpkgstyle(io, :Activating, "$(n)environment at $(pathrepr(p))")
     end
     add_snapshot_to_undo()
     return nothing

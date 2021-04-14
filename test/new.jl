@@ -1719,6 +1719,16 @@ end
         @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         @test haskey(Pkg.Types.Context().env.project.compat, "julia")
     end end
+    # rm should not unnecessarily remove compat entries
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "CompatExtras")
+        Pkg.activate(path)
+        @test haskey(Pkg.Types.Context().env.project.compat, "Aqua")
+        @test haskey(Pkg.Types.Context().env.project.compat, "DataFrames")
+        Pkg.rm("DataFrames")
+        @test !haskey(Pkg.Types.Context().env.project.compat, "DataFrames")
+        @test haskey(Pkg.Types.Context().env.project.compat, "Aqua")
+    end end
     # rm removes unused recursive depdencies
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "SimplePackage")
@@ -1904,14 +1914,32 @@ end
         @test occursin(r"Updating `.+Manifest\.toml`", readline(io))
         @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v\d\.\d\.\d", readline(io))
         # Removing registered version
+
         Pkg.rm("Example"; status_io=io)
-        @test occursin(r"Updating `.+Project.toml`", readline(io))
-        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", readline(io))
-        @test occursin(r"Updating `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", readline(io))
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
+        @test occursin(r"\[7876af07\] - Example v\d\.\d\.\d", output)
+
+        # Pinning a registered package
+        Pkg.add("Example")
+        Pkg.pin("Example"; status_io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d ⇒ v\d\.\d\.\d ⚲", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
+
+        # Free a pinned package
+        Pkg.free("Example"; status_io=io)
+        output = String(take!(io))
+        @test occursin(r"Updating `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] ~ Example v\d\.\d\.\d ⚲ ⇒ v\d\.\d\.\d", output)
+        @test occursin(r"Updating `.+Manifest.toml`", output)
     end
     # Project Status API
     isolate(loaded_depot=true) do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         io = PipeBuffer()
         ## empty project
         Pkg.status(;io=io)
@@ -1930,6 +1958,7 @@ end
     end
     ## status warns when package not installed
     isolate() do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         Pkg.activate(joinpath(@__DIR__, "test_packages", "Status"))
         io = PipeBuffer()
         Pkg.status(; io=io)
@@ -1946,6 +1975,7 @@ end
     end
     # Manifest Status API
     isolate(loaded_depot=true) do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         io = PipeBuffer()
         ## empty manifest
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
@@ -1961,6 +1991,7 @@ end
     end
     # Diff API
     isolate(loaded_depot=true) do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         io = PipeBuffer()
         projdir = dirname(Pkg.project().path)
         mkpath(projdir)
@@ -2488,9 +2519,13 @@ using Pkg.Types: is_stdlib
 end
 
 @testset "STDLIBS_BY_VERSION up-to-date" begin
-    test_result = Pkg.Types.STDLIBS_BY_VERSION[end][2] == Pkg.Types.load_stdlib()
+    last_stdlibs = Pkg.Types.get_last_stdlibs(VERSION)
+    test_result = last_stdlibs == Pkg.Types.load_stdlib()
     if !test_result
-        @error("STDLIBS_BY_VERSION out of date!  Re-run generate_historical_stdlibs.jl!")
+        @error("STDLIBS_BY_VERSION out of date!  Manually fix given the info below, or re-run generate_historical_stdlibs.jl!")
+        @show length(last_stdlibs) length(Pkg.Types.load_stdlib())
+        @show setdiff(last_stdlibs, Pkg.Types.load_stdlib())
+        @show setdiff(Pkg.Types.load_stdlib(), last_stdlibs)
     end
     @test test_result
 end

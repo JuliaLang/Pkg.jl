@@ -211,4 +211,8 @@ end
     end end
 end
 
+@testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin
+    @test_throws Pkg.Types.PkgError("`Example.jl` is not a valid package name. Perhaps you meant `Example`") Pkg.API.check_package_name("Example.jl")
+end
+
 end # module APITests

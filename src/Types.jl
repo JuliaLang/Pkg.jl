@@ -363,6 +363,19 @@ function stdlibs()
 end
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
+# Find the entry in `STDLIBS_BY_VERSION`
+# that corresponds to the requested version, and use that.
+function get_last_stdlibs(julia_version::VersionNumber)
+    last_stdlibs = Dict{UUID,String}()
+    for (version, stdlibs) in STDLIBS_BY_VERSION
+        if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
+            break
+        end
+        last_stdlibs = stdlibs
+    end
+    return last_stdlibs
+end
+
 # Allow asking if something is an stdlib for a particular version of Julia
 function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
     # Only use the cache if we are asking for stdlibs in a custom Julia version
@@ -381,16 +394,7 @@ function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
         return false
     end
 
-    # If we are given an actual version, find the entry in `STDLIBS_BY_VERSION`
-    # that corresponds to the requested version, and use that.
-    last_stdlibs = Dict{UUID,String}()
-    for (version, stdlibs) in STDLIBS_BY_VERSION
-        if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
-            break
-        end
-        last_stdlibs = stdlibs
-    end
-
+    last_stdlibs = get_last_stdlibs(julia_version)
     # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
     # fall through with an empty `last_stdlibs`, which will always return `false`.
     return uuid in keys(last_stdlibs)
@@ -1009,7 +1013,7 @@ function clone_or_cp_registries(ctx::Context, regs::Vector{RegistrySpec}, depot:
             if url !== nothing && registry_use_pkg_server()
                 # download from Pkg server
                 try
-                    download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                    download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = ctx.io)
                 catch err
                     pkgerror("could not download $url")
                 end
@@ -1147,7 +1151,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                         # TODO: update faster by using a diff, if available
                         mktempdir() do tmp
                             try
-                                download_verify_unpack(url, nothing, tmp, ignore_existence = true)
+                                download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = ctx.io)
                             catch err
                                 @warn "could not download $url"
                             end
