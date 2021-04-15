@@ -2478,6 +2478,22 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
             @test "8bc80be82b2ae4bd69f50a1a077a81b8678c9024" == tree_hash(dir)
         end
     end
+
+    # Test for directory with .git hashing
+    mktempdir() do dir
+        mkdir(joinpath(dir, "Foo"))
+        mkdir(joinpath(dir, "FooGit"))
+        mkdir(joinpath(dir, "FooGit", ".git"))
+        write(joinpath(dir, "Foo", "foo"), "foo")
+        chmod(joinpath(dir, "Foo", "foo"), 0o644)
+        write(joinpath(dir, "FooGit", "foo"), "foo")
+        chmod(joinpath(dir, "FooGit", "foo"), 0o644)
+        write(joinpath(dir, "FooGit", ".git", "foo"), "foo")
+        chmod(joinpath(dir, "FooGit", ".git", "foo"), 0o644)
+        @test tree_hash(joinpath(dir, "Foo")) == 
+              tree_hash(joinpath(dir, "FooGit")) ==
+              "2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33"
+    end
 end
 
 @testset "multiple registries overlapping version ranges for different versions" begin
