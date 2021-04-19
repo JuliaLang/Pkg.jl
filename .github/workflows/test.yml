@@ -29,7 +29,8 @@ jobs:
           - ""
           - "pkg.julialang.org"
         julia-version:
-          # - '1.6'
+          # - '1.6' # TODO: uncomment this line after Julia 1.7.0 is released
+          - '1'
           - 'nightly'
         exclude:
           - os: macOS-latest
@@ -69,8 +70,8 @@ jobs:
       - uses: actions/checkout@v1.0.0
       - uses: julia-actions/setup-julia@latest
         with:
-          # version: '1.6'
-          version: 'nightly'
+          version: '1'
+          # version: 'nightly'
       - name: Generate docs
         run: |
           julia --color=yes -e 'write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"54cfe95a-1eb2-52ea-b672-e2afdf69b78f\"\n"));'
