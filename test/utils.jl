@@ -52,7 +52,15 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         if !isdir(REGISTRY_DIR)
             init_reg()
         end
-        rm(joinpath(REGISTRY_DIR, ".ci"); force = true, recursive = true)
+        chmod(joinpath(REGISTRY_DIR, ".ci"), 0o755)
+        for (root, dirs, files) in walkdir(joinpath(REGISTRY_DIR, ".ci"))
+            for dir in dirs
+                chmod(joinpath(root, dir), 0o755)
+            end
+            for file in files
+                chmod(joinpath(root, file), 0o644)
+            end
+        end
 
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
