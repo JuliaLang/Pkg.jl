@@ -1,2 +1,2 @@
 CODEOWNERS @JuliaLang/github-actions
-.github/workflows/ @JuliaLang/github-actions
+.github/ @JuliaLang/github-actions
