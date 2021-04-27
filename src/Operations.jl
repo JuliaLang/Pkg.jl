@@ -1740,7 +1740,7 @@ function stat_rep(x::PackageSpec; name=true)
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
 end
 
-print_single(ctx::Context, pkg::PackageSpec) = printstyled(ctx.io, stat_rep(pkg); color=:white)
+print_single(ctx::Context, pkg::PackageSpec) = print(ctx.io, stat_rep(pkg))
 
 is_instantiated(::Nothing) = false
 is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)
