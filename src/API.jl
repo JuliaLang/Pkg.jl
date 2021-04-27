@@ -401,6 +401,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
               test_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
               force_latest_compatible_version::Bool=false,
               allow_earlier_backwards_compatible_versions::Bool=true,
+              allow_reresolve::Bool=true,
               kwargs...)
     julia_args = Cmd(julia_args)
     test_args = Cmd(test_args)
@@ -424,6 +425,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         test_args,
         force_latest_compatible_version,
         allow_earlier_backwards_compatible_versions,
+        allow_reresolve,
     )
     return
 end
