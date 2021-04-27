@@ -52,6 +52,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         if !isdir(REGISTRY_DIR)
             init_reg()
         end
+        rm(joinpath(REGISTRY_DIR, ".ci"); force = true, recursive = true)
 
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
