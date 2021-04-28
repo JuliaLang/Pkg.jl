@@ -1393,7 +1393,8 @@ end
 function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
                  sandbox_path::String, sandbox_project_override;
                  force_latest_compatible_version::Bool=false,
-                 allow_earlier_backwards_compatible_versions::Bool=true)
+                 allow_earlier_backwards_compatible_versions::Bool=true,
+                 allow_reresolve::Bool=true)
     active_manifest = manifestfile_path(dirname(ctx.env.project_file))
     sandbox_project = projectfile_path(sandbox_path)
 
@@ -1439,6 +1440,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 err isa Resolve.ResolverError || rethrow()
+                allow_reresolve || rethrow()
                 @debug err
                 @warn "Could not use exact versions of packages in manifest, re-resolving"
                 temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
@@ -1540,7 +1542,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
               test_fn=nothing,
               force_latest_compatible_version::Bool=false,
-              allow_earlier_backwards_compatible_versions::Bool=true)
+              allow_earlier_backwards_compatible_versions::Bool=true,
+              allow_reresolve::Bool=true)
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
     # load manifest data
@@ -1582,7 +1585,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             gen_target_project(ctx.env, ctx.registries, pkg, source_path, "test")
         # now we sandbox
         printpkgstyle(ctx.io, :Testing, pkg.name)
-        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; force_latest_compatible_version, allow_earlier_backwards_compatible_versions) do
+        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env; mode=PKGMODE_COMBINED, io=sandbox_ctx.io)
