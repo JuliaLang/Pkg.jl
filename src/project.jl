@@ -152,7 +152,7 @@ function destructure(project::Project)::Dict
     # sanity check for consistency between compat value and string representation
     for (name, compat) in project.compat
         if compat.val != semver_spec(compat.str)
-            throw(ErrorException("inconsistency between compat values and string representation"))
+            pkgerror("inconsistency between compat values and string representation")
         end
     end
 
