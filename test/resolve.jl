@@ -438,7 +438,7 @@ end
         #=
         # DISABLED FOR NOW BECAUSE THE JLL INTO STDLIBS BROKE IT
         # First, we're going to resolve for specific versions of Julia, ensuring we get the right dep versions:
-        Pkg.Registry.download_default_registries(Pkg.DEFAULT_IO[])
+        Pkg.Registry.download_default_registries(Pkg.stdout_f())
         ctx = Pkg.Types.Context(;julia_version=v"1.5")
         versions, deps = Pkg.Operations._resolve(ctx.io, ctx.env, ctx.registries, [
             Pkg.Types.PackageSpec(name="MPFR_jll", uuid=Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3")),

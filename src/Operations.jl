@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, DEFAULT_IO
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f
 
 #########
 # Utils #
@@ -459,7 +459,7 @@ function install_archive(
     urls::Vector{Pair{String,Bool}},
     hash::SHA1,
     version_path::String;
-    io::IO=DEFAULT_IO[]
+    io::IO=stderr_f()
 )::Bool
     tmp_objects = String[]
     url_success = false
@@ -588,7 +588,7 @@ function download_artifacts(env::EnvCache;
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
                             verbose::Bool=false,
-                            io::IO=DEFAULT_IO[])
+                            io::IO=stderr_f())
     pkg_roots = String[]
     for (uuid, pkg) in env.manifest
         pkg = manifest_info(env.manifest, uuid)
