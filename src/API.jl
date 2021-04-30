@@ -311,7 +311,9 @@ end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
-            update_registry::Bool=true, kwargs...)
+            update_registry::Bool=true,
+            skip_writing_project::Bool=false,
+            kwargs...)
     Context!(ctx; kwargs...)
     if update_registry
         Registry.download_default_registries(ctx.io)
@@ -328,13 +330,13 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx.env.manifest, pkgs)
     end
-    Operations.up(ctx, pkgs, level)
+    Operations.up(ctx, pkgs, level; skip_writing_project)
     return
 end
 
 resolve(; io::IO=stderr_f(), kwargs...) = resolve(Context(;io); kwargs...)
-function resolve(ctx::Context; kwargs...)
-    up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
+function resolve(ctx::Context; skip_writing_project::Bool=false, kwargs...)
+    up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, skip_writing_project, kwargs...)
     return nothing
 end
 
