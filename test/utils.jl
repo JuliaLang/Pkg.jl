@@ -279,4 +279,22 @@ function add_this_pkg(; platform=Base.BinaryPlatforms.HostPlatform())
     Pkg.develop(spec; platform)
 end
 
+function force_rm(path::AbstractString)
+    if isdir(path)
+        chmod(path, 0o700)
+        for (root, dirs, files) in walkdir(path)
+            for dir in dirs
+                chmod(joinpath(root, dir), 0o700)
+            end
+            for file in files
+                chmod(joinpath(root, file), 0o600)
+            end
+        end
+    elseif isfile(path)
+        chmod(path, 0o600)
+    end
+    rm(path; force = true, recursive = true)
+    return nothing
 end
+
+end # module

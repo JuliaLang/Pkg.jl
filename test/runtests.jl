@@ -22,9 +22,12 @@ Pkg.DEFAULT_IO[] = IOBuffer()
 include("utils.jl")
 
 # Clean slate. Make sure to not start with an outdated registry
-rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
-rm(Utils.LOADED_DEPOT; force = true, recursive = true)
-rm(Utils.REGISTRY_DEPOT; force = true, recursive = true)
+paths_to_remove = String[
+    joinpath(@__DIR__, "registries"),
+    Utils.LOADED_DEPOT,
+    Utils.REGISTRY_DEPOT,
+]
+Utils.force_rm.(paths_to_remove)
 
 include("new.jl")
 include("pkg.jl")
