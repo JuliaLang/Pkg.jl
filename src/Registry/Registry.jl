@@ -165,6 +165,8 @@ end
 
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
+    regdir = joinpath(depot, "registries")
+    isdir(regdir) || mkpath(regdir)
     registry_urls = nothing
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
@@ -175,7 +177,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
             if reg.path !== nothing && reg.linked == true # symlink to local source
                 registry = Registry.RegistryInstance(reg.path)
-                regpath = joinpath(depot, "registries", registry.name)
+                regpath = joinpath(regdir, registry.name)
                 printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
                 isdir(dirname(regpath)) || mkpath(dirname(regpath))
                 symlink(reg.path, regpath)
@@ -197,7 +199,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
                 isfile(joinpath(reg.path, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in source directory.")
                 registry = Registry.RegistryInstance(reg.path)
-                regpath = joinpath(depot, "registries", registry.name)
+                regpath = joinpath(regdir, registry.name)
                 cp(reg.path, regpath; force=true) # has to be cp given we're copying
                 printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                 return
@@ -212,7 +214,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 Pkg.Types.pkgerror("no `Registry.toml` file in cloned registry.")
             end
             registry = Registry.RegistryInstance(tmp)
-            regpath = joinpath(depot, "registries", registry.name)
+            regpath = joinpath(regdir, registry.name)
             # copy to `depot`
             ispath(dirname(regpath)) || mkpath(dirname(regpath))
             if isfile(joinpath(regpath, "Registry.toml"))
@@ -224,7 +226,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     throw(Pkg.Types.PkgError("registry `$(registry.name)=\"$(registry.uuid)\"` conflicts with " *
                         "existing registry `$(existing_registry.name)=\"$(existing_registry.uuid)\"`. " *
                         "To install it you can clone it manually into e.g. " *
-                        "`$(Base.contractuser(joinpath(depot, "registries", registry.name*"-2")))`."))
+                        "`$(Base.contractuser(joinpath(regdir, registry.name*"-2")))`."))
                 end
             elseif registry_use_pkg_server(url) || reg.linked !== true
                 # if the dir doesn't exist, or exists but doesn't contain a Registry.toml
