@@ -1,7 +1,7 @@
 module Registry
 
 import ..Pkg
-using ..Pkg: depots1, printpkgstyle, DEFAULT_IO, isdir_nothrow, pathrepr, pkg_server,
+using ..Pkg: depots1, printpkgstyle, stdout_f, stderr_f, isdir_nothrow, pathrepr, pkg_server,
              GitTools, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
 using ..Pkg.PlatformEngines: download_verify_unpack, download
 using UUIDs, LibGit2
@@ -40,7 +40,7 @@ Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.
 """
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
-function add(regs::Vector{RegistrySpec}; io::IO=DEFAULT_IO[])
+function add(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     if isempty(regs)
         download_default_registries(io, only_if_empty = false)
     else
@@ -253,7 +253,7 @@ Pkg.Registry.rm(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 rm(reg::Union{String,RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
 rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
-function rm(regs::Vector{RegistrySpec}; io::IO=DEFAULT_IO[])
+function rm(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     for registry in find_installed_registries(io, regs)
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         Base.rm(registry.path; force=true, recursive=true)
@@ -318,7 +318,7 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[], force::Bool=true)
+function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true)
     OFFLINE_MODE[] && return
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
 
@@ -406,7 +406,7 @@ end
 
 
 """
-    Pkg.Registry.status()
+    Pkg.Registry.status(; io=stdout)
 
 Display information about available registries.
 
@@ -418,7 +418,7 @@ Display information about available registries.
 Pkg.Registry.status()
 ```
 """
-function status(io::IO=DEFAULT_IO[])
+function status(io::IO=stdout_f())
     regs = reachable_registries()
     regs = unique(r -> r.uuid, regs; seen=Set{Union{UUID,Nothing}}())
     printpkgstyle(io, Symbol("Registry Status"), "")

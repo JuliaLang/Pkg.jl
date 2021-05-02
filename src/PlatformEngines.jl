@@ -5,7 +5,7 @@
 module PlatformEngines
 
 using SHA, Downloads, Tar
-import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, DEFAULT_IO
+import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f
 using ..MiniProgressBars
 using Base.BinaryPlatforms, p7zip_jll
 
@@ -242,7 +242,7 @@ function download(
     verbose::Bool = false,
     headers::Vector{Pair{String,String}} = Pair{String,String}[],
     auth_header::Union{Pair{String,String}, Nothing} = nothing,
-    io::IO=DEFAULT_IO[]
+    io::IO=stderr_f()
 )
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
@@ -405,7 +405,7 @@ end
         force::Bool = false,
         verbose::Bool = false,
         quiet_download::Bool = false,
-        io::IO=DEFAULT_IO[],
+        io::IO=stderr,
     )
 
 Helper method to download tarball located at `url`, verify it matches the
@@ -440,7 +440,7 @@ function download_verify_unpack(
     force::Bool = false,
     verbose::Bool = false,
     quiet_download::Bool = false,
-    io::IO=DEFAULT_IO[],
+    io::IO=stderr_f(),
 )
     # First, determine whether we should keep this tarball around
     remove_tarball = false
