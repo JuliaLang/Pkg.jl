@@ -11,7 +11,7 @@ import Base.string
 using REPL.TerminalMenus
 
 using TOML
-import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
+import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..stderr_f
 import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
 import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
@@ -313,7 +313,7 @@ include("manifest.jl")
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
-    io::IO = something(DEFAULT_IO[], stderr)
+    io::IO = stderr_f()
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8

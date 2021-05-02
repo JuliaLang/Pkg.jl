@@ -14,7 +14,7 @@ import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server
-import ...Pkg: can_fancyprint, DEFAULT_IO
+import ...Pkg: can_fancyprint, stderr_f
 import ..Types: printpkgstyle
 
 #########
@@ -567,7 +567,7 @@ function install_archive(
     urls::Vector{Pair{String,Bool}},
     hash::SHA1,
     version_path::String;
-    io::IO=DEFAULT_IO[]
+    io::IO=stderr_f()
 )::Bool
     tmp_objects = String[]
     url_success = false
@@ -686,7 +686,7 @@ end
 function download_artifacts(ctx::Context, pkg_roots::Vector{String};
                             platform::AbstractPlatform=HostPlatform(),
                             verbose::Bool=false,
-                            io::IO=DEFAULT_IO[])
+                            io::IO=stderr_f())
     # List of Artifacts.toml files that we're going to download from
     artifacts_tomls = String[]
 

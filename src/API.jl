@@ -16,6 +16,7 @@ import ..can_fancyprint, ..DEFAULT_IO
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
+import ..stderr_f, ..stdout_f
 using ..Artifacts: artifact_paths
 using ..MiniProgressBars
 
@@ -73,7 +74,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-        function $f(pkgs::Vector{PackageSpec}; io::IO=DEFAULT_IO[], kwargs...)
+        function $f(pkgs::Vector{PackageSpec}; io::IO=$(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
             ctx = Context()
             kwargs = merge((;kwargs...), (:io => io,))
             ret = $f(ctx, pkgs; kwargs...)
@@ -261,7 +262,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(; io::IO=DEFAULT_IO[], kwargs...) = resolve(Context(;io); kwargs...)
+resolve(; io::IO=stderr_f(), kwargs...) = resolve(Context(;io); kwargs...)
 function resolve(ctx::Context; kwargs...)
     up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
     return nothing
@@ -1422,7 +1423,7 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false, shared=false, io::IO=DEFAULT_IO[])
+function activate(;temp=false, shared=false, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir())
     Base.ACTIVE_PROJECT[] = nothing
@@ -1448,7 +1449,7 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=DEFAULT_IO[])
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
