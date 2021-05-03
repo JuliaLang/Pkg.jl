@@ -317,12 +317,13 @@ function download_artifact(
         try
             download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
                                    verbose=verbose, quiet_download=quiet_download, io=io)
-        catch e
+        catch err
+            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
             # Clean that destination directory out if something went wrong
             rm(dest_dir; force=true, recursive=true)
 
-            if isa(e, InterruptException)
-                rethrow(e)
+            if isa(err, InterruptException)
+                rethrow(err)
             end
             return false
         end
@@ -339,9 +340,10 @@ function download_artifact(
                 download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose,
                     quiet_download=quiet_download, io=io)
             end
-        catch e
-            if isa(e, InterruptException)
-                rethrow(e)
+        catch err
+            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
+            if isa(err, InterruptException)
+                rethrow(err)
             end
             # If something went wrong during download, return false
             return false
