@@ -668,8 +668,17 @@ end
 end
 
 @testset "REPL missing package install hook" begin
-    @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
-    # cannot test installation of findable packages given requires user input to stdin on the prompt
+    isolate(loaded_depot=true) do
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+
+        println(stdin.buffer, "n") # simulate rejecting prompt with `n\n`
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+        flush(stdin.buffer)
+
+        println(stdin.buffer, "y") # simulate accepting prompt with `y\n`
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+        flush(stdin.buffer)
+    end
 end
 
 end # module
