@@ -302,7 +302,7 @@ function append_all_pkgs!(pkgs, ctx, mode)
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        for (uuid, entry) in ctx.env.manifest
+        for (uuid, entry) in ctx.env.manifest.deps
             push!(pkgs, PackageSpec(name=entry.name, uuid=uuid))
         end
     end
@@ -594,7 +594,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         # Collect the locations of every package referred to in this manifest
         pkg_dir(uuid, entry) = Operations.find_installed(entry.name, uuid, entry.tree_hash)
-        return [pkg_dir(u, e) for (u, e) in manifest if e.tree_hash !== nothing]
+        return [pkg_dir(u, e) for (u, e) in manifest.deps if e.tree_hash !== nothing]
     end
 
     # TODO: Merge with function above to not read manifest twice?
@@ -608,7 +608,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         end
 
         # Collect the locations of every repo referred to in this manifest
-        return [Types.add_repo_cache_path(e.repo.source) for (u, e) in manifest if e.repo.source !== nothing]
+        return [Types.add_repo_cache_path(e.repo.source) for (u, e) in manifest.deps if e.repo.source !== nothing]
     end
 
     function process_artifacts_toml(path, packages_to_delete)
@@ -973,7 +973,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
         if ctx.env.pkg !== nothing
             push!(pkgs, ctx.env.pkg)
         else
-            for (uuid, entry) in ctx.env.manifest
+            for (uuid, entry) in ctx.env.manifest.deps
                 push!(pkgs, PackageSpec(entry.name, uuid))
             end
         end
@@ -992,8 +992,8 @@ function _is_stale(paths::Vector{String}, sourcepath::String)
     return true
 end
 
-function make_pkgspec(man, uuid)
-    pkgent = man[uuid]
+function make_pkgspec(man::Manifest, uuid)
+    pkgent = man.deps[uuid]
     # If we have an unusual situation such as an un-versioned package (like an stdlib that
     # is being overridden) its `version` may be `nothing`.
     pkgver = something(pkgent.version, VersionSpec())
@@ -1024,8 +1024,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
 
-    man = Pkg.Types.read_manifest(ctx.env.manifest_file)
-    deps_pair_or_nothing = Iterators.map(man) do dep
+    man = ctx.env.manifest
+    deps_pair_or_nothing = Iterators.map(man.deps) do dep
         pkg = Base.PkgId(first(dep), last(dep).name)
         Base.in_sysimage(pkg) && return nothing
         deps = [Base.PkgId(last(x), first(x)) for x in last(dep).deps]
@@ -1050,7 +1050,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
-        if haskey(man, pkgid.uuid)
+        if haskey(man.deps, pkgid.uuid)
             push!(pkg_specs, make_pkgspec(man, pkgid.uuid))
         end
     end
@@ -1202,7 +1202,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     wait(was_processed[dep])
                 end
 
-                if haskey(man, pkg.uuid) # to handle the working environment uuid
+                if haskey(man.deps, pkg.uuid) # to handle the working environment uuid
                     suspended = precomp_suspended(make_pkgspec(man, pkg.uuid))
                     queued = precomp_queued(make_pkgspec(man, pkg.uuid))
                 else
@@ -1253,7 +1253,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
-                            if haskey(man, pkg.uuid)
+                            if haskey(man.deps, pkg.uuid)
                                 queued && precomp_dequeue!(make_pkgspec(man, pkg.uuid))
                                 precomp_suspend!(make_pkgspec(man, pkg.uuid))
                             end
@@ -1407,8 +1407,9 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
+        Operations.warn_if_manifest_has_different_julia_version(ctx.io, _manifest)
         deps = Dict{String,String}()
-        for (uuid, pkg) in _manifest
+        for (uuid, pkg) in _manifest.deps
             if pkg.name in keys(deps)
                 # TODO, query what package to put in Project when in interactive mode?
                 pkgerror("cannot instantiate a manifest without project file when the manifest has multiple packages with the same name ($(pkg.name))")
@@ -1425,9 +1426,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
+    Operations.warn_if_manifest_has_different_julia_version(ctx)
+    if Operations.check_manifest_originated_from_current_project(ctx.env)
+        printpkgstyle(ctx.io, :Warning,
+            "The project and manifest are out of sync. To fix, resolve or update the environment", color = Base.warn_color())
+    end
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
-        get(ctx.env.manifest, uuid, nothing) === nothing || continue
+        get(ctx.env.manifest.deps, uuid, nothing) === nothing || continue
         pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
                  " If you intend `$name` to be a direct dependency, run `Pkg.resolve()` to populate the manifest.",
                  " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",

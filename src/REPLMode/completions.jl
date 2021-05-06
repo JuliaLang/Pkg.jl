@@ -103,7 +103,7 @@ function complete_installed_packages(options, partial)
     mode = get(options, :mode, PKGMODE_PROJECT)
     return mode == PKGMODE_PROJECT ?
         collect(keys(env.project.deps)) :
-        unique!([entry.name for (uuid, entry) in env.manifest])
+        unique!([entry.name for (uuid, entry) in env.manifest.deps])
 end
 
 function complete_add_dev(options, partial, i1, i2)

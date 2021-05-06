@@ -84,7 +84,7 @@ end
 function load_manifest_deps(manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
                             preserve::PreserveLevel=PRESERVE_ALL)
     pkgs = copy(pkgs)
-    for (uuid, entry) in manifest
+    for (uuid, entry) in manifest.deps
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         push!(pkgs, PackageSpec(
             uuid      = uuid,
@@ -123,7 +123,7 @@ end
 
 function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
     manifest = env.manifest
-    empty!(manifest)
+    empty!(manifest.deps)
     if env.pkg !== nothing
         pkgs = push!(copy(pkgs), env.pkg::PackageSpec)
     end
@@ -139,7 +139,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         else
             entry.deps = deps_map[pkg.uuid]
         end
-        env.manifest[pkg.uuid] = entry
+        env.manifest.deps[pkg.uuid] = entry
     end
     prune_manifest(env)
 end
@@ -590,7 +590,7 @@ function download_artifacts(env::EnvCache;
                             verbose::Bool=false,
                             io::IO=stderr_f())
     pkg_roots = String[]
-    for (uuid, pkg) in env.manifest
+    for (uuid, pkg) in env.manifest.deps
         pkg = manifest_info(env.manifest, uuid)
         pkg_root = source_path(env.project_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_roots, pkg_root)
@@ -638,7 +638,7 @@ end
 
 function download_source(ctx::Context; readonly=true)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{PackageEntry, Set{String}, String}}[]
-    for pkg in values(ctx.env.manifest)
+    for pkg in values(ctx.env.manifest.deps)
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.project_file, pkg, ctx.julia_version)
         path === nothing && continue
@@ -749,10 +749,10 @@ function prune_manifest(env::EnvCache)
     env.manifest = prune_manifest(env.manifest, keep)
 end
 
-function prune_manifest(manifest::Dict, keep::Vector{UUID})
+function prune_manifest(manifest::Manifest, keep::Vector{UUID})
     while !isempty(keep)
         clean = true
-        for (uuid, entry) in manifest
+        for (uuid, entry) in manifest.deps
             uuid in keep || continue
             for dep in values(entry.deps)
                 dep in keep && continue
@@ -762,7 +762,9 @@ function prune_manifest(manifest::Dict, keep::Vector{UUID})
         end
         clean && break
     end
-    return Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
+    new_manifest = deepcopy(manifest)
+    new_manifest.deps = Dict(uuid => entry for (uuid, entry) in manifest.deps if uuid in keep)
+    return new_manifest
 end
 
 
@@ -792,7 +794,7 @@ end
 # TODO: This function should be replacable with `is_instantiated` but
 # see https://github.com/JuliaLang/Pkg.jl/issues/2470
 function any_package_not_installed(manifest::Manifest)
-    for (uuid, entry) in manifest
+    for (uuid, entry) in manifest.deps
         if Base.locate_package(Base.PkgId(uuid, entry.name)) === nothing
             return true
         end
@@ -974,7 +976,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     # drop reverse dependencies
     while !isempty(drop)
         clean = true
-        for (uuid, entry) in ctx.env.manifest
+        for (uuid, entry) in ctx.env.manifest.deps
             deps = values(entry.deps)
             isempty(drop ∩ deps) && continue
             uuid ∉ drop || continue
@@ -1085,9 +1087,9 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
                      " package `$(pkg.name) = \"$(ctx.env.project.deps[name])\"` ",
                      "already exists as a direct dependency")
         # package with the same uuid exist in the manifest: assert they have the same name
-        haskey(ctx.env.manifest, pkg.uuid) && (ctx.env.manifest[pkg.uuid].name != pkg.name) &&
+        haskey(ctx.env.manifest.deps, pkg.uuid) && (ctx.env.manifest.deps[pkg.uuid].name != pkg.name) &&
             pkgerror("refusing to add package $(err_rep(pkg)):",
-                     " package `$(ctx.env.manifest[pkg.uuid].name) = \"$(pkg.uuid)\"` ",
+                     " package `$(ctx.env.manifest.deps[pkg.uuid].name) = \"$(pkg.uuid)\"` ",
                      "already exists in the manifest")
     end
 end
@@ -1370,7 +1372,7 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     env = deepcopy(env)
     # include root in manifest (in case any dependencies point back to it)
     if env.pkg !== nothing
-        env.manifest[env.pkg.uuid] = PackageEntry(;name=env.pkg.name, path=dirname(env.project_file),
+        env.manifest.deps[env.pkg.uuid] = PackageEntry(;name=env.pkg.name, path=dirname(env.project_file),
                                                   deps=env.project.deps)
     end
     # preserve important nodes
@@ -1380,8 +1382,8 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     return prune_manifest(env.manifest, keep)
 end
 
-function abspath!(env::EnvCache, manifest::Dict{UUID,PackageEntry})
-    for (uuid, entry) in manifest
+function abspath!(env::EnvCache, manifest::Manifest)
+    for (uuid, entry) in manifest.deps
         if entry.path !== nothing
             entry.path = project_rel_path(env, entry.path)
         end
@@ -1418,14 +1420,14 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         sandbox_env = Types.EnvCache(projectfile_path(sandbox_path))
         sandbox_manifest = abspath!(sandbox_env, sandbox_env.manifest)
         for (name, uuid) in sandbox_env.project.deps
-            entry = get(sandbox_manifest, uuid, nothing)
+            entry = get(sandbox_manifest.deps, uuid, nothing)
             if entry !== nothing && isfixed(entry)
                 subgraph = prune_manifest(sandbox_manifest, [uuid])
-                for (uuid, entry) in subgraph
-                    if haskey(working_manifest, uuid)
+                for (uuid, entry) in subgraph.deps
+                    if haskey(working_manifest.deps, uuid)
                         pkgerror("can not merge projects")
                     end
-                    working_manifest[uuid] = entry
+                    working_manifest.deps[uuid] = entry
                 end
             end
         end
@@ -1443,13 +1445,13 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 allow_reresolve || rethrow()
                 @debug err
                 @warn "Could not use exact versions of packages in manifest, re-resolving"
-                temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
+                temp_ctx.env.manifest.deps = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest.deps if isfixed(entry))
                 Pkg.resolve(temp_ctx; io=devnull)
                 @debug "Using _clean_ dep graph"
             end
 
             # Absolutify stdlibs paths
-            for (uuid, entry) in temp_ctx.env.manifest
+            for (uuid, entry) in temp_ctx.env.manifest.deps
                 if is_stdlib(uuid)
                     entry.path = Types.stdlib_path(entry.name)
                 end
@@ -1498,7 +1500,7 @@ function gen_target_project(env::EnvCache, registries::Vector{Registry.RegistryI
     test_project = Types.Project()
     if projectfile_path(source_path; strict=true) === nothing
         # no project file, assuming this is an old REQUIRE package
-        test_project.deps = copy(env.manifest[pkg.uuid].deps)
+        test_project.deps = copy(env.manifest.deps[pkg.uuid].deps)
         if target == "test"
             test_REQUIRE_path = joinpath(source_path, "test", "REQUIRE")
             if isfile(test_REQUIRE_path)
@@ -1833,7 +1835,7 @@ function check_force_latest_compatible_version(ctx::Types.Context,
                                                uuid::Base.UUID;
                                                target_name= nothing,
                                                allow_earlier_backwards_compatible_versions::Bool = true)
-    dep = ctx.env.manifest[uuid]
+    dep = ctx.env.manifest.deps[uuid]
     name = dep.name
     active_version = dep.version
     has_compat = haskey(ctx.env.project.compat, name)
@@ -1899,6 +1901,24 @@ function get_all_registered_versions(ctx::Types.Context,
         end
     end
     return versions
+end
+
+function warn_if_manifest_has_different_julia_version(io::IO, man::Manifest)
+    if man.julia_version != Base.VERSION
+        printpkgstyle(io, :Warning,
+            "The manifest was generated using Julia $(repr(man.julia_version)). The current Julia version is $(repr(Base.VERSION))",
+            color = Base.warn_color())
+    end
+end
+warn_if_manifest_has_different_julia_version(ctx::Types.Context) =
+    warn_if_manifest_has_different_julia_version(ctx.io, ctx.env.manifest)
+
+function check_manifest_originated_from_current_project(env::EnvCache)
+    if isnothing(env.manifest.project_hash)
+        # if there's no project hash, the manifest couldn't have originated from a project
+        return false
+    end
+    return env.manifest.project_hash == Types.project_hash(env.project)
 end
 
 end # module

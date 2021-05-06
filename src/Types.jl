@@ -245,7 +245,14 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.uuid == t2.uuid
     # omits `other`
 Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.uuid], init=h)  # omits `other`
-const Manifest = Dict{UUID,PackageEntry}
+
+Base.@kwdef mutable struct Manifest
+    julia_version::Union{Nothing,VersionNumber} = Base.VERSION
+    project_hash::Union{Nothing,String} = nothing
+    deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
+end
+Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
+Base.hash(m::Manifest, h::UInt) = foldr(hash, [getfield(m, x) for x in fieldnames(Manifest)], init=h)
 
 function Base.show(io::IO, pkg::PackageEntry)
     f = []
@@ -784,7 +791,7 @@ end
 function manifest_resolve!(manifest::Manifest, pkgs::AbstractVector{PackageSpec}; force=false)
     uuids = Dict{String,Vector{UUID}}()
     names = Dict{UUID,String}()
-    for (uuid, entry) in manifest
+    for (uuid, entry) in manifest.deps
         push!(get!(uuids, entry.name, UUID[]), uuid)
         names[uuid] = entry.name # can be duplicate but doesn't matter
     end
@@ -840,7 +847,7 @@ function ensure_resolved(manifest::Manifest,
     unresolved_uuids = Dict{String,Vector{UUID}}()
     for pkg in pkgs
         has_uuid(pkg) && continue
-        uuids = [uuid for (uuid, entry) in manifest if entry.name == pkg.name]
+        uuids = [uuid for (uuid, entry) in manifest.deps if entry.name == pkg.name]
         sort!(uuids, by=uuid -> uuid.value)
         unresolved_uuids[pkg.name] = uuids
     end
@@ -930,7 +937,7 @@ end
 # Find package by UUID in the manifest file
 manifest_info(::Manifest, uuid::Nothing) = nothing
 function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry,Nothing}
-    return get(manifest, uuid, nothing)
+    return get(manifest.deps, uuid, nothing)
 end
 function write_env(env::EnvCache; update_undo=true)
     if env.project != env.original_project

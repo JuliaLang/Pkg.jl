@@ -250,7 +250,8 @@ end
 
 function copy_test_package(tmpdir::String, name::String; use_pkg=true)
     target = joinpath(tmpdir, name)
-    cp(joinpath(@__DIR__, "test_packages", name), target)
+    test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
+    cp(test_pkg_dir, target)
     use_pkg || return target
 
     # The known Pkg UUID, and whatever UUID we're currently using for testing
@@ -258,7 +259,7 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
     pkg_uuid = TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["uuid"]
 
     # We usually want this test package to load our pkg, so update its Pkg UUID:
-    test_pkg_dir = joinpath(@__DIR__, "test_packages", name)
+
     for f in ("Manifest.toml", "Project.toml")
         fpath = joinpath(tmpdir, name, f)
         if isfile(fpath)

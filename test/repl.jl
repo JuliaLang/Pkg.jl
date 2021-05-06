@@ -187,8 +187,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     @test Pkg.dependencies()[uuid2].version == v"0.1.0"
                     # make sure paths to SubModule1 and SubModule2 are relative
                     manifest = Pkg.Types.Context().env.manifest
-                    @test manifest[uuid1].path == "SubModule1"
-                    @test manifest[uuid2].path == "SubModule2"
+                    @test manifest.deps[uuid1].path == "SubModule1"
+                    @test manifest.deps[uuid2].path == "SubModule2"
                 end
             end
             cp("HelloWorld", joinpath(other_dir, "HelloWorld"))

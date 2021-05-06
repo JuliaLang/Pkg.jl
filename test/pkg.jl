@@ -588,7 +588,7 @@ end
             version = "0.1.0"
             """)
         manifest = Pkg.Types.read_manifest("Manifest.toml")
-        package = manifest[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
+        package = manifest.deps[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
         @test package.path == (Sys.iswindows() ? "bar\\Foo" : "bar/Foo")
         Pkg.Types.write_manifest(manifest, "Manifest.toml")
         @test occursin("path = \"bar/Foo\"", read("Manifest.toml", String))
@@ -660,10 +660,10 @@ end
         Pkg.activate(joinpath(tmp, "Unpruned"))
         Pkg.update()
         manifest = Pkg.Types.Context().env.manifest
-        package_example = get(manifest, example_uuid, nothing)
+        package_example = get(manifest.deps, example_uuid, nothing)
         @test package_example !== nothing
         @test package_example.version > v"0.4.0"
-        @test get(manifest, unicode_uuid, nothing) === nothing
+        @test get(manifest.deps, unicode_uuid, nothing) === nothing
     end end
 end
 

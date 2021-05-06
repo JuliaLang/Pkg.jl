@@ -142,6 +142,8 @@ function read_project(f_or_io::Union{String, IO})
     return Project(raw)
 end
 
+project_hash(project::Project) = bytes2hex(reinterpret(UInt8, [hash(project)]))
+
 
 ###########
 # WRITING #

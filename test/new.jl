@@ -712,7 +712,7 @@ end
             manifest = Pkg.Types.read_manifest(joinpath(dirname(Base.active_project()), "Manifest.toml"))
             # Test that the relative path is canonicalized.
             repo = string("../../../", basename(tempdir), "/EmptyPackage")
-            @test manifest[empty_package].repo.source == repo
+            @test manifest.deps[empty_package].repo.source == repo
         end
         # Now we try to find the package.
         rm(joinpath(DEPOT_PATH[1], "packages"); recursive=true)
@@ -2257,11 +2257,14 @@ end
             @test_throws PkgError Pkg.Types.read_project(bad_project)
         end
     end
-    # reading corrupted manifest files
-    isolate(loaded_depot=true) do
-        dir = joinpath(@__DIR__, "manifest", "bad")
-        for bad_manifest in joinpath.(dir, readdir(dir))
-            @test_throws PkgError Pkg.Types.read_manifest(bad_manifest)
+    @testset "reading corrupted manifest files" begin
+        isolate(loaded_depot=true) do
+            dir = joinpath(@__DIR__, "manifest", "bad")
+            for bad_manifest in joinpath.(dir, readdir(dir))
+                @testset "$bad_manifest" begin
+                    @test_throws PkgError Pkg.Types.read_manifest(bad_manifest)
+                end
+            end
         end
     end
     # pruning manifest
@@ -2282,8 +2285,8 @@ end
             a = Pkg.Types.read_manifest(testfile)
             Pkg.Types.write_manifest(a, temp)
             b = Pkg.Types.read_manifest(temp)
-            for (uuid, x) in a
-                y = b[uuid]
+            for (uuid, x) in a.deps
+                y = b.deps[uuid]
                 for property in propertynames(x)
                     # `other` caches the *whole* input dictionary. its ok to mutate the fields of
                     # the input dictionary if that field will eventually be overwriten on `write_manifest`
@@ -2319,7 +2322,7 @@ end
                 version = "0.1.0"
                 """)
             manifest = Pkg.Types.read_manifest("Manifest.toml")
-            package = manifest[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
+            package = manifest.deps[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
             @test package.path == (Sys.iswindows() ? "bar\\Foo" : "bar/Foo")
             Pkg.Types.write_manifest(manifest, "Manifest.toml")
             @test occursin("path = \"bar/Foo\"", read("Manifest.toml", String))
@@ -2356,8 +2359,8 @@ end
             Pkg.activate("Cycle_B")
             Pkg.develop(Pkg.PackageSpec(path="Cycle_A"))
             manifest_b = Pkg.Types.read_manifest("Cycle_B/Manifest.toml")
-            @test cycle_a_uuid in keys(manifest_b)
-            @test_broken !(cycle_b_uuid in keys(manifest_b))
+            @test cycle_a_uuid in keys(manifest_b.deps)
+            @test_broken !(cycle_b_uuid in keys(manifest_b.deps))
         end
     end
 end
@@ -2490,7 +2493,7 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
         chmod(joinpath(dir, "FooGit", "foo"), 0o644)
         write(joinpath(dir, "FooGit", ".git", "foo"), "foo")
         chmod(joinpath(dir, "FooGit", ".git", "foo"), 0o644)
-        @test tree_hash(joinpath(dir, "Foo")) == 
+        @test tree_hash(joinpath(dir, "Foo")) ==
               tree_hash(joinpath(dir, "FooGit")) ==
               "2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33"
     end
@@ -2659,8 +2662,8 @@ end
         manifest_path = joinpath(dirname(Base.active_project()), "Manifest.toml")
         @test isfile(manifest_path)
         manifest = TOML.parsefile(manifest_path)
-        @test haskey(manifest, name)
-        return first(manifest[name])
+        @test haskey(manifest["deps"], name)
+        return first(manifest["deps"][name])
     end
 
     isolate(loaded_depot=true) do
