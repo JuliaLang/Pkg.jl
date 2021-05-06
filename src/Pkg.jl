@@ -138,7 +138,8 @@ Precompile all the dependencies of the project in parallel.
 !!! note
     This method is called automatically after any Pkg action that changes the manifest.
     Any packages that have previously errored during precompilation won't be retried in auto mode
-    until they have changed. To disable automatic precompilation set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`
+    until they have changed. To disable automatic precompilation set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
+    To manually control the number of tasks used set `ENV["JULIA_NUM_PRECOMPILE_TASKS"]`.
 
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3. On earlier versions
