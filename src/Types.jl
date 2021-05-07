@@ -221,7 +221,7 @@ Base.@kwdef mutable struct Project
     compat::Dict{String,Compat} = Dict{String,Compat}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
-Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
+Base.hash(p::Project, h::UInt) = foldr(hash, [getfield(p, x) for x in fieldnames(Project)], init=h)
 
 
 Base.@kwdef mutable struct PackageEntry
