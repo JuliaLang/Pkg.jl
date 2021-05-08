@@ -86,7 +86,7 @@ function isjoinable(up::VersionBound, lo::VersionBound)
     return true
 end
 
-Base.hash(r::VersionBound, h::UInt) = hash(reinterpret(UInt8, [hash(r.t, h)]), convert(UInt64, r.n))
+Base.hash(r::VersionBound, h::UInt) = hash(hash(r.t, h), convert(UInt64, r.n))
 
 # Hot code
 function VersionBound(s::AbstractString)
