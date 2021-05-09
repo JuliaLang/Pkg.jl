@@ -128,7 +128,7 @@ Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local g
 Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl)") # With subdir
 ```
 
-See also [`PackageSpec`](@ref).
+See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 """
 const add = API.add
 
@@ -301,7 +301,7 @@ Pkg.develop(url="https://github.com/JuliaLang/Compat.jl")
 Pkg.develop(path="MyJuliaPackages/Package.jl")
 ```
 
-See also [`PackageSpec`](@ref)
+See also [`PackageSpec`](@ref), [`Pkg.add`](@ref).
 
 """
 const develop = API.develop
