@@ -863,7 +863,7 @@ end
 
 @testset "Suggest `Pkg.develop` instead of `Pkg.add`" begin
     mktempdir() do tmp_dir
-        touch(join(tmp_dir, "Project.toml"))
+        touch(joinpath(tmp_dir, "Project.toml"))
         @test_throws Pkg.Types.PkgError Pkg.add(; path = tmp_dir)
     end
 end
