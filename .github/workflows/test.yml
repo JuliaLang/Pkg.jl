@@ -20,13 +20,13 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macOS-latest
-          - windows-latest
+          # - macOS-latest
+          # - windows-latest
         julia-arch:
           - 'x64'
-          - 'x86'
+          # - 'x86'
         pkg-server:
-          - ""
+          # - ""
           - "pkg.julialang.org"
         julia-version:
           # - '1.6'
@@ -41,9 +41,10 @@ jobs:
           git config --global core.autocrlf false
           git config --global core.eol lf
       - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@latest
+      - name: Install Julia from URL
+        uses: julia-actions/install-julia-from-url@main
         with:
-          version: ${{ matrix.julia-version }}
+          url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/linux/x64/1.7/julia-88274cb9c2-linux64.tar.gz
       - name: Fix TEMP on windows
         if: matrix.os == 'windows-latest'
         run: |
@@ -67,10 +68,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1.0.0
-      - uses: julia-actions/setup-julia@latest
+      - name: Install Julia from URL
+        uses: julia-actions/install-julia-from-url@main
         with:
-          # version: '1.6'
-          version: 'nightly'
+          url: https://s3.amazonaws.com/julialangnightlies/assert_pretesting/linux/x64/1.7/julia-88274cb9c2-linux64.tar.gz
       - name: Generate docs
         run: |
           julia --color=yes -e 'write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"54cfe95a-1eb2-52ea-b672-e2afdf69b78f\"\n"));'
