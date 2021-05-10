@@ -624,7 +624,10 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     if !isurl(pkg.repo.source)
         if isdir(pkg.repo.source)
             if !isdir(joinpath(pkg.repo.source, ".git"))
-                pkgerror("Did not find a git repository at `$(pkg.repo.source)`")
+                has_project_file = isfile(joinpath(pkg.repo.source, "Project.toml")) || isfile(joinpath(pkg.repo.source, "JuliaProject.toml"))
+                pkg_develop_suggestion = has_project_file ? ". You may consider using `Pkg.develop` instead" : ""
+                msg = "Did not find a git repository at `$(pkg.repo.source)`$(pkg_develop_suggestion)"
+                pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
             pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.project_file, pkg.repo.source)
