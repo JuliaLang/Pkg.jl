@@ -680,7 +680,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             println(ctx.io, line)
         end
         printstyled(ctx.io, " └ "; color=:green)
-        Base.prompt(stdin, ctx.io, "(y/n)", default = "n")
+        Base.prompt(stdin, ctx.io, "(y/n)", default = "y")
     catch err
         if err isa InterruptException
             println(ctx.io)
