@@ -245,7 +245,24 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.uuid == t2.uuid
     # omits `other`
 Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.uuid], init=h)  # omits `other`
-const Manifest = Dict{UUID,PackageEntry}
+
+Base.@kwdef mutable struct Manifest
+    julia_version::Union{Nothing,VersionNumber} = Base.VERSION
+    manifest_format::VersionNumber = v"2.0.0"
+    deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
+end
+Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
+Base.hash(m::Manifest, h::UInt) = foldr(hash, [getfield(m, x) for x in fieldnames(Manifest)], init=h)
+Base.getindex(m::Manifest, i_or_key) = getindex(m.deps, i_or_key)
+Base.get(m::Manifest, key, default) = get(m.deps, key, default)
+Base.setindex!(m::Manifest, i_or_key, value) = setindex!(m.deps, i_or_key, value)
+Base.iterate(m::Manifest) = iterate(m.deps)
+Base.iterate(m::Manifest, i::Int) = iterate(m.deps, i)
+Base.length(m::Manifest) = length(m.deps)
+Base.empty!(m::Manifest) = empty!(m.deps)
+Base.values(m::Manifest) = values(m.deps)
+Base.keys(m::Manifest) = keys(m.deps)
+Base.haskey(m::Manifest, key) = haskey(m.deps, key)
 
 function Base.show(io::IO, pkg::PackageEntry)
     f = []

@@ -2490,7 +2490,7 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
         chmod(joinpath(dir, "FooGit", "foo"), 0o644)
         write(joinpath(dir, "FooGit", ".git", "foo"), "foo")
         chmod(joinpath(dir, "FooGit", ".git", "foo"), 0o644)
-        @test tree_hash(joinpath(dir, "Foo")) == 
+        @test tree_hash(joinpath(dir, "Foo")) ==
               tree_hash(joinpath(dir, "FooGit")) ==
               "2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33"
     end
@@ -2658,9 +2658,9 @@ end
     function get_manifest_block(name)
         manifest_path = joinpath(dirname(Base.active_project()), "Manifest.toml")
         @test isfile(manifest_path)
-        manifest = TOML.parsefile(manifest_path)
-        @test haskey(manifest, name)
-        return only(manifest[name])
+        deps = Base.get_deps(TOML.parsefile(manifest_path))
+        @test haskey(deps, name)
+        return only(deps[name])
     end
 
     isolate(loaded_depot=true) do
