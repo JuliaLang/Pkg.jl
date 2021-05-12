@@ -887,6 +887,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             Base.rm(path; recursive=true, force=true)
         catch e
             @warn("Failed to delete $path", exception=e)
+            return 0
         end
         if verbose
             printpkgstyle(ctx.io, :Deleted, pathrepr(path) * " (" *
