@@ -2660,7 +2660,7 @@ end
         @test isfile(manifest_path)
         manifest = TOML.parsefile(manifest_path)
         @test haskey(manifest, name)
-        return only(manifest[name])
+        return first(manifest[name])
     end
 
     isolate(loaded_depot=true) do
