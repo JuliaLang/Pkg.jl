@@ -108,7 +108,8 @@ Hello aT157rHV
 ## Adding a build step to the package
 
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
-A package is built by executing the file `deps/build.jl`.
+A package is built by executing the file `deps/build.jl`, but please don't forget to manually create that 
+before runnning below command.
 
 ```julia-repl
 julia> print(read("deps/build.jl", String))
