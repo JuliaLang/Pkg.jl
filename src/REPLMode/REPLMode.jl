@@ -650,4 +650,45 @@ end
 
 const help = gen_help()
 
+function try_prompt_pkg_add(pkgs::Vector{Symbol})
+    ctx = Context()
+    available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
+    available_pkgs = pkgs[isempty.(available_uuids) .== false]
+    isempty(available_pkgs) && return false
+    resp = try
+        plural1 = length(pkgs) == 1 ? "" : "s"
+        plural2 = length(available_pkgs) == 1 ? "a package" : "packages"
+        plural3 = length(available_pkgs) == 1 ? "is" : "are"
+        plural4 = length(available_pkgs) == 1 ? "" : "s"
+        missing_pkg_list = length(pkgs) == 1 ? String(pkgs[1]) : "[$(join(pkgs, ", "))]"
+        available_pkg_list = length(available_pkgs) == 1 ? String(available_pkgs[1]) : "[$(join(available_pkgs, ", "))]"
+        printstyled(ctx.io, " │ "; color=:green)
+        println(ctx.io, "Package$(plural1) $(missing_pkg_list) not found,",
+                            " but $(plural2) named $(available_pkg_list) $(plural3) available from a registry.")
+        printstyled(ctx.io, " │ "; color=:green)
+        println(ctx.io, "Install package$(plural4)?")
+        printstyled(ctx.io, " │ "; color=:green)
+        print(ctx.io, "  ")
+        printstyled(ctx.io, REPLMode.promptf(); color=:blue)
+        println(ctx.io, "add ", join(available_pkgs, ' '))
+        printstyled(ctx.io, " └ "; color=:green)
+        Base.prompt(stdin, ctx.io, "(y/n)", default = "n")
+    catch err
+        if err isa InterruptException
+            println(ctx.io)
+            return false
+        end
+        rethrow()
+    end
+    if lowercase(resp) in ["y", "yes"]
+        API.add(string.(available_pkgs))
+        if length(available_pkgs) < length(pkgs)
+            return false # declare that some pkgs couldn't be installed
+        else
+            return true
+        end
+    end
+    return false
+end
+
 end #module

@@ -11,7 +11,7 @@ import ..GitTools
 import ..TOML
 using ..MiniProgressBars
 using ..PlatformEngines
-import ..pkg_server, ..can_fancyprint, ..DEFAULT_IO, ..printpkgstyle
+import ..pkg_server, ..can_fancyprint, ..stderr_f, ..printpkgstyle
 import ..Types: write_env_usage, parse_toml
 
 using SHA
@@ -285,7 +285,7 @@ end
 
 """
     download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
-                      verbose::Bool = false, io::IO=DEFAULT_IO[])
+                      verbose::Bool = false, io::IO=stderr)
 
 Download/install an artifact into the artifact store.  Returns `true` on success.
 
@@ -298,7 +298,7 @@ function download_artifact(
     tarball_hash::Union{String, Nothing} = nothing;
     verbose::Bool = false,
     quiet_download::Bool = false,
-    io::IO=DEFAULT_IO[],
+    io::IO=stderr_f(),
 )
     if artifact_exists(tree_hash)
         return true
@@ -317,12 +317,13 @@ function download_artifact(
         try
             download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
                                    verbose=verbose, quiet_download=quiet_download, io=io)
-        catch e
+        catch err
+            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
             # Clean that destination directory out if something went wrong
             rm(dest_dir; force=true, recursive=true)
 
-            if isa(e, InterruptException)
-                rethrow(e)
+            if isa(err, InterruptException)
+                rethrow(err)
             end
             return false
         end
@@ -339,9 +340,10 @@ function download_artifact(
                 download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose,
                     quiet_download=quiet_download, io=io)
             end
-        catch e
-            if isa(e, InterruptException)
-                rethrow(e)
+        catch err
+            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
+            if isa(err, InterruptException)
+                rethrow(err)
             end
             # If something went wrong during download, return false
             return false
@@ -380,7 +382,7 @@ end
                               pkg_uuid::Union{Base.UUID,Nothing}=nothing,
                               verbose::Bool = false,
                               quiet_download::Bool = false,
-                              io::IO=DEFAULT_IO[])
+                              io::IO=stderr)
 
 Ensures an artifact is installed, downloading it via the download information stored in
 `artifacts_toml` if necessary.  Throws an error if unable to install.
@@ -393,7 +395,7 @@ function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    pkg_uuid::Union{Base.UUID,Nothing}=nothing,
                                    verbose::Bool = false,
                                    quiet_download::Bool = false,
-                                   io::IO=DEFAULT_IO[])
+                                   io::IO=stderr_f())
     meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
@@ -407,7 +409,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
                                    platform::AbstractPlatform = HostPlatform(),
                                    verbose::Bool = false,
                                    quiet_download::Bool = false,
-                                   io::IO=DEFAULT_IO[])
+                                   io::IO=stderr_f())
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
@@ -466,7 +468,7 @@ end
                                    include_lazy = false,
                                    verbose = false,
                                    quiet_download = false,
-                                   io::IO=DEFAULT_IO[])
+                                   io::IO=stderr)
 
 Installs all non-lazy artifacts from a given `(Julia)Artifacts.toml` file. `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
@@ -493,7 +495,7 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
                                         include_lazy::Bool = false,
                                         verbose::Bool = false,
                                         quiet_download::Bool = false,
-                                        io::IO=DEFAULT_IO[])
+                                        io::IO=stderr_f())
     # This function should not be called anymore; use `select_downloadable_artifacts()` directly.
     Base.depwarn("`ensure_all_artifacts_installed()` is deprecated; iterate over `select_downloadable_artifacts()` output with `ensure_artifact_installed()`.", :ensure_all_artifacts_installed)
     # Collect all artifacts we're supposed to install

@@ -1,7 +1,7 @@
 module Registry
 
 import ..Pkg
-using ..Pkg: depots1, printpkgstyle, DEFAULT_IO, isdir_nothrow, pathrepr, pkg_server,
+using ..Pkg: depots1, printpkgstyle, stdout_f, stderr_f, isdir_nothrow, pathrepr, pkg_server,
              GitTools, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
 using ..Pkg.PlatformEngines: download_verify_unpack, download
 using UUIDs, LibGit2
@@ -40,7 +40,7 @@ Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.
 """
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
-function add(regs::Vector{RegistrySpec}; io::IO=DEFAULT_IO[])
+function add(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     if isempty(regs)
         download_default_registries(io, only_if_empty = false)
     else
@@ -165,6 +165,8 @@ end
 
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
+    regdir = joinpath(depot, "registries")
+    isdir(regdir) || mkpath(regdir)
     registry_urls = nothing
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
@@ -175,7 +177,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
             if reg.path !== nothing && reg.linked == true # symlink to local source
                 registry = Registry.RegistryInstance(reg.path)
-                regpath = joinpath(depot, "registries", registry.name)
+                regpath = joinpath(regdir, registry.name)
                 printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
                 isdir(dirname(regpath)) || mkpath(dirname(regpath))
                 symlink(reg.path, regpath)
@@ -197,7 +199,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
                 isfile(joinpath(reg.path, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in source directory.")
                 registry = Registry.RegistryInstance(reg.path)
-                regpath = joinpath(depot, "registries", registry.name)
+                regpath = joinpath(regdir, registry.name)
                 cp(reg.path, regpath; force=true) # has to be cp given we're copying
                 printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                 return
@@ -212,7 +214,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 Pkg.Types.pkgerror("no `Registry.toml` file in cloned registry.")
             end
             registry = Registry.RegistryInstance(tmp)
-            regpath = joinpath(depot, "registries", registry.name)
+            regpath = joinpath(regdir, registry.name)
             # copy to `depot`
             ispath(dirname(regpath)) || mkpath(dirname(regpath))
             if isfile(joinpath(regpath, "Registry.toml"))
@@ -224,7 +226,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     throw(Pkg.Types.PkgError("registry `$(registry.name)=\"$(registry.uuid)\"` conflicts with " *
                         "existing registry `$(existing_registry.name)=\"$(existing_registry.uuid)\"`. " *
                         "To install it you can clone it manually into e.g. " *
-                        "`$(Base.contractuser(joinpath(depot, "registries", registry.name*"-2")))`."))
+                        "`$(Base.contractuser(joinpath(regdir, registry.name*"-2")))`."))
                 end
             elseif registry_use_pkg_server(url) || reg.linked !== true
                 # if the dir doesn't exist, or exists but doesn't contain a Registry.toml
@@ -253,7 +255,7 @@ Pkg.Registry.rm(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 rm(reg::Union{String,RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
 rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
-function rm(regs::Vector{RegistrySpec}; io::IO=DEFAULT_IO[])
+function rm(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     for registry in find_installed_registries(io, regs)
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         Base.rm(registry.path; force=true, recursive=true)
@@ -318,7 +320,7 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[], force::Bool=true)
+function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true)
     OFFLINE_MODE[] && return
     !force && UPDATED_REGISTRY_THIS_SESSION[] && return
 
@@ -406,7 +408,7 @@ end
 
 
 """
-    Pkg.Registry.status()
+    Pkg.Registry.status(; io=stdout)
 
 Display information about available registries.
 
@@ -418,7 +420,7 @@ Display information about available registries.
 Pkg.Registry.status()
 ```
 """
-function status(io::IO=DEFAULT_IO[])
+function status(io::IO=stdout_f())
     regs = reachable_registries()
     regs = unique(r -> r.uuid, regs; seen=Set{Union{UUID,Nothing}}())
     printpkgstyle(io, Symbol("Registry Status"), "")

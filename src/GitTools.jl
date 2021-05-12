@@ -274,7 +274,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,N
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
     for f in sort(readdir(root; join=true); by = f -> isdir(f) ? f*"/" : f)
         # Skip `.git` directories
-        if f == ".git"
+        if basename(f) == ".git"
             continue
         end
 

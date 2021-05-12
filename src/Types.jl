@@ -11,8 +11,8 @@ import Base.string
 using REPL.TerminalMenus
 
 using TOML
-import ..Pkg, ..DEFAULT_IO, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl
+import ..Pkg, ..Registry
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f
 import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: download, download_verify_unpack
 using ..Pkg.Versions
@@ -91,11 +91,15 @@ Base.:(==)(r1::GitRepo, r2::GitRepo) =
 Base.@kwdef mutable struct PackageSpec
     name::Union{Nothing,String} = nothing
     uuid::Union{Nothing,UUID} = nothing
-    version::VersionTypes = VersionSpec()
+    version::Union{Nothing,VersionTypes,String} = VersionSpec()
     tree_hash::Union{Nothing,SHA1} = nothing
     repo::GitRepo = GitRepo()
     path::Union{Nothing,String} = nothing
     pinned::Bool = false
+    # used for input only
+    url = nothing
+    rev = nothing
+    subdir = nothing
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
@@ -126,17 +130,20 @@ function Base.show(io::IO, pkg::PackageSpec)
     pkg.name !== nothing && push!(f, "name" => pkg.name)
     pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
     pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
-    pkg.path !== nothing && push!(f, "dev/path" => pkg.path)
+    pkg.path !== nothing && push!(f, "path" => pkg.path)
+    pkg.url !== nothing && push!(f, "url" => pkg.url)
+    pkg.rev !== nothing && push!(f, "rev" => pkg.rev)
+    pkg.subdir !== nothing && push!(f, "subdir" => pkg.subdir)
     pkg.pinned && push!(f, "pinned" => pkg.pinned)
     push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
     if pkg.repo.source !== nothing
-        push!(f, "url/path" => string("\"", pkg.repo.source, "\""))
+        push!(f, "repo/source" => string("\"", pkg.repo.source, "\""))
     end
     if pkg.repo.rev !== nothing
-        push!(f, "rev" => pkg.repo.rev)
+        push!(f, "repo/rev" => pkg.repo.rev)
     end
     if pkg.repo.subdir !== nothing
-        push!(f, "subdir" => pkg.repo.subdir)
+        push!(f, "repo/subdir" => pkg.repo.subdir)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
@@ -165,7 +172,7 @@ function manifestfile_path(env_path::String; strict=false)
     if strict
         return nothing
     else
-        project = basename(projectfile_path(env_path))
+        project = basename(projectfile_path(env_path)::String)
         idx = findfirst(x -> x == project, Base.project_names)
         @assert idx !== nothing
         return joinpath(env_path, Base.manifest_names[idx])
@@ -323,7 +330,7 @@ include("manifest.jl")
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
-    io::IO = something(DEFAULT_IO[])
+    io::IO = stderr_f()
     use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
@@ -370,6 +377,19 @@ function stdlibs()
 end
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
+# Find the entry in `STDLIBS_BY_VERSION`
+# that corresponds to the requested version, and use that.
+function get_last_stdlibs(julia_version::VersionNumber)
+    last_stdlibs = Dict{UUID,String}()
+    for (version, stdlibs) in STDLIBS_BY_VERSION
+        if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
+            break
+        end
+        last_stdlibs = stdlibs
+    end
+    return last_stdlibs
+end
+
 # Allow asking if something is an stdlib for a particular version of Julia
 function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
     # Only use the cache if we are asking for stdlibs in a custom Julia version
@@ -388,16 +408,7 @@ function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
         return false
     end
 
-    # If we are given an actual version, find the entry in `STDLIBS_BY_VERSION`
-    # that corresponds to the requested version, and use that.
-    last_stdlibs = Dict{UUID,String}()
-    for (version, stdlibs) in STDLIBS_BY_VERSION
-        if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
-            break
-        end
-        last_stdlibs = stdlibs
-    end
-
+    last_stdlibs = get_last_stdlibs(julia_version)
     # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
     # fall through with an empty `last_stdlibs`, which will always return `false`.
     return uuid in keys(last_stdlibs)
@@ -613,7 +624,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     if !isurl(pkg.repo.source)
         if isdir(pkg.repo.source)
             if !isdir(joinpath(pkg.repo.source, ".git"))
-                pkgerror("Did not find a git repository at `$(pkg.repo.source)`")
+                msg = "Did not find a git repository at `$(pkg.repo.source)`"
+                if isfile(joinpath(pkg.repo.source, "Project.toml")) || isfile(joinpath(pkg.repo.source, "JuliaProject.toml"))
+                    msg *= ", perhaps you meant `Pkg.develop`?"
+                end
+                pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
             pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.project_file, pkg.repo.source)
@@ -826,7 +841,7 @@ end
 function ensure_resolved(manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
         registry::Bool=false,)::Nothing
-        unresolved_uuids = Dict{String,Vector{UUID}}()
+    unresolved_uuids = Dict{String,Vector{UUID}}()
     for pkg in pkgs
         has_uuid(pkg) && continue
         uuids = [uuid for (uuid, entry) in manifest if entry.name == pkg.name]

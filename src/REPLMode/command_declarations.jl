@@ -155,12 +155,13 @@ PSA[:name => "develop",
         PSA[:name => "strict", :api => :strict => true],
         PSA[:name => "local", :api => :shared => false],
         PSA[:name => "shared", :api => :shared => true],
+        PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
     :completions => complete_add_dev,
     :description => "clone the full package repo locally for development",
     :help => md"""
-    [dev|develop] [--shared|--local] pkg[=uuid] ...
-    [dev|develop] path
+    [dev|develop] [--preserve=<opt>] [--shared|--local] pkg[=uuid] ...
+    [dev|develop] [--preserve=<opt>] path
 
 Make a package available for development. If `pkg` is an existing local path, that path will be recorded in
 the manifest and used. Otherwise, a full git clone of `pkg` is made. The location of the clone is
@@ -335,7 +336,8 @@ not all manifest dependencies may be loaded by the top-level dependencies on the
 
 This method is called automatically after any Pkg action that changes the manifest.
 Any packages that have previously errored during precompilation won't be retried in auto mode
-until they have changed. To disable automatic precompilation set the environment variable `JULIA_PKG_PRECOMPILE_AUTO=0`
+until they have changed. To disable automatic precompilation set the environment variable `JULIA_PKG_PRECOMPILE_AUTO=0`.
+To manually control the number of tasks used set the environment variable `JULIA_NUM_PRECOMPILE_TASKS`.
 """,
 ],
 PSA[:name => "status",

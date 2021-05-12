@@ -36,8 +36,9 @@ The name of the package/project is determined by the `name` field, for example:
 ```toml
 name = "Example"
 ```
-The name can contain word characters `[a-zA-Z0-9_]`, but can not start with a number. For
-packages it is recommended to follow the
+The name must be a valid [identifier](https://docs.julialang.org/en/v1/base/base/#Base.isidentifier)
+(a sequence of Unicode characters that does not start with a number and is neither `true` nor `false`).
+For packages it is recommended to follow the
 [package naming guidelines](@ref Package-naming-guidelines). The `name` field is mandatory
 for packages.
 

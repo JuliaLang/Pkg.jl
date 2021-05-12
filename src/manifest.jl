@@ -64,10 +64,12 @@ end
 read_deps(::Nothing) = Dict{String, UUID}()
 read_deps(deps) = pkgerror("Expected `deps` field to be either a list or a table.")
 function read_deps(deps::AbstractVector)
+    ret = String[]
     for dep in deps
         dep isa String || pkgerror("Expected `dep` entry to be a String.")
+        push!(ret, dep)
     end
-    return deps
+    return ret
 end
 function read_deps(raw::Dict{String, Any})::Dict{String,UUID}
     deps = Dict{String,UUID}()
@@ -80,7 +82,7 @@ end
 struct Stage1
     uuid::UUID
     entry::PackageEntry
-    deps::Union{AbstractVector{<:AbstractString}, Dict{String,UUID}}
+    deps::Union{Vector{String}, Dict{String,UUID}}
 end
 
 normalize_deps(name, uuid, deps, manifest) = deps
@@ -137,7 +139,7 @@ function Manifest(raw::Dict)::Manifest
         deps = nothing
         try
             entry.pinned      = read_pinned(get(info, "pinned", nothing))
-            uuid              = read_field("uuid",          nothing, info, safe_uuid)
+            uuid              = read_field("uuid",          nothing, info, safe_uuid)::UUID
             entry.version     = read_field("version",       nothing, info, safe_version)
             entry.path        = read_field("path",          nothing, info, safe_path)
             entry.repo.source = read_field("repo-url",      nothing, info, identity)

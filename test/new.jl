@@ -326,6 +326,18 @@ end
     end
 end
 
+@testset "activate" begin
+    isolate(loaded_depot=true) do
+        io = IOBuffer()
+        Pkg.activate("Foo"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Activating.*project at.*`.*Foo`", output)
+        Pkg.activate(; io=io, temp=true)
+        output = String(take!(io))
+        @test occursin(r"Activating new project at `.*`", output)
+    end
+end
+
 #
 # # Add
 #
@@ -1217,6 +1229,11 @@ end
         @test api == Pkg.develop
         @test args == [Pkg.PackageSpec(;url="https://github.com/JuliaLang/Example.jl")]
         @test isempty(opts)
+        # develop using preserve option
+        api, args, opts = first(Pkg.pkg"dev --preserve=none Example")
+        @test api == Pkg.develop
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test opts == Dict(:preserve => Pkg.PRESERVE_NONE)
     end
 end
 
@@ -2461,6 +2478,22 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
             @test "8bc80be82b2ae4bd69f50a1a077a81b8678c9024" == tree_hash(dir)
         end
     end
+
+    # Test for directory with .git hashing
+    mktempdir() do dir
+        mkdir(joinpath(dir, "Foo"))
+        mkdir(joinpath(dir, "FooGit"))
+        mkdir(joinpath(dir, "FooGit", ".git"))
+        write(joinpath(dir, "Foo", "foo"), "foo")
+        chmod(joinpath(dir, "Foo", "foo"), 0o644)
+        write(joinpath(dir, "FooGit", "foo"), "foo")
+        chmod(joinpath(dir, "FooGit", "foo"), 0o644)
+        write(joinpath(dir, "FooGit", ".git", "foo"), "foo")
+        chmod(joinpath(dir, "FooGit", ".git", "foo"), 0o644)
+        @test tree_hash(joinpath(dir, "Foo")) == 
+              tree_hash(joinpath(dir, "FooGit")) ==
+              "2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33"
+    end
 end
 
 @testset "multiple registries overlapping version ranges for different versions" begin
@@ -2603,12 +2636,13 @@ using Pkg.Types: is_stdlib
 end
 
 @testset "STDLIBS_BY_VERSION up-to-date" begin
-    test_result = Pkg.Types.STDLIBS_BY_VERSION[end][2] == Pkg.Types.load_stdlib()
+    last_stdlibs = Pkg.Types.get_last_stdlibs(VERSION)
+    test_result = last_stdlibs == Pkg.Types.load_stdlib()
     if !test_result
         @error("STDLIBS_BY_VERSION out of date!  Manually fix given the info below, or re-run generate_historical_stdlibs.jl!")
-        @show length(Pkg.Types.STDLIBS_BY_VERSION[end][2]) length(Pkg.Types.load_stdlib())
-        @show setdiff(Pkg.Types.STDLIBS_BY_VERSION[end][2], Pkg.Types.load_stdlib())
-        @show setdiff(Pkg.Types.load_stdlib(), Pkg.Types.STDLIBS_BY_VERSION[end][2])
+        @show length(last_stdlibs) length(Pkg.Types.load_stdlib())
+        @show setdiff(last_stdlibs, Pkg.Types.load_stdlib())
+        @show setdiff(Pkg.Types.load_stdlib(), last_stdlibs)
     end
     @test test_result
 end
@@ -2626,7 +2660,7 @@ end
         @test isfile(manifest_path)
         manifest = TOML.parsefile(manifest_path)
         @test haskey(manifest, name)
-        return first(manifest[name])
+        return only(manifest[name])
     end
 
     isolate(loaded_depot=true) do

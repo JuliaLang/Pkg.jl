@@ -16,7 +16,7 @@ import ..can_fancyprint, ..pathrepr, ..isurl
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
-import ..DEFAULT_IO
+import ..stderr_f, ..stdout_f
 using ..Artifacts: artifact_paths
 using ..MiniProgressBars
 
@@ -102,11 +102,12 @@ end
 
 project() = project(EnvCache())
 function project(env::EnvCache)::ProjectInfo
+    pkg = env.pkg
     return ProjectInfo(
-        name         = env.pkg === nothing ? nothing : env.pkg.name,
-        uuid         = env.pkg === nothing ? nothing : env.pkg.uuid,
-        version      = env.pkg === nothing ? nothing : env.pkg.version,
-        ispackage    = env.pkg !== nothing,
+        name         = pkg === nothing ? nothing : pkg.name,
+        uuid         = pkg === nothing ? nothing : pkg.uuid,
+        version      = pkg === nothing ? nothing : pkg.version::VersionNumber,
+        ispackage    = pkg !== nothing,
         dependencies = env.project.deps,
         path         = env.project_file
     )
@@ -139,10 +140,12 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-        function $f(pkgs::Vector{PackageSpec}; io::IO=DEFAULT_IO[], kwargs...)
+        function $f(pkgs::Vector{PackageSpec}; io::IO=$(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
             Registry.download_default_registries(io)
             ctx = Context()
             kwargs = merge((;kwargs...), (:io => io,))
+            pkgs = deepcopy(pkgs) # don't mutate input
+            foreach(pkg -> handle_package_input!(pkg), pkgs)
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             return ret
@@ -151,19 +154,19 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
                       url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
-            pkg = Package(name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, subdir=subdir)
+            pkg = PackageSpec(; name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, subdir=subdir)
             if $f === status || $f === rm || $f === up
                 kwargs = merge((;kwargs...), (:mode => mode,))
             end
             # Handle $f() case
-            if pkg == Package()
+            if unique([name,uuid,version,url,rev,path,subdir]) == [nothing]
                 $f(PackageSpec[]; kwargs...)
             else
                 $f(pkg; kwargs...)
             end
         end
         function $f(pkgs::Vector{<:NamedTuple}; kwargs...)
-            $f([Package(;pkg...) for pkg in pkgs]; kwargs...)
+            $f([PackageSpec(;pkg...) for pkg in pkgs]; kwargs...)
         end
     end
 end
@@ -171,15 +174,13 @@ end
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
-    foreach(pkg -> check_package_name(pkg.name, :develop), pkgs)
-    pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
+        check_package_name(pkg.name, "develop")
         if pkg.name == "julia" # if julia is passed as a package the solver gets tricked
             pkgerror("`julia` is not a valid package name")
         end
-        pkg.name === nothing || check_package_name(pkg.name, "develop")
         if pkg.name === nothing && pkg.uuid === nothing && pkg.repo.source === nothing
             pkgerror("name, UUID, URL, or filesystem path specification required when calling `develop`")
         end
@@ -217,18 +218,16 @@ end
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
              platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :add)
-    foreach(pkg -> check_package_name(pkg.name, :add), pkgs)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
     for pkg in pkgs
+        check_package_name(pkg.name, "add")
         if pkg.name == "julia" # if julia is passed as a package the solver gets tricked
             pkgerror("`julia` is not a valid package name")
         end
         if pkg.name === nothing && pkg.uuid === nothing && pkg.repo.source === nothing
             pkgerror("name, UUID, URL, or filesystem path specification required when calling `add`")
         end
-        pkg.name === nothing || check_package_name(pkg.name, "add")
         if pkg.repo.source !== nothing || pkg.repo.rev !== nothing
             if pkg.version != VersionSpec()
                 pkgerror("version specification invalid when tracking a repository:",
@@ -270,12 +269,12 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
 end
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_pkgs::Bool=false, kwargs...)
+    Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, mode)
     end
     require_not_empty(pkgs, :rm)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -287,8 +286,6 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
             pkgerror("packages may only be specified by name or UUID when calling `rm`")
         end
     end
-
-    Context!(ctx; kwargs...)
 
     mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
     mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
@@ -315,8 +312,6 @@ end
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true, kwargs...)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-
     Context!(ctx; kwargs...)
     if update_registry
         Registry.download_default_registries(ctx.io)
@@ -337,20 +332,19 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(; io::IO=DEFAULT_IO[], kwargs...) = resolve(Context(;io); kwargs...)
+resolve(; io::IO=stderr_f(), kwargs...) = resolve(Context(;io); kwargs...)
 function resolve(ctx::Context; kwargs...)
     up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, kwargs...)
     return nothing
 end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+    Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
     end
     require_not_empty(pkgs, :pin)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-    Context!(ctx; kwargs...)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -376,13 +370,12 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
 end
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+    Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
     end
     require_not_empty(pkgs, :free)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
-    Context!(ctx; kwargs...)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -408,11 +401,12 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
               test_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
               force_latest_compatible_version::Bool=false,
               allow_earlier_backwards_compatible_versions::Bool=true,
+              allow_reresolve::Bool=true,
               kwargs...)
     julia_args = Cmd(julia_args)
     test_args = Cmd(test_args)
-    pkgs = deepcopy(pkgs) # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
+
     if isempty(pkgs)
         ctx.env.pkg === nothing && pkgerror("trying to test unnamed project") #TODO Allow this?
         push!(pkgs, ctx.env.pkg)
@@ -431,6 +425,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         test_args,
         force_latest_compatible_version,
         allow_earlier_backwards_compatible_versions,
+        allow_reresolve,
     )
     return
 end
@@ -972,7 +967,6 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
-    pkgs = deepcopy(pkgs)  # deepcopy for avoid mutating PackageSpec members
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
@@ -1015,6 +1009,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
     # TODO: Investigate why this happens in windows and restore the full task limit
     default_num_tasks = Sys.iswindows() ? div(Sys.CPU_THREADS::Int, 2) + 1 : Sys.CPU_THREADS::Int + 1
+    default_num_tasks = min(default_num_tasks, 16) # limit for better stability on shared resource systems
 
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(default_num_tasks)))
     parallel_limiter = Base.Semaphore(num_tasks)
@@ -1099,6 +1094,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     ansi_disablecursor = "\e[?25l"
     n_done::Int = 0
     n_already_precomp::Int = 0
+    n_loaded::Int = 0
 
     function handle_interrupt(err)
         notify(interrupted_or_done)
@@ -1145,15 +1141,16 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         bar.max = n_total - n_already_precomp
                         final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
                         for dep in pkg_queue_show
+                            loaded = haskey(Base.loaded_modules, dep)
                             name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                             if dep in precomperr_deps
                                 print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
                             elseif haskey(failed_deps, dep)
                                 print(iostr, color_string("  ✗ ", Base.error_color()), name, "\n")
                             elseif was_recompiled[dep]
-                                interrupted_or_done.set && continue
-                                print(iostr, color_string("  ✓ ", :green), name, "\n")
-                                @async begin # keep successful deps visible for short period
+                                !loaded && interrupted_or_done.set && continue
+                                print(iostr, color_string("  ✓ ", loaded ? Base.warn_color() : :green), name, "\n")
+                                loaded || @async begin # keep successful deps visible for short period
                                     sleep(1);
                                     filter!(!isequal(dep), pkg_queue)
                                 end
@@ -1200,6 +1197,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
 
         task = @async begin
             try
+                loaded = haskey(Base.loaded_modules, pkg)
                 for dep in deps # wait for deps to finish
                     wait(was_processed[dep])
                 end
@@ -1232,7 +1230,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     end
                     try
                         ret = Logging.with_logger(Logging.NullLogger()) do
-                            Base.compilecache(pkg, sourcepath, iob, devnull) # capture stderr, send stdout to devnull
+                            # capture stderr, send stdout to devnull, don't skip loaded modules
+                            Base.compilecache(pkg, sourcepath, iob, devnull, false)
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
@@ -1243,10 +1242,11 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         else
                             queued && (haskey(man, pkg.uuid) && precomp_dequeue!(make_pkgspec(man, pkg.uuid)))
                             !fancyprint && lock(print_lock) do
-                                println(io, string(color_string("  ✓ ", :green), name))
+                                println(io, string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name))
                             end
                             was_recompiled[pkg] = true
                         end
+                        loaded && (n_loaded += 1)
                     catch err
                         if err isa ErrorException
                             failed_deps[pkg] = (strict || is_direct_dep) ? String(take!(iob)) : ""
@@ -1301,6 +1301,15 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                 !isempty(circular_deps) && (print(iostr, ", $(length(circular_deps)) skipped due to circular dependency"))
                 !isempty(skipped_deps) && (print(iostr, ", $(length(skipped_deps)) skipped during auto due to previous errors"))
                 print(iostr, ")")
+            end
+            if n_loaded > 0
+                plural1 = n_loaded == 1 ? "y" : "ies"
+                plural2 = n_loaded == 1 ? "a different version is" : "different versions are"
+                plural3 = n_loaded == 1 ? "" : "s"
+                print(iostr, "\n  ",
+                    color_string(string(n_loaded), Base.warn_color()),
+                    " dependenc$(plural1) precompiled but $(plural2) currently loaded. Restart julia to access the new version$(plural3)"
+                )
             end
             if !isempty(precomperr_deps)
                 plural = length(precomperr_deps) == 1 ? "y" : "ies"
@@ -1494,12 +1503,12 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false, shared=false, io::IO=DEFAULT_IO[])
+function activate(;temp=false, shared=false, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
-    temp && return activate(mktempdir())
+    temp && return activate(mktempdir(); io=io)
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(io, :Activating, "environment at $(pathrepr(p))")
+    p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
     add_snapshot_to_undo()
     return nothing
 end
@@ -1520,7 +1529,7 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=DEFAULT_IO[])
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1556,7 +1565,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(io, :Activating, "$(n)environment at $(pathrepr(p))")
+        printpkgstyle(io, :Activating, "$(n)project at $(pathrepr(dirname(p)))")
     end
     add_snapshot_to_undo()
     return nothing
@@ -1584,7 +1593,7 @@ mutable struct UndoState
     idx::Int
     entries::Vector{UndoSnapshot}
 end
-UndoState() = UndoState(0, UndoState[])
+UndoState() = UndoState(0, UndoSnapshot[])
 const undo_entries = Dict{String, UndoState}()
 const max_undo_limit = 50
 const saved_initial_snapshot = Ref(false)
@@ -1640,23 +1649,16 @@ end
 
 @deprecate setprotocol!(proto::Union{Nothing, AbstractString}) setprotocol!(protocol = proto) false
 
-# API constructor
-function Package(;name::Union{Nothing,AbstractString} = nothing,
-                 uuid::Union{Nothing,String,UUID} = nothing,
-                 version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
-                 url = nothing, rev = nothing, path=nothing,
-                 subdir = nothing)
-    if path !== nothing && url !== nothing
+function handle_package_input!(pkg::PackageSpec)
+    if pkg.path !== nothing && pkg.url !== nothing
         pkgerror("`path` and `url` are conflicting specifications")
     end
-    repo = Types.GitRepo(rev = rev, source = url !== nothing ? url : path, subdir = subdir)
-    version = version === nothing ? VersionSpec() : VersionSpec(version)
-    uuid = uuid isa String ? UUID(uuid) : uuid
-    PackageSpec(;name=name, uuid=uuid, version=version, path=nothing,
-                repo=repo, tree_hash=nothing)
+    pkg.repo = Types.GitRepo(rev = pkg.rev, source = pkg.url !== nothing ? pkg.url : pkg.path,
+                         subdir = pkg.subdir)
+    pkg.path = nothing
+    pkg.tree_hash = nothing
+    pkg.version = pkg.version === nothing ? VersionSpec() : VersionSpec(pkg.version)
+    pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
-Package(name::AbstractString) = PackageSpec(name)
-Package(name::AbstractString, uuid::UUID) = PackageSpec(name, uuid)
-Package(name::AbstractString, uuid::UUID, version::VersionTypes) = PackageSpec(name, uuid, version)
 
 end # module
