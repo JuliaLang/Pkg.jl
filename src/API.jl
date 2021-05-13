@@ -148,6 +148,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
             foreach(pkg -> handle_package_input!(pkg), pkgs)
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
+            $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -846,11 +847,9 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         merge_orphanages!(new_orphanage, depot_orphaned_scratchspaces, spaces_to_delete, old_orphanage)
 
         # Write out the `new_orphanage` for this depot
-        if !isempty(new_orphanage) || isfile(orphanage_file)
-            mkpath(dirname(orphanage_file))
-            open(orphanage_file, "w") do io
-                TOML.print(io, new_orphanage, sorted=true)
-            end
+        mkpath(dirname(orphanage_file))
+        open(orphanage_file, "w") do io
+            TOML.print(io, new_orphanage, sorted=true)
         end
     end
 
