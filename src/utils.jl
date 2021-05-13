@@ -6,6 +6,21 @@ function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=fa
     println(io, " ", text)
 end
 
+function linewrap(str::String; io = stdout, padding = 0, width = Base.displaysize(io)[2])
+    text_chunks = split(str, ' ')
+    lines = String[""]
+    for chunk in text_chunks
+        new_line_attempt = string(last(lines), chunk, " ")
+        if length(strip(new_line_attempt)) > width - padding
+            lines[end] = strip(last(lines))
+            push!(lines, string(chunk, " "))
+        else
+            lines[end] = new_line_attempt
+        end
+    end
+    return lines
+end
+
 const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 isurl(r::String) = occursin(URL_regex, r)
 

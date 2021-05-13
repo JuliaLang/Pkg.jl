@@ -7,7 +7,7 @@ using Markdown, UUIDs, Dates
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import ..casesensitive_isdir, ..OFFLINE_MODE
+import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
 
 const TEST_MODE = Ref{Bool}(false)
@@ -662,17 +662,25 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         plural4 = length(available_pkgs) == 1 ? "" : "s"
         missing_pkg_list = length(pkgs) == 1 ? String(pkgs[1]) : "[$(join(pkgs, ", "))]"
         available_pkg_list = length(available_pkgs) == 1 ? String(available_pkgs[1]) : "[$(join(available_pkgs, ", "))]"
-        printstyled(ctx.io, " │ "; color=:green)
-        println(ctx.io, "Package$(plural1) $(missing_pkg_list) not found,",
-                            " but $(plural2) named $(available_pkg_list) $(plural3) available from a registry.")
+        msg1 = "Package$(plural1) $(missing_pkg_list) not found, but $(plural2) named $(available_pkg_list) $(plural3) available from a registry."
+        for line in linewrap(msg1, io = ctx.io, padding = length(" │ "))
+            printstyled(ctx.io, " │ "; color=:green)
+            println(ctx.io, line)
+        end
         printstyled(ctx.io, " │ "; color=:green)
         println(ctx.io, "Install package$(plural4)?")
-        printstyled(ctx.io, " │ "; color=:green)
-        print(ctx.io, "  ")
-        printstyled(ctx.io, REPLMode.promptf(); color=:blue)
-        println(ctx.io, "add ", join(available_pkgs, ' '))
+        msg2 = string("add ", join(available_pkgs, ' '))
+        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", REPLMode.promptf()))))
+            printstyled(ctx.io, " │   "; color=:green)
+            if i == 1
+                printstyled(ctx.io, REPLMode.promptf(); color=:blue)
+            else
+                print(ctx.io, " "^length(REPLMode.promptf()))
+            end
+            println(ctx.io, line)
+        end
         printstyled(ctx.io, " └ "; color=:green)
-        Base.prompt(stdin, ctx.io, "(y/n)", default = "n")
+        Base.prompt(stdin, ctx.io, "(y/n)", default = "y")
     catch err
         if err isa InterruptException
             println(ctx.io)
