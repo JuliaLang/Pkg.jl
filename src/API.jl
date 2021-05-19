@@ -1264,7 +1264,13 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         Base.release(parallel_limiter)
                     end
                 else
-                    !is_stale && (n_already_precomp += 1)
+                    if !is_stale
+                        n_already_precomp += 1
+                        try
+                            touch(path_to_try) # update timestamp of precompilation file
+                        catch # file might be read-only and then we fail to update timestamp, which is fine
+                        end
+                    end
                     suspended && !in(pkg, circular_deps) && push!(skipped_deps, pkg)
                 end
                 n_done += 1
