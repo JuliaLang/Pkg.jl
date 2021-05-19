@@ -1024,7 +1024,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
 
-    man = Pkg.Types.read_manifest(ctx.env.manifest_file)
+    man = ctx.env.manifest
     deps_pair_or_nothing = Iterators.map(man) do dep
         pkg = Base.PkgId(first(dep), last(dep).name)
         Base.in_sysimage(pkg) && return nothing
