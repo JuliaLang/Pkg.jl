@@ -579,7 +579,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     registry_resolve!(ctx.registries, pkg)
     # Didn't find the package in the registry, but maybe it exists in the updated registry
     if !isresolved(pkg)
-        Registry.update(; io=ctx.io, force=false)
+        Pkg.Operations.update_registries(ctx; force=false)
         registry_resolve!(ctx.registries, pkg)
     end
     ensure_resolved(ctx.env.manifest, [pkg]; registry=true)

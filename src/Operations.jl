@@ -1051,6 +1051,12 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
     return pkg
 end
 
+# Update registries AND read them back in.
+function update_registries(ctx::Context, registries...; kwargs...)
+     Registry.update(registries...; io=ctx.io, kwargs...)
+     copy!(ctx.registries, Registry.reachable_registries())
+end
+
 function is_all_registered(registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec})
     pkgs = filter(tracking_registered_version, pkgs)
     for pkg in pkgs
