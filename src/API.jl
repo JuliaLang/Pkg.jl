@@ -1024,7 +1024,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
 
-    man = Pkg.Types.read_manifest(ctx.env.manifest_file)
+    man = ctx.env.manifest
     deps_pair_or_nothing = Iterators.map(man) do dep
         pkg = Base.PkgId(first(dep), last(dep).name)
         Base.in_sysimage(pkg) && return nothing
@@ -1264,7 +1264,13 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         Base.release(parallel_limiter)
                     end
                 else
-                    !is_stale && (n_already_precomp += 1)
+                    if !is_stale
+                        n_already_precomp += 1
+                        try
+                            touch(path_to_try) # update timestamp of precompilation file
+                        catch # file might be read-only and then we fail to update timestamp, which is fine
+                        end
+                    end
                     suspended && !in(pkg, circular_deps) && push!(skipped_deps, pkg)
                 end
                 n_done += 1
