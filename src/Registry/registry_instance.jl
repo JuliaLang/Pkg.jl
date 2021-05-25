@@ -223,7 +223,7 @@ end
 const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
 
 function get_cached_registry(path, tree_info::Base.SHA1, compressed::Bool)
-    if !isdir(path)
+    if !ispath(path)
         delete!(REGISTRY_CACHE, path)
         return nothing
     end
@@ -241,9 +241,10 @@ end
 
 function RegistryInstance(path::AbstractString)
     compressed_file = nothing
-    if isfile(joinpath(path, ".registry_info.toml"))
-        d_reg_info = parsefile(nothing, path, ".registry_info.toml")
-        compressed_file = d_reg_info["filename"]::String
+    if isfile(path)
+        @assert splitext(path)[2] == ".toml"
+        d_reg_info = parsefile(nothing, dirname(path), basename(path))
+        compressed_file = d_reg_info["path"]::String
         tree_info = Base.SHA1(d_reg_info["git-tree-sha1"]::String)
     else
         tree_info_file = joinpath(path, ".tree_info.toml")
@@ -262,7 +263,7 @@ function RegistryInstance(path::AbstractString)
     end
 
     in_memory_registry = if compressed_file !== nothing
-        uncompress_registry(joinpath(path, compressed_file))
+        uncompress_registry(joinpath(dirname(path), compressed_file))
     else
         nothing
     end
@@ -329,11 +330,24 @@ function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT
         isdir(d) || continue
         reg_dir = joinpath(d, "registries")
         isdir(reg_dir) || continue
-        for name in readdir(reg_dir)
-            file_unpacked = joinpath(reg_dir, name, "Registry.toml")
-            file_packed = joinpath(reg_dir, name, ".registry_info.toml")
-            if isfile(file_unpacked) || isfile(file_packed)
-                push!(registries, RegistryInstance(joinpath(reg_dir, name)))
+        reg_paths = readdir(reg_dir; join=true)
+        candidate_registries = String[]
+        # All folders could be registries
+        append!(candidate_registries, filter(isdir, reg_paths))
+        if registry_read_from_tarball()
+            compressed_registries = filter(endswith(".toml"), reg_paths)
+            # if we are reading compressed registries, ignore compressed registries
+            # with the same name
+            compressed_registry_names = Set([splitext(basename(file))[1] for file in compressed_registries])
+            filter!(x -> !(basename(x) in compressed_registry_names), candidate_registries)
+            append!(candidate_registries, compressed_registries)
+        end
+
+        for candidate in candidate_registries
+            candidate = joinpath(reg_dir, candidate)
+            # candidate can be either a folder or a TOML file
+            if isfile(joinpath(candidate, "Registry.toml")) || isfile(candidate)
+                push!(registries, RegistryInstance(candidate))
             end
         end
     end

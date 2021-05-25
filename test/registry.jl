@@ -330,7 +330,7 @@ if Pkg.Registry.registry_use_pkg_server()
                 
                 # This should not uncompress the registry
                 Registry.add(RegistrySpec(uuid = UUID("23338594-aafe-5451-b93e-139f81909106")))
-                @test isfile(joinpath(DEPOT_PATH[1], "registries", "General", "General.tar.gz")) != something(unpack, false)
+                @test isfile(joinpath(DEPOT_PATH[1], "registries", "General.tar.gz")) != something(unpack, false)
                 Pkg.add("Example")
                 
                 # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
@@ -340,11 +340,11 @@ if Pkg.Registry.registry_use_pkg_server()
                         git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
                         """)
                 else
-                    write(joinpath(DEPOT_PATH[1], "registries", "General", ".registry_info.toml"),
+                    write(joinpath(DEPOT_PATH[1], "registries", "General.toml"),
                         """
                         git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
                         uuid = "23338594-aafe-5451-b93e-139f81909106"
-                        filename = "General.tar.gz"
+                        path = "General.tar.gz"
                         """)
                 end
                 Pkg.update()
