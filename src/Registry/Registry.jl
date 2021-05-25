@@ -1,8 +1,7 @@
 module Registry
 
 import ..Pkg
-using ..Pkg: depots1, printpkgstyle, stdout_f, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-             GitTools, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
+using ..Pkg: depots1, printpkgstyle, stdout_f, stderr_f, isdir_nothrow, pathrepr, pkg_server, GitTools
 using ..Pkg.PlatformEngines: download_verify_unpack, download
 using UUIDs, LibGit2
 
@@ -320,10 +319,7 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true)
-    OFFLINE_MODE[] && return
-    !force && UPDATED_REGISTRY_THIS_SESSION[] && return
-
+function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f())
     isempty(regs) && (regs = reachable_registries(; depots=depots1()))
     errors = Tuple{String, String}[]
     registry_urls = nothing
@@ -402,7 +398,6 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
         end
         @error warn_str
     end
-    UPDATED_REGISTRY_THIS_SESSION[] = true
     return
 end
 

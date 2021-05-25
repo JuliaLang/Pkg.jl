@@ -248,7 +248,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Registry.update(; io=ctx.io, force=false)
+    Operations.update_registries(ctx; force=false)
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
@@ -315,8 +315,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     Context!(ctx; kwargs...)
     if update_registry
         Registry.download_default_registries(ctx.io)
-        Registry.update(; io=ctx.io, force=true)
-        copy!(ctx.registries, Registry.reachable_registries())
+        Operations.update_registries(ctx; force=true)
     end
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
@@ -1454,7 +1453,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         if !(e isa PkgError) || update_registry == false
             rethrow(e)
         end
-        Registry.update(; io=ctx.io, force=false)
+        Operations.update_registries(ctx; force=false)
         Operations.check_registered(ctx.registries, pkgs)
     end
     new_git = UUID[]
