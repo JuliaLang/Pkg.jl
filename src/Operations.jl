@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
 
 #########
 # Utils #
@@ -1052,9 +1052,12 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
 end
 
 # Update registries AND read them back in.
-function update_registries(ctx::Context, registries...; kwargs...)
-     Registry.update(registries...; io=ctx.io, kwargs...)
-     copy!(ctx.registries, Registry.reachable_registries())
+function update_registries(ctx::Context; force::Bool=true, kwargs...)
+    OFFLINE_MODE[] && return
+    !force && UPDATED_REGISTRY_THIS_SESSION[] && return
+    Registry.update(; io=ctx.io, kwargs...)
+    copy!(ctx.registries, Registry.reachable_registries())
+    UPDATED_REGISTRY_THIS_SESSION[] = true
 end
 
 function is_all_registered(registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec})
