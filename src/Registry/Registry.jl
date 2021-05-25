@@ -1,8 +1,8 @@
 module Registry
 
 import ..Pkg
-using ..Pkg: depots1, printpkgstyle, DEFAULT_IO, isdir_nothrow, pathrepr, pkg_server,
-             GitTools, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
+using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
+             GitTools
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z
 using UUIDs, LibGit2, TOML
 
@@ -40,7 +40,7 @@ Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.
 """
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
-function add(regs::Vector{RegistrySpec}; io::IO=DEFAULT_IO[])
+function add(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     if isempty(regs)
         download_default_registries(io, only_if_empty = false)
     else
@@ -184,13 +184,10 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 reg_unc = uncompress_registry(tmp)
                 reg.name = TOML.parse(reg_unc["Registry.toml"])["name"]::String
             end
-            regpath = joinpath(regdir, reg.name)
-            Base.rm(regpath; recursive=true, force=true)
-            mkpath(regpath)
-            mv(tmp, joinpath(regpath, reg.name * ".tar.gz"); force=true)
+            mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force=true)
             hash = pkg_server_url_hash(url)
             reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "filename" => reg.name * ".tar.gz")
-            open(joinpath(regpath, ".registry_info.toml"), "w") do io
+            open(joinpath(regdir, reg.name * ".registry_info.toml"), "w") do io
                 TOML.print(io, reg_info)
             end
         else
@@ -276,7 +273,7 @@ Pkg.Registry.rm(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 rm(reg::Union{String,RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
 rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
-function rm(regs::Vector{RegistrySpec}; io::IO=DEFAULT_IO[])
+function rm(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     for registry in find_installed_registries(io, regs)
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         Base.rm(registry.path; force=true, recursive=true)
@@ -341,11 +338,9 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[], force::Bool=true)
-    OFFLINE_MODE[] && return
-    !force && UPDATED_REGISTRY_THIS_SESSION[] && return
-
+function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true)
     isempty(regs) && (regs = reachable_registries(; depots=depots1()))
+    @show regs
     errors = Tuple{String, String}[]
     registry_urls = nothing
     for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{UUID}())
@@ -443,7 +438,6 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=DEFAULT_IO[]
         end
         @error warn_str
     end
-    UPDATED_REGISTRY_THIS_SESSION[] = true
     return
 end
 
@@ -461,7 +455,7 @@ Display information about available registries.
 Pkg.Registry.status()
 ```
 """
-function status(io::IO=DEFAULT_IO[])
+function status(io::IO=stderr_f())
     regs = reachable_registries()
     regs = unique(r -> r.uuid, regs; seen=Set{Union{UUID,Nothing}}())
     printpkgstyle(io, Symbol("Registry Status"), "")

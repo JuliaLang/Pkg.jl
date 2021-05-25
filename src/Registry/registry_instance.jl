@@ -241,8 +241,9 @@ end
 
 function RegistryInstance(path::AbstractString)
     compressed_file = nothing
-    if isfile(joinpath(path, ".registry_info.toml"))
-        d_reg_info = parsefile(nothing, path, ".registry_info.toml")
+    if isfile(path)
+        @assert splitext(path)[2] == ".toml"
+        d_reg_info = parsefile(nothing, dirname(path), basename(path))
         compressed_file = d_reg_info["filename"]::String
         tree_info = Base.SHA1(d_reg_info["git-tree-sha1"]::String)
     else
@@ -329,11 +330,26 @@ function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT
         isdir(d) || continue
         reg_dir = joinpath(d, "registries")
         isdir(reg_dir) || continue
-        for name in readdir(reg_dir)
-            file_unpacked = joinpath(reg_dir, name, "Registry.toml")
-            file_packed = joinpath(reg_dir, name, ".registry_info.toml")
-            if isfile(file_unpacked) || isfile(file_packed)
-                push!(registries, RegistryInstance(joinpath(reg_dir, name)))
+        @show reg_dir
+        reg_paths = readdir(reg_dir; join=true)
+        @show reg_paths
+        candidate_registries = String[]
+        # All folders could be registries
+        append!(candidate_registries, filter(isdir, reg_paths))
+        if registry_read_from_tarball()
+            compressed_registries = filter(endswith(".toml"), reg_paths)
+            # if we are reading compressed registries, ignore compressed registries
+            # with the same name
+            compressed_registry_names = Set([splitext(basename(file))[1] for file in compressed_registries])
+            filter!(x -> !(basename(x) in compressed_registry_names), candidate_registries)
+            append!(candidate_registries, compressed_registries)
+        end
+
+        for candidate in candidate_registries
+            candidate = joinpath(reg_dir, candidate)
+            # candidate can be either a folder or a TOML file
+            if isfile(joinpath(candidate, "Registry.toml")) || isfile(candidate)
+                push!(registries, RegistryInstance(candidate))
             end
         end
     end
