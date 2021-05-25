@@ -1083,21 +1083,26 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
         @assert pkg.name !== nothing && pkg.uuid !== nothing
         # package with the same name exist in the project: assert that they have the same uuid
-        get(ctx.env.project.deps, pkg.name, pkg.uuid) == pkg.uuid ||
-            pkgerror("refusing to add package $(err_rep(pkg)):",
-                     " package `$(pkg.name) = \"$(get(ctx.env.project.deps, pkg.name, pkg.uuid))\"` ",
-                     "already exists as a direct dependency")
+        existing_uuid = get(ctx.env.project.deps, pkg.name, pkg.uuid)
+        existing_uuid == pkg.uuid ||
+            pkgerror("""Refusing to add package $(err_rep(pkg)).
+                     Package `$(pkg.name)=$(existing_uuid)` with the same name already exists as a direct dependency.
+                     To remove the existing package, use `import Pkg; Pkg.rm("$(pkg.name)")`.
+                     """)
         # package with the same uuid exist in the project: assert they have the same name
         name = findfirst(==(pkg.uuid), ctx.env.project.deps)
-        (name === nothing || name == pkg.name) ||
-            pkgerror("refusing to add package $(err_rep(pkg)):",
-                     " package `$(pkg.name) = \"$(ctx.env.project.deps[name])\"` ",
-                     "already exists as a direct dependency")
+        name === nothing || name == pkg.name ||
+            pkgerror("""Refusing to add package $(err_rep(pkg)).
+                     Package `$name=$(pkg.uuid)` with the same UUID already exists as a direct dependency.
+                     To remove the existing package, use `import Pkg; Pkg.rm("$name")`.
+                     """)
         # package with the same uuid exist in the manifest: assert they have the same name
-        haskey(ctx.env.manifest, pkg.uuid) && (ctx.env.manifest[pkg.uuid].name != pkg.name) &&
-            pkgerror("refusing to add package $(err_rep(pkg)):",
-                     " package `$(ctx.env.manifest[pkg.uuid].name) = \"$(pkg.uuid)\"` ",
-                     "already exists in the manifest")
+        entry = get(ctx.env.manifest, pkg.uuid, nothing)
+        entry === nothing || entry.name == pkg.name ||
+            pkgerror("""Refusing to add package $(err_rep(pkg)).
+                     Package `$(entry.name)=$(pkg.uuid)` with the same UUID already exists in the manifest.
+                     To remove the existing package, use `import Pkg; Pkg.rm(Pkg.PackageSpec(uuid="$(pkg.uuid)"); mode=Pkg.PKGMODE_MANIFEST)`.
+                     """)
     end
 end
 
