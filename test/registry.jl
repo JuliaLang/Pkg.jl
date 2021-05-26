@@ -65,7 +65,6 @@ function with_depot2(f)
     Base.DEPOT_PATH[1:2] .= Base.DEPOT_PATH[2:-1:1]
 end
 
-
 @testset "registries" begin
     temp_pkg_dir() do depot; mktempdir() do depot2
         insert!(Base.DEPOT_PATH, 2, depot2)
@@ -318,6 +317,41 @@ end
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
     end
+end
+
+if Pkg.Registry.registry_use_pkg_server()
+@testset "compressed registry" begin
+    for unpack in (true, nothing)
+        withenv("JULIA_PKG_UNPACK_REGISTRY" => unpack) do
+            temp_pkg_dir(;linked_reg=false) do depot
+                # These get restored by temp_pkg_dir
+                Pkg.Registry.DEFAULT_REGISTRIES[1].path = nothing
+                Pkg.Registry.DEFAULT_REGISTRIES[1].url = "https://github.com/JuliaRegistries/General.git"
+                
+                # This should not uncompress the registry
+                Registry.add(RegistrySpec(uuid = UUID("23338594-aafe-5451-b93e-139f81909106")))
+                @test isfile(joinpath(DEPOT_PATH[1], "registries", "General.tar.gz")) != something(unpack, false)
+                Pkg.add("Example")
+                
+                # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
+                if unpack == true
+                    write(joinpath(DEPOT_PATH[1], "registries", "General", ".tree_info.toml"),
+                        """
+                        git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
+                        """)
+                else
+                    write(joinpath(DEPOT_PATH[1], "registries", "General.toml"),
+                        """
+                        git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
+                        uuid = "23338594-aafe-5451-b93e-139f81909106"
+                        path = "General.tar.gz"
+                        """)
+                end
+                Pkg.update()
+            end
+        end
+    end
+end
 end
 
 end # module
