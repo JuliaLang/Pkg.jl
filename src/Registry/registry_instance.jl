@@ -344,7 +344,6 @@ function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT
         end
 
         for candidate in candidate_registries
-            candidate = joinpath(reg_dir, candidate)
             # candidate can be either a folder or a TOML file
             if isfile(joinpath(candidate, "Registry.toml")) || isfile(candidate)
                 push!(registries, RegistryInstance(candidate))
