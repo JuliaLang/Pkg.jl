@@ -936,8 +936,9 @@ manifest_info(::Manifest, uuid::Nothing) = nothing
 function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry,Nothing}
     return get(manifest, uuid, nothing)
 end
-function write_env(env::EnvCache; update_undo=true)
-    if env.project != env.original_project
+function write_env(env::EnvCache; update_undo=true,
+                   skip_writing_project::Bool=false)
+    if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end
     if env.manifest != env.original_manifest

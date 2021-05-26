@@ -177,6 +177,16 @@ function set_compat(proj::Project, name::String, compat::String)
     proj.compat[name] = Types.Compat(Types.semver_spec(compat), compat)
 end
 
+function reset_all_compat!(proj::Project)
+    for name in keys(proj.compat)
+        compat = proj.compat[name]
+        if compat.val != Types.semver_spec(compat.str)
+            proj.compat[name] = Types.Compat(Types.semver_spec(compat.str), compat.str)
+        end
+    end
+    return nothing
+end
+
 function collect_project!(pkg::PackageSpec, path::String,
                           deps_map::Dict{UUID,Vector{PackageSpec}})
     deps_map[pkg.uuid] = PackageSpec[]
@@ -1232,7 +1242,8 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
 
-function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
+function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
+            skip_writing_project::Bool=false)
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
@@ -1250,7 +1261,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
     download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
-    write_env(ctx.env) # write env before building
+    write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env; io=ctx.io)
     build_versions(ctx, union(new_apply, new_git))
 end
@@ -1449,8 +1460,17 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         with_temp_env(tmp) do
             temp_ctx = Context()
             temp_ctx.env.project.deps[target.name] = target.uuid
+
+            if force_latest_compatible_version
+                apply_force_latest_compatible_version!(
+                    temp_ctx;
+                    target_name = target.name,
+                    allow_earlier_backwards_compatible_versions,
+                )
+            end
+
             try
-                Pkg.resolve(temp_ctx; io=devnull)
+                Pkg.resolve(temp_ctx; io=devnull, skip_writing_project=true)
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 err isa Resolve.ResolverError || rethrow()
@@ -1458,9 +1478,11 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 @debug err
                 @warn "Could not use exact versions of packages in manifest, re-resolving"
                 temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
-                Pkg.resolve(temp_ctx; io=devnull)
+                Pkg.resolve(temp_ctx; io=devnull, skip_writing_project=true)
                 @debug "Using _clean_ dep graph"
             end
+
+            reset_all_compat!(temp_ctx.env.project)
 
             # Absolutify stdlibs paths
             for (uuid, entry) in temp_ctx.env.manifest
@@ -1469,17 +1491,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 end
             end
             write_env(temp_ctx.env, update_undo = false)
-
-            if force_latest_compatible_version
-                result = check_force_latest_compatible_version(
-                    temp_ctx;
-                    target_name = target.name,
-                    allow_earlier_backwards_compatible_versions,
-                )
-                if !result
-                    pkgerror("One or more direct dependencies is not at the latest compatible version")
-                end
-            end
 
             # Run sandboxed code
             path_sep = Sys.iswindows() ? ';' : ':'
@@ -1828,26 +1839,27 @@ function status(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
     end
 end
 
-function check_force_latest_compatible_version(ctx::Types.Context;
-                                               target_name = nothing,
-                                               allow_earlier_backwards_compatible_versions::Bool = true)
+function apply_force_latest_compatible_version!(ctx::Types.Context;
+                                                target_name = nothing,
+                                                allow_earlier_backwards_compatible_versions::Bool = true)
     direct_deps = load_direct_deps(ctx.env)
     direct_deps_uuids = [dep.uuid for dep in direct_deps]
     uuid_list = filter(!is_stdlib, direct_deps_uuids)
-    isempty(uuid_list) && return true
-    results = check_force_latest_compatible_version.(
-        Ref(ctx),
-        uuid_list;
-        target_name,
-        allow_earlier_backwards_compatible_versions,
-    )
-    return all(results)
+    for uuid in uuid_list
+        apply_force_latest_compatible_version!(
+            ctx,
+            uuid;
+            target_name,
+            allow_earlier_backwards_compatible_versions,
+        )
+    end
+    return nothing
 end
 
-function check_force_latest_compatible_version(ctx::Types.Context,
-                                               uuid::Base.UUID;
-                                               target_name= nothing,
-                                               allow_earlier_backwards_compatible_versions::Bool = true)
+function apply_force_latest_compatible_version!(ctx::Types.Context,
+                                                uuid::Base.UUID;
+                                                target_name= nothing,
+                                                allow_earlier_backwards_compatible_versions::Bool = true)
     dep = ctx.env.manifest[uuid]
     name = dep.name
     active_version = dep.version
@@ -1855,37 +1867,32 @@ function check_force_latest_compatible_version(ctx::Types.Context,
     if !has_compat
         if name != target_name
             @warn(
-                "Package does not have a [compat] entry",
+                "Dependency does not have a [compat] entry",
                 name, uuid, active_version, target_name,
             )
         end
-        return true
+        return nothing
     end
-    compat_entry = ctx.env.project.compat[name].val
+    old_compat_spec = ctx.env.project.compat[name].val
     latest_compatible_version = get_latest_compatible_version(
         ctx,
         uuid,
-        compat_entry,
+        old_compat_spec,
     )
     earliest_backwards_compatible_version = get_earliest_backwards_compatible_version(latest_compatible_version)
     if allow_earlier_backwards_compatible_versions
-        result = active_version >= earliest_backwards_compatible_version
+        version_for_intersect = only_major_minor_patch(earliest_backwards_compatible_version)
     else
-        result = active_version >= latest_compatible_version
+        version_for_intersect = only_major_minor_patch(latest_compatible_version)
     end
-    if !result
-        @error(
-            "Package is not at the latest compatible version",
-            name,
-            uuid,
-            compat_entry,
-            active_version,
-            latest_compatible_version,
-            earliest_backwards_compatible_version,
-            allow_earlier_backwards_compatible_versions,
-        )
-    end
-    return result
+    compat_for_intersect = Pkg.Types.semver_spec("≥ $(version_for_intersect)")
+    new_compat_spec = Base.intersect(old_compat_spec, compat_for_intersect)
+    ctx.env.project.compat[name].val = new_compat_spec
+    return nothing
+end
+
+function only_major_minor_patch(ver::Base.VersionNumber)
+    return Base.VersionNumber(ver.major, ver.minor, ver.patch)
 end
 
 function get_earliest_backwards_compatible_version(ver::Base.VersionNumber)
