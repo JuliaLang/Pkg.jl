@@ -348,6 +348,8 @@ if Pkg.Registry.registry_use_pkg_server()
                         """)
                 end
                 Pkg.update()
+                Pkg.Registry.rm(RegistrySpec(name = "General"))
+                @test isempty(readdir(joinpath(DEPOT_PATH[1], "registries")))
             end
         end
     end

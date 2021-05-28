@@ -276,6 +276,12 @@ rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in 
 function rm(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     for registry in find_installed_registries(io, regs)
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
+        if isfile(registry.path)
+            d = TOML.parsefile(registry.path)
+            if haskey(d, "path")
+               Base.rm(joinpath(dirname(registry.path), d["path"]); force=true)
+            end
+        end
         Base.rm(registry.path; force=true, recursive=true)
     end
     return nothing
