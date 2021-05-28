@@ -236,13 +236,15 @@ function write_manifest(env::EnvCache)
 end
 write_manifest(manifest::Manifest, manifest_file::AbstractString) =
     write_manifest(destructure(manifest), manifest_file)
-function write_manifest(manifest::Dict, manifest_file::AbstractString)
-    str = sprint() do io
-        print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-        TOML.print(io, manifest, sorted=true) do x
-            (x isa UUID || x isa SHA1 || x isa VersionNumber) && return string(x)
-            error("unhandled type `$(typeof(x))`")
-        end
+function write_manifest(io::IO, manifest::Dict)
+    print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
+    TOML.print(io, manifest, sorted=true) do x
+        x isa UUID || x isa SHA1 || x isa VersionNumber || pkgerror("unhandled type `$(typeof(x))`")
+        return string(x)
     end
+    return nothing
+end
+function write_manifest(manifest::Dict, manifest_file::AbstractString)
+    str = sprint(write_manifest, manifest)
     write(manifest_file, str)
 end
