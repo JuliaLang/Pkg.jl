@@ -320,6 +320,26 @@ function create_name_uuid_mapping!(r::RegistryInstance)
     return
 end
 
+function verify_compressed_registry_toml(path::String)
+    d = TOML.tryparsefile(path)
+    if d isa TOML.ParserError
+        @warn "Failed to parse registry TOML file at $(repr(path))" exception=d
+        return false
+    end
+    for key in ("git-tree-sha1", "uuid", "path")
+        if !haskey(d, key)
+            @warn "Expected key $(repr(key)) to exist in registry TOML file at $(repr(path))"
+            return false
+        end
+    end
+    compressed_file = joinpath(dirname(path), d["path"])
+    if !isfile(compressed_file)
+        @warn "Expected the compressed registry for $(repr(path)) to exist at $(repr(compressed_file))"
+        return false
+    end
+    return true
+end
+
 function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT_PATH)
     # collect registries
     if depots isa String
@@ -340,7 +360,11 @@ function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT
             # with the same name
             compressed_registry_names = Set([splitext(basename(file))[1] for file in compressed_registries])
             filter!(x -> !(basename(x) in compressed_registry_names), candidate_registries)
-            append!(candidate_registries, compressed_registries)
+            for compressed_registry in compressed_registries
+                if verify_compressed_registry_toml(compressed_registry)
+                    push!(candidate_registries, compressed_registry)
+                end
+            end
         end
 
         for candidate in candidate_registries
