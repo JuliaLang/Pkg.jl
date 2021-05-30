@@ -178,20 +178,18 @@ function read_manifest(f_or_io::Union{String, IO})
         end
         rethrow()
     end
-    if !isempty(raw) && Base.is_v1_format_manifest(raw)
+    if Base.is_v1_format_manifest(raw)
         raw = convert_flat_format_manifest(raw)
     end
     return Manifest(raw)
 end
 
 function convert_flat_format_manifest(old_raw_manifest::Dict)
-    new_raw_manifest = Dict{String,Any}()
-    new_raw_manifest["deps"] = Dict{String,Vector{Any}}()
-    for (key, value) in old_raw_manifest
-        new_raw_manifest["deps"][key] = value
-    end
-    new_raw_manifest["julia_version"] = nothing
-    new_raw_manifest["manifest_format"] = "1"
+    new_raw_manifest = Dict{String, Any}(
+            "deps" => old_raw_manifest,
+            "julia_version" => nothing,
+            "manifest_format" => v"1"
+        )
     return new_raw_manifest
 end
 
