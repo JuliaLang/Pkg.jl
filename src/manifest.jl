@@ -219,7 +219,7 @@ function destructure(manifest::Manifest)::Dict
     elseif manifest.manifest_format.major == 2
         raw = Dict{String,Any}()
         raw["julia_version"] = manifest.julia_version
-        raw["manifest_format"] = manifest.manifest_format
+        raw["manifest_format"] = string(manifest.manifest_format.major, ".", manifest.manifest_format.minor)
         raw["deps"] = Dict{String,Vector{Dict{String,Any}}}()
     end
 
