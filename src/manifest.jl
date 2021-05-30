@@ -281,6 +281,12 @@ function write_manifest(env::EnvCache)
     write_manifest(env.manifest, env.manifest_file)
 end
 function write_manifest(manifest::Manifest, manifest_file::AbstractString)
+    if manifest.manifest_format.major == 1
+        @warn """The active manifest file has an old format that is being maintained.
+            To update to the new format:
+                1. Delete the manifest file at `$(manifest_file)`
+                2. Run `import Pkg; Pkg.resolve()`""" maxlog = 1
+    end
     return write_manifest(destructure(manifest), manifest_file)
 end
 function write_manifest(io::IO, manifest::Manifest)
