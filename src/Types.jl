@@ -262,7 +262,7 @@ Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing,VersionNumber} = Base.VERSION
-    manifest_format::VersionNumber = v"1.0.0" # default to older flat format
+    manifest_format::VersionNumber = v"2.0.0"
     deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
     other::Dict{String,Any} = Dict{String,Any}()
 end
