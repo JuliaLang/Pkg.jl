@@ -191,7 +191,7 @@ function convert_flat_format_manifest(old_raw_manifest::Dict)
     new_raw_manifest = Dict{String, Any}(
             "deps" => old_raw_manifest,
             "julia_version" => nothing,
-            "manifest_format" => v"1"
+            "manifest_format" => "1.0.0" # must be a string here to match raw dict
         )
     return new_raw_manifest
 end
