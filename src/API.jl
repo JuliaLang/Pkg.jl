@@ -1100,6 +1100,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
 
     function handle_interrupt(err)
         notify(interrupted_or_done)
+        sleep(0.2) # yield for a period to let the print loop cease first
         if err isa InterruptException
             lock(print_lock) do
                 println(io, " Interrupted: Exiting precompilation...")
