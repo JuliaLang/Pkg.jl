@@ -133,6 +133,9 @@ end
 function Manifest(raw::Dict)::Manifest
     julia_version = isnothing(raw["julia_version"]) ? nothing : VersionNumber(raw["julia_version"])
     manifest_format = VersionNumber(raw["manifest_format"])
+    if !in(manifest_format.major, 1:2)
+        @warn "Unknown Manifest.toml format version detected. Unexpected behavior may occur" manifest_format maxlog = 1
+    end
     stage1 = Dict{String,Vector{Stage1}}()
     if haskey(raw, "deps") # deps field doesn't exist if there are no deps
         for (name, infos) in raw["deps"], info in infos
