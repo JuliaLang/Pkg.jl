@@ -1012,6 +1012,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
 
     function handle_interrupt(err)
         notify(interrupted_or_done)
+        sleep(0.2) # yield for a period to let the print loop cease first
         if err isa InterruptException
             lock(print_lock) do
                 println(io, " Interrupted: Exiting precompilation...")
@@ -1162,8 +1163,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         end
                         loaded && (n_loaded += 1)
                     catch err
-                        if err isa ErrorException
-                            failed_deps[pkg] = (strict || is_direct_dep) ? String(take!(iob)) : ""
+                        if err isa ErrorException || (err isa ArgumentError && startswith(err.msg, "Invalid header in cache file"))
+                            failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", String(take!(iob))) : ""
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
