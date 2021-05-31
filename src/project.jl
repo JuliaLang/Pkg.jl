@@ -182,12 +182,14 @@ function write_project(env::EnvCache)
 end
 write_project(project::Project, project_file::AbstractString) =
     write_project(destructure(project), project_file)
-function write_project(project::Dict, project_file::AbstractString)
-    str = sprint() do io
-        TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key)) do x
-            (x isa UUID || x isa VersionNumber) && return string(x)
-            error("unhandled type `$(typeof(x))`")
-        end
+function write_project(io::IO, project::Dict)
+    TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key)) do x
+        x isa UUID || x isa VersionNumber || pkgerror("unhandled type `$(typeof(x))`")
+        return string(x)
     end
+    return nothing
+end
+function write_project(project::Dict, project_file::AbstractString)
+    str = sprint(write_project, project)
     write(project_file, str)
 end
