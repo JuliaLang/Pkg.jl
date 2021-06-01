@@ -60,6 +60,17 @@ using  ..Utils
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
         end
     end
+
+    @testset "v3.0: unknown format, warn" begin
+        # the reference file here is not actually v3.0. It just represents an unknown manifest format
+        env_dir = joinpath(@__DIR__, "manifest", "formats", "v3.0_unknown")
+        env_manifest = joinpath(env_dir, "Manifest.toml")
+        isfile(env_manifest) || error("Reference manifest is missing")
+        isolate(loaded_depot=true) do
+            io = IOBuffer()
+            @test_logs (:warn, "Unknown Manifest.toml format version detected. Unexpected behavior may occur") Pkg.activate(env_dir; io=io)
+        end
+    end
 end
 
 
