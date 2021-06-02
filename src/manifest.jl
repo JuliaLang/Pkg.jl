@@ -130,11 +130,15 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
     return Manifest(; julia_version, manifest_format, deps)
 end
 
-function Manifest(raw::Dict)::Manifest
+function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
     julia_version = isnothing(raw["julia_version"]) ? nothing : VersionNumber(raw["julia_version"])
     manifest_format = VersionNumber(raw["manifest_format"])
     if !in(manifest_format.major, 1:2)
-        @warn "Unknown Manifest.toml format version detected. Unexpected behavior may occur" manifest_format maxlog = 1
+        if f_or_io isa IO
+            @warn "Unknown Manifest.toml format version detected in streamed manifest. Unexpected behavior may occur" manifest_format maxlog = 1
+        else
+            @warn "Unknown Manifest.toml format version detected in file `$(path)`. Unexpected behavior may occur" manifest_format maxlog = 1
+        end
     end
     stage1 = Dict{String,Vector{Stage1}}()
     if haskey(raw, "deps") # deps field doesn't exist if there are no deps
@@ -184,7 +188,7 @@ function read_manifest(f_or_io::Union{String, IO})
     if Base.is_v1_format_manifest(raw)
         raw = convert_flat_format_manifest(raw)
     end
-    return Manifest(raw)
+    return Manifest(raw, f_or_io)
 end
 
 function convert_flat_format_manifest(old_raw_manifest::Dict)

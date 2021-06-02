@@ -68,7 +68,7 @@ using  ..Utils
         isfile(env_manifest) || error("Reference manifest is missing")
         isolate(loaded_depot=true) do
             io = IOBuffer()
-            @test_logs (:warn, "Unknown Manifest.toml format version detected. Unexpected behavior may occur") Pkg.activate(env_dir; io=io)
+            @test_logs (:warn,) Pkg.activate(env_dir; io=io)
         end
     end
 end
