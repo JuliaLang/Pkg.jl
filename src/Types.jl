@@ -88,18 +88,32 @@ Base.:(==)(r1::GitRepo, r2::GitRepo) =
     r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
 
 
-Base.@kwdef mutable struct PackageSpec
-    name::Union{Nothing,String} = nothing
-    uuid::Union{Nothing,UUID} = nothing
-    version::Union{Nothing,VersionTypes,String} = VersionSpec()
-    tree_hash::Union{Nothing,SHA1} = nothing
-    repo::GitRepo = GitRepo()
-    path::Union{Nothing,String} = nothing
-    pinned::Bool = false
+mutable struct PackageSpec
+    name::Union{Nothing,String}
+    uuid::Union{Nothing,UUID}
+    version::Union{Nothing,VersionTypes,String}
+    tree_hash::Union{Nothing,SHA1}
+    repo::GitRepo
+    path::Union{Nothing,String}
+    pinned::Bool
     # used for input only
-    url = nothing
-    rev = nothing
-    subdir = nothing
+    url
+    rev
+    subdir
+
+end
+function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
+                       uuid::Union{Nothing,UUID,AbstractString} = nothing,
+                       version::Union{Nothing,VersionTypes,AbstractString} = VersionSpec(),
+                       tree_hash::Union{Nothing,SHA1} = nothing,
+                       repo::GitRepo = GitRepo(),
+                       path::Union{Nothing,AbstractString} = nothing,
+                       pinned::Bool = false,
+                       url = nothing,
+                       rev = nothing,
+                       subdir = nothing)
+    uuid = uuid === nothing ? nothing : UUID(uuid)
+    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
