@@ -250,6 +250,7 @@ Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing,VersionNumber} = Base.VERSION
     manifest_format::VersionNumber = v"1.0.0" # default to older flat format
     deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
+    other::Dict{String,Any} = Dict{String,Any}()
 end
 Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
 Base.hash(m::Manifest, h::UInt) = foldr(hash, [getfield(m, x) for x in fieldnames(Manifest)], init=h)

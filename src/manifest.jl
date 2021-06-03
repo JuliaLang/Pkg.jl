@@ -105,7 +105,7 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
     return final
 end
 
-function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest_format::VersionNumber, stage1::Dict{String,Vector{Stage1}})
+function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest_format::VersionNumber, stage1::Dict{String,Vector{Stage1}}, other::Dict{String, Any})
     # expand vector format deps
     for (name, infos) in stage1, info in infos
         info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
@@ -127,7 +127,7 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
                      "but entry with UUID `$uuid` has name `$(dep_entry.name)`.")
         end
     end
-    return Manifest(; julia_version, manifest_format, deps)
+    return Manifest(; julia_version, manifest_format, deps, other)
 end
 
 function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
@@ -169,7 +169,14 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
         # by this point, all the fields of the `PackageEntry`s have been type casted
         # but we have *not* verified the _graph_ structure of the manifest
     end
-    return validate_manifest(julia_version, manifest_format, stage1)
+    other = Dict{String, Any}()
+    for (k, v) in raw
+        if k in ("julia_version", "deps", "manifest_format")
+            continue
+        end
+        other[k] = v
+    end
+    return validate_manifest(julia_version, manifest_format, stage1, other)
 end
 
 function read_manifest(f_or_io::Union{String, IO})
@@ -225,6 +232,9 @@ function destructure(manifest::Manifest)::Dict
         raw["julia_version"] = manifest.julia_version
         raw["manifest_format"] = string(manifest.manifest_format.major, ".", manifest.manifest_format.minor)
         raw["deps"] = Dict{String,Vector{Dict{String,Any}}}()
+        for (k, v) in manifest.other
+            raw[k] = v
+        end
     end
 
     for (uuid, entry) in manifest

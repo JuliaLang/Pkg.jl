@@ -58,6 +58,20 @@ using  ..Utils
 
             Pkg.rm("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+
+            m = Pkg.Types.read_manifest(env_manifest)
+            @test m.other["some_other_field"] = "other"
+            @test m.other["some_other_data"] = [1,2,3,4]
+            
+            mktemp() do (path, io)
+                Pkg.Types.write_manifest(io, m)
+                m2 = Pkg.Types.read_manifest(env_manifest)
+                @test m.deps == m2.deps
+                @test m.julia_version == m2.julia_version
+                @test m.manifest_format == m2.manifest_format
+                @test m.other == m2.other
+            end
+
         end
     end
 
