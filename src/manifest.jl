@@ -137,7 +137,7 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
         if f_or_io isa IO
             @warn "Unknown Manifest.toml format version detected in streamed manifest. Unexpected behavior may occur" manifest_format maxlog = 1
         else
-            @warn "Unknown Manifest.toml format version detected in file `$(path)`. Unexpected behavior may occur" manifest_format maxlog = 1
+            @warn "Unknown Manifest.toml format version detected in file `$(f_or_io)`. Unexpected behavior may occur" manifest_format maxlog = 1
         end
     end
     stage1 = Dict{String,Vector{Stage1}}()

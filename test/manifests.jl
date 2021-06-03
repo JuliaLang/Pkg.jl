@@ -60,10 +60,10 @@ using  ..Utils
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
 
             m = Pkg.Types.read_manifest(env_manifest)
-            @test m.other["some_other_field"] = "other"
-            @test m.other["some_other_data"] = [1,2,3,4]
-            
-            mktemp() do (path, io)
+            @test m.other["some_other_field"] == "other"
+            @test m.other["some_other_data"] == [1,2,3,4]
+
+            mktemp() do path, io
                 Pkg.Types.write_manifest(io, m)
                 m2 = Pkg.Types.read_manifest(env_manifest)
                 @test m.deps == m2.deps
