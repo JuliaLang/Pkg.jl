@@ -559,6 +559,13 @@ Below is a comparison between the REPL mode and the functional API::
 """
 const RegistrySpec = Registry.RegistrySpec
 
+"""
+    upgrade_manifest()
+    upgrade_manifest(ctx::Context)
+
+Upgrades the format of the manifest file from v1.0 to v2.0 without re-resolving.
+"""
+const upgrade_manifest = API.upgrade_manifest
 
 function __init__()
     if isdefined(Base, :active_repl)
