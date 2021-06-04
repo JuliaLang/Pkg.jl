@@ -1,7 +1,7 @@
 using Pkg
 using Test
 
-@testset "Pkg UUID" begin 
+@testset "Test that the UUID is unchanged" begin 
     project_filename = joinpath(dirname(@__DIR__), "Project.toml")
     project = Pkg.TOML.parsefile(project_filename)
     uuid = project["uuid"]
