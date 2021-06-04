@@ -215,4 +215,31 @@ end
     @test_throws Pkg.Types.PkgError("`Example.jl` is not a valid package name. Perhaps you meant `Example`") Pkg.API.check_package_name("Example.jl")
 end
 
+@testset "issue #2587, PR #2589: `Pkg.PackageSpec` accepts `Union{UUID, AbstractString, Nothing}` for `uuid`" begin
+    @testset begin
+        xs = [
+            Pkg.PackageSpec(uuid = Base.UUID(0)),
+            Pkg.PackageSpec(uuid = Base.UUID("00000000-0000-0000-0000-000000000000")),
+            Pkg.PackageSpec(uuid = "00000000-0000-0000-0000-000000000000"),
+            Pkg.PackageSpec(uuid = strip("00000000-0000-0000-0000-000000000000")), # `strip` returns a `SubString{String}`, which is an `AbstractString` but is not a `String`
+        ]
+        for x in xs
+            @test x isa Pkg.PackageSpec
+            @test x.uuid isa Base.UUID
+            @test x.uuid == Base.UUID(0)
+        end
+    end
+    
+    @testset begin
+        xs = [
+            Pkg.PackageSpec(),
+            Pkg.PackageSpec(uuid = nothing),
+        ]
+        for x in xs
+            @test x isa Pkg.PackageSpec
+            @test x.uuid === nothing
+        end
+    end
+end
+
 end # module APITests
