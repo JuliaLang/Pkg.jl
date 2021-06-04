@@ -283,15 +283,18 @@ end
 function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     return write_manifest(destructure(manifest), manifest_file)
 end
-function write_manifest(io::IO, manifest::Dict)
+function write_manifest(io::IO, manifest::Manifest)
+    return write_manifest(io, destructure(manifest))
+end
+function write_manifest(io::IO, raw_manifest::Dict)
     print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-    TOML.print(io, manifest, sorted=true) do x
+    TOML.print(io, raw_manifest, sorted=true) do x
         (typeof(x) in [String, Nothing, UUID, SHA1, VersionNumber]) && return string(x)
         error("unhandled type `$(typeof(x))`")
     end
     return nothing
 end
-function write_manifest(manifest::Dict, manifest_file::AbstractString)
-    str = sprint(write_manifest, manifest)
+function write_manifest(raw_manifest::Dict, manifest_file::AbstractString)
+    str = sprint(write_manifest, raw_manifest)
     write(manifest_file, str)
 end
