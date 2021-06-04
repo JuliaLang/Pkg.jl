@@ -6,7 +6,7 @@ import Pkg
 
 using Test
 
-@testset "Ensure we're testing the correct Pkg" begin
+@testset "Test that we have imported the correct package" begin
     @test realpath(dirname(dirname(Base.pathof(Pkg)))) == realpath(dirname(@__DIR__))
 end
 
