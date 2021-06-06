@@ -28,7 +28,7 @@ using  ..Utils
             io = IOBuffer()
             Pkg.activate(env_dir; io=io)
             output = String(take!(io))
-            @test occursin(r"Activating.*project at.*`.*formats/v1.0`", output)
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
 
             Pkg.add("Profile")
@@ -50,7 +50,7 @@ using  ..Utils
             io = IOBuffer()
             Pkg.activate(env_dir; io=io)
             output = String(take!(io))
-            @test occursin(r"Activating.*project at.*`.*formats/v2.0`", output)
+            @test occursin(r"Activating.*project at.*`.*v2.0`", output)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
 
             Pkg.add("Profile")
