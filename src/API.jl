@@ -1678,6 +1678,7 @@ function upgrade_manifest(ctx::Context = Context())
         pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` version is unrecogized: manifest_format == $(before_format)")
     end
     ctx.env.manifest.manifest_format = v"2.0"
+    ctx.env.manifest.julia_version = VERSION
     Types.write_manifest(ctx.env)
     printpkgstyle(ctx.io, :Updated, "Format of manifest file at `$(ctx.env.manifest_file)` updated from v$(before_format.major).$(before_format.minor) to v2.0")
     return nothing
