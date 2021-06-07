@@ -16,6 +16,8 @@ unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
 unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 
+# Disable auto-gc for these tests
+Pkg._auto_gc_enabled[] = false
 
 #
 # # Depot Changes

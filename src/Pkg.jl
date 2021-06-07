@@ -5,6 +5,7 @@ module Pkg
 import Random
 import REPL
 import TOML
+using Dates
 
 export @pkg_str
 export PackageSpec
@@ -606,6 +607,41 @@ function dir(pkg::String, paths::AbstractString...)
     path === nothing && return nothing
     return abspath(path, "..", "..", paths...)
 end
+
+###########
+# AUTO GC #
+###########
+
+const DEPOT_ORPHANAGE_TIMESTAMPS = Dict{String,Float64}()
+const _auto_gc_enabled = Ref{Bool}(true)
+function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
+    if !_auto_gc_enabled[]
+        return
+    end
+
+    # If we don't know the last time this depot was GC'ed (because this is the
+    # first time we've looked this session), or it looks like we might want to
+    # collect; let's go ahead and hit the filesystem to find the mtime of the
+    # `orphaned.toml` file, which should tell us how long since the last time
+    # we GC'ed.
+    orphanage_path = joinpath(logdir(depots1()), "orphaned.toml")
+    delay_secs = Second(collect_delay).value
+    curr_time = time()
+    if curr_time - get(DEPOT_ORPHANAGE_TIMESTAMPS, depots1(), 0.0) >= delay_secs
+        DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = mtime(orphanage_path)
+    end
+
+    if curr_time - DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] > delay_secs
+        @info("We haven't cleaned this depot up for a bit, running Pkg.gc()...")
+        try
+            Pkg.gc(ctx; collect_delay)
+            DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = curr_time
+        catch ex
+            @error("GC failed", exception=ex)
+        end
+    end
+end
+
 
 ##################
 # Precompilation #
