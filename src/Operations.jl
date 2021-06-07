@@ -759,7 +759,7 @@ function prune_manifest(env::EnvCache)
     env.manifest = prune_manifest(env.manifest, keep)
 end
 
-function prune_manifest(manifest::Dict, keep::Vector{UUID})
+function prune_manifest(manifest::Manifest, keep::Vector{UUID})
     while !isempty(keep)
         clean = true
         for (uuid, entry) in manifest
@@ -772,7 +772,8 @@ function prune_manifest(manifest::Dict, keep::Vector{UUID})
         end
         clean && break
     end
-    return Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
+    manifest.deps = Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
+    return manifest
 end
 
 
@@ -1405,7 +1406,7 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     return prune_manifest(env.manifest, keep)
 end
 
-function abspath!(env::EnvCache, manifest::Dict{UUID,PackageEntry})
+function abspath!(env::EnvCache, manifest::Manifest)
     for (uuid, entry) in manifest
         if entry.path !== nothing
             entry.path = project_rel_path(env, entry.path)
@@ -1477,7 +1478,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 allow_reresolve || rethrow()
                 @debug err
                 @warn "Could not use exact versions of packages in manifest, re-resolving"
-                temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
+                temp_ctx.env.manifest.deps = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest.deps if isfixed(entry))
                 Pkg.resolve(temp_ctx; io=devnull, skip_writing_project=true)
                 @debug "Using _clean_ dep graph"
             end
