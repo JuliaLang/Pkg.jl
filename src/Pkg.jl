@@ -600,7 +600,7 @@ end
 ###########
 
 const DEPOT_ORPHANAGE_TIMESTAMPS = Dict{String,Float64}()
-_auto_gc_enabled = Ref{Bool}(true)
+const _auto_gc_enabled = Ref{Bool}(true)
 function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     if !_auto_gc_enabled[]
         return
