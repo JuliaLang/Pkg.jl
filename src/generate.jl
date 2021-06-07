@@ -61,10 +61,20 @@ end
 function entrypoint(io::IO, pkg::AbstractString, dir)
     genfile(io, dir, "src/$pkg.jl") do file_io
         print(file_io,
-           """
+            """
             module $pkg
 
-            greet() = print("Hello World!")
+            \"""
+                hello(who::String)
+            Return "Hello, `who`".
+            \"""
+            hello(who::String) = "Hello, \$who"
+
+            \"""
+                domath(x::Number)
+            Return `x + 5`.
+            \"""
+            domath(x::Number) = x + 5
 
             end # module
             """
