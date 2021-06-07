@@ -561,7 +561,6 @@ const RegistrySpec = Registry.RegistrySpec
 
 """
     upgrade_manifest()
-    upgrade_manifest(ctx::Context)
 
 Upgrades the format of the manifest file from v1.0 to v2.0 without re-resolving.
 """
