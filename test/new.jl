@@ -2555,9 +2555,10 @@ end
     function get_manifest_block(name)
         manifest_path = joinpath(dirname(Base.active_project()), "Manifest.toml")
         @test isfile(manifest_path)
-        manifest = TOML.parsefile(manifest_path)
-        @test haskey(manifest, name)
-        return first(manifest[name])
+        manifest = Pkg.Types.read_manifest
+        deps = Base.get_deps(TOML.parsefile(manifest_path))
+        @test haskey(deps, name)
+        return only(deps[name])
     end
 
     isolate(loaded_depot=true) do

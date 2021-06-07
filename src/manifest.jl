@@ -103,19 +103,19 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
     return final
 end
 
-function validate_manifest(stage1::Dict{String,Vector{Stage1}})
+function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest_format::VersionNumber, stage1::Dict{String,Vector{Stage1}}, other::Dict{String, Any})
     # expand vector format deps
     for (name, infos) in stage1, info in infos
         info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
     end
     # invariant: all dependencies are now normalized to Dict{String,UUID}
-    manifest = Dict{UUID, PackageEntry}()
+    deps = Dict{UUID, PackageEntry}()
     for (name, infos) in stage1, info in infos
-        manifest[info.uuid] = info.entry
+        deps[info.uuid] = info.entry
     end
     # now just verify the graph structure
-    for (entry_uuid, entry) in manifest, (name, uuid) in entry.deps
-        dep_entry = get(manifest, uuid, nothing)
+    for (entry_uuid, entry) in deps, (name, uuid) in entry.deps
+        dep_entry = get(deps, uuid, nothing)
         if dep_entry === nothing
             pkgerror("`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
                      "but no such entry exists in the manifest.")
@@ -125,49 +125,79 @@ function validate_manifest(stage1::Dict{String,Vector{Stage1}})
                      "but entry with UUID `$uuid` has name `$(dep_entry.name)`.")
         end
     end
-    return manifest
+    return Manifest(; julia_version, manifest_format, deps, other)
 end
 
-function Manifest(raw::Dict)::Manifest
-    stage1 = Dict{String,Vector{Stage1}}()
-    for (name, infos) in raw, info in infos
-        entry = PackageEntry()
-        entry.name = name
-        uuid = nothing
-        deps = nothing
-        try
-            entry.pinned      = read_pinned(get(info, "pinned", nothing))
-            uuid              = read_field("uuid",          nothing, info, safe_uuid)
-            entry.version     = read_field("version",       nothing, info, safe_version)
-            entry.path        = read_field("path",          nothing, info, safe_path)
-            entry.repo.source = read_field("repo-url",      nothing, info, identity)
-            entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
-            entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
-            entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
-            deps = read_deps(get(info::Dict, "deps", nothing))
-        catch
-            # TODO: Should probably not unconditionally log something
-            @error "Could not parse entry for `$name`"
-            rethrow()
+function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
+    julia_version = raw["julia_version"] == "nothing" ? nothing : VersionNumber(raw["julia_version"])
+    manifest_format = VersionNumber(raw["manifest_format"])
+    if !in(manifest_format.major, 1:2)
+        if f_or_io isa IO
+            @warn "Unknown Manifest.toml format version detected in streamed manifest. Unexpected behavior may occur" manifest_format maxlog = 1
+        else
+            @warn "Unknown Manifest.toml format version detected in file `$(f_or_io)`. Unexpected behavior may occur" manifest_format maxlog = 1
         end
-        entry.other = info::Union{Dict,Nothing}
-        stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps))
     end
-    # by this point, all the fields of the `PackageEntry`s have been type casted
-    # but we have *not* verified the _graph_ structure of the manifest
-    return validate_manifest(stage1)
+    stage1 = Dict{String,Vector{Stage1}}()
+    if haskey(raw, "deps") # deps field doesn't exist if there are no deps
+        for (name, infos) in raw["deps"], info in infos
+            entry = PackageEntry()
+            entry.name = name
+            uuid = nothing
+            deps = nothing
+            try
+                entry.pinned      = read_pinned(get(info, "pinned", nothing))
+                uuid              = read_field("uuid",          nothing, info, safe_uuid)::UUID
+                entry.version     = read_field("version",       nothing, info, safe_version)
+                entry.path        = read_field("path",          nothing, info, safe_path)
+                entry.repo.source = read_field("repo-url",      nothing, info, identity)
+                entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
+                entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
+                entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
+                deps = read_deps(get(info::Dict, "deps", nothing))
+            catch
+                # TODO: Should probably not unconditionally log something
+                @error "Could not parse entry for `$name`"
+                rethrow()
+            end
+            entry.other = info::Union{Dict,Nothing}
+            stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps))
+        end
+        # by this point, all the fields of the `PackageEntry`s have been type casted
+        # but we have *not* verified the _graph_ structure of the manifest
+    end
+    other = Dict{String, Any}()
+    for (k, v) in raw
+        if k in ("julia_version", "deps", "manifest_format")
+            continue
+        end
+        other[k] = v
+    end
+    return validate_manifest(julia_version, manifest_format, stage1, other)
 end
 
 function read_manifest(f_or_io::Union{String,IO})
     raw = if f_or_io isa IO
         TOML.tryparse(read(f_or_io, String))
     else
-        isfile(f_or_io) ? TOML.tryparsefile(f_or_io) : return Dict{UUID,PackageEntry}()
+        isfile(f_or_io) ? TOML.tryparsefile(f_or_io) : return Manifest()
     end
     if raw isa TOML.ParserError
         pkgerror("Could not parse manifest: ", sprint(showerror, raw))
     end
-    return Manifest(raw)
+    if Base.is_v1_format_manifest(raw)
+        raw = convert_flat_format_manifest(raw)
+    end
+    return Manifest(raw, f_or_io)
+end
+
+function convert_flat_format_manifest(old_raw_manifest::Dict)
+    new_raw_manifest = Dict{String, Any}(
+            "deps" => old_raw_manifest,
+            "julia_version" => "nothing", # must be a string here to match raw dict
+            "manifest_format" => "1.0.0" # must be a string here to match raw dict
+        )
+    return new_raw_manifest
 end
 
 ###########
@@ -187,7 +217,19 @@ function destructure(manifest::Manifest)::Dict
         unique_name[entry.name] = !haskey(unique_name, entry.name)
     end
 
-    raw = Dict{String,Any}()
+    # maintain the format of the manifest when writing
+    if manifest.manifest_format.major == 1
+        raw = Dict{String,Vector{Dict{String,Any}}}()
+    elseif manifest.manifest_format.major == 2
+        raw = Dict{String,Any}()
+        raw["julia_version"] = manifest.julia_version
+        raw["manifest_format"] = string(manifest.manifest_format.major, ".", manifest.manifest_format.minor)
+        raw["deps"] = Dict{String,Vector{Dict{String,Any}}}()
+        for (k, v) in manifest.other
+            raw[k] = v
+        end
+    end
+
     for (uuid, entry) in manifest
         new_entry = something(entry.other, Dict{String,Any}())
         new_entry["uuid"] = string(uuid)
@@ -218,7 +260,11 @@ function destructure(manifest::Manifest)::Dict
                 end
             end
         end
-        push!(get!(raw, entry.name, Dict{String,Any}[]), new_entry)
+        if manifest.manifest_format.major == 1
+            push!(get!(raw, entry.name, Dict{String,Any}[]), new_entry)
+        elseif manifest.manifest_format.major == 2
+            push!(get!(raw["deps"], entry.name, Dict{String,Any}[]), new_entry)
+        end
     end
     return raw
 end
@@ -227,17 +273,21 @@ function write_manifest(env::EnvCache)
     mkpath(dirname(env.manifest_file))
     write_manifest(env.manifest, env.manifest_file)
 end
-write_manifest(manifest::Manifest, manifest_file::AbstractString) =
-    write_manifest(destructure(manifest), manifest_file)
-function write_manifest(io::IO, manifest::Dict)
+function write_manifest(manifest::Manifest, manifest_file::AbstractString)
+    return write_manifest(destructure(manifest), manifest_file)
+end
+function write_manifest(io::IO, manifest::Manifest)
+    return write_manifest(io, destructure(manifest))
+end
+function write_manifest(io::IO, raw_manifest::Dict)
     print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-    TOML.print(io, manifest, sorted=true) do x
-        x isa UUID || x isa SHA1 || x isa VersionNumber || pkgerror("unhandled type `$(typeof(x))`")
-        return string(x)
+    TOML.print(io, raw_manifest, sorted=true) do x
+        (typeof(x) in [String, Nothing, UUID, SHA1, VersionNumber]) && return string(x)
+        error("unhandled type `$(typeof(x))`")
     end
     return nothing
 end
-function write_manifest(manifest::Dict, manifest_file::AbstractString)
-    str = sprint(write_manifest, manifest)
+function write_manifest(raw_manifest::Dict, manifest_file::AbstractString)
+    str = sprint(write_manifest, raw_manifest)
     write(manifest_file, str)
 end

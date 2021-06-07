@@ -1425,7 +1425,7 @@ end
 
 function activate(;temp=false, shared=false, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
-    temp && return activate(mktempdir())
+    temp && return activate(mktempdir(); io)
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(io, :Activating, "environment at $(pathrepr(p))")
