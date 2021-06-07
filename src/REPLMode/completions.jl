@@ -200,7 +200,7 @@ function _completions(input, final, offset, index)
         return x
     else
         possible = filter(possible -> startswith(possible, partial), x)
-        return possible, offset:index, !isempty(possible)
+        return sort(possible), offset:index, !isempty(possible)
     end
 end
 
