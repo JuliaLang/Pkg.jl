@@ -1670,4 +1670,18 @@ function handle_package_input!(pkg::PackageSpec)
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
+function upgrade_manifest(ctx::Context = Context())
+    before_format = ctx.env.manifest.manifest_format
+    if before_format == v"2.0"
+        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` already up to date: manifest_format == $(before_format)")
+    elseif before_format != v"1.0"
+        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` version is unrecogized: manifest_format == $(before_format)")
+    end
+    ctx.env.manifest.manifest_format = v"2.0"
+    ctx.env.manifest.julia_version = VERSION
+    Types.write_manifest(ctx.env)
+    printpkgstyle(ctx.io, :Updated, "Format of manifest file at `$(ctx.env.manifest_file)` updated from v$(before_format.major).$(before_format.minor) to v2.0")
+    return nothing
+end
+
 end # module

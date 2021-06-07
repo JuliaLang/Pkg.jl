@@ -5,7 +5,7 @@ import ..Pkg, LibGit2
 using  ..Utils
 
 @testset "Manifest.toml formats" begin
-    @testset "Default manifest format is v1" begin
+    @testset "Default manifest format is v2" begin
         isolate(loaded_depot=true) do
             io = IOBuffer()
             Pkg.activate(; io=io, temp=true)
@@ -13,7 +13,8 @@ using  ..Utils
             @test occursin(r"Activating.*project at.*", output)
             Pkg.add("Profile")
             env_manifest = Pkg.Types.Context().env.manifest_file
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
         end
     end
 
