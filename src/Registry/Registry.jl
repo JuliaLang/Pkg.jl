@@ -238,7 +238,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     existing_registry = Registry.RegistryInstance(regpath)
                     if registry.uuid == existing_registry.uuid
                         println(io,
-                                "registry `$(registry.name)` already exist in `$(Base.contractuser(regpath))`.")
+                                "Registry `$(registry.name)` already exists in `$(Base.contractuser(regpath))`.")
                     else
                         throw(Pkg.Types.PkgError("registry `$(registry.name)=\"$(registry.uuid)\"` conflicts with " *
                             "existing registry `$(existing_registry.name)=\"$(existing_registry.uuid)\"`. " *
