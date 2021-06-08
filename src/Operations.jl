@@ -1843,33 +1843,32 @@ end
 function apply_force_latest_compatible_version!(ctx::Types.Context;
                                                 target_name = nothing,
                                                 allow_earlier_backwards_compatible_versions::Bool = true)
-    direct_deps = load_direct_deps(ctx.env)
-    direct_deps_uuids = [dep.uuid for dep in direct_deps]
-    uuid_list = filter(!is_stdlib, direct_deps_uuids)
-    for uuid in uuid_list
-        apply_force_latest_compatible_version!(
-            ctx,
-            uuid;
-            target_name,
-            allow_earlier_backwards_compatible_versions,
-        )
+    deps_from_env = load_direct_deps(ctx.env)
+    deps = [(; name = x.name, uuid = x.uuid) for x in deps_from_env]
+    for dep in deps
+        if !is_stdlib(dep.uuid)
+            apply_force_latest_compatible_version!(
+                ctx,
+                dep;
+                target_name,
+                allow_earlier_backwards_compatible_versions,
+            )
+        end
     end
     return nothing
 end
 
 function apply_force_latest_compatible_version!(ctx::Types.Context,
-                                                uuid::Base.UUID;
-                                                target_name= nothing,
+                                                dep::NamedTuple{(:name, :uuid), Tuple{String, Base.UUID}};
+                                                target_name = nothing,
                                                 allow_earlier_backwards_compatible_versions::Bool = true)
-    dep = ctx.env.manifest[uuid]
-    name = dep.name
-    active_version = dep.version
+    name, uuid = dep
     has_compat = haskey(ctx.env.project.compat, name)
     if !has_compat
         if name != target_name
             @warn(
                 "Dependency does not have a [compat] entry",
-                name, uuid, active_version, target_name,
+                name, uuid, target_name,
             )
         end
         return nothing
