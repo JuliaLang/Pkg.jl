@@ -109,6 +109,7 @@ using  ..Utils
             @test occursin(r"Activating.*project at.*`.*v1.0`", output)
             @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
         end
+        cp(string(env_manifest, "_backup"), env_manifest, force = true)
     end
 end
 
