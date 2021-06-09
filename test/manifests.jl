@@ -86,6 +86,30 @@ using  ..Utils
             @test_logs (:warn,) Pkg.activate(env_dir; io=io)
         end
     end
+
+    @testset "Pkg.upgrade_manifest()" begin
+        env_dir = joinpath(@__DIR__, "manifest", "formats", "v1.0")
+        env_manifest = joinpath(env_dir, "Manifest.toml")
+        cp(env_manifest, string(env_manifest, "_backup"))
+        isfile(env_manifest) || error("Reference manifest is missing")
+        if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            error("Reference manifest file at $(env_manifest) is invalid")
+        end
+        isolate(loaded_depot=true) do
+            io = IOBuffer()
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+
+            Pkg.upgrade_manifest()
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+        end
+    end
 end
 
 
