@@ -143,6 +143,11 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(pkgs::Vector{PackageSpec}; io::IO=$(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
             Registry.download_default_registries(io)
             ctx = Context()
+            # Save initial environment for undo/redo functionality
+            if !saved_initial_snapshot[]
+                add_snapshot_to_undo(ctx.env)
+                saved_initial_snapshot[] = true
+            end
             kwargs = merge((;kwargs...), (:io => io,))
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(pkg -> handle_package_input!(pkg), pkgs)
