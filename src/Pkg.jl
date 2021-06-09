@@ -393,6 +393,9 @@ any packages listed as arguments, the output will be limited to those packages.
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 
+See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest 
+status as a Julia object instead of printing it.
+
 !!! compat "Julia 1.1"
     `Pkg.status` with package arguments requires at least Julia 1.1.
 
