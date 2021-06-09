@@ -131,7 +131,7 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
 end
 
 function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
-    julia_version = isnothing(raw["julia_version"]) ? nothing : VersionNumber(raw["julia_version"])
+    julia_version = raw["julia_version"] == "nothing" ? nothing : VersionNumber(raw["julia_version"])
     manifest_format = VersionNumber(raw["manifest_format"])
     if !in(manifest_format.major, 1:2)
         if f_or_io isa IO
@@ -201,7 +201,7 @@ end
 function convert_flat_format_manifest(old_raw_manifest::Dict)
     new_raw_manifest = Dict{String, Any}(
             "deps" => old_raw_manifest,
-            "julia_version" => nothing,
+            "julia_version" => "nothing", # must be a string here to match raw dict
             "manifest_format" => "1.0.0" # must be a string here to match raw dict
         )
     return new_raw_manifest
