@@ -129,7 +129,7 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
 end
 
 function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
-    julia_version = raw["julia_version"] == "nothing" ? nothing : VersionNumber(raw["julia_version"])
+    julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]) : nothing
     manifest_format = VersionNumber(raw["manifest_format"])
     if !in(manifest_format.major, 1:2)
         if f_or_io isa IO
@@ -203,16 +203,16 @@ function read_manifest(f_or_io::Union{String,IO})
         pkgerror("Could not parse manifest: ", sprint(showerror, raw))
     end
     if is_v1_format_manifest(raw)
-        raw = convert_flat_format_manifest(raw)
+        raw = convert_v1_format_manifest(raw)
     end
     return Manifest(raw, f_or_io)
 end
 
-function convert_flat_format_manifest(old_raw_manifest::Dict)
+function convert_v1_format_manifest(old_raw_manifest::Dict)
     new_raw_manifest = Dict{String, Any}(
             "deps" => old_raw_manifest,
-            "julia_version" => "nothing", # must be a string here to match raw dict
             "manifest_format" => "1.0.0" # must be a string here to match raw dict
+            # don't set julia_version as it is unknown in old manifests
         )
     return new_raw_manifest
 end
@@ -239,7 +239,9 @@ function destructure(manifest::Manifest)::Dict
         raw = Dict{String,Vector{Dict{String,Any}}}()
     elseif manifest.manifest_format.major == 2
         raw = Dict{String,Any}()
-        raw["julia_version"] = manifest.julia_version
+        if !isnothing(manifest.julia_version) # don't write julia_version if nothing
+            raw["julia_version"] = manifest.julia_version
+        end
         raw["manifest_format"] = string(manifest.manifest_format.major, ".", manifest.manifest_format.minor)
         raw["deps"] = Dict{String,Vector{Dict{String,Any}}}()
         for (k, v) in manifest.other
