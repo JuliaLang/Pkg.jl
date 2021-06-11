@@ -32,7 +32,10 @@ devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depots1(), "de
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
-const DEFAULT_IO = Ref{IO}()
+# For globally overriding in e.g. tests
+const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
+stderr_f() = something(DEFAULT_IO[], stderr)
+stdout_f() = something(DEFAULT_IO[], stdout)
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
@@ -138,7 +141,8 @@ Precompile all the dependencies of the project in parallel.
 !!! note
     This method is called automatically after any Pkg action that changes the manifest.
     Any packages that have previously errored during precompilation won't be retried in auto mode
-    until they have changed. To disable automatic precompilation set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`
+    until they have changed. To disable automatic precompilation set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
+    To manually control the number of tasks used set `ENV["JULIA_NUM_PRECOMPILE_TASKS"]`.
 
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3. On earlier versions
@@ -215,7 +219,7 @@ by starting julia with `--inline=no`.
 const test = API.test
 
 """
-    Pkg.gc(; io::IO=DEFAULT_IO[])
+    Pkg.gc(; io::IO=stderr)
 
 Garbage collect packages that are no longer reachable from any project.
 Only packages that are tracked by version are deleted, so no packages
@@ -225,9 +229,9 @@ const gc = API.gc
 
 
 """
-    Pkg.build(; verbose = false, io::IO=DEFAULT_IO[])
-    Pkg.build(pkg::Union{String, Vector{String}}; verbose = false, io::IO=DEFAULT_IO[])
-    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false, io::IO=DEFAULT_IO[])
+    Pkg.build(; verbose = false, io::IO=stderr)
+    Pkg.build(pkg::Union{String, Vector{String}}; verbose = false, io::IO=stderr)
+    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false, io::IO=stderr)
 
 Run the build script in `deps/build.jl` for `pkg` and all of its dependencies in
 depth-first recursive order.
@@ -241,8 +245,8 @@ redirecting to the `build.log` file.
 const build = API.build
 
 """
-    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=DEFAULT_IO[])
-    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=DEFAULT_IO[])
+    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr)
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
 git revision. A pinned package is never updated.
@@ -256,8 +260,8 @@ Pkg.pin(name="Example", version="0.3.1")
 const pin = API.pin
 
 """
-    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=DEFAULT_IO[])
-    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=DEFAULT_IO[])
+    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr)
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
 
 If `pkg` is pinned, remove the pin.
 If `pkg` is tracking a path,
@@ -272,8 +276,8 @@ const free = API.free
 
 
 """
-    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=DEFAULT_IO[])
-    Pkg.develop(pkgs::Union{Packagespec, Vector{Packagespec}}; io::IO=DEFAULT_IO[])
+    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr)
+    Pkg.develop(pkgs::Union{Packagespec, Vector{Packagespec}}; io::IO=stderr)
 
 Make a package available for development by tracking it by path.
 If `pkg` is given with only a name or by a URL, the package will be downloaded
@@ -346,7 +350,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false, io::IO=DEFAULT_IO[])
+    Pkg.instantiate(; verbose = false, io::IO=stderr)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -360,7 +364,7 @@ dependencies in the manifest and instantiate the resulting project.
 const instantiate = API.instantiate
 
 """
-    Pkg.resolve(; io::IO=DEFAULT_IO[])
+    Pkg.resolve(; io::IO=stderr)
 
 Update the current manifest with potential changes to the dependency graph
 from packages that are tracking a path.
@@ -389,7 +393,8 @@ const status = API.status
 
 
 """
-    Pkg.activate([s::String]; shared::Bool=false, io::IO=DEFAULT_IO[])
+    Pkg.activate([s::String]; shared::Bool=false, io::IO=stderr)
+    Pkg.activate(; temp::Bool=false, shared::Bool=false, io::IO=stderr)
 
 Activate the environment at `s`. The active environment is the environment
 that is modified by executing package commands.
@@ -543,7 +548,6 @@ const RegistrySpec = Types.RegistrySpec
 
 
 function __init__()
-    DEFAULT_IO[] = stderr
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else

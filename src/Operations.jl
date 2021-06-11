@@ -14,7 +14,7 @@ import ..Artifacts: ensure_all_artifacts_installed, artifact_names, extract_all_
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server
-import ...Pkg: can_fancyprint, DEFAULT_IO
+import ...Pkg: can_fancyprint, stderr_f
 import ..Types: printpkgstyle
 
 #########
@@ -567,7 +567,7 @@ function install_archive(
     urls::Vector{Pair{String,Bool}},
     hash::SHA1,
     version_path::String;
-    io::IO=DEFAULT_IO[]
+    io::IO=stderr_f()
 )::Bool
     tmp_objects = String[]
     url_success = false
@@ -686,7 +686,7 @@ end
 function download_artifacts(ctx::Context, pkg_roots::Vector{String};
                             platform::AbstractPlatform=HostPlatform(),
                             verbose::Bool=false,
-                            io::IO=DEFAULT_IO[])
+                            io::IO=stderr_f())
     # List of Artifacts.toml files that we're going to download from
     artifacts_tomls = String[]
 
@@ -850,7 +850,7 @@ function prune_manifest(ctx::Context)
     ctx.env.manifest = prune_manifest(ctx.env.manifest, keep)
 end
 
-function prune_manifest(manifest::Dict, keep::Vector{UUID})
+function prune_manifest(manifest::Manifest, keep::Vector{UUID})
     while !isempty(keep)
         clean = true
         for (uuid, entry) in manifest
@@ -863,7 +863,8 @@ function prune_manifest(manifest::Dict, keep::Vector{UUID})
         end
         clean && break
     end
-    return Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
+    manifest.deps = Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
+    return manifest
 end
 
 function any_package_not_installed(ctx)
@@ -1463,9 +1464,9 @@ function sandbox_preserve(ctx::Context, target::PackageSpec, test_project::Strin
     return prune_manifest(env.manifest, keep)
 end
 
-abspath!(ctx::Context, manifest::Dict{UUID,PackageEntry}) =
+abspath!(ctx::Context, manifest::Manifest) =
     abspath!(dirname(ctx.env.project_file), manifest)
-function abspath!(project::String, manifest::Dict{UUID,PackageEntry})
+function abspath!(project::String, manifest::Manifest)
     for (uuid, entry) in manifest
         if entry.path !== nothing
             entry.path = project_rel_path(project, entry.path)
@@ -1524,7 +1525,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             catch err# TODO
                 @debug err
                 @warn "Could not use exact versions of packages in manifest, re-resolving"
-                temp_ctx.env.manifest = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest if isfixed(entry))
+                temp_ctx.env.manifest.deps = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest.deps if isfixed(entry))
                 Pkg.resolve(temp_ctx; io=devnull)
                 @debug "Using _clean_ dep graph"
             end
@@ -1657,7 +1658,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         printpkgstyle(ctx, :Testing, pkg.name)
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override) do
             test_fn !== nothing && test_fn()
-            sandbox_ctx = Context()
+            sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx; mode=PKGMODE_COMBINED)
             Pkg._auto_precompile(sandbox_ctx)
             printpkgstyle(ctx, :Testing, "Running tests...")
@@ -1740,7 +1741,7 @@ function stat_rep(x::PackageSpec; name=true)
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
 end
 
-print_single(ctx::Context, pkg::PackageSpec) = printstyled(ctx.io, stat_rep(pkg); color=:white)
+print_single(ctx::Context, pkg::PackageSpec) = print(ctx.io, stat_rep(pkg))
 
 is_instantiated(::Nothing) = false
 is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)

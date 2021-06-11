@@ -141,6 +141,20 @@ end
 inside_test_sandbox(fn, name; kwargs...) = Pkg.test(name; test_fn=fn, kwargs...)
 inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
 
+@testset "test: printing" begin
+    isolate(loaded_depot=true) do
+        Pkg.add(name="Example")
+        io = IOBuffer()
+        Pkg.test("Example"; io=io)
+        output = String(take!(io))
+        @test occursin(r"Testing Example", output)
+        @test occursin(r"Status `.+Project\.toml`", output)
+        @test occursin(r"Status `.+Manifest\.toml`", output)
+        @test occursin(r"Testing Running tests...", output)
+        @test occursin(r"Testing Example tests passed", output)
+    end
+end
+
 @testset "test: sandboxing" begin
     # explicit test dependencies and the tested project are available within the test sandbox
     isolate(loaded_depot=true) do; mktempdir() do tempdir
@@ -2530,6 +2544,17 @@ end
     @test test_result
 end
 
+# returns a deps list for both old and new manifest formats
+function get_deps(raw_manifest::Dict)
+    if Pkg.Types.is_v1_format_manifest(raw_manifest)
+        return raw_manifest
+    else
+        # if the manifest has no deps, there won't be a `deps` field
+        return get(Dict{String, Any}, raw_manifest, "deps")
+    end
+end
+
+
 @testset "Pkg.add() with julia_version" begin
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
@@ -2541,9 +2566,10 @@ end
     function get_manifest_block(name)
         manifest_path = joinpath(dirname(Base.active_project()), "Manifest.toml")
         @test isfile(manifest_path)
-        manifest = TOML.parsefile(manifest_path)
-        @test haskey(manifest, name)
-        return first(manifest[name])
+        manifest = Pkg.Types.read_manifest
+        deps = get_deps(TOML.parsefile(manifest_path))
+        @test haskey(deps, name)
+        return only(deps[name])
     end
 
     isolate(loaded_depot=true) do

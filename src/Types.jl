@@ -11,7 +11,7 @@ import Base.string
 using REPL.TerminalMenus
 
 using TOML
-import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO
+import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..stderr_f
 import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
 import Base.BinaryPlatforms: Platform
 import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
@@ -20,7 +20,7 @@ import Base: SHA1
 using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
-    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, range_compressed_versionspec, err_rep,
+    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, Manifest, range_compressed_versionspec, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     manifest_info, registered_uuids, registered_paths, registered_uuid, registered_name,
@@ -219,7 +219,25 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.tree_hash == t2.tree_hash &&
     t1.deps == t2.deps   # omits `other`
 Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps], init=h)  # omits `other`
-const Manifest = Dict{UUID,PackageEntry}
+
+Base.@kwdef mutable struct Manifest
+    julia_version::Union{Nothing,VersionNumber} = Base.VERSION
+    manifest_format::VersionNumber = v"1.0.0" # default to older flat format
+    deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
+    other::Dict{String,Any} = Dict{String,Any}()
+end
+Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
+Base.hash(m::Manifest, h::UInt) = foldr(hash, [getfield(m, x) for x in fieldnames(Manifest)], init=h)
+Base.getindex(m::Manifest, i_or_key) = getindex(m.deps, i_or_key)
+Base.get(m::Manifest, key, default) = get(m.deps, key, default)
+Base.setindex!(m::Manifest, i_or_key, value) = setindex!(m.deps, i_or_key, value)
+Base.iterate(m::Manifest) = iterate(m.deps)
+Base.iterate(m::Manifest, i::Int) = iterate(m.deps, i)
+Base.length(m::Manifest) = length(m.deps)
+Base.empty!(m::Manifest) = empty!(m.deps)
+Base.values(m::Manifest) = values(m.deps)
+Base.keys(m::Manifest) = keys(m.deps)
+Base.haskey(m::Manifest, key) = haskey(m.deps, key)
 
 function Base.show(io::IO, pkg::PackageEntry)
     f = []
@@ -313,7 +331,7 @@ include("manifest.jl")
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
-    io::IO = something(DEFAULT_IO[], stderr)
+    io::IO = stderr_f()
     use_libgit2_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
@@ -478,7 +496,6 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         end
         if isdir(dev_path)
             resolve_projectfile!(ctx, pkg, dev_path)
-            println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
             if is_local_path
                 pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx, dev_path)
             else
