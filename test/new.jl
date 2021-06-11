@@ -2544,6 +2544,17 @@ end
     @test test_result
 end
 
+# returns a deps list for both old and new manifest formats
+function get_deps(raw_manifest::Dict)
+    if Pkg.Types.is_v1_format_manifest(raw_manifest)
+        return raw_manifest
+    else
+        # if the manifest has no deps, there won't be a `deps` field
+        return get(Dict{String, Any}, raw_manifest, "deps")
+    end
+end
+
+
 @testset "Pkg.add() with julia_version" begin
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
@@ -2556,7 +2567,7 @@ end
         manifest_path = joinpath(dirname(Base.active_project()), "Manifest.toml")
         @test isfile(manifest_path)
         manifest = Pkg.Types.read_manifest
-        deps = Base.get_deps(TOML.parsefile(manifest_path))
+        deps = get_deps(TOML.parsefile(manifest_path))
         @test haskey(deps, name)
         return only(deps[name])
     end

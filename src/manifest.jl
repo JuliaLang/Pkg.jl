@@ -176,6 +176,23 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
     return validate_manifest(julia_version, manifest_format, stage1, other)
 end
 
+if isdefined(Base, :is_v1_format_manifest)
+    const is_v1_format_manifest = Base.is_v1_format_manifest
+else
+    function is_v1_format_manifest(raw_manifest::Dict)
+        if haskey(raw_manifest, "manifest_format")
+            if raw_manifest["manifest_format"] isa Dict && haskey(raw_manifest["manifest_format"], "uuid")
+                # the off-chance where an old format manifest has a dep called "manifest_format"
+                return true
+            end
+            return false
+        else
+            return true
+        end
+    end
+end
+
+
 function read_manifest(f_or_io::Union{String,IO})
     raw = if f_or_io isa IO
         TOML.tryparse(read(f_or_io, String))
@@ -185,7 +202,7 @@ function read_manifest(f_or_io::Union{String,IO})
     if raw isa TOML.ParserError
         pkgerror("Could not parse manifest: ", sprint(showerror, raw))
     end
-    if Base.is_v1_format_manifest(raw)
+    if is_v1_format_manifest(raw)
         raw = convert_flat_format_manifest(raw)
     end
     return Manifest(raw, f_or_io)

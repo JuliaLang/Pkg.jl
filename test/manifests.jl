@@ -13,7 +13,7 @@ using  ..Utils
             @test occursin(r"Activating.*environment at.*", output)
             Pkg.add("Profile")
             env_manifest = Pkg.Types.Context().env.manifest_file
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+            @test Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest))
         end
     end
 
@@ -21,7 +21,7 @@ using  ..Utils
         env_dir = joinpath(@__DIR__, "manifest", "formats", "v1.0")
         env_manifest = joinpath(env_dir, "Manifest.toml")
         isfile(env_manifest) || error("Reference manifest is missing")
-        if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+        if Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
             error("Reference manifest file at $(env_manifest) is invalid")
         end
         isolate(loaded_depot=true) do
@@ -29,13 +29,13 @@ using  ..Utils
             Pkg.activate(env_dir; io=io)
             output = String(take!(io))
             @test occursin(r"Activating.*environment at.*`.*v1.0.*`", output)
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+            @test Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest))
 
             Pkg.add("Profile")
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+            @test Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest))
 
             Pkg.rm("Profile")
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+            @test Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest))
         end
     end
 
@@ -43,7 +43,7 @@ using  ..Utils
         env_dir = joinpath(@__DIR__, "manifest", "formats", "v2.0")
         env_manifest = joinpath(env_dir, "Manifest.toml")
         isfile(env_manifest) || error("Reference manifest is missing")
-        if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+        if Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest))
             error("Reference manifest file at $(env_manifest) is invalid")
         end
         isolate(loaded_depot=true) do
@@ -51,13 +51,13 @@ using  ..Utils
             Pkg.activate(env_dir; io=io)
             output = String(take!(io))
             @test occursin(r"Activating.*environment at.*`.*v2.0.*`", output)
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
 
             Pkg.add("Profile")
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
 
             Pkg.rm("Profile")
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
 
             m = Pkg.Types.read_manifest(env_manifest)
             @test m.other["some_other_field"] == "other"

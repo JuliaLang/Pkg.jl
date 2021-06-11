@@ -1147,8 +1147,12 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     end
                     try
                         ret = Logging.with_logger(Logging.NullLogger()) do
-                            # capture stderr, send stdout to devnull, don't skip loaded modules
-                            Base.compilecache(pkg, sourcepath, iob, devnull, false)
+                            @static if hasmethod(Base.compilecache, Tuple{Base.PkgId, String, IO, IO, Bool})
+                                # capture stderr, send stdout to devnull, don't skip loaded modules
+                                Base.compilecache(pkg, sourcepath, iob, devnull, false)
+                            else
+                                Base.compilecache(pkg, sourcepath, iob, devnull)
+                            end
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
