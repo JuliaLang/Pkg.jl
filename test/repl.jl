@@ -255,8 +255,8 @@ temp_pkg_dir() do project_path
         @test Base.ACTIVE_PROJECT[] === nothing
         # expansion of ~
         if !Sys.iswindows()
-            pkg"activate ~/Foo"
-            @test Base.active_project() == joinpath(homedir(), "Foo", "Project.toml")
+            pkg"activate ~/Foo_lzTkPF6N"
+            @test Base.active_project() == joinpath(homedir(), "Foo_lzTkPF6N", "Project.toml")
         end
     end
 end
