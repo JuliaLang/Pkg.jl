@@ -895,7 +895,7 @@ end
                               ) Pkg.pkg"add some/really/random/Dir"
         # warn if not explicit about adding directory
         mkdir("Example")
-        @test_logs (:info, r"Use `./Example` to add or develop the local directory at `.*`.") Pkg.pkg"add Example"
+        @test_logs (:info, r"Use `./Example` to add or develop the local directory at `.*`.") match_mode=:any Pkg.pkg"add Example"
     end end
 end
 
@@ -1967,7 +1967,7 @@ end
     # other
     isolate(loaded_depot=true) do
         @test_deprecated Pkg.status(Pkg.PKGMODE_MANIFEST)
-        @test_logs (:warn, r"diff option only available") Pkg.status(diff=true)
+        @test_logs (:warn, r"diff option only available") match_mode=:any Pkg.status(diff=true)
     end
     # State changes
     isolate(loaded_depot=true) do

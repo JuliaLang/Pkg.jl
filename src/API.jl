@@ -1415,6 +1415,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
+        Types.check_warn_manifest_julia_version_compat(_manifest, ctx.env.manifest_file)
         deps = Dict{String,String}()
         for (uuid, pkg) in _manifest
             if pkg.name in keys(deps)
@@ -1433,6 +1434,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
+    Types.check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
