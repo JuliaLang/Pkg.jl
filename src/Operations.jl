@@ -288,10 +288,13 @@ end
 function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
     # compatibility
     if julia_version !== nothing
+        env.manifest.julia_version = julia_version
         v = intersect(julia_version, get_compat(env.project, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
+    else
+        env.manifest.julia_version = VERSION
     end
     names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
     # recursive search for packages which are tracking a path
