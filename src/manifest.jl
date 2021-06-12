@@ -160,7 +160,7 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
                 deps = read_deps(get(info::Dict, "deps", nothing))
             catch
                 # TODO: Should probably not unconditionally log something
-                @error "Could not parse entry for `$name`"
+                @error "Could not parse entry for `$name`" f_or_io
                 rethrow()
             end
             entry.other = info::Union{Dict,Nothing}
