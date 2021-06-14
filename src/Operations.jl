@@ -1398,11 +1398,11 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     if env.pkg !== nothing
         env.manifest[env.pkg.uuid] = PackageEntry(;name=env.pkg.name, path=dirname(env.project_file),
                                                   deps=env.project.deps)
-        # if the source manifest is an old format, upgrade the manifest_format so
-        # that warnings aren't thrown for the temp sandbox manifest
-        if env.manifest.manifest_format < v"2.0"
-            env.manifest.manifest_format = v"2.0"
-        end
+    end
+    # if the source manifest is an old format, upgrade the manifest_format so
+    # that warnings aren't thrown for the temp sandbox manifest
+    if env.manifest.manifest_format < v"2.0"
+        env.manifest.manifest_format = v"2.0"
     end
     # preserve important nodes
     keep = [target.uuid]
