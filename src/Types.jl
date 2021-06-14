@@ -347,12 +347,6 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         deepcopy(manifest),
         )
 
-    # Save initial environment for undo/redo functionality
-    if !Pkg.API.saved_initial_snapshot[]
-        Pkg.API.add_snapshot_to_undo(env′)
-        Pkg.API.saved_initial_snapshot[] = true
-    end
-
     return env′
 end
 
