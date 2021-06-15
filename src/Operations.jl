@@ -822,7 +822,7 @@ end
 
 function build(ctx::Context, uuids::Set{UUID}, verbose::Bool)
     if any_package_not_installed(ctx.env.manifest) || !isfile(ctx.env.manifest_file)
-        Pkg.instantiate(ctx)
+        Pkg.instantiate(ctx, allow_build = false, allow_autoprecomp = false)
     end
     all_uuids = get_deps(ctx.env, uuids)
     build_versions(ctx, all_uuids; verbose)
