@@ -435,8 +435,6 @@ end
             return versions[idx]
         end
 
-        #=
-        # DISABLED FOR NOW BECAUSE THE JLL INTO STDLIBS BROKE IT
         # First, we're going to resolve for specific versions of Julia, ensuring we get the right dep versions:
         Pkg.Registry.download_default_registries(Pkg.stdout_f())
         ctx = Pkg.Types.Context(;julia_version=v"1.5")
@@ -469,7 +467,6 @@ end
         mpfr = find_by_name(versions, "MPFR_jll")
         @test mpfr !== nothing
         @test mpfr.version.major == 4 && mpfr.version.minor == 0
-        =#
     end
 end
 
