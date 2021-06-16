@@ -4,6 +4,32 @@ using  Test, UUIDs, Dates, TOML
 import ..Pkg, LibGit2
 using  ..Utils
 
+# used with the reference manifests in `test/manifest/formats`
+# ensures the manifests are valid and restored after test
+function reference_manifest_isolated_test(f, dir::String; v1::Bool=false)
+    env_dir = joinpath(@__DIR__, "manifest", "formats", dir)
+    env_manifest = joinpath(env_dir, "Manifest.toml")
+    env_project = joinpath(env_dir, "Project.toml")
+    cp(env_manifest, string(env_manifest, "_backup"))
+    cp(env_project, string(env_project, "_backup"))
+    try
+        isfile(env_manifest) || error("Reference manifest is missing")
+        if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == !v1
+            error("Reference manifest file at $(env_manifest) is invalid")
+        end
+        isolate(loaded_depot=true) do
+            f(env_dir, env_manifest)
+        end
+    finally
+        cp(string(env_manifest, "_backup"), env_manifest, force = true)
+        rm(string(env_manifest, "_backup"))
+        cp(string(env_project, "_backup"), env_project, force = true)
+        rm(string(env_project, "_backup"))
+    end
+end
+
+##
+
 @testset "Manifest.toml formats" begin
     @testset "Default manifest format is v2" begin
         isolate(loaded_depot=true) do
@@ -19,13 +45,7 @@ using  ..Utils
     end
 
     @testset "v1.0: activate, change, maintain manifest format" begin
-        env_dir = joinpath(@__DIR__, "manifest", "formats", "v1.0")
-        env_manifest = joinpath(env_dir, "Manifest.toml")
-        isfile(env_manifest) || error("Reference manifest is missing")
-        if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            error("Reference manifest file at $(env_manifest) is invalid")
-        end
-        isolate(loaded_depot=true) do
+        reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
             io = IOBuffer()
             Pkg.activate(env_dir; io=io)
             output = String(take!(io))
@@ -41,13 +61,7 @@ using  ..Utils
     end
 
     @testset "v2.0: activate, change, maintain manifest format" begin
-        env_dir = joinpath(@__DIR__, "manifest", "formats", "v2.0")
-        env_manifest = joinpath(env_dir, "Manifest.toml")
-        isfile(env_manifest) || error("Reference manifest is missing")
-        if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
-            error("Reference manifest file at $(env_manifest) is invalid")
-        end
-        isolate(loaded_depot=true) do
+        reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
             io = IOBuffer()
             Pkg.activate(env_dir; io=io)
             output = String(take!(io))
@@ -72,50 +86,69 @@ using  ..Utils
                 @test m.manifest_format == m2.manifest_format
                 @test m.other == m2.other
             end
-
         end
     end
 
     @testset "v3.0: unknown format, warn" begin
         # the reference file here is not actually v3.0. It just represents an unknown manifest format
-        env_dir = joinpath(@__DIR__, "manifest", "formats", "v3.0_unknown")
-        env_manifest = joinpath(env_dir, "Manifest.toml")
-        isfile(env_manifest) || error("Reference manifest is missing")
-        isolate(loaded_depot=true) do
+        reference_manifest_isolated_test("v3.0_unknown") do env_dir, env_manifest
             io = IOBuffer()
             @test_logs (:warn,) Pkg.activate(env_dir; io=io)
         end
     end
 
     @testset "Pkg.upgrade_manifest()" begin
-        env_dir = joinpath(@__DIR__, "manifest", "formats", "v1.0")
-        env_manifest = joinpath(env_dir, "Manifest.toml")
-        cp(env_manifest, string(env_manifest, "_backup"))
-        try
-            isfile(env_manifest) || error("Reference manifest is missing")
-            if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-                error("Reference manifest file at $(env_manifest) is invalid")
-            end
-            isolate(loaded_depot=true) do
-                io = IOBuffer()
-                Pkg.activate(env_dir; io=io)
-                output = String(take!(io))
-                @test occursin(r"Activating.*project at.*`.*v1.0`", output)
-                @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+        reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
+            io = IOBuffer()
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
 
-                Pkg.upgrade_manifest()
-                @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-                Pkg.activate(env_dir; io=io)
-                output = String(take!(io))
-                @test occursin(r"Activating.*project at.*`.*v1.0`", output)
-                @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
-            end
-        finally
-            cp(string(env_manifest, "_backup"), env_manifest, force = true)
-            rm(string(env_manifest, "_backup"))
+            Pkg.upgrade_manifest()
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
         end
     end
 end
 
+@testset "Manifest metadata" begin
+    @testset "julia_version" begin
+        @testset "new environment: value is `nothing`, then `VERSION` after resolve" begin
+            isolate(loaded_depot=true) do
+                Pkg.activate(; temp=true)
+                @test Pkg.Types.Context().env.manifest.julia_version == nothing
+                Pkg.add("Profile")
+                @test Pkg.Types.Context().env.manifest.julia_version == VERSION
+            end
+        end
+        @testset "activating old environment: maintains old version, then `VERSION` after resolve" begin
+            reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
+                Pkg.activate(env_dir)
+                @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV.1199"
+
+                Pkg.add("Profile")
+                @test Pkg.Types.Context().env.manifest.julia_version == VERSION
+            end
+        end
+        @testset "instantiate manifest from different julia_version" begin
+            reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
+                Pkg.activate(env_dir)
+                @test_logs (:warn, r"The active manifest file") Pkg.instantiate()
+                @test Pkg.Types.Context().env.manifest.julia_version == nothing
+            end
+            if VERSION >= v"1.8"
+                reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
+                    Pkg.activate(env_dir)
+                    @test_logs (:warn, r"The active manifest file") Pkg.instantiate()
+                    @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV.1199"
+                end
+            end
+        end
+    end
+end
 
 end # module
