@@ -1408,7 +1408,7 @@ end
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
-                     platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
+                     platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
@@ -1498,7 +1498,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Install all artifacts
     Operations.download_artifacts(ctx.env; platform=platform, verbose=verbose)
     # Run build scripts
-    Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
+    allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
 
     allow_autoprecomp && Pkg._auto_precompile(ctx)
 end
