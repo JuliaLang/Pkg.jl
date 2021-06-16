@@ -1408,13 +1408,14 @@ end
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
-                     platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
+                     platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
     end
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
+        Types.check_warn_manifest_julia_version_compat(_manifest, ctx.env.manifest_file)
         deps = Dict{String,String}()
         for (uuid, pkg) in _manifest
             if pkg.name in keys(deps)
@@ -1433,6 +1434,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
+    Types.check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
@@ -1496,7 +1498,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Install all artifacts
     Operations.download_artifacts(ctx.env; platform=platform, verbose=verbose)
     # Run build scripts
-    Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
+    allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
 
     allow_autoprecomp && Pkg._auto_precompile(ctx)
 end
