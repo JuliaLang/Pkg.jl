@@ -1321,7 +1321,7 @@ end
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
-                     platform::AbstractPlatform=HostPlatform(), allow_autoprecomp::Bool=true, kwargs...)
+                     platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
@@ -1411,7 +1411,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
     Operations.download_artifacts(ctx, art_pkgs; platform, verbose, io=ctx.io)
     # Run build scripts
-    Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose)
+    allow_build && Operations.build_versions(ctx, union(UUID[pkg.uuid for pkg in new_apply], new_git); verbose)
 
     allow_autoprecomp && Pkg._auto_precompile(ctx)
 end

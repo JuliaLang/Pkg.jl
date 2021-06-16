@@ -903,7 +903,7 @@ end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}, verbose::Bool)
     if any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file)
-        Pkg.instantiate(ctx)
+        Pkg.instantiate(ctx, allow_build=false, allow_autoprecomp=false)
     end
     uuids = UUID[]
     _get_deps!(ctx, pkgs, uuids)
