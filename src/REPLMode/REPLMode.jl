@@ -688,7 +688,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         end
         rethrow()
     end
-    if lowercase(resp) in ["y", "yes"]
+    if !isnothing(resp) && lowercase(resp) in ["y", "yes"]
         API.add(string.(available_pkgs))
         if length(available_pkgs) < length(pkgs)
             return false # declare that some pkgs couldn't be installed
