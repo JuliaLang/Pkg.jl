@@ -22,7 +22,7 @@ using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
+    PkgError, pkgerror, has_name, has_uuid, is_stdlib, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
@@ -411,9 +411,8 @@ is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
 # Find the entry in `STDLIBS_BY_VERSION`
 # that corresponds to the requested version, and use that.
-# If we can't find one, defaults to `UNREGISTERED_STDLIBS`
 function get_last_stdlibs(julia_version::VersionNumber)
-    last_stdlibs = UNREGISTERED_STDLIBS
+    last_stdlibs = Dict{UUID,String}()
     for (version, stdlibs) in STDLIBS_BY_VERSION
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
             break
@@ -422,10 +421,6 @@ function get_last_stdlibs(julia_version::VersionNumber)
     end
     return last_stdlibs
 end
-# If `julia_version` is set to `nothing`, that means (essentially) treat all registered
-# stdlibs as normal packages so that we get the latest versions of everything, ignoring
-# julia compat.  So we set the list of stdlibs to that of only the unregistered stdlibs.
-get_last_stdlibs(::Nothing) = UNREGISTERED_STDLIBS
 
 # Allow asking if something is an stdlib for a particular version of Julia
 function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
@@ -434,22 +429,21 @@ function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
         return is_stdlib(uuid)
     end
 
+    # If this UUID is known to be unregistered, always return `true`
+    if haskey(UNREGISTERED_STDLIBS, uuid)
+        return true
+    end
+
+    # Otherwise, if the `julia_version` is `nothing`, all registered stdlibs
+    # will be treated like normal packages.
+    if julia_version === nothing
+        return false
+    end
+
     last_stdlibs = get_last_stdlibs(julia_version)
     # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
     # fall through with an empty `last_stdlibs`, which will always return `false`.
     return uuid in keys(last_stdlibs)
-end
-
-# Return the version of a stdlib with respect to a particular Julia version, or
-# `nothing` if that stdlib is not versioned.  We only store version numbers for
-# stdlibs that are external and thus could be installed from their repositories,
-# e.g. things like `GMP_jll`, `Tar`, etc...
-function stdlib_version(uuid::UUID, julia_version::Union{VersionNumber,Nothing})
-    last_stdlibs = get_last_stdlibs(julia_version)
-    if !(uuid in keys(last_stdlibs))
-        return nothing
-    end
-    return last_stdlibs[uuid][2]
 end
 
 is_unregistered_stdlib(uuid::UUID) = haskey(UNREGISTERED_STDLIBS, uuid)

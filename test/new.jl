@@ -2668,6 +2668,16 @@ end
     end
 
     isolate(loaded_depot=true) do
+        # Test that adding `NetworkOptions` results in a `Manifest.toml` with no version
+        # which means that it was treated as a standard library
+        Pkg.add("NetworkOptions")
+        block = get_manifest_block("NetworkOptions")
+        @test haskey(block, "uuid")
+        @test block["uuid"] == networkoptions_uuid
+        @test !haskey(block, "version")
+    end
+
+    isolate(loaded_depot=true) do
         # Next, test that if we ask for `v1.5` it DOES have a version, and that GMP_jll installs v6.1.X
         Pkg.add(["NetworkOptions", "GMP_jll"]; julia_version=v"1.5")
         no_block = get_manifest_block("NetworkOptions")
@@ -2688,7 +2698,7 @@ end
         artifacts_toml = joinpath(gmp_jll_dir, "Artifacts.toml")
         @test isfile(artifacts_toml)
         meta = artifact_meta("GMP", artifacts_toml)
-        @test meta !== nothing
+        @test meta != nothing
 
         gmp_artifact_path = artifact_path(Base.SHA1(meta["git-tree-sha1"]))
         @test isdir(gmp_artifact_path)
@@ -2700,22 +2710,8 @@ end
         end
     end
 
-    # Next, test that if we ask for `v1.6`, GMP_jll gets `v6.2.0`, and for `v1.7`, it gets `v6.2.1`
-    function do_gmp_test(julia_version, gmp_version)
-        isolate(loaded_depot=true) do
-            Pkg.add("GMP_jll"; julia_version)
-            gmp_block = get_manifest_block("GMP_jll")
-            @test haskey(gmp_block, "uuid")
-            @test gmp_block["uuid"] == gmp_jll_uuid
-            @test haskey(gmp_block, "version")
-            @test startswith(gmp_block["version"], string(gmp_version))
-        end
-    end
-    do_gmp_test(v"1.6", v"6.2.0")
-    do_gmp_test(v"1.7", v"6.2.1")
-
     isolate(loaded_depot=true) do
-        # Next, test that if we ask for `nothing`, NetworkOptions has a `version` but `LinearAlgebra` does not.
+        # Next, test that if we ask for `nothing`, NetworkOptions has a `version` but `LinearAlgebra` does.
         Pkg.add(["LinearAlgebra", "NetworkOptions"]; julia_version=nothing)
         no_block = get_manifest_block("NetworkOptions")
         @test haskey(no_block, "uuid")
