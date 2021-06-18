@@ -131,8 +131,8 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
                              tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid)
         if is_stdlib(pkg.uuid, julia_version)
-            # Only set stdlib versions for versioned (external) stdlibs
-            entry.version = stdlib_version(pkg.uuid, julia_version)
+            # do not set version for stdlibs
+            entry.version = nothing
         end
         if Types.is_project(env, pkg)
             entry.deps = env.project.deps
@@ -384,7 +384,6 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
         union!(uuids, fixed_uuids)
     end
 
-    stdlibs_for_julia_version = Types.get_last_stdlibs(julia_version)
     seen = Set{UUID}()
 
     # pkg -> version -> (dependency => compat):
@@ -400,21 +399,13 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
         for uuid in unseen
             push!(seen, uuid)
             uuid in keys(fixed) && continue
-            all_compat_u = get_or_make!(all_compat,   uuid)
+            all_compat_u   = get_or_make!(all_compat,   uuid)
 
-            uuid_is_stdlib = false
-            stdlib_name = ""
-            stdlib_version = nothing
-            if haskey(stdlibs_for_julia_version, uuid)
-                uuid_is_stdlib = true
-                stdlib_name, stdlib_version = stdlibs_for_julia_version[uuid]
-            end
-
-            # If we're requesting resolution of a package that is an unregistered stdlib (or one
-            # that tracks no version information) we must special-case it here.  This is further
-            # complicated by the fact that we can ask this question relative to a Julia version.
-            if is_unregistered_stdlib(uuid) || (uuid_is_stdlib && stdlib_version === nothing)
-                path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
+            # If we're requesting resolution of a package that is an stdlib and is not registered,
+            # we must special-case it here.  This is further complicated by the fact that we can
+            # ask this question relative to a particular Julia version.
+            if is_unregistered_stdlib(uuid) || is_stdlib(uuid, julia_version)
+                path = Types.stdlib_path(stdlibs()[uuid])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
                 proj = read_package(proj_file)
