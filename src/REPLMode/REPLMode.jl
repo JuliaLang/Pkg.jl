@@ -682,13 +682,17 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         printstyled(ctx.io, " └ "; color=:green)
         Base.prompt(stdin, ctx.io, "(y/n)", default = "y")
     catch err
-        if err isa InterruptException
+        if err isa InterruptException # if ^C is entered
             println(ctx.io)
             return false
         end
         rethrow()
     end
-    if !isnothing(resp) && lowercase(resp) in ["y", "yes"]
+    if isnothing(resp) # if ^D is entered
+        println(ctx.io)
+        return false
+    end
+    if lowercase(resp) in ["y", "yes"]
         API.add(string.(available_pkgs))
         if length(available_pkgs) < length(pkgs)
             return false # declare that some pkgs couldn't be installed
