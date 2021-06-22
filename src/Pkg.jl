@@ -408,7 +408,7 @@ const status = API.status
 
 """
     Pkg.activate([s::String]; shared::Bool=false, io::IO=stderr)
-    Pkg.activate(; temp::Bool=false, shared::Bool=false, io::IO=stderr)
+    Pkg.activate(; temp::Bool=false, io::IO=stderr)
 
 Activate the environment at `s`. The active environment is the environment
 that is modified by executing package commands.
@@ -428,12 +428,22 @@ If no argument is given to `activate`, then activate the home project.
 The home project is specified by either the `--project` command line option to
 the julia executable, or the `JULIA_PROJECT` environment variable.
 
+    Pkg.activate(f::Function, s::String)
+
+Activate the environment at `s` for the duration of the function call `f`. This is
+intended for use with a `do`-block, see examples.
+
 # Examples
 ```
 Pkg.activate()
 Pkg.activate("local/path")
 Pkg.activate("MyDependency")
 Pkg.activate(; temp=true)
+
+Pkg.activate("local/path") do
+    # "local/path" environment activated
+end
+# back to most recently activated environment
 ```
 
 !!! compat "Julia 1.4"
