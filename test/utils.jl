@@ -3,12 +3,14 @@
 module Utils
 
 import ..Pkg
+using Tar
 using TOML
 using UUIDs
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
-       git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT
+       git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
+       list_tarball_files
 
 const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
 
@@ -277,6 +279,14 @@ function add_this_pkg(; platform=Base.BinaryPlatforms.HostPlatform())
         path=pkg_dir,
     )
     Pkg.develop(spec; platform)
+end
+
+function list_tarball_files(tarball_path::AbstractString)
+    names = String[]
+    Tar.list(`$(Pkg.PlatformEngines.exe7z()) x $tarball_path -so`) do hdr
+        push!(names, hdr.path)
+    end
+    return names
 end
 
 end

@@ -374,14 +374,6 @@ function unpack(
     Tar.extract(`$(exe7z()) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
 end
 
-function list_tarball_files(tarball_path::AbstractString)
-    names = String[]
-    Tar.list(`$(exe7z()) x $tarball_path -so`) do hdr
-        push!(names, hdr.path)
-    end
-    return names
-end
-
 """
     package(src_dir::AbstractString, tarball_path::AbstractString)
 
