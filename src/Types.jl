@@ -14,7 +14,6 @@ using TOML
 import ..Pkg, ..Registry
 import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f
 import Base.BinaryPlatforms: Platform
-import ..PlatformEngines: download, download_verify_unpack
 using ..Pkg.Versions
 
 import Base: SHA1
