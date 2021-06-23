@@ -383,7 +383,7 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, io::IO=stderr)
 
 Print out the status of the project/manifest.
 If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
