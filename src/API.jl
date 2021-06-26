@@ -1629,7 +1629,7 @@ function add_snapshot_to_undo(env=nothing)
         UndoState()
     end
     # Is the current state the same as the previous one, do nothing
-    if !isempty(state.entries) && env.project == env.original_project && env.manifest == env.original_manifest
+    if !isempty(state.entries) && env.project == env.original_project && env.manifest.deps == env.original_manifest.deps
         return
     end
     snapshot = UndoSnapshot(now(), env.project, env.manifest)
