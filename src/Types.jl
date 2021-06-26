@@ -226,8 +226,8 @@ Base.@kwdef mutable struct Manifest
     deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
     other::Dict{String,Any} = Dict{String,Any}()
 end
-Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
-Base.hash(m::Manifest, h::UInt) = foldr(hash, [getfield(m, x) for x in fieldnames(Manifest)], init=h)
+Base.:(==)(t1::Manifest, t2::Manifest) = t1.deps == t2.deps
+Base.hash(m::Manifest, h::UInt) = hash(m.deps, h)
 Base.getindex(m::Manifest, i_or_key) = getindex(m.deps, i_or_key)
 Base.get(m::Manifest, key, default) = get(m.deps, key, default)
 Base.setindex!(m::Manifest, i_or_key, value) = setindex!(m.deps, i_or_key, value)
