@@ -221,7 +221,7 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
 Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps], init=h)  # omits `other`
 
 Base.@kwdef mutable struct Manifest
-    julia_version::Union{Nothing,VersionNumber} = Base.VERSION
+    julia_version::Union{Nothing,VersionNumber} = nothing # only set to VERSION when resolving
     manifest_format::VersionNumber = v"1.0.0" # default to older flat format
     deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
     other::Dict{String,Any} = Dict{String,Any}()

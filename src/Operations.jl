@@ -361,10 +361,13 @@ end
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # compatibility
     if ctx.julia_version !== nothing
+        ctx.env.manifest.julia_version = ctx.julia_version
         v = intersect(ctx.julia_version, project_compatibility(ctx, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
+    else
+        ctx.env.manifest.julia_version = VERSION
     end
     names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
     # recursive search for packages which are tracking a path
@@ -900,7 +903,7 @@ end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}, verbose::Bool)
     if any_package_not_installed(ctx) || !isfile(ctx.env.manifest_file)
-        Pkg.instantiate(ctx)
+        Pkg.instantiate(ctx, allow_build=false, allow_autoprecomp=false)
     end
     uuids = UUID[]
     _get_deps!(ctx, pkgs, uuids)
