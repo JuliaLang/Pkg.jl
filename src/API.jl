@@ -450,11 +450,18 @@ marking them as "orphaned".  This method will only remove orphaned objects (pack
 versions, artifacts, and scratch spaces) that have been continually un-used for a period
 of `collect_delay`; which defaults to seven days.
 
+Garbage collection is only applied to the "user depot", e.g. the first entry in the
+depot path. If you want to run `gc` on all depots set `force=true` (this might require
+admin privileges depending on the setup).
+
 Use verbose mode (`verbose=true`) for detailed output.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, kwargs...)
+function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, force=false, kwargs...)
     Context!(ctx; kwargs...)
     env = ctx.env
+
+    # Only look at user-depot unless force=true
+    gc_depots = force ? depots() : [depots1()]
 
     # First, we load in our `manifest_usage.toml` files which will tell us when our
     # "index files" (`Manifest.toml`, `Artifacts.toml`) were last used.  We will combine
@@ -472,7 +479,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     scratch_parents_by_depot = Dict{String, Dict{String, Set{String}}}()
 
     # Load manifest files from all depots
-    for depot in depots()
+    for depot in gc_depots
         # When a manifest/artifact.toml is installed/used, we log it within the
         # `manifest_usage.toml` files within `write_env_usage()` and `bind_artifact!()`
         function reduce_usage!(f::Function, usage_filepath)
@@ -733,7 +740,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
     # Do an initial scan of our depots to get a preliminary `packages_to_delete`.
     packages_to_delete = String[]
-    for depot in depots()
+    for depot in gc_depots
         depot_orphaned_packages = String[]
         packagedir = abspath(depot, "packages")
         if isdir(packagedir)
@@ -773,7 +780,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     repos_to_delete = String[]
     spaces_to_delete = String[]
 
-    for depot in depots()
+    for depot in gc_depots
         # We track orphaned objects on a per-depot basis, writing out our `orphaned.toml`
         # tracking file immediately, only pushing onto the overall `*_to_delete` lists if
         # the package has been orphaned for at least a period of `collect_delay`
@@ -919,7 +926,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     end
 
     # Prune package paths that are now empty
-    for depot in depots()
+    for depot in gc_depots
         packagedir = abspath(depot, "packages")
         !isdir(packagedir) && continue
 
@@ -933,7 +940,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     end
 
     # Prune scratch space UUID folders that are now empty
-    for depot in depots()
+    for depot in gc_depots
         scratch_dir = abspath(depot, "scratchspaces")
         !isdir(scratch_dir) && continue
 
