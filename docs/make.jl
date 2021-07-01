@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-using Documenter, DocumenterLaTeX
+using Documenter
 using Pkg
 
 include("generate.jl")
@@ -13,7 +13,7 @@ const formats = Any[
     ),
 ]
 if "pdf" in ARGS
-    push!(formats, LaTeX(platform = "docker"))
+    push!(formats, Documenter.LaTeX(platform = "docker"))
 end
 
 # setup for doctesting
