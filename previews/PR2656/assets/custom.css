@@ -1,0 +1,6 @@
+#documenter .docs-sidebar .docs-logo > img {
+    max-height: 12rem;
+}
+html.theme--documenter-dark #documenter .docs-sidebar .docs-logo > img {
+    max-height: 12rem;
+}
