@@ -9,7 +9,7 @@ import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f
 using ..MiniProgressBars
 using Base.BinaryPlatforms, p7zip_jll
 
-export probe_platform_engines!, verify, unpack, package, download_verify_unpack
+export verify, unpack, package, download_verify_unpack
 
 const EXE7Z_LOCK = ReentrantLock()
 const EXE7Z = Ref{String}()
@@ -40,14 +40,13 @@ function find7z()
     error("7z binary not found")
 end
 
-function probe_platform_engines!(;verbose::Bool = false)
-    # don't do anything
-end
-
 is_secure_url(url::AbstractString) =
     occursin(r"^(https://|\w+://(127\.0\.0\.1|localhost)(:\d+)?($|/))"i, url)
 
-function get_server_dir(url::AbstractString, server=pkg_server())
+function get_server_dir(
+    url :: AbstractString,
+    server :: Union{AbstractString, Nothing} = pkg_server(),
+)
     server === nothing && return
     url == server || startswith(url, "$server/") || return
     m = match(r"^\w+://([^\\/]+)(?:$|/)", server)
@@ -372,14 +371,6 @@ function unpack(
     verbose::Bool = false,
 )
     Tar.extract(`$(exe7z()) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
-end
-
-function list_tarball_files(tarball_path::AbstractString)
-    names = String[]
-    Tar.list(`$(exe7z()) x $tarball_path -so`) do hdr
-        push!(names, hdr.path)
-    end
-    return names
 end
 
 """

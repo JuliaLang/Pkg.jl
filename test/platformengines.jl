@@ -2,7 +2,7 @@ module PlatformEngineTests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
-
+using ..Utils: list_tarball_files
 
 @testset "Packaging" begin
     # Gotta set this guy up beforehand
@@ -36,7 +36,7 @@ using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
             @test isfile(tarball_path)
 
             # Test that we can inspect the contents of the tarball
-            contents = PlatformEngines.list_tarball_files(tarball_path)
+            contents = list_tarball_files(tarball_path)
             @test "bin/bar.sh" in contents
             @test "lib/baz.so" in contents
             @test "etc/qux.conf" in contents
