@@ -38,9 +38,6 @@ function ≲(b::VersionBound, v::VersionNumber)
     return (v.major, v.minor, v.patch) >= (b[1], b[2], b[3])
 end
 
-≳(v::VersionNumber, b::VersionBound) = v ≲ b
-≳(b::VersionBound, v::VersionNumber) = b ≲ v
-
 function isless_ll(a::VersionBound, b::VersionBound)
     m, n = a.n, b.n
     for i = 1:min(m, n)
