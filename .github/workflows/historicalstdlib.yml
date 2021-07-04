@@ -1,0 +1,45 @@
+name: Check historical stdlib entries
+on:
+  pull_request:
+    branches:
+      - 'master'
+      - 'release-*'
+  push:
+    branches:
+      - 'master'
+      - 'release-*'
+    tags: '*'
+defaults:
+  run:
+    shell: bash
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        julia-arch:
+          - 'x64'
+        julia-version:
+          - 'nightly'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: ${{ matrix.julia-version }}
+      - name: Run generate_historical_stdlibs.jl
+        run: julia --project --color=yes -e 'import Pkg; Pkg.instantiate(); include("generate_historical_stdlibs.jl")'
+        working-directory: ./ext/HistoricaStdlibGenerator
+      - name: Check for uncommitted changes
+        id: check-changes
+        uses: mskri/check-uncommitted-changes-action@v1.0.1
+      - name: Show diff if there are changes
+        if: steps.check-changes.outputs.outcome == failure()
+        run: git diff
+      - name: Fail if generate_historical_stdlibs.jl needs to be run
+        if: steps.check-changes.outputs.changes != ''
+        run: exit 1
+

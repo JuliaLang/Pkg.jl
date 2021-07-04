@@ -11,3 +11,4 @@ docs/build
 /test/registries/*
 /test/registry_depot/*
 /test/loaded_depot/*
+/ext/HistoricaStdlibGenerator/Manifest.toml
