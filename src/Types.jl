@@ -468,11 +468,28 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
         TOML.print(io, Dict(source_file => [Dict("time" => now())]))
     end
 
-    # Append entry to log file in one chunk
+    ## Atomically write usage file
     usage_file = joinpath(logdir(), usage_filepath)
-    open(usage_file, append=true) do io
-        write(io, entry)
+    while true
+        # read existing usage file
+        existing_usage = isfile(usage_file) ? read(usage_file, String) : ""
+
+        # Write to a temp file in the same directory as the destination
+        temp_usage_file = tempname(logdir())
+        open(temp_usage_file, "w") do io
+            write(io, existing_usage)
+            write(io, entry)
+        end
+
+        # Move the temp file into place, replacing the original
+        mv(temp_usage_file, usage_file, force = true)
+
+        # Check that the new file has what we want in it
+        new_usage = read(usage_file, String)
+        occursin(entry, new_usage) && break
+        # If not, try again
     end
+
 end
 
 function read_package(path::String)
