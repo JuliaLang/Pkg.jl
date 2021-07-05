@@ -284,8 +284,9 @@ function write_manifest(env::EnvCache)
 end
 function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     if manifest.manifest_format.major == 1
-        @warn """The active manifest file at `$(manifest_file)` has an old format that is being maintained.
-            To update to the new format run `Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.""" maxlog = 1 _id = Symbol(manifest_file)
+        @warn """The active manifest file has an old format that does not record the julia version. The dependencies
+            resolved in this manifest may be incompatible with the current julia version.
+            To update to the new format run `Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.""" maxlog = 1 _id = Symbol(manifest_file) _file = manifest_file _line = 0 _module = nothing
     end
     return write_manifest(destructure(manifest), manifest_file)
 end
@@ -313,18 +314,18 @@ function check_warn_manifest_julia_version_compat(manifest::Manifest, manifest_f
     isempty(manifest.deps) && return
     if manifest.manifest_format < v"2"
         @warn """The active manifest file is an older format with no julia version entry. Dependencies may have \
-        been resolved with a different julia version.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+        been resolved with a different julia version.""" maxlog = 1 _id = Symbol(manifest_file) _file = manifest_file _line = 0 _module = nothing
         return
     end
     v = manifest.julia_version
     if v === nothing
         @warn """The active manifest file is missing a julia version entry. Dependencies may have \
-        been resolved with a different julia version.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+        been resolved with a different julia version.""" maxlog = 1 _id = Symbol(manifest_file) _file = manifest_file _line = 0 _module = nothing
         return
     end
     if v.major != VERSION.major && v.minor != VERSION.minor
         ver_str = something(manifest.julia_version, "pre-1.7")
         @warn """The active manifest file has dependencies that were resolved with a different julia \
-        version ($(manifest.julia_version)). Unexpected behavior may occur.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+        version ($(manifest.julia_version)). Unexpected behavior may occur.""" maxlog = 1 _id = Symbol(manifest_file) _file = manifest_file _line = 0 _module = nothing
     end
 end
