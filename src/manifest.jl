@@ -310,3 +310,25 @@ function write_manifest(raw_manifest::Dict, manifest_file::AbstractString)
     str = sprint(write_manifest, raw_manifest)
     write(manifest_file, str)
 end
+
+############
+# METADATA #
+############
+
+function check_warn_manifest_julia_version_compat(manifest::Manifest, manifest_file::String)
+    isempty(manifest.deps) && return
+    manifest.manifest_format < v"2" && return # 1.6 shouldn't warn about this given it can't update the old manifest format
+
+    # but if the manifest is the new format and it is possible to know what julia version it was resolved with...
+    v = manifest.julia_version
+    if v === nothing
+        @warn string("The active manifest file is missing a julia version entry. Dependencies may have ",
+        "been resolved with a different julia version.") maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+        return
+    end
+    if v.major != VERSION.major && v.minor != VERSION.minor
+        ver_str = something(manifest.julia_version, "pre-1.7")
+        @warn string("The active manifest file has dependencies that were resolved with a different julia ",
+        "version ($(manifest.julia_version)). Unexpected behavior may occur.") maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+    end
+end
