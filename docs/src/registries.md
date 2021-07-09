@@ -79,3 +79,11 @@ pkg> registry up
   Updating registry at `~/.julia/registries/General`
   Updating git-repo `https://github.com/JuliaRegistries/General`
 ```
+
+### Creating and maintaining registries
+
+Pkg only provides client facilities for registries, rather than functionality to create
+or maintain them. However, [Registrator.jl](https://github.com/JuliaRegistries/Registrator.jl)
+and [LocalRegistry.jl](https://github.com/GunnarFarneback/LocalRegistry.jl) provide ways to
+create and update registries, and [RegistryCI.jl](https://github.com/JuliaRegistries/RegistryCI.jl)
+provides automated testing and merging functionality for maintaining a registry.
