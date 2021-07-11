@@ -190,6 +190,7 @@ const update = API.up
 
 **Keyword arguments:**
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
+  - `check_bounds::Union{Bool, Nothing}=true`: force bounds checking to be on or off, or the julia default auto via `nothing`
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
 
@@ -393,7 +394,7 @@ any packages listed as arguments, the output will be limited to those packages.
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 
-See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest 
+See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
 
 !!! compat "Julia 1.1"

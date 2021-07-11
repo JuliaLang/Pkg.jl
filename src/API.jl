@@ -403,7 +403,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
 end
 
 function test(ctx::Context, pkgs::Vector{PackageSpec};
-              coverage=false, test_fn=nothing,
+              coverage=false, check_bounds=true, test_fn=nothing,
               julia_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
               test_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
               force_latest_compatible_version::Bool=false,
@@ -427,6 +427,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         ctx,
         pkgs;
         coverage,
+        check_bounds,
         test_fn,
         julia_args,
         test_args,

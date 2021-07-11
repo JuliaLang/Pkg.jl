@@ -1358,6 +1358,7 @@ end
 
 function gen_test_code(testfile::String;
         coverage=false,
+        check_bounds=true,
         julia_args::Cmd=``,
         test_args::Cmd=``)
     code = """
@@ -1371,7 +1372,7 @@ function gen_test_code(testfile::String;
         --code-coverage=$(coverage ? "user" : "none")
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
-        --check-bounds=yes
+        $(check_bounds === nothing ? `` : """--check-bounds=$(check_bounds ? "yes" : "no")""")
         --depwarn=$(Base.JLOptions().depwarn == 2 ? "error" : "yes")
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
@@ -1574,7 +1575,7 @@ end
 testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function test(ctx::Context, pkgs::Vector{PackageSpec};
-              coverage=false, julia_args::Cmd=``, test_args::Cmd=``,
+              coverage=false, check_bounds=true, julia_args::Cmd=``, test_args::Cmd=``,
               test_fn=nothing,
               force_latest_compatible_version::Bool=false,
               allow_earlier_backwards_compatible_versions::Bool=true,
@@ -1627,7 +1628,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             Pkg._auto_precompile(sandbox_ctx)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(stdout)
-            cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
+            cmd = gen_test_code(testfile(source_path); coverage, check_bounds, julia_args, test_args)
             p = run(ignorestatus(cmd))
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
