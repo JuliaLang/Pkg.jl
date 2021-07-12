@@ -380,16 +380,20 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
-const STDLIB = Ref{Dict{UUID,String}}()
+const STDLIB = Ref{Dict{UUID,Tuple{String,Union{Nothing,VersionNumber}}}}()
 function load_stdlib()
-    stdlib = Dict{UUID,String}()
+    stdlib = Dict{UUID,Tuple{String,Union{Nothing,VersionNumber}}}()
     for name in readdir(stdlib_dir())
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
         uuid = get(project, "uuid", nothing)
         nothing === uuid && continue
-        stdlib[UUID(uuid)] = name
+        version = get(project, "version", nothing)
+        if isa(version, AbstractString)
+            version = tryparse(VersionNumber, version)
+        end
+        stdlib[UUID(uuid)] = (name, version)
     end
     return stdlib
 end
@@ -854,16 +858,26 @@ function registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkgs::
 end
 
 function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
+    _stdlibs = stdlibs()
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in stdlibs()
-                name == pkg.name && (pkg.uuid = uuid)
+            for (uuid, (name, version)) in _stdlibs
+                if name == pkg.name
+                    pkg.uuid = uuid
+                    if version !== nothing
+                        pkg.version = version
+                    end
+                end
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name = get(stdlibs(), pkg.uuid, nothing)
-            nothing !== name && (pkg.name = name)
+            if haskey(_stdlibs, pkg.uuid)
+                pkg.name, version = _stdlibs[pkg.uuid]
+                if version !== nothing
+                    pkg.version = version
+                end
+            end
         end
     end
 end
