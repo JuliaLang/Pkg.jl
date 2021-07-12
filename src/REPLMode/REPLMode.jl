@@ -6,6 +6,7 @@ using Markdown, UUIDs, Dates
 
 import REPL
 import REPL: LineEdit, REPLCompletions
+import REPL: TerminalMenus
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
@@ -680,7 +681,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             println(ctx.io, line)
         end
         printstyled(ctx.io, " └ "; color=:green)
-        Base.prompt(stdin, ctx.io, "(y/n)", default = "y")
+        Base.prompt(stdin, ctx.io, "(y/n/o/t or ? for details)", default = "y")
     catch err
         if err isa InterruptException # if ^C is entered
             println(ctx.io)
@@ -692,15 +693,72 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         println(ctx.io)
         return false
     end
-    if lowercase(resp) in ["y", "yes"]
-        API.add(string.(available_pkgs))
+    function handle_resp(resp, called_from_help)
+        lower_resp = lowercase(resp)
+        if lower_resp in ["y", "yes"]
+            API.add(string.(available_pkgs))
+        elseif lower_resp in ["t", "temp"]
+            API.activate(temp = true)
+            API.add(string.(available_pkgs))
+        elseif lower_resp in ["o"]
+            envs = filter(v -> v != "@stdlib", Base.LOAD_PATH)
+            menu = TerminalMenus.RadioMenu(envs, pagesize=length(envs))
+            rows_to_clear = called_from_help ? 5 : 1
+            for _ in 1:rows_to_clear
+                print(ctx.io, "\e[1A\e[1G\e[0J")
+            end
+            printstyled(ctx.io, " └ "; color=:green)
+            choice = try
+                TerminalMenus.request("Select an environment from the load path", menu)
+            catch err
+                if err isa InterruptException # if ^C is entered
+                    println(ctx.io)
+                    return false
+                end
+                rethrow()
+            end
+            choice == -1 && return false
+            API.activate(envs[choice]) do
+                API.add(string.(available_pkgs))
+            end
+        elseif !called_from_help && (lower_resp in ["?"])
+            options = ["y: Add package to the current environment",
+                "n: Don't add the package",
+                "o: Select an environment from the load path to add the package to",
+                "t: Activate a new temporary environment and add the package"]
+            menu = TerminalMenus.RadioMenu(options, pagesize=4)
+            print(ctx.io, "\e[1A\e[1G\e[0J")
+            printstyled(ctx.io, " └ "; color=:green)
+            choice = try
+                TerminalMenus.request("Select an option", menu)
+            catch err
+                if err isa InterruptException # if ^C is entered
+                    println(ctx.io)
+                    return false
+                end
+                rethrow()
+            end
+            choice == -1 && return false
+            return ["y", "n", "o", "t"][choice]
+        elseif (lower_resp in ["n"])
+            return false
+        else
+            println(ctx.io, "Selection not recognized")
+            return false
+        end
         if length(available_pkgs) < length(pkgs)
             return false # declare that some pkgs couldn't be installed
         else
             return true
         end
     end
-    return false
+
+    ret = handle_resp(resp, false)
+    if ret isa Bool
+        return ret
+    else
+        return handle_resp(ret, true)
+    end
 end
 
 end #module
