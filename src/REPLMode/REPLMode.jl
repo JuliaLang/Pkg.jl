@@ -8,7 +8,7 @@ import REPL
 import REPL: LineEdit, REPLCompletions
 import REPL: TerminalMenus
 
-import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap
+import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
 
 const TEST_MODE = Ref{Bool}(false)
@@ -706,7 +706,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         envs = convert(Vector{String}, filter(x -> !isnothing(x), expanded_envs))
         option_list = String[]
         for i in 1:length(envs)
-            push!(option_list, "`$(envs[i])` ($(editable_envs[i]))")
+            push!(option_list, "$(pathrepr(envs[i])) ($(editable_envs[i]))")
         end
         push!(option_list, "Activate and install into new temporary environment")
         menu = TerminalMenus.RadioMenu(option_list, pagesize=length(option_list))
