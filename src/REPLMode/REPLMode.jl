@@ -701,7 +701,8 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             API.activate(temp = true)
             API.add(string.(available_pkgs))
         elseif lower_resp in ["o"]
-            envs = filter(v -> v != "@stdlib", Base.LOAD_PATH)
+            expanded_envs = Base.load_path_expand.(filter(v -> v != "@stdlib", LOAD_PATH))
+            envs = convert(Vector{String}, filter(x -> !isnothing(x), expanded_envs))
             menu = TerminalMenus.RadioMenu(envs, pagesize=length(envs))
             rows_to_clear = called_from_help ? 5 : 1
             for _ in 1:rows_to_clear
