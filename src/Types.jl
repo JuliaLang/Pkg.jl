@@ -470,11 +470,9 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     while true
         # read existing usage file
         usage = if isfile(usage_file)
-            content = read(usage_file)
-            Base.TOML.reinit!(p, String(content); filepath=usage_file)
-            Base.TOML.parse(p)
+            TOML.parsefile(usage_file)
         else
-            Dict()
+            Dict{String, Any}()
         end
 
         # record new usage
@@ -482,7 +480,7 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
 
         # keep only latest usage info
         for kv in usage
-            times = map(d->Dates.DateTime(d["time"]), usage[kv.first])
+            times = map(d -> Dates.DateTime(d["time"]), usage[kv.first])
             usage[kv.first] = [Dict("time" => maximum(times))]
         end
 
@@ -497,11 +495,9 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
 
         # Check that the new file has what we want in it
         new_usage = if isfile(usage_file)
-            content = read(usage_file)
-            Base.TOML.reinit!(p, String(content); filepath=usage_file)
-            Base.TOML.parse(p)
+            TOML.parsefile(usage_file)
         else
-            Dict()
+            Dict{String, Any}()
         end
         if haskey(new_usage, source_file)
             for e in new_usage[source_file]
