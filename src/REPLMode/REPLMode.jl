@@ -705,11 +705,14 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         expanded_envs = Base.load_path_expand.(editable_envs)
         envs = convert(Vector{String}, filter(x -> !isnothing(x), expanded_envs))
         option_list = String[]
+        keybindings = Char[]
         for i in 1:length(envs)
-            push!(option_list, "$(pathrepr(envs[i])) ($(editable_envs[i]))")
+            push!(option_list, "$(i): $(pathrepr(envs[i])) ($(editable_envs[i]))")
+            push!(keybindings, only("$i"))
         end
-        push!(option_list, "Activate and install into new temporary environment")
-        menu = TerminalMenus.RadioMenu(option_list, pagesize=length(option_list))
+        push!(option_list, "t: Activate and install into new temporary environment")
+        push!(keybindings, 't')
+        menu = TerminalMenus.RadioMenu(option_list, keybindings=keybindings, pagesize=length(option_list))
         print(ctx.io, "\e[1A\e[1G\e[0J")
         printstyled(ctx.io, " └ "; color=:green)
         choice = try
