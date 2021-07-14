@@ -459,10 +459,10 @@ end
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
     # Don't record ghost usage
     !isfile(source_file) && return
+
     # Ensure that log dir exists
     !ispath(logdir()) && mkpath(logdir())
 
-    p = TOML.Parser()
     usage_file = joinpath(logdir(), usage_filepath)
     timestamp = now()
 
@@ -508,7 +508,6 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
         end
         # If not, try again
     end
-
 end
 
 function read_package(path::String)
