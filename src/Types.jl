@@ -479,9 +479,9 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
         usage[source_file] = [Dict("time" => timestamp)]
 
         # keep only latest usage info
-        for kv in usage
-            times = map(d -> Dates.DateTime(d["time"]), usage[kv.first])
-            usage[kv.first] = [Dict("time" => maximum(times))]
+        for k in keys(usage)
+            times = map(d -> Dates.DateTime(d["time"]), usage[k])
+            usage[k] = [Dict("time" => maximum(times))]
         end
 
         # Write to a temp file in the same directory as the destination
