@@ -210,7 +210,6 @@ struct RegistryInstance
     path::String
     name::String
     uuid::UUID
-    url::Union{String, Nothing}
     repo::Union{String, Nothing}
     description::Union{String, Nothing}
     pkgs::Dict{UUID, PkgEntry}
@@ -282,7 +281,6 @@ function RegistryInstance(path::AbstractString)
         path,
         d["name"]::String,
         UUID(d["uuid"]::String),
-        get(d, "url", nothing)::Union{String, Nothing},
         get(d, "repo", nothing)::Union{String, Nothing},
         get(d, "description", nothing)::Union{String, Nothing},
         pkgs,
