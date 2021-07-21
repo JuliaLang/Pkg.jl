@@ -697,9 +697,6 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     lower_resp = lowercase(resp)
     if lower_resp in ["y", "yes"]
         API.add(string.(available_pkgs))
-    elseif lower_resp in ["t", "temp"] # hidden option
-        API.activate(temp = true)
-        API.add(string.(available_pkgs))
     elseif lower_resp in ["o"]
         editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
         expanded_envs = Base.load_path_expand.(editable_envs)
@@ -710,10 +707,8 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             push!(option_list, "$(i): $(pathrepr(envs[i])) ($(editable_envs[i]))")
             push!(keybindings, only("$i"))
         end
-        push!(option_list, "t: Activate and install into new temporary environment")
-        push!(keybindings, 't')
         menu = TerminalMenus.RadioMenu(option_list, keybindings=keybindings, pagesize=length(option_list))
-        print(ctx.io, "\e[1A\e[1G\e[0J")
+        print(ctx.io, "\e[1A\e[1G\e[0J") # go up one line, to the start, and clear it
         printstyled(ctx.io, " └ "; color=:green)
         choice = try
             TerminalMenus.request("Select environment:", menu)
@@ -725,13 +720,8 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             rethrow()
         end
         choice == -1 && return false
-        if choice == length(option_list)
-            API.activate(temp = true)
+        API.activate(envs[choice]) do
             API.add(string.(available_pkgs))
-        else
-            API.activate(envs[choice]) do
-                API.add(string.(available_pkgs))
-            end
         end
     elseif (lower_resp in ["n"])
         return false
