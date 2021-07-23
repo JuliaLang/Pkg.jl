@@ -179,6 +179,8 @@ const rm = API.rm
 Update a package `pkg`. If no posistional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
 If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
 
+`Pkg.update` automatically calls [`Pkg.precompile`](@ref) after its call. Set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0` to disable this.
+
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
 const update = API.up
