@@ -94,3 +94,28 @@ end
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
     Base.isless(a::UUID, b::UUID) = a.value < b.value
 end
+
+function get_last_used_env_from_usage()
+    usage_file = joinpath(logdir(depots1()), "manifest_usage.toml")
+    last_used = ""
+    last_used_time = typemin(Dates.DateTime)
+    try
+        for (filename, infos) in Types.parse_toml(usage_file), info in infos
+            if haskey(info, "time")
+                if info["time"] > last_used_time
+                    last_used_time = info["time"]
+                    last_used = filename
+                end
+            end
+        end
+    catch
+        # Given this is run on __init__, silently error if the manifest usage file cannot be parsed
+        return ""
+    end
+    last_env = dirname(last_used)
+    if isdir(last_env)
+        return last_env
+    else
+        return ""
+    end
+end

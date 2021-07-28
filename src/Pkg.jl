@@ -37,6 +37,7 @@ const OFFLINE_MODE = Ref(false)
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 stderr_f() = something(DEFAULT_IO[], stderr)
 stdout_f() = something(DEFAULT_IO[], stdout)
+const PREV_ENV_PATH = Ref{String}("")
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
@@ -393,7 +394,7 @@ any packages listed as arguments, the output will be limited to those packages.
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 
-See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest 
+See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
 
 !!! compat "Julia 1.1"
@@ -583,6 +584,7 @@ function __init__()
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
     OFFLINE_MODE[] = get(ENV, "JULIA_PKG_OFFLINE", nothing) == "true"
+    PREV_ENV_PATH[] = get_last_used_env_from_usage()
     return nothing
 end
 
