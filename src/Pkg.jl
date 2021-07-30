@@ -584,11 +584,6 @@ function __init__()
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
     OFFLINE_MODE[] = get(ENV, "JULIA_PKG_OFFLINE", nothing) == "true"
-    try
-        PREV_ENV_PATH[] = get_last_used_env_from_usage()
-    catch
-        # Silently suppress errors in case the manifest usage file cannot be parsed, given this is init
-    end
     return nothing
 end
 
