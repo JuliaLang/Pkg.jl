@@ -325,6 +325,10 @@ end
         api, opts = first(Pkg.pkg"activate --temp")
         @test api == Pkg.activate
         @test opts == Dict(:temp => true)
+        # - activating the previous project
+        api, opts = first(Pkg.pkg"activate -")
+        @test api == Pkg.activate
+        @test opts == Dict(:prev => true)
     end
 end
 
@@ -337,6 +341,23 @@ end
         Pkg.activate(; io=io, temp=true)
         output = String(take!(io))
         @test occursin(r"Activating new project at `.*`", output)
+        prev_env = Base.active_project()
+
+        # - activating the previous project
+        Pkg.activate(; temp=true)
+        @test prev_env != Base.active_project()
+        Pkg.activate(; prev=true)
+        @test prev_env == Base.active_project()
+
+        Pkg.activate(; temp=true)
+        @test prev_env != Base.active_project()
+        Pkg.activate(; prev=true)
+        @test prev_env == Base.active_project()
+
+        Pkg.activate("")
+        @test prev_env != Base.active_project()
+        Pkg.activate(; prev=true)
+        @test prev_env == Base.active_project()
     end
 end
 

@@ -12,7 +12,7 @@ using Serialization
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -1527,9 +1527,11 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false, shared=false, io::IO=stderr_f())
+function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir(); io=io)
+    prev && return activate(PREV_ENV_PATH[]; io=io)
+    PREV_ENV_PATH[] = Base.active_project()
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
@@ -1585,6 +1587,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
             fullpath = joinpath(Pkg.envdir(Pkg.depots1()), path)
         end
     end
+    PREV_ENV_PATH[] = Base.active_project()
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
     p = Base.active_project()
     if p !== nothing

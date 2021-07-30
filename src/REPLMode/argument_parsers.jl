@@ -195,7 +195,10 @@ function parse_activate(args::Vector{QString}, options)
             return [x.raw]
         end
         x = x.raw
-        if first(x) == '@'
+        if x == "-"
+            options[:prev] = true
+            return []
+        elseif first(x) == '@'
             options[:shared] = true
             return [x[2:end]]
         else
