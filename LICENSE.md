@@ -1,6 +1,6 @@
 The Pkg.jl package is licensed under the MIT "Expat" License:
 
-> Copyright (c) 2017-2021: Kristoffer Carlsson, Stefan Karpinski, and other contributors:
+> Copyright (c) 2017-2021: Stefan Karpinski, and  contributors:
 > https://github.com/JuliaLang/Pkg.jl/graphs/contributors
 >
 > Permission is hereby granted, free of charge, to any person obtaining a copy
