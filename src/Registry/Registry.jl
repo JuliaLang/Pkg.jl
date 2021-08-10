@@ -53,26 +53,10 @@ const DEFAULT_REGISTRIES =
                               uuid = UUID("23338594-aafe-5451-b93e-139f81909106"),
                               url = "https://github.com/JuliaRegistries/General.git")]
 
-# Use the pattern
-#
-# registry_urls = nothing
-# for ...
-#     url, registry_urls = pkg_server_registry_url(uuid, registry_urls)
-# end
-#
-# to query the pkg server at most once for registries.
-pkg_server_registry_url(uuid::UUID, ::Nothing) =
-    pkg_server_registry_url(uuid, pkg_server_registry_urls())
-
-pkg_server_registry_url(uuid::UUID, registry_urls::Dict{UUID, String}) =
-    get(registry_urls, uuid, nothing), registry_urls
-
-pkg_server_registry_url(::Nothing, registry_urls) = nothing, registry_urls
-
-function pkg_server_registry_urls()
-    registry_urls = Dict{UUID, String}()
+function pkg_server_registry_info()
+    registry_info = Dict{UUID, Base.SHA1}()
     server = pkg_server()
-    server === nothing && return registry_urls
+    server === nothing && return nothing
     tmp_path = tempname()
     download_ok = false
     try
@@ -85,13 +69,24 @@ function pkg_server_registry_urls()
     open(tmp_path) do io
         for line in eachline(io)
             if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
-                uuid = UUID(m.captures[1])
-                hash = String(m.captures[2])
-                registry_urls[uuid] = "$server/registry/$uuid/$hash"
+                uuid = UUID(m.captures[1]::SubString{String})
+                hash = Base.SHA1(m.captures[2]::SubString{String})
+                registry_info[uuid] = hash
             end
         end
     end
     Base.rm(tmp_path, force=true)
+    return server, registry_info
+end
+
+function pkg_server_registry_urls()
+    server_registry_info = pkg_server_registry_info()
+    registry_urls = Dict{UUID, String}()
+    server_registry_info === nothing && return registry_urls
+    server, registry_info = server_registry_info
+    for (uuid, hash) in registry_info
+        registry_urls[uuid] = "$server/registry/$uuid/$hash"
+    end
     return registry_urls
 end
 
@@ -166,12 +161,12 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     populate_known_registries_with_urls!(regs)
     regdir = joinpath(depot, "registries")
     isdir(regdir) || mkpath(regdir)
-    registry_urls = nothing
+    registry_urls = pkg_server_registry_urls()
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
             Pkg.Types.pkgerror("ambiguous registry specification; both url and path is set.")
         end
-        url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
+        url = get(registry_urls, reg.uuid, nothing)
         if url !== nothing && registry_read_from_tarball()
             tmp = tempname()
             try
@@ -347,14 +342,14 @@ update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for 
 function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true)
     isempty(regs) && (regs = reachable_registries(; depots=depots1()))
     errors = Tuple{String, String}[]
-    registry_urls = nothing
+    registry_urls = pkg_server_registry_urls()
     for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{UUID}())
         let reg=reg
             regpath = pathrepr(reg.path)
             if reg.tree_info !== nothing
                 printpkgstyle(io, :Updating, "registry at " * regpath)
                 old_hash = reg.tree_info
-                url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
+                url = get(registry_urls, reg.uuid, nothing)
                 if url !== nothing
                     check_registry_state(reg)
                 end
