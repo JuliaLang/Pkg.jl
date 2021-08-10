@@ -473,7 +473,7 @@ function status(io::IO=stderr_f())
         for reg in regs
             printstyled(io, " [$(string(reg.uuid)[1:8])]"; color = :light_black)
             print(io, " $(reg.name)")
-            reg.url === nothing || print(io, " ($(reg.url))")
+            reg.repo === nothing || print(io, " ($(reg.repo))")
             println(io)
         end
     end
