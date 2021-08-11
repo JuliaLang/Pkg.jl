@@ -3,7 +3,8 @@
 Registries contain information about packages, such as
 available releases and dependencies, and where they can be downloaded.
 The `General` registry (https://github.com/JuliaRegistries/General)
-is the default one, and is installed automatically.
+is the default one, and is installed automatically if there are no
+other registries installed.
 
 ## Managing registries
 
@@ -19,7 +20,11 @@ the [Registry API Reference](@ref) section.
 
 A custom registry can be added with the `registry add` command
 from the Pkg REPL. Usually this will be done with a URL to the
-registry. Here we add the `General` registry:
+registry.
+
+Adding a custom registry might cause the `General` registry to not
+be added automatically. In that case, we can simply add the `General`
+registry manually:
 
 ```julia-repl
 pkg> registry add https://github.com/JuliaRegistries/General
