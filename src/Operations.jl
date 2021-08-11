@@ -669,6 +669,9 @@ function download_source(ctx::Context; readonly=true)
     widths = [textwidth(pkg.name) for (pkg, _) in pkgs_to_install]
     max_name = maximum(widths; init=0)
 
+    # Check what registries the current pkg server tracks
+    server_registry_info = Registry.pkg_server_registry_info()
+
     @sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
         results = Channel(ctx.num_concurrent_downloads)
@@ -688,9 +691,19 @@ function download_source(ctx::Context; readonly=true)
                     end
                     try
                         archive_urls = Pair{String,Bool}[]
-                        if (server = pkg_server()) !== nothing
-                            url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
-                            push!(archive_urls, url => true)
+                        # Check if the current package is available in one of the registries being tracked by the pkg server
+                        # In that case, download from the package server
+                        if server_registry_info !== nothing
+                            server, registry_info = server_registry_info
+                            for reg in ctx.registries
+                                if reg.uuid in keys(registry_info)
+                                    if haskey(reg, pkg.uuid)
+                                        url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
+                                        push!(archive_urls, url => true)
+                                        break
+                                    end
+                                end
+                            end
                         end
                         for repo_url in urls
                             url = get_archive_url_for_version(repo_url, pkg.tree_hash)
