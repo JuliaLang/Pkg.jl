@@ -1491,19 +1491,21 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
         end
         repo_path = Types.add_repo_cache_path(repo_source)
-        LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare=true)) do repo
-            # We only update the clone if the tree hash can't be found
-            tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
-            if tree_hash_object === nothing
-                GitTools.fetch(ctx.io, repo, repo_source; refspecs=Types.refspecs)
+        let repo_source=repo_source
+            LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare=true)) do repo
+                # We only update the clone if the tree hash can't be found
                 tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
+                if tree_hash_object === nothing
+                    GitTools.fetch(ctx.io, repo, repo_source; refspecs=Types.refspecs)
+                    tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
+                end
+                if tree_hash_object === nothing
+                    pkgerror("Did not find tree_hash $(pkg.tree_hash) for $(err_rep(pkg))")
+                end
+                mkpath(sourcepath)
+                GitTools.checkout_tree_to_path(repo, tree_hash_object, sourcepath)
+                push!(new_git, pkg.uuid)
             end
-            if tree_hash_object === nothing
-                 pkgerror("Did not find tree_hash $(pkg.tree_hash) for $(err_rep(pkg))")
-            end
-            mkpath(sourcepath)
-            GitTools.checkout_tree_to_path(repo, tree_hash_object, sourcepath)
-            push!(new_git, pkg.uuid)
         end
     end
 

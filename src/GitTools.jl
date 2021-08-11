@@ -158,8 +158,10 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     end
     try
         if use_cli_git()
-            cd(LibGit2.path(repo)) do
-                run(`git fetch -q $remoteurl $(only(refspecs))`)
+            let remoteurl=remoteurl
+                cd(LibGit2.path(repo)) do
+                    run(`git fetch -q $remoteurl $(only(refspecs))`)
+                end
             end
         else
             return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
