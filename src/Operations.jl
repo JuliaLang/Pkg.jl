@@ -575,7 +575,7 @@ end
 
 function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform())
     # Check to see if this package has an (Julia)Artifacts.toml
-    artifacts_tomls = Tuple{String,Dict}[]
+    artifacts_tomls = Tuple{String,Base.TOML.TOMLDict}[]
     for f in artifact_names
         artifacts_toml = joinpath(pkg_root, f)
         if isfile(artifacts_toml)
