@@ -1718,7 +1718,7 @@ function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,
     end
 end
 
-function compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance})
+function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance})
     manifest, project = env.manifest, env.project
     packages_holding_back = String[]
     max_version, max_version_in_compat = v"0", v"0"
@@ -1742,7 +1742,7 @@ function compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.Regi
     end
 
     manifest_info = get(manifest, pkg.uuid, nothing)
-    manifest_info === nothing && return packages_holding_back, max_version
+    manifest_info === nothing && return nothing
 
     # Check compat of dependees
     for (uuid, dep_pkg) in manifest
@@ -1867,7 +1867,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if outdated
             if diff == false && !is_stdlib(new.uuid)
                 @assert old == nothing
-                cinfo = compat_info(new, env, registries)
+                cinfo = status_compat_info(new, env, registries)
                 if cinfo !== nothing
                     latest_version = false
                 end
