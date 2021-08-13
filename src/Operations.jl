@@ -1741,7 +1741,6 @@ function compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.Regi
         return ["compat"], max_version, max_version_in_compat
     end
 
-    is_direct_dep = pkg.uuid in values(project.deps)
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return packages_holding_back, max_version
 
