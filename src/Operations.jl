@@ -1827,7 +1827,7 @@ struct PackageStatusData
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, compat::Bool, io::IO)
+                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=:red), "→", context=io)
     not_latest_version_indicator = sprint((io, args) -> printstyled(io, args...; color=:yellow), "↓", context=io)
     filter = !isempty(uuids) || !isempty(names)
@@ -1865,7 +1865,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         latest_version = true
         # Compat info
         cinfo = nothing
-        if compat
+        if outdated
             if diff == false && !is_stdlib(new.uuid)
                 @assert old == nothing
                 cinfo = compat_info(new, env, registries)
@@ -1875,7 +1875,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             end
         end
         # if we are running with compat, only show packages that are upper bounded
-        if compat && latest_version
+        if outdated && latest_version
             continue
         end
 
@@ -1890,7 +1890,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         print(io, pkg.downloaded ? (all_packages_downloaded ? "" : " ") : not_installed_indicator)
         printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
         diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
-        if compat && !diff && pkg.compat_data !== nothing
+        if outdated && !diff && pkg.compat_data !== nothing
             packages_holding_back, max_version, max_version_compat = pkg.compat_data
             if pkg.new.version !== max_version_compat && max_version_compat != max_version
                 printstyled(io, " [<v", max_version_compat, "]", color=:light_magenta)
@@ -1940,7 +1940,7 @@ function show_update(env::EnvCache, registries::Vector{Registry.RegistryInstance
 end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
-                header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true, io::IO, compat::Bool=false)
+                header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true, io::IO, outdated::Bool=false)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -1967,10 +1967,10 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, compat)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, compat)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated)
     end
 end
 

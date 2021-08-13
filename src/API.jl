@@ -1520,8 +1520,8 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, compat::Bool=false, io::IO=stdout, kwargs...)
-    Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, compat)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, io::IO=stdout, kwargs...)
+    Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated)
     return nothing
 end
 

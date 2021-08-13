@@ -395,12 +395,12 @@ any packages listed as arguments, the output will be limited to those packages.
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 
-Setting `compat=true` will only show packages that are not on the latest version,
+Setting `outdated=true` will only show packages that are not on the latest version,
 their maximum version and why they are not on the latest version (either due to other
 packages holding them back due to compatibility constraints, or due to compatibility in the project file).
 As an example, a status output like:
 ```
-pkg> st -c -m
+pkg> Pkg.status(; outdated=true)
 Status `Manifest.toml`
  [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
  [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
@@ -424,7 +424,7 @@ status as a Julia object instead of printing it.
     is the default for environments in git repositories.
 
 !!! compat "Julia 1.8"
-    The `compat` keyword argument reguires at least Julia 1.8
+    The `outdated` keyword argument reguires at least Julia 1.8
 """
 const status = API.status
 

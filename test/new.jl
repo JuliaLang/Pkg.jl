@@ -2169,7 +2169,7 @@ end
         v = Pkg.dependencies()[exuuid].version
         io = IOBuffer()
         Pkg.add(Pkg.PackageSpec(name="Example", version="0.4.0"); io=devnull)
-        Pkg.status(; compat=true, io=io)
+        Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin("[7876af07] Example v0.4.0 (<v$v)", str)
         open(Base.active_project(), "a") do io
@@ -2178,7 +2178,7 @@ end
                   Example = "0.4.1"
             """)
         end
-        Pkg.status(; compat=true, io=io)
+        Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin("[7876af07] Example v0.4.0 [<v0.4.1], (<v$v)", str)
     end
