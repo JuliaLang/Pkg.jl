@@ -1387,7 +1387,7 @@ function recall_precompile_state()
         if isfile(fpath)
             open(fpath) do io
                 try
-                    pkgspecs = deserialize(io)
+                    pkgspecs = deserialize(io)::Vector{PackageSpec}
                     append!(empty!(store), pkgspecs)
                 catch
                     empty!(store)
