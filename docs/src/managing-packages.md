@@ -133,6 +133,38 @@ Updating `~/.julia/environments/v1/Manifest.toml`
   [92a963f6] + ImportMacros v1.0.0 `git@github.com:fredrikekre/ImportMacros.jl.git#master`
 ```
 
+### Adding a subdir package
+
+If the package you want to add is not in the root of the repository, then you need to manually pass the `subdir` keyword to `Pkg.add`
+or `PackageSpec`. For instance, to add the `SnoopCompileCore` package in the [SnoopCompile](https://github.com/timholy/SnoopCompile.jl)
+repository:
+
+```julia-repl
+julia> Pkg.add(url="https://github.com/timholy/SnoopCompile.jl.git", subdir="SnoopCompileCore")
+     Cloning git-repo `https://github.com/timholy/SnoopCompile.jl.git`
+    Updating git-repo `https://github.com/timholy/SnoopCompile.jl.git`
+   Resolving package versions...
+  Installing known registries into `~/.julia`
+       Added registry `General` to `~/.julia/registries/General`
+    Updating `~/.julia/environments/v1.6/Project.toml`
+  [e2b509da] + SnoopCompileCore v2.7.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
+    Updating `~/.julia/environments/v1.6/Manifest.toml`
+  [e2b509da] + SnoopCompileCore v2.7.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
+  [9e88b42a] + Serialization
+Precompiling project...
+  1 dependency successfully precompiled in 2 seconds
+```
+
+Another way is to use the Pkg REPL with `<repo_url>:<subdir>` format:
+
+```julia-repl
+(@v1.6) pkg> add https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore
+...
+```
+
+!!! compat "Julia 1.6"
+    The Pkg REPL for subdir packages requires at least Julia 1.6.
+
 ### Adding a local package
 
 Instead of giving a URL of a git repo to `add` we could instead have given a local path to a git repo.
