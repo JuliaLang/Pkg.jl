@@ -635,6 +635,8 @@ end
         status 7876af07-990d-54b4-ab0e-23690620f79a
         status Example Random
         status -m Example
+        status --outdated
+        status --compat
         """
         # --diff option
         @test_logs (:warn, r"diff option only available") pkg"status --diff"

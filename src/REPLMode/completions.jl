@@ -106,6 +106,18 @@ function complete_installed_packages(options, partial)
         unique!([entry.name for (uuid, entry) in env.manifest])
 end
 
+function complete_installed_packages_and_compat(options, partial)
+    env = try EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    return map(vcat(collect(keys(env.project.deps)), "julia")) do d
+        compat_str = Operations.get_compat_str(env.project, d)
+        isnothing(compat_str) ? d : string(d, " ", compat_str)
+    end
+end
+
 function complete_add_dev(options, partial, i1, i2)
     comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)

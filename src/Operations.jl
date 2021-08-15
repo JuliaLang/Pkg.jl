@@ -174,7 +174,14 @@ end
 get_compat(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].val : Types.VersionSpec()
 get_compat_str(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].str : nothing
 function set_compat(proj::Project, name::String, compat::String)
-    proj.compat[name] = Types.Compat(Types.semver_spec(compat), compat)
+    semverspec = Types.semver_spec(compat, throw = false)
+    isnothing(semverspec) && return false
+    proj.compat[name] = Types.Compat(semverspec, compat)
+    return true
+end
+function set_compat(proj::Project, name::String, ::Nothing)
+    delete!(proj.compat, name)
+    return true
 end
 
 function reset_all_compat!(proj::Project)
@@ -1986,6 +1993,40 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
         print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated)
     end
 end
+
+function compat_line(io, pkg, uuid, compat_str, longest_dep_len; indent = "  ")
+    iob = IOBuffer()
+    ioc = IOContext(iob, :color => get(io, :color, false))
+    if isnothing(uuid)
+        print(ioc, "$indent           ")
+    else
+        printstyled(ioc, "$indent[", string(uuid)[1:8], "] "; color = :light_black)
+    end
+    print(ioc, rpad(pkg, longest_dep_len))
+    if isnothing(compat_str)
+        printstyled(ioc, " none"; color = :light_black)
+    else
+        print(ioc, " ", compat_str)
+    end
+    return String(take!(iob))
+end
+
+function print_compat(ctx::Context, pkgs_in::Vector{PackageSpec} = PackageSpec[]; io = nothing)
+    io = something(io, ctx.io)
+    printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
+    names = [pkg.name for pkg in pkgs_in]
+    pkgs = isempty(pkgs_in) ? ctx.env.project.deps : filter(pkg -> in(first(pkg), names), ctx.env.project.deps)
+    add_julia = isempty(pkgs_in) || any(p->p.name == "julia", pkgs_in)
+    longest_dep_len = isempty(pkgs) ? length("julia") : max(reduce(max, map(length, collect(keys(pkgs)))), length("julia"))
+    if add_julia
+        println(io, compat_line(io, "julia", nothing, get_compat_str(ctx.env.project, "julia"), longest_dep_len))
+    end
+    for (dep, uuid) in pkgs
+        println(io, compat_line(io, dep, uuid, get_compat_str(ctx.env.project, dep), longest_dep_len))
+    end
+end
+print_compat(pkg::String; kwargs...) = print_compat(Context(), pkg; kwargs...)
+print_compat(; kwargs...) = print_compat(Context(); kwargs...)
 
 function apply_force_latest_compatible_version!(ctx::Types.Context;
                                                 target_name = nothing,
