@@ -11,7 +11,7 @@ Pkg v1.7 Release Notes
 
 - The format of the `Manifest.toml` file have changed. New manifests will use
   the new format while old manifest will have their existing format in place.
-  Julia 1.6.3 is compatible with the new format.
+  Julia 1.6.2 is compatible with the new format.
 - Registries downloaded from the Pkg Server (not git) are no longer uncompressed into files but instead read directly from the compressed tarball into memory. This improves performance on
   filesystems which do not handle a large number of files well. To turn this feature off, set the environment variable `JULIA_PKG_UNPACK_REGISTRY=true`.
 - It is now possible to use an external `git` executable instead of the default libgit2 library for 
