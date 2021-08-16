@@ -233,15 +233,15 @@ Precompiling project...
 Another way is to use the Pkg REPL with `<repo_url>:<subdir>` format:
 
 ```julia-repl
-(@v1.6) pkg> add https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore # git HTTPS protocol
+(@v1.5) pkg> add https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore # git HTTPS protocol
 ...
 
-(@v1.6) pkg> add "git@github.com:timholy/SnoopCompile.jl.git":SnoopCompileCore # git SSH protocol
+(@v1.5) pkg> add "git@github.com:timholy/SnoopCompile.jl.git":SnoopCompileCore # git SSH protocol
 ...
 ```
 
-!!! compat "Julia 1.6"
-    The Pkg REPL for subdir packages requires at least Julia 1.6.
+!!! compat "Julia 1.5"
+    The Pkg REPL for subdir packages requires at least Julia 1.5.
 
 
 ## Removing packages
