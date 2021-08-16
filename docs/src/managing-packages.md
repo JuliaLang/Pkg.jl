@@ -219,8 +219,6 @@ julia> Pkg.add(url="https://github.com/timholy/SnoopCompile.jl.git", subdir="Sno
      Cloning git-repo `https://github.com/timholy/SnoopCompile.jl.git`
     Updating git-repo `https://github.com/timholy/SnoopCompile.jl.git`
    Resolving package versions...
-  Installing known registries into `~/.julia`
-       Added registry `General` to `~/.julia/registries/General`
     Updating `~/.julia/environments/v1.6/Project.toml`
   [e2b509da] + SnoopCompileCore v2.7.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
     Updating `~/.julia/environments/v1.6/Manifest.toml`
