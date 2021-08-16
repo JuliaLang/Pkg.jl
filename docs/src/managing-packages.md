@@ -208,7 +208,7 @@ For example, the tracked dependencies can be stored inside of the active project
 The whole directory can be moved and `Pkg` will still be able to find the dependencies
 because their path relative to the active project is preserved even though their absolute path has changed.
 
-### Adding a subdir package
+### Adding a package in a subdirectory of a repository
 
 If the package you want to add by URL is not in the root of the repository, then you need to manually pass the `subdir` keyword to `Pkg.add`
 or `PackageSpec`. For instance, to add the `SnoopCompileCore` package in the [SnoopCompile](https://github.com/timholy/SnoopCompile.jl)
@@ -226,22 +226,20 @@ julia> Pkg.add(url="https://github.com/timholy/SnoopCompile.jl.git", subdir="Sno
     Updating `~/.julia/environments/v1.6/Manifest.toml`
   [e2b509da] + SnoopCompileCore v2.7.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
   [9e88b42a] + Serialization
-Precompiling project...
-  1 dependency successfully precompiled in 2 seconds
 ```
 
 Another way is to use the Pkg REPL with `<repo_url>:<subdir>` format:
 
 ```julia-repl
-(@v1.5) pkg> add https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore # git HTTPS protocol
+pkg> add https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore # git HTTPS protocol
 ...
 
-(@v1.5) pkg> add "git@github.com:timholy/SnoopCompile.jl.git":SnoopCompileCore # git SSH protocol
+pkg> add "git@github.com:timholy/SnoopCompile.jl.git":SnoopCompileCore # git SSH protocol
 ...
 ```
 
 !!! compat "Julia 1.5"
-    The Pkg REPL for subdir packages requires at least Julia 1.5.
+    The Pkg REPL for packages in subdirectory requires at least Julia 1.5.
 
 
 ## Removing packages
