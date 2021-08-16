@@ -147,7 +147,7 @@ wrap_option(option::String)  = length(option) == 1 ? "-$option" : "--$option"
 is_opt(word::AbstractString) = first(word) == '-' && word != "-"
 
 function parse_option(word::AbstractString)::Option
-    m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
+    m = match(r"^(?: -([a-z]) | --((?:[a-z]{1,}-?)*)(?:\s*=\s*(\S*))? )$"ix, word)
     m === nothing && pkgerror("malformed option: ", repr(word))
     option_name = m.captures[1] !== nothing ? m.captures[1] : m.captures[2]
     option_arg  = m.captures[3] === nothing ? nothing : String(m.captures[3])

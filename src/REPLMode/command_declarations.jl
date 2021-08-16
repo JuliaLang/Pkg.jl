@@ -350,13 +350,14 @@ PSA[:name => "status",
         PSA[:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
         PSA[:name => "diff", :short_name => "d", :api => :diff => true],
+        PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
     ],
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    [st|status] [-d|--diff] [pkgs...]
-    [st|status] [-d|--diff] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
 
 Show the status of the current environment. In `--project` mode (default), the
 status of the project file is summarized. In `--manifest` mode the output also
@@ -364,13 +365,18 @@ includes the recursive dependencies of added packages given in the manifest.
 If there are any packages listed as arguments the output will be limited to those packages.
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
+The `--compat` option in addition show if some packages are not at their latest version
+and what packages are holding them back.
 
 !!! compat "Julia 1.1"
     `pkg> status` with package arguments requires at least Julia 1.1.
 
 !!! compat "Julia 1.3"
-    The `--diff` option requires Julia 1.3. In earlier versions `--diff`
+    The `--diff` option requires at least Julia 1.3. In earlier versions `--diff`
     is the default for environments in git repositories.
+
+!!! compat "Julia 1.8" 
+    The `--outdated` option requires at least Julia 1.8.
 """,
 ],
 PSA[:name => "gc",

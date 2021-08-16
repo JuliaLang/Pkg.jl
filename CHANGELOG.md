@@ -1,3 +1,9 @@
+Pkg v1.8 Release Notes
+======================
+
+- New `outdated::Bool` kwarg to `Pkg.status` (`--outdated` or `-o` in the REPL mode) to show
+  information about packages not at the latest version.
+
 Pkg v1.7 Release Notes
 ======================
 
