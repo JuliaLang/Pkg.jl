@@ -222,7 +222,7 @@ end
 
 # Helper function for getting these printed out in a nicely-sorted order
 function print_sorted(io::IO, d::Dict; indent::Int=0)
-    println(io, "Dict{UUID,Tuple{String,Union{String,Nothing}}}(")
+    println(io, "Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}(")
     for pair in sort(collect(d), by = kv-> kv[2][1])
         println(io, " "^indent, repr(pair[1]), " => ", repr(pair[2]), ",")
     end
