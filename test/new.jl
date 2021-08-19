@@ -2767,6 +2767,17 @@ end
         @test linalg_block["uuid"] == linalg_uuid
         @test !haskey(linalg_block, "version")
     end
+
+    isolate(loaded_depot=true) do
+        # Next, test that stdlibs do not get dependencies from the registry
+        # NOTE: this test depends on the fact that in Julia v1.6+ we added
+        # "fake" JLLs that do not depend on Pkg while the "normal" p7zip_jll does.
+        # A future p7zip_jll in the registry may not depend on Pkg, so be sure
+        # to verify your assumptions when updating this test.
+        Pkg.add("p7zip_jll")
+        p7zip_jll_uuid = UUID("3f19e933-33d8-53b3-aaab-bd5110c3b7a0")
+        @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
+    end
 end
 
 end #module
