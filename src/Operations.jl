@@ -1875,7 +1875,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         end
 
         latest_version = true
-        # Compat info
+        # Outdated info
         cinfo = nothing
         if outdated
             if diff == false && !is_stdlib(new.uuid)
@@ -1886,7 +1886,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
                 end
             end
         end
-        # if we are running with compat, only show packages that are upper bounded
+        # if we are running with outdated, only show packages that are upper bounded
         if outdated && latest_version
             continue
         end
