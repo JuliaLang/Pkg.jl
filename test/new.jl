@@ -2162,7 +2162,7 @@ end
         Pkg.status("FooBar"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"No Matches in diff for `.+Manifest.toml`", readline(io))
     end
-    # Compat API
+    # Outdated API
     isolate(loaded_depot=true) do
         Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
         Pkg.add("Example"; io=devnull)

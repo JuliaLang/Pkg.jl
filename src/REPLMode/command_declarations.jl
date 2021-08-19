@@ -365,7 +365,7 @@ includes the recursive dependencies of added packages given in the manifest.
 If there are any packages listed as arguments the output will be limited to those packages.
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
-The `--compat` option in addition show if some packages are not at their latest version
+The `--outdated` option in addition show if some packages are not at their latest version
 and what packages are holding them back.
 
 !!! compat "Julia 1.1"
@@ -375,7 +375,7 @@ and what packages are holding them back.
     The `--diff` option requires at least Julia 1.3. In earlier versions `--diff`
     is the default for environments in git repositories.
 
-!!! compat "Julia 1.8" 
+!!! compat "Julia 1.8"
     The `--outdated` option requires at least Julia 1.8.
 """,
 ],
