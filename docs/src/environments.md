@@ -14,7 +14,7 @@ julia> mkdir("MyProject")
 julia> cd("MyProject")
 /Users/kristoffer/MyProject
 
-(v1.0) pkg> activate .
+(v1.0) pkg> activate . # "." means the current directory
 
 (MyProject) pkg> st
     Status `Project.toml`
