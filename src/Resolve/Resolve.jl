@@ -358,32 +358,86 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     # keep a track for the log
     why = Union{Symbol,Int}[0 for p0 = 1:np]
 
+    bksol = similar(sol)
+    seen = Set{Int}()
+    staged = Set{Int}()
+    staged_next = Set{Int}()
+
     restart = true
     while restart
+        # @info "LET'S GO"
         restart = false
         for p0 = 1:np
+            # @info "consider $p0"
+
             s0 = sol[p0]
             s0 == spp[p0] && (why[p0] = :uninst; continue) # the package is not installed
 
-            # check if bumping to the higher version would violate a constraint
-            gconstr[p0][s0+1] || (why[p0] = :constr; continue)
+            # pick the next version that doesn't violate a constraint (if any)
+            bump = findfirst(v0->gconstr[p0][v0], s0+1:spp[p0])
 
-            # check if bumping to the higher version would violate a constraint
-            viol = false
-            for (j1,p1) in enumerate(gadj[p0])
-                s1 = sol[p1]
-                msk = gmsk[p0][j1]
-                if !msk[s1, s0+1]
-                    viol = true
-                    why[p0] = p1
-                    break
+            # no such version was found, skip this package
+            bump ≡ nothing && (why[p0] = :constr; continue)
+
+            # assume that we will succeed in bumping the version (otherwise we
+            # roll-back at the end)
+
+            ## debugging stuff...
+            # if sol[p0]+bump ≠ spp[p0]
+            #     outstr = "bumping $p0 = $(pkgID(p0, graph)) from $(sol[p0]) to $(sol[p0]+bump)"
+            # else
+            #     outstr = "uninstalling $p0 = $(pkgID(p0, graph))"
+            # end
+
+            copy!(bksol, sol)
+            s0up = s0 + bump
+            sol[p0] = s0up
+
+            empty!(seen)
+            empty!(staged)
+            empty!(staged_next)
+            push!(staged, p0)
+
+            while !isempty(staged)
+                for f0 in staged
+                    for (j1,f1) in enumerate(gadj[f0])
+                        s1 = sol[f1]
+                        msk = gmsk[f0][j1]
+                        bump = findfirst(v1->(gconstr[f1][v1] && msk[v1, sol[f0]]), s1:spp[f1])
+                        f1 ∈ seen && @assert bump == 1 # TODO: when done debugging we can use this at the start of the loop
+                        if bump ≡ nothing
+                            why[p0] = f1 # TODO: improve this (we should have the path from p0 to f1)
+                            # outstr *= "\nbumping failed at $f1 = $(pkgID(f1, graph))"
+                            @goto abort
+                        end
+                        # if bump ≠ 1
+                        #     if sol[f1]+bump-1 ≠ spp[f1]
+                        #         outstr *= "\nbumping $f1 = $(pkgID(f1, graph)) from $(sol[f1]) to $(sol[f1]+bump-1)"
+                        #     else
+                        #         outstr *= "\nuninstalling $f1 = $(pkgID(f1, graph))"
+                        #     end
+                        # end
+                        sol[f1] += bump - 1
+                        bump > 1 && push!(staged_next, f1)
+                    end
                 end
+                union!(seen, staged)
+                staged, staged_next = staged_next, staged
+                empty!(staged_next)
             end
-            viol && continue
 
-            # So the solution is non-optimal: we bump it manually
-            sol[p0] += 1
+            # if we're here the bump was successful, there's nothing more to do
+
+            # @info outstr
+
             restart = true
+            continue
+
+            ## abort the bumping: restore the solution
+            @label abort
+
+            copy!(sol, bksol)
+            # @info outstr
         end
     end
 
@@ -411,6 +465,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
         staged = staged_next
     end
 
+    # @info "clearing up: $([pkgID(p0, graph) for p0 in findall(uninst) if sol[p0] ≠ spp[p0]])"
     for p0 in findall(uninst)
         sol[p0] = spp[p0]
         why[p0] = :uninst
