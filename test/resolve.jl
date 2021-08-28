@@ -411,7 +411,8 @@ end
     ## DEPENDENCY SCHEME 12: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
     ## ref Pkg.jl issue #1949
 
-    include("resolvedata2.jl")
+    resolvedata2 = read(`$(Pkg.PlatformEngines.exe7z()) x resolvedata2.jl.gz -so`, String)
+    include_string(@__MODULE__, resolvedata2)
 
     @test sanity_tst(ResolveData2.deps_data, ResolveData2.problematic_data)
     @test resolve_tst(ResolveData2.deps_data, ResolveData2.reqs_data, ResolveData2.want_data)
