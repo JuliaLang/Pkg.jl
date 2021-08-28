@@ -287,7 +287,7 @@ may fit your package better.
 
 Once a package is ready it can be registered with the [General Registry](https://github.com/JuliaRegistries/General).
 Currently packages are submitted via [`Registrator`](https://juliaregistrator.github.io/).
-In addition to `Registrator`, [`TagBot`](https://github.com/apps/julia-tagbot) helps manage the process of tagging releases.
+In addition to `Registrator`, [`TagBot`](https://github.com/marketplace/actions/julia-tagbot) helps manage the process of tagging releases.
 
 ## Best Practices
 
