@@ -49,12 +49,12 @@ function get_server_dir(
 )
     server === nothing && return
     url == server || startswith(url, "$server/") || return
-    m = match(r"^\w+://([^\\/]+)(?:$|/)", server)
+    m = match(r"^\w+://(?:[^\\/@]+@)?([^\\/:]+)(?:$|/|:)", server)
     if m === nothing
         @warn "malformed Pkg server value" server
         return
     end
-    joinpath(depots1(), "servers", String(m.captures[1]))
+    joinpath(depots1(), "servers", m.captures[1])
 end
 
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex},Any}[]
