@@ -382,7 +382,7 @@ function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol,Int}
 end
 
 """
-Push the given solution to a local optimium if needed: keeps increasing
+Push the given solution to a local optimum if needed: keeps increasing
 the states of the given solution as long as no constraints are violated.
 It might also install additional packages, if needed to bump the ones already
 installed.
@@ -403,7 +403,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     # Strategy:
     # There's a cycle in which first the unnecessary (unconnected) packages are removed,
     # then we make a pass over the whole packages trying to bump each of them.
-    # We repeat the above two steps until no furhter action is allowed.
+    # We repeat the above two steps until no further action is allowed.
     # When attempting to bump a package, we may attempt to bump or install other packages
     # if needed. Except if the bump would uninstall a package, in which cases we don't
     # touch anything else: we do it only if it has no consequence at all. This strategy
@@ -418,7 +418,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     # (they start installed and can be bumped) and which down (they start uninstalled and
     # can be installed)
     move_up = BitVector(undef, length(sol))
-    # lower and upper bounds on the valid reange of each package
+    # lower and upper bounds on the valid range of each package
     upperbound = similar(spp)
     lowerbound = similar(spp)
     # backup space for restoring the state if an attempted bump fails
@@ -426,7 +426,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     bk_lowerbound = similar(lowerbound)
     bk_upperbound = similar(upperbound)
 
-    # auxiliary set to perform breadth-first search on the graph
+    # auxiliary sets to perform breadth-first search on the graph
     seen = Set{Int}()
     staged = Set{Int}()
     staged_next = Set{Int}()
@@ -436,7 +436,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
 
     while true
         copy!(old_sol, sol)
-        @assert sol ∉ allsols
         push!(allsols, copy(sol))
 
         # step 1: uninstall unneded packages
@@ -533,7 +532,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             end
 
             # if we're here the bump was successful, there's nothing more to do
-
             continue
 
             ## abort the bumping: restore the solution
