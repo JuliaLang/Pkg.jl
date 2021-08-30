@@ -372,13 +372,10 @@ function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol,Int}
         staged = staged_next
     end
 
-    # @info "clearing up: $([pkgID(p0, graph) for p0 in findall(uninst) if sol[p0] ≠ spp[p0]])"
     for p0 in findall(uninst)
         sol[p0] = spp[p0]
         why[p0] = :uninst
     end
-
-    # @assert verify_solution(sol, graph)
 end
 
 """
@@ -541,7 +538,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             copy!(lowerbound, bk_lowerbound)
             copy!(upperbound, bk_upperbound)
         end
-        # @assert verify_solution(sol, graph)
         sol ≠ old_sol || break
         # It might be possible in principle to contrive a situation in which
         # the solutions oscillate
