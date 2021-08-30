@@ -413,11 +413,11 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     # The way it's written should ensure that no package is ever downgraded (unless it was
     # originally unneeded, and then got removed, and later reinstalled to a lower version as
     # a consequence of a bump of some other package).
-    
+
     # move_up is used to keep track of which packages can move up
     # (they start installed and can be bumped) and which down (they start uninstalled and
     # can be installed)
-    move_up = similar(sol)
+    move_up = BitVector(undef, length(sol))
     # lower and upper bounds on the valid reange of each package
     upperbound = similar(spp)
     lowerbound = similar(spp)
@@ -444,9 +444,11 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
 
         # setp 2: try to bump each installed package in turn
 
-        move_up = sol .≠ spp
+        move_up .= sol .≠ spp
         copy!(upperbound, spp)
-        lowerbound .= [move_up[p0] ? sol[p0] : 1 for p0 = 1:np]
+        let move_up = move_up
+            lowerbound .= [move_up[p0] ? sol[p0] : 1 for p0 = 1:np]
+        end
 
         for p0 = 1:np
             s0 = sol[p0]
@@ -456,8 +458,10 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             @assert upperbound[p0] == spp[p0]
 
             # pick the next version that doesn't violate a constraint (if any)
-            bump_range = s0+1:spp[p0]
-            bump = findfirst(v0->gconstr[p0][v0], bump_range)
+            bump_range = collect(s0+1:spp[p0])
+            bump = let gconstr = gconstr
+                findfirst(v0->gconstr[p0][v0], bump_range)
+            end
 
             # no such version was found, skip this package
             bump ≡ nothing && (why[p0] = :constr; continue)
@@ -505,7 +509,9 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
                                 bump_range = collect(ub1:-1:lb1)
                             end
                         end
-                        bump = findfirst(v1->(gconstr[f1][v1] && msk[v1, sol[f0]]), bump_range)
+                        bump = let gconstr = gconstr
+                            findfirst(v1->(gconstr[f1][v1] && msk[v1, sol[f0]]), bump_range)
+                        end
                         if bump ≡ nothing
                             why[p0] = f1 # TODO: improve this? (ideally we might want the path from p0 to f1)
                             @goto abort
