@@ -41,6 +41,7 @@ Pkg.resolve
 Pkg.gc
 Pkg.status
 Pkg.precompile
+Pkg.offline
 Pkg.setprotocol!
 Pkg.dependencies
 Pkg.project
