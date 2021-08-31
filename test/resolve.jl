@@ -407,11 +407,19 @@ end
 
     @test sanity_tst(ResolveData.deps_data, ResolveData.problematic_data)
     @test resolve_tst(ResolveData.deps_data, ResolveData.reqs_data, ResolveData.want_data)
+
+    ## DEPENDENCY SCHEME 12: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
+    ## ref Pkg.jl issue #1949
+
+    include("resolvedata2.jl")
+
+    @test sanity_tst(ResolveData2.deps_data, ResolveData2.problematic_data)
+    @test resolve_tst(ResolveData2.deps_data, ResolveData2.reqs_data, ResolveData2.want_data)
 end
 
 @testset "nasty" begin
     VERBOSE && @info("SCHEME NASTY")
-    ## DEPENDENCY SCHEME 12: A NASTY CASE
+    ## DEPENDENCY SCHEME 13: A NASTY CASE
 
     include("NastyGenerator.jl")
     deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = true)

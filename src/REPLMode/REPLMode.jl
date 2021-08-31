@@ -692,6 +692,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         println(ctx.io)
         return false
     end
+    resp = strip(resp)
     if lowercase(resp) in ["y", "yes"]
         API.add(string.(available_pkgs))
         if length(available_pkgs) < length(pkgs)

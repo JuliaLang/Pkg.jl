@@ -1435,7 +1435,9 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         return instantiate(Context(); manifest=manifest, update_registry=update_registry, verbose=verbose, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
-        up(ctx; update_registry=update_registry)
+        # given no manifest exists, only allow invoking a registry update if there are project deps
+        allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
+        up(ctx; update_registry = update_registry && allow_registry_update)
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
