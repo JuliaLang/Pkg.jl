@@ -324,11 +324,14 @@ Create a minimal project called `pkgname` in the current folder. For more featur
 ],
 PSA[:name => "precompile",
     :api => API.precompile,
+    :arg_count => 0 => Inf,
+    :completions => complete_installed_packages,
     :description => "precompile all the project dependencies",
     :help => md"""
     precompile
+    precompile pkgs...
 
-Precompile all the dependencies of the project in parallel.
+Precompile all or specified dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
 
 Errors will only throw when precompiling the top-level dependencies, given that

@@ -137,6 +137,12 @@ end
         @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
         @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
+
+        Pkg.precompile("Dep4", io=iob)
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+        Pkg.precompile(["Dep4", "NoVersion"], io=iob)
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
         println("Auto precompilation disabled")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
@@ -229,7 +235,7 @@ end
             @test x.uuid == Base.UUID(0)
         end
     end
-    
+
     @testset begin
         xs = [
             Pkg.PackageSpec(),
