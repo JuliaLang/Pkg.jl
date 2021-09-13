@@ -65,7 +65,7 @@ function pkg_server_registry_info()
     catch err
         @warn "could not download $server/registries" exception=err
     end
-    download_ok || return registry_urls
+    download_ok || return nothing
     open(tmp_path) do io
         for line in eachline(io)
             if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
