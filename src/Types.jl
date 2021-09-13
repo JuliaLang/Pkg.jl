@@ -714,7 +714,7 @@ function resolve_projectfile!(ctx, pkg, project_path)
     env = ctx.env
     project_file = projectfile_path(project_path; strict=true)
     project_file === nothing && pkgerror(string("could not find project file in package at `",
-                                                pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)), "` maybe `subdir` needs to be specified")
+                    something(pkg.repo.source, pkg.path, project_path), "` maybe `subdir` needs to be specified"))
     project_data = read_package(project_file)
     if pkg.uuid === nothing || pkg.uuid == project_data.uuid
         pkg.uuid = project_data.uuid
