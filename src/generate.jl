@@ -59,7 +59,7 @@ function project(io::IO, pkg::AbstractString, dir::AbstractString)
 end
 
 function entrypoint(io::IO, pkg::AbstractString, dir)
-    genfile(io, dir, "src/$pkg.jl") do file_io
+    genfile(io, joinpath(dir, "src"), "$pkg.jl") do file_io
         print(file_io,
            """
             module $pkg
