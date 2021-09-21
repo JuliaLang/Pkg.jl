@@ -2185,6 +2185,41 @@ end
 end
 
 #
+# # compat
+#
+@testset "Pkg.compat" begin
+    # State changes
+    isolate(loaded_depot=true) do
+        Pkg.add("Example")
+        iob = IOBuffer()
+        Pkg.status(compat=true, io = iob)
+        output = String(take!(iob))
+        @test occursin(r"Compat `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] *Example *none", output)
+        @test occursin(r"julia *none", output)
+
+        Pkg.compat("Example", "0.2,0.3")
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") == "0.2,0.3"
+        Pkg.status(compat=true, io = iob)
+        output = String(take!(iob))
+        @test occursin(r"Compat `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] *Example *0.2,0.3", output)
+        @test occursin(r"julia *none", output)
+
+        Pkg.compat("Example", nothing)
+        Pkg.compat("julia", "1.8")
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") == nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "julia") == "1.8"
+        Pkg.status(compat=true, io = iob)
+        output = String(take!(iob))
+        @test occursin(r"Compat `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] *Example *none", output)
+        @test occursin(r"julia *1.8", output)
+    end
+end
+
+
+#
 # # Caching
 #
 @testset "Repo caching" begin

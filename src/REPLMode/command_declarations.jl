@@ -351,6 +351,7 @@ PSA[:name => "status",
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
         PSA[:name => "diff", :short_name => "d", :api => :diff => true],
         PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
+        PSA[:name => "compat", :short_name => "c", :api => :compat => true],
     ],
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
@@ -358,6 +359,7 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
     [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
+    [st|status] [-c|--compat] [pkgs...]
 
 Show the status of the current environment. In `--project` mode (default), the
 status of the project file is summarized. In `--manifest` mode the output also
@@ -367,6 +369,7 @@ The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 The `--outdated` option in addition show if some packages are not at their latest version
 and what packages are holding them back.
+The `--compat` option alone shows project compat entries.
 
 !!! compat "Julia 1.1"
     `pkg> status` with package arguments requires at least Julia 1.1.
@@ -376,7 +379,20 @@ and what packages are holding them back.
     is the default for environments in git repositories.
 
 !!! compat "Julia 1.8"
-    The `--outdated` option requires at least Julia 1.8.
+    The `--outdated` and `--compat` options require at least Julia 1.8.
+""",
+],
+PSA[:name => "compat",
+    :api => API.compat,
+    :arg_count => 0 => 2,
+    :completions => complete_installed_packages_and_compat,
+    :description => "edit compat entries in the current Project",
+    :help => md"""
+    compat [pkg] [compat_string]
+
+Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments.
+When directly editing use tab to complete the package name and any existing compat entry.
+Specifying a package with a blank compat entry will remove the entry.
 """,
 ],
 PSA[:name => "gc",

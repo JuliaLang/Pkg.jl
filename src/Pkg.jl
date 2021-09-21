@@ -428,6 +428,18 @@ status as a Julia object instead of printing it.
 """
 const status = API.status
 
+"""
+    Pkg.compat()
+
+Interactively edit the [compat] entries within the current Project.
+
+    Pkg.compat(pkg::String, compat::String)
+
+Set the [compat] string for the given package within the current Project.
+
+See [`Compatibility`](@ref) for more information on the project [compat] section.
+"""
+const compat = API.compat
 
 """
     Pkg.activate([s::String]; shared::Bool=false, io::IO=stderr)
@@ -440,7 +452,7 @@ The logic for what path is activated is as follows:
   * If `shared` is `true`, the first existing environment named `s` from the depots
     in the depot stack will be activated. If no such environment exists,
     create and activate that environment in the first depot.
-  * If `temp` is `true` this will create and activate a temporary enviroment which will
+  * If `temp` is `true` this will create and activate a temporary environment which will
     be deleted when the julia process is exited.
   * If `s` is an existing path, then activate the environment at that path.
   * If `s` is a package in the current project and `s` is tracking a path, then
