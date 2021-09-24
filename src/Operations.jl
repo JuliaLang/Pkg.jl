@@ -1644,8 +1644,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
-            status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io)
-            Pkg._auto_precompile(sandbox_ctx)
+            status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false)
+            Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(stdout)
             cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
@@ -1907,7 +1907,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
     for pkg in package_statuses
         latest_version = pkg.compat_data === nothing
-        print(io, pkg.downloaded ? (all_packages_downloaded ? "" : " ") : not_installed_indicator)
+        print(io, pkg.downloaded ? " " : not_installed_indicator)
         printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
         diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
         if outdated && !diff && pkg.compat_data !== nothing
