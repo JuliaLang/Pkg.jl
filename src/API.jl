@@ -15,7 +15,7 @@ import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
 import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH
 using ..Types, ..TOML
-using ..Types: VersionTypes
+using ..Types: VersionTypes, notify_active_project_watchers
 using Base.BinaryPlatforms
 import ..stderr_f, ..stdout_f
 using ..Artifacts: artifact_paths
@@ -1534,7 +1534,6 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
     return nothing
 end
 
-
 function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir(); io=io)
@@ -1543,6 +1542,7 @@ function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
+    notify_active_project_watchers()
     add_snapshot_to_undo()
     return nothing
 end
@@ -1602,6 +1602,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
         n = ispath(p) ? "" : "new "
         printpkgstyle(io, :Activating, "$(n)project at $(pathrepr(dirname(p)))")
     end
+    notify_active_project_watchers()
     add_snapshot_to_undo()
     return nothing
 end
@@ -1609,9 +1610,11 @@ function activate(f::Function, new_project::AbstractString)
     old = Base.ACTIVE_PROJECT[]
     Base.ACTIVE_PROJECT[] = new_project
     try
+        notify_active_project_watchers()
         f()
     finally
         Base.ACTIVE_PROJECT[] = old
+        notify_active_project_watchers()
     end
 end
 

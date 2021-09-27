@@ -302,7 +302,10 @@ function write_manifest(io::IO, raw_manifest::Dict)
 end
 function write_manifest(raw_manifest::Dict, manifest_file::AbstractString)
     str = sprint(write_manifest, raw_manifest)
-    write(manifest_file, str)
+    ispreexisting = isfile(manifest_file)
+    ret = write(manifest_file, str)
+    !ispreexisting && notify_active_project_watchers()
+    return ret
 end
 
 ############

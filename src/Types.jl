@@ -58,6 +58,20 @@ const TOML_LOCK = ReentrantLock()
 parse_toml(toml_file::AbstractString) =
     Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
 
+## Watchers for when the active project changes (e.g., Revise)
+# Each should be a thunk, i.e., `f()`. To determine the current active project,
+# the thunk can query `Base.active_project()`.
+const active_project_watcher_thunks = []
+function notify_active_project_watchers()
+    for f in active_project_watcher_thunks
+        try
+            Base.invokelatest(f)
+        catch
+        end
+    end
+    return nothing
+end
+
 #################
 # Pkg Error #
 #################
