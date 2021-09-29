@@ -470,7 +470,17 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     while true
         # read existing usage file
         usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
+            retries = 0
+            @label retry1
+            try
+                # If the file existed, but disappears or is mangled during parse, keep trying and error if retries fail
+                TOML.parsefile(usage_file)
+            catch
+                retries += 1
+                retries > 5 && rethrow()
+                sleep(0.1)
+                @goto retry1
+            end
         else
             Dict{String, Any}()
         end
@@ -490,12 +500,24 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
             TOML.print(io, usage, sorted=true)
         end
 
-        # Move the temp file into place, replacing the original
-        mv(temp_usage_file, usage_file, force = true)
+        # Create or overwrite the original (this is as fast as mv, but doesn't rm the original to overwrite)
+        open(usage_file, "w") do io
+            write(io, read(temp_usage_file, String))
+        end
 
         # Check that the new file has what we want in it
         new_usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
+            retries = 0
+            @label retry2
+            try
+                # If the file existed, but disappears or is mangled during parse, keep trying and error if retries fail
+                TOML.parsefile(usage_file)
+            catch
+                retries += 1
+                retries > 5 && rethrow()
+                sleep(0.1)
+                @goto retry2
+            end
         else
             Dict{String, Any}()
         end
