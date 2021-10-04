@@ -425,7 +425,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     bk_upperbound = similar(upperbound)
 
     # auxiliary sets to perform breadth-first search on the graph
-    seen = Set{Int}()
     staged = Set{Int}()
     staged_next = Set{Int}()
 
@@ -479,7 +478,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             # if needed by another package
             try_uninstall || (lowerbound[p0] = new_s0) # note that we're in the move_up case
 
-            empty!(seen)
             empty!(staged)
             empty!(staged_next)
             push!(staged, p0)
@@ -487,12 +485,11 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             while !isempty(staged)
                 for f0 in staged
                     for (j1,f1) in enumerate(gadj[f0])
-                        f1 == p0 && continue
-                        f1 ∈ seen && continue
                         s1 = sol[f1]
                         msk = gmsk[f0][j1]
-                        if try_uninstall
-                            bump_range = [s1] # when uninstalling, no further changes are allowed
+                        if f1 == p0 || try_uninstall
+                            # when uninstalling or looking at p0, no further changes are allowed
+                            bump_range = [s1]
                         else
                             lb1 = lowerbound[f1]
                             ub1 = upperbound[f1]
@@ -524,7 +521,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
                         end
                     end
                 end
-                union!(seen, staged)
                 staged, staged_next = staged_next, staged
                 empty!(staged_next)
             end
