@@ -1090,6 +1090,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     failed_deps = Dict{Base.PkgId, String}()
     skipped_deps = Base.PkgId[]
     precomperr_deps = Base.PkgId[] # packages that may succeed after a restart (i.e. loaded packages with no cache file)
+    attempted_download = Base.PkgId[]
 
     print_lock = stdout isa Base.LibuvStream ? stdout.lock::ReentrantLock : ReentrantLock()
     first_started = Base.Event()
@@ -1255,6 +1256,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                                 println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
+                            @assert length(ret) == 2 "compilecache returned the wrong number of values"
+                            ret[2] == 126 && push!(attempted_download, pkg)
                             queued && (haskey(man, pkg.uuid) && precomp_dequeue!(make_pkgspec(man, pkg.uuid)))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name))
@@ -1315,6 +1318,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
     if ndeps > 0 || !isempty(failed_deps)
         plural = ndeps == 1 ? "y" : "ies"
         str = sprint() do iostr
+            !isempty(attempted_download) && @warn "The following packages downloaded data during precompilation, which is not advisable" attempted_download
             print(iostr, "  $(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
             if n_already_precomp > 0 || !isempty(skipped_deps)
                 print(iostr, " (")
