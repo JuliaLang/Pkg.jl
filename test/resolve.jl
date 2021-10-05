@@ -396,11 +396,41 @@ end
     ]
     want_data = Dict("A"=>v"1", "B"=>v"2", "C"=>v"2", "D"=>v"2", "E"=>v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
+
+
+
+    VERBOSE && @info("SCHEME 11")
+    ## DEPENDENCY SCHEME 11: FOUR PACKAGES, WITH AN INCONSISTENCY
+    ## ref Pkg.jl issue #2740
+    deps_data = Any[
+        ["A", v"1", "C", "1"],
+        ["A", v"2", "C", "2"],
+        ["A", v"2", "D", "1"],
+        ["B", v"1", "D", "1"],
+        ["B", v"2", "D", "2"],
+        ["C", v"1", "D", "1"],
+        ["C", v"1", "B", "1"],
+        ["C", v"2", "D", "2"],
+        ["C", v"2", "B", "2"],
+        ["D", v"1"],
+        ["D", v"2"],
+    ]
+
+    @test sanity_tst(deps_data, [("A", v"2")])
+
+    # require A & B, any version (must use the highest non-inconsistent)
+    reqs_data = Any[
+        ["A", "*"],
+        ["B", "*"],
+    ]
+    want_data = Dict("A"=>v"1", "B"=>v"1", "C"=>v"1", "D"=>v"1")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
 end
 
 @testset "realistic" begin
     VERBOSE && @info("SCHEME REALISTIC")
-    ## DEPENDENCY SCHEME 11: A REALISTIC EXAMPLE
+    ## DEPENDENCY SCHEME 12: A REALISTIC EXAMPLE
     ## ref Julia issue #21485
 
     include("resolvedata1.jl")
@@ -408,7 +438,7 @@ end
     @test sanity_tst(ResolveData.deps_data, ResolveData.problematic_data)
     @test resolve_tst(ResolveData.deps_data, ResolveData.reqs_data, ResolveData.want_data)
 
-    ## DEPENDENCY SCHEME 12: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
+    ## DEPENDENCY SCHEME 13: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
     ## ref Pkg.jl issue #1949
 
     include("resolvedata2.jl")
