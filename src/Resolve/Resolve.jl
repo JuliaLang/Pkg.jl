@@ -255,7 +255,7 @@ function greedysolver(graph::Graph)
     for rp0 in req_inds
         # look for the highest version which satisfies the requirements
         rv0 = findlast(gconstr[rp0])
-        @assert rv0 ≠ 0 && rv0 ≠ spp[rp0]
+        @assert rv0 ≢ nothing && rv0 ≠ spp[rp0]
         sol[rp0] = rv0
         fill!(gconstr[rp0], false)
         gconstr[rp0][rv0] = true
@@ -291,14 +291,14 @@ function greedysolver(graph::Graph)
                 # or the same version was already selected, we're ok;
                 # otherwise we can't be sure what the optimal configuration is
                 # and we bail out
-                if v1 > 0 && (sol[p1] == spp[p1] || sol[p1] == v1)
-                    sol[p1] = v1
-                else
+                old_v1 = sol[p1]
+                if v1 ≡ nothing || (old_v1 ≠ v1 && old_v1 ≠ spp[p1])
                     pop_snapshot!(graph)
                     return (false, Int[])
+                elseif old_v1 == spp[p1]
+                    sol[p1] = v1
+                    push!(staged_next, p1)
                 end
-
-                p1 ∈ seen || push!(staged_next, p1)
             end
         end
         union!(seen, staged_next)
@@ -355,17 +355,18 @@ function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol,Int}
 
     uninst = trues(np)
     staged = Set{Int}(p0 for p0 = 1:np if !gconstr[p0][end])
-    seen = copy(staged)
+    seen = copy(staged) ∪ Set{Int}(p0 for p0 = 1:np if sol[p0] == spp[p0]) # we'll skip uninstalled packages
 
     while !isempty(staged)
         staged_next = Set{Int}()
         for p0 in staged
             s0 = sol[p0]
-            s0 == spp[p0] && continue
+            @assert s0 ≠ spp[p0]
             uninst[p0] = false
             for (j1,p1) in enumerate(gadj[p0])
+                p1 ∈ seen && continue            # we've already seen the package, or it is uninstalled
                 gmsk[p0][j1][end,s0] && continue # the package is not required by p0 at version s0
-                p1 ∈ seen || push!(staged_next, p1)
+                push!(staged_next, p1)
             end
         end
         union!(seen, staged_next)
@@ -424,7 +425,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     bk_upperbound = similar(upperbound)
 
     # auxiliary sets to perform breadth-first search on the graph
-    seen = Set{Int}()
     staged = Set{Int}()
     staged_next = Set{Int}()
 
@@ -478,7 +478,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             # if needed by another package
             try_uninstall || (lowerbound[p0] = new_s0) # note that we're in the move_up case
 
-            empty!(seen)
             empty!(staged)
             empty!(staged_next)
             push!(staged, p0)
@@ -486,20 +485,19 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             while !isempty(staged)
                 for f0 in staged
                     for (j1,f1) in enumerate(gadj[f0])
-                        f1 == p0 && continue
-                        f1 ∈ seen && continue
                         s1 = sol[f1]
                         msk = gmsk[f0][j1]
-                        if try_uninstall
-                            bump_range = [s1] # when uninstalling, no further changes are allowed
+                        if f1 == p0 || try_uninstall
+                            # when uninstalling or looking at p0, no further changes are allowed
+                            bump_range = [s1]
                         else
                             lb1 = lowerbound[f1]
                             ub1 = upperbound[f1]
                             @assert lb1 ≤ s1 ≤ ub1
                             if move_up[f1]
                                 s1 > lb1 && @assert s1 == spp[f1]
-                                    # the arrangement of the range gives precedence to improving the
-                                    # current situation, but allows reinstalling a package if needed
+                                # the arrangement of the range gives precedence to improving the
+                                # current situation, but allows reinstalling a package if needed
                                 bump_range = vcat(s1:ub1, s1-1:-1:lb1)
                             else
                                 bump_range = collect(ub1:-1:lb1)
@@ -523,7 +521,6 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
                         end
                     end
                 end
-                union!(seen, staged)
                 staged, staged_next = staged_next, staged
                 empty!(staged_next)
             end
