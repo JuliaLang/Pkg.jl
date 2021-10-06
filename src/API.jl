@@ -1000,7 +1000,7 @@ end
 
 function _is_stale(paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
-        staledeps = Base.stale_cachefile(sourcepath, path_to_try)
+        staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
         staledeps === true ? continue : return false
     end
     return true
