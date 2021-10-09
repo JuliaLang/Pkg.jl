@@ -1950,8 +1950,20 @@ end
     # REPL
     isolate() do
         Pkg.REPLMode.TEST_MODE[] = true
+
         api, opts = first(Pkg.pkg"precompile")
         @test api == Pkg.precompile
+        @test isempty(opts)
+
+        api, arg, opts = first(Pkg.pkg"precompile Foo")
+        @test api == Pkg.precompile
+        @test arg == "Foo"
+        @test isempty(opts)
+
+        api, arg1, arg2, opts = first(Pkg.pkg"precompile Foo Bar")
+        @test api == Pkg.precompile
+        @test arg1 == "Foo"
+        @test arg2 == "Bar"
         @test isempty(opts)
     end
 end
@@ -2507,7 +2519,6 @@ end
         # Argument count
         @test_throws PkgError Pkg.pkg"activate one two"
         @test_throws PkgError Pkg.pkg"activate one two three"
-        @test_throws PkgError Pkg.pkg"precompile Example"
         # invalid options
         @test_throws PkgError Pkg.pkg"rm --minor Example"
         @test_throws PkgError Pkg.pkg"pin --project Example"

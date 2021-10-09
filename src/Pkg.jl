@@ -136,8 +136,10 @@ const add = API.add
 
 """
     Pkg.precompile(; strict::Bool=false)
+    Pkg.precompile(pkg; strict::Bool=false)
+    Pkg.precompile(pkgs; strict::Bool=false)
 
-Precompile all the dependencies of the project in parallel.
+Precompile all or specific dependencies of the project in parallel.
 !!! note
     Errors will only throw when precompiling the top-level dependencies, given that
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
@@ -153,9 +155,14 @@ Precompile all the dependencies of the project in parallel.
     This function requires at least Julia 1.3. On earlier versions
     you can use `Pkg.API.precompile()` or the `precompile` Pkg REPL command.
 
+!!! compat "Julia 1.8"
+    Specifying packages to precompile requires at least Julia 1.8.
+
 # Examples
 ```julia
 Pkg.precompile()
+Pkg.precompile("Foo")
+Pkg.precompile(["Foo", "Bar"])
 ```
 """
 const precompile = API.precompile

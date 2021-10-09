@@ -1014,8 +1014,11 @@ function make_pkgspec(man, uuid)
     return PackageSpec(uuid = uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash)
 end
 
-precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, warn_loaded = true, kwargs...)
+precompile(pkgs...; kwargs...) = precompile(Context(), [pkgs...]; kwargs...)
+precompile(pkg::String; kwargs...) = precompile(Context(), pkg; kwargs...)
+precompile(ctx::Context, pkg::String; kwargs...) = precompile(ctx, [pkg]; kwargs...)
+precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkgs; kwargs...)
+function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false, strict::Bool=false, warn_loaded = true, kwargs...)
     Context!(ctx; kwargs...)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1056,6 +1059,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         push!(direct_deps, Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name))
     end
 
+    isempty(depsmap) && return
+
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
@@ -1072,18 +1077,40 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
 
     # guarding against circular deps
     circular_deps = Base.PkgId[]
-    function in_deps(pkgs, deps, dmap)
+    function in_deps(_pkgs, deps, dmap)
         isempty(deps) && return false
-        !isempty(intersect(pkgs,deps)) && return true
-        return any(dep->in_deps(vcat(pkgs, dep), dmap[dep], dmap), deps)
+        !isempty(intersect(_pkgs, deps)) && return true
+        return any(dep->in_deps(vcat(_pkgs, dep), dmap[dep], dmap), deps)
     end
     for (pkg, deps) in depsmap
         if in_deps([pkg], deps, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
             precomp_suspend!(make_pkgspec(man, pkg.uuid))
-            !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
+            if !internal_call && (isempty(pkgs) || in(first(pkg).name, pkgs))
+                @warn "Circular dependency detected. Precompilation skipped for $pkg"
+            end
         end
+    end
+
+    if !isempty(pkgs)
+        # if a list of packages is given, restrict to dependencies of given packages
+        function collect_all_deps(depsmap, dep, alldeps=Base.PkgId[])
+            append!(alldeps, depsmap[dep])
+            for _dep in depsmap[dep]
+                collect_all_deps(depsmap, _dep, alldeps)
+            end
+            return alldeps
+        end
+        keep = Base.PkgId[]
+        for dep in depsmap
+            if first(dep).name in pkgs
+                push!(keep, first(dep))
+                append!(keep, collect_all_deps(depsmap, first(dep)))
+            end
+        end
+        filter!(d->in(first(d), keep), depsmap)
+        isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs))")
     end
 
     pkg_queue = Base.PkgId[]
