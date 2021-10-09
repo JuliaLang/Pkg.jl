@@ -657,6 +657,7 @@ function _auto_precompile(ctx::Types.Context; warn_loaded = true)
 end
 
 using LibGit2: LibGit2
+using Tar: Tar
 function _run_precompilation_script_setup()
     tmp = mktempdir()
     cd(tmp)
@@ -702,6 +703,14 @@ function _run_precompilation_script_setup()
         uuid = "$uuid"
         repo = "$(escape_string(tmp))/TestPkg.jl"
         """)
+    Tar.create("registries/Registry", "registries/Registry.tar")
+    run(`$(Pkg.PlatformEngines.exe7z()) a "registries/Registry.tar.gz" -tgzip "registries/Registry.tar"`)
+    write("registries/Registry.toml", """
+          git-tree-sha1 = "11b5fad51c4f98cfe0c145ceab0b8fb63fed6f81"
+          uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
+          path = "Registry.tar.gz"
+    """)
+    Base.rm("registries/Registry"; recursive=true)
     return tmp
 end
 
@@ -722,16 +731,20 @@ end
 const CTRL_C = '\x03'
 const precompile_script = """
     import Pkg
+    _pwd = pwd()
     tmp = Pkg._run_precompilation_script_setup()
     $CTRL_C
     Pkg.add("TestPkg")
     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
     Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
     Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
+    Pkg.update()
     ] add Te\t\t$CTRL_C
     ] st
     $CTRL_C
     Pkg._run_precompilation_script_artifact()
-    rm(tmp; recursive=true)"""
+    rm(tmp; recursive=true)
+    cd(_pwd)
+    """
 
 end # module
