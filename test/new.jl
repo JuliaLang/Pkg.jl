@@ -360,10 +360,13 @@ end
         @test Base.active_project() == prev_env
 
         load_path_before = copy(LOAD_PATH)
-        empty!(LOAD_PATH)   # unset active env
-        Pkg.activate()      # shouldn't error
-        Pkg.activate()      # shouldn't error
-        append!(empty!(LOAD_PATH), load_path_before)
+        try
+            empty!(LOAD_PATH)   # unset active env
+            Pkg.activate()      # shouldn't error
+            Pkg.activate() # shouldn't error
+        finally
+            append!(empty!(LOAD_PATH), load_path_before)
+        end
     end
 end
 
