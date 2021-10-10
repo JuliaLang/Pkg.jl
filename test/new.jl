@@ -345,19 +345,28 @@ end
 
         # - activating the previous project
         Pkg.activate(; temp=true)
-        @test prev_env != Base.active_project()
+        @test Base.active_project() != prev_env
         Pkg.activate(; prev=true)
         @test prev_env == Base.active_project()
 
         Pkg.activate(; temp=true)
-        @test prev_env != Base.active_project()
+        @test Base.active_project() != prev_env
         Pkg.activate(; prev=true)
-        @test prev_env == Base.active_project()
+        @test Base.active_project() == prev_env
 
         Pkg.activate("")
-        @test prev_env != Base.active_project()
+        @test Base.active_project() != prev_env
         Pkg.activate(; prev=true)
-        @test prev_env == Base.active_project()
+        @test Base.active_project() == prev_env
+
+        load_path_before = copy(LOAD_PATH)
+        try
+            empty!(LOAD_PATH)   # unset active env
+            Pkg.activate()      # shouldn't error
+            Pkg.activate(; prev=true) # shouldn't error
+        finally
+            append!(empty!(LOAD_PATH), load_path_before)
+        end
     end
 end
 
