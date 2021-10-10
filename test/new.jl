@@ -363,7 +363,7 @@ end
         try
             empty!(LOAD_PATH)   # unset active env
             Pkg.activate()      # shouldn't error
-            Pkg.activate() # shouldn't error
+            Pkg.activate(; prev=true) # shouldn't error
         finally
             append!(empty!(LOAD_PATH), load_path_before)
         end
