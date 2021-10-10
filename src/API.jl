@@ -1538,13 +1538,15 @@ end
 function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir(); io=io)
-    PREV_ENV_PATH[] = Base.active_project()
     if prev
         if isempty(PREV_ENV_PATH[])
             pkgerror("No previously active environment found")
         else
             return activate(PREV_ENV_PATH[]; io=io)
         end
+    end
+    if !isnothing(Base.active_project())
+        PREV_ENV_PATH[] = Base.active_project()
     end
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
@@ -1601,7 +1603,9 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
             fullpath = joinpath(Pkg.envdir(Pkg.depots1()), path)
         end
     end
-    PREV_ENV_PATH[] = Base.active_project()
+    if !isnothing(Base.active_project())
+        PREV_ENV_PATH[] = Base.active_project()
+    end
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
     p = Base.active_project()
     if p !== nothing
