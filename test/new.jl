@@ -362,7 +362,7 @@ end
         load_path_before = copy(LOAD_PATH)
         empty!(LOAD_PATH)   # unset active env
         Pkg.activate()      # shouldn't error
-        @test prev_env == Base.active_project()
+        Pkg.activate()      # shouldn't error
         append!(empty!(LOAD_PATH), load_path_before)
     end
 end
