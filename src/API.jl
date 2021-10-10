@@ -1538,8 +1538,14 @@ end
 function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir(); io=io)
-    prev && return activate(PREV_ENV_PATH[]; io=io)
     PREV_ENV_PATH[] = Base.active_project()
+    if prev
+        if isempty(PREV_ENV_PATH[])
+            pkgerror("No previously active environment found")
+        else
+            return activate(PREV_ENV_PATH[]; io=io)
+        end
+    end
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
