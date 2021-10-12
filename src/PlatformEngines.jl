@@ -278,6 +278,7 @@ end
         hash::Union{AbstractString, Nothing},
         dest::AbstractString;
         verbose::Bool = false,
+        headers::Vector{Pair{String,String}} = Pair{String,String}[],
         force::Bool = false,
         quiet_download::Bool = false,
     )
@@ -304,6 +305,7 @@ function download_verify(
     hash::Union{AbstractString, Nothing},
     dest::AbstractString;
     verbose::Bool = false,
+    headers::Vector{Pair{String,String}} = Pair{String,String}[],
     force::Bool = false,
     quiet_download::Bool = false,
 )
@@ -329,7 +331,7 @@ function download_verify(
     mkpath(dirname(dest))
 
     # Download the file, optionally continuing
-    download(url, dest; verbose=verbose || !quiet_download)
+    download(url, dest; verbose=(verbose || !quiet_download), headers)
     if hash !== nothing && !verify(dest, hash; verbose=verbose)
         # If the file already existed, it's possible the initially downloaded chunk
         # was bad.  If verification fails after downloading, auto-delete the file
@@ -341,7 +343,7 @@ function download_verify(
             Base.rm(dest; force=true)
 
             # Download and verify from scratch
-            download(url, dest; verbose=verbose || !quiet_download)
+            download(url, dest; verbose=(verbose || !quiet_download), headers)
             if hash !== nothing && !verify(dest, hash; verbose=verbose)
                 error("Verification failed")
             end
@@ -395,6 +397,7 @@ end
         ignore_existence::Bool = false,
         force::Bool = false,
         verbose::Bool = false,
+        headers::Vector{Pair{String,String}} = Pair{String,String}[],
         quiet_download::Bool = false,
         io::IO=stderr,
     )
@@ -430,6 +433,7 @@ function download_verify_unpack(
     ignore_existence::Bool = false,
     force::Bool = false,
     verbose::Bool = false,
+    headers::Vector{Pair{String,String}} = Pair{String,String}[],
     quiet_download::Bool = false,
     io::IO=stderr_f(),
 )
@@ -477,7 +481,7 @@ function download_verify_unpack(
     # Download the tarball; if it already existed and we needed to remove it
     # then we should remove the unpacked path as well
     should_delete = !download_verify(url, hash, tarball_path;
-                                     force=force, verbose=verbose, quiet_download=quiet_download)
+                                     force, verbose, quiet_download, headers)
     if should_delete
         if verbose
             @info("Removing dest directory $(dest) as source tarball changed")
