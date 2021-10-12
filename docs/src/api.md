@@ -40,6 +40,7 @@ Pkg.instantiate
 Pkg.resolve
 Pkg.gc
 Pkg.status
+Pkg.compat
 Pkg.precompile
 Pkg.offline
 Pkg.setprotocol!
