@@ -60,7 +60,7 @@ function pkg_server_registry_info()
     tmp_path = tempname()
     download_ok = false
     try
-        download("$server/registries", tmp_path, verbose=false)
+        download("$server/registries", tmp_path, verbose=false, headers=pkg_server_registry_headers())
         download_ok = true
     catch err
         @warn "could not download $server/registries" exception=err
@@ -91,6 +91,40 @@ function pkg_server_registry_urls()
 end
 
 pkg_server_url_hash(url::String) = Base.SHA1(split(url, '/')[end])
+
+function pkg_server_allow_incomplete_registries()
+    # Note: the name of the environment variable may be different from the name of the HTTP header.
+    environment_variable_name = "JULIA_PKG_ALLOW_INCOMPLETE_REGISTRIES"
+    default_value = false
+
+    # 1. If the environment variable is not set, we return the `default_value`.
+    # 2. If the environment variable is set to the empty string (""), we return the `default_value`.
+    # 3. If the environment variable consists only of whitespace, we return the `default_value`.
+    # 3. If the environment variable is set to `true` or `1`, we return `true`.
+    # 4. If the environment variable is set to `false` or `0`, we return `false`.
+    # 5. If the environment variable is set to something that does not parse to a `Bool`, we
+    #    print a warning and return the `default_value.`
+
+    value = get(ENV, environment_variable_name, "")
+    isempty(strip(value)) && return default_value
+    b = tryparse(Bool, value)
+    (b isa Bool) && return b
+    @warn "Could not parse ENV[\"$(environment_variable_name)\"] as a bool, defaulting to $(default_value)"
+    return default_value
+end
+
+function pkg_server_header_allow_incomplete_registries()
+    # Note: the name of the environment variable may be different from the name of the HTTP header.
+    header_name = "JULIA_PKG_ALLOW_INCOMPLETE_REGISTRIES"
+    return header_name => "$(pkg_server_allow_incomplete_registries())"
+end
+
+function pkg_server_registry_headers()
+    headers = Pair{String,String}[
+        pkg_server_header_allow_incomplete_registries(),
+    ]
+    return headers
+end
 
 function download_default_registries(io::IO; only_if_empty::Bool = true)
     installed_registries = reachable_registries()
@@ -140,7 +174,7 @@ function registry_use_pkg_server()
     get(ENV, "JULIA_PKG_SERVER", nothing) !== ""
 end
 
-registry_read_from_tarball() = 
+registry_read_from_tarball() =
     registry_use_pkg_server() && !(get(ENV, "JULIA_PKG_UNPACK_REGISTRY", "") == "true")
 
 function check_registry_state(reg)
@@ -170,7 +204,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
         if url !== nothing && registry_read_from_tarball()
             tmp = tempname()
             try
-                download_verify(url, nothing, tmp)
+                download_verify(url, nothing, tmp; headers=pkg_server_registry_headers())
             catch err
                 Pkg.Types.pkgerror("could not download $url")
             end
@@ -200,7 +234,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 elseif url !== nothing && registry_use_pkg_server()
                     # download from Pkg server
                     try
-                        download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
+                        download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io; headers=pkg_server_registry_headers())
                     catch err
                         Pkg.Types.pkgerror("could not download $url")
                     end
@@ -360,7 +394,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                         if registry_read_from_tarball()
                             tmp = tempname()
                             try
-                                download_verify(url, nothing, tmp)
+                                download_verify(url, nothing, tmp; headers=pkg_server_registry_headers())
                             catch err
                                 @error "could not download $url" exception=err
                             end
@@ -378,7 +412,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                         else
                             mktempdir() do tmp
                                 try
-                                    download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
+                                    download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io; headers=pkg_server_registry_headers())
                                 catch err
                                     @error "could not download $url" exception=err
                                 end
