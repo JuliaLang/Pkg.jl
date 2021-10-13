@@ -232,6 +232,10 @@ function get_metadata_headers(url::AbstractString)
     end
     push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
     push!(headers, "Julia-Interactive" => string(isinteractive()))
+    registry_pref = get(ENV, "JULIA_PKG_REGISTRY_PREFERENCE", nothing)
+    if registry_pref !== nothing
+        push!(headers, "Julia-Registry-Preference" => registry_pref)
+    end
     return headers
 end
 
