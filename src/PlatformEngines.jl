@@ -232,7 +232,28 @@ function get_metadata_headers(url::AbstractString)
     end
     push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
     push!(headers, "Julia-Interactive" => string(isinteractive()))
+    push!(headers, "Julia-Pkg-Allow-Incomplete-Registries" => "$(pkg_server_allow_incomplete_registries())")
     return headers
+end
+
+function pkg_server_allow_incomplete_registries()
+    environment_variable_name = "JULIA_PKG_ALLOW_INCOMPLETE_REGISTRIES"
+    default_value = false
+
+    # 1. If the environment variable is not set, we return the `default_value`.
+    # 2. If the environment variable is set to the empty string (""), we return the `default_value`.
+    # 3. If the environment variable consists only of whitespace, we return the `default_value`.
+    # 4. If the environment variable is set to `true` or `1`, we return `true`.
+    # 5. If the environment variable is set to `false` or `0`, we return `false`.
+    # 6. If the environment variable is set to something that does not parse to a `Bool`, we
+    #    print a warning and return the `default_value.`
+
+    value = get(ENV, environment_variable_name, "")
+    isempty(strip(value)) && return default_value
+    b = tryparse(Bool, value)
+    (b isa Bool) && return b
+    @warn "Could not parse ENV[\"$(environment_variable_name)\"] as a bool, defaulting to $(default_value)"
+    return default_value
 end
 
 function download(
