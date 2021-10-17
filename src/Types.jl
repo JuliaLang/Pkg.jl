@@ -652,30 +652,32 @@ function set_repo_source_from_registry!(ctx, pkg)
 
     # We might have been given a name / uuid combo that does not have an entry in the registry
     # or has an entry in multiple registries.
-    reg_infos = Tuple{String, Registry.PkgInfo}[]
+    reg_infos = @NamedTuple{registry::String,repo::Union{String, Nothing},subdir::Union{String, Nothing}}[]
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
         info = Pkg.Registry.registry_info(regpkg)
         info.repo === nothing && continue
-        push!(reg_infos, (reg.name, info))
+        push!(reg_infos, (; registry=reg.name, info.repo, info.subdir))
     end
+    unique!(reg_infos)
 
     if isempty(reg_infos)
         pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
     end
 
     if length(reg_infos) == 1
-        info = reg_infos[1][2]
+        info = reg_infos[1]
     else
-        registry_names = first.(reg_infos)
-        err = () -> pkgerror("Repository for package with UUID `$(pkg.uuid)` found in multiple registries: $(registry_names). Set the URL manually.")
+        sort!(reg_infos)
+        options = String[string(info.registry, ": ", info.repo, isnothing(info.subdir) ? "" : ", [subdirectory: $(info.subdir)]") for info in reg_infos]
+        err = () -> pkgerror("Repository for package with UUID `$(pkg.uuid)` found in multiple registries: $(options). Set the URL manually.")
         if isinteractive()
             # prompt for which registry was intended:
-            menu = RadioMenu(registry_names)
+            menu = RadioMenu(options)
             choice = request("Repository for package with UUID `$(pkg.uuid)` found in multiple registries, choose one:", menu)
             choice == -1 && err()
-            info = reg_infos[choice][2]
+            info = reg_infos[choice]
         else
             err()
         end
