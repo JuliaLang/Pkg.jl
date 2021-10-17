@@ -318,7 +318,7 @@ end
     end
 end
 
-
+# Set up registries for the "Multiple registries, same package" tests
 function setup_test_registries2(dir = pwd())
     # Set up two registries with the same name, with different uuid
     reg_uuids = ["e9fceed0-5623-4384-aff0-6db4c442647a", "a8e078ad-b4bd-4e09-a52f-c464826eef9d"]
@@ -354,7 +354,7 @@ function setup_test_registries2(dir = pwd())
     end
 end
 
-@testset "Multiple registries, same package" begin
+@testset "Multiple registries, same package (#2525)" begin
     temp_pkg_dir() do depot; mktempdir() do depot2
         insert!(Base.DEPOT_PATH, 2, depot2)
         # set up registries
@@ -371,7 +371,7 @@ end
         Foo2 = RegistrySpec(name = "RegistryFoo", uuid = "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
             url = joinpath(regdir, "RegistryFoo2"))
 
-        # Packages in registries
+        # Package in registries
         Example  = PackageSpec(name = "Example",  uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
 
         pkgstr("registry add General $(Foo1.url)")
