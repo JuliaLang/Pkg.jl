@@ -659,38 +659,42 @@ function set_repo_source_from_registry!(ctx, pkg)
 
     # We might have been given a name / uuid combo that does not have an entry in the registry
     # or has an entry in multiple registries.
-    reg_infos = @NamedTuple{registry::String,repo::Union{String, Nothing},subdir::Union{String, Nothing}}[]
+    # `reg_infos` maps `(repo, subdir)` to a list of registries with that pair
+    reg_infos = Dict{Tuple{String, Union{String, Nothing}}, Vector{String}}()
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
         info = Pkg.Registry.registry_info(regpkg)
         info.repo === nothing && continue
-        push!(reg_infos, (; registry=reg.name, info.repo, info.subdir))
+        registries = get!(Vector{String}, reg_infos, (info.repo, info.subdir))
+        push!(registries, reg.name)
     end
     if isempty(reg_infos)
         pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
     end
-    unique!(reg_infos)
     if length(reg_infos) == 1
-        info = reg_infos[1]
+        # If there's only one (repo, subdir) pair, we don't care which registry(ies) it came from,
+        # since we don't need to prompt.
+        info = only(keys(reg_infos))
     else
-        sort!(reg_infos)
-        options = String[string(info.registry, ": ", info.repo, isnothing(info.subdir) ? "" : ":$(info.subdir)") for info in reg_infos]
-        err = () -> pkgerror("Repository for package with UUID `$(pkg.uuid)` found in multiple registries: $(options). Set the URL manually.")
+        reg_infos = collect(reg_infos) # so we can index it later
+        options = String[string(join(sort!(unique!(registries)), ", "), ": ", repo, isnothing(subdir) ? "" : ":$(subdir)") for ((repo, subdir), registries) in reg_infos]
+        p = sortperm(options) # sort to get a consistent order for testing
+        options = options[p]
+        reg_infos = reg_infos[p]
+        err = () -> pkgerror("Multiple repositories found for package with UUID `$(pkg.uuid)`: $(options). Set the URL manually.")
         if INTERACTIVE_MENU[]
             # prompt for which registry was intended:
             menu = RadioMenu(options)
-            choice = request("Repository for package with UUID `$(pkg.uuid)` found in multiple registries, choose one:", menu)
+            choice = request("Multiple repositories found for package with UUID `$(pkg.uuid)`, choose one:", menu)
             choice == -1 && err()
-            info = reg_infos[choice]
+            info = first(reg_infos[choice])
         else
             err()
         end
     end
-    pkg.repo.source = info.repo
-    if info.subdir !== nothing
-        pkg.repo.subdir = info.subdir
-    end
+    pkg.repo.source = info[1]
+    pkg.repo.subdir = info[2]
     return info # for testing
 end
 

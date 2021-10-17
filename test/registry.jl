@@ -320,15 +320,16 @@ end
 
 # Set up registries for the "Multiple registries, same package" tests
 function setup_test_registries2(dir = pwd())
-    # Set up two registries with the same name, with different uuid
-    reg_uuids = ["e9fceed0-5623-4384-aff0-6db4c442647a", "a8e078ad-b4bd-4e09-a52f-c464826eef9d"]
+    # Set up three registries with different names and different uuids
+    reg_uuids = ["e9fceed0-5623-4384-aff0-6db4c442647a", "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
+                 "9b48f051-cf83-418c-9cc0-9c86d2171a80"]
     # Same package (name + uuid) in both registries; different repos and versions
     pkg_uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
-    for i in 1:2
+    for i in 1:3
         regpath = joinpath(dir, "RegistryFoo$(i)")
         mkpath(joinpath(regpath, "Example"))
         write(joinpath(regpath, "Registry.toml"), """
-            name = "RegistryFoo"
+            name = "RegistryFoo$i"
             uuid = "$(reg_uuids[i])"
             repo = "https://github.com"
             [packages]
@@ -337,8 +338,8 @@ function setup_test_registries2(dir = pwd())
         write(joinpath(regpath, "Example", "Package.toml"), """
             name = "Example"
             uuid = "$(pkg_uuid)"
-            repo = "https://github.com/JuliaLang/Example$(i).jl.git"
-            $(i == 2 ? "subdir = \"subdir\"" : "")
+            repo = "https://github.com/JuliaLang/OtherExampleRepo.jl.git"
+            $(i == 3 ? "subdir = \"subdir\"" : "")
             """)
         write(joinpath(regpath, "Example", "Versions.toml"), """
             ["0.5.1"]
@@ -367,29 +368,41 @@ end
         general_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
         General = RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106",
             url = general_url, path = general_path, linked = general_linked)
-        Foo1 = RegistrySpec(name = "RegistryFoo", uuid = "e9fceed0-5623-4384-aff0-6db4c442647a",
+        Foo1 = RegistrySpec(name = "RegistryFoo1", uuid = "e9fceed0-5623-4384-aff0-6db4c442647a",
             url = joinpath(regdir, "RegistryFoo1"))
-        Foo2 = RegistrySpec(name = "RegistryFoo", uuid = "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
+        Foo2 = RegistrySpec(name = "RegistryFoo2", uuid = "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
             url = joinpath(regdir, "RegistryFoo2"))
+        Foo3 = RegistrySpec(name = "RegistryFoo3", uuid = "9b48f051-cf83-418c-9cc0-9c86d2171a80",
+            url = joinpath(regdir, "RegistryFoo3"))
 
         # Package in registries
-        Example  = PackageSpec(name = "Example",  uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+        Example = PackageSpec(name = "Example",  uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
 
-        pkgstr("registry add General $(Foo1.url)")
+        # Use 2 registries with the same repo
+        pkgstr("registry add $(Foo1.url)")
         with_depot2(() -> pkgstr("registry add $(Foo2.url)"))
-        test_installed([General, Foo1, Foo2])
+        test_installed([Foo1, Foo2])
         @test is_pkg_available(Example)
+        # No prompting, no error, since it's unambiguous which repo (and subdir) to use
+        info = Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
+        @test info == ("https://github.com/JuliaLang/OtherExampleRepo.jl.git", nothing)
 
+        # Now add 2 more registries so we have 3 different repos, one that
+        # only differs by a `subdir`.
+        pkgstr("registry add General $(Foo3.url)")
+        test_installed([General, Foo1, Foo2, Foo3])
+        @test is_pkg_available(Example)
+        # Here we have a prompt in interactive mode, so we test both paths.
         current = Pkg.Types.INTERACTIVE_MENU[]
         # Test the non-interactive path
         try
             Pkg.Types.INTERACTIVE_MENU[] = false
             @test_throws PkgError Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
             # Ambiguous which repo to use when adding with a branch
-            msg = "Repository for package with UUID `7876af07-990d-54b4-ab0e-23690620f79a` found in multiple registries: " * 
+            msg = "Multiple repositories found for package with UUID `7876af07-990d-54b4-ab0e-23690620f79a`: " * 
               """["General: https://github.com/JuliaLang/Example.jl.git",""" * 
-              """ "RegistryFoo: https://github.com/JuliaLang/Example1.jl.git",""" *
-              """ "RegistryFoo: https://github.com/JuliaLang/Example2.jl.git:subdir"].""" *
+              """ "RegistryFoo1, RegistryFoo2: https://github.com/JuliaLang/OtherExampleRepo.jl.git",""" *
+              """ "RegistryFoo3: https://github.com/JuliaLang/OtherExampleRepo.jl.git:subdir"].""" *
               " Set the URL manually."
             @test_throws PkgError(msg) Pkg.add(name="Example", rev="DO_NOT_REMOVE")
         finally
@@ -406,7 +419,7 @@ end
             write(stdin.buffer, "\r") # press enter
             ctx = Pkg.Types.Context()
             info = Pkg.Types.set_repo_source_from_registry!(ctx, Example)
-            @test info == (; registry="General", repo = "https://github.com/JuliaLang/Example.jl.git", subdir=nothing)
+            @test info == ("https://github.com/JuliaLang/Example.jl.git", nothing)
 
             # Now that it is added to `ctx`, we shouldn't need to use a menu to add it again
             @test Pkg.Types.handle_repo_add!(ctx, Example)
