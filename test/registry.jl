@@ -338,6 +338,7 @@ function setup_test_registries2(dir = pwd())
             name = "Example"
             uuid = "$(pkg_uuid)"
             repo = "https://github.com/JuliaLang/Example$(i).jl.git"
+            $(i == 2 ? "subdir = \"subdir\"" : "")
             """)
         write(joinpath(regpath, "Example", "Versions.toml"), """
             ["0.5.1"]
@@ -385,7 +386,11 @@ end
             Pkg.Types.INTERACTIVE_MENU[] = false
             @test_throws PkgError Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
             # Ambiguous which repo to use when adding with a branch
-            msg = """Repository for package with UUID `7876af07-990d-54b4-ab0e-23690620f79a` found in multiple registries: ["General: https://github.com/JuliaLang/Example.jl.git", "RegistryFoo: https://github.com/JuliaLang/Example1.jl.git", "RegistryFoo: https://github.com/JuliaLang/Example2.jl.git"]. Set the URL manually."""
+            msg = "Repository for package with UUID `7876af07-990d-54b4-ab0e-23690620f79a` found in multiple registries: " * 
+              """["General: https://github.com/JuliaLang/Example.jl.git",""" * 
+              """ "RegistryFoo: https://github.com/JuliaLang/Example1.jl.git",""" *
+              """ "RegistryFoo: https://github.com/JuliaLang/Example2.jl.git:subdir"].""" *
+              " Set the URL manually."
             @test_throws PkgError(msg) Pkg.add(name="Example", rev="DO_NOT_REMOVE")
         finally
             # Make sure we reset it
