@@ -670,7 +670,7 @@ function set_repo_source_from_registry!(ctx, pkg)
         info = reg_infos[1]
     else
         sort!(reg_infos)
-        options = String[string(info.registry, ": ", info.repo, isnothing(info.subdir) ? "" : ", [subdirectory: $(info.subdir)]") for info in reg_infos]
+        options = String[string(info.registry, ": ", info.repo, isnothing(info.subdir) ? "" : " [subdirectory: $(info.subdir)]") for info in reg_infos]
         err = () -> pkgerror("Repository for package with UUID `$(pkg.uuid)` found in multiple registries: $(options). Set the URL manually.")
         if isinteractive()
             # prompt for which registry was intended:
