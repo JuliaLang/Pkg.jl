@@ -649,20 +649,42 @@ function set_repo_source_from_registry!(ctx, pkg)
         registry_resolve!(ctx.registries, pkg)
     end
     ensure_resolved(ctx.env.manifest, [pkg]; registry=true)
+
     # We might have been given a name / uuid combo that does not have an entry in the registry
+    # or has an entry in multiple registries.
+    reg_infos = Tuple{String, Registry.PkgInfo}[]
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
         info = Pkg.Registry.registry_info(regpkg)
-        url = info.repo
-        url === nothing && continue
-        pkg.repo.source = url
-        if info.subdir !== nothing
-            pkg.repo.subdir = info.subdir
-        end
-        return
+        info.repo === nothing && continue
+        push!(reg_infos, (reg.name, info))
     end
-    pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
+
+    if isempty(reg_infos)
+        pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
+    end
+
+    if length(reg_infos) == 1
+        info = reg_infos[1][2]
+    else
+        registry_names = first.(reg_infos)
+        err = () -> pkgerror("Repository for package with UUID `$(pkg.uuid)` found in multiple registries: $(registry_names). Set the URL manually.")
+        if isinteractive()
+            # prompt for which registry was intended:
+            menu = RadioMenu(registry_names)
+            choice = request("Repository for package with UUID `$(pkg.uuid)` found in multiple registries, choose one:", menu)
+            choice == -1 && err()
+            info = reg_infos[choice][2]
+        else
+            err()
+        end
+    end
+    pkg.repo.source = info.repo
+    if info.subdir !== nothing
+        pkg.repo.subdir = info.subdir
+    end
+    return
 end
 
 
