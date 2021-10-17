@@ -34,7 +34,6 @@ function setup_test_registries(dir = pwd())
             """)
         write(joinpath(regpath, "Example", "Deps.toml"), """
             ["0.5"]
-            julia = "0.6-1.0"
             """)
         write(joinpath(regpath, "Example", "Compat.toml"), """
             ["0.5"]
@@ -317,6 +316,100 @@ end
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
     end
+end
+
+
+function setup_test_registries2(dir = pwd())
+    # Set up two registries with the same name, with different uuid
+    reg_uuids = ["e9fceed0-5623-4384-aff0-6db4c442647a", "a8e078ad-b4bd-4e09-a52f-c464826eef9d"]
+    # Same package (name + uuid) in both registries; different repos and versions
+    pkg_uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+    for i in 1:2
+        regpath = joinpath(dir, "RegistryFoo$(i)")
+        mkpath(joinpath(regpath, "Example"))
+        write(joinpath(regpath, "Registry.toml"), """
+            name = "RegistryFoo"
+            uuid = "$(reg_uuids[i])"
+            repo = "https://github.com"
+            [packages]
+            $(pkg_uuid) = { name = "Example", path = "Example" }
+            """)
+        write(joinpath(regpath, "Example", "Package.toml"), """
+            name = "Example"
+            uuid = "$(pkg_uuid)"
+            repo = "https://github.com/JuliaLang/Example$(i).jl.git"
+            """)
+        write(joinpath(regpath, "Example", "Versions.toml"), """
+            ["0.5.1"]
+            git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
+            """)
+        write(joinpath(regpath, "Example", "Deps.toml"), """
+            ["0.5"]
+            """)
+        write(joinpath(regpath, "Example", "Compat.toml"), """
+            ["0.5"]
+            julia = "0.6-1.0"
+            """)
+        git_init_and_commit(regpath)
+    end
+end
+
+@testset "Multiple registries, same package" begin
+    temp_pkg_dir() do depot; mktempdir() do depot2
+        insert!(Base.DEPOT_PATH, 2, depot2)
+        # set up registries
+        regdir = mktempdir()
+
+        setup_test_registries2(regdir)
+        general_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
+        general_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
+        general_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
+        General = RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106",
+            url = general_url, path = general_path, linked = general_linked)
+        Foo1 = RegistrySpec(name = "RegistryFoo", uuid = "e9fceed0-5623-4384-aff0-6db4c442647a",
+            url = joinpath(regdir, "RegistryFoo1"))
+        Foo2 = RegistrySpec(name = "RegistryFoo", uuid = "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
+            url = joinpath(regdir, "RegistryFoo2"))
+
+        # Packages in registries
+        Example  = PackageSpec(name = "Example",  uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+
+        pkgstr("registry add General $(Foo1.url)")
+        with_depot2(() -> pkgstr("registry add $(Foo2.url)"))
+        test_installed([General, Foo1, Foo2])
+        @test is_pkg_available(Example)
+
+        current = Pkg.Types.INTERACTIVE_MENU[]
+        # Test the non-interactive path
+        try
+            Pkg.Types.INTERACTIVE_MENU[] = false
+            @test_throws PkgError Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
+            # Ambiguous which repo to use when adding with a branch
+            msg = """Repository for package with UUID `7876af07-990d-54b4-ab0e-23690620f79a` found in multiple registries: ["General: https://github.com/JuliaLang/Example.jl.git", "RegistryFoo: https://github.com/JuliaLang/Example1.jl.git", "RegistryFoo: https://github.com/JuliaLang/Example2.jl.git"]. Set the URL manually."""
+            @test_throws PkgError(msg) Pkg.add(name="Example", rev="DO_NOT_REMOVE")
+        finally
+            # Make sure we reset it
+            Pkg.Types.INTERACTIVE_MENU[] = current
+        end
+
+        # Test the interactive path
+        try
+            Pkg.Types.INTERACTIVE_MENU[] = true
+            write(stdin.buffer, "q") # press q
+            @test_throws PkgError Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
+
+            write(stdin.buffer, "\r") # press enter
+            ctx = Pkg.Types.Context()
+            info = Pkg.Types.set_repo_source_from_registry!(ctx, Example)
+            @test info == (; registry="General", repo = "https://github.com/JuliaLang/Example.jl.git", subdir=nothing)
+
+            # Now that it is added to `ctx`, we shouldn't need to use a menu to add it again
+            @test Pkg.Types.handle_repo_add!(ctx, Example)
+        finally
+            Pkg.Types.INTERACTIVE_MENU[] = current
+        end
+
+    end end
 end
 
 if Pkg.Registry.registry_use_pkg_server()

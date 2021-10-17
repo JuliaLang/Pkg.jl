@@ -10,6 +10,13 @@ import REPL
 import Base.string
 using REPL.TerminalMenus
 
+const INTERACTIVE_MENU = Ref{Bool}(false)
+
+function __init__()
+    INTERACTIVE_MENU[] = isinteractive()
+    return nothing
+end
+
 using TOML
 import ..Pkg, ..Registry
 import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f
@@ -670,7 +677,7 @@ function set_repo_source_from_registry!(ctx, pkg)
         sort!(reg_infos)
         options = String[string(info.registry, ": ", info.repo, isnothing(info.subdir) ? "" : " [subdirectory: $(info.subdir)]") for info in reg_infos]
         err = () -> pkgerror("Repository for package with UUID `$(pkg.uuid)` found in multiple registries: $(options). Set the URL manually.")
-        if isinteractive()
+        if INTERACTIVE_MENU[]
             # prompt for which registry was intended:
             menu = RadioMenu(options)
             choice = request("Repository for package with UUID `$(pkg.uuid)` found in multiple registries, choose one:", menu)
@@ -684,7 +691,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     if info.subdir !== nothing
         pkg.repo.subdir = info.subdir
     end
-    return
+    return info # for testing
 end
 
 
