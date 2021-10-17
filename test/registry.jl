@@ -405,6 +405,8 @@ end
               """ "RegistryFoo3: https://github.com/JuliaLang/OtherExampleRepo.jl.git:subdir"].""" *
               " Set the URL manually."
             @test_throws PkgError(msg) Pkg.add(name="Example", rev="DO_NOT_REMOVE")
+            # or when `develop`ing:
+            @test_throws PkgError(msg) Pkg.develop("Example")
         finally
             # Make sure we reset it
             Pkg.Types.INTERACTIVE_MENU[] = current
@@ -423,6 +425,8 @@ end
 
             # Now that it is added to `ctx`, we shouldn't need to use a menu to add it again
             @test Pkg.Types.handle_repo_add!(ctx, Example)
+            # or to `develop` it:
+            @test Pkg.Types.handle_repo_develop!(ctx, Example, false)
         finally
             Pkg.Types.INTERACTIVE_MENU[] = current
         end
