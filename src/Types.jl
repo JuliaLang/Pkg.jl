@@ -660,12 +660,10 @@ function set_repo_source_from_registry!(ctx, pkg)
         info.repo === nothing && continue
         push!(reg_infos, (; registry=reg.name, info.repo, info.subdir))
     end
-    unique!(reg_infos)
-
     if isempty(reg_infos)
         pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
     end
-
+    unique!(reg_infos)
     if length(reg_infos) == 1
         info = reg_infos[1]
     else
