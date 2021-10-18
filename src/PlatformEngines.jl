@@ -233,7 +233,7 @@ function get_metadata_headers(url::AbstractString)
     push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
     push!(headers, "Julia-Interactive" => string(isinteractive()))
     for (key, val) in ENV
-        m = match(r"^JULIA_PKG_HEADER_([A-Z0-9_]+)$"i, key)
+        m = match(r"^JULIA_PKG_SERVER_([A-Z0-9_]+)$"i, key)
         m === nothing && continue
         val = strip(val)
         isempty(val) && continue
