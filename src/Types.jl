@@ -10,13 +10,6 @@ import REPL
 import Base.string
 using REPL.TerminalMenus
 
-const INTERACTIVE_MENU = Ref{Bool}(false)
-
-function __init__()
-    INTERACTIVE_MENU[] = isinteractive()
-    return nothing
-end
-
 using TOML
 import ..Pkg, ..Registry
 import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f
@@ -659,40 +652,24 @@ function set_repo_source_from_registry!(ctx, pkg)
 
     # We might have been given a name / uuid combo that does not have an entry in the registry
     # or has an entry in multiple registries.
-    # `reg_infos` maps `(repo, subdir)` to a list of registries with that pair
-    reg_infos = Dict{Tuple{String, Union{String, Nothing}}, Vector{String}}()
+    # `latest_versions` maps `(repo, subdir)` to the latest registered version from that repo
+    # (across all registries), so we can find the repo with the latest registered version.
+    latest_versions = Dict{Tuple{String, Union{String, Nothing}}, VersionNumber}()
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
         info = Pkg.Registry.registry_info(regpkg)
         info.repo === nothing && continue
-        registries = get!(Vector{String}, reg_infos, (info.repo, info.subdir))
-        push!(registries, reg.name)
-    end
-    if isempty(reg_infos)
-        pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
-    end
-    if length(reg_infos) == 1
-        # If there's only one (repo, subdir) pair, we don't care which registry(ies) it came from,
-        # since we don't need to prompt.
-        info = only(keys(reg_infos))
-    else
-        reg_infos = collect(reg_infos) # so we can index it later
-        options = String[string(join(sort!(unique!(registries)), ", "), ": ", repo, isnothing(subdir) ? "" : ":$(subdir)") for ((repo, subdir), registries) in reg_infos]
-        p = sortperm(options) # sort to get a consistent order for testing
-        options = options[p]
-        reg_infos = reg_infos[p]
-        err = () -> pkgerror("Multiple repositories found for package with UUID `$(pkg.uuid)`: $(options). Set the URL manually.")
-        if INTERACTIVE_MENU[]
-            # prompt for which registry was intended:
-            menu = RadioMenu(options)
-            choice = request("Multiple repositories found for package with UUID `$(pkg.uuid)`, choose one:", menu)
-            choice == -1 && err()
-            info = first(reg_infos[choice])
-        else
-            err()
+        latest = maximum(keys(info.version_info))
+        current_latest = get!(latest_versions, (info.repo, info.subdir), latest)
+        if latest > current_latest
+            latest_versions[(info.repo, info.subdir)] = latest
         end
     end
+    if isempty(latest_versions)
+        pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
+    end
+    info = argmax(latest_versions)
     pkg.repo.source = info[1]
     pkg.repo.subdir = info[2]
     return info # for testing

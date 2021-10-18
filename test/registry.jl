@@ -342,14 +342,14 @@ function setup_test_registries2(dir = pwd())
             $(i == 3 ? "subdir = \"subdir\"" : "")
             """)
         write(joinpath(regpath, "Example", "Versions.toml"), """
-            ["0.5.1"]
+            ["0.4.$i"]
             git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
             """)
         write(joinpath(regpath, "Example", "Deps.toml"), """
-            ["0.5"]
+            ["0.4"]
             """)
         write(joinpath(regpath, "Example", "Compat.toml"), """
-            ["0.5"]
+            ["0.4"]
             julia = "0.6-1.0"
             """)
         git_init_and_commit(regpath)
@@ -383,53 +383,21 @@ end
         with_depot2(() -> pkgstr("registry add $(Foo2.url)"))
         test_installed([Foo1, Foo2])
         @test is_pkg_available(Example)
-        # No prompting, no error, since it's unambiguous which repo (and subdir) to use
         info = Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
         @test info == ("https://github.com/JuliaLang/OtherExampleRepo.jl.git", nothing)
 
-        # Now add 2 more registries so we have 3 different repos, one that
-        # only differs by a `subdir`.
-        pkgstr("registry add General $(Foo3.url)")
+        pkgstr("registry add $(Foo3.url)")
+        test_installed([Foo1, Foo2, Foo3])
+        info = Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
+        @test info == ("https://github.com/JuliaLang/OtherExampleRepo.jl.git", "subdir")
+
+
+        pkgstr("registry add General")
         test_installed([General, Foo1, Foo2, Foo3])
         @test is_pkg_available(Example)
-        # Here we have a prompt in interactive mode, so we test both paths.
-        current = Pkg.Types.INTERACTIVE_MENU[]
-        # Test the non-interactive path
-        try
-            Pkg.Types.INTERACTIVE_MENU[] = false
-            @test_throws PkgError Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
-            # Ambiguous which repo to use when adding with a branch
-            msg = "Multiple repositories found for package with UUID `7876af07-990d-54b4-ab0e-23690620f79a`: " * 
-              """["General: https://github.com/JuliaLang/Example.jl.git",""" * 
-              """ "RegistryFoo1, RegistryFoo2: https://github.com/JuliaLang/OtherExampleRepo.jl.git",""" *
-              """ "RegistryFoo3: https://github.com/JuliaLang/OtherExampleRepo.jl.git:subdir"].""" *
-              " Set the URL manually."
-            @test_throws PkgError(msg) Pkg.add(name="Example", rev="DO_NOT_REMOVE")
-            # or when `develop`ing:
-            @test_throws PkgError(msg) Pkg.develop("Example")
-        finally
-            # Make sure we reset it
-            Pkg.Types.INTERACTIVE_MENU[] = current
-        end
+        info = Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
+        @test info == ("https://github.com/JuliaLang/Example.jl.git", nothing)
 
-        # Test the interactive path
-        try
-            Pkg.Types.INTERACTIVE_MENU[] = true
-            write(stdin.buffer, "q") # press q
-            @test_throws PkgError Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
-
-            write(stdin.buffer, "\r") # press enter
-            ctx = Pkg.Types.Context()
-            info = Pkg.Types.set_repo_source_from_registry!(ctx, Example)
-            @test info == ("https://github.com/JuliaLang/Example.jl.git", nothing)
-
-            # Now that it is added to `ctx`, we shouldn't need to use a menu to add it again
-            @test Pkg.Types.handle_repo_add!(ctx, Example)
-            # or to `develop` it:
-            @test Pkg.Types.handle_repo_develop!(ctx, Example, false)
-        finally
-            Pkg.Types.INTERACTIVE_MENU[] = current
-        end
 
     end end
 end
