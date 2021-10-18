@@ -213,7 +213,7 @@ end
 
         Pkg.activate(".")
         Pkg.resolve()
-        Pkg.precompile()
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
     end end
 end
 

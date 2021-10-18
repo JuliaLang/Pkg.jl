@@ -1006,12 +1006,23 @@ function _is_stale(paths::Vector{String}, sourcepath::String)
     return true
 end
 
-function make_pkgspec(man, uuid)
-    pkgent = man[uuid]
-    # If we have an unusual situation such as an un-versioned package (like an stdlib that
-    # is being overridden) its `version` may be `nothing`.
-    pkgver = something(pkgent.version, VersionSpec())
-    return PackageSpec(uuid = uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash)
+function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
+    i = findfirst(ps -> ps.uuid == uuid, pkgspecs)
+    if !isnothing(i)
+        return pkgspecs[i]
+    elseif !isnothing(ctx.env.pkg) && uuid == ctx.env.pkg.uuid
+        # uuid is of the active Project
+        return ctx.env.pkg
+    elseif haskey(ctx.env.manifest, uuid)
+        pkgent = ctx.env.manifest[uuid]
+        # If we have an unusual situation such as an un-versioned package (like an stdlib that
+        # is being overridden) its `version` may be `nothing`.
+        pkgver = something(pkgent.version, VersionSpec())
+        return PackageSpec(uuid = uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash)
+    else
+        # this branch should never be hit, so if it is throw a regular error with a stacktrace
+        error("UUID $uuid not found. It does not match the Project uuid nor any dependency")
+    end
 end
 
 precompile(pkgs...; kwargs...) = precompile(Context(), [pkgs...]; kwargs...)
@@ -1069,9 +1080,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
-        if haskey(man, pkgid.uuid)
-            push!(pkg_specs, make_pkgspec(man, pkgid.uuid))
-        end
+        push!(pkg_specs, get_or_make_pkgspec(pkg_specs, ctx, pkgid.uuid))
     end
     precomp_prune_suspended!(pkg_specs)
 
@@ -1086,11 +1095,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         if in_deps([pkg], deps, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
-            precomp_suspend!(make_pkgspec(man, pkg.uuid))
-            if !internal_call && (isempty(pkgs) || in(first(pkg).name, pkgs))
-                @warn "Circular dependency detected. Precompilation skipped for $pkg"
-            end
         end
+    end
+    if !isempty(circular_deps)
+        @warn """Circular dependency detected. Precompilation will be skipped for:\n  $(join(string.(circular_deps), "\n  "))"""
     end
 
     if !isempty(pkgs)
@@ -1244,17 +1252,15 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     wait(was_processed[dep])
                 end
 
-                if haskey(man, pkg.uuid) # to handle the working environment uuid
-                    suspended = precomp_suspended(make_pkgspec(man, pkg.uuid))
-                    queued = precomp_queued(make_pkgspec(man, pkg.uuid))
-                else
-                    suspended = false
-                    queued = false
-                end
+                pkgspec = get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid)
+                suspended = precomp_suspended(pkgspec)
+                queued = precomp_queued(pkgspec)
+
+                circular = pkg in circular_deps
                 # skip stale checking and force compilation if any dep was recompiled in this session
                 any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
                 is_stale = true
-                if (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
+                if !circular && (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
@@ -1277,12 +1283,12 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
-                            haskey(man, pkg.uuid) && precomp_queue!(make_pkgspec(man, pkg.uuid))
+                            precomp_queue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
-                            queued && (haskey(man, pkg.uuid) && precomp_dequeue!(make_pkgspec(man, pkg.uuid)))
+                            queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name))
                             end
@@ -1295,10 +1301,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
-                            if haskey(man, pkg.uuid)
-                                queued && precomp_dequeue!(make_pkgspec(man, pkg.uuid))
-                                precomp_suspend!(make_pkgspec(man, pkg.uuid))
-                            end
+                            queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
+                            precomp_suspend!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                         else
                             rethrow(err)
                         end
@@ -1313,7 +1317,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         catch # file might be read-only and then we fail to update timestamp, which is fine
                         end
                     end
-                    suspended && !in(pkg, circular_deps) && push!(skipped_deps, pkg)
+                    suspended && push!(skipped_deps, pkg)
                 end
                 n_done += 1
                 notify(was_processed[pkg])
@@ -1343,12 +1347,11 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         plural = ndeps == 1 ? "y" : "ies"
         str = sprint() do iostr
             print(iostr, "  $(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
-            if n_already_precomp > 0 || !isempty(skipped_deps)
-                print(iostr, " (")
-                n_already_precomp > 0 && (print(iostr, "$n_already_precomp already precompiled"))
-                !isempty(circular_deps) && (print(iostr, ", $(length(circular_deps)) skipped due to circular dependency"))
-                !isempty(skipped_deps) && (print(iostr, ", $(length(skipped_deps)) skipped during auto due to previous errors"))
-                print(iostr, ")")
+            if n_already_precomp > 0 || !isempty(circular_deps) || !isempty(skipped_deps)
+                n_already_precomp > 0 && (print(iostr, ". $n_already_precomp already precompiled"))
+                !isempty(circular_deps) && (print(iostr, ". $(length(circular_deps)) skipped due to circular dependency"))
+                !isempty(skipped_deps) && (print(iostr, ". $(length(skipped_deps)) skipped during auto due to previous errors"))
+                print(iostr, ".")
             end
             if n_loaded > 0
                 plural1 = n_loaded == 1 ? "y" : "ies"
@@ -1427,12 +1430,22 @@ function recall_precompile_state()
     end
     return nothing
 end
-precomp_suspend!(pkg::PackageSpec) = push!(pkgs_precompile_suspended, pkg)
+function precomp_suspend!(pkg::PackageSpec)
+    precomp_suspended(pkg) || push!(pkgs_precompile_suspended, pkg)
+    return
+end
 precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
 precomp_suspended(pkg::PackageSpec) = pkg in pkgs_precompile_suspended
-precomp_prune_suspended!(pkgs::Vector{PackageSpec}) = filter!(in(pkgs), pkgs_precompile_suspended)
+function precomp_prune_suspended!(pkgs::Vector{PackageSpec})
+    filter!(in(pkgs), pkgs_precompile_suspended)
+    unique!(pkgs_precompile_suspended)
+    return
+end
 
-precomp_queue!(pkg::PackageSpec) = push!(pkgs_precompile_pending, pkg)
+function precomp_queue!(pkg::PackageSpec)
+    precomp_suspended(pkg) || push!(pkgs_precompile_pending, pkg)
+    return
+end
 precomp_dequeue!(pkg::PackageSpec) = filter!(!isequal(pkg), pkgs_precompile_pending)
 precomp_queued(pkg::PackageSpec) = pkg in pkgs_precompile_pending
 
