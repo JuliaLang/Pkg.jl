@@ -213,6 +213,12 @@ end
 
         Pkg.activate(".")
         Pkg.resolve()
+
+        ## Tests when circularity is in dependencies
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+
+        ## Tests when circularity goes through the active project
+        Pkg.activate("CircularDep1")
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
     end end
 end
