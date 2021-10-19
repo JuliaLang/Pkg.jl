@@ -1269,7 +1269,7 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
 end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
-            skip_writing_project::Bool=false)
+            skip_writing_project::Bool=false, silent_no_change::Bool=false)
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
@@ -1288,7 +1288,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     new_apply = download_source(ctx)
     download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env; skip_writing_project) # write env before building
-    show_update(ctx.env, ctx.registries; io=ctx.io)
+    show_update(ctx.env, ctx.registries; io=ctx.io, silent_no_change)
     build_versions(ctx, union(new_apply, new_git))
 end
 
@@ -1847,7 +1847,7 @@ struct PackageStatusData
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO)
+                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO, silent_no_change::Bool)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=:red), "→", context=io)
     not_latest_version_indicator = sprint((io, args) -> printstyled(io, args...; color=:yellow), "↓", context=io)
     filter = !isempty(uuids) || !isempty(names)
@@ -1861,7 +1861,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     end
     xs = !diff ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if old != new]
     if isempty(xs)
-        printpkgstyle(io, Symbol("No Changes"), "to $(pathrepr(manifest ? env.manifest_file : env.project_file))", ignore_indent)
+        silent_no_change || printpkgstyle(io, Symbol("No Changes"), "to $(pathrepr(manifest ? env.manifest_file : env.project_file))", ignore_indent)
         return nothing
     end
     xs = !filter ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
@@ -1951,16 +1951,17 @@ function git_head_env(env, project_dir)
     end
 end
 
-function show_update(env::EnvCache, registries::Vector{Registry.RegistryInstance}; io::IO)
+function show_update(env::EnvCache, registries::Vector{Registry.RegistryInstance}; io::IO, silent_no_change::Bool = false)
     old_env = EnvCache()
     old_env.project = env.original_project
     old_env.manifest = env.original_manifest
-    status(env, registries; header=:Updating, mode=PKGMODE_COMBINED, env_diff=old_env, ignore_indent=false, io=io)
+    status(env, registries; header=:Updating, mode=PKGMODE_COMBINED, env_diff=old_env, ignore_indent=false, io=io, silent_no_change)
     return nothing
 end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
-                header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true, io::IO, outdated::Bool=false)
+                header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
+                io::IO, outdated::Bool=false, silent_no_change::Bool=false)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -1987,10 +1988,10 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, silent_no_change)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, silent_no_change)
     end
 end
 

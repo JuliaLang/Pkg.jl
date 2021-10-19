@@ -320,6 +320,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true,
             skip_writing_project::Bool=false,
+            silent_no_change::Bool=false,
             kwargs...)
     Context!(ctx; kwargs...)
     if update_registry
@@ -336,7 +337,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx.env.manifest, pkgs)
     end
-    Operations.up(ctx, pkgs, level; skip_writing_project)
+    Operations.up(ctx, pkgs, level; skip_writing_project, silent_no_change)
     return
 end
 
@@ -1029,9 +1030,10 @@ precompile(pkgs...; kwargs...) = precompile(Context(), [pkgs...]; kwargs...)
 precompile(pkg::String; kwargs...) = precompile(Context(), pkg; kwargs...)
 precompile(ctx::Context, pkg::String; kwargs...) = precompile(ctx, [pkg]; kwargs...)
 precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkgs; kwargs...)
-function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false, strict::Bool=false, warn_loaded = true, kwargs...)
+function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
+                    strict::Bool=false, warn_loaded = true, definitely_resolved = false, kwargs...)
     Context!(ctx; kwargs...)
-    resolve(ctx)
+    definitely_resolved || resolve(ctx, silent_no_change = true)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
 

@@ -694,7 +694,7 @@ end
 
 function _auto_precompile(ctx::Types.Context; warn_loaded = true)
     if Base.JLOptions().use_compiled_modules == 1 && tryparse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
-        Pkg.precompile(ctx; internal_call=true, warn_loaded = warn_loaded)
+        Pkg.precompile(ctx; internal_call=true, warn_loaded, definitely_resolved = true)
     end
 end
 
