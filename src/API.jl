@@ -1031,9 +1031,9 @@ precompile(pkg::String; kwargs...) = precompile(Context(), pkg; kwargs...)
 precompile(ctx::Context, pkg::String; kwargs...) = precompile(ctx, [pkg]; kwargs...)
 precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkgs; kwargs...)
 function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
-                    strict::Bool=false, warn_loaded = true, definitely_resolved = false, kwargs...)
+                    strict::Bool=false, warn_loaded = true, kwargs...)
     Context!(ctx; kwargs...)
-    definitely_resolved || resolve(ctx, silent_no_change = true)
+    internal_call || resolve(ctx, silent_no_change = true)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
 
