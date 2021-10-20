@@ -19,7 +19,7 @@ If you want to develop this package do the following steps:
 
 If you need to build Julia from source with a Git checkout of Pkg, then instead use `make DEPS_GIT=Pkg` when building Julia. The `Pkg` repo is in `stdlib/Pkg`, and created initially with a detached `HEAD`. If you're doing this from a pre-existing Julia repository, you may need to `make clean` beforehand.
 
-If you need to build Julia from source with Git checkouts of two or more stdlibs, please see the instructions in the [`Building Julia from source with a Git checkout of a stdlib` section](https://github.com/JuliaLang/julia/blob/master/doc/build/build.md#building-julia-from-source-with-a-git-checkout-of-a-stdlib) section of the [doc/build/build.md](https://github.com/JuliaLang/julia/blob/master/doc/build/build.md) file.
+If you need to build Julia from source with Git checkouts of two or more stdlibs, please see the instructions in the [`Building Julia from source with a Git checkout of a stdlib` section](https://github.com/JuliaLang/julia/blob/master/doc/src/devdocs/build/build.md#building-julia-from-source-with-a-git-checkout-of-a-stdlib) section of the [doc/build/build.md](https://github.com/JuliaLang/julia/blob/master/doc/src/devdocs/build/build.md) file.
 
 ## Synchronization with the Julia repo
 
