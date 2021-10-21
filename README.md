@@ -5,7 +5,7 @@ shipped with Julia v1.0 and above.
 
 | **Documentation**                                                 | **Build Status**                                                                                |
 |:-----------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
-| [![][docs-v1-img]][docs-v1-url] [![][docs-dev-img]][docs-dev-url] | [![][ci-img]][ci-url] [![][appveyor-img]][appveyor-url] [![][codecov-img]][codecov-url] |
+| [![][docs-v1-img]][docs-v1-url] [![][docs-dev-img]][docs-dev-url] | [![][ci-img]][ci-url] [![][codecov-img]][codecov-url] |
 
 ## Using the development version of Pkg.jl
 
@@ -35,9 +35,6 @@ To open a PR to update this to the latest commit the [JuliaPackaging/BumpStdlibs
 
 [ci-img]: https://github.com/JuliaLang/Pkg.jl/workflows/Run%20tests/badge.svg?branch=master
 [ci-url]: https://github.com/JuliaLang/Pkg.jl/actions?query=workflow%3A%22Run+tests%22
-
-[appveyor-img]: https://ci.appveyor.com/api/projects/status/cgno2xgwapugpg4t/branch/master?svg=true
-[appveyor-url]: https://ci.appveyor.com/project/JuliaLang/pkg-jl/branch/master
 
 [codecov-img]: https://codecov.io/gh/JuliaLang/Pkg.jl/branch/master/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/JuliaLang/Pkg.jl
