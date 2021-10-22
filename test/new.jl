@@ -2734,7 +2734,7 @@ using Pkg.Types: is_stdlib
 end
 
 @testset "STDLIBS_BY_VERSION up-to-date" begin
-    last_stdlibs = Pkg.Types.get_last_stdlibs(VERSION)
+    last_stdlibs = Pkg.Types.get_last_stdlibs(VERSION, use_historical_for_current_version = true)
     # Drop version numbers
     last_stdlibs = Dict(uuid => name for (uuid, (name, vers)) in last_stdlibs)
     test_result = last_stdlibs == Pkg.Types.load_stdlib()

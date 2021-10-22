@@ -405,7 +405,11 @@ is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 # Find the entry in `STDLIBS_BY_VERSION`
 # that corresponds to the requested version, and use that.
 # If we can't find one, defaults to `UNREGISTERED_STDLIBS`
-function get_last_stdlibs(julia_version::VersionNumber)
+function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_current_version = false)
+    if !use_historical_for_current_version &&
+        VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) == VersionNumber(VERSION.major, VERSION.minor, VERSION.patch)
+        return stdlibs()
+    end
     last_stdlibs = UNREGISTERED_STDLIBS
     for (version, stdlibs) in STDLIBS_BY_VERSION
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
