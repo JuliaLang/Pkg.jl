@@ -5,6 +5,7 @@ using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_serv
              GitTools, get_bool_env
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z
 using UUIDs, LibGit2, TOML
+import FileWatching
 
 include("registry_instance.jl")
 
@@ -163,6 +164,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     populate_known_registries_with_urls!(regs)
     regdir = joinpath(depot, "registries")
     isdir(regdir) || mkpath(regdir)
+    FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
+    # only allow one julia process to download and install registries at a time
     registry_urls = pkg_server_registry_urls()
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
@@ -249,6 +252,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 end
             end
         end
+    end
     end
     return nothing
 end
@@ -348,6 +352,8 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
     for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{UUID}())
         let reg=reg, errors=errors
             regpath = pathrepr(reg.path)
+            FileWatching.mkpidlock(joinpath(dirname(dirname(reg.path)), ".$(reg.name).pid"), stale_age = 10) do
+            # only allow one julia process to update a registry at a time
             let regpath=regpath
                 if reg.tree_info !== nothing
                     printpkgstyle(io, :Updating, "registry at " * regpath)
@@ -438,6 +444,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                         @label done_git
                     end
                 end
+            end
             end
         end
     end

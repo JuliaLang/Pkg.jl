@@ -363,6 +363,56 @@ temp_pkg_dir() do project_path
         @test any(x -> startswith(x, manifest), keys(usage))
     end
 
+    @testset "test atomicity of write_env_usage with $(Sys.CPU_THREADS) parallel processes" begin
+        tasks = Task[]
+        iobs = IOBuffer[]
+        Sys.CPU_THREADS == 1 && error("Cannot test for atomic usage log file interaction effectively with only Sys.CPU_THREADS=1")
+        run(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg"`) # to precompile Pkg given we're in a different depot
+        flag_start_dir = tempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
+        flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
+        for i in 1:Sys.CPU_THREADS
+            iob = IOBuffer()
+            t = @async run(pipeline(`$(Base.julia_cmd()[1]) --project="$(pkgdir(Pkg))"
+                -e "import Pkg;
+                Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
+                Pkg.activate(temp = true);
+                Pkg.add(\"Random\", io = devnull);
+                touch(tempname(raw\"$flag_start_dir\")) # file marker that first part has finished
+                while length(readdir(raw\"$flag_start_dir\")) < $(Sys.CPU_THREADS)
+                    # sync all processes to start at the same time
+                    sleep(0.1)
+                end
+                @async begin
+                    sleep(15)
+                    touch(raw\"$flag_end_file\")
+                end
+                i = 0
+                while !isfile(raw\"$flag_end_file\")
+                    global i += 1
+                    try
+                        Pkg.Types.EnvCache()
+                    catch
+                        touch(raw\"$flag_end_file\")
+                        println(stderr, \"Errored after $i iterations\")
+                        rethrow()
+                    end
+                    yield()
+                end"`,
+                stderr = iob, stdout = devnull))
+            push!(tasks, t)
+            push!(iobs, iob)
+        end
+        for i in eachindex(tasks)
+            try
+                fetch(tasks[i]) # If any of these failed it will throw when fetched
+            catch
+                print(String(take!(iobs[i])))
+                break
+            end
+        end
+        @test any(istaskfailed, tasks) == false
+    end
+
     @testset "adding nonexisting packages" begin
         nonexisting_pkg = randstring(14)
         @test_throws PkgError Pkg.add(nonexisting_pkg)
