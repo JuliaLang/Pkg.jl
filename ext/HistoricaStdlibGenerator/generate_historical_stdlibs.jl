@@ -111,20 +111,24 @@ function get_stdlibs(scratch_dir, julia_installer_name)
             end
 
             # This will give us a dictionary of UUID => (name, version) mappings for all standard libraries
-            stdlibs = Dict{Base.UUID, Tuple}(uuid => (name, nothing) for (uuid, name) in eval(Meta.parse(stdlibs_str)))
+            if jlvers < v"1.8"
+                stdlibs = Dict{Base.UUID, Tuple}(uuid => (name, nothing) for (uuid, name) in eval(Meta.parse(stdlibs_str)))
 
-            # We're going to try and get versions for each stdlib:
-            stdlib_path = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; print(Pkg.Types.stdlib_path(""))'`)
-            for uuid in keys(stdlibs)
-                # If this stdlib has a `Project.toml`, try to parse it for its version field
-                name = first(stdlibs[uuid])
-                project_path = joinpath(stdlib_path, name, "Project.toml")
-                if isfile(project_path)
-                    d = TOML.parsefile(project_path)
-                    if haskey(d, "version")
-                        stdlibs[uuid] = (name, VersionNumber(d["version"]))
+                # We're going to try and get versions for each stdlib:
+                stdlib_path = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; print(Pkg.Types.stdlib_path(""))'`)
+                for uuid in keys(stdlibs)
+                    # If this stdlib has a `Project.toml`, try to parse it for its version field
+                    name = first(stdlibs[uuid])
+                    project_path = joinpath(stdlib_path, name, "Project.toml")
+                    if isfile(project_path)
+                        d = TOML.parsefile(project_path)
+                        if haskey(d, "version")
+                            stdlibs[uuid] = (name, VersionNumber(d["version"]))
+                        end
                     end
                 end
+            else
+                stdlibs = Dict{Base.UUID, Tuple}(uuid => (name, version) for (uuid, (name, version)) in eval(Meta.parse(stdlibs_str)))
             end
 
             return (jlvers, stdlibs)
