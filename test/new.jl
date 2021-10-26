@@ -2739,8 +2739,8 @@ end
     if !test_result
         @error("STDLIBS_BY_VERSION out of date!  Manually fix given the info below, or re-run generate_historical_stdlibs.jl!")
         @show length(last_stdlibs) length(Pkg.Types.load_stdlib())
-        @show setdiff(last_stdlibs, Pkg.Types.load_stdlib())
-        @show setdiff(Pkg.Types.load_stdlib(), last_stdlibs)
+        @info "Current stdlib info (sorted):"
+        show(stdout, "text/plain", collect(sort(collect(pairs(Pkg.Types.load_stdlib())), by=(s->s[2][1]))))
     end
     @test test_result
 end
