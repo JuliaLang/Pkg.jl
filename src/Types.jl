@@ -380,16 +380,18 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
-const STDLIB = Ref{Dict{UUID,String}}()
+const STDLIB = Ref{Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}}()
 function load_stdlib()
-    stdlib = Dict{UUID,String}()
+    stdlib = Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}()
     for name in readdir(stdlib_dir())
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
         uuid = get(project, "uuid", nothing)
+        v_str = get(project, "version", nothing)
+        version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
-        stdlib[UUID(uuid)] = name
+        stdlib[UUID(uuid)] = (name, version)
     end
     return stdlib
 end
@@ -405,7 +407,10 @@ is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 # Find the entry in `STDLIBS_BY_VERSION`
 # that corresponds to the requested version, and use that.
 # If we can't find one, defaults to `UNREGISTERED_STDLIBS`
-function get_last_stdlibs(julia_version::VersionNumber)
+function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_current_version = false)
+    if !use_historical_for_current_version && julia_version == VERSION
+        return stdlibs()
+    end
     last_stdlibs = UNREGISTERED_STDLIBS
     for (version, stdlibs) in STDLIBS_BY_VERSION
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
@@ -894,12 +899,12 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in stdlibs()
+            for (uuid, (name, version)) in stdlibs()
                 name == pkg.name && (pkg.uuid = uuid)
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name = get(stdlibs(), pkg.uuid, nothing)
+            name, version = get(stdlibs(), pkg.uuid, (nothing, nothing))
             nothing !== name && (pkg.name = name)
         end
     end

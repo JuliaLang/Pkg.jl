@@ -303,7 +303,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     else
         env.manifest.julia_version = VERSION
     end
-    names = Dict{UUID, String}(uuid => stdlib for (uuid, stdlib) in stdlibs())
+    names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in stdlibs())
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
     # But we only want to use information for those packages that we don't know about
@@ -350,7 +350,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
-            name = is_stdlib(uuid) ? stdlibs()[uuid] : registered_name(registries, uuid)
+            name = is_stdlib(uuid) ? first(stdlibs()[uuid]) : registered_name(registries, uuid)
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
