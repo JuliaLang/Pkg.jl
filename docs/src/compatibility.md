@@ -198,4 +198,4 @@ you can safely submit this change as a pull request to `B` so that a new release
 If instead an error is thrown, it indicates that `B` requires more extensive updates to be
 compatible with the latest version of `D`; those updates will need to be completed before
 it becomes possible to use both `A` and `B` simultaneously.
-You can, though, continue to use the independently of one another.
+You can, though, continue to use them independently of one another.
