@@ -589,7 +589,7 @@ end
         end
 
         # Next, set up our depot path, with `depot1` as the "innermost" depot.
-        old_depot_path = DEPOT_PATH
+        old_depot_path = copy(DEPOT_PATH)
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, [depot1, depot2, depot3])
 
