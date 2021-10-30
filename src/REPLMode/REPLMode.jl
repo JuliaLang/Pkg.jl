@@ -633,6 +633,8 @@ function gen_help()
 **Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
 backspace when the input line is empty or press Ctrl+C.
 
+Full documentation available at https://pkgdocs.julialang.org/
+
 **Synopsis**
 
     pkg> cmd [opts] [args]
