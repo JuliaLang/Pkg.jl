@@ -600,7 +600,8 @@ end
 
         # Our `test/test_packages/ArtifactOverrideLoading` package contains some artifacts
         # that will not load unless they are properly overridden
-        aol_uuid = Base.UUID("7b879065-7f74-5fa4-bdd5-9b7a15df8941")
+        aol1_uuid = Base.UUID("3a70384f-7a01-4d14-aae9-08fd25033a95")
+        aol2_uuid = Base.UUID("087ed6a3-3c58-4207-b6d1-75b1bb3d694f")
 
         # Create an arbitrary absolute path for `barty`
         barty_override_path = abspath(joinpath(depot_container, "a_wild_barty_appears"))
@@ -616,10 +617,14 @@ end
 
                 # Override "ArtifactOverrideLoading.arty" to point to `bar_hash` as well.
                 # Override "ArtifactOverrideLoading.barty" to point to a location on disk
-                string(aol_uuid) => Dict(
+                string(aol1_uuid) => Dict(
                     "arty" => bytes2hex(bar_hash.bytes),
                     "barty" => barty_override_path,
-                )
+                ),
+                string(aol2_uuid) => Dict(
+                    "arty" => bytes2hex(bar_hash.bytes),
+                    "barty" => barty_override_path,
+                ),
             )
             TOML.print(io, overrides)
         end
@@ -633,18 +638,20 @@ end
 
         # Verify that the name-based override worked; extract paths from module that
         # loads overridden package artifacts.
-        Pkg.activate(depot_container) do
-            copy_test_package(depot_container, "ArtifactOverrideLoading")
-            git_init_and_commit(joinpath(depot_container, "ArtifactOverrideLoading"))
+        aol1_project = joinpath(depot_container, "aol1_project")
+        mkpath(aol1_project)
+        Pkg.activate(aol1_project) do
+            copy_test_package(aol1_project, "ArtifactOverrideLoading1")
+            git_init_and_commit(joinpath(aol1_project, "ArtifactOverrideLoading1"))
             add_this_pkg()
             Pkg.add(Pkg.Types.PackageSpec(
-                name="ArtifactOverrideLoading",
-                uuid=aol_uuid,
-                path=joinpath(depot_container, "ArtifactOverrideLoading"),
+                name="ArtifactOverrideLoading1",
+                uuid=aol1_uuid,
+                path=joinpath(aol1_project, "ArtifactOverrideLoading1"),
             ))
 
             (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
-                using ArtifactOverrideLoading
+                using ArtifactOverrideLoading1
                 arty_path, barty_path
             end)
 
@@ -661,9 +668,12 @@ end
                 bytes2hex(baz_hash.bytes) => "",
 
                 # Override "ArtifactOverrideLoading.arty" to point to `barty_override_path` as well.
-                string(aol_uuid) => Dict(
+                string(aol1_uuid) => Dict(
                     "arty" => barty_override_path,
-                )
+                ),
+                string(aol2_uuid) => Dict(
+                    "arty" => barty_override_path,
+                ),
             )
             TOML.print(io, overrides)
         end
@@ -671,19 +681,26 @@ end
         # Force Pkg to reload what it knows about artifact overrides
         Pkg.Artifacts.load_overrides(;force=true)
 
-        # Force Julia to re-load ArtifactOverrideLoading from scratch
-        pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
-        delete!(Base.loaded_modules, pkgid)
-
         # Verify that the hash-based overrides (and clears) worked
         @test artifact_path(foo_hash) == barty_override_path
         @test endswith(artifact_path(baz_hash), bytes2hex(baz_hash.bytes))
 
         # Verify that the name-based override worked; extract paths from module that
         # loads overridden package artifacts.
-        Pkg.activate(depot_container) do
+        aol2_project = joinpath(depot_container, "aol2_project")
+        mkpath(aol2_project)
+        Pkg.activate(aol2_project) do
+            copy_test_package(aol2_project, "ArtifactOverrideLoading2")
+            git_init_and_commit(joinpath(aol2_project, "ArtifactOverrideLoading2"))
+            add_this_pkg()
+            Pkg.add(Pkg.Types.PackageSpec(
+                name="ArtifactOverrideLoading2",
+                uuid=aol2_uuid,
+                path=joinpath(aol2_project, "ArtifactOverrideLoading2"),
+            ))
+
             (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
-                using ArtifactOverrideLoading
+                using ArtifactOverrideLoading2
                 arty_path, barty_path
             end)
 

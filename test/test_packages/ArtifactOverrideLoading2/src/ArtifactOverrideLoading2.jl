@@ -1,4 +1,4 @@
-module ArtifactOverrideLoading
+module ArtifactOverrideLoading2
 using Pkg.Artifacts
 export arty_path, barty_path
 
