@@ -14,9 +14,9 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
 
 const CACHE_DIRECTORY = mktempdir(; cleanup = true)
 
-const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
+const LOADED_DEPOT = joinpath(CACHE_DIRECTORY, "loaded_depot")
 
-const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
+const REGISTRY_DEPOT = joinpath(CACHE_DIRECTORY, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
