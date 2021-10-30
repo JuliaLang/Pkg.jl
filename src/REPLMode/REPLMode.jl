@@ -284,7 +284,7 @@ end
 parse(input::String) =
     map(Base.Iterators.filter(!isempty, tokenize(input))) do words
         statement, _ = core_parse(words)
-        statement.spec === nothing && pkgerror("Could not determine command")
+        statement.spec === nothing && pkgerror("Could not determine command. Type ? for help with available commands")
         statement.options = map(parse_option, statement.options)
         statement
     end
