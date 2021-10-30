@@ -54,6 +54,7 @@ function get_server_dir(
         @warn "malformed Pkg server value" server
         return
     end
+    isempty(Base.DEPOT_PATH) && return
     joinpath(depots1(), "servers", String(m.captures[1]))
 end
 
