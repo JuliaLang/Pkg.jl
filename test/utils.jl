@@ -12,6 +12,8 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
        list_tarball_files
 
+const CACHE_DIRECTORY = mktempdir(; cleanup = true)
+
 const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
 
 const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
