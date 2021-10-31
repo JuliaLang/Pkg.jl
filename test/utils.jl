@@ -9,9 +9,12 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT
 
-const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
+const CACHE_DIRECTORY = mktempdir(; cleanup = true)
 
-const REGISTRY_DIR = joinpath(@__DIR__, "registries", "General")
+const LOADED_DEPOT = joinpath(CACHE_DIRECTORY, "loaded_depot")
+
+const REGISTRY_DEPOT = joinpath(CACHE_DIRECTORY, "registry_depot")
+const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 
 function isolate(fn::Function; loaded_depot=false)
@@ -148,7 +151,7 @@ function write_build(path, content)
 end
 
 function with_current_env(f)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(".")
     try
         f()
@@ -158,7 +161,7 @@ function with_current_env(f)
 end
 
 function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
@@ -176,7 +179,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
 end
 
 function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(path)
     try
         if change_dir
