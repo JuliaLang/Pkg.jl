@@ -725,7 +725,7 @@ end
 @testset "subdir functionality" begin
     temp_pkg_dir() do project_path; with_temp_env() do
         mktempdir() do tmp
-            repodir = git_init_package(tmp, "test_packages/MainRepo")
+            repodir = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "MainRepo"))
             # Add with subdir
             subdir_uuid = UUID("6fe4e069-dcb0-448a-be67-3a8bf3404c58")
             Pkg.add(url = repodir, subdir = "SubDir")
