@@ -238,8 +238,12 @@ Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2,
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
 # only hash the deps and compat fields as they are the only fields that affect a resolve
-project_resolve_hash(t::Project, h::UInt = UInt(0)) = string(foldr(hash, [t.deps, t.compat], init=h))
-
+function project_resolve_hash(t::Project, h::UInt = UInt(0))
+    iob = IOBuffer()
+    println(iob, t.deps)
+    println(iob, t.compat)
+    return bytes2hex(sha1(seekstart(iob)))
+end
 
 Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
