@@ -439,6 +439,17 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
+function is_manifest_current(ctx::Context = Context())
+    if haskey(ctx.env.manifest.other, "project_hash")
+        recorded_hash = ctx.env.manifest.other["project_hash"]
+        current_hash = Types.project_resolve_hash(ctx.env.project)
+        return recorded_hash == current_hash
+    else
+        # Manifest doesn't have a hash of the source Project recorded
+        return nothing
+    end
+end
+
 const UsageDict = Dict{String,DateTime}
 const UsageByDepotDict = Dict{String,UsageDict}
 
@@ -1493,6 +1504,12 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
     Types.check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
+
+    if is_manifest_current(ctx) === false
+        @warn """The project hash recorded into the manifest when it was resolved does not match the hash of the current project.
+            A project dependency has been added/removed or compat entry has changed. The environment may need to be updated"""
+    end
+
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue

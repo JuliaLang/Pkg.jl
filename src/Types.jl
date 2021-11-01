@@ -219,6 +219,7 @@ Base.@kwdef mutable struct Compat
     val::VersionSpec
     str::String
 end
+Base.hash(t::Compat, h::UInt) = foldr(hash, [t.val, t.str], init=h)
 
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
@@ -235,6 +236,9 @@ Base.@kwdef mutable struct Project
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
+
+# only hash the deps and compat fields as they are the only fields that affect a resolve
+project_resolve_hash(t::Project, h::UInt = UInt(0)) = string(foldr(hash, [t.deps, t.compat], init=h))
 
 
 Base.@kwdef mutable struct PackageEntry

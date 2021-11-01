@@ -142,6 +142,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         env.manifest[pkg.uuid] = entry
     end
     prune_manifest(env)
+    record_project_hash(env)
 end
 
 
@@ -801,6 +802,9 @@ function prune_manifest(manifest::Manifest, keep::Vector{UUID})
     return manifest
 end
 
+function record_project_hash(env::EnvCache)
+    env.manifest.other["project_hash"] = Types.project_resolve_hash(env.project)
+end
 
 #########
 # Build #
@@ -1058,6 +1062,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     end
     # only keep reachable manifest entires
     prune_manifest(ctx.env)
+    record_project_hash(ctx.env)
     # update project & manifest
     write_env(ctx.env)
     show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1432,6 +1437,7 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     # preserve important nodes
     keep = [target.uuid]
     append!(keep, collect(values(read_project(test_project).deps)))
+    record_project_hash(env)
     # prune and return
     return prune_manifest(env.manifest, keep)
 end
