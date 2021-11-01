@@ -1031,10 +1031,10 @@ precompile(pkg::String; kwargs...) = precompile(Context(), pkg; kwargs...)
 precompile(ctx::Context, pkg::String; kwargs...) = precompile(ctx, [pkg]; kwargs...)
 precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkgs; kwargs...)
 function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
-                    strict::Bool=false, warn_loaded = true, kwargs...)
+                    strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
     Context!(ctx; kwargs...)
     internal_call || resolve(ctx, silent_no_change = true)
-    instantiate(ctx; allow_autoprecomp=false, kwargs...)
+    already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
 
     # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
@@ -1503,7 +1503,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env)
-        allow_autoprecomp && Pkg._auto_precompile(ctx)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
 
@@ -1560,7 +1560,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
 
-    allow_autoprecomp && Pkg._auto_precompile(ctx)
+    allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
 end
 
 
