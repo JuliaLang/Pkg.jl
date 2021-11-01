@@ -43,6 +43,7 @@ jobs:
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
+          arch: ${{ matrix.julia-arch }}
       - name: Fix TEMP on windows
         if: matrix.os == 'windows-latest'
         run: |
