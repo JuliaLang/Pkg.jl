@@ -1009,9 +1009,9 @@ function make_pkgspec(man, uuid)
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, warn_loaded = true, kwargs...)
+function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
     Context!(ctx; kwargs...)
-    instantiate(ctx; allow_autoprecomp=false, kwargs...)
+    already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
 
     # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
@@ -1457,7 +1457,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env)
-        allow_autoprecomp && Pkg._auto_precompile(ctx)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
 
@@ -1512,7 +1512,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
 
-    allow_autoprecomp && Pkg._auto_precompile(ctx)
+    allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
 end
 
 
