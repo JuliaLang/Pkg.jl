@@ -285,7 +285,11 @@ end
 @testset "test: fallback when no project file exists" begin
     isolate(loaded_depot=true) do
         Pkg.add(name="Permutations", version="0.3.2")
-        Pkg.test("Permutations")
+        if Sys.WORD_SIZE == 32
+            @test_skip Pkg.test("Permutations")
+        else
+            Pkg.test("Permutations")
+        end 
     end
 end
 
