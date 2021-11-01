@@ -284,7 +284,7 @@ end
 
 @testset "test: fallback when no project file exists" begin
     isolate(loaded_depot=true) do
-        Pkg.add(name="Permutations", version="0.4.9")
+        Pkg.add(name="Permutations", version="0.3.2")
         Pkg.test("Permutations")
     end
 end
