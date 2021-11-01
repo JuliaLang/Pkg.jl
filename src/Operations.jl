@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION, is_manifest_current
 
 #########
 # Utils #
@@ -1998,6 +1998,11 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, silent_no_change)
+    end
+    if is_manifest_current(env) === false
+        printpkgstyle(io, :Warning, """The project and manifest may be out of sync. \
+        The project hash recorded into the manifest when it was resolved does not match the hash of the current project. \
+        A project dependency has been added/removed or compat entry has changed. The environment may need to be updated""", ignore_indent; color=Base.warn_color())
     end
 end
 
