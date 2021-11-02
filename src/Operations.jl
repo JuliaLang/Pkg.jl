@@ -337,7 +337,11 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     for pkg in pkgs
         names[pkg.uuid] = pkg.name
     end
-    reqs = Resolve.Requires(pkg.uuid => VersionSpec(pkg.version) for pkg in pkgs)
+
+    # Unless using the unbounded or historical resolver, always allow stdlibs to update. Helps if the previous resolve
+    # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
+    unbind_stdlibs = julia_version === VERSION
+    reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
     graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
