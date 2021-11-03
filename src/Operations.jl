@@ -2001,8 +2001,8 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     end
     if is_manifest_current(env) === false
         printpkgstyle(io, :Warning, """The project and manifest may be out of sync. \
-        The project hash recorded into the manifest when it was resolved does not match the hash of the current project. \
-        A project dependency has been added/removed or compat entry has changed. The environment may need to be updated""", ignore_indent; color=Base.warn_color())
+        A project dependency has been added/removed or compat entry has changed since the manifest was last resolved. \
+        The environment may need to be updated. Try `Pkg.resolve()` or `Pkg.update()`.""", ignore_indent; color=Base.warn_color())
     end
 end
 
