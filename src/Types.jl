@@ -237,10 +237,10 @@ Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2,
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
 # only hash the deps and compat fields as they are the only fields that affect a resolve
-function project_resolve_hash(t::Project, h::UInt = UInt(0))
+function project_resolve_hash(t::Project)
     iob = IOBuffer()
-    foreach(((name, uuid),) -> println(io, name, "=", uuid), sort!(collect(t.deps); by=first))
-    foreach(((name, compat),) -> println(name, "=", compat.val), sort!(collect(t.compat); by=first))
+    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(t.deps); by=first))
+    foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
     return bytes2hex(sha1(seekstart(iob)))
 end
 
