@@ -635,7 +635,6 @@ end
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
             copy_test_package(depot_container, "ArtifactOverrideLoading")
-            git_init_and_commit(joinpath(depot_container, "ArtifactOverrideLoading"))
             add_this_pkg()
             Pkg.develop(Pkg.Types.PackageSpec(
                 name="ArtifactOverrideLoading",
