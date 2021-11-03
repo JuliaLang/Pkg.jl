@@ -673,6 +673,8 @@ function download_source(ctx::Context; readonly=true)
         push!(pkgs_to_install, (;pkg, urls, path))
     end
 
+    OFFLINE_MODE[] && return Set{UUID}(entry.pkg.uuid for entry in pkgs_to_install)
+
     ########################################
     # Install from archives asynchronously #
     ########################################
