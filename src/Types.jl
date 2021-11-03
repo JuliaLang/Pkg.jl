@@ -219,7 +219,6 @@ Base.@kwdef mutable struct Compat
     val::VersionSpec
     str::String
 end
-Base.hash(t::Compat, h::UInt) = foldr(hash, [t.val, t.str], init=h)
 
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
@@ -240,8 +239,8 @@ Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames
 # only hash the deps and compat fields as they are the only fields that affect a resolve
 function project_resolve_hash(t::Project, h::UInt = UInt(0))
     iob = IOBuffer()
-    println(iob, t.deps)
-    println(iob, t.compat)
+    foreach(((name, uuid),) -> println(io, name, "=", uuid), sort!(collect(t.deps); by=first))
+    foreach(((name, compat),) -> println(name, "=", compat.val), sort!(collect(t.compat); by=first))
     return bytes2hex(sha1(seekstart(iob)))
 end
 
