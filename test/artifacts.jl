@@ -637,7 +637,7 @@ end
             copy_test_package(depot_container, "ArtifactOverrideLoading")
             git_init_and_commit(joinpath(depot_container, "ArtifactOverrideLoading"))
             add_this_pkg()
-            Pkg.add(Pkg.Types.PackageSpec(
+            Pkg.develop(Pkg.Types.PackageSpec(
                 name="ArtifactOverrideLoading",
                 uuid=aol_uuid,
                 path=joinpath(depot_container, "ArtifactOverrideLoading"),
@@ -673,7 +673,9 @@ end
 
         # Force Julia to re-load ArtifactOverrideLoading from scratch
         pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
+        delete!(Base.module_keys, Base.loaded_modules[pkgid])
         delete!(Base.loaded_modules, pkgid)
+        touch(joinpath(depot_container, "ArtifactOverrideLoading", "src", "ArtifactOverrideLoading.jl"))
 
         # Verify that the hash-based overrides (and clears) worked
         @test artifact_path(foo_hash) == barty_override_path
