@@ -219,7 +219,7 @@ Base.@kwdef mutable struct Compat
     val::VersionSpec
     str::String
 end
-Base.:(==)(t1::Compat, t2::Compat) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Compat))
+Base.:(==)(t1::Compat, t2::Compat) = t1.val == t2.val
 
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
