@@ -140,7 +140,7 @@ function registry_use_pkg_server()
     get(ENV, "JULIA_PKG_SERVER", nothing) !== ""
 end
 
-registry_read_from_tarball() = 
+registry_read_from_tarball() =
     registry_use_pkg_server() && !(get(ENV, "JULIA_PKG_UNPACK_REGISTRY", "") == "true")
 
 function check_registry_state(reg)
@@ -362,7 +362,8 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                             try
                                 download_verify(url, nothing, tmp)
                             catch err
-                                Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
+                                push!(errors, (reg.path, "registry failed to download from $url: $(sprint(showerror, err))"))
+                                @goto done
                             end
                             # If we have an uncompressed Pkg server registry, remove it and get the compressed version
                             if isdir(reg.path)
@@ -375,16 +376,19 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                             open(joinpath(registry_path, reg.name * ".toml"), "w") do io
                                 TOML.print(io, reg_info)
                             end
+                            @label done
                         else
                             mktempdir() do tmp
                                 try
                                     download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
                                 catch err
-                                    Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
+                                    push!(errors, (reg.path, "registry failed to download and unpack from $url: $(sprint(showerror, err))"))
+                                    @goto done
                                 end
                                 tree_info_file = joinpath(tmp, ".tree_info.toml")
                                 write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
                                 mv(tmp, reg.path, force=true)
+                                @label done
                             end
                         end
                     end
