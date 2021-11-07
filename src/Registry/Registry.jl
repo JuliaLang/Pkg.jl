@@ -172,7 +172,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             try
                 download_verify(url, nothing, tmp)
             catch err
-                Pkg.Types.pkgerror("could not download $url")
+                Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
             end
             if reg.name === nothing
                 # Need to look up the registry name here
@@ -202,7 +202,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     try
                         download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
                     catch err
-                        Pkg.Types.pkgerror("could not download $url")
+                        Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
                     end
                     tree_info_file = joinpath(tmp, ".tree_info.toml")
                     hash = pkg_server_url_hash(url)
