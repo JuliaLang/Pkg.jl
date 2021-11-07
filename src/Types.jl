@@ -220,6 +220,7 @@ Base.@kwdef mutable struct Compat
     str::String
 end
 Base.:(==)(t1::Compat, t2::Compat) = t1.val == t2.val
+Base.hash(t::Compat, h::UInt) = hash(t.val, h)
 
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
