@@ -383,7 +383,6 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                     Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
                                 end
                                 tree_info_file = joinpath(tmp, ".tree_info.toml")
-                                hash = pkg_server_url_hash(url)
                                 write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
                                 mv(tmp, reg.path, force=true)
                             end
