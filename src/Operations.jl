@@ -682,7 +682,8 @@ function download_source(ctx::Context; readonly=true)
     max_name = maximum(widths; init=0)
 
     # Check what registries the current pkg server tracks
-    server_registry_info = Registry.pkg_server_registry_info()
+    # Use cached registry info if available as it will have been updated during a Pkg.update
+    server_registry_info = Registry.pkg_server_registry_info(use_cached = true)
 
     @sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
