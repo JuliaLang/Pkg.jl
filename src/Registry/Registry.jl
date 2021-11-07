@@ -53,10 +53,20 @@ const DEFAULT_REGISTRIES =
                               uuid = UUID("23338594-aafe-5451-b93e-139f81909106"),
                               url = "https://github.com/JuliaRegistries/General.git")]
 
-function pkg_server_registry_info()
-    registry_info = Dict{UUID, Base.SHA1}()
+const CURRENT_PKGSERVER = Ref{String}("")
+const CURRENT_PKGSERVER_REGINFO = Dict{UUID, Base.SHA1}()
+
+function pkg_server_registry_info(;use_cached = false)
     server = pkg_server()
-    server === nothing && return nothing
+    if use_cached && server == CURRENT_PKGSERVER[]
+        # cache is valid
+        return CURRENT_PKGSERVER[], CURRENT_PKGSERVER_REGINFO
+    end
+    empty!(CURRENT_PKGSERVER_REGINFO)
+    if server === nothing
+        CURRENT_PKGSERVER[] = ""
+        return nothing
+    end
     tmp_path = tempname()
     download_ok = false
     try
@@ -71,12 +81,13 @@ function pkg_server_registry_info()
             if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
                 uuid = UUID(m.captures[1]::SubString{String})
                 hash = Base.SHA1(m.captures[2]::SubString{String})
-                registry_info[uuid] = hash
+                CURRENT_PKGSERVER_REGINFO[uuid] = hash
             end
         end
     end
     Base.rm(tmp_path, force=true)
-    return server, registry_info
+    CURRENT_PKGSERVER[] = server
+    return server, CURRENT_PKGSERVER_REGINFO
 end
 
 function pkg_server_registry_urls()
