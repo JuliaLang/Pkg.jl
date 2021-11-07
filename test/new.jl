@@ -2312,6 +2312,7 @@ end
             for property in propertynames(a)
                 @test getproperty(a, property) == getproperty(b, property)
             end
+            @test a == b
         end
         rm(dirname(temp); recursive = true, force = true)
     end
