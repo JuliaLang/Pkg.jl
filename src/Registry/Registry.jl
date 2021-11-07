@@ -362,7 +362,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                             try
                                 download_verify(url, nothing, tmp)
                             catch err
-                                push!(errors, (reg.path, "registry failed to download from $url: $(sprint(showerror, err))"))
+                                push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
                                 @goto done
                             end
                             # If we have an uncompressed Pkg server registry, remove it and get the compressed version
@@ -382,7 +382,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                 try
                                     download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
                                 catch err
-                                    push!(errors, (reg.path, "registry failed to download and unpack from $url: $(sprint(showerror, err))"))
+                                    push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
                                     @goto done
                                 end
                                 tree_info_file = joinpath(tmp, ".tree_info.toml")
