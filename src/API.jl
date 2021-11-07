@@ -1863,6 +1863,14 @@ function handle_package_input!(pkg::PackageSpec)
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
+function upgrade_manifest(man_path::String)
+    dir = mktempdir()
+    cp(man_path, joinpath(dir, "Manifest.toml"))
+    Pkg.activate(dir) do
+        Pkg.upgrade_manifest()
+    end
+    mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
+end
 function upgrade_manifest(ctx::Context = Context())
     before_format = ctx.env.manifest.manifest_format
     if before_format == v"2.0"

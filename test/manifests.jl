@@ -113,6 +113,22 @@ end
             @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
         end
     end
+    @testset "Pkg.upgrade_manifest(manifest_path)" begin
+        reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
+            io = IOBuffer()
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+
+            Pkg.upgrade_manifest(env_manifest)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+        end
+    end
 end
 
 @testset "Manifest metadata" begin
