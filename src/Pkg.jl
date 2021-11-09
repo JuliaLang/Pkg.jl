@@ -571,6 +571,7 @@ Upgrades the format of the manifest file from v1.0 to v2.0 without re-resolving.
 const upgrade_manifest = API.upgrade_manifest
 
 function __init__()
+    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
@@ -732,13 +733,14 @@ const CTRL_C = '\x03'
 const precompile_script = """
     import Pkg
     _pwd = pwd()
+    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     tmp = Pkg._run_precompilation_script_setup()
     $CTRL_C
     Pkg.add("TestPkg")
     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
     Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
     Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
-    Pkg.update()
+    Pkg.update(; update_registry=false)
     Pkg.precompile()
     ] add Te\t\t$CTRL_C
     ] st
