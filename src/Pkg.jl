@@ -33,6 +33,7 @@ devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depot, "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
+const OFFLINE_REGISTRY = Ref(false) # if the registry has offline-accessible source paths
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 stderr_f() = something(DEFAULT_IO[], stderr)
@@ -484,7 +485,7 @@ Pkg.activate(; temp=true)
 const activate = API.activate
 
 """
-    Pkg.offline(b::Bool=true)
+    Pkg.offline(b::Bool=true; offline_registry::Bool=false)
 
 Enable (`b=true`) or disable (`b=false`) offline mode.
 
@@ -492,13 +493,24 @@ In offline mode Pkg tries to do as much as possible without connecting
 to internet. For example, when adding a package Pkg only considers
 versions that are already downloaded in version resolution.
 
+If the provided registries have offline-accessible paths `offline_registry`
+can be set to `true` to allow package installations.
+
 To work in offline mode across Julia sessions you can
 set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
+Similarly `JULIA_PKG_OFFLINE_REGISTRY` can be set.
 
 !!! compat "Julia 1.5"
     Pkg's offline mode requires Julia 1.5 or later.
+
+!!! compat "Julia 1.8"
+    The `offline_registry` mode requires Julia 1.8 or later.
 """
-offline(b::Bool=true) = (OFFLINE_MODE[] = b; nothing)
+function offline(b::Bool=true; offline_registry::Bool = false)
+    OFFLINE_MODE[] = b
+    OFFLINE_REGISTRY[] = offline_registry
+    nothing
+end
 
 """
     PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
@@ -627,6 +639,7 @@ function __init__()
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
     OFFLINE_MODE[] = get(ENV, "JULIA_PKG_OFFLINE", nothing) == "true"
+    OFFLINE_REGISTRY[] = get(ENV, "JULIA_PKG_OFFLINE_REGISTRY", nothing) == "true"
     return nothing
 end
 
@@ -778,6 +791,7 @@ const precompile_script = """
     _pwd = pwd()
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     tmp = Pkg._run_precompilation_script_setup()
+    Pkg.offline(true, offline_registry = true)
     $CTRL_C
     Pkg.add("TestPkg")
     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
@@ -791,6 +805,7 @@ const precompile_script = """
     Pkg._run_precompilation_script_artifact()
     rm(tmp; recursive=true)
     cd(_pwd)
+    Pkg.offline(false, offline_registry = false)
     """
 
 end # module
