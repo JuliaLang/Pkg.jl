@@ -445,10 +445,11 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                     pkg === nothing && continue
                     info = Registry.registry_info(pkg)
                     for (v, compat_info) in Registry.compat_info(info)
-                        # Filter yanked and if we are in offline mode also downloaded packages
+                        # Filter yanked and if we are in offline mode also downloaded packages, except if the
+                        # registries provided have been marked as having offline-accessible source paths
                         # TODO, pull this into a function
                         Registry.isyanked(info, v) && continue
-                        if Pkg.OFFLINE_MODE[]
+                        if Pkg.OFFLINE_MODE[] && !Pkg.OFFLINE_REGISTRY[]
                             pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
                             is_package_downloaded(env.project_file, pkg_spec) || continue
                         end
@@ -683,7 +684,7 @@ function download_source(ctx::Context; readonly=true)
 
     # Check what registries the current pkg server tracks
     # Use cached registry info if available as it will have been updated during a Pkg.update
-    server_registry_info = Registry.pkg_server_registry_info(use_cached = true)
+    server_registry_info = OFFLINE_MODE[] ? nothing : Registry.pkg_server_registry_info(use_cached = true)
 
     @sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
