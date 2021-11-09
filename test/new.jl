@@ -2739,18 +2739,6 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, nothing)
 end
 
-@testset "STDLIBS_BY_VERSION up-to-date" begin
-    last_stdlibs = Pkg.Types.get_last_stdlibs(VERSION, use_historical_for_current_version = true)
-    test_result = last_stdlibs == Pkg.Types.load_stdlib()
-    if !test_result
-        @error("STDLIBS_BY_VERSION out of date!  Manually fix given the info below, or re-run generate_historical_stdlibs.jl!")
-        @show length(last_stdlibs) length(Pkg.Types.load_stdlib())
-        @info "Current stdlib info (sorted):"
-        show(stdout, "text/plain", collect(sort(collect(pairs(Pkg.Types.load_stdlib())), by=(s->s[2][1]))))
-    end
-    @test test_result
-end
-
 @testset "Pkg.add() with julia_version" begin
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
