@@ -673,6 +673,8 @@ function download_source(ctx::Context; readonly=true)
         push!(pkgs_to_install, (;pkg, urls, path))
     end
 
+    length(pkgs_to_install) == 0 && return Set{UUID}()
+
     ########################################
     # Install from archives asynchronously #
     ########################################
