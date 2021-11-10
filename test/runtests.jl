@@ -21,11 +21,6 @@ Pkg.DEFAULT_IO[] = IOBuffer()
 
 include("utils.jl")
 
-# Clean slate. Make sure to not start with an outdated registry
-rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
-rm(Utils.LOADED_DEPOT; force = true, recursive = true)
-rm(Utils.REGISTRY_DEPOT; force = true, recursive = true)
-
 include("new.jl")
 include("pkg.jl")
 include("repl.jl")

@@ -282,8 +282,8 @@ end
 
 parse(input::String) =
     map(Base.Iterators.filter(!isempty, tokenize(input))) do words
-        statement, _ = core_parse(words)
-        statement.spec === nothing && pkgerror("Could not determine command")
+        statement, input_word = core_parse(words)
+        statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. Type ? for help with available commands")
         statement.options = map(parse_option, statement.options)
         statement
     end
@@ -631,6 +631,8 @@ function gen_help()
     help = md"""
 **Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
 backspace when the input line is empty or press Ctrl+C.
+
+Full documentation available at https://pkgdocs.julialang.org/
 
 **Synopsis**
 
