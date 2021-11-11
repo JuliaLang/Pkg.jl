@@ -203,8 +203,14 @@ end
 function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
     pre = full[1:index]
     isempty(pre) && return default_commands(), 0:-1, false # empty input -> complete commands
-    last   = split(pre, ' ', keepempty=true)[end]
-    offset = isempty(last) ? index+1 : last.offset+1
+    offset_adjust = 0
+    if length(pre) >= 2 && pre[1] == '?' && pre[2] != ' '
+        # supports completion on things like `pkg> ?act` with no space
+        pre = string(pre[1], " ", pre[2:end])
+        offset_adjust = -1
+    end
+    last = split(pre, ' ', keepempty=true)[end]
+    offset = isempty(last) ? index+1+offset_adjust : last.offset+1+offset_adjust
     final  = isempty(last) # is the cursor still attached to the final token?
     return _completions(pre, final, offset, index)
 end

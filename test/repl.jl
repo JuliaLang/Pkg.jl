@@ -336,6 +336,12 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test apply_completion("rm E") == "rm Example"
         @test apply_completion("add Exampl") == "add Example"
 
+        # help mode
+        @test apply_completion("?ad") == "?add"
+        @test apply_completion("?act") == "?activate"
+        @test apply_completion("? ad") == "? add"
+        @test apply_completion("? act") == "? activate"
+
         # stdlibs
         c, r = test_complete("add Stat")
         @test "Statistics" in c

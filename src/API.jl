@@ -917,7 +917,7 @@ function make_pkgspec(man, uuid)
 end
 
 precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, kwargs...)
+function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, warn_loaded = true, kwargs...)
     Context!(ctx; kwargs...)
     instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1058,7 +1058,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         bar.max = n_total - n_already_precomp
                         final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
                         for dep in pkg_queue_show
-                            loaded = haskey(Base.loaded_modules, dep)
+                            loaded = warn_loaded && haskey(Base.loaded_modules, dep)
                             name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                             if dep in precomperr_deps
                                 print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
@@ -1334,7 +1334,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             deps[pkg.name] = string(uuid)
         end
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
-        return instantiate(Context(); manifest=manifest, update_registry=update_registry, verbose=verbose, kwargs...)
+        return instantiate(Context(); manifest=manifest, update_registry=update_registry, allow_autoprecomp=allow_autoprecomp, verbose=verbose, platform=platform, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
