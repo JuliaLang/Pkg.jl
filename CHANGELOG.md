@@ -11,8 +11,8 @@ Pkg v1.8 Release Notes
 - Pkg now only tries to download packages from the package server in case the
   server tracks a registry that contains the package.
 - `Pkg.instantiate` will now warn when a Project.toml is out of sync with a Manifest.toml. It does this by storing a hash
-  of the project in the manifest when it is resolved, so that any change to the Project.toml without a re-resolve, such
-  as changing a compat bound or adding a dep, can be detected.
+  of the project deps and compat entries (other fields are ignored) in the manifest when it is resolved, so that any change
+  to the Project.toml deps or compat entries without a re-resolve can be detected.
 
 Pkg v1.7 Release Notes
 ======================
