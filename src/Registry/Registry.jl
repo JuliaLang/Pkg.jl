@@ -140,7 +140,7 @@ function registry_use_pkg_server()
     get(ENV, "JULIA_PKG_SERVER", nothing) !== ""
 end
 
-registry_read_from_tarball() = 
+registry_read_from_tarball() =
     registry_use_pkg_server() && !(get(ENV, "JULIA_PKG_UNPACK_REGISTRY", "") == "true")
 
 function check_registry_state(reg)
@@ -172,7 +172,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             try
                 download_verify(url, nothing, tmp)
             catch err
-                Pkg.Types.pkgerror("could not download $url")
+                Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
             end
             if reg.name === nothing
                 # Need to look up the registry name here
@@ -202,7 +202,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     try
                         download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
                     catch err
-                        Pkg.Types.pkgerror("could not download $url")
+                        Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
                     end
                     tree_info_file = joinpath(tmp, ".tree_info.toml")
                     hash = pkg_server_url_hash(url)
@@ -362,7 +362,8 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                             try
                                 download_verify(url, nothing, tmp)
                             catch err
-                                @error "could not download $url" exception=err
+                                push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
+                                @goto done_tarball_read
                             end
                             # If we have an uncompressed Pkg server registry, remove it and get the compressed version
                             if isdir(reg.path)
@@ -375,17 +376,19 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                             open(joinpath(registry_path, reg.name * ".toml"), "w") do io
                                 TOML.print(io, reg_info)
                             end
+                            @label done_tarball_read
                         else
                             mktempdir() do tmp
                                 try
                                     download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
                                 catch err
-                                    @error "could not download $url" exception=err
+                                    push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
+                                    @goto done_tarball_unpack
                                 end
                                 tree_info_file = joinpath(tmp, ".tree_info.toml")
-                                hash = pkg_server_url_hash(url)
                                 write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
                                 mv(tmp, reg.path, force=true)
+                                @label done_tarball_unpack
                             end
                         end
                     end
@@ -395,15 +398,15 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                 LibGit2.with(LibGit2.GitRepo(reg.path)) do repo
                     if LibGit2.isdirty(repo)
                         push!(errors, (regpath, "registry dirty"))
-                        @goto done
+                        @goto done_git
                     end
                     if !LibGit2.isattached(repo)
                         push!(errors, (regpath, "registry detached"))
-                        @goto done
+                        @goto done_git
                     end
                     if !("origin" in LibGit2.remotes(repo))
                         push!(errors, (regpath, "origin not in the list of remotes"))
-                        @goto done
+                        @goto done_git
                     end
                     branch = LibGit2.headname(repo)
                     try
@@ -411,14 +414,14 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                     catch e
                         e isa Pkg.Types.PkgError || rethrow()
                         push!(errors, (reg.path, "failed to fetch from repo"))
-                        @goto done
+                        @goto done_git
                     end
                     ff_succeeded = try
                         LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
                     catch e
                         e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
                         push!(errors, (reg.path, "branch origin/$branch not found"))
-                        @goto done
+                        @goto done_git
                     end
 
                     if !ff_succeeded
@@ -426,10 +429,10 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                         catch e
                             e isa LibGit2.GitError || rethrow()
                             push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
-                            @goto done
+                            @goto done_git
                         end
                     end
-                    @label done
+                    @label done_git
                 end
             end
         end
