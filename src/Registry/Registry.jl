@@ -363,7 +363,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                 download_verify(url, nothing, tmp)
                             catch err
                                 push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
-                                @goto done
+                                @goto done_tarball_read
                             end
                             # If we have an uncompressed Pkg server registry, remove it and get the compressed version
                             if isdir(reg.path)
@@ -376,19 +376,19 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                             open(joinpath(registry_path, reg.name * ".toml"), "w") do io
                                 TOML.print(io, reg_info)
                             end
-                            @label done
+                            @label done_tarball_read
                         else
                             mktempdir() do tmp
                                 try
                                     download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
                                 catch err
                                     push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
-                                    @goto done
+                                    @goto done_tarball_unpack
                                 end
                                 tree_info_file = joinpath(tmp, ".tree_info.toml")
                                 write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
                                 mv(tmp, reg.path, force=true)
-                                @label done
+                                @label done_tarball_unpack
                             end
                         end
                     end
@@ -398,15 +398,15 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                 LibGit2.with(LibGit2.GitRepo(reg.path)) do repo
                     if LibGit2.isdirty(repo)
                         push!(errors, (regpath, "registry dirty"))
-                        @goto done
+                        @goto done_git
                     end
                     if !LibGit2.isattached(repo)
                         push!(errors, (regpath, "registry detached"))
-                        @goto done
+                        @goto done_git
                     end
                     if !("origin" in LibGit2.remotes(repo))
                         push!(errors, (regpath, "origin not in the list of remotes"))
-                        @goto done
+                        @goto done_git
                     end
                     branch = LibGit2.headname(repo)
                     try
@@ -414,14 +414,14 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                     catch e
                         e isa Pkg.Types.PkgError || rethrow()
                         push!(errors, (reg.path, "failed to fetch from repo"))
-                        @goto done
+                        @goto done_git
                     end
                     ff_succeeded = try
                         LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
                     catch e
                         e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
                         push!(errors, (reg.path, "branch origin/$branch not found"))
-                        @goto done
+                        @goto done_git
                     end
 
                     if !ff_succeeded
@@ -429,10 +429,10 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                         catch e
                             e isa LibGit2.GitError || rethrow()
                             push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
-                            @goto done
+                            @goto done_git
                         end
                     end
-                    @label done
+                    @label done_git
                 end
             end
         end
