@@ -142,6 +142,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         env.manifest[pkg.uuid] = entry
     end
     prune_manifest(env)
+    record_project_hash(env)
 end
 
 
@@ -807,6 +808,9 @@ function prune_manifest(manifest::Manifest, keep::Vector{UUID})
     return manifest
 end
 
+function record_project_hash(env::EnvCache)
+    env.manifest.other["project_hash"] = Types.project_resolve_hash(env.project)
+end
 
 #########
 # Build #
@@ -1064,6 +1068,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     end
     # only keep reachable manifest entires
     prune_manifest(ctx.env)
+    record_project_hash(ctx.env)
     # update project & manifest
     write_env(ctx.env)
     show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1438,6 +1443,7 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     # preserve important nodes
     keep = [target.uuid]
     append!(keep, collect(values(read_project(test_project).deps)))
+    record_project_hash(env)
     # prune and return
     return prune_manifest(env.manifest, keep)
 end
@@ -1998,6 +2004,22 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, silent_no_change)
+    end
+    if is_manifest_current(env) === false
+        printpkgstyle(io, :Warning, """The project and manifest may be out of sync as either project dependencies have been \
+        added/removed or compat entries have changed since the manifest was last resolved. \
+        Try `Pkg.resolve()` or consider `Pkg.update()` if necessary.""", ignore_indent; color=Base.warn_color())
+    end
+end
+
+function is_manifest_current(env::EnvCache)
+    if haskey(env.manifest.other, "project_hash")
+        recorded_hash = env.manifest.other["project_hash"]
+        current_hash = Types.project_resolve_hash(env.project)
+        return recorded_hash == current_hash
+    else
+        # Manifest doesn't have a hash of the source Project recorded
+        return nothing
     end
 end
 

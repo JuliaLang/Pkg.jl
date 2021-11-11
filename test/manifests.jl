@@ -164,6 +164,36 @@ end
                 end
             end
         end
+        @testset "project_hash for identifying out of sync manifest" begin
+            isolate(loaded_depot=true) do
+                iob = IOBuffer()
+
+                Pkg.activate(; temp=true)
+                Pkg.add("Example")
+                @test Pkg.is_manifest_current() === true
+
+                Pkg.compat("Example", "0.4")
+                @test Pkg.is_manifest_current() === false
+                Pkg.status(io = iob)
+                @test occursin("The project and manifest may be out of sync", String(take!(iob)))
+                @test_logs (:warn, r"The project and manifest may be out of sync") Pkg.instantiate()
+
+                Pkg.update()
+                @test Pkg.is_manifest_current() === true
+                Pkg.status(io = iob)
+                @test !occursin("The project and manifest may be out of sync", String(take!(iob)))
+
+                Pkg.compat("Example", "0.5")
+                Pkg.status(io = iob)
+                @test occursin("The project and manifest may be out of sync", String(take!(iob)))
+                @test_logs (:warn, r"The project and manifest may be out of sync") Pkg.instantiate()
+
+                Pkg.rm("Example")
+                @test Pkg.is_manifest_current() === true
+                Pkg.status(io = iob)
+                @test !occursin("The project and manifest may be out of sync", String(take!(iob)))
+            end
+        end
     end
 end
 

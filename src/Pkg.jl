@@ -613,6 +613,16 @@ Upgrades the format of the current or specified manifest file from v1.0 to v2.0 
 """
 const upgrade_manifest = API.upgrade_manifest
 
+"""
+    is_manifest_current(ctx::Context = Context())
+
+Returns whether the active manifest was resolved from the active project state.
+For instance, if the project had compat entries changed, but the manifest wasn't re-resolved, this would return false.
+
+If the manifest doesn't have the project hash recorded, `nothing` is returned.
+"""
+const is_manifest_current = API.is_manifest_current
+
 function __init__()
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
     if isdefined(Base, :active_repl)
