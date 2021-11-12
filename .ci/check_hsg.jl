@@ -40,6 +40,8 @@ function run_hsg()
     cmd_1 = `$(julia_binary) --project=$(hsg_directory) -e 'import Pkg; Pkg.instantiate()'`
     cmd_2 = `$(julia_binary) --project=$(hsg_directory) $(hsg_generate_file)`
 
+    run(setenv(`$(julia_binary) --version`, env2))
+    run(setenv(`$(julia_binary) -e "import InteractiveUtils; InteractiveUtils.versioninfo()"`, env2))
     run(setenv(cmd_1, env2))
     run(setenv(cmd_2, env2))
 
