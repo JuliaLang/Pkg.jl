@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   check_hsg:
-    if: false # This line disables this CI check. TODO: delete this line.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
