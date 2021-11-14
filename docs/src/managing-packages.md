@@ -182,6 +182,10 @@ When tracking a path, the package manager will never modify the files at that pa
 If `dev` is used on a local path, that path to that package is recorded and used when loading that package.
 The path will be recorded relative to the project file, unless it is given as an absolute path.
 
+```julia-repl
+(v1.0) pkg> dev /Users/kristoffer/Desktop/Example
+```
+
 To stop tracking a path and use the registered version again, use `free`:
 
 ```julia-repl
