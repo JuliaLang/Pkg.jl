@@ -1236,6 +1236,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         end
     end
     tasks = Task[]
+    Base.LOADING_CACHE[] = Base.LoadingCache()
     for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
@@ -1341,6 +1342,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         wait(interrupted_or_done)
     catch err
         handle_interrupt(err)
+    finally
+        Base.LOADING_CACHE[] = nothing
     end
     notify(first_started) # in cases of no-op or !fancyprint
     save_precompile_state() # save lists to scratch space
