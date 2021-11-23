@@ -10,7 +10,7 @@ shipped with Julia v1.0 and above.
 ## Using the development version of Pkg.jl
 
 If you want to develop this package do the following steps:
-- Clone the repo anywhere.
+- Make a fork and then clone the repo locally on your computer
 - In line 2 of the `Project.toml` file (the line that begins with `uuid = ...`), modify the UUID, e.g. change the `44cf...` to `54cf...`.
 - Change the current directory to the Pkg repo you just cloned and start julia with `julia --project`.
 - `import Pkg` will now load the files in the cloned repo instead of the Pkg stdlib .
