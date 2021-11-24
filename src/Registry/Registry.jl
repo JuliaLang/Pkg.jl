@@ -2,7 +2,7 @@ module Registry
 
 import ..Pkg
 using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-             GitTools
+             GitTools, bool_env
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z
 using UUIDs, LibGit2, TOML
 
@@ -141,7 +141,7 @@ function registry_use_pkg_server()
 end
 
 registry_read_from_tarball() =
-    registry_use_pkg_server() && !(get(ENV, "JULIA_PKG_UNPACK_REGISTRY", "") == "true")
+    registry_use_pkg_server() && !bool_env("JULIA_PKG_UNPACK_REGISTRY")
 
 function check_registry_state(reg)
     reg_currently_uses_pkg_server = reg.tree_info !== nothing
