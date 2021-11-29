@@ -1300,6 +1300,13 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io, silent_no_change)
+    for pkg in pkgs
+        latest_available = get_latest_compatible_version(ctx, pkg.uuid, Pkg.Types.VersionSpec())
+        currently_installed = manifest_info(ctx.env.manifest, pkg.uuid).version
+        if latest_available > currently_installed
+            @warn """$(pkg.name) (at $(currently_installed)) could not be updated to the latest version ($(latest_available). Run `Pkg.add(name="$(pkg.name)", version=$(latest_available))` to learn why."""
+        end
+    end
     build_versions(ctx, union(new_apply, new_git))
 end
 
