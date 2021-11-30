@@ -220,9 +220,12 @@ for (julia_ver, stdlibs) in versions_dict
 end
 
 registries = Pkg.Registry.reachable_registries()
-unregistered_stdlibs = filter(all_stdlibs) do (uuid, name)
+_unregistered_stdlibs_with_vers = filter(all_stdlibs) do (uuid, name)
     return !any(haskey(reg.pkgs, uuid) for reg in registries)
 end
+
+# For each entry in `UNREGISTERED_STDLIBS`, set the version number to `nothing`
+unregistered_stdlibs = Dict((k, (v[1], nothing)) for (k, v) in pairs(_unregistered_stdlibs_with_vers))
 
 # Helper function for getting these printed out in a nicely-sorted order
 function print_sorted(io::IO, d::Dict; indent::Int=0)
