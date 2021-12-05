@@ -1419,11 +1419,11 @@ function with_temp_env(fn::Function, temp_env::String)
     active_project = Base.ACTIVE_PROJECT[]
     try
         push!(empty!(LOAD_PATH), "@", temp_env)
-        Base.ACTIVE_PROJECT[] = nothing
+        Base.set_active_project(nothing)
         fn()
     finally
         append!(empty!(LOAD_PATH), load_path)
-        Base.ACTIVE_PROJECT[] = active_project
+        Base.set_active_project(active_project)
     end
 end
 

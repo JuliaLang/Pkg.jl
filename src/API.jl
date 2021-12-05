@@ -1603,7 +1603,7 @@ function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
     if !isnothing(Base.active_project())
         PREV_ENV_PATH[] = Base.active_project()
     end
-    Base.ACTIVE_PROJECT[] = nothing
+    Base.set_active_project(nothing)
     p = Base.active_project()
     p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
     add_snapshot_to_undo()
@@ -1661,7 +1661,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
     if !isnothing(Base.active_project())
         PREV_ENV_PATH[] = Base.active_project()
     end
-    Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
+    Base.set_active_project(Base.load_path_expand(fullpath))
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
@@ -1672,11 +1672,11 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
 end
 function activate(f::Function, new_project::AbstractString)
     old = Base.ACTIVE_PROJECT[]
-    Base.ACTIVE_PROJECT[] = new_project
+    Base.set_active_project(new_project)
     try
         f()
     finally
-        Base.ACTIVE_PROJECT[] = old
+        Base.set_active_project(old)
     end
 end
 

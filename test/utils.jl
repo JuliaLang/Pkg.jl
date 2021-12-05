@@ -60,7 +60,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
-        Base.ACTIVE_PROJECT[] = nothing
+        Base.set_active_project(nothing)
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
         Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
         Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
@@ -92,7 +92,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         append!(LOAD_PATH, old_load_path)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
-        Base.ACTIVE_PROJECT[] = old_active_project
+        Base.set_active_project(old_active_project)
         cd(old_working_directory)
         Pkg.REPLMode.TEST_MODE[] = false # reset unconditionally
         Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
@@ -131,7 +131,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
-        Base.ACTIVE_PROJECT[] = nothing
+        Base.set_active_project(nothing)
         Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
         Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
         Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
@@ -160,7 +160,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
         append!(LOAD_PATH, old_load_path)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
-        Base.ACTIVE_PROJECT[] = old_active_project
+        Base.set_active_project(old_active_project)
         Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
         Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
         Pkg.Registry.DEFAULT_REGISTRIES[1].linked = old_general_registry_linked
@@ -196,7 +196,7 @@ function with_current_env(f)
     try
         f()
     finally
-        Base.ACTIVE_PROJECT[] = prev_active
+        Base.set_active_project(prev_active)
     end
 end
 
@@ -208,7 +208,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
     try
         applicable(f, env_path) ? f(env_path) : f()
     finally
-        Base.ACTIVE_PROJECT[] = prev_active
+        Base.set_active_project(prev_active)
         try
             rm && Base.rm(env_path; force = true, recursive = true)
         catch err
@@ -228,7 +228,7 @@ function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
             fn()
         end
     finally
-        Base.ACTIVE_PROJECT[] = prev_active
+        Base.set_active_project(prev_active)
     end
 end
 
