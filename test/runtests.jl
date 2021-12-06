@@ -21,8 +21,8 @@ Pkg.DEFAULT_IO[] = IOBuffer()
 
 include("utils.jl")
 
-@testset "Pkg" verbose = true begin
-    @testset "$f" verbose = true for f in [
+@testset "Pkg" begin
+    @testset "$f" for f in [
         "new.jl",
         "pkg.jl",
         "repl.jl",
