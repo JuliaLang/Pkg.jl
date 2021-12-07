@@ -21,19 +21,27 @@ Pkg.DEFAULT_IO[] = IOBuffer()
 
 include("utils.jl")
 
-include("new.jl")
-include("pkg.jl")
-include("repl.jl")
-include("api.jl")
-include("registry.jl")
-include("subdir.jl")
-include("artifacts.jl")
-include("binaryplatforms.jl")
-include("platformengines.jl")
-include("sandbox.jl")
-include("resolve.jl")
-include("misc.jl")
-include("force_latest_compatible_version.jl")
-include("manifests.jl")
+@testset "Pkg" begin
+    @testset "$f" for f in [
+        "new.jl",
+        "pkg.jl",
+        "repl.jl",
+        "pkg.jl",
+        "repl.jl",
+        "api.jl",
+        "registry.jl",
+        "subdir.jl",
+        "artifacts.jl",
+        "binaryplatforms.jl",
+        "platformengines.jl",
+        "sandbox.jl",
+        "resolve.jl",
+        "misc.jl",
+        "force_latest_compatible_version.jl",
+        "manifests.jl",
+        ]
+        include(f)
+    end
+end
 
 end # module
