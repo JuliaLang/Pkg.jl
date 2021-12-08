@@ -658,9 +658,9 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     if isempty(ctx.registries)
         if !REG_WARNED[]
             printstyled(ctx.io, " │ "; color=:green)
-            printstyled(ctx.io, "Attempted to search for missing packages in Pkg registries but no registries are installed.\n")
+            printstyled(ctx.io, "Attempted to find missing packages in package registries but no registries are installed.\n")
             printstyled(ctx.io, " └ "; color=:green)
-            printstyled(ctx.io, "Use Pkg mode to install a registry. Both `pkg> add` and `pkg> update` will install the default registries.\n\n")
+            printstyled(ctx.io, "Use package mode to install a registry. `pkg> registry add` will install the default registries.\n\n")
             REG_WARNED[] = true
         end
         return false
