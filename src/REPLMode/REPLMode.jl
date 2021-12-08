@@ -10,6 +10,7 @@ import REPL: TerminalMenus
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
+import ..Registry: DEFAULT_REGISTRIES
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)
@@ -655,6 +656,20 @@ const help = gen_help()
 
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
     ctx = Context()
+    # any user that doesn't have registries and doesn't want this prompt can `empty!(Pkg.Registry.DEFAULT_REGISTRIES)`
+    if isempty(ctx.registries) && !isempty(DEFAULT_REGISTRIES)
+        printstyled(ctx.io, " │ "; color=:green)
+        printstyled(ctx.io, "Attempted to search for missing packages in Pkg registries but no registries are installed.\n")
+        printstyled(ctx.io, " └ "; color=:green)
+        plural = length(DEFAULT_REGISTRIES) == 1 ? "y" : "ies"
+        resp = Base.prompt(stdin, ctx.io, "Install the default registr$(plural)? (y/n)", default = "y")
+        if lowercase(strip(resp)) == "y"
+            Registry.download_default_registries(ctx.io)
+            ctx = Context()
+        else
+            return false
+        end
+    end
     available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
     available_pkgs = pkgs[isempty.(available_uuids) .== false]
     isempty(available_pkgs) && return false
