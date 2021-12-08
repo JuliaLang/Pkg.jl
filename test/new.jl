@@ -2502,6 +2502,18 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
               tree_hash(joinpath(dir, "FooGit")) ==
               "2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33"
     end
+
+    # Test for symlinks that are a prefix of another directory, causing sorting issues
+    if !Sys.iswindows()
+        mktempdir() do dir
+            mkdir(joinpath(dir, "5.28.1"))
+            write(joinpath(dir, "5.28.1", "foo"), "")
+            chmod(joinpath(dir, "5.28.1", "foo"), 0o644)
+            symlink("5.28.1", joinpath(dir, "5.28"))
+
+            @test tree_hash(dir) == "5e50a4254773a7c689bebca79e2954630cab9c04"
+       end
+   end
 end
 
 @testset "multiple registries overlapping version ranges for different versions" begin
