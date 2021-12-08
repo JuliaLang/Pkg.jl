@@ -656,13 +656,11 @@ const help = gen_help()
 
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
     ctx = Context()
-    # any user that doesn't have registries and doesn't want this prompt can `empty!(Pkg.Registry.DEFAULT_REGISTRIES)`
-    if isempty(ctx.registries) && !isempty(DEFAULT_REGISTRIES)
+    if isempty(ctx.registries)
         printstyled(ctx.io, " │ "; color=:green)
-        printstyled(ctx.io, "Attempted to search for missing packages in Pkg registries but no registries are installed.\n")
+        printstyled(ctx.io, "Attempted to find missing packages in package registries but no registries are installed.\n")
         printstyled(ctx.io, " └ "; color=:green)
-        plural = length(DEFAULT_REGISTRIES) == 1 ? "y" : "ies"
-        resp = Base.prompt(stdin, ctx.io, "Install the default registr$(plural)? (y/n)", default = "y")
+        resp = Base.prompt(stdin, ctx.io, "Install default registries? (y/n)", default = "y")
         if lowercase(strip(resp)) == "y"
             Registry.download_default_registries(ctx.io)
             ctx = Context()
