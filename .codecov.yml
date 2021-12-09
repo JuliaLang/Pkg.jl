@@ -1,3 +1,7 @@
-comment: false
+comment: false # Disable the comment that is posted on pull requests.
+coverage:
+  status:
+    patch: off # Disable the `codecov/patch` commit status.
+    project: off # Disable the `codecov/project` commit status.
 github_checks:
-    annotations: false
+    annotations: false # Disable the annotations in the "Files Changed" view of a pull request.
