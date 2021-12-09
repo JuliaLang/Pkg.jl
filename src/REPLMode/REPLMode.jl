@@ -651,9 +651,20 @@ Some commands have an alias, indicated below.
 end
 
 const help = gen_help()
+const REG_WARNED = Ref{Bool}(false)
 
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
     ctx = Context()
+    if isempty(ctx.registries)
+        if !REG_WARNED[]
+            printstyled(ctx.io, " │ "; color=:green)
+            printstyled(ctx.io, "Attempted to find missing packages in package registries but no registries are installed.\n")
+            printstyled(ctx.io, " └ "; color=:green)
+            printstyled(ctx.io, "Use package mode to install a registry. `pkg> registry add` will install the default registries.\n\n")
+            REG_WARNED[] = true
+        end
+        return false
+    end
     available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
     available_pkgs = pkgs[isempty.(available_uuids) .== false]
     isempty(available_pkgs) && return false
