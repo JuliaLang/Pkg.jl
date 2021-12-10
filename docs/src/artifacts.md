@@ -228,6 +228,29 @@ Most methods that are affected by overrides have the ability to ignore overrides
 For UUID/name based overrides to work, `Artifacts.toml` files must be loaded with the knowledge of the UUID of the loading package.
 This is deduced automatically by the `artifacts""` string macro, however if you are for some reason manually using the `Pkg.Artifacts` API within your package and you wish to honor overrides, you must provide the package UUID to API calls like `artifact_meta()` and `ensure_artifact_installed()` via the `pkg_uuid` keyword argument.
 
+## Override libraries within a JLL
+
+JLLs are a special type of Julia package that use the artifact system to distribute binaries built with [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil).
+
+Instead of overriding the entire artifact, you can override a particular library within the JLL using [Preferences.jl](https://github.com/JuliaPackaging/Preferences.jl).
+
+For example, assume I have a custom binary for [ecos](https://github.com/embotech/ecos.git) at `/usr/local/lib/libecos`.
+To override the `libecos` `LibraryProduct` of [ECOS_jll](https://github.com/JuliaBinaryWrappers/ECOS_jll.jl), run:
+```julia
+using Preferences
+set_preferences!(
+    "LocalPreferences.toml",
+    "ECOS_jll",
+    "libecos_path" => "/usr/local/lib/libecos",
+)
+```
+Then, when you restart Julia `ECOS_jll` will use the `/usr/local/lib/libecos` library instead of the one provided by the artifact.
+
+!!! warning
+    There are two common cases where this will not work:
+     1. The JLL is part of the [Julia stdlib](https://github.com/JuliaLang/julia/tree/master/stdlib), for example `Zlib_jll`
+     2. The JLL has not been compiled with [JLLWrappers.jl](https://github.com/JuliaPackaging/JLLWrappers.jl) as a dependency, for example, `Gzip_jll`.
+
 ## Extending Platform Selection
 
 !!! compat "Julia 1.6"
