@@ -280,8 +280,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, mode)
+    else
+        require_not_empty(pkgs, :rm)
     end
-    require_not_empty(pkgs, :rm)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -352,8 +353,9 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+    else
+        require_not_empty(pkgs, :pin)
     end
-    require_not_empty(pkgs, :pin)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -383,8 +385,9 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+    else
+        require_not_empty(pkgs, :free)
     end
-    require_not_empty(pkgs, :free)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing

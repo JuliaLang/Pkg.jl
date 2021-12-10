@@ -1868,6 +1868,11 @@ end
         end
         Pkg.rm(all_pkgs = true)
         @test !haskey(Pkg.dependencies(), exuuid)
+
+        # test that the noops don't error
+        Pkg.rm(all_pkgs = true)
+        Pkg.pin(all_pkgs = true)
+        Pkg.free(all_pkgs = true)
     end
     isolate() do
         Pkg.REPLMode.TEST_MODE[] = true
