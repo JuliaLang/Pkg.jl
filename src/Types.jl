@@ -477,50 +477,15 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     # Ensure that log dir exists
     !ispath(logdir()) && mkpath(logdir())
 
+    # Generate entire entry as a string first
+    entry = sprint() do io
+        TOML.print(io, Dict(source_file => [Dict("time" => now())]))
+    end
+
+    # Append entry to log file in one chunk
     usage_file = joinpath(logdir(), usage_filepath)
-    timestamp = now()
-
-    ## Atomically write usage file
-    while true
-        # read existing usage file
-        usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
-        else
-            Dict{String, Any}()
-        end
-
-        # record new usage
-        usage[source_file] = [Dict("time" => timestamp)]
-
-        # keep only latest usage info
-        for k in keys(usage)
-            times = map(d -> Dates.DateTime(d["time"]), usage[k])
-            usage[k] = [Dict("time" => maximum(times))]
-        end
-
-        # Write to a temp file in the same directory as the destination
-        temp_usage_file = tempname(logdir())
-        open(temp_usage_file, "w") do io
-            TOML.print(io, usage, sorted=true)
-        end
-
-        # Move the temp file into place, replacing the original
-        mv(temp_usage_file, usage_file, force = true)
-
-        # Check that the new file has what we want in it
-        new_usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
-        else
-            Dict{String, Any}()
-        end
-        if haskey(new_usage, source_file)
-            for e in new_usage[source_file]
-                if Dates.DateTime(e["time"]) >= timestamp
-                    return
-                end
-            end
-        end
-        # If not, try again
+    open(usage_file, append=true) do io
+        write(io, entry)
     end
 end
 
