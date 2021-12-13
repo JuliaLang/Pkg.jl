@@ -470,7 +470,23 @@ function Context!(ctx::Context; kwargs...)
     return ctx
 end
 
+function env_var_auto_gc()
+    s = get(ENV, "JULIA_PKG_AUTO_GC", "true")
+    b = parse(Bool, s)::Bool
+    return b
+end
+
+function env_var_write_env_usage()
+    s = get(ENV, "JULIA_PKG_WRITE_ENV_USAGE", "true")
+    b = parse(Bool, s)::Bool
+    return b
+end
+
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
+    if !env_var_write_env_usage()
+        return
+    end
+
     # Don't record ghost usage
     !isfile(source_file) && return
 

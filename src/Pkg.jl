@@ -672,7 +672,7 @@ end
 const DEPOT_ORPHANAGE_TIMESTAMPS = Dict{String,Float64}()
 const _auto_gc_enabled = Ref{Bool}(true)
 function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
-    if !_auto_gc_enabled[]
+    if !(_auto_gc_enabled[] && Types.env_var_auto_gc() && Types.env_var_write_env_usage())
         return
     end
 
