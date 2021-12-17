@@ -48,6 +48,10 @@ function Base.:(==)(a::PackageInfo, b::PackageInfo)
         a.source == b.source && a.dependencies == b.dependencies
 end
 
+function package_info(pkg::AbstractString)::PackageInfo
+    dependencies()[Base.identify_package(name).uuid]
+end
+
 function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
     entry = manifest_info(env.manifest, pkg.uuid)
     if entry === nothing
