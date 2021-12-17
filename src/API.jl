@@ -49,7 +49,7 @@ function Base.:(==)(a::PackageInfo, b::PackageInfo)
 end
 
 function package_info(pkg::AbstractString)::PackageInfo
-    dependencies()[Base.identify_package(name).uuid]
+    dependencies()[Base.identify_package(pkg).uuid]
 end
 
 function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
