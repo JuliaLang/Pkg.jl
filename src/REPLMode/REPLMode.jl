@@ -667,6 +667,8 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         return false
     end
     available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
+    filter!(u -> all(!isequal(Operations.JULIA_UUID), u), available_uuids) # "julia" is in General but not installable
+    isempty(available_uuids) && return false
     available_pkgs = pkgs[isempty.(available_uuids) .== false]
     isempty(available_pkgs) && return false
     resp = try
