@@ -679,6 +679,9 @@ end
     isolate(loaded_depot=true) do
         @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
 
+        # don't offer to install the dummy "julia" entry that's in General
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
+
         println(stdin.buffer, "n") # simulate rejecting prompt with `n\n`
         @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
         flush(stdin.buffer)
