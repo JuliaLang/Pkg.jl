@@ -90,7 +90,7 @@ function casesensitive_isdir(dir::String)
     isdir_nothrow(dir) && lastdir in readdir(joinpath(dir, ".."))
 end
 
-bool_env(name::String; default::String="false") =
+get_bool_env(name::String; default::String="false") =
     lowercase(get(ENV, name, default)) in ("t", "true", "y", "yes", "1")
 
 ## ordering of UUIDs ##

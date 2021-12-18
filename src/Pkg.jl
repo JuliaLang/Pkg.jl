@@ -636,7 +636,7 @@ function __init__()
         end
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
-    OFFLINE_MODE[] = bool_env("JULIA_PKG_OFFLINE")
+    OFFLINE_MODE[] = get_bool_env("JULIA_PKG_OFFLINE")
     return nothing
 end
 
@@ -705,7 +705,7 @@ end
 ##################
 
 function _auto_precompile(ctx::Types.Context; warn_loaded = true, already_instantiated = false)
-    if Base.JLOptions().use_compiled_modules == 1 && bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
+    if Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
         Pkg.precompile(ctx; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
