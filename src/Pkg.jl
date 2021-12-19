@@ -558,7 +558,7 @@ function __init__()
             end
         end
     end
-    OFFLINE_MODE[] = get(ENV, "JULIA_PKG_OFFLINE", nothing) == "true"
+    OFFLINE_MODE[] = get_bool_env("JULIA_PKG_OFFLINE")
     return nothing
 end
 
@@ -592,7 +592,7 @@ end
 ##################
 
 function _auto_precompile(ctx::Types.Context; warn_loaded = true)
-    if Base.JLOptions().use_compiled_modules == 1 && tryparse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
+    if Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
         Pkg.precompile(ctx; internal_call=true, warn_loaded = warn_loaded)
     end
 end

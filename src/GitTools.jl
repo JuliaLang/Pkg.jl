@@ -5,12 +5,13 @@ module GitTools
 using ..Pkg
 import ..Pkg: can_fancyprint
 using ..Pkg.MiniProgressBars
+import ..get_bool_env
 using SHA
 import Base: SHA1
 import LibGit2
 using Printf
 
-use_cli_git() = get(ENV, "JULIA_PKG_USE_CLI_GIT", "") == "true"
+use_cli_git() = get_bool_env("JULIA_PKG_USE_CLI_GIT")
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
