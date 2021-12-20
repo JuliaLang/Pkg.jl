@@ -49,7 +49,7 @@ function Base.:(==)(a::PackageInfo, b::PackageInfo)
 end
 
 function package_info(pkg::AbstractString)::PackageInfo
-    dependencies()[Base.identify_package(pkg).uuid]
+    filter(p -> p.second.name == pkg, dependencies()) |> values |> only
 end
 
 function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
