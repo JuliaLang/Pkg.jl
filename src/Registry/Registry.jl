@@ -40,6 +40,7 @@ Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.
 """
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
+add(; kwargs...) = add(RegistrySpec[]; kwargs...)
 function add(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     if isempty(regs)
         download_default_registries(io, only_if_empty = false)
