@@ -321,7 +321,6 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true,
             skip_writing_project::Bool=false,
-            silent_no_change::Bool=false,
             kwargs...)
     Context!(ctx; kwargs...)
     if update_registry
@@ -338,7 +337,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx.env.manifest, pkgs)
     end
-    Operations.up(ctx, pkgs, level; skip_writing_project, silent_no_change)
+    Operations.up(ctx, pkgs, level; skip_writing_project)
     return
 end
 
