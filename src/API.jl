@@ -1502,9 +1502,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Types.check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
 
     if Operations.is_manifest_current(ctx.env) === false
-        @warn """The project and manifest may be out of sync as either project dependencies have been \
-        added/removed or compat entries have changed since the manifest was last resolved.
-        Try `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
+        @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
+        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
     end
 
     Operations.prune_manifest(ctx.env)

@@ -2006,9 +2006,8 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
         print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, silent_no_change)
     end
     if is_manifest_current(env) === false
-        printpkgstyle(io, :Warning, """The project and manifest may be out of sync as either project dependencies have been \
-        added/removed or compat entries have changed since the manifest was last resolved. \
-        Try `Pkg.resolve()` or consider `Pkg.update()` if necessary.""", ignore_indent; color=Base.warn_color())
+        printpkgstyle(io, :Warning, """The project dependencies or compat requirements have changed since the manifest was last resolved. \
+        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary.""", ignore_indent; color=Base.warn_color())
     end
 end
 
