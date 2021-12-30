@@ -1038,7 +1038,6 @@ precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkg
 function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
     Context!(ctx; kwargs...)
-    internal_call || resolve(ctx, silent_no_change = true)
     already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
 
