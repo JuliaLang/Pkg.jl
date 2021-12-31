@@ -1894,7 +1894,6 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if Types.is_project_uuid(env, uuid)
             continue
         end
-        longest_name_length = max(length(something(old, new).name), longest_name_length)
         latest_version = true
         # Outdated info
         cinfo = nothing
@@ -1909,6 +1908,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if outdated && latest_version
             continue
         end
+        longest_name_length = max(length(something(old, new).name), longest_name_length)
 
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
 
