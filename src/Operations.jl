@@ -1922,7 +1922,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
         diff ? print_diff(io, pkg.old, pkg.new, longest_name_length) : print_single(io, pkg.new, longest_name_length)
 
-        if !latest_version && !diff
+        if !latest_version && !diff && !Operations.is_tracking_repo(pkg.new) && !Operations.is_tracking_path(pkg.new)
             packages_holding_back, _ = pkg.compat_data
             if isempty(packages_holding_back)
                 print(io, " ⌃")
