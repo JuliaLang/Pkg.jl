@@ -1715,8 +1715,8 @@ end
 
 # Display
 
-function stat_rep(x::PackageSpec; name=true)
-    name = name ? "$(x.name)" : ""
+function stat_rep(x::PackageSpec; name=true, pad_length=0)
+    name = name ? "$(rpad(x.name, pad_length))" : ""
     version = x.version == VersionSpec() ? "" : "v$(x.version)"
     rev = ""
     if x.repo.rev !== nothing
@@ -1729,25 +1729,25 @@ function stat_rep(x::PackageSpec; name=true)
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
 end
 
-print_single(io::IO, pkg::PackageSpec) = print(io, stat_rep(pkg))
+print_single(io::IO, pkg::PackageSpec, pad_length::Int) = print(io, stat_rep(pkg; pad_length))
 
 is_instantiated(::Nothing) = false
 is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)
 # Compare an old and new node of the dependency graph and print a single line to summarize the change
-function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec})
+function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec}, pad_length::Int)
     if !is_instantiated(old) && is_instantiated(new)
-        printstyled(io, "+ $(stat_rep(new))"; color=:light_green)
+        printstyled(io, "+ $(stat_rep(new; pad_length))"; color=:light_green)
     elseif !is_instantiated(new)
-        printstyled(io, "- $(stat_rep(old))"; color=:light_red)
+        printstyled(io, "- $(stat_rep(old; pad_length))"; color=:light_red)
     elseif is_tracking_registry(old) && is_tracking_registry(new) &&
            new.version isa VersionNumber && old.version isa VersionNumber && new.version != old.version
         if new.version > old.version
-            printstyled(io, "↑ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
+            printstyled(io, "↑ $(stat_rep(old; pad_length)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
         else
-            printstyled(io, "↓ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_magenta)
+            printstyled(io, "↓ $(stat_rep(old; pad_length)) ⇒ $(stat_rep(new; name=false))"; color=:light_magenta)
         end
     else
-        printstyled(io, "~ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
+        printstyled(io, "~ $(stat_rep(old; pad_length)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
     end
 end
 
@@ -1888,22 +1888,21 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     xs = sort!(xs, by = (x -> (is_stdlib(x[1]), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
     all_packages_downloaded = true
 
+    longest_name_length = 0
     package_statuses = PackageStatusData[]
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
             continue
         end
-
+        longest_name_length = max(length(something(old, new).name), longest_name_length)
         latest_version = true
         # Outdated info
         cinfo = nothing
-        if outdated
-            if diff == false && !is_stdlib(new.uuid)
-                @assert old == nothing
-                cinfo = status_compat_info(new, env, registries)
-                if cinfo !== nothing
-                    latest_version = false
-                end
+        if diff == false && !is_stdlib(new.uuid)
+            @assert old == nothing
+            cinfo = status_compat_info(new, env, registries)
+            if cinfo !== nothing
+                latest_version = false
             end
         end
         # if we are running with outdated, only show packages that are upper bounded
@@ -1921,7 +1920,12 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         latest_version = pkg.compat_data === nothing
         print(io, pkg.downloaded ? " " : not_installed_indicator)
         printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
-        diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
+        diff ? print_diff(io, pkg.old, pkg.new, longest_name_length) : print_single(io, pkg.new, longest_name_length)
+
+        if !latest_version && !diff
+            packages_holding_back, _ = pkg.compat_data
+            print(io, isempty(packages_holding_back) ? " ⌃" : " ⌅")
+        end
         if outdated && !diff && pkg.compat_data !== nothing
             packages_holding_back, max_version, max_version_compat = pkg.compat_data
             if pkg.new.version !== max_version_compat && max_version_compat != max_version
