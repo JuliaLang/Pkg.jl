@@ -1773,6 +1773,8 @@ function compat(ctx::Context; io = nothing)
     end
     new_entry = strip(resp)
     compat(ctx, dep, string(new_entry))
+    printpkgstyle(io, :Resolve, "checking for complance with the new compat rules")
+    resolve(ctx)
     return
 end
 function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io = nothing, kwargs...)
@@ -1788,6 +1790,8 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         else
             printpkgstyle(io, :Compat, "entry set:\n  $(pkg) = $(repr(compat_str))")
         end
+        printpkgstyle(io, :Resolve, "checking for compliance with the new compat rules")
+        resolve(ctx)
         return
     else
         pkgerror("No package named $pkg in current Project")
