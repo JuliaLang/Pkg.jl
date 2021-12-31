@@ -1915,6 +1915,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         all_packages_downloaded &= pkg_downloaded
         push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, cinfo))
     end
+    no_packages_upgradable = true
     no_packages_held_back = true
     for pkg in package_statuses
         latest_version = pkg.compat_data === nothing
@@ -1925,6 +1926,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if !latest_version && !diff && !Operations.is_tracking_repo(pkg.new) && !Operations.is_tracking_path(pkg.new)
             packages_holding_back, _ = pkg.compat_data
             if isempty(packages_holding_back)
+                no_packages_upgradable = false
                 print(io, " ⌃")
             else
                 no_packages_held_back = false
@@ -1951,8 +1953,14 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     if !all_packages_downloaded
         printpkgstyle(io, :Info, "packages marked with $not_installed_indicator not downloaded, use `instantiate` to download", ignore_indent)
     end
-    if !no_packages_held_back
-        printpkgstyle(io, :Info, "packages marked with ⌅ have new versions available that cannot be installed. To see why use `status --outdated`", ignore_indent)
+    if !no_packages_upgradable && no_packages_held_back
+        printpkgstyle(io, :Info, "packages marked with ⌃ have new versions available", ignore_indent)
+    end
+    if !no_packages_held_back && no_packages_upgradable
+        printpkgstyle(io, :Info, "packages marked with ⌅ have new versions available but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+    end
+    if !no_packages_held_back && !no_packages_upgradable
+        printpkgstyle(io, :Info, "packages marked with ⌃ and ⌅ have new versions available, but those with ⌅ cannot be upgraded. To see why use `status --outdated`", ignore_indent)
     end
 
     return nothing
