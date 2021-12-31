@@ -175,23 +175,24 @@ end
                 Pkg.compat("Example", "0.4")
                 @test Pkg.is_manifest_current() === false
                 Pkg.status(io = iob)
-                @test occursin("The project and manifest may be out of sync", String(take!(iob)))
-                @test_logs (:warn, r"The project and manifest may be out of sync") Pkg.instantiate()
+                sync_msg_str = r"The project dependencies or compat requirements have changed since the manifest was last resolved."
+                @test occursin(sync_msg_str, String(take!(iob)))
+                @test_logs (:warn, sync_msg_str) Pkg.instantiate()
 
                 Pkg.update()
                 @test Pkg.is_manifest_current() === true
                 Pkg.status(io = iob)
-                @test !occursin("The project and manifest may be out of sync", String(take!(iob)))
+                @test !occursin(sync_msg_str, String(take!(iob)))
 
                 Pkg.compat("Example", "0.5")
                 Pkg.status(io = iob)
-                @test occursin("The project and manifest may be out of sync", String(take!(iob)))
-                @test_logs (:warn, r"The project and manifest may be out of sync") Pkg.instantiate()
+                @test occursin(sync_msg_str, String(take!(iob)))
+                @test_logs (:warn, sync_msg_str) Pkg.instantiate()
 
                 Pkg.rm("Example")
                 @test Pkg.is_manifest_current() === true
                 Pkg.status(io = iob)
-                @test !occursin("The project and manifest may be out of sync", String(take!(iob)))
+                @test !occursin(sync_msg_str, String(take!(iob)))
             end
         end
     end

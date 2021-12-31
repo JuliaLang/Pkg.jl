@@ -219,9 +219,11 @@ end
 
         ## Tests when circularity goes through the active project
         Pkg.activate("CircularDep1")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
         Pkg.activate(".")
         Pkg.activate("CircularDep2")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
         Pkg.activate(".")
         Pkg.activate("CircularDep3")

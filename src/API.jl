@@ -321,7 +321,6 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true,
             skip_writing_project::Bool=false,
-            silent_no_change::Bool=false,
             kwargs...)
     Context!(ctx; kwargs...)
     if update_registry
@@ -338,7 +337,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx.env.manifest, pkgs)
     end
-    Operations.up(ctx, pkgs, level; skip_writing_project, silent_no_change)
+    Operations.up(ctx, pkgs, level; skip_writing_project)
     return
 end
 
@@ -1038,7 +1037,6 @@ precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkg
 function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
     Context!(ctx; kwargs...)
-    internal_call || resolve(ctx, silent_no_change = true)
     already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
 
@@ -1503,9 +1501,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Types.check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
 
     if Operations.is_manifest_current(ctx.env) === false
-        @warn """The project and manifest may be out of sync as either project dependencies have been \
-        added/removed or compat entries have changed since the manifest was last resolved.
-        Try `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
+        @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
+        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
     end
 
     Operations.prune_manifest(ctx.env)
