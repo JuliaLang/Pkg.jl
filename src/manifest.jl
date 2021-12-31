@@ -285,7 +285,8 @@ end
 function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     if manifest.manifest_format.major == 1
         @warn """The active manifest file at `$(manifest_file)` has an old format that is being maintained.
-            To update to the new format run `Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.""" maxlog = 1 _id = Symbol(manifest_file)
+            To update to the new format run `Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.
+            To then record the julia version re-resolve with `Pkg.resolve()` and if there are resolve conflicts consider `Pkg.update()`.""" maxlog = 1 _id = Symbol(manifest_file)
     end
     return write_manifest(destructure(manifest), manifest_file)
 end
