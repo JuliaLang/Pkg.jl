@@ -1715,9 +1715,9 @@ end
 
 # Display
 
-function stat_rep(x::PackageSpec; name=true, pad_length=0)
-    name = name ? "$(rpad(x.name, pad_length))" : ""
-    version = x.version == VersionSpec() ? "" : "v$(x.version)"
+function stat_rep(x::PackageSpec; name=true, pad_name=0, pad_version=0)
+    name = name ? "$(rpad(x.name, pad_name))" : ""
+    version = rpad(x.version == VersionSpec() ? "" : "v$(x.version)", pad_version)
     rev = ""
     if x.repo.rev !== nothing
         rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
@@ -1729,25 +1729,25 @@ function stat_rep(x::PackageSpec; name=true, pad_length=0)
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
 end
 
-print_single(io::IO, pkg::PackageSpec, pad_length::Int) = print(io, stat_rep(pkg; pad_length))
+print_single(io::IO, pkg::PackageSpec, pad_name::Int, pad_version::Int) = print(io, stat_rep(pkg; pad_name, pad_version))
 
 is_instantiated(::Nothing) = false
 is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)
 # Compare an old and new node of the dependency graph and print a single line to summarize the change
-function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec}, pad_length::Int)
+function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec}, pad_name::Int, pad_version::Int)
     if !is_instantiated(old) && is_instantiated(new)
-        printstyled(io, "+ $(stat_rep(new; pad_length))"; color=:light_green)
+        printstyled(io, "+ $(stat_rep(new; pad_name, pad_version))"; color=:light_green)
     elseif !is_instantiated(new)
-        printstyled(io, "- $(stat_rep(old; pad_length))"; color=:light_red)
+        printstyled(io, "- $(stat_rep(old; pad_name, pad_version))"; color=:light_red)
     elseif is_tracking_registry(old) && is_tracking_registry(new) &&
            new.version isa VersionNumber && old.version isa VersionNumber && new.version != old.version
         if new.version > old.version
-            printstyled(io, "↑ $(stat_rep(old; pad_length)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
+            printstyled(io, "↑ $(stat_rep(old; pad_name, pad_version)) ⇒ $(stat_rep(new; name=false, pad_version))"; color=:light_yellow)
         else
-            printstyled(io, "↓ $(stat_rep(old; pad_length)) ⇒ $(stat_rep(new; name=false))"; color=:light_magenta)
+            printstyled(io, "↓ $(stat_rep(old; pad_name, pad_version)) ⇒ $(stat_rep(new; name=false, pad_version))"; color=:light_magenta)
         end
     else
-        printstyled(io, "~ $(stat_rep(old; pad_length)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
+        printstyled(io, "~ $(stat_rep(old; pad_name, pad_version)) ⇒ $(stat_rep(new; name=false, pad_version))"; color=:light_yellow)
     end
 end
 
@@ -1889,6 +1889,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     all_packages_downloaded = true
 
     longest_name_length = 0
+    longest_version_length = 0
     package_statuses = PackageStatusData[]
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
@@ -1909,6 +1910,9 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             continue
         end
         longest_name_length = max(length(something(old, new).name), longest_name_length)
+        v = something(old, new).version
+        v_str = v == VersionSpec() ? "" : "v$(v)"
+        longest_version_length = max(length(v_str), longest_version_length)
 
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
 
@@ -1921,7 +1925,11 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         latest_version = pkg.compat_data === nothing
         print(io, pkg.downloaded ? " " : not_installed_indicator)
         printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
-        diff ? print_diff(io, pkg.old, pkg.new, longest_name_length) : print_single(io, pkg.new, longest_name_length)
+        if diff
+            print_diff(io, pkg.old, pkg.new, longest_name_length, longest_version_length)
+        else
+            print_single(io, pkg.new, longest_name_length, longest_version_length)
+        end
 
         if !latest_version && !diff && !Operations.is_tracking_repo(pkg.new) && !Operations.is_tracking_path(pkg.new)
             packages_holding_back, _ = pkg.compat_data
