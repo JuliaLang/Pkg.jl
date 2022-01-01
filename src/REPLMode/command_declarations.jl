@@ -364,14 +364,17 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
-Show the status of the current environment. In `--project` mode (default), the
-status of the project file is summarized. In `--manifest` mode the output also
-includes the recursive dependencies of added packages given in the manifest.
+Show the status of the current environment.
+Packages marked with `⌃` have new versions that can be installed, e.g. via `pkg> up`.
+Those marked with `⌅` have new versions available, but that cannot be installed. To see why
+use `pkg> status --outdated` which shows any packages that are not at their latest version
+and if any packages are holding them back.
+
+In `--project` mode (default), the status of the project file is summarized. In `--manifest`
+mode the output also includes the recursive dependencies of added packages given in the manifest.
 If there are any packages listed as arguments the output will be limited to those packages.
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
-The `--outdated` option in addition show if some packages are not at their latest version
-and what packages are holding them back.
 The `--compat` option alone shows project compat entries.
 
 !!! compat "Julia 1.1"
@@ -382,6 +385,7 @@ The `--compat` option alone shows project compat entries.
     is the default for environments in git repositories.
 
 !!! compat "Julia 1.8"
+    The `⌃` and `⌅` indicators were added in Julia 1.8
     The `--outdated` and `--compat` options require at least Julia 1.8.
 """,
 ],
