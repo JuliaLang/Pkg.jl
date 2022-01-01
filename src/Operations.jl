@@ -1715,9 +1715,16 @@ end
 
 # Display
 
-function stat_rep(x::PackageSpec; name=true, pad_name=0, pad_version=0)
+function stat_rep(x::PackageSpec; name=true, pad_name=0, pad_version=0, upgradable=false, heldback=false)
     name = name ? "$(rpad(x.name, pad_name))" : ""
-    version = rpad(x.version == VersionSpec() ? "" : "v$(x.version)", pad_version)
+    version = x.version == VersionSpec() ? "" : "v$(x.version)"
+    if upgradable
+        version = string(version, " ⌃")
+    end
+    if heldback
+        version = string(version, " ⌅")
+    end
+    version = rpad(version, pad_version)
     rev = ""
     if x.repo.rev !== nothing
         rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
@@ -1729,7 +1736,9 @@ function stat_rep(x::PackageSpec; name=true, pad_name=0, pad_version=0)
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
 end
 
-print_single(io::IO, pkg::PackageSpec, pad_name::Int, pad_version::Int) = print(io, stat_rep(pkg; pad_name, pad_version))
+function print_single(io::IO, pkg::PackageSpec, pad_name::Int, pad_version::Int, upgradable::Bool, heldback::Bool)
+    print(io, stat_rep(pkg; pad_name, pad_version, upgradable, heldback))
+end
 
 is_instantiated(::Nothing) = false
 is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)
@@ -1910,9 +1919,15 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             continue
         end
         longest_name_length = max(length(something(old, new).name), longest_name_length)
+
         v = something(old, new).version
         v_str = v == VersionSpec() ? "" : "v$(v)"
-        longest_version_length = max(length(v_str), longest_version_length)
+        longest_version_length = if !latest_version && !diff && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
+            # if an updatable indicator will be shown
+            max(length(v_str) + 2, longest_version_length)
+        else
+            max(length(v_str), longest_version_length)
+        end
 
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
 
@@ -1925,22 +1940,24 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         latest_version = pkg.compat_data === nothing
         print(io, pkg.downloaded ? " " : not_installed_indicator)
         printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
-        if diff
-            print_diff(io, pkg.old, pkg.new, longest_name_length, longest_version_length)
-        else
-            print_single(io, pkg.new, longest_name_length, longest_version_length)
-        end
-
+        upgradable, heldback = false, false
         if !latest_version && !diff && !Operations.is_tracking_repo(pkg.new) && !Operations.is_tracking_path(pkg.new)
             packages_holding_back, _ = pkg.compat_data
             if isempty(packages_holding_back)
+                upgradable = true
                 no_packages_upgradable = false
-                print(io, " ⌃")
             else
+                heldback = true
                 no_packages_held_back = false
-                print(io, " ⌅")
             end
         end
+
+        if diff
+            print_diff(io, pkg.old, pkg.new, longest_name_length, longest_version_length)
+        else
+            print_single(io, pkg.new, longest_name_length, longest_version_length, upgradable, heldback)
+        end
+
         if outdated && !diff && pkg.compat_data !== nothing
             packages_holding_back, max_version, max_version_compat = pkg.compat_data
             if pkg.new.version !== max_version_compat && max_version_compat != max_version
