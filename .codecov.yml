@@ -1,10 +1,10 @@
 comment: false # Disable the comment that is posted on pull requests.
 coverage:
   status:
-    patch: off
+    patch:
       default:
         only_pulls: true # Only show the `codecov/patch` commit status on pull requests.
-    project: off
+    project:
       default:
         only_pulls: true # Only show the `codecov/project` commit status on pull requests.
 github_checks:
