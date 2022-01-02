@@ -64,6 +64,13 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"add Example,Random"
     pkg"rm Example,Random"
     pkg"add Example#master"
+    pkg"rm Example"
+    pkg"add https://github.com/JuliaLang/Example.jl#master"
+    pkg"rm Example"
+    pkg"add git@github.com:JuliaLang/Example.jl.git"
+    pkg"rm Example"
+    pkg"add \"git@github.com:JuliaLang/Example.jl.git\"#master"
+    pkg"rm Example"
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)
     entry = Pkg.Types.manifest_info(EnvCache().manifest, TEST_PKG.uuid)
