@@ -5,21 +5,26 @@
 module PlatformEngines
 
 using SHA, Downloads, Tar
-import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint
+import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f
 using ..MiniProgressBars
-using Base.BinaryPlatforms
+using Base.BinaryPlatforms, p7zip_jll
 
-export probe_platform_engines!, verify, unpack, package, download_verify_unpack
+export verify, unpack, package, download_verify_unpack
 
 const EXE7Z_LOCK = ReentrantLock()
 const EXE7Z = Ref{String}()
 
 function exe7z()
+    # If the JLL is available, use the wrapper function defined in there
+    if p7zip_jll.is_available()
+        return p7zip_jll.p7zip()
+    end
+
     lock(EXE7Z_LOCK) do
         if !isassigned(EXE7Z)
             EXE7Z[] = find7z()
         end
-        return EXE7Z[]
+        return Cmd([EXE7Z[]])
     end
 end
 
@@ -27,7 +32,7 @@ function find7z()
     name = "7z"
     Sys.iswindows() && (name = "$name.exe")
     for dir in (joinpath("..", "libexec"), ".")
-        path = normpath(Sys.BINDIR, dir, name)
+        path = normpath(Sys.BINDIR::String, dir, name)
         isfile(path) && return path
     end
     path = Sys.which(name)
@@ -35,14 +40,13 @@ function find7z()
     error("7z binary not found")
 end
 
-function probe_platform_engines!(;verbose::Bool = false)
-    # don't do anything
-end
-
 is_secure_url(url::AbstractString) =
     occursin(r"^(https://|\w+://(127\.0\.0\.1|localhost)(:\d+)?($|/))"i, url)
 
-function get_server_dir(url::AbstractString, server=pkg_server())
+function get_server_dir(
+    url :: AbstractString,
+    server :: Union{AbstractString, Nothing} = pkg_server(),
+)
     server === nothing && return
     url == server || startswith(url, "$server/") || return
     m = match(r"^\w+://([^\\/]+)(?:$|/)", server)
@@ -50,6 +54,7 @@ function get_server_dir(url::AbstractString, server=pkg_server())
         @warn "malformed Pkg server value" server
         return
     end
+    isempty(Base.DEPOT_PATH) && return
     joinpath(depots1(), "servers", String(m.captures[1]))
 end
 
@@ -228,6 +233,17 @@ function get_metadata_headers(url::AbstractString)
     end
     push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
     push!(headers, "Julia-Interactive" => string(isinteractive()))
+    for (key, val) in ENV
+        m = match(r"^JULIA_PKG_SERVER_([A-Z0-9_]+)$"i, key)
+        m === nothing && continue
+        val = strip(val)
+        isempty(val) && continue
+        words = split(m.captures[1], '_', keepempty=false)
+        isempty(words) && continue
+        hdr = "Julia-" * join(map(titlecase, words), '-')
+        any(hdr == k for (k, v) in headers) && continue
+        push!(headers, hdr => val)
+    end
     return headers
 end
 
@@ -237,6 +253,7 @@ function download(
     verbose::Bool = false,
     headers::Vector{Pair{String,String}} = Pair{String,String}[],
     auth_header::Union{Pair{String,String}, Nothing} = nothing,
+    io::IO=stderr_f()
 )
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
@@ -248,7 +265,6 @@ function download(
         push!(headers, header)
     end
 
-    io = stderr
     do_fancy = verbose && can_fancyprint(io)
     progress = if do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
@@ -264,7 +280,7 @@ function download(
     try
         Downloads.download(url, dest; headers, progress)
     finally
-        do_fancy && end_progress(stderr, bar)
+        do_fancy && end_progress(io, bar)
     end
 end
 
@@ -369,14 +385,6 @@ function unpack(
     Tar.extract(`$(exe7z()) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
 end
 
-function list_tarball_files(tarball_path::AbstractString)
-    names = String[]
-    Tar.list(`$(exe7z()) x $tarball_path -so`) do hdr
-        push!(names, hdr.path)
-    end
-    return names
-end
-
 """
     package(src_dir::AbstractString, tarball_path::AbstractString)
 
@@ -400,6 +408,7 @@ end
         force::Bool = false,
         verbose::Bool = false,
         quiet_download::Bool = false,
+        io::IO=stderr,
     )
 
 Helper method to download tarball located at `url`, verify it matches the
@@ -434,6 +443,7 @@ function download_verify_unpack(
     force::Bool = false,
     verbose::Bool = false,
     quiet_download::Bool = false,
+    io::IO=stderr_f(),
 )
     # First, determine whether we should keep this tarball around
     remove_tarball = false

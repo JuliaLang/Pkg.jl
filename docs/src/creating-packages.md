@@ -3,7 +3,7 @@
 A package is a project with a `name`, `uuid` and `version` entry in the `Project.toml` file, and a `src/PackageName.jl` file that defines the module `PackageName`.
 This file is executed when the package is loaded.
 
-### Generating files for a package
+## Generating files for a package
 
 !!! note
     The [PkgTemplates](https://github.com/invenia/PkgTemplates.jl) package offers a very easy, repeatable, and 
@@ -62,7 +62,7 @@ julia> HelloWorld.greet()
 Hello World!
 ```
 
-### Adding dependencies to the project
+## Adding dependencies to the project
 
 Let’s say we want to use the standard library package `Random` and the registered package `JSON` in our project.
 We simply `add` these packages (note how the prompt now shows the name of the newly generated project,
@@ -105,7 +105,7 @@ julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
 
-### Adding a build step to the package
+## Adding a build step to the package
 
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
 A package is built by executing the file `deps/build.jl`.
@@ -145,7 +145,7 @@ error("Ooops")
 └ @ Pkg.Operations Operations.jl:938
 ```
 
-### Adding tests to the package
+## Adding tests to the package
 
 When a package is tested the file `test/runtests.jl` is executed:
 
@@ -163,7 +163,7 @@ Testing...
 Tests are run in a new Julia process, where the package itself, and any
 test-specific dependencies, are available, see below.
 
-#### Test-specific dependencies in Julia 1.2 and above
+### Test-specific dependencies in Julia 1.2 and above
 
 !!! compat "Julia 1.2"
     This section only applies to Julia 1.2 and above. For specifying test dependencies
@@ -218,7 +218,7 @@ using Test
    Testing HelloWorld tests passed```
 ```
 
-#### Test-specific dependencies in Julia 1.0 and 1.1
+### Test-specific dependencies in Julia 1.0 and 1.1
 
 !!! note
     The method of adding test-specific dependencies described in this section will
@@ -238,7 +238,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Markdown", "Test"]
 ```
 
-### Package naming guidelines
+## Package naming guidelines
 
 Package names should be sensible to most Julia users, *even to those who are not domain experts*.
 The following guidelines applies to the `General` registry, but may be useful for other package
@@ -283,8 +283,31 @@ may fit your package better.
 7. Avoid naming a package closely to an existing package
      * `Websocket` is too close to `WebSockets` and can be confusing to users. Rather use a new name such as `SimpleWebsockets`.
 
-### Registering packages
+## Registering packages
 
-Once a package is ready it can be registered with the [General Registry](https://github.com/JuliaRegistries/General).
+Once a package is ready it can be registered with the [General Registry](https://github.com/JuliaRegistries/General#registering-a-package-in-general) (see also the [FAQ](https://github.com/JuliaRegistries/General#faq)).
 Currently packages are submitted via [`Registrator`](https://juliaregistrator.github.io/).
-In addition to `Registrator`, [`TagBot`](https://github.com/apps/julia-tagbot) helps manage the process of tagging releases.
+In addition to `Registrator`, [`TagBot`](https://github.com/marketplace/actions/julia-tagbot) helps manage the process of tagging releases.
+
+## Best Practices
+
+Packages should avoid mutating their own state (writing to files within their package directory).
+Packages should, in general, not assume that they are located in a writable location (e.g. if installed as part of a system-wide depot) or even a stable one (e.g. if they are bundled into a system image by [PackageCompiler.jl](https://github.com/JuliaLang/PackageCompiler.jl)).
+To support the various usecases in the Julia package ecosystem, the Pkg developers have created a number of auxilliary packages and techniques to help package authors create self-contained, immutable and relocatable packages:
+
+* [`Artifacts`](https://pkgdocs.julialang.org/v1/artifacts/) can be used to bundle chunks of data alongside your package, or even allow them to be downloaded on-demand.
+  Prefer artifacts over attempting to open a file via a path such as `joinpath(@__DIR__, "data", "my_dataset.csv")` as this is non-relocatable.
+  Once your package has been precompiled, the result of `@__DIR__` will have been baked into your precompiled package data, and if you attempt to distribute this package, it will attempt to load files at the wrong location.
+  Artifacts can be bundled and accessed easily using the `artifact"name"` string macro.
+  Artifacts are available from Julia 1.3 onward.
+
+* [`Scratch.jl`](https://github.com/JuliaPackaging/Scratch.jl) provides the notion of "scratch spaces", mutable containers of data for packages.
+  Scratch spaces are designed for data caches that are completely managed by a package and should be removed when the package itself is uninstalled.
+  For important user-generated data, packages should continue to write out to a user-specified path that is not managed by Julia or Pkg.
+  Scratch is usable from Julia 1.5 onward.
+  
+* [`Preferences.jl`](https://github.com/JuliaPackaging/Preferences.jl) allows packages to read and write preferences to the top-level `Project.toml`.
+  These preferences can be read at runtime or compile-time, to enable or disable different aspects of package behavior.
+  Packages previously would write out files to their own package directories to record options set by the user or environment, but this is highly discouraged now that `Preferences` is available.
+  Preferences are available from Juilia 1.6 onward.
+ 

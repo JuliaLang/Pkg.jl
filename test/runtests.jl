@@ -4,6 +4,12 @@ module PkgTests
 
 import Pkg
 
+using Test
+
+@testset "Test that we have imported the correct package" begin
+    @test realpath(dirname(dirname(Base.pathof(Pkg)))) == realpath(dirname(@__DIR__))
+end
+
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
 
 if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
@@ -11,26 +17,31 @@ if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
     @info "Pkg Server metadata:\n$s"
 end
 
-# Make sure to not start with an outdated registry
-rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
-
-
 Pkg.DEFAULT_IO[] = IOBuffer()
 
 include("utils.jl")
-include("new.jl")
-include("pkg.jl")
-include("repl.jl")
-include("api.jl")
-include("registry.jl")
-include("subdir.jl")
-include("artifacts.jl")
-include("binaryplatforms.jl")
-include("platformengines.jl")
-include("sandbox.jl")
-include("resolve.jl")
 
-# clean up locally cached registry
-rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
+@testset "Pkg" begin
+    @testset "$f" for f in [
+        "new.jl",
+        "pkg.jl",
+        "repl.jl",
+        "pkg.jl",
+        "repl.jl",
+        "api.jl",
+        "registry.jl",
+        "subdir.jl",
+        "artifacts.jl",
+        "binaryplatforms.jl",
+        "platformengines.jl",
+        "sandbox.jl",
+        "resolve.jl",
+        "misc.jl",
+        "force_latest_compatible_version.jl",
+        "manifests.jl",
+        ]
+        include(f)
+    end
+end
 
 end # module

@@ -227,3 +227,77 @@ Note that while that hash was previously overridden, it is no longer, and theref
 Most methods that are affected by overrides have the ability to ignore overrides by setting `honor_overrides=false` as a keyword argument within them.
 For UUID/name based overrides to work, `Artifacts.toml` files must be loaded with the knowledge of the UUID of the loading package.
 This is deduced automatically by the `artifacts""` string macro, however if you are for some reason manually using the `Pkg.Artifacts` API within your package and you wish to honor overrides, you must provide the package UUID to API calls like `artifact_meta()` and `ensure_artifact_installed()` via the `pkg_uuid` keyword argument.
+
+## Extending Platform Selection
+
+!!! compat "Julia 1.7"
+    Pkg's extended platform selection requires at least Julia 1.7, and is considered experimental.
+
+New in Julia 1.6, `Platform` objects can have extended attributes applied to them, allowing artifacts to be tagged with things such as CUDA driver version compatibility, microarchitectural compatibility, julia version compatibility and more!
+Note that this feature is considered experimental and may change in the future.
+If you as a package developer find yourself needing this feature, please get in contact with us so it can evolve for the benefit of the whole ecosystem.
+In order to support artifact selection at `Pkg.add()` time, `Pkg` will run the specially-named file `<project_root>/.pkg/select_artifacts.jl`, passing the current platform triplet as the first arugment.
+This artifact selection script should print a `TOML`-serialized dictionary representing the artifacts that this package needs according to the given platform, and performing any inspection of the system as necessary to auto-detect platform capabilities, if they are not explicitly provided by the given platform triplet.
+The format of the dictionary should match that returned from `Artifacts.select_downloadable_artifacts()`, and indeed most packages should simply call that function with an augmented `Platform` object.
+An example artifact selection hook definition might look like the following, split across two files:
+
+```julia
+# .pkg/platform_augmentation.jl
+using Libdl, Base.BinaryPlatforms
+function augment_platform!(p::Platform)
+    # If this platform object already has a `cuda` tag set, don't augment
+    if haskey(p, "cuda")
+        return p
+    end
+
+    # Open libcuda explicitly, so it gets `dlclose()`'ed after we're done
+    dlopen("libcuda") do lib
+        # find symbol to ask for driver version; if we can't find it, just silently continue
+        cuDriverGetVersion = dlsym(lib, "cuDriverGetVersion"; throw_error=false)
+        if cuDriverGetVersion !== nothing
+            # Interrogate CUDA driver for driver version:
+            driverVersion = Ref{Cint}()
+            ccall(cuDriverGetVersion, UInt32, (Ptr{Cint},), driverVersion)
+
+            # Store only the major version
+            p["cuda"] = div(driverVersion, 1000)
+        end
+    end
+
+    # Return possibly-altered `Platform` object
+    return p
+end
+```
+
+```julia
+using TOML, Artifacts, Base.BinaryPlatforms
+include("./platform_augmentation.jl")
+artifacts_toml = joinpath(dirname(@__DIR__), "Artifacts.toml")
+
+# Get "target triplet" from ARGS, if given (defaulting to the host triplet otherwise)
+target_triplet = get(ARGS, 1, Base.BinaryPlatforms.host_triplet())
+
+# Augment this platform object with any special tags we require
+platform = augment_platform!(HostPlatform(parse(Platform, target_triplet)))
+
+# Select all downloadable artifacts that match that platform
+artifacts = select_downloadable_artifacts(artifacts_toml; platform)
+
+# Output the result to `stdout` as a TOML dictionary
+TOML.print(stdout, artifacts)
+```
+
+In this hook definition, our platform augmentation routine opens a system library (`libcuda`), searches it for a symbol to give us the CUDA driver version, then embeds the major version of that version number into the `cuda` property of the `Platform` object we are augmenting.
+While it is not critical for this code to actually attempt to close the loaded library (as it will most likely be opened again by the CUDA package immediately after the package operations are completed) it is best practice to make hooks as lightweight and transparent as possible, as they may be used by other Pkg utilities in the future.
+In your own package, you should also use augmented platform objects when using the `@artifact_str` macro, as follows:
+
+```julia
+include("../.pkg/platform_augmentation.jl")
+
+function __init__()
+    p = augment_platform!(HostPlatform())
+    global my_artifact_dir = @artifact_str("MyArtifact", p)
+end
+```
+
+This ensures that the same artifact is used by your code as Pkg attempted to install.

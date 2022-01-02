@@ -58,15 +58,17 @@ end
 read_project_targets(raw, project::Project) =
     pkgerror("Expected `targets` section to be a key-value list")
 
-read_project_compat(::Nothing, project::Project) = Dict{String,Any}()
+read_project_compat(::Nothing, project::Project) = Dict{String,Compat}()
 function read_project_compat(raw::Dict{String,Any}, project::Project)
+    compat = Dict{String,Compat}()
     for (name, version) in raw
-        try VersionSpec(semver_spec(version))
+        try
+            compat[name] = Compat(semver_spec(version), version)
         catch err
             pkgerror("Could not parse compatibility version for dependency `$name`")
         end
     end
-    return raw
+    return compat
 end
 read_project_compat(raw, project::Project) =
     pkgerror("Expected `compat` section to be a key-value list")
@@ -147,6 +149,14 @@ end
 function destructure(project::Project)::Dict
     raw = deepcopy(project.other)
 
+    # sanity check for consistency between compat value and string representation
+    for (name, compat) in project.compat
+        if compat.val != semver_spec(compat.str)
+            pkgerror("inconsistency between compat values and string representation")
+        end
+    end
+
+    # if a field is set to its default value, don't include it in the write
     should_delete(x::Dict) = isempty(x)
     should_delete(x)       = x === nothing
     entry!(key::String, src) = should_delete(src) ? delete!(raw, key) : (raw[key] = src)
@@ -157,7 +167,7 @@ function destructure(project::Project)::Dict
     entry!("manifest", project.manifest)
     entry!("deps",     project.deps)
     entry!("extras",   project.extras)
-    entry!("compat",   project.compat)
+    entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
     entry!("targets",  project.targets)
     return raw
 end
@@ -172,12 +182,14 @@ function write_project(env::EnvCache)
 end
 write_project(project::Project, project_file::AbstractString) =
     write_project(destructure(project), project_file)
-function write_project(project::Dict, project_file::AbstractString)
-    str = sprint() do io
-        TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key)) do x
-            (x isa UUID || x isa VersionNumber) && return string(x)
-            error("unhandled type `$(typeof(x))`")
-        end
+function write_project(io::IO, project::Dict)
+    TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key)) do x
+        x isa UUID || x isa VersionNumber || pkgerror("unhandled type `$(typeof(x))`")
+        return string(x)
     end
+    return nothing
+end
+function write_project(project::Dict, project_file::AbstractString)
+    str = sprint(write_project, project)
     write(project_file, str)
 end

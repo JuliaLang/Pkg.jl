@@ -81,8 +81,14 @@ we can explicitly track that branch (or commit) by appending `#branchname` (or `
 ```
 
 The status output now shows that we are tracking the `master` branch of `Example`.
-When updating packages, we will pull updates from that branch.
+When updating packages, updates are pulled from that branch.
 
+!!! note
+    If we would specify a commit id instead of a branch name, e.g.
+    `add Example#025cf7e`, then we would effectively "pin" the package
+    to that commit. This is because the commit id always point to the same
+    thing unlike a branch, which may be updated.
+    
 To go back to tracking the registry version of `Example`, the command `free` is used:
 
 ```julia-repl
@@ -176,6 +182,10 @@ When tracking a path, the package manager will never modify the files at that pa
 If `dev` is used on a local path, that path to that package is recorded and used when loading that package.
 The path will be recorded relative to the project file, unless it is given as an absolute path.
 
+```julia-repl
+(v1.0) pkg> dev /Users/kristoffer/Desktop/Example
+```
+
 To stop tracking a path and use the registered version again, use `free`:
 
 ```julia-repl
@@ -201,6 +211,38 @@ This approach is useful when the relative location of tracked dependencies is mo
 For example, the tracked dependencies can be stored inside of the active project directory.
 The whole directory can be moved and `Pkg` will still be able to find the dependencies
 because their path relative to the active project is preserved even though their absolute path has changed.
+
+### Adding a package in a subdirectory of a repository
+
+If the package you want to add by URL is not in the root of the repository, then you need to manually pass the `subdir` keyword to `Pkg.add`
+or `PackageSpec`. For instance, to add the `SnoopCompileCore` package in the [SnoopCompile](https://github.com/timholy/SnoopCompile.jl)
+repository:
+
+```julia-repl
+julia> Pkg.add(url="https://github.com/timholy/SnoopCompile.jl.git", subdir="SnoopCompileCore")
+     Cloning git-repo `https://github.com/timholy/SnoopCompile.jl.git`
+    Updating git-repo `https://github.com/timholy/SnoopCompile.jl.git`
+   Resolving package versions...
+    Updating `~/.julia/environments/v1.6/Project.toml`
+  [e2b509da] + SnoopCompileCore v2.7.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
+    Updating `~/.julia/environments/v1.6/Manifest.toml`
+  [e2b509da] + SnoopCompileCore v2.7.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
+  [9e88b42a] + Serialization
+```
+
+Another way is to use the Pkg REPL with `<repo_url>:<subdir>` format:
+
+```julia-repl
+pkg> add https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore # git HTTPS protocol
+...
+
+pkg> add "git@github.com:timholy/SnoopCompile.jl.git":SnoopCompileCore # git SSH protocol
+...
+```
+
+!!! compat "Julia 1.5"
+    The Pkg REPL for packages in subdirectory requires at least Julia 1.5.
+
 
 ## Removing packages
 
@@ -426,3 +468,56 @@ To run a typical garbage collection with default arguments, simply use the `gc` 
 ```
 
 Note that only packages in `~/.julia/packages` are deleted.
+
+
+## Pkg client/server
+
+!!! compat "Julia 1.4"
+    Pkg client/server feature requires at least Julia 1.4. It is opt-in for Julia 1.4 and is enabled
+    by default since Julia 1.5.
+
+When you add a new registered package, usually three things would happen:
+
+1. update registries,
+2. download source codes of the package,
+3. if not available, download [artifacts](@ref Artifacts) required by the package.
+
+The [General](https://github.com/JuliaRegistries/General) registry and most packages in it are
+developed on Github, while the artifacts data are hosted in various platforms. When the network
+connection to Github and AWS S3 is not stable, it is usually not a good experience to install or
+update packages. Fortunately, the pkg client/server feature improves the experience in the sense that:
+
+1. If set, pkg client would first try to download data from the pkg server,
+2. if that fails, then it falls back to download from the origianl sources (e.g., Github).
+
+Since Julia 1.5, `https://pkg.julialang.org` provided by the JuliaLang org. is used as the default
+pkg server. In most cases this should be transparent, but users can still set/unset an pkg server
+upstream via the environment variable `JULIA_PKG_SERVER`.
+
+```julia
+# manually set it to some pkg server
+julia> ENV["JULIA_PKG_SERVER"] = "pkg.julialang.org"
+"pkg.julialang.org"
+
+# unset to always download data from original sources
+julia> ENV["JULIA_PKG_SERVER"] = ""
+""
+```
+
+For clarification, some sources are not provided by Pkg server
+
+* packages/registries fetched via `git`
+  * `]add https://github.com/JuliaLang/Example.jl.git`
+  * `]add Example#v0.5.3` (Note that this is different from `]add Example@0.5.3`)
+  * `]registry add https://github.com/JuliaRegistries/General.git`, including registries installed by Julia before 1.4.
+* artifacts without download info
+  * [TestImages](https://github.com/JuliaImages/TestImages.jl/blob/eaa94348df619c65956e8cfb0032ecddb7a29d3a/Artifacts.toml#L1-L2)
+
+
+!!! note
+    If you have a new registry installed via pkg server, then it's impossible for old Julia versions to
+    update the registry because Julia before 1.4 don't know how to fetch new data.
+    Hence, for users that frequently switches between multiple julia versions, it is recommended to
+    still use git-controlled regsitries.
+
+For the deployment of pkg server, please refer to [PkgServer.jl](https://github.com/JuliaPackaging/PkgServer.jl).

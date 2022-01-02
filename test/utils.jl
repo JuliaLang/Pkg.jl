@@ -3,35 +3,58 @@
 module Utils
 
 import ..Pkg
+using Tar
 using TOML
+using UUIDs
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
-       git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT
+       git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
+       list_tarball_files
 
-const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
+const CACHE_DIRECTORY = mktempdir(; cleanup = true)
 
-const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
+const LOADED_DEPOT = joinpath(CACHE_DIRECTORY, "loaded_depot")
+
+const REGISTRY_DEPOT = joinpath(CACHE_DIRECTORY, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
+const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 
-function isolate(fn::Function; loaded_depot=false)
+function init_reg()
+    mkpath(REGISTRY_DIR)
+    if Pkg.Registry.registry_use_pkg_server()
+        url = Pkg.Registry.pkg_server_registry_urls()[GENERAL_UUID]
+        @info "Downloading General registry from $url"
+        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
+        tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")
+        hash = Pkg.Registry.pkg_server_url_hash(url)
+        write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
+    else
+        Base.shred!(LibGit2.CachedCredentials()) do creds
+            LibGit2.with(Pkg.GitTools.clone(
+                stderr,
+                "https://github.com/JuliaRegistries/General.git",
+                REGISTRY_DIR,
+                credentials = creds)) do repo
+            end
+        end
+    end
+end
+
+function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
     old_working_directory = pwd()
-    old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
+    old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
+    old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
+    old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
-        # Clone the registry only once
+        # Clone/download the registry only once
         if !isdir(REGISTRY_DIR)
-            mkpath(REGISTRY_DIR)
-            Base.shred!(LibGit2.CachedCredentials()) do creds
-                LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
-                                                "https://github.com/JuliaRegistries/General.git",
-                    REGISTRY_DIR, credentials = creds)) do repo
-                end
-            end
+            init_reg()
         end
 
         empty!(LOAD_PATH)
@@ -39,7 +62,9 @@ function isolate(fn::Function; loaded_depot=false)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = REGISTRY_DIR
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
+        Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
+        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         Pkg.REPLMode.TEST_MODE[] = false
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
@@ -70,31 +95,46 @@ function isolate(fn::Function; loaded_depot=false)
         Base.ACTIVE_PROJECT[] = old_active_project
         cd(old_working_directory)
         Pkg.REPLMode.TEST_MODE[] = false # reset unconditionally
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = old_general_registry_linked
     end
 end
 
-function temp_pkg_dir(fn::Function;rm=true)
+function isolate_and_pin_registry(fn::Function; registry_url::String, registry_commit::String)
+    isolate(loaded_depot = false, linked_reg = true) do
+        this_gen_reg_path = joinpath(last(Base.DEPOT_PATH), "registries", "General")
+        rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
+        run(`git clone $(registry_url) $(this_gen_reg_path)`)
+        cd(this_gen_reg_path) do
+            run(`git checkout $(registry_commit)`)
+        end
+        fn()
+    end
+    return nothing
+end
+
+function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
-    old_general_registry_url = Pkg.Types.DEFAULT_REGISTRIES[1].url
+    old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
+    old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
+    old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
-        # Clone the registry only once
-        generaldir = joinpath(@__DIR__, "registries", "General")
-        if !isdir(generaldir)
-            mkpath(generaldir)
-            LibGit2.with(Pkg.GitTools.clone(Pkg.Types.Context().io,
-                                            "https://github.com/JuliaRegistries/General.git",
-                generaldir)) do repo
-            end
+        # Clone/download the registry only once
+        if !isdir(REGISTRY_DIR)
+            init_reg()
         end
+
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = generaldir
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
+        Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
+        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
@@ -103,7 +143,6 @@ function temp_pkg_dir(fn::Function;rm=true)
             try
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
-                push!(DEPOT_PATH, REGISTRY_DEPOT)
                 fn(env_dir)
             finally
                 try
@@ -122,7 +161,9 @@ function temp_pkg_dir(fn::Function;rm=true)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
-        Pkg.Types.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
+        Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
+        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = old_general_registry_linked
     end
 end
 
@@ -150,7 +191,7 @@ function write_build(path, content)
 end
 
 function with_current_env(f)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(".")
     try
         f()
@@ -160,7 +201,7 @@ function with_current_env(f)
 end
 
 function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     env_path = joinpath(mktempdir(), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
@@ -178,7 +219,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
 end
 
 function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
-    prev_active = Base.ACTIVE_PROJECT[] 
+    prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(path)
     try
         if change_dir
@@ -231,7 +272,7 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
     return target
 end
 
-function add_this_pkg()
+function add_this_pkg(; platform=Base.BinaryPlatforms.HostPlatform())
     pkg_dir = dirname(@__DIR__)
     pkg_uuid = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
     spec = Pkg.PackageSpec(
@@ -239,7 +280,15 @@ function add_this_pkg()
         uuid=UUID(pkg_uuid),
         path=pkg_dir,
     )
-    Pkg.develop(spec)
+    Pkg.develop(spec; platform)
+end
+
+function list_tarball_files(tarball_path::AbstractString)
+    names = String[]
+    Tar.list(`$(Pkg.PlatformEngines.exe7z()) x $tarball_path -so`) do hdr
+        push!(names, hdr.path)
+    end
+    return names
 end
 
 end

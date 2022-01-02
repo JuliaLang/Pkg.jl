@@ -11,30 +11,28 @@ import Base.string
 using REPL.TerminalMenus
 
 using TOML
-import ...Pkg, ..UPDATED_REGISTRY_THIS_SESSION, ..DEFAULT_IO, ..RegistryHandling
-import ...Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server
+import ..Pkg, ..Registry
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f
 import Base.BinaryPlatforms: Platform
-import ..PlatformEngines: probe_platform_engines!, download, download_verify_unpack
 using ..Pkg.Versions
 
 import Base: SHA1
 using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
-    PackageSpec, EnvCache, Context, PackageInfo, ProjectInfo, GitRepo, Context!, Manifest, Project, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
-   project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
+    PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
+    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
+    project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
-    read_project, read_package, read_manifest, pathrepr,
+    read_project, read_package, read_manifest,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
-    printpkgstyle, isurl,
-    projectfile_path, manifestfile_path,
-    RegistrySpec
+    projectfile_path, manifestfile_path
 
-const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
+# Load in data about historical stdlibs
+include("HistoricalStdlibs.jl")
 
 deepcopy_toml(x) = x
 function deepcopy_toml(@nospecialize(x::Vector))
@@ -88,17 +86,33 @@ end
 Base.:(==)(r1::GitRepo, r2::GitRepo) =
     r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
 
-isurl(r::String) = occursin(URL_regex, r)
 
-Base.@kwdef mutable struct PackageSpec
-    name::Union{Nothing,String} = nothing
-    uuid::Union{Nothing,UUID} = nothing
-    version::VersionTypes = VersionSpec()
-    tree_hash::Union{Nothing,SHA1} = nothing
-    repo::GitRepo = GitRepo()
-    path::Union{Nothing,String} = nothing
-    pinned::Bool = false
-    mode::PackageMode = PKGMODE_PROJECT
+mutable struct PackageSpec
+    name::Union{Nothing,String}
+    uuid::Union{Nothing,UUID}
+    version::Union{Nothing,VersionTypes,String}
+    tree_hash::Union{Nothing,SHA1}
+    repo::GitRepo
+    path::Union{Nothing,String}
+    pinned::Bool
+    # used for input only
+    url
+    rev
+    subdir
+
+end
+function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
+                       uuid::Union{Nothing,UUID,AbstractString} = nothing,
+                       version::Union{Nothing,VersionTypes,AbstractString} = VersionSpec(),
+                       tree_hash::Union{Nothing,SHA1} = nothing,
+                       repo::GitRepo = GitRepo(),
+                       path::Union{Nothing,AbstractString} = nothing,
+                       pinned::Bool = false,
+                       url = nothing,
+                       rev = nothing,
+                       subdir = nothing)
+    uuid = uuid === nothing ? nothing : UUID(uuid)
+    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
@@ -108,7 +122,7 @@ PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-    a.pinned == b.pinned && a.mode == b.mode
+    a.pinned == b.pinned
 end
 
 function err_rep(pkg::PackageSpec)
@@ -129,17 +143,20 @@ function Base.show(io::IO, pkg::PackageSpec)
     pkg.name !== nothing && push!(f, "name" => pkg.name)
     pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
     pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
-    pkg.path !== nothing && push!(f, "dev/path" => pkg.path)
+    pkg.path !== nothing && push!(f, "path" => pkg.path)
+    pkg.url !== nothing && push!(f, "url" => pkg.url)
+    pkg.rev !== nothing && push!(f, "rev" => pkg.rev)
+    pkg.subdir !== nothing && push!(f, "subdir" => pkg.subdir)
     pkg.pinned && push!(f, "pinned" => pkg.pinned)
     push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
     if pkg.repo.source !== nothing
-        push!(f, "url/path" => string("\"", pkg.repo.source, "\""))
+        push!(f, "repo/source" => string("\"", pkg.repo.source, "\""))
     end
     if pkg.repo.rev !== nothing
-        push!(f, "rev" => pkg.repo.rev)
+        push!(f, "repo/rev" => pkg.repo.rev)
     end
     if pkg.repo.subdir !== nothing
-        push!(f, "subdir" => pkg.repo.subdir)
+        push!(f, "repo/subdir" => pkg.repo.subdir)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
@@ -168,7 +185,7 @@ function manifestfile_path(env_path::String; strict=false)
     if strict
         return nothing
     else
-        project = basename(projectfile_path(env_path))
+        project = basename(projectfile_path(env_path)::String)
         idx = findfirst(x -> x == project, Base.project_names)
         @assert idx !== nothing
         return joinpath(env_path, Base.manifest_names[idx])
@@ -198,6 +215,13 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     return Pkg.safe_realpath(project_file)
 end
 
+Base.@kwdef mutable struct Compat
+    val::VersionSpec
+    str::String
+end
+Base.:(==)(t1::Compat, t2::Compat) = t1.val == t2.val
+Base.hash(t::Compat, h::UInt) = hash(t.val, h)
+
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
     # Fields
@@ -209,11 +233,18 @@ Base.@kwdef mutable struct Project
     deps::Dict{String,UUID} = Dict{String,UUID}()
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
-    compat::Dict{String,String} = Dict{String,String}()# TODO Dict{String, VersionSpec}
+    compat::Dict{String,Compat} = Dict{String,Compat}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
-Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
+Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
+# only hash the deps and compat fields as they are the only fields that affect a resolve
+function project_resolve_hash(t::Project)
+    iob = IOBuffer()
+    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(t.deps); by=first))
+    foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
+    return bytes2hex(sha1(seekstart(iob)))
+end
 
 Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
@@ -223,6 +254,7 @@ Base.@kwdef mutable struct PackageEntry
     repo::GitRepo = GitRepo()
     tree_hash::Union{Nothing,SHA1} = nothing
     deps::Dict{String,UUID} = Dict{String,UUID}()
+    uuid::Union{Nothing, UUID} = nothing
     other::Union{Dict,Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
@@ -231,9 +263,29 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.pinned == t2.pinned &&
     t1.repo == t2.repo &&
     t1.tree_hash == t2.tree_hash &&
-    t1.deps == t2.deps   # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps], init=h)  # omits `other`
-const Manifest = Dict{UUID,PackageEntry}
+    t1.deps == t2.deps &&
+    t1.uuid == t2.uuid
+    # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.uuid], init=h)  # omits `other`
+
+Base.@kwdef mutable struct Manifest
+    julia_version::Union{Nothing,VersionNumber} = nothing # only set to VERSION when resolving
+    manifest_format::VersionNumber = v"2.0.0"
+    deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
+    other::Dict{String,Any} = Dict{String,Any}()
+end
+Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
+Base.hash(m::Manifest, h::UInt) = foldr(hash, [getfield(m, x) for x in fieldnames(Manifest)], init=h)
+Base.getindex(m::Manifest, i_or_key) = getindex(m.deps, i_or_key)
+Base.get(m::Manifest, key, default) = get(m.deps, key, default)
+Base.setindex!(m::Manifest, i_or_key, value) = setindex!(m.deps, i_or_key, value)
+Base.iterate(m::Manifest) = iterate(m.deps)
+Base.iterate(m::Manifest, i::Int) = iterate(m.deps, i)
+Base.length(m::Manifest) = length(m.deps)
+Base.empty!(m::Manifest) = empty!(m.deps)
+Base.values(m::Manifest) = values(m.deps)
+Base.keys(m::Manifest) = keys(m.deps)
+Base.haskey(m::Manifest, key) = haskey(m.deps, key)
 
 function Base.show(io::IO, pkg::PackageEntry)
     f = []
@@ -252,21 +304,6 @@ function Base.show(io::IO, pkg::PackageEntry)
     print(io, ")")
 end
 
-function collect_reachable_registries(; depots=Base.DEPOT_PATH)
-    # collect registries
-    registries = RegistryHandling.Registry[]
-    for d in depots
-        isdir(d) || continue
-        reg_dir = joinpath(d, "registries")
-        isdir(reg_dir) || continue
-        for name in readdir(reg_dir)
-            file = joinpath(reg_dir, name, "Registry.toml")
-            isfile(file) || continue
-            push!(registries, RegistryHandling.Registry(joinpath(reg_dir, name)))
-        end
-    end
-    return registries
-end
 
 mutable struct EnvCache
     # environment info:
@@ -295,6 +332,7 @@ function EnvCache(env::Union{Nothing,String}=nothing)
             name = project.name,
             uuid = project.uuid,
             version = something(project.version, VersionNumber("0.0")),
+            path = project_dir,
         )
     else
         project_package = nothing
@@ -317,12 +355,6 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         deepcopy(manifest),
         )
 
-    # Save initial environment for undo/redo functionality
-    if !Pkg.API.saved_initial_snapshot[]
-        Pkg.API.add_snapshot_to_undo(env′)
-        Pkg.API.saved_initial_snapshot[] = true
-    end
-
     return env′
 end
 
@@ -332,18 +364,16 @@ include("manifest.jl")
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
-    io::IO = something(DEFAULT_IO[], stderr)
-    use_libgit2_for_all_downloads::Bool = false
+    io::IO = stderr_f()
+    use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
 
     # Registris
-    registries::Vector{RegistryHandling.Registry} = collect_reachable_registries()
+    registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()
 
     # The Julia Version to resolve with respect to
     julia_version::Union{VersionNumber,Nothing} = VERSION
-    # test instrumenting
-    status_io::Union{IO,Nothing} = nothing
 end
 
 project_uuid(env::EnvCache) = env.pkg === nothing ? nothing : env.pkg.uuid
@@ -358,19 +388,19 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 ###########
 # Context #
 ###########
-stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
-stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
 
-const STDLIB = Ref{Dict{UUID,String}}()
+const STDLIB = Ref{Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}}()
 function load_stdlib()
-    stdlib = Dict{UUID,String}()
+    stdlib = Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}()
     for name in readdir(stdlib_dir())
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
         uuid = get(project, "uuid", nothing)
+        v_str = get(project, "version", nothing)
+        version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
-        stdlib[UUID(uuid)] = name
+        stdlib[UUID(uuid)] = (name, version)
     end
     return stdlib
 end
@@ -382,6 +412,54 @@ function stdlibs()
     return STDLIB[]
 end
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
+
+# Find the entry in `STDLIBS_BY_VERSION`
+# that corresponds to the requested version, and use that.
+# If we can't find one, defaults to `UNREGISTERED_STDLIBS`
+function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_current_version = false)
+    if !use_historical_for_current_version && julia_version == VERSION
+        return stdlibs()
+    end
+    last_stdlibs = UNREGISTERED_STDLIBS
+    for (version, stdlibs) in STDLIBS_BY_VERSION
+        if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
+            break
+        end
+        last_stdlibs = stdlibs
+    end
+    return last_stdlibs
+end
+# If `julia_version` is set to `nothing`, that means (essentially) treat all registered
+# stdlibs as normal packages so that we get the latest versions of everything, ignoring
+# julia compat.  So we set the list of stdlibs to that of only the unregistered stdlibs.
+get_last_stdlibs(::Nothing) = UNREGISTERED_STDLIBS
+
+# Allow asking if something is an stdlib for a particular version of Julia
+function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
+    # Only use the cache if we are asking for stdlibs in a custom Julia version
+    if julia_version == VERSION
+        return is_stdlib(uuid)
+    end
+
+    last_stdlibs = get_last_stdlibs(julia_version)
+    # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
+    # fall through with an empty `last_stdlibs`, which will always return `false`.
+    return uuid in keys(last_stdlibs)
+end
+
+# Return the version of a stdlib with respect to a particular Julia version, or
+# `nothing` if that stdlib is not versioned.  We only store version numbers for
+# stdlibs that are external and thus could be installed from their repositories,
+# e.g. things like `GMP_jll`, `Tar`, etc...
+function stdlib_version(uuid::UUID, julia_version::Union{VersionNumber,Nothing})
+    last_stdlibs = get_last_stdlibs(julia_version)
+    if !(uuid in keys(last_stdlibs))
+        return nothing
+    end
+    return last_stdlibs[uuid][2]
+end
+
+is_unregistered_stdlib(uuid::UUID) = haskey(UNREGISTERED_STDLIBS, uuid)
 
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
@@ -459,7 +537,6 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         end
         if isdir(dev_path)
             resolve_projectfile!(ctx.env, pkg, dev_path)
-            println(ctx.io, "Path `$(dev_path)` exists and looks like the correct package. Using existing path.")
             if is_local_path
                 pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
             else
@@ -530,7 +607,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
 end
 
 function handle_repos_develop!(ctx::Context, pkgs::AbstractVector{PackageSpec}, shared::Bool)
-    new_uuids = UUID[]
+    new_uuids = Set{UUID}()
     for pkg in pkgs
         new = handle_repo_develop!(ctx, pkg, shared)
         new && push!(new_uuids, pkg.uuid)
@@ -547,7 +624,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     registry_resolve!(ctx.registries, pkg)
     # Didn't find the package in the registry, but maybe it exists in the updated registry
     if !isresolved(pkg)
-        update_registries(ctx.io)
+        Pkg.Operations.update_registries(ctx; force=false)
         registry_resolve!(ctx.registries, pkg)
     end
     ensure_resolved(ctx.env.manifest, [pkg]; registry=true)
@@ -555,7 +632,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
-        info = Pkg.RegistryHandling.registry_info(regpkg)
+        info = Pkg.Registry.registry_info(regpkg)
         url = info.repo
         url === nothing && continue
         pkg.repo.source = url
@@ -592,7 +669,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     if !isurl(pkg.repo.source)
         if isdir(pkg.repo.source)
             if !isdir(joinpath(pkg.repo.source, ".git"))
-                pkgerror("Did not find a git repository at `$(pkg.repo.source)`")
+                msg = "Did not find a git repository at `$(pkg.repo.source)`"
+                if isfile(joinpath(pkg.repo.source, "Project.toml")) || isfile(joinpath(pkg.repo.source, "JuliaProject.toml"))
+                    msg *= ", perhaps you meant `Pkg.develop`?"
+                end
+                pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
             pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.project_file, pkg.repo.source)
@@ -603,7 +684,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     end
 
     let repo_source = repo_source
-        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
+        # The type-assertions below are necessary presumably due to julia#36454
+        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::Union{Nothing,String}), repo_source::Union{Nothing,String}; isbare=true)) do repo
+            repo_source_typed = repo_source::Union{Nothing,String}
             GitTools.check_valid_HEAD(repo)
 
             # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
@@ -615,7 +698,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             fetched = false
             if obj_branch === nothing
                 fetched = true
-                GitTools.fetch(ctx.io, repo, repo_source; refspecs=refspecs)
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
                 obj_branch = get_object_or_branch(repo, pkg.repo.rev)
                 if obj_branch === nothing
                     pkgerror("Did not find rev $(pkg.repo.rev) in repository")
@@ -627,7 +710,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             innerentry = manifest_info(ctx.env.manifest, pkg.uuid)
             ispinned = innerentry !== nothing && innerentry.pinned
             if isbranch && !fetched && !ispinned
-                GitTools.fetch(ctx.io, repo, repo_source; refspecs=refspecs)
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
                 gitobject, isbranch = get_object_or_branch(repo, pkg.repo.rev)
             end
 
@@ -645,7 +728,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
             if has_uuid(pkg)
-                version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg)
+                version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
                 isdir(version_path) && return false
             end
 
@@ -655,7 +738,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
             # check to see if the package exists at its canonical path.
-            version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg)
+            version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
             isdir(version_path) && return false
 
             # Otherwise, move the temporary path into its correct place and set read only
@@ -668,7 +751,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 end
 
 function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
-    new_uuids = UUID[]
+    new_uuids = Set{UUID}()
     for pkg in pkgs
         handle_repo_add!(ctx, pkg) && push!(new_uuids, pkg.uuid)
         @assert pkg.name !== nothing && pkg.uuid !== nothing && pkg.tree_hash !== nothing
@@ -679,7 +762,7 @@ end
 function resolve_projectfile!(env::EnvCache, pkg, project_path)
     project_file = projectfile_path(project_path; strict=true)
     project_file === nothing && pkgerror(string("could not find project file in package at `",
-                                                pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)), "` maybe `subdir` needs to be specified")
+                    something(pkg.repo.source, pkg.path, project_path), "` maybe `subdir` needs to be specified"))
     project_data = read_package(project_file)
     if pkg.uuid === nothing || pkg.uuid == project_data.uuid
         pkg.uuid = project_data.uuid
@@ -739,7 +822,6 @@ function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     uuids = env.project.deps
     names = Dict(uuid => name for (name, uuid) in uuids)
     for pkg in pkgs
-        pkg.mode == PKGMODE_PROJECT || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             pkg.uuid = uuids[pkg.name]
         end
@@ -758,7 +840,6 @@ function manifest_resolve!(manifest::Manifest, pkgs::AbstractVector{PackageSpec}
         names[uuid] = entry.name # can be duplicate but doesn't matter
     end
     for pkg in pkgs
-        force || pkg.mode == PKGMODE_MANIFEST || continue
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
             length(uuids[pkg.name]) == 1 && (pkg.uuid = uuids[pkg.name][1])
         end
@@ -769,8 +850,8 @@ function manifest_resolve!(manifest::Manifest, pkgs::AbstractVector{PackageSpec}
 end
 
 # Disambiguate name/uuid package specifications using registry info.
-registry_resolve!(registries::Vector{RegistryHandling.Registry}, pkg::PackageSpec) = registry_resolve!(registries, [pkg])
-function registry_resolve!(registries::Vector{RegistryHandling.Registry}, pkgs::AbstractVector{PackageSpec})
+registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec) = registry_resolve!(registries, [pkg])
+function registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
     # collect all names and uuids since we're looking anyway
@@ -792,12 +873,12 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in stdlibs()
+            for (uuid, (name, version)) in stdlibs()
                 name == pkg.name && (pkg.uuid = uuid)
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name = get(stdlibs(), pkg.uuid, nothing)
+            name, version = get(stdlibs(), pkg.uuid, (nothing, nothing))
             nothing !== name && (pkg.name = name)
         end
     end
@@ -807,7 +888,7 @@ end
 function ensure_resolved(manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
         registry::Bool=false,)::Nothing
-        unresolved_uuids = Dict{String,Vector{UUID}}()
+    unresolved_uuids = Dict{String,Vector{UUID}}()
     for pkg in pkgs
         has_uuid(pkg) && continue
         uuids = [uuid for (uuid, entry) in manifest if entry.name == pkg.name]
@@ -847,370 +928,15 @@ function ensure_resolved(manifest::Manifest,
     pkgerror(msg)
 end
 
-##############
-# Registries #
-##############
-
-mutable struct RegistrySpec
-    name::Union{String,Nothing}
-    uuid::Union{UUID,Nothing}
-    url::Union{String,Nothing}
-    # the path field can be a local source when adding a registry
-    # otherwise it is the path where the registry is installed
-    path::Union{String,Nothing}
-    RegistrySpec(name::String) = RegistrySpec(name = name)
-    RegistrySpec(;name=nothing, uuid=nothing, url=nothing, path=nothing) =
-        new(name, isa(uuid, String) ? UUID(uuid) : uuid, url, path)
-end
-
-const DEFAULT_REGISTRIES =
-    RegistrySpec[RegistrySpec(name = "General",
-                              uuid = UUID("23338594-aafe-5451-b93e-139f81909106"),
-                              url = "https://github.com/JuliaRegistries/General.git")]
-
-function clone_default_registries(ctx::Context; only_if_empty = true)
-    installed_registries = [reg.uuid::UUID for reg in collect_registries()]
-    # Only clone if there are no installed registries, unless called
-    # with false keyword argument.
-    if isempty(installed_registries) || !only_if_empty
-        printpkgstyle(ctx.io, :Installing, "known registries into $(pathrepr(depots1()))")
-        registries = copy(DEFAULT_REGISTRIES)
-        for uuid in keys(pkg_server_registry_urls())
-            if !(uuid in (reg.uuid for reg in registries))
-                push!(registries, RegistrySpec(uuid = uuid))
-            end
-        end
-        filter!(reg -> !(reg.uuid in installed_registries), registries)
-        clone_or_cp_registries(ctx.io, registries)
-        copy!(ctx.registries, collect_reachable_registries())
-    end
-end
-
-# Return `RegistrySpec`s of each registry in a depot
-function collect_registries(depot::String)
-    d = joinpath(depot, "registries")
-    regs = RegistrySpec[]
-    ispath(d) || return regs
-    for name in readdir(d)
-        file = joinpath(d, name, "Registry.toml")
-        if isfile(file)
-            registry = read_registry(file)
-            verify_registry(registry)
-            spec = RegistrySpec(name = registry["name"]::String,
-                                uuid = UUID(registry["uuid"]::String),
-                                url = get(registry, "repo", nothing)::Union{String,Nothing},
-                                path = dirname(file))
-            push!(regs, spec)
-        end
-    end
-    return regs
-end
-# Return `RegistrySpec`s of all registries in all depots
-function collect_registries()
-    isempty(depots()) && return RegistrySpec[]
-    return RegistrySpec[r for d in depots() for r in collect_registries(d)]
-end
-
-# Hacky way to make e.g. `registry add General` work.
-function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
-    known_registries = DEFAULT_REGISTRIES # TODO: Some way to add stuff here?
-    for reg in registries, known in known_registries
-        if reg.uuid !== nothing
-            if reg.uuid === known.uuid
-                reg.url = known.url
-            end
-        elseif reg.name !== nothing
-            if reg.name == known.name
-                named_regs = filter(r -> r.name == reg.name, known_registries)
-                if !all(r -> r.uuid == first(named_regs).uuid, named_regs)
-                    pkgerror("multiple registries with name `$(reg.name)`, please specify with uuid.")
-                end
-                reg.url = known.url
-                reg.uuid = known.uuid
-            end
-        end
-    end
-end
-
-# Use the pattern
-#
-# registry_urls = nothing
-# for ...
-#     url, registry_urls = pkg_server_registry_url(uuid, registry_urls)
-# end
-#
-# to query the pkg server at most once for registries.
-pkg_server_registry_url(uuid::UUID, ::Nothing) =
-    pkg_server_registry_url(uuid, pkg_server_registry_urls())
-
-pkg_server_registry_url(uuid::UUID, registry_urls::Dict{UUID, String}) =
-    get(registry_urls, uuid, nothing), registry_urls
-
-pkg_server_registry_url(::Nothing, registry_urls) = nothing, registry_urls
-
-function pkg_server_registry_urls()
-    registry_urls = Dict{UUID, String}()
-    server = pkg_server()
-    server === nothing && return registry_urls
-    probe_platform_engines!()
-    tmp_path = tempname()
-    download_ok = false
-    try
-        download("$server/registries", tmp_path, verbose=false)
-        download_ok = true
-    catch err
-        @warn "could not download $server/registries"
-    end
-    download_ok || return registry_urls
-    open(tmp_path) do io
-        for line in eachline(io)
-            if (m = match(r"^/registry/([^/]+)/([^/]+)$", line)) !== nothing
-                uuid = UUID(m.captures[1])
-                hash = String(m.captures[2])
-                registry_urls[uuid] = "$server/registry/$uuid/$hash"
-            end
-        end
-    end
-    rm(tmp_path, force=true)
-    return registry_urls
-end
-
-pkg_server_url_hash(url::String) = split(url, '/')[end]
-
-# entry point for `registry add`
-function clone_or_cp_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
-    populate_known_registries_with_urls!(regs)
-    registry_urls = nothing
-    for reg in regs
-        if reg.path !== nothing && reg.url !== nothing
-            pkgerror("ambiguous registry specification; both url and path is set.")
-        end
-        # clone to tmpdir first
-        mktempdir() do tmp
-            url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-            # on Windows we prefer git cloning because untarring is so slow
-            if !Sys.iswindows() && url !== nothing
-                # download from Pkg server
-                try
-                    download_verify_unpack(url, nothing, tmp, ignore_existence = true)
-                catch err
-                    pkgerror("could not download $url")
-                end
-                tree_info_file = joinpath(tmp, ".tree_info.toml")
-                ispath(tree_info_file) &&
-                    error("tree info file $tree_info_file already exists")
-                open(tree_info_file, write=true) do io
-                    hash = pkg_server_url_hash(url)
-                    println(io, "git-tree-sha1 = ", repr(hash))
-                end
-            elseif reg.path !== nothing # copy from local source
-                printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
-                cp(reg.path, tmp; force=true)
-            elseif reg.url !== nothing # clone from url
-                LibGit2.with(GitTools.clone(io, reg.url, tmp; header = "registry from $(repr(reg.url))")) do repo
-                end
-            else
-                pkgerror("no path or url specified for registry")
-            end
-            # verify that the clone looks like a registry
-            if !isfile(joinpath(tmp, "Registry.toml"))
-                pkgerror("no `Registry.toml` file in cloned registry.")
-            end
-            registry = read_registry(joinpath(tmp, "Registry.toml"); cache=false) # don't cache this tmp registry
-            verify_registry(registry)
-            # copy to `depot`
-            # slug = Base.package_slug(UUID(registry["uuid"]))
-            regpath = joinpath(depot, "registries", registry["name"]::String#=, slug=#)
-            ispath(dirname(regpath)) || mkpath(dirname(regpath))
-            if Pkg.isdir_nothrow(regpath)
-                existing_registry = read_registry(joinpath(regpath, "Registry.toml"))
-                if registry["uuid"] == existing_registry["uuid"]
-                    println(io,
-                            "registry `$(registry["name"])` already exist in `$(Base.contractuser(regpath))`.")
-                else
-                    throw(PkgError("registry `$(registry["name"])=\"$(registry["uuid"])\"` conflicts with " *
-                        "existing registry `$(existing_registry["name"])=\"$(existing_registry["uuid"])\"`. " *
-                        "To install it you can clone it manually into e.g. " *
-                        "`$(Base.contractuser(joinpath(depot, "registries", registry["name"]*"-2")))`."))
-                end
-            else
-                mv(tmp, regpath)
-                printpkgstyle(io, :Added, "registry `$(registry["name"])` to `$(Base.contractuser(regpath))`")
-            end
-        end
-    end
-    return nothing
-end
-
-function read_registry(reg_file; cache=true)
-    return parse_toml(reg_file)
-end
-
-# verify that the registry looks like a registry
-const REQUIRED_REGISTRY_ENTRIES = ("name", "uuid", "repo", "packages") # ??
-
-function verify_registry(registry::Dict{String, Any})
-    for key in REQUIRED_REGISTRY_ENTRIES
-        haskey(registry, key) || pkgerror("no `$key` entry in `Registry.toml`.")
-    end
-end
-
-# Search for the input registries among installed ones
-function find_installed_registries(io::IO,
-                                   needles::Vector{RegistrySpec},
-                                   haystack::Vector{RegistrySpec}=collect_registries())
-    output = RegistrySpec[]
-    for needle in needles
-        if needle.name === nothing && needle.uuid === nothing
-            pkgerror("no name or uuid specified for registry.")
-        end
-        found = false
-        for candidate in haystack
-            if needle.uuid !== nothing
-                if needle.uuid == candidate.uuid
-                    push!(output, candidate)
-                    found = true
-                end
-            elseif needle.name !== nothing
-                if needle.name == candidate.name
-                    named_regs = filter(r -> r.name == needle.name, haystack)
-                    if !all(r -> r.uuid == first(named_regs).uuid, named_regs)
-                        pkgerror("multiple registries with name `$(needle.name)`, please specify with uuid.")
-                    end
-                    push!(output, candidate)
-                    found = true
-                end
-            end
-        end
-        if !found
-            println(io, "registry `$(needle.name === nothing ? needle.uuid :
-                                         needle.uuid === nothing ? needle.name :
-                                         "$(needle.name)=$(needle.uuid)")` not found.")
-        end
-    end
-    return output
-end
-
-# entry point for `registry rm`
-function remove_registries(io::IO, regs::Vector{RegistrySpec})
-    for registry in find_installed_registries(io, regs)
-        printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
-        rm(registry.path; force=true, recursive=true)
-    end
-    return nothing
-end
-
-# entry point for `registry up`
-function update_registries(io::IO, regs::Vector{RegistrySpec} = collect_registries(depots1());
-                           force::Bool=false)
-    Pkg.OFFLINE_MODE[] && return
-    !force && UPDATED_REGISTRY_THIS_SESSION[] && return
-    errors = Tuple{String, String}[]
-    registry_urls = nothing
-    for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{Union{UUID,Nothing}}())
-        let reg=reg
-            regpath = pathrepr(reg.path)
-            if isfile(joinpath(reg.path, ".tree_info.toml"))
-                printpkgstyle(io, :Updating, "registry at " * regpath)
-                tree_info = parse_toml(joinpath(reg.path, ".tree_info.toml"))
-                old_hash = tree_info["git-tree-sha1"]
-                url, registry_urls = pkg_server_registry_url(reg.uuid, registry_urls)
-                if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
-                    let new_hash=new_hash
-                        # TODO: update faster by using a diff, if available
-                        mktempdir() do tmp
-                            try
-                                download_verify_unpack(url, nothing, tmp, ignore_existence = true)
-                            catch err
-                                @warn "could not download $url"
-                            end
-                            tree_info_file = joinpath(tmp, ".tree_info.toml")
-                            ispath(tree_info_file) &&
-                                error("tree info file $tree_info_file already exists")
-                            open(tree_info_file, write=true) do io
-                                println(io, "git-tree-sha1 = ", repr(new_hash))
-                            end
-                            registry_file = joinpath(tmp, "Registry.toml")
-                            registry = read_registry(registry_file; cache=false)
-                            verify_registry(registry)
-                            mv(tmp, reg.path, force=true)
-                        end
-                    end
-                end
-            elseif isdir(joinpath(reg.path, ".git"))
-                printpkgstyle(io, :Updating, "registry at " * regpath)
-                # Using LibGit2.with here crashes julia when running the
-                # tests for PkgDev wiht "Unreachable reached".
-                # This seems to work around it.
-                repo = nothing
-                try
-                    repo = LibGit2.GitRepo(reg.path)
-                    if LibGit2.isdirty(repo)
-                        push!(errors, (regpath, "registry dirty"))
-                        @goto done
-                    end
-                    if !LibGit2.isattached(repo)
-                        push!(errors, (regpath, "registry detached"))
-                        @goto done
-                    end
-                    if !("origin" in LibGit2.remotes(repo))
-                        push!(errors, (regpath, "origin not in the list of remotes"))
-                        @goto done
-                    end
-                    branch = LibGit2.headname(repo)
-                    try
-                        GitTools.fetch(io, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
-                    catch e
-                        e isa PkgError || rethrow()
-                        push!(errors, (reg.path, "failed to fetch from repo"))
-                        @goto done
-                    end
-                    ff_succeeded = try
-                        LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
-                    catch e
-                        e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
-                        push!(errors, (reg.path, "branch origin/$branch not found"))
-                        @goto done
-                    end
-
-                    if !ff_succeeded
-                        try LibGit2.rebase!(repo, "origin/$branch")
-                        catch e
-                            e isa LibGit2.GitError || rethrow()
-                            push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
-                            @goto done
-                        end
-                    end
-                    @label done
-                finally
-                    if repo isa LibGit2.GitRepo
-                        close(repo)
-                    end
-                end
-            end
-        end
-    end
-    if !isempty(errors)
-        warn_str = "Some registries failed to update:"
-        for (reg, err) in errors
-            warn_str *= "\n    — $reg — $err"
-        end
-        @warn warn_str
-    end
-    UPDATED_REGISTRY_THIS_SESSION[] = true
-    return
-end
-
-function registered_uuids(registries::Vector{RegistryHandling.Registry}, name::String)
+function registered_uuids(registries::Vector{Registry.RegistryInstance}, name::String)
     uuids = Set{UUID}()
     for reg in registries
-        union!(uuids, RegistryHandling.uuids_from_name(reg, name))
+        union!(uuids, Registry.uuids_from_name(reg, name))
     end
     return uuids
 end
-
 # Determine a single UUID for a given name, prompting if needed
-function registered_uuid(registries::Vector{RegistryHandling.Registry}, name::String)::Union{Nothing,UUID}
+function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::String)::Union{Nothing,UUID}
     uuids = registered_uuids(registries, name)
     length(uuids) == 0 && return nothing
     length(uuids) == 1 && return first(uuids)
@@ -1219,7 +945,7 @@ function registered_uuid(registries::Vector{RegistryHandling.Registry}, name::St
         for reg in registries
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
-            info = Pkg.RegistryHandling.registry_info(pkg)
+            info = Pkg.Registry.registry_info(pkg)
             info.repo === nothing && continue
             push!(repo_infos, (reg.name, info.repo, uuid))
         end
@@ -1238,7 +964,7 @@ end
 
 # Determine current name for a given package UUID
 
-function registered_name(registries::Vector{RegistryHandling.Registry}, uuid::UUID)::Union{Nothing,String}
+function registered_name(registries::Vector{Registry.RegistryInstance}, uuid::UUID)::Union{Nothing,String}
     name = nothing
     for reg in registries
         regpkg = get(reg, uuid, nothing)
@@ -1255,73 +981,19 @@ end
 # Find package by UUID in the manifest file
 manifest_info(::Manifest, uuid::Nothing) = nothing
 function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry,Nothing}
-    #any(uuids -> uuid in uuids, values(env.uuids)) || find_registered!(env, [uuid])
     return get(manifest, uuid, nothing)
 end
-
-function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false)
-    indent = textwidth(string(:Precompiling)) # "Precompiling" is the longest operation
-    ignore_indent && (indent = 0)
-    printstyled(io, lpad(string(cmd), indent), color=:green, bold=true)
-    println(io, " ", text)
-end
-
-
-function pathrepr(path::String)
-    # print stdlib paths as @stdlib/Name
-    if startswith(path, stdlib_dir())
-        path = "@stdlib/" * basename(path)
+function write_env(env::EnvCache; update_undo=true,
+                   skip_writing_project::Bool=false)
+    if (env.project != env.original_project) && (!skip_writing_project)
+        write_project(env)
     end
-    return "`" * Base.contractuser(path) * "`"
-end
-
-function write_env(env::EnvCache; update_undo=true)
-    write_project(env)
-    write_manifest(env)
+    if env.manifest != env.original_manifest
+        write_manifest(env)
+    end
     update_undo && Pkg.API.add_snapshot_to_undo(env)
 end
 
-###
-### PackageInfo
-###
-
-Base.@kwdef struct PackageInfo
-    name::String
-    version::Union{Nothing,VersionNumber}
-    tree_hash::Union{Nothing,String}
-    is_direct_dep::Bool
-    is_pinned::Bool
-    is_tracking_path::Bool
-    is_tracking_repo::Bool
-    is_tracking_registry::Bool
-    git_revision::Union{Nothing,String}
-    git_source::Union{Nothing,String}
-    source::String
-    dependencies::Dict{String,UUID}
-end
-
-function Base.:(==)(a::PackageInfo, b::PackageInfo)
-    return a.name == b.name && a.version == b.version && a.tree_hash == b.tree_hash &&
-        a.is_direct_dep == b.is_direct_dep &&
-        a.is_pinned == b.is_pinned && a.is_tracking_path == b.is_tracking_path &&
-        a.is_tracking_repo == a.is_tracking_repo &&
-        a.is_tracking_registry == b.is_tracking_registry &&
-        a.git_revision == b.git_revision && a.git_source == b.git_source &&
-        a.source == b.source && a.dependencies == b.dependencies
-end
-
-###
-### ProjectInfo
-###
-
-Base.@kwdef struct ProjectInfo
-    name::Union{Nothing,String}
-    uuid::Union{Nothing,UUID}
-    version::Union{Nothing,VersionNumber}
-    ispackage::Bool
-    dependencies::Dict{String,UUID}
-    path::String
-end
 
 
 end # module

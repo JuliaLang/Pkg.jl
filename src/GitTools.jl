@@ -3,12 +3,14 @@
 module GitTools
 
 using ..Pkg
-import ..Pkg: can_fancyprint
-using ..Pkg.MiniProgressBars
+using ..MiniProgressBars
+import ..get_bool_env, ..can_fancyprint, ..printpkgstyle
 using SHA
 import Base: SHA1
 import LibGit2
 using Printf
+
+use_cli_git() = get_bool_env("JULIA_PKG_USE_CLI_GIT")
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
@@ -86,8 +88,9 @@ end
 function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
-    Pkg.Types.printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
+    printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
         LibGit2.Callbacks(
@@ -103,9 +106,14 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
-    mkpath(source_path)
     try
-        return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+        if use_cli_git()
+            run(`git clone --quiet $url $source_path`)
+            return LibGit2.GitRepo(source_path)
+        else
+            mkpath(source_path)
+            return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+        end
     catch err
         rm(source_path; force=true, recursive=true)
         err isa LibGit2.GitError || err isa InterruptException || rethrow()
@@ -123,7 +131,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
 end
 
-function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, kwargs...)
+function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, refspecs=[""], kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
@@ -131,7 +139,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     end
     fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
+    printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
@@ -149,7 +157,15 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
         credentials = LibGit2.CachedCredentials()
     end
     try
-        return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
+        if use_cli_git()
+            let remoteurl=remoteurl
+                cd(LibGit2.path(repo)) do
+                    run(`git fetch -q $remoteurl $(only(refspecs))`)
+                end
+            end
+        else
+            return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
+        end
     catch err
         err isa LibGit2.GitError || rethrow()
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
@@ -170,11 +186,21 @@ Base.string(mode::GitMode) = string(UInt32(mode); base=8)
 Base.print(io::IO, mode::GitMode) = print(io, string(mode))
 
 function gitmode(path::AbstractString)
+    # Windows doens't deal with executable permissions in quite the same way,
+    # `stat()` gives a different answer than we actually want, so we use
+    # `isexecutable()` which uses `uv_fs_access()` internally.  On other
+    # platforms however, we just want to check via `stat()`.
+    function isexec(p)
+        @static if Sys.iswindows()
+            return Sys.isexecutable(p)
+        end
+        return !iszero(filemode(p) & 0o100)
+    end
     if islink(path)
         return mode_symlink
     elseif isdir(path)
         return mode_dir
-    elseif Sys.isexecutable(path)
+    elseif isexec(path)
         return mode_executable
     else
         return mode_normal
@@ -246,30 +272,42 @@ end
 
 Calculate the git tree hash of a given path.
 """
-function tree_hash(::Type{HashType}, root::AbstractString) where HashType
+function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,Nothing} = nothing, indent::Int=0) where HashType
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
-    for f in readdir(root)
+    for f in sort(readdir(root; join=true); by = f -> gitmode(f) == mode_dir ? f*"/" : f)
         # Skip `.git` directories
-        if f == ".git"
+        if basename(f) == ".git"
             continue
         end
 
-        filepath = abspath(root, f)
+        filepath = abspath(f)
         mode = gitmode(filepath)
         if mode == mode_dir
             # If this directory contains no files, then skip it
             contains_files(filepath) || continue
 
             # Otherwise, hash it up!
-            hash = tree_hash(HashType, filepath)
+            child_stream = nothing
+            if debug_out !== nothing
+                child_stream = IOBuffer()
+            end
+            hash = tree_hash(HashType, filepath; debug_out=child_stream, indent=indent+1)
+            if debug_out !== nothing
+                indent_str = "| "^indent
+                println(debug_out, "$(indent_str)+ [D] $(basename(filepath)) - $(bytes2hex(hash))")
+                print(debug_out, String(take!(child_stream)))
+                println(debug_out, indent_str)
+            end
         else
             hash = blob_hash(HashType, filepath)
+            if debug_out !== nothing
+                indent_str = "| "^indent
+                mode_str = mode == mode_normal ? "F" : "X"
+                println(debug_out, "$(indent_str)[$(mode_str)] $(basename(filepath)) - $(bytes2hex(hash))")
+            end
         end
-        push!(entries, (f, hash, mode))
+        push!(entries, (basename(filepath), hash, mode))
     end
-
-    # Sort entries by name (with trailing slashes for directories)
-    sort!(entries, by = ((name, hash, mode),) -> mode == mode_dir ? name*"/" : name)
 
     content_size = 0
     for (n, h, m) in entries
@@ -285,7 +323,7 @@ function tree_hash(::Type{HashType}, root::AbstractString) where HashType
     end
     return SHA.digest!(ctx)
 end
-tree_hash(root::AbstractString) = tree_hash(SHA.SHA1_CTX, root)
+tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing) = tree_hash(SHA.SHA1_CTX, root; debug_out)
 
 function check_valid_HEAD(repo)
     try LibGit2.head(repo)

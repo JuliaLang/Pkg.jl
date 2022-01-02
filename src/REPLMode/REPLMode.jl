@@ -6,10 +6,10 @@ using Markdown, UUIDs, Dates
 
 import REPL
 import REPL: LineEdit, REPLCompletions
+import REPL: TerminalMenus
 
-import ..casesensitive_isdir
+import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
-import ..Pkg: Pkg, RegistryHandling
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)
@@ -147,7 +147,7 @@ wrap_option(option::String)  = length(option) == 1 ? "-$option" : "--$option"
 is_opt(word::AbstractString) = first(word) == '-' && word != "-"
 
 function parse_option(word::AbstractString)::Option
-    m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
+    m = match(r"^(?: -([a-z]) | --((?:[a-z]{1,}-?)*)(?:\s*=\s*(\S*))? )$"ix, word)
     m === nothing && pkgerror("malformed option: ", repr(word))
     option_name = m.captures[1] !== nothing ? m.captures[1] : m.captures[2]
     option_arg  = m.captures[3] === nothing ? nothing : String(m.captures[3])
@@ -283,8 +283,8 @@ end
 
 parse(input::String) =
     map(Base.Iterators.filter(!isempty, tokenize(input))) do words
-        statement, _ = core_parse(words)
-        statement.spec === nothing && pkgerror("Could not determine command")
+        statement, input_word = core_parse(words)
+        statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. Type ? for help with available commands")
         statement.options = map(parse_option, statement.options)
         statement
     end
@@ -375,7 +375,7 @@ end
 #############
 function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     if !isinteractive() && !TEST_MODE[] && !PRINTED_REPL_WARNING[]
-        @warn "The Pkg REPL interface is intended for interactive use, use with caution from scripts."
+        @warn "The Pkg REPL mode is intended for interactive use only, and should not be used from scripts. It is recommended to use the functional API instead."
         PRINTED_REPL_WARNING[] = true
     end
     try
@@ -514,17 +514,17 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
-                prefix = string("(", project_name, ") ")
+                prefix = "($(project_name)) "
                 prev_prefix = prefix
                 prev_project_timestamp = mtime(project_file)
                 prev_project_file = project_file
             end
         end
     end
-    if Pkg.OFFLINE_MODE[]
-        prefix = prefix * "[offline] "
+    if OFFLINE_MODE[]
+        prefix = "$(prefix)[offline] "
     end
-    return prefix * "pkg> "
+    return "$(prefix)pkg> "
 end
 
 # Set up the repl Pkg REPLMode
@@ -633,6 +633,8 @@ function gen_help()
 **Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
 backspace when the input line is empty or press Ctrl+C.
 
+Full documentation available at https://pkgdocs.julialang.org/
+
 **Synopsis**
 
     pkg> cmd [opts] [args]
@@ -650,5 +652,103 @@ Some commands have an alias, indicated below.
 end
 
 const help = gen_help()
+const REG_WARNED = Ref{Bool}(false)
+
+function try_prompt_pkg_add(pkgs::Vector{Symbol})
+    ctx = Context()
+    if isempty(ctx.registries)
+        if !REG_WARNED[]
+            printstyled(ctx.io, " │ "; color=:green)
+            printstyled(ctx.io, "Attempted to find missing packages in package registries but no registries are installed.\n")
+            printstyled(ctx.io, " └ "; color=:green)
+            printstyled(ctx.io, "Use package mode to install a registry. `pkg> registry add` will install the default registries.\n\n")
+            REG_WARNED[] = true
+        end
+        return false
+    end
+    available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
+    filter!(u -> all(!isequal(Operations.JULIA_UUID), u), available_uuids) # "julia" is in General but not installable
+    isempty(available_uuids) && return false
+    available_pkgs = pkgs[isempty.(available_uuids) .== false]
+    isempty(available_pkgs) && return false
+    resp = try
+        plural1 = length(pkgs) == 1 ? "" : "s"
+        plural2 = length(available_pkgs) == 1 ? "a package" : "packages"
+        plural3 = length(available_pkgs) == 1 ? "is" : "are"
+        plural4 = length(available_pkgs) == 1 ? "" : "s"
+        missing_pkg_list = length(pkgs) == 1 ? String(pkgs[1]) : "[$(join(pkgs, ", "))]"
+        available_pkg_list = length(available_pkgs) == 1 ? String(available_pkgs[1]) : "[$(join(available_pkgs, ", "))]"
+        msg1 = "Package$(plural1) $(missing_pkg_list) not found, but $(plural2) named $(available_pkg_list) $(plural3) available from a registry."
+        for line in linewrap(msg1, io = ctx.io, padding = length(" │ "))
+            printstyled(ctx.io, " │ "; color=:green)
+            println(ctx.io, line)
+        end
+        printstyled(ctx.io, " │ "; color=:green)
+        println(ctx.io, "Install package$(plural4)?")
+        msg2 = string("add ", join(available_pkgs, ' '))
+        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", REPLMode.promptf()))))
+            printstyled(ctx.io, " │   "; color=:green)
+            if i == 1
+                printstyled(ctx.io, REPLMode.promptf(); color=:blue)
+            else
+                print(ctx.io, " "^length(REPLMode.promptf()))
+            end
+            println(ctx.io, line)
+        end
+        printstyled(ctx.io, " └ "; color=:green)
+        Base.prompt(stdin, ctx.io, "(y/n/o)", default = "y")
+    catch err
+        if err isa InterruptException # if ^C is entered
+            println(ctx.io)
+            return false
+        end
+        rethrow()
+    end
+    if isnothing(resp) # if ^D is entered
+        println(ctx.io)
+        return false
+    end
+    resp = strip(resp)
+    lower_resp = lowercase(resp)
+    if lower_resp in ["y", "yes"]
+        API.add(string.(available_pkgs))
+    elseif lower_resp in ["o"]
+        editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
+        expanded_envs = Base.load_path_expand.(editable_envs)
+        envs = convert(Vector{String}, filter(x -> !isnothing(x), expanded_envs))
+        option_list = String[]
+        keybindings = Char[]
+        for i in 1:length(envs)
+            push!(option_list, "$(i): $(pathrepr(envs[i])) ($(editable_envs[i]))")
+            push!(keybindings, only("$i"))
+        end
+        menu = TerminalMenus.RadioMenu(option_list, keybindings=keybindings, pagesize=length(option_list))
+        print(ctx.io, "\e[1A\e[1G\e[0J") # go up one line, to the start, and clear it
+        printstyled(ctx.io, " └ "; color=:green)
+        choice = try
+            TerminalMenus.request("Select environment:", menu)
+        catch err
+            if err isa InterruptException # if ^C is entered
+                println(ctx.io)
+                return false
+            end
+            rethrow()
+        end
+        choice == -1 && return false
+        API.activate(envs[choice]) do
+            API.add(string.(available_pkgs))
+        end
+    elseif (lower_resp in ["n"])
+        return false
+    else
+        println(ctx.io, "Selection not recognized")
+        return false
+    end
+    if length(available_pkgs) < length(pkgs)
+        return false # declare that some pkgs couldn't be installed
+    else
+        return true
+    end
+end
 
 end #module

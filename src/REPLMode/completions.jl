@@ -55,16 +55,16 @@ const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 function complete_remote_package(partial)
     isempty(partial) && return String[]
     cmp = Set{String}()
-    for reg in Pkg.Types.collect_reachable_registries()
+    for reg in Registry.reachable_registries()
         for (uuid, regpkg) in reg
             name = regpkg.name
             name in cmp && continue
             if startswith(regpkg.name, partial)
-                pkg = RegistryHandling.registry_info(regpkg)
-                uncompressed_data = RegistryHandling.uncompressed_data(pkg)
+                pkg = Registry.registry_info(regpkg)
+                compat_info = Registry.compat_info(pkg)
                 # Filter versions
-                for (v, uncompressed_compat) in uncompressed_data
-                    RegistryHandling.isyanked(pkg, v) && continue
+                for (v, uncompressed_compat) in compat_info
+                    Registry.isyanked(pkg, v) && continue
                     # TODO: Filter based on offline mode
                     is_julia_compat = nothing
                     for (pkg_uuid, vspec) in uncompressed_compat
@@ -106,6 +106,18 @@ function complete_installed_packages(options, partial)
         unique!([entry.name for (uuid, entry) in env.manifest])
 end
 
+function complete_installed_packages_and_compat(options, partial)
+    env = try EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    return map(vcat(collect(keys(env.project.deps)), "julia")) do d
+        compat_str = Operations.get_compat_str(env.project, d)
+        isnothing(compat_str) ? d : string(d, " ", compat_str)
+    end
+end
+
 function complete_add_dev(options, partial, i1, i2)
     comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)
@@ -113,7 +125,7 @@ function complete_add_dev(options, partial, i1, i2)
     end
     comps = vcat(comps, sort(complete_remote_package(partial)))
     if !isempty(partial)
-        append!(comps, filter!(startswith(partial), collect(values(Types.stdlibs()))))
+        append!(comps, filter!(startswith(partial), first.(values(Types.stdlibs()))))
     end
     return comps, idx, !isempty(comps)
 end
@@ -207,8 +219,14 @@ end
 function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
     pre = full[1:index]
     isempty(pre) && return default_commands(), 0:-1, false # empty input -> complete commands
-    last   = split(pre, ' ', keepempty=true)[end]
-    offset = isempty(last) ? index+1 : last.offset+1
+    offset_adjust = 0
+    if length(pre) >= 2 && pre[1] == '?' && pre[2] != ' '
+        # supports completion on things like `pkg> ?act` with no space
+        pre = string(pre[1], " ", pre[2:end])
+        offset_adjust = -1
+    end
+    last = split(pre, ' ', keepempty=true)[end]
+    offset = isempty(last) ? index+1+offset_adjust : last.offset+1+offset_adjust
     final  = isempty(last) # is the cursor still attached to the final token?
     return _completions(pre, final, offset, index)
 end

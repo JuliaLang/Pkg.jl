@@ -38,9 +38,6 @@ function ≲(b::VersionBound, v::VersionNumber)
     return (v.major, v.minor, v.patch) >= (b[1], b[2], b[3])
 end
 
-≳(v::VersionNumber, b::VersionBound) = v ≲ b
-≳(b::VersionBound, v::VersionNumber) = b ≲ v
-
 function isless_ll(a::VersionBound, b::VersionBound)
     m, n = a.n, b.n
     for i = 1:min(m, n)
@@ -89,7 +86,7 @@ function isjoinable(up::VersionBound, lo::VersionBound)
     return true
 end
 
-Base.hash(r::VersionBound, h::UInt) = hash(hash(r.t, h), r.n)
+Base.hash(r::VersionBound, h::UInt) = hash(r.t, hash(r.n, h))
 
 # Hot code
 function VersionBound(s::AbstractString)
@@ -243,8 +240,7 @@ end
 Base.copy(vs::VersionSpec) = VersionSpec(vs)
 
 const empty_versionspec = VersionSpec(VersionRange[])
-# Windows console doesn't like Unicode
-const _empty_symbol = @static Sys.iswindows() ? "empty" : "∅"
+const _empty_symbol = "∅"
 
 Base.isempty(s::VersionSpec) = all(isempty, s.ranges)
 @assert isempty(empty_versionspec)
@@ -290,7 +286,7 @@ Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
 # Semver notation #
 ###################
 
-function semver_spec(s::String)
+function semver_spec(s::String; throw = true)
     ranges = VersionRange[]
     for ver in strip.(split(strip(s), ','))
         range = nothing
@@ -302,7 +298,13 @@ function semver_spec(s::String)
                 break
             end
         end
-        found_match || error("invalid version specifier: $s")
+        if !found_match
+            if throw
+                error("invalid version specifier: \"$s\"")
+            else
+                return nothing
+            end
+        end
         push!(ranges, range)
     end
     return VersionSpec(ranges)

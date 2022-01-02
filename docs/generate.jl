@@ -32,9 +32,9 @@ function generate()
         # [**11.** REPL Mode Reference](@id REPL-Mode-Reference)
 
         This section describes available commands in the Pkg REPL.
-        The REPL mode is mostly meant for interactive use,
+        The Pkg REPL mode is mostly meant for interactive use,
         and for non-interactive use it is recommended to use the
-        "API mode", see [API Reference](@ref API-Reference).
+        functional API, see [API Reference](@ref API-Reference).
         """)
     # list commands
     println(io, "## `package` commands")
