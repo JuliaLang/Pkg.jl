@@ -1916,7 +1916,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
 
-        new_ver_avail = !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new) && !latest_version
+        new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
         pkg_upgradable = new_ver_avail && isempty(cinfo[1])
         pkg_heldback = new_ver_avail && !isempty(cinfo[1])
 
