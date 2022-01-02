@@ -14,6 +14,7 @@ julia> mkdir("MyProject")
 julia> cd("MyProject")
 /Users/kristoffer/MyProject
 
+# we can now use "." instead of a longer relative or full path:
 (v1.0) pkg> activate .
 
 (MyProject) pkg> st
