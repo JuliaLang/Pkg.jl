@@ -396,22 +396,60 @@ end
     ]
     want_data = Dict("A"=>v"1", "B"=>v"2", "C"=>v"2", "D"=>v"2", "E"=>v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
+
+
+
+    VERBOSE && @info("SCHEME 11")
+    ## DEPENDENCY SCHEME 11: FOUR PACKAGES, WITH AN INCONSISTENCY
+    ## ref Pkg.jl issue #2740
+    deps_data = Any[
+        ["A", v"1", "C", "1"],
+        ["A", v"2", "C", "2"],
+        ["A", v"2", "D", "1"],
+        ["B", v"1", "D", "1"],
+        ["B", v"2", "D", "2"],
+        ["C", v"1", "D", "1"],
+        ["C", v"1", "B", "1"],
+        ["C", v"2", "D", "2"],
+        ["C", v"2", "B", "2"],
+        ["D", v"1"],
+        ["D", v"2"],
+    ]
+
+    @test sanity_tst(deps_data, [("A", v"2")])
+
+    # require A & B, any version (must use the highest non-inconsistent)
+    reqs_data = Any[
+        ["A", "*"],
+        ["B", "*"],
+    ]
+    want_data = Dict("A"=>v"1", "B"=>v"1", "C"=>v"1", "D"=>v"1")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
 end
 
 @testset "realistic" begin
     VERBOSE && @info("SCHEME REALISTIC")
-    ## DEPENDENCY SCHEME 11: A REALISTIC EXAMPLE
+    ## DEPENDENCY SCHEME 12: A REALISTIC EXAMPLE
     ## ref Julia issue #21485
 
     include("resolvedata1.jl")
 
     @test sanity_tst(ResolveData.deps_data, ResolveData.problematic_data)
     @test resolve_tst(ResolveData.deps_data, ResolveData.reqs_data, ResolveData.want_data)
+
+    ## DEPENDENCY SCHEME 13: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
+    ## ref Pkg.jl issue #1949
+
+    include("resolvedata2.jl")
+
+    @test sanity_tst(ResolveData2.deps_data, ResolveData2.problematic_data)
+    @test resolve_tst(ResolveData2.deps_data, ResolveData2.reqs_data, ResolveData2.want_data)
 end
 
 @testset "nasty" begin
     VERBOSE && @info("SCHEME NASTY")
-    ## DEPENDENCY SCHEME 12: A NASTY CASE
+    ## DEPENDENCY SCHEME 13: A NASTY CASE
 
     include("NastyGenerator.jl")
     deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = true)
@@ -435,10 +473,8 @@ end
             return versions[idx]
         end
 
-        #=
-        # DISABLED FOR NOW BECAUSE THE JLL INTO STDLIBS BROKE IT
         # First, we're going to resolve for specific versions of Julia, ensuring we get the right dep versions:
-        Pkg.Registry.download_default_registries(Pkg.DEFAULT_IO[])
+        Pkg.Registry.download_default_registries(Pkg.stdout_f())
         ctx = Pkg.Types.Context(;julia_version=v"1.5")
         versions, deps = Pkg.Operations._resolve(ctx.io, ctx.env, ctx.registries, [
             Pkg.Types.PackageSpec(name="MPFR_jll", uuid=Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3")),
@@ -469,7 +505,19 @@ end
         mpfr = find_by_name(versions, "MPFR_jll")
         @test mpfr !== nothing
         @test mpfr.version.major == 4 && mpfr.version.minor == 0
-        =#
+    end
+end
+
+@testset "Stdlib resolve smoketest" begin
+    # All stdlibs should be installable and resolvable
+    temp_pkg_dir() do dir
+        Pkg.activate(temp=true)
+        Pkg.add(map(first, values(Pkg.Types.load_stdlib())))    # add all stdlibs
+        iob = IOBuffer()
+        Pkg.resolve(io = iob)
+        str = String(take!(iob))
+        @test occursin(r"No Changes to .*Project.toml", str)
+        @test occursin(r"No Changes to .*Manifest.toml", str)
     end
 end
 

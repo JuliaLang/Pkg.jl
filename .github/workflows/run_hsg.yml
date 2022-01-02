@@ -1,0 +1,43 @@
+name: Update Historical Stdlibs
+on:
+  workflow_dispatch:
+permissions: # Permissions for the `GITHUB_TOKEN` token
+  contents: write
+  pull-requests: write
+concurrency:
+  # Skip intermediate builds: always.
+  # Cancel intermediate builds: only if it is a pull request build.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+jobs:
+  run_hsg:
+    name: Update Historical Stdlibs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+      - uses: julia-actions/setup-julia@v1
+        with:
+          # version: '1'
+          version: 'nightly'
+      - name: "Instantiate the project"
+        run: julia --color=yes --project=ext/HistoricaStdlibGenerator -e 'import Pkg; Pkg.instantiate()'
+      - name: "Run the `generate_historical_stdlibs.jl` script"
+        run: julia --color=yes --project=ext/HistoricaStdlibGenerator ext/HistoricaStdlibGenerator/generate_historical_stdlibs.jl
+      - run: git status
+      - run: git add -A
+      - run: git diff HEAD
+      - name: "Create or update the pull request"
+        uses: peter-evans/create-pull-request@7380612b49221684fefa025244f2ef4008ae50ad # v3.10.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: "bot/update-historical-stdlibs"
+          delete-branch: true
+          commit-message: "🤖 Update the list of historical stdlibs"
+          title: "🤖 Update the list of historical stdlibs"
+          body: |
+            This PR updates the list of historical stdlibs.
+            Note: CI will not automatically run on this PR. To run CI, please
+            close and reopen the PR.

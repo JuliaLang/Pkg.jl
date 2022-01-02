@@ -14,6 +14,7 @@ julia> mkdir("MyProject")
 julia> cd("MyProject")
 /Users/kristoffer/MyProject
 
+# we can now use "." instead of a longer relative or full path:
 (v1.0) pkg> activate .
 
 (MyProject) pkg> st
@@ -35,6 +36,8 @@ julia> readdir()
   Updating `Manifest.toml`
   [7876af07] + Example v0.5.1
   [8dfed614] + Test
+Precompiling project...
+  1 dependency successfully precompiled in 2 seconds
 
 julia> readdir()
 2-element Array{String,1}:
@@ -59,15 +62,30 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 This new environment is completely separate from the one we used earlier.
 
 
-## Precompiling a project
+## Project Precompilation
 
-The REPL command `precompile` can be used to precompile all the dependencies in the project. You can for example do
+By default any package that is added to a project or updated in a Pkg action will be automatically precompiled, along
+with its dependencies. The exception is the `develop` command, which neither builds nor precompiles the package, when
+that happens is left up to the user to decide.
+
+If a package that has been updated is already loaded in the session, the precompilation process will go ahead and precompile
+the new version, and any packages that depend on it, but will note that the package cannot be used until session restart.
+
+To disable this auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`, after which precompilation can be triggered
+manually either serially via code loading
 
 ```julia-repl
-(HelloWorld) pkg> update; precompile
+julia> using Example
+[ Info: Precompiling Example [7876af07-990d-54b4-ab0e-23690620f79a]
 ```
 
-to update the dependencies and then precompile them.
+ or the parallel precompilation, which can be significantly faster when many dependencies are involved, via
+
+```julia-repl
+pkg> precompile
+Precompiling project...
+  23 dependencies successfully precompiled in 36 seconds
+```
 
 ## Using someone else's project
 

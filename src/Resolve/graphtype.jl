@@ -44,7 +44,7 @@ mutable struct ResolveLog
     pool::Dict{UUID,ResolveLogEntry}
 
     # journal: record all messages in order (shared between all entries)
-    journal::Vector{Tuple{UUID,String}}
+    journal::ResolveJournal
 
     # exact: keeps track of whether the resolve process is still exact, or
     #        heuristics have been employed
@@ -711,19 +711,24 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
     other_p, other_entry = pkgs[p0], rlog.pool[pkgs[p0]]
     other_id = pkgID(other_p, rlog)
     if any(vmask)
-        msg = "restricted by "
-        if other_p == uuid_julia
-            msg *= "julia compatibility requirements "
-            other_entry = nothing # don't propagate the log
+        if all(vmask[1:(end-1)])    # Check if all versions are allowed(except uninstalled)
+            msg = ""
+            other_entry = nothing   # Don't propagate the log if all versions allowed
         else
-            msg *= "compatibility requirements with $(logstr(other_id)) "
-        end
-        msg *= "to versions: $(vs_string(p1, vmask))"
-        if vmask ≠ gconstr[p1]
-            if any(gconstr[p1])
-                msg *= ", leaving only versions: $(vs_string(p1, gconstr[p1]))"
+            msg = "restricted by "
+            if other_p == uuid_julia
+                msg *= "julia compatibility requirements "
+                other_entry = nothing # don't propagate the log
             else
-                msg *= " — no versions left"
+                msg *= "compatibility requirements with $(logstr(other_id)) "
+            end
+            msg *= "to versions: $(vs_string(p1, vmask))"
+            if vmask ≠ gconstr[p1]
+                if any(gconstr[p1])
+                    msg *= ", leaving only versions: $(vs_string(p1, gconstr[p1]))"
+                else
+                    msg *= " — no versions left"
+                end
             end
         end
     else
@@ -1019,6 +1024,8 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
         Set{Int}(p0 for p0 = 1:np if !gconstr[p0][end]) :
         sources
 
+    seen = copy(staged)
+
     while !isempty(staged)
         staged_next = Set{Int}()
         for p0 in staged
@@ -1048,6 +1055,8 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
                 if gconstr1 ≠ old_gconstr1
                     push!(staged_next, p1)
                     log_events && log_event_implicit_req!(graph, p1, added_constr1, p0)
+                elseif p1 ∉ seen
+                    push!(staged_next, p1)
                 end
                 if !any(gconstr1)
                     if exact
@@ -1060,6 +1069,7 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
                 end
             end
         end
+        union!(seen, staged_next)
         staged = staged_next
     end
     return graph

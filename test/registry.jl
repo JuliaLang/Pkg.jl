@@ -53,7 +53,7 @@ end
 
 function is_pkg_available(pkg::PackageSpec)
     uuids = Set{UUID}()
-    for registry in Pkg.Registry.reachable_registries() 
+    for registry in Pkg.Registry.reachable_registries()
         union!(uuids, keys(registry))
     end
     return in(pkg.uuid, uuids)
@@ -65,16 +65,17 @@ function with_depot2(f)
     Base.DEPOT_PATH[1:2] .= Base.DEPOT_PATH[2:-1:1]
 end
 
-
 @testset "registries" begin
     temp_pkg_dir() do depot; mktempdir() do depot2
         insert!(Base.DEPOT_PATH, 2, depot2)
         # set up registries
         regdir = mktempdir()
         setup_test_registries(regdir)
-        generalurl = Pkg.Registry.DEFAULT_REGISTRIES[1].url # hehe
+        general_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
+        general_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
+        general_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
         General = RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106",
-            url = generalurl)
+            url = general_url, path = general_path, linked = general_linked)
         Foo1 = RegistrySpec(name = "RegistryFoo", uuid = "e9fceed0-5623-4384-aff0-6db4c442647a",
             url = joinpath(regdir, "RegistryFoo1"))
         Foo2 = RegistrySpec(name = "RegistryFoo", uuid = "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
@@ -109,7 +110,7 @@ end
         for reg in ("General",
                     RegistrySpec("General"),
                     RegistrySpec(name = "General"),
-                    RegistrySpec(name = "General", url = generalurl),
+                    RegistrySpec(name = "General", path = general_path),
                     RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"),
                     RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106"))
             Pkg.Registry.add(reg)
@@ -316,6 +317,43 @@ end
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
     end
+end
+
+if Pkg.Registry.registry_use_pkg_server()
+@testset "compressed registry" begin
+    for unpack in (true, nothing)
+        withenv("JULIA_PKG_UNPACK_REGISTRY" => unpack) do
+            temp_pkg_dir(;linked_reg=false) do depot
+                # These get restored by temp_pkg_dir
+                Pkg.Registry.DEFAULT_REGISTRIES[1].path = nothing
+                Pkg.Registry.DEFAULT_REGISTRIES[1].url = "https://github.com/JuliaRegistries/General.git"
+                
+                # This should not uncompress the registry
+                Registry.add(RegistrySpec(uuid = UUID("23338594-aafe-5451-b93e-139f81909106")))
+                @test isfile(joinpath(DEPOT_PATH[1], "registries", "General.tar.gz")) != something(unpack, false)
+                Pkg.add("Example")
+                
+                # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
+                if unpack == true
+                    write(joinpath(DEPOT_PATH[1], "registries", "General", ".tree_info.toml"),
+                        """
+                        git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
+                        """)
+                else
+                    write(joinpath(DEPOT_PATH[1], "registries", "General.toml"),
+                        """
+                        git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
+                        uuid = "23338594-aafe-5451-b93e-139f81909106"
+                        path = "General.tar.gz"
+                        """)
+                end
+                Pkg.update()
+                Pkg.Registry.rm(RegistrySpec(name = "General"))
+                @test isempty(readdir(joinpath(DEPOT_PATH[1], "registries")))
+            end
+        end
+    end
+end
 end
 
 end # module

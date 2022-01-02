@@ -33,21 +33,21 @@ temp_pkg_dir() do project_path
 
         @test_throws PkgError pkg"generate 2019Julia"
         pkg"generate Foo"
-        pkg"dev Foo"
+        pkg"dev ./Foo"
         mv(joinpath("Foo", "src", "Foo.jl"), joinpath("Foo", "src", "Foo2.jl"))
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
         ###
         mv(joinpath("Foo", "src", "Foo2.jl"), joinpath("Foo", "src", "Foo.jl"))
         write(joinpath("Foo", "Project.toml"), """
             name = "Foo"
         """
         )
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
         write(joinpath("Foo", "Project.toml"), """
             uuid = "b7b78b08-812d-11e8-33cd-11188e330cbe"
         """
         )
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
     end
 end
 
@@ -64,6 +64,15 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"add Example,Random"
     pkg"rm Example,Random"
     pkg"add Example#master"
+    pkg"rm Example"
+    pkg"add https://github.com/JuliaLang/Example.jl#master"
+
+    ## TODO: figure out how to test these in CI
+    # pkg"rm Example"
+    # pkg"add git@github.com:JuliaLang/Example.jl.git"
+    # pkg"rm Example"
+    # pkg"add \"git@github.com:JuliaLang/Example.jl.git\"#master"
+    # pkg"rm Example"
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)
     entry = Pkg.Types.manifest_info(EnvCache().manifest, TEST_PKG.uuid)
@@ -179,7 +188,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 with_current_env() do
                     uuid1 = Pkg.generate("SubModule1")["SubModule1"]
                     uuid2 = Pkg.generate("SubModule2")["SubModule2"]
-                    pkg"develop SubModule1"
+                    pkg"develop ./SubModule1"
                     mkdir("tests")
                     cd("tests")
                     pkg"develop ../SubModule2"
@@ -255,8 +264,8 @@ temp_pkg_dir() do project_path
         @test Base.ACTIVE_PROJECT[] === nothing
         # expansion of ~
         if !Sys.iswindows()
-            pkg"activate ~/Foo"
-            @test Base.active_project() == joinpath(homedir(), "Foo", "Project.toml")
+            pkg"activate ~/Foo_lzTkPF6N"
+            @test Base.active_project() == joinpath(homedir(), "Foo_lzTkPF6N", "Project.toml")
         end
     end
 end
@@ -285,6 +294,23 @@ apply_completion(str) = begin
 end
 
 # Autocompletions
+temp_pkg_dir() do project_path; cd(project_path) do
+    @testset "tab completion while offline" begin
+        # No registry and no network connection
+        Pkg.offline()
+        pkg"activate ."
+        c, r = test_complete("add Exam")
+        @test isempty(c)
+        Pkg.offline(false)
+        # Existing registry but no network connection
+        pkg"registry add General" # instantiate the `General` registry to complete remote package names
+        Pkg.offline(true)
+        c, r = test_complete("add Exam")
+        @test "Example" in c
+        Pkg.offline(false)
+    end
+end end
+
 temp_pkg_dir() do project_path; cd(project_path) do
     @testset "tab completion" begin
         pkg"registry add General" # instantiate the `General` registry to complete remote package names
@@ -335,6 +361,12 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "remove" in c
         @test apply_completion("rm E") == "rm Example"
         @test apply_completion("add Exampl") == "add Example"
+
+        # help mode
+        @test apply_completion("?ad") == "?add"
+        @test apply_completion("?act") == "?activate"
+        @test apply_completion("? ad") == "? add"
+        @test apply_completion("? act") == "? activate"
 
         # stdlibs
         c, r = test_complete("add Stat")
@@ -418,10 +450,10 @@ temp_pkg_dir() do project_path; cd(project_path) do
         with_current_env() do
             # the command below also tests multiline input
             pkg"""
-                dev RecursiveDep2
-                dev RecursiveDep
-                dev SubModule
-                dev SubModule2
+                dev ./RecursiveDep2
+                dev ./RecursiveDep
+                dev ./SubModule
+                dev ./SubModule2
                 add Random
                 add Example
                 add JSON
@@ -618,6 +650,8 @@ end
         status 7876af07-990d-54b4-ab0e-23690620f79a
         status Example Random
         status -m Example
+        status --outdated
+        status --compat
         """
         # --diff option
         @test_logs (:warn, r"diff option only available") pkg"status --diff"
@@ -648,6 +682,23 @@ end
     @inferred Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[])
     @inferred Pkg.REPLMode.CommandSpecs(Pkg.REPLMode.CommandDeclaration[])
     @inferred Pkg.REPLMode.CompoundSpecs(Pair{String,Vector{Pkg.REPLMode.CommandDeclaration}}[])
+end
+
+@testset "REPL missing package install hook" begin
+    isolate(loaded_depot=true) do
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+
+        # don't offer to install the dummy "julia" entry that's in General
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
+
+        println(stdin.buffer, "n") # simulate rejecting prompt with `n\n`
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+        flush(stdin.buffer)
+
+        println(stdin.buffer, "y") # simulate accepting prompt with `y\n`
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+        flush(stdin.buffer)
+    end
 end
 
 end # module

@@ -1,0 +1,16 @@
+name = "CompatExtras"
+uuid = "37f6bc05-9e90-43d5-90c6-4d69d7097606"
+version = "0.1.0"
+
+[deps]
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+
+[compat]
+Aqua = "0.5"
+DataFrames = "0.22"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+
+[targets]
+test = ["Aqua"]

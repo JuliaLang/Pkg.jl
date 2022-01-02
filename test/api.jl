@@ -137,6 +137,12 @@ end
         @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
         @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
+
+        Pkg.precompile("Dep4", io=iob)
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+        Pkg.precompile(["Dep4", "NoVersion"], io=iob)
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
         println("Auto precompilation disabled")
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
@@ -207,12 +213,53 @@ end
 
         Pkg.activate(".")
         Pkg.resolve()
-        Pkg.precompile()
+
+        ## Tests when circularity is in dependencies
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+
+        ## Tests when circularity goes through the active project
+        Pkg.activate("CircularDep1")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+        Pkg.activate(".")
+        Pkg.activate("CircularDep2")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+        Pkg.activate(".")
+        Pkg.activate("CircularDep3")
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
     end end
 end
 
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin
     @test_throws Pkg.Types.PkgError("`Example.jl` is not a valid package name. Perhaps you meant `Example`") Pkg.API.check_package_name("Example.jl")
+end
+
+@testset "issue #2587, PR #2589: `Pkg.PackageSpec` accepts `Union{UUID, AbstractString, Nothing}` for `uuid`" begin
+    @testset begin
+        xs = [
+            Pkg.PackageSpec(uuid = Base.UUID(0)),
+            Pkg.PackageSpec(uuid = Base.UUID("00000000-0000-0000-0000-000000000000")),
+            Pkg.PackageSpec(uuid = "00000000-0000-0000-0000-000000000000"),
+            Pkg.PackageSpec(uuid = strip("00000000-0000-0000-0000-000000000000")), # `strip` returns a `SubString{String}`, which is an `AbstractString` but is not a `String`
+        ]
+        for x in xs
+            @test x isa Pkg.PackageSpec
+            @test x.uuid isa Base.UUID
+            @test x.uuid == Base.UUID(0)
+        end
+    end
+
+    @testset begin
+        xs = [
+            Pkg.PackageSpec(),
+            Pkg.PackageSpec(uuid = nothing),
+        ]
+        for x in xs
+            @test x isa Pkg.PackageSpec
+            @test x.uuid === nothing
+        end
+    end
 end
 
 end # module APITests

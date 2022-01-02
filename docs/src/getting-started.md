@@ -165,7 +165,7 @@ Now we can go back to the Julia REPL and load the package:
 julia> import Example
 ```
 
-!!! warn
+!!! warning
     A package can only be loaded once per Julia session.
     If you have run `import Example` in the current Julia session, you will
     have to restart Julia and rerun `activate tutorial` in the Pkg REPL.

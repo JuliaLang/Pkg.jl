@@ -378,7 +378,7 @@ end
 
 temp_pkg_dir() do project_path
     @testset "libgit2 downloads" begin
-        Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
+        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         @eval import $(Symbol(TEST_PKG.name))
         @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
@@ -400,7 +400,7 @@ end
 
 temp_pkg_dir() do project_path
     @testset "libgit2 downloads" begin
-        Pkg.add(TEST_PKG.name; use_libgit2_for_all_downloads=true)
+        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         Pkg.rm(TEST_PKG.name)
     end
@@ -725,7 +725,7 @@ end
 @testset "subdir functionality" begin
     temp_pkg_dir() do project_path; with_temp_env() do
         mktempdir() do tmp
-            repodir = git_init_package(tmp, "test_packages/MainRepo")
+            repodir = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "MainRepo"))
             # Add with subdir
             subdir_uuid = UUID("6fe4e069-dcb0-448a-be67-3a8bf3404c58")
             Pkg.add(url = repodir, subdir = "SubDir")
@@ -859,6 +859,13 @@ end
     @test !(v"1.2.2" in v)
     @test   v"1.2.3" in v
     @test !(v"1.2.4" in v)
+end
+
+@testset "Suggest `Pkg.develop` instead of `Pkg.add`" begin
+    mktempdir() do tmp_dir
+        touch(joinpath(tmp_dir, "Project.toml"))
+        @test_throws Pkg.Types.PkgError Pkg.add(; path = tmp_dir)
+    end
 end
 
 end # module

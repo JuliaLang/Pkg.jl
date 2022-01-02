@@ -11,6 +11,10 @@ function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector
     return parse_package_args(args; add_or_dev=add_or_dev)
 end
 
+struct VersionToken
+    version::String
+end
+
 struct Rev
     rev::String
 end
@@ -20,7 +24,7 @@ struct Subdir
 end
 
 const PackageIdentifier = String
-const PackageToken = Union{PackageIdentifier, VersionRange, Rev, Subdir}
+const PackageToken = Union{PackageIdentifier, VersionToken, Rev, Subdir}
 
     # Match a git repository URL. This includes uses of `@` and `:` but
     # requires that it has `.git` at the end.
@@ -64,7 +68,7 @@ function package_lex(qwords::Vector{QString})::Vector{String}
 end
 
 PackageToken(word::String)::PackageToken =
-    first(word) == '@' ? VersionRange(word[2:end]) :
+    first(word) == '@' ? VersionToken(word[2:end]) :
     first(word) == '#' ? Rev(word[2:end]) :
     first(word) == ':' ? Subdir(word[2:end]) :
     String(word)
@@ -75,15 +79,15 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
         (isempty(args) || args[1] isa PackageIdentifier) && return
         modifier = popfirst!(args)
         if modifier isa Subdir
-            pkg.repo.subdir = modifier.dir
+            pkg.subdir = modifier.dir
             (isempty(args) || args[1] isa PackageIdentifier) && return
             modifier = popfirst!(args)
         end
 
-        if modifier isa VersionRange
-            pkg.version = VersionSpec(modifier)
+        if modifier isa VersionToken
+            pkg.version = modifier.version
         elseif modifier isa Rev
-            pkg.repo.rev = modifier.rev
+            pkg.rev = modifier.rev
         else
             pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
         end
@@ -98,7 +102,7 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
             push!(pkgs, pkg)
         # Modifiers without a corresponding package identifier -- this is a user error
         else
-            arg isa VersionRange ?
+            arg isa VersionToken ?
                 pkgerror("Package name/uuid must precede version specifier `@$arg`.") :
             arg isa Rev ?
                 pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.") :
@@ -117,20 +121,27 @@ end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
-    if add_or_develop && casesensitive_isdir(expanduser(word))
-        if !occursin(Base.Filesystem.path_separator_re, word)
-            @info "Resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
+    if add_or_develop
+        if isurl(word)
+            return PackageSpec(; url=word)
+        elseif any(occursin.(['\\','/'], word)) || word == "." || word == ".."
+            if casesensitive_isdir(expanduser(word))
+                return PackageSpec(; path=normpath(expanduser(word)))
+            else
+                pkgerror("`$word` appears to be a local path, but directory does not exist")
+            end
         end
-        return PackageSpec(repo=Types.GitRepo(source=expanduser(word)))
-    elseif occursin(uuid_re, word)
-        return PackageSpec(uuid=UUID(word))
+        if occursin(name_re, word) && casesensitive_isdir(expanduser(word))
+            @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
+        end
+    end
+    if occursin(uuid_re, word)
+        return PackageSpec(;uuid=UUID(word))
     elseif occursin(name_re, word)
         return PackageSpec(String(match(name_re, word).captures[1]))
     elseif occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
-    elseif add_or_develop && isurl(word)
-        return PackageSpec(repo=Types.GitRepo(source=word))
     else
         pkgerror("Unable to parse `$word` as a package.")
     end
@@ -184,7 +195,10 @@ function parse_activate(args::Vector{QString}, options)
             return [x.raw]
         end
         x = x.raw
-        if first(x) == '@'
+        if x == "-"
+            options[:prev] = true
+            return []
+        elseif first(x) == '@'
             options[:shared] = true
             return [x[2:end]]
         else
