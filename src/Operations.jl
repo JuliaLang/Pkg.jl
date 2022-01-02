@@ -1967,7 +1967,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     end
 
     if !all_packages_downloaded
-        printpkgstyle(io, :Info, "packages marked with $not_installed_indicator not downloaded, use `instantiate` to download", ignore_indent)
+        printpkgstyle(io, :Info, "packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", ignore_indent)
     end
     if !no_packages_upgradable && no_packages_held_back
         printpkgstyle(io, :Info, "packages marked with $upgradable_indicator have new versions available", ignore_indent)
