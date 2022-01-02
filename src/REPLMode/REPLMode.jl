@@ -735,7 +735,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             rethrow()
         end
         choice == -1 && return false
-        API.activate(envs[choice]) do
+        Operations.activate(envs[choice]) do
             API.add(string.(available_pkgs))
         end
     elseif (lower_resp in ["n"])

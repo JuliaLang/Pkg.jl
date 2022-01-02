@@ -1003,6 +1003,17 @@ end
 ##############
 # Operations #
 ##############
+
+function activate(f::Function, new_project::AbstractString)
+    old = Base.ACTIVE_PROJECT[]
+    Base.ACTIVE_PROJECT[] = new_project
+    try
+        f()
+    finally
+        Base.ACTIVE_PROJECT[] = old
+    end
+end
+
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     drop = UUID[]
     # find manifest-mode drops
