@@ -1715,16 +1715,9 @@ end
 
 # Display
 
-function stat_rep(x::PackageSpec; name=true, pad_name=0, pad_version=0, upgradable=false, heldback=false)
-    name = name ? "$(rpad(x.name, pad_name))" : ""
+function stat_rep(x::PackageSpec; name=true)
+    name = name ? "$(x.name)" : ""
     version = x.version == VersionSpec() ? "" : "v$(x.version)"
-    if upgradable
-        version = string(version, " ⌃")
-    end
-    if heldback
-        version = string(version, " ⌅")
-    end
-    version = rpad(version, pad_version)
     rev = ""
     if x.repo.rev !== nothing
         rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
@@ -1736,27 +1729,25 @@ function stat_rep(x::PackageSpec; name=true, pad_name=0, pad_version=0, upgradab
     return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
 end
 
-function print_single(io::IO, pkg::PackageSpec, pad_name::Int, pad_version::Int, upgradable::Bool, heldback::Bool)
-    print(io, stat_rep(pkg; pad_name, pad_version, upgradable, heldback))
-end
+print_single(io::IO, pkg::PackageSpec) = print(io, stat_rep(pkg))
 
 is_instantiated(::Nothing) = false
 is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid)
 # Compare an old and new node of the dependency graph and print a single line to summarize the change
-function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec}, pad_name::Int, pad_version::Int)
+function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,PackageSpec})
     if !is_instantiated(old) && is_instantiated(new)
-        printstyled(io, "+ $(stat_rep(new; pad_name, pad_version))"; color=:light_green)
+        printstyled(io, "+ $(stat_rep(new))"; color=:light_green)
     elseif !is_instantiated(new)
-        printstyled(io, "- $(stat_rep(old; pad_name, pad_version))"; color=:light_red)
+        printstyled(io, "- $(stat_rep(old))"; color=:light_red)
     elseif is_tracking_registry(old) && is_tracking_registry(new) &&
            new.version isa VersionNumber && old.version isa VersionNumber && new.version != old.version
         if new.version > old.version
-            printstyled(io, "↑ $(stat_rep(old; pad_name, pad_version)) ⇒ $(stat_rep(new; name=false, pad_version))"; color=:light_yellow)
+            printstyled(io, "↑ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
         else
-            printstyled(io, "↓ $(stat_rep(old; pad_name, pad_version)) ⇒ $(stat_rep(new; name=false, pad_version))"; color=:light_magenta)
+            printstyled(io, "↓ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_magenta)
         end
     else
-        printstyled(io, "~ $(stat_rep(old; pad_name, pad_version)) ⇒ $(stat_rep(new; name=false, pad_version))"; color=:light_yellow)
+        printstyled(io, "~ $(stat_rep(old)) ⇒ $(stat_rep(new; name=false))"; color=:light_yellow)
     end
 end
 
@@ -1864,13 +1855,16 @@ struct PackageStatusData
     old::Union{Nothing, PackageSpec}
     new::Union{Nothing, PackageSpec}
     downloaded::Bool
+    upgradable::Bool
+    heldback::Bool
     compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=:red), "→", context=io)
-    not_latest_version_indicator = sprint((io, args) -> printstyled(io, args...; color=:yellow), "↓", context=io)
+    upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
+    heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=:normal), "⌅", context=io)
     filter = !isempty(uuids) || !isempty(names)
     # setup
     xs = diff_array(old_env, env; manifest=manifest)
@@ -1896,9 +1890,10 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     # Sort stdlibs and _jlls towards the end in status output
     xs = sort!(xs, by = (x -> (is_stdlib(x[1]), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
     all_packages_downloaded = true
+    no_packages_upgradable = true
+    no_packages_held_back = true
+    lpadding = 2
 
-    longest_name_length = 0
-    longest_version_length = 0
     package_statuses = PackageStatusData[]
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
@@ -1918,45 +1913,41 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if outdated && latest_version
             continue
         end
-        longest_name_length = max(length(something(old, new).name), longest_name_length)
-
-        v = something(old, new).version
-        v_str = v == VersionSpec() ? "" : "v$(v)"
-        longest_version_length = if !latest_version && !diff && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
-            # if an updatable indicator will be shown
-            max(length(v_str) + 2, longest_version_length)
-        else
-            max(length(v_str), longest_version_length)
-        end
 
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
 
-        all_packages_downloaded &= pkg_downloaded
-        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, cinfo))
-    end
-    no_packages_upgradable = true
-    no_packages_held_back = true
-    for pkg in package_statuses
-        latest_version = pkg.compat_data === nothing
-        print(io, pkg.downloaded ? " " : not_installed_indicator)
-        printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
-        upgradable, heldback = false, false
-        if !latest_version && !diff && !Operations.is_tracking_repo(pkg.new) && !Operations.is_tracking_path(pkg.new)
-            packages_holding_back, _ = pkg.compat_data
-            if isempty(packages_holding_back)
-                upgradable = true
-                no_packages_upgradable = false
-            else
-                heldback = true
-                no_packages_held_back = false
-            end
+        new_ver_avail = !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new) && !latest_version
+        pkg_upgradable = new_ver_avail && isempty(cinfo[1])
+        pkg_heldback = new_ver_avail && !isempty(cinfo[1])
+
+        if !pkg_downloaded && (pkg_upgradable || pkg_heldback)
+            # allow space in the gutter for two icons on a single line
+            lpadding = 3
         end
 
-        if diff
-            print_diff(io, pkg.old, pkg.new, longest_name_length, longest_version_length)
-        else
-            print_single(io, pkg.new, longest_name_length, longest_version_length, upgradable, heldback)
+        all_packages_downloaded &= pkg_downloaded
+        no_packages_upgradable &= !pkg_upgradable
+        no_packages_held_back &= !pkg_heldback
+        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo))
+    end
+
+    for pkg in package_statuses
+        if !pkg.downloaded
+            print(io, not_installed_indicator)
+        elseif lpadding > 2
+            print(io, " ")
         end
+        if pkg.upgradable
+            print(io, upgradable_indicator)
+        elseif pkg.heldback
+            print(io, heldback_indicator)
+        else
+            print(io, " ")
+        end
+
+        printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
+
+        diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
 
         if outdated && !diff && pkg.compat_data !== nothing
             packages_holding_back, max_version, max_version_compat = pkg.compat_data
@@ -1979,13 +1970,13 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         printpkgstyle(io, :Info, "packages marked with $not_installed_indicator not downloaded, use `instantiate` to download", ignore_indent)
     end
     if !no_packages_upgradable && no_packages_held_back
-        printpkgstyle(io, :Info, "packages marked with ⌃ have new versions available", ignore_indent)
+        printpkgstyle(io, :Info, "packages marked with $upgradable_indicator have new versions available", ignore_indent)
     end
     if !no_packages_held_back && no_packages_upgradable
-        printpkgstyle(io, :Info, "packages marked with ⌅ have new versions available but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+        printpkgstyle(io, :Info, "packages marked with $heldback_indicator have new versions available but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
     end
     if !no_packages_held_back && !no_packages_upgradable
-        printpkgstyle(io, :Info, "packages marked with ⌃ and ⌅ have new versions available, but those with ⌅ cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+        printpkgstyle(io, :Info, "packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with ⌅ cannot be upgraded. To see why use `status --outdated`", ignore_indent)
     end
 
     return nothing

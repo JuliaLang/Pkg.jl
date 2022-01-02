@@ -2204,7 +2204,7 @@ end
         Pkg.add(Pkg.PackageSpec(name="Example", version="0.4.0"); io=devnull)
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
-        @test occursin(Regex("\\[7876af07\\] Example\\s*v0.4.0\\s*⌃\\s*\\(<v$v\\)"), str)
+        @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\(<v$v\\)"), str)
         open(Base.active_project(), "a") do io
             write(io, """
                   [compat]
@@ -2213,7 +2213,7 @@ end
         end
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
-        @test occursin(Regex("\\[7876af07\\] Example\\s*v0.4.0\\s*⌃\\s*\\[<v0.4.1\\], \\(<v$v\\)"), str)
+        @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\[<v0.4.1\\], \\(<v$v\\)"), str)
     end
 end
 
