@@ -389,13 +389,15 @@ PSA[:name => "compat",
     :api => API.compat,
     :arg_count => 0 => 2,
     :completions => complete_installed_packages_and_compat,
-    :description => "edit compat entries in the current Project",
+    :description => "edit compat entries in the current Project and re-resolve",
     :help => md"""
     compat [pkg] [compat_string]
 
 Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments.
 When directly editing use tab to complete the package name and any existing compat entry.
 Specifying a package with a blank compat entry will remove the entry.
+After changing compat entries a `resolve` will be attempted to check whether the current
+environment is compliant with the new compat rules.
 """,
 ],
 PSA[:name => "gc",
