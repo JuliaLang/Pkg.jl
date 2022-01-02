@@ -11,9 +11,10 @@ In order to create a new project, create a directory for it and then activate th
 ```julia-repl
 julia> mkdir("MyProject")
 
-julia> cd("MyProject") # we can now use "." instead of a longer relative or full path
+julia> cd("MyProject")
 /Users/kristoffer/MyProject
 
+# we can now use "." instead of a longer relative or full path:
 (v1.0) pkg> activate .
 
 (MyProject) pkg> st
