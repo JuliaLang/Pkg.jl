@@ -435,4 +435,4 @@ to internet. For example, when adding a package Pkg only considers
 versions that are already downloaded in version resolution.
 
 To work in offline mode across Julia sessions you can
-set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
+use `import Pkg; Pkg.offline(true)` or set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
