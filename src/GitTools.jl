@@ -4,13 +4,13 @@ module GitTools
 
 using ..Pkg
 using ..MiniProgressBars
-import ..can_fancyprint, ..printpkgstyle
+import ..get_bool_env, ..can_fancyprint, ..printpkgstyle
 using SHA
 import Base: SHA1
 import LibGit2
 using Printf
 
-use_cli_git() = get(ENV, "JULIA_PKG_USE_CLI_GIT", "") == "true"
+use_cli_git() = get_bool_env("JULIA_PKG_USE_CLI_GIT")
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
@@ -158,8 +158,10 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     end
     try
         if use_cli_git()
-            cd(LibGit2.path(repo)) do
-                run(`git fetch -q $remoteurl $(only(refspecs))`)
+            let remoteurl=remoteurl
+                cd(LibGit2.path(repo)) do
+                    run(`git fetch -q $remoteurl $(only(refspecs))`)
+                end
             end
         else
             return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
@@ -272,7 +274,7 @@ Calculate the git tree hash of a given path.
 """
 function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,Nothing} = nothing, indent::Int=0) where HashType
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
-    for f in sort(readdir(root; join=true); by = f -> isdir(f) ? f*"/" : f)
+    for f in sort(readdir(root; join=true); by = f -> gitmode(f) == mode_dir ? f*"/" : f)
         # Skip `.git` directories
         if basename(f) == ".git"
             continue

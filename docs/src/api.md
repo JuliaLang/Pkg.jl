@@ -40,7 +40,9 @@ Pkg.instantiate
 Pkg.resolve
 Pkg.gc
 Pkg.status
+Pkg.compat
 Pkg.precompile
+Pkg.offline
 Pkg.setprotocol!
 Pkg.dependencies
 Pkg.project
@@ -74,14 +76,10 @@ Pkg.Registry.status
 Pkg.Artifacts.create_artifact
 Pkg.Artifacts.remove_artifact
 Pkg.Artifacts.verify_artifact
-Pkg.Artifacts.artifact_meta
-Pkg.Artifacts.artifact_hash
 Pkg.Artifacts.bind_artifact!
 Pkg.Artifacts.unbind_artifact!
 Pkg.Artifacts.download_artifact
-Pkg.Artifacts.find_artifacts_toml
 Pkg.Artifacts.ensure_artifact_installed
 Pkg.Artifacts.ensure_all_artifacts_installed
-Pkg.Artifacts.@artifact_str
 Pkg.Artifacts.archive_artifact
 ```

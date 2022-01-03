@@ -219,6 +219,8 @@ Base.@kwdef mutable struct Compat
     val::VersionSpec
     str::String
 end
+Base.:(==)(t1::Compat, t2::Compat) = t1.val == t2.val
+Base.hash(t::Compat, h::UInt) = hash(t.val, h)
 
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
@@ -234,8 +236,15 @@ Base.@kwdef mutable struct Project
     compat::Dict{String,Compat} = Dict{String,Compat}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
-Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
+Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
+# only hash the deps and compat fields as they are the only fields that affect a resolve
+function project_resolve_hash(t::Project)
+    iob = IOBuffer()
+    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(t.deps); by=first))
+    foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
+    return bytes2hex(sha1(seekstart(iob)))
+end
 
 Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
@@ -380,16 +389,18 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
-const STDLIB = Ref{Dict{UUID,String}}()
+const STDLIB = Ref{Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}}()
 function load_stdlib()
-    stdlib = Dict{UUID,String}()
+    stdlib = Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}()
     for name in readdir(stdlib_dir())
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
         uuid = get(project, "uuid", nothing)
+        v_str = get(project, "version", nothing)
+        version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
-        stdlib[UUID(uuid)] = name
+        stdlib[UUID(uuid)] = (name, version)
     end
     return stdlib
 end
@@ -405,7 +416,10 @@ is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 # Find the entry in `STDLIBS_BY_VERSION`
 # that corresponds to the requested version, and use that.
 # If we can't find one, defaults to `UNREGISTERED_STDLIBS`
-function get_last_stdlibs(julia_version::VersionNumber)
+function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_current_version = false)
+    if !use_historical_for_current_version && julia_version == VERSION
+        return stdlibs()
+    end
     last_stdlibs = UNREGISTERED_STDLIBS
     for (version, stdlibs) in STDLIBS_BY_VERSION
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
@@ -463,50 +477,15 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     # Ensure that log dir exists
     !ispath(logdir()) && mkpath(logdir())
 
+    # Generate entire entry as a string first
+    entry = sprint() do io
+        TOML.print(io, Dict(source_file => [Dict("time" => now())]))
+    end
+
+    # Append entry to log file in one chunk
     usage_file = joinpath(logdir(), usage_filepath)
-    timestamp = now()
-
-    ## Atomically write usage file
-    while true
-        # read existing usage file
-        usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
-        else
-            Dict{String, Any}()
-        end
-
-        # record new usage
-        usage[source_file] = [Dict("time" => timestamp)]
-
-        # keep only latest usage info
-        for k in keys(usage)
-            times = map(d -> Dates.DateTime(d["time"]), usage[k])
-            usage[k] = [Dict("time" => maximum(times))]
-        end
-
-        # Write to a temp file in the same directory as the destination
-        temp_usage_file = tempname(logdir())
-        open(temp_usage_file, "w") do io
-            TOML.print(io, usage, sorted=true)
-        end
-
-        # Move the temp file into place, replacing the original
-        mv(temp_usage_file, usage_file, force = true)
-
-        # Check that the new file has what we want in it
-        new_usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
-        else
-            Dict{String, Any}()
-        end
-        if haskey(new_usage, source_file)
-            for e in new_usage[source_file]
-                if Dates.DateTime(e["time"]) >= timestamp
-                    return
-                end
-            end
-        end
-        # If not, try again
+    open(usage_file, append=true) do io
+        write(io, entry)
     end
 end
 
@@ -705,7 +684,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     end
 
     let repo_source = repo_source
-        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
+        # The type-assertions below are necessary presumably due to julia#36454
+        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::Union{Nothing,String}), repo_source::Union{Nothing,String}; isbare=true)) do repo
+            repo_source_typed = repo_source::Union{Nothing,String}
             GitTools.check_valid_HEAD(repo)
 
             # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
@@ -717,7 +698,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             fetched = false
             if obj_branch === nothing
                 fetched = true
-                GitTools.fetch(ctx.io, repo, repo_source; refspecs=refspecs)
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
                 obj_branch = get_object_or_branch(repo, pkg.repo.rev)
                 if obj_branch === nothing
                     pkgerror("Did not find rev $(pkg.repo.rev) in repository")
@@ -729,7 +710,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             innerentry = manifest_info(ctx.env.manifest, pkg.uuid)
             ispinned = innerentry !== nothing && innerentry.pinned
             if isbranch && !fetched && !ispinned
-                GitTools.fetch(ctx.io, repo, repo_source; refspecs=refspecs)
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
                 gitobject, isbranch = get_object_or_branch(repo, pkg.repo.rev)
             end
 
@@ -780,8 +761,8 @@ end
 
 function resolve_projectfile!(env::EnvCache, pkg, project_path)
     project_file = projectfile_path(project_path; strict=true)
-    project_file === nothing && pkgerror(string("could not find project file in package at `",
-                                                pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)), "` maybe `subdir` needs to be specified")
+    project_file === nothing && pkgerror(string("could not find project file (Project.toml or JuliaProject.toml) in package at `",
+                    something(pkg.repo.source, pkg.path, project_path), "` maybe `subdir` needs to be specified"))
     project_data = read_package(project_file)
     if pkg.uuid === nothing || pkg.uuid == project_data.uuid
         pkg.uuid = project_data.uuid
@@ -892,12 +873,12 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in stdlibs()
+            for (uuid, (name, version)) in stdlibs()
                 name == pkg.name && (pkg.uuid = uuid)
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name = get(stdlibs(), pkg.uuid, nothing)
+            name, version = get(stdlibs(), pkg.uuid, (nothing, nothing))
             nothing !== name && (pkg.name = name)
         end
     end

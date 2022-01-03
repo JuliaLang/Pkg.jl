@@ -52,12 +52,11 @@ function graph_from_data(deps_data)
         end
         isempty(r) && continue
         rp = r[1]
-        rvs = VersionSpec(r[2:end])
+        rvs = VersionSpec(r[2:end]...)
         deps[p][vn][rp] = rvs
     end
     for (p,preq) in deps
         u = uuid(p)
-
         deps_pkgs = Dict{String,Set{VersionNumber}}()
         for (vn,vreq) in deps[p], rp in keys(vreq)
             push!(get!(Set{VersionNumber}, deps_pkgs, rp), vn)
@@ -117,7 +116,26 @@ function resolve_tst(deps_data, reqs_data, want_data = nothing; clean_graph = fa
     add_reqs!(graph, reqs)
     simplify_graph!(graph, clean_graph = clean_graph)
     want = resolve(graph)
-    return want == wantuuids(want_data)
+
+    id(u) = pkgID(u, graph)
+    wd = wantuuids(want_data)
+    if want ≠ wd
+        for (u,vn) in want
+            if u ∉ keys(wd)
+                @info "resolver decided to install $(id(u)) (v$vn), package wasn't expected"
+            elseif vn ≠ wd[u]
+            @info "version mismatch for $(id(u)), resolver wants v$vn, expected v$(wd[u])"
+            end
+        end
+        for (u,vn) in wd
+            if u ∉ keys(want)
+                @info "was expecting the resolver to install $(id(u)) (v$vn)"
+            end
+        end
+        return false
+    else
+        return true
+    end
 end
 
 end

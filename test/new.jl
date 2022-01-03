@@ -285,7 +285,12 @@ end
 @testset "test: fallback when no project file exists" begin
     isolate(loaded_depot=true) do
         Pkg.add(name="Permutations", version="0.3.2")
-        Pkg.test("Permutations")
+        if Sys.WORD_SIZE == 32
+            # The Permutations.jl v0.3.2 tests are known to fail on 32-bit Julia
+            @test_skip Pkg.test("Permutations")
+        else
+            Pkg.test("Permutations")
+        end 
     end
 end
 
@@ -325,6 +330,10 @@ end
         api, opts = first(Pkg.pkg"activate --temp")
         @test api == Pkg.activate
         @test opts == Dict(:temp => true)
+        # - activating the previous project
+        api, opts = first(Pkg.pkg"activate -")
+        @test api == Pkg.activate
+        @test opts == Dict(:prev => true)
     end
 end
 
@@ -337,6 +346,32 @@ end
         Pkg.activate(; io=io, temp=true)
         output = String(take!(io))
         @test occursin(r"Activating new project at `.*`", output)
+        prev_env = Base.active_project()
+
+        # - activating the previous project
+        Pkg.activate(; temp=true)
+        @test Base.active_project() != prev_env
+        Pkg.activate(; prev=true)
+        @test prev_env == Base.active_project()
+
+        Pkg.activate(; temp=true)
+        @test Base.active_project() != prev_env
+        Pkg.activate(; prev=true)
+        @test Base.active_project() == prev_env
+
+        Pkg.activate("")
+        @test Base.active_project() != prev_env
+        Pkg.activate(; prev=true)
+        @test Base.active_project() == prev_env
+
+        load_path_before = copy(LOAD_PATH)
+        try
+            empty!(LOAD_PATH)   # unset active env
+            Pkg.activate()      # shouldn't error
+            Pkg.activate(; prev=true) # shouldn't error
+        finally
+            append!(empty!(LOAD_PATH), load_path_before)
+        end
     end
 end
 
@@ -1833,6 +1868,11 @@ end
         end
         Pkg.rm(all_pkgs = true)
         @test !haskey(Pkg.dependencies(), exuuid)
+
+        # test that the noops don't error
+        Pkg.rm(all_pkgs = true)
+        Pkg.pin(all_pkgs = true)
+        Pkg.free(all_pkgs = true)
     end
     isolate() do
         Pkg.REPLMode.TEST_MODE[] = true
@@ -1929,8 +1969,20 @@ end
     # REPL
     isolate() do
         Pkg.REPLMode.TEST_MODE[] = true
+
         api, opts = first(Pkg.pkg"precompile")
         @test api == Pkg.precompile
+        @test isempty(opts)
+
+        api, arg, opts = first(Pkg.pkg"precompile Foo")
+        @test api == Pkg.precompile
+        @test arg == "Foo"
+        @test isempty(opts)
+
+        api, arg1, arg2, opts = first(Pkg.pkg"precompile Foo Bar")
+        @test api == Pkg.precompile
+        @test arg1 == "Foo"
+        @test arg2 == "Bar"
         @test isempty(opts)
     end
 end
@@ -2114,7 +2166,7 @@ end
         @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
         ## non-empty project + non-empty diff
         Pkg.rm("Markdown")
-        Pkg.add( name="Example", version="0.3.0")
+        Pkg.add(name="Example", version="0.3.0")
         ## diff project
         Pkg.status(; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -2141,7 +2193,62 @@ end
         Pkg.status("FooBar"; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"No Matches in diff for `.+Manifest.toml`", readline(io))
     end
+    # Outdated API
+    isolate(loaded_depot=true) do
+        Pkg.Registry.add(Pkg.RegistrySpec[], io=devnull) # load reg before io capturing
+        Pkg.add("Example"; io=devnull)
+        v = Pkg.dependencies()[exuuid].version
+        io = IOBuffer()
+        Pkg.add(Pkg.PackageSpec(name="Example", version="0.4.0"); io=devnull)
+        Pkg.status(; outdated=true, io=io)
+        str = String(take!(io))
+        @test occursin("[7876af07] Example v0.4.0 (<v$v)", str)
+        open(Base.active_project(), "a") do io
+            write(io, """
+                  [compat]
+                  Example = "0.4.1"
+            """)
+        end
+        Pkg.status(; outdated=true, io=io)
+        str = String(take!(io))
+        @test occursin("[7876af07] Example v0.4.0 [<v0.4.1], (<v$v)", str)
+    end
 end
+
+#
+# # compat
+#
+@testset "Pkg.compat" begin
+    # State changes
+    isolate(loaded_depot=true) do
+        Pkg.add("Example")
+        iob = IOBuffer()
+        Pkg.status(compat=true, io = iob)
+        output = String(take!(iob))
+        @test occursin(r"Compat `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] *Example *none", output)
+        @test occursin(r"julia *none", output)
+
+        Pkg.compat("Example", "0.2,0.3")
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") == "0.2,0.3"
+        Pkg.status(compat=true, io = iob)
+        output = String(take!(iob))
+        @test occursin(r"Compat `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] *Example *0.2,0.3", output)
+        @test occursin(r"julia *none", output)
+
+        Pkg.compat("Example", nothing)
+        Pkg.compat("julia", "1.8")
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") == nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "julia") == "1.8"
+        Pkg.status(compat=true, io = iob)
+        output = String(take!(iob))
+        @test occursin(r"Compat `.+Project.toml`", output)
+        @test occursin(r"\[7876af07\] *Example *none", output)
+        @test occursin(r"julia *1.8", output)
+    end
+end
+
 
 #
 # # Caching
@@ -2307,6 +2414,7 @@ end
             for property in propertynames(a)
                 @test getproperty(a, property) == getproperty(b, property)
             end
+            @test a == b
         end
         rm(dirname(temp); recursive = true, force = true)
     end
@@ -2431,7 +2539,6 @@ end
         # Argument count
         @test_throws PkgError Pkg.pkg"activate one two"
         @test_throws PkgError Pkg.pkg"activate one two three"
-        @test_throws PkgError Pkg.pkg"precompile Example"
         # invalid options
         @test_throws PkgError Pkg.pkg"rm --minor Example"
         @test_throws PkgError Pkg.pkg"pin --project Example"
@@ -2496,6 +2603,18 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
               tree_hash(joinpath(dir, "FooGit")) ==
               "2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33"
     end
+
+    # Test for symlinks that are a prefix of another directory, causing sorting issues
+    if !Sys.iswindows()
+        mktempdir() do dir
+            mkdir(joinpath(dir, "5.28.1"))
+            write(joinpath(dir, "5.28.1", "foo"), "")
+            chmod(joinpath(dir, "5.28.1", "foo"), 0o644)
+            symlink("5.28.1", joinpath(dir, "5.28"))
+
+            @test tree_hash(dir) == "5e50a4254773a7c689bebca79e2954630cab9c04"
+       end
+   end
 end
 
 @testset "multiple registries overlapping version ranges for different versions" begin
@@ -2637,20 +2756,6 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, nothing)
 end
 
-@testset "STDLIBS_BY_VERSION up-to-date" begin
-    last_stdlibs = Pkg.Types.get_last_stdlibs(VERSION)
-    # Drop version numbers
-    last_stdlibs = Dict(uuid => name for (uuid, (name, vers)) in last_stdlibs)
-    test_result = last_stdlibs == Pkg.Types.load_stdlib()
-    if !test_result
-        @error("STDLIBS_BY_VERSION out of date!  Manually fix given the info below, or re-run generate_historical_stdlibs.jl!")
-        @show length(last_stdlibs) length(Pkg.Types.load_stdlib())
-        @show setdiff(last_stdlibs, Pkg.Types.load_stdlib())
-        @show setdiff(Pkg.Types.load_stdlib(), last_stdlibs)
-    end
-    @test test_result
-end
-
 @testset "Pkg.add() with julia_version" begin
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
@@ -2725,6 +2830,17 @@ end
         @test haskey(linalg_block, "uuid")
         @test linalg_block["uuid"] == linalg_uuid
         @test !haskey(linalg_block, "version")
+    end
+
+    isolate(loaded_depot=true) do
+        # Next, test that stdlibs do not get dependencies from the registry
+        # NOTE: this test depends on the fact that in Julia v1.6+ we added
+        # "fake" JLLs that do not depend on Pkg while the "normal" p7zip_jll does.
+        # A future p7zip_jll in the registry may not depend on Pkg, so be sure
+        # to verify your assumptions when updating this test.
+        Pkg.add("p7zip_jll")
+        p7zip_jll_uuid = UUID("3f19e933-33d8-53b3-aaab-bd5110c3b7a0")
+        @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
     end
 end
 

@@ -12,6 +12,11 @@ on:
 defaults:
   run:
     shell: bash
+concurrency:
+  # Skip intermediate builds: always.
+  # Cancel intermediate builds: only if it is a pull request build.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -45,6 +50,7 @@ jobs:
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
+          arch: ${{ matrix.julia-arch }}
       - name: Fix TEMP on windows
         if: matrix.os == 'windows-latest'
         run: |
@@ -72,7 +78,7 @@ jobs:
           version: 'nightly'
       - name: Generate docs
         run: |
-          julia --color=yes -e 'write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"54cfe95a-1eb2-52ea-b672-e2afdf69b78f\"\n"));'
+          julia --color=yes .ci/test_and_change_uuid.jl
           julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
           julia --project=docs --color=yes docs/make.jl pdf
         env:

@@ -37,6 +37,7 @@ const OFFLINE_MODE = Ref(false)
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 stderr_f() = something(DEFAULT_IO[], stderr)
 stdout_f() = something(DEFAULT_IO[], stdout)
+const PREV_ENV_PATH = Ref{String}("")
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 
@@ -137,8 +138,10 @@ const add = API.add
 
 """
     Pkg.precompile(; strict::Bool=false)
+    Pkg.precompile(pkg; strict::Bool=false)
+    Pkg.precompile(pkgs; strict::Bool=false)
 
-Precompile all the dependencies of the project in parallel.
+Precompile all or specific dependencies of the project in parallel.
 !!! note
     Errors will only throw when precompiling the top-level dependencies, given that
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
@@ -154,9 +157,14 @@ Precompile all the dependencies of the project in parallel.
     This function requires at least Julia 1.3. On earlier versions
     you can use `Pkg.API.precompile()` or the `precompile` Pkg REPL command.
 
+!!! compat "Julia 1.8"
+    Specifying packages to precompile requires at least Julia 1.8.
+
 # Examples
 ```julia
 Pkg.precompile()
+Pkg.precompile("Foo")
+Pkg.precompile(["Foo", "Bar"])
 ```
 """
 const precompile = API.precompile
@@ -387,15 +395,34 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
 
 Print out the status of the project/manifest.
 If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
 that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`,
 print status also about those in the manifest (recursive dependencies). If there are
 any packages listed as arguments, the output will be limited to those packages.
+
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
+
+Setting `outdated=true` will only show packages that are not on the latest version,
+their maximum version and why they are not on the latest version (either due to other
+packages holding them back due to compatibility constraints, or due to compatibility in the project file).
+As an example, a status output like:
+```
+pkg> Pkg.status(; outdated=true)
+Status `Manifest.toml`
+ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
+ [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
+ [2ab3a3ac] LogExpFunctions v0.2.5 (<v0.3.0): SpecialFunctions
+```
+means that the latest version of Crayons is 4.0.4 but the latest version compatible
+with the `[compat]` section in the current project is 3.0.0.
+The latest version of NearestNeighbors is 0.4.9 but due to compat constrains in the project
+it is held back to 0.4.8.
+The latest version of LogExpFunctions is 0.3.0 but SpecialFunctions
+is holding it back to 0.2.5.
 
 See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
@@ -404,11 +431,26 @@ status as a Julia object instead of printing it.
     `Pkg.status` with package arguments requires at least Julia 1.1.
 
 !!! compat "Julia 1.3"
-    The `diff` keyword argument requires Julia 1.3. In earlier versions `diff=true`
+    The `diff` keyword argument requires at least Julia 1.3. In earlier versions `diff=true`
     is the default for environments in git repositories.
+
+!!! compat "Julia 1.8"
+    The `outdated` keyword argument reguires at least Julia 1.8
 """
 const status = API.status
 
+"""
+    Pkg.compat()
+
+Interactively edit the [compat] entries within the current Project.
+
+    Pkg.compat(pkg::String, compat::String)
+
+Set the [compat] string for the given package within the current Project.
+
+See [`Compatibility`](@ref) for more information on the project [compat] section.
+"""
+const compat = API.compat
 
 """
     Pkg.activate([s::String]; shared::Bool=false, io::IO=stderr)
@@ -421,7 +463,7 @@ The logic for what path is activated is as follows:
   * If `shared` is `true`, the first existing environment named `s` from the depots
     in the depot stack will be activated. If no such environment exists,
     create and activate that environment in the first depot.
-  * If `temp` is `true` this will create and activate a temporary enviroment which will
+  * If `temp` is `true` this will create and activate a temporary environment which will
     be deleted when the julia process is exited.
   * If `s` is an existing path, then activate the environment at that path.
   * If `s` is a package in the current project and `s` is tracking a path, then
@@ -472,7 +514,7 @@ This includes:
   * The `name` of the package.
   * The package's unique `uuid`.
   * A `version` (for example when adding a package). When upgrading, can also be an instance of
-   the enum [`UpgradeLevel`](@ref).
+    the enum [`UpgradeLevel`](@ref).
   * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
   * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
   * A `subdir` which can be used when adding a package that is not in the root of a repository.
@@ -569,12 +611,24 @@ const RegistrySpec = Registry.RegistrySpec
 
 """
     upgrade_manifest()
+    upgrade_manifest(manifest_path::String)
 
-Upgrades the format of the manifest file from v1.0 to v2.0 without re-resolving.
+Upgrades the format of the current or specified manifest file from v1.0 to v2.0 without re-resolving.
 """
 const upgrade_manifest = API.upgrade_manifest
 
+"""
+    is_manifest_current(ctx::Context = Context())
+
+Returns whether the active manifest was resolved from the active project state.
+For instance, if the project had compat entries changed, but the manifest wasn't re-resolved, this would return false.
+
+If the manifest doesn't have the project hash recorded, `nothing` is returned.
+"""
+const is_manifest_current = API.is_manifest_current
+
 function __init__()
+    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
@@ -586,7 +640,7 @@ function __init__()
         end
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
-    OFFLINE_MODE[] = get(ENV, "JULIA_PKG_OFFLINE", nothing) == "true"
+    OFFLINE_MODE[] = get_bool_env("JULIA_PKG_OFFLINE")
     return nothing
 end
 
@@ -654,13 +708,14 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context)
-    if Base.JLOptions().use_compiled_modules == 1 && tryparse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
-        Pkg.precompile(ctx; internal_call=true)
+function _auto_precompile(ctx::Types.Context; warn_loaded = true, already_instantiated = false)
+    if Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
+        Pkg.precompile(ctx; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
 
 using LibGit2: LibGit2
+using Tar: Tar
 function _run_precompilation_script_setup()
     tmp = mktempdir()
     cd(tmp)
@@ -706,6 +761,14 @@ function _run_precompilation_script_setup()
         uuid = "$uuid"
         repo = "$(escape_string(tmp))/TestPkg.jl"
         """)
+    Tar.create("registries/Registry", "registries/Registry.tar")
+    run(`$(Pkg.PlatformEngines.exe7z()) a "registries/Registry.tar.gz" -tgzip "registries/Registry.tar"`)
+    write("registries/Registry.toml", """
+          git-tree-sha1 = "11b5fad51c4f98cfe0c145ceab0b8fb63fed6f81"
+          uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
+          path = "Registry.tar.gz"
+    """)
+    Base.rm("registries/Registry"; recursive=true)
     return tmp
 end
 
@@ -726,16 +789,22 @@ end
 const CTRL_C = '\x03'
 const precompile_script = """
     import Pkg
+    _pwd = pwd()
+    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     tmp = Pkg._run_precompilation_script_setup()
     $CTRL_C
     Pkg.add("TestPkg")
     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
     Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
     Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
+    Pkg.update(; update_registry=false)
+    Pkg.precompile()
     ] add Te\t\t$CTRL_C
     ] st
     $CTRL_C
     Pkg._run_precompilation_script_artifact()
-    rm(tmp; recursive=true)"""
+    rm(tmp; recursive=true)
+    cd(_pwd)
+    """
 
 end # module

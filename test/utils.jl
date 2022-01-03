@@ -12,17 +12,19 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
        list_tarball_files
 
-const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
+const CACHE_DIRECTORY = mktempdir(; cleanup = true)
 
-const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
+const LOADED_DEPOT = joinpath(CACHE_DIRECTORY, "loaded_depot")
+
+const REGISTRY_DEPOT = joinpath(CACHE_DIRECTORY, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 
 function init_reg()
-    url, _ = Pkg.Registry.pkg_server_registry_url(GENERAL_UUID, nothing)
     mkpath(REGISTRY_DIR)
     if Pkg.Registry.registry_use_pkg_server()
+        url = Pkg.Registry.pkg_server_registry_urls()[GENERAL_UUID]
         @info "Downloading General registry from $url"
         Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
         tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")

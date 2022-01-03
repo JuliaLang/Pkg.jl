@@ -146,7 +146,7 @@ function init_package_info!(pkg::PkgEntry)
 
     d_p = parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Package.toml"))
     name = d_p["name"]::String
-    name != pkg.name && error("inconsistend name in Registry.toml and Package.toml for pkg at $(path)")
+    name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
     repo = get(d_p, "repo", nothing)::Union{Nothing, String}
     subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
 

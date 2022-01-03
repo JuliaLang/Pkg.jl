@@ -182,6 +182,10 @@ When tracking a path, the package manager will never modify the files at that pa
 If `dev` is used on a local path, that path to that package is recorded and used when loading that package.
 The path will be recorded relative to the project file, unless it is given as an absolute path.
 
+```julia-repl
+(v1.0) pkg> dev /Users/kristoffer/Desktop/Example
+```
+
 To stop tracking a path and use the registered version again, use `free`:
 
 ```julia-repl
@@ -207,6 +211,38 @@ This approach is useful when the relative location of tracked dependencies is mo
 For example, the tracked dependencies can be stored inside of the active project directory.
 The whole directory can be moved and `Pkg` will still be able to find the dependencies
 because their path relative to the active project is preserved even though their absolute path has changed.
+
+### Adding a package in a subdirectory of a repository
+
+If the package you want to add by URL is not in the root of the repository, then you need to manually pass the `subdir` keyword to `Pkg.add`
+or `PackageSpec`. For instance, to add the `SnoopCompileCore` package in the [SnoopCompile](https://github.com/timholy/SnoopCompile.jl)
+repository:
+
+```julia-repl
+julia> Pkg.add(url="https://github.com/timholy/SnoopCompile.jl.git", subdir="SnoopCompileCore")
+     Cloning git-repo `https://github.com/timholy/SnoopCompile.jl.git`
+    Updating git-repo `https://github.com/timholy/SnoopCompile.jl.git`
+   Resolving package versions...
+    Updating `~/.julia/environments/v1.6/Project.toml`
+  [e2b509da] + SnoopCompileCore v2.7.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
+    Updating `~/.julia/environments/v1.6/Manifest.toml`
+  [e2b509da] + SnoopCompileCore v2.7.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
+  [9e88b42a] + Serialization
+```
+
+Another way is to use the Pkg REPL with `<repo_url>:<subdir>` format:
+
+```julia-repl
+pkg> add https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore # git HTTPS protocol
+...
+
+pkg> add "git@github.com:timholy/SnoopCompile.jl.git":SnoopCompileCore # git SSH protocol
+...
+```
+
+!!! compat "Julia 1.5"
+    The Pkg REPL for packages in subdirectory requires at least Julia 1.5.
+
 
 ## Removing packages
 
@@ -433,6 +469,14 @@ To run a typical garbage collection with default arguments, simply use the `gc` 
 
 Note that only packages in `~/.julia/packages` are deleted.
 
+## Offline Mode
+
+In offline mode Pkg tries to do as much as possible without connecting
+to internet. For example, when adding a package Pkg only considers
+versions that are already downloaded in version resolution.
+
+To work in offline mode use `import Pkg; Pkg.offline(true)` or set the environment 
+variable `JULIA_PKG_OFFLINE` to `"true"`.
 
 ## Pkg client/server
 

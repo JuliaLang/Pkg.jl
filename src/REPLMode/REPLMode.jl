@@ -147,7 +147,7 @@ wrap_option(option::String)  = length(option) == 1 ? "-$option" : "--$option"
 is_opt(word::AbstractString) = first(word) == '-' && word != "-"
 
 function parse_option(word::AbstractString)::Option
-    m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
+    m = match(r"^(?: -([a-z]) | --((?:[a-z]{1,}-?)*)(?:\s*=\s*(\S*))? )$"ix, word)
     m === nothing && pkgerror("malformed option: ", repr(word))
     option_name = m.captures[1] !== nothing ? m.captures[1] : m.captures[2]
     option_arg  = m.captures[3] === nothing ? nothing : String(m.captures[3])
@@ -283,8 +283,8 @@ end
 
 parse(input::String) =
     map(Base.Iterators.filter(!isempty, tokenize(input))) do words
-        statement, _ = core_parse(words)
-        statement.spec === nothing && pkgerror("Could not determine command")
+        statement, input_word = core_parse(words)
+        statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. Type ? for help with available commands")
         statement.options = map(parse_option, statement.options)
         statement
     end
@@ -633,6 +633,8 @@ function gen_help()
 **Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
 backspace when the input line is empty or press Ctrl+C.
 
+Full documentation available at https://pkgdocs.julialang.org/
+
 **Synopsis**
 
     pkg> cmd [opts] [args]
@@ -650,10 +652,23 @@ Some commands have an alias, indicated below.
 end
 
 const help = gen_help()
+const REG_WARNED = Ref{Bool}(false)
 
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
     ctx = Context()
+    if isempty(ctx.registries)
+        if !REG_WARNED[]
+            printstyled(ctx.io, " │ "; color=:green)
+            printstyled(ctx.io, "Attempted to find missing packages in package registries but no registries are installed.\n")
+            printstyled(ctx.io, " └ "; color=:green)
+            printstyled(ctx.io, "Use package mode to install a registry. `pkg> registry add` will install the default registries.\n\n")
+            REG_WARNED[] = true
+        end
+        return false
+    end
     available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
+    filter!(u -> all(!isequal(Operations.JULIA_UUID), u), available_uuids) # "julia" is in General but not installable
+    isempty(available_uuids) && return false
     available_pkgs = pkgs[isempty.(available_uuids) .== false]
     isempty(available_pkgs) && return false
     resp = try

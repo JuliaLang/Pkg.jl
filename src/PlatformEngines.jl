@@ -54,6 +54,7 @@ function get_server_dir(
         @warn "malformed Pkg server value" server
         return
     end
+    isempty(Base.DEPOT_PATH) && return
     joinpath(depots1(), "servers", String(m.captures[1]))
 end
 
@@ -232,6 +233,17 @@ function get_metadata_headers(url::AbstractString)
     end
     push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
     push!(headers, "Julia-Interactive" => string(isinteractive()))
+    for (key, val) in ENV
+        m = match(r"^JULIA_PKG_SERVER_([A-Z0-9_]+)$"i, key)
+        m === nothing && continue
+        val = strip(val)
+        isempty(val) && continue
+        words = split(m.captures[1], '_', keepempty=false)
+        isempty(words) && continue
+        hdr = "Julia-" * join(map(titlecase, words), '-')
+        any(hdr == k for (k, v) in headers) && continue
+        push!(headers, hdr => val)
+    end
     return headers
 end
 

@@ -64,6 +64,15 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"add Example,Random"
     pkg"rm Example,Random"
     pkg"add Example#master"
+    pkg"rm Example"
+    pkg"add https://github.com/JuliaLang/Example.jl#master"
+
+    ## TODO: figure out how to test these in CI
+    # pkg"rm Example"
+    # pkg"add git@github.com:JuliaLang/Example.jl.git"
+    # pkg"rm Example"
+    # pkg"add \"git@github.com:JuliaLang/Example.jl.git\"#master"
+    # pkg"rm Example"
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)
     entry = Pkg.Types.manifest_info(EnvCache().manifest, TEST_PKG.uuid)
@@ -353,6 +362,12 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test apply_completion("rm E") == "rm Example"
         @test apply_completion("add Exampl") == "add Example"
 
+        # help mode
+        @test apply_completion("?ad") == "?add"
+        @test apply_completion("?act") == "?activate"
+        @test apply_completion("? ad") == "? add"
+        @test apply_completion("? act") == "? activate"
+
         # stdlibs
         c, r = test_complete("add Stat")
         @test "Statistics" in c
@@ -635,6 +650,8 @@ end
         status 7876af07-990d-54b4-ab0e-23690620f79a
         status Example Random
         status -m Example
+        status --outdated
+        status --compat
         """
         # --diff option
         @test_logs (:warn, r"diff option only available") pkg"status --diff"
@@ -670,6 +687,9 @@ end
 @testset "REPL missing package install hook" begin
     isolate(loaded_depot=true) do
         @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+
+        # don't offer to install the dummy "julia" entry that's in General
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
 
         println(stdin.buffer, "n") # simulate rejecting prompt with `n\n`
         @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false

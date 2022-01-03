@@ -113,6 +113,22 @@ end
             @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
         end
     end
+    @testset "Pkg.upgrade_manifest(manifest_path)" begin
+        reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
+            io = IOBuffer()
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+
+            Pkg.upgrade_manifest(env_manifest)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+        end
+    end
 end
 
 @testset "Manifest metadata" begin
@@ -146,6 +162,37 @@ end
                     @test_logs (:warn, r"The active manifest file") Pkg.instantiate()
                     @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV.1199"
                 end
+            end
+        end
+        @testset "project_hash for identifying out of sync manifest" begin
+            isolate(loaded_depot=true) do
+                iob = IOBuffer()
+
+                Pkg.activate(; temp=true)
+                Pkg.add("Example")
+                @test Pkg.is_manifest_current() === true
+
+                Pkg.compat("Example", "0.4")
+                @test Pkg.is_manifest_current() === false
+                Pkg.status(io = iob)
+                sync_msg_str = r"The project dependencies or compat requirements have changed since the manifest was last resolved."
+                @test occursin(sync_msg_str, String(take!(iob)))
+                @test_logs (:warn, sync_msg_str) Pkg.instantiate()
+
+                Pkg.update()
+                @test Pkg.is_manifest_current() === true
+                Pkg.status(io = iob)
+                @test !occursin(sync_msg_str, String(take!(iob)))
+
+                Pkg.compat("Example", "0.5")
+                Pkg.status(io = iob)
+                @test occursin(sync_msg_str, String(take!(iob)))
+                @test_logs (:warn, sync_msg_str) Pkg.instantiate()
+
+                Pkg.rm("Example")
+                @test Pkg.is_manifest_current() === true
+                Pkg.status(io = iob)
+                @test !occursin(sync_msg_str, String(take!(iob)))
             end
         end
     end

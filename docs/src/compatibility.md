@@ -29,7 +29,7 @@ The union of multiple version specifiers can be formed by comma separating indiv
 [compat]
 Example = "1.2, 2"
 ```
-will result in `[1.2.0, 3.0.0)`.  Note leading zeros are treated differently, e.g. `Example = "0.2, 1"` would only result in `[0.2.0-0.3.0, 1.0.0-2.0.0]`. See the next section for more information on versions with leading zeros.
+will result in `[1.2.0, 3.0.0)`.  Note leading zeros are treated differently, e.g. `Example = "0.2, 1"` would only result in `[0.2.0 - 0.3.0) ∪ [1.0.0 - 2.0.0)`. See the next section for more information on versions with leading zeros.
 
 ### [Behavior of versions with leading zeros (0.0.x and 0.x.y)](@id compat-pre-1.0)
 
@@ -198,4 +198,4 @@ you can safely submit this change as a pull request to `B` so that a new release
 If instead an error is thrown, it indicates that `B` requires more extensive updates to be
 compatible with the latest version of `D`; those updates will need to be completed before
 it becomes possible to use both `A` and `B` simultaneously.
-You can, though, continue to use the independently of one another.
+You can, though, continue to use them independently of one another.

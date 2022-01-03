@@ -21,27 +21,27 @@ Pkg.DEFAULT_IO[] = IOBuffer()
 
 include("utils.jl")
 
-# Clean slate. Make sure to not start with an outdated registry
-rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
-rm(Utils.LOADED_DEPOT; force = true, recursive = true)
-rm(Utils.REGISTRY_DEPOT; force = true, recursive = true)
-
-include("new.jl")
-include("pkg.jl")
-include("repl.jl")
-include("api.jl")
-include("registry.jl")
-include("subdir.jl")
-include("artifacts.jl")
-include("binaryplatforms.jl")
-include("platformengines.jl")
-include("sandbox.jl")
-include("resolve.jl")
-include("misc.jl")
-include("force_latest_compatible_version.jl")
-include("manifests.jl")
-
-# clean up locally cached registry
-rm(joinpath(@__DIR__, "registries"); force = true, recursive = true)
+@testset "Pkg" begin
+    @testset "$f" for f in [
+        "new.jl",
+        "pkg.jl",
+        "repl.jl",
+        "pkg.jl",
+        "repl.jl",
+        "api.jl",
+        "registry.jl",
+        "subdir.jl",
+        "artifacts.jl",
+        "binaryplatforms.jl",
+        "platformengines.jl",
+        "sandbox.jl",
+        "resolve.jl",
+        "misc.jl",
+        "force_latest_compatible_version.jl",
+        "manifests.jl",
+        ]
+        include(f)
+    end
+end
 
 end # module

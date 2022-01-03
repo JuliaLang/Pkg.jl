@@ -143,6 +143,7 @@ pkg> add Example#master
 pkg> add Example#c37b675
 pkg> add https://github.com/JuliaLang/Example.jl#master
 pkg> add git@github.com:JuliaLang/Example.jl.git
+pkg> add "git@github.com:JuliaLang/Example.jl.git"#master
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
 """,
@@ -328,11 +329,14 @@ Create a minimal project called `pkgname` in the current folder. For more featur
 ],
 PSA[:name => "precompile",
     :api => API.precompile,
+    :arg_count => 0 => Inf,
+    :completions => complete_installed_packages,
     :description => "precompile all the project dependencies",
     :help => md"""
     precompile
+    precompile pkgs...
 
-Precompile all the dependencies of the project in parallel.
+Precompile all or specified dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
 
 Errors will only throw when precompiling the top-level dependencies, given that
@@ -354,13 +358,16 @@ PSA[:name => "status",
         PSA[:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
         PSA[:name => "diff", :short_name => "d", :api => :diff => true],
+        PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
+        PSA[:name => "compat", :short_name => "c", :api => :compat => true],
     ],
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    [st|status] [-d|--diff] [pkgs...]
-    [st|status] [-d|--diff] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
+    [st|status] [-c|--compat] [pkgs...]
 
 Show the status of the current environment. In `--project` mode (default), the
 status of the project file is summarized. In `--manifest` mode the output also
@@ -368,13 +375,34 @@ includes the recursive dependencies of added packages given in the manifest.
 If there are any packages listed as arguments the output will be limited to those packages.
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
+The `--outdated` option in addition show if some packages are not at their latest version
+and what packages are holding them back.
+The `--compat` option alone shows project compat entries.
 
 !!! compat "Julia 1.1"
     `pkg> status` with package arguments requires at least Julia 1.1.
 
 !!! compat "Julia 1.3"
-    The `--diff` option requires Julia 1.3. In earlier versions `--diff`
+    The `--diff` option requires at least Julia 1.3. In earlier versions `--diff`
     is the default for environments in git repositories.
+
+!!! compat "Julia 1.8"
+    The `--outdated` and `--compat` options require at least Julia 1.8.
+""",
+],
+PSA[:name => "compat",
+    :api => API.compat,
+    :arg_count => 0 => 2,
+    :completions => complete_installed_packages_and_compat,
+    :description => "edit compat entries in the current Project and re-resolve",
+    :help => md"""
+    compat [pkg] [compat_string]
+
+Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments.
+When directly editing use tab to complete the package name and any existing compat entry.
+Specifying a package with a blank compat entry will remove the entry.
+After changing compat entries a `resolve` will be attempted to check whether the current
+environment is compliant with the new compat rules.
 """,
 ],
 PSA[:name => "gc",

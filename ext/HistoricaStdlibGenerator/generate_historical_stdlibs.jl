@@ -111,20 +111,24 @@ function get_stdlibs(scratch_dir, julia_installer_name)
             end
 
             # This will give us a dictionary of UUID => (name, version) mappings for all standard libraries
-            stdlibs = Dict{Base.UUID, Tuple}(uuid => (name, nothing) for (uuid, name) in eval(Meta.parse(stdlibs_str)))
+            if jlvers < v"1.8"
+                stdlibs = Dict{Base.UUID, Tuple}(uuid => (name, nothing) for (uuid, name) in eval(Meta.parse(stdlibs_str)))
 
-            # We're going to try and get versions for each stdlib:
-            stdlib_path = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; print(Pkg.Types.stdlib_path(""))'`)
-            for uuid in keys(stdlibs)
-                # If this stdlib has a `Project.toml`, try to parse it for its version field
-                name = first(stdlibs[uuid])
-                project_path = joinpath(stdlib_path, name, "Project.toml")
-                if isfile(project_path)
-                    d = TOML.parsefile(project_path)
-                    if haskey(d, "version")
-                        stdlibs[uuid] = (name, VersionNumber(d["version"]))
+                # We're going to try and get versions for each stdlib:
+                stdlib_path = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; print(Pkg.Types.stdlib_path(""))'`)
+                for uuid in keys(stdlibs)
+                    # If this stdlib has a `Project.toml`, try to parse it for its version field
+                    name = first(stdlibs[uuid])
+                    project_path = joinpath(stdlib_path, name, "Project.toml")
+                    if isfile(project_path)
+                        d = TOML.parsefile(project_path)
+                        if haskey(d, "version")
+                            stdlibs[uuid] = (name, VersionNumber(d["version"]))
+                        end
                     end
                 end
+            else
+                stdlibs = Dict{Base.UUID, Tuple}(uuid => (name, version) for (uuid, (name, version)) in eval(Meta.parse(stdlibs_str)))
             end
 
             return (jlvers, stdlibs)
@@ -216,13 +220,16 @@ for (julia_ver, stdlibs) in versions_dict
 end
 
 registries = Pkg.Registry.reachable_registries()
-unregistered_stdlibs = filter(all_stdlibs) do (uuid, name)
+_unregistered_stdlibs_with_vers = filter(all_stdlibs) do (uuid, name)
     return !any(haskey(reg.pkgs, uuid) for reg in registries)
 end
 
+# For each entry in `UNREGISTERED_STDLIBS`, set the version number to `nothing`
+unregistered_stdlibs = Dict((k, (v[1], nothing)) for (k, v) in pairs(_unregistered_stdlibs_with_vers))
+
 # Helper function for getting these printed out in a nicely-sorted order
 function print_sorted(io::IO, d::Dict; indent::Int=0)
-    println(io, "Dict(")
+    println(io, "Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}(")
     for pair in sort(collect(d), by = kv-> kv[2][1])
         println(io, " "^indent, repr(pair[1]), " => ", repr(pair[2]), ",")
     end

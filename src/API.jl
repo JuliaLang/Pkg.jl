@@ -9,16 +9,18 @@ using Dates
 import LibGit2
 import Logging
 using Serialization
+using REPL.TerminalMenus
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
 import ..stderr_f, ..stdout_f
 using ..Artifacts: artifact_paths
 using ..MiniProgressBars
+import ..Resolve: ResolverError
 
 include("generate.jl")
 
@@ -279,8 +281,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, mode)
+    else
+        require_not_empty(pkgs, :rm)
     end
-    require_not_empty(pkgs, :rm)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -350,8 +353,9 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+    else
+        require_not_empty(pkgs, :pin)
     end
-    require_not_empty(pkgs, :pin)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -381,8 +385,9 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+    else
+        require_not_empty(pkgs, :free)
     end
-    require_not_empty(pkgs, :free)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -436,6 +441,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     )
     return
 end
+
+is_manifest_current(ctx::Context = Context()) = Operations.is_manifest_current(ctx.env)
 
 const UsageDict = Dict{String,DateTime}
 const UsageByDepotDict = Dict{String,UsageDict}
@@ -999,24 +1006,39 @@ end
 
 function _is_stale(paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
-        staledeps = Base.stale_cachefile(sourcepath, path_to_try)
+        staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
         staledeps === true ? continue : return false
     end
     return true
 end
 
-function make_pkgspec(man, uuid)
-    pkgent = man[uuid]
-    # If we have an unusual situation such as an un-versioned package (like an stdlib that
-    # is being overridden) its `version` may be `nothing`.
-    pkgver = something(pkgent.version, VersionSpec())
-    return PackageSpec(uuid = uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash)
+function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
+    i = findfirst(ps -> ps.uuid == uuid, pkgspecs)
+    if !isnothing(i)
+        return pkgspecs[i]
+    elseif !isnothing(ctx.env.pkg) && uuid == ctx.env.pkg.uuid
+        # uuid is of the active Project
+        return ctx.env.pkg
+    elseif haskey(ctx.env.manifest, uuid)
+        pkgent = ctx.env.manifest[uuid]
+        # If we have an unusual situation such as an un-versioned package (like an stdlib that
+        # is being overridden) its `version` may be `nothing`.
+        pkgver = something(pkgent.version, VersionSpec())
+        return PackageSpec(uuid = uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash)
+    else
+        # this branch should never be hit, so if it is throw a regular error with a stacktrace
+        error("UUID $uuid not found. It does not match the Project uuid nor any dependency")
+    end
 end
 
-precompile(; kwargs...) = precompile(Context(); kwargs...)
-function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false, kwargs...)
+precompile(pkgs...; kwargs...) = precompile(Context(), [pkgs...]; kwargs...)
+precompile(pkg::String; kwargs...) = precompile(Context(), pkg; kwargs...)
+precompile(ctx::Context, pkg::String; kwargs...) = precompile(ctx, [pkg]; kwargs...)
+precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkgs; kwargs...)
+function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
+                    strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
     Context!(ctx; kwargs...)
-    instantiate(ctx; allow_autoprecomp=false, kwargs...)
+    already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
 
     # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
@@ -1055,6 +1077,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         push!(direct_deps, Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name))
     end
 
+    isempty(depsmap) && return
+
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
@@ -1063,26 +1087,45 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
-        if haskey(man, pkgid.uuid)
-            push!(pkg_specs, make_pkgspec(man, pkgid.uuid))
-        end
+        push!(pkg_specs, get_or_make_pkgspec(pkg_specs, ctx, pkgid.uuid))
     end
     precomp_prune_suspended!(pkg_specs)
 
     # guarding against circular deps
     circular_deps = Base.PkgId[]
-    function in_deps(pkgs, deps, dmap)
+    function in_deps(_pkgs, deps, dmap)
         isempty(deps) && return false
-        !isempty(intersect(pkgs,deps)) && return true
-        return any(dep->in_deps(vcat(pkgs, dep), dmap[dep], dmap), deps)
+        !isempty(intersect(_pkgs, deps)) && return true
+        return any(dep->in_deps(vcat(_pkgs, dep), dmap[dep], dmap), deps)
     end
     for (pkg, deps) in depsmap
         if in_deps([pkg], deps, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
-            precomp_suspend!(make_pkgspec(man, pkg.uuid))
-            !internal_call && @warn "Circular dependency detected. Precompilation skipped for $pkg"
         end
+    end
+    if !isempty(circular_deps)
+        @warn """Circular dependency detected. Precompilation will be skipped for:\n  $(join(string.(circular_deps), "\n  "))"""
+    end
+
+    if !isempty(pkgs)
+        # if a list of packages is given, restrict to dependencies of given packages
+        function collect_all_deps(depsmap, dep, alldeps=Base.PkgId[])
+            append!(alldeps, depsmap[dep])
+            for _dep in depsmap[dep]
+                collect_all_deps(depsmap, _dep, alldeps)
+            end
+            return alldeps
+        end
+        keep = Base.PkgId[]
+        for dep in depsmap
+            if first(dep).name in pkgs
+                push!(keep, first(dep))
+                append!(keep, collect_all_deps(depsmap, first(dep)))
+            end
+        end
+        filter!(d->in(first(d), keep), depsmap)
+        isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs))")
     end
 
     pkg_queue = Base.PkgId[]
@@ -1155,7 +1198,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         bar.max = n_total - n_already_precomp
                         final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
                         for dep in pkg_queue_show
-                            loaded = haskey(Base.loaded_modules, dep)
+                            loaded = warn_loaded && haskey(Base.loaded_modules, dep)
                             name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
                             if dep in precomperr_deps
                                 print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
@@ -1195,6 +1238,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         end
     end
     tasks = Task[]
+    Base.LOADING_CACHE[] = Base.LoadingCache()
     for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
@@ -1216,17 +1260,15 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                     wait(was_processed[dep])
                 end
 
-                if haskey(man, pkg.uuid) # to handle the working environment uuid
-                    suspended = precomp_suspended(make_pkgspec(man, pkg.uuid))
-                    queued = precomp_queued(make_pkgspec(man, pkg.uuid))
-                else
-                    suspended = false
-                    queued = false
-                end
+                pkgspec = get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid)
+                suspended = precomp_suspended(pkgspec)
+                queued = precomp_queued(pkgspec)
+
+                circular = pkg in circular_deps
                 # skip stale checking and force compilation if any dep was recompiled in this session
                 any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
                 is_stale = true
-                if (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
+                if !circular && (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
@@ -1249,12 +1291,12 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
-                            haskey(man, pkg.uuid) && precomp_queue!(make_pkgspec(man, pkg.uuid))
+                            precomp_queue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
-                            queued && (haskey(man, pkg.uuid) && precomp_dequeue!(make_pkgspec(man, pkg.uuid)))
+                            queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name))
                             end
@@ -1267,10 +1309,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
-                            if haskey(man, pkg.uuid)
-                                queued && precomp_dequeue!(make_pkgspec(man, pkg.uuid))
-                                precomp_suspend!(make_pkgspec(man, pkg.uuid))
-                            end
+                            queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
+                            precomp_suspend!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                         else
                             rethrow(err)
                         end
@@ -1285,7 +1325,7 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
                         catch # file might be read-only and then we fail to update timestamp, which is fine
                         end
                     end
-                    suspended && !in(pkg, circular_deps) && push!(skipped_deps, pkg)
+                    suspended && push!(skipped_deps, pkg)
                 end
                 n_done += 1
                 notify(was_processed[pkg])
@@ -1304,6 +1344,8 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         wait(interrupted_or_done)
     catch err
         handle_interrupt(err)
+    finally
+        Base.LOADING_CACHE[] = nothing
     end
     notify(first_started) # in cases of no-op or !fancyprint
     save_precompile_state() # save lists to scratch space
@@ -1315,12 +1357,11 @@ function precompile(ctx::Context; internal_call::Bool=false, strict::Bool=false,
         plural = ndeps == 1 ? "y" : "ies"
         str = sprint() do iostr
             print(iostr, "  $(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
-            if n_already_precomp > 0 || !isempty(skipped_deps)
-                print(iostr, " (")
-                n_already_precomp > 0 && (print(iostr, "$n_already_precomp already precompiled"))
-                !isempty(circular_deps) && (print(iostr, ", $(length(circular_deps)) skipped due to circular dependency"))
-                !isempty(skipped_deps) && (print(iostr, ", $(length(skipped_deps)) skipped during auto due to previous errors"))
-                print(iostr, ")")
+            if n_already_precomp > 0 || !isempty(circular_deps) || !isempty(skipped_deps)
+                n_already_precomp > 0 && (print(iostr, ". $n_already_precomp already precompiled"))
+                !isempty(circular_deps) && (print(iostr, ". $(length(circular_deps)) skipped due to circular dependency"))
+                !isempty(skipped_deps) && (print(iostr, ". $(length(skipped_deps)) skipped during auto due to previous errors"))
+                print(iostr, ".")
             end
             if n_loaded > 0
                 plural1 = n_loaded == 1 ? "y" : "ies"
@@ -1387,7 +1428,7 @@ function recall_precompile_state()
         if isfile(fpath)
             open(fpath) do io
                 try
-                    pkgspecs = deserialize(io)
+                    pkgspecs = deserialize(io)::Vector{PackageSpec}
                     append!(empty!(store), pkgspecs)
                 catch
                     empty!(store)
@@ -1399,12 +1440,22 @@ function recall_precompile_state()
     end
     return nothing
 end
-precomp_suspend!(pkg::PackageSpec) = push!(pkgs_precompile_suspended, pkg)
+function precomp_suspend!(pkg::PackageSpec)
+    precomp_suspended(pkg) || push!(pkgs_precompile_suspended, pkg)
+    return
+end
 precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
 precomp_suspended(pkg::PackageSpec) = pkg in pkgs_precompile_suspended
-precomp_prune_suspended!(pkgs::Vector{PackageSpec}) = filter!(in(pkgs), pkgs_precompile_suspended)
+function precomp_prune_suspended!(pkgs::Vector{PackageSpec})
+    filter!(in(pkgs), pkgs_precompile_suspended)
+    unique!(pkgs_precompile_suspended)
+    return
+end
 
-precomp_queue!(pkg::PackageSpec) = push!(pkgs_precompile_pending, pkg)
+function precomp_queue!(pkg::PackageSpec)
+    precomp_suspended(pkg) || push!(pkgs_precompile_pending, pkg)
+    return
+end
 precomp_dequeue!(pkg::PackageSpec) = filter!(!isequal(pkg), pkgs_precompile_pending)
 precomp_queued(pkg::PackageSpec) = pkg in pkgs_precompile_pending
 
@@ -1437,7 +1488,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             deps[pkg.name] = string(uuid)
         end
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
-        return instantiate(Context(); manifest=manifest, update_registry=update_registry, verbose=verbose, kwargs...)
+        return instantiate(Context(); manifest=manifest, update_registry=update_registry, allow_autoprecomp=allow_autoprecomp, verbose=verbose, platform=platform, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
@@ -1449,6 +1500,12 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
     Types.check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
+
+    if Operations.is_manifest_current(ctx.env) === false
+        @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
+        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
+    end
+
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
@@ -1459,7 +1516,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env)
-        allow_autoprecomp && Pkg._auto_precompile(ctx)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
 
@@ -1491,19 +1548,21 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
         end
         repo_path = Types.add_repo_cache_path(repo_source)
-        LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare=true)) do repo
-            # We only update the clone if the tree hash can't be found
-            tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
-            if tree_hash_object === nothing
-                GitTools.fetch(ctx.io, repo, repo_source; refspecs=Types.refspecs)
+        let repo_source=repo_source
+            LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare=true)) do repo
+                # We only update the clone if the tree hash can't be found
                 tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
+                if tree_hash_object === nothing
+                    GitTools.fetch(ctx.io, repo, repo_source; refspecs=Types.refspecs)
+                    tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
+                end
+                if tree_hash_object === nothing
+                    pkgerror("Did not find tree_hash $(pkg.tree_hash) for $(err_rep(pkg))")
+                end
+                mkpath(sourcepath)
+                GitTools.checkout_tree_to_path(repo, tree_hash_object, sourcepath)
+                push!(new_git, pkg.uuid)
             end
-            if tree_hash_object === nothing
-                 pkgerror("Did not find tree_hash $(pkg.tree_hash) for $(err_rep(pkg))")
-            end
-            mkpath(sourcepath)
-            GitTools.checkout_tree_to_path(repo, tree_hash_object, sourcepath)
-            push!(new_git, pkg.uuid)
         end
     end
 
@@ -1514,22 +1573,37 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
 
-    allow_autoprecomp && Pkg._auto_precompile(ctx)
+    allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
 end
 
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT,
-                io::IO=stdout, kwargs...)
-    Operations.status(ctx.env, pkgs, mode=mode, git_diff=diff, io=io)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, io::IO=stdout, kwargs...)
+    if compat
+        diff && pkgerror("Compat status has no `diff` mode")
+        outdated && pkgerror("Compat status has no `outdated` mode")
+        Operations.print_compat(ctx, pkgs; io)
+    else
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated)
+    end
     return nothing
 end
 
 
-function activate(;temp=false, shared=false, io::IO=stderr_f())
+function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir(); io=io)
+    if prev
+        if isempty(PREV_ENV_PATH[])
+            pkgerror("No previously active environment found")
+        else
+            return activate(PREV_ENV_PATH[]; io=io)
+        end
+    end
+    if !isnothing(Base.active_project())
+        PREV_ENV_PATH[] = Base.active_project()
+    end
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
@@ -1585,6 +1659,9 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
             fullpath = joinpath(Pkg.envdir(Pkg.depots1()), path)
         end
     end
+    if !isnothing(Base.active_project())
+        PREV_ENV_PATH[] = Base.active_project()
+    end
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
     p = Base.active_project()
     if p !== nothing
@@ -1603,6 +1680,140 @@ function activate(f::Function, new_project::AbstractString)
         Base.ACTIVE_PROJECT[] = old
     end
 end
+
+function compat(ctx::Context; io = nothing)
+    io = something(io, ctx.io)
+    can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
+    printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
+    longest_dep_len = max(5, length.(collect(keys(ctx.env.project.deps)))...)
+    opt_strs = String[]
+    opt_pkgs = String[]
+    compat_str = Operations.get_compat_str(ctx.env.project, "julia")
+    push!(opt_strs, Operations.compat_line(io, "julia", nothing, compat_str, longest_dep_len, indent = ""))
+    push!(opt_pkgs, "julia")
+    for (dep, uuid) in ctx.env.project.deps
+        compat_str = Operations.get_compat_str(ctx.env.project, dep)
+        push!(opt_strs, Operations.compat_line(io, dep, uuid, compat_str, longest_dep_len, indent = ""))
+        push!(opt_pkgs, dep)
+    end
+    menu = TerminalMenus.RadioMenu(opt_strs, pagesize=length(opt_strs))
+    choice = try
+        TerminalMenus.request("  Select an entry to edit:", menu)
+    catch err
+        if err isa InterruptException # if ^C is entered
+            println(io)
+            return false
+        end
+        rethrow()
+    end
+    choice == -1 && return false
+    dep = opt_pkgs[choice]
+    current_compat_str = something(Operations.get_compat_str(ctx.env.project, dep), "")
+    resp = try
+        prompt = "  Edit compat entry for $(dep):"
+        print(io, prompt)
+        buffer = current_compat_str
+        cursor = length(buffer)
+        start_pos = length(prompt) + 2
+        move_start = "\e[$(start_pos)G"
+        clear_to_end = "\e[0J"
+        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid},Int32), stdin.handle, true)
+        while true
+            print(io, move_start, clear_to_end, buffer, "\e[$(start_pos + cursor)G")
+            inp = TerminalMenus._readkey(stdin)
+            if inp == '\r' # Carriage return
+                println(io)
+                break
+            elseif inp == '\x03' # cltr-C
+                println(io)
+                return
+            elseif inp == TerminalMenus.ARROW_RIGHT
+                cursor = min(length(buffer), cursor + 1)
+            elseif inp == TerminalMenus.ARROW_LEFT
+                cursor = max(0, cursor - 1)
+            elseif inp == TerminalMenus.HOME_KEY
+                cursor = (0)
+            elseif inp == TerminalMenus.END_KEY
+                cursor = length(buffer)
+            elseif inp == TerminalMenus.DEL_KEY
+                if cursor == 0
+                    buffer = buffer[2:end]
+                elseif cursor < length(buffer)
+                    buffer = buffer[1:cursor] * buffer[(cursor + 2):end]
+                end
+            elseif inp isa TerminalMenus.Key
+                # ignore all other escaped (multi-byte) keys
+            elseif inp == '\x7f' # backspace
+                if cursor == 1
+                    buffer = buffer[2:end]
+                elseif cursor == length(buffer)
+                    buffer = buffer[1:end - 1]
+                elseif cursor > 0
+                    buffer = buffer[1:(cursor-1)] * buffer[(cursor + 1):end]
+                else
+                    continue
+                end
+                cursor -= 1
+            else
+                if cursor == 0
+                    buffer = inp * buffer
+                elseif cursor == length(buffer)
+                    buffer = buffer * inp
+                else
+                    buffer = buffer[1:cursor] * inp * buffer[(cursor + 1):end]
+                end
+                cursor += 1
+            end
+        end
+        buffer
+    finally
+        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid},Int32), stdin.handle, false)
+    end
+    new_entry = strip(resp)
+    compat(ctx, dep, string(new_entry))
+    printpkgstyle(io, :Resolve, "checking for complance with the new compat rules...")
+    try
+        resolve(ctx)
+    catch e
+        if e isa ResolverError
+            printpkgstyle(io, :Error, e.msg, color = Base.warn_color())
+        else
+            rethrow()
+        end
+    end
+    return
+end
+function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io = nothing, kwargs...)
+    io = something(io, ctx.io)
+    pkg = pkg == "Julia" ? "julia" : pkg
+    isnothing(compat_str) || (compat_str = string(strip(compat_str, '"')))
+    if haskey(ctx.env.project.deps, pkg) || pkg == "julia"
+        success = Operations.set_compat(ctx.env.project, pkg, isnothing(compat_str) ? nothing : isempty(compat_str) ? nothing : compat_str)
+        success === false && pkgerror("invalid compat version specifier \"$(compat_str)\"")
+        write_env(ctx.env)
+        if isnothing(compat_str) || isempty(compat_str)
+            printpkgstyle(io, :Compat, "entry removed for $(pkg)")
+        else
+            printpkgstyle(io, :Compat, "entry set:\n  $(pkg) = $(repr(compat_str))")
+        end
+        printpkgstyle(io, :Resolve, "checking for compliance with the new compat rules...")
+        try
+            resolve(ctx)
+        catch e
+            if e isa ResolverError
+                printpkgstyle(io, :Error, e.msg, color = Base.warn_color())
+            else
+                rethrow()
+            end
+        end
+        return
+    else
+        pkgerror("No package named $pkg in current Project")
+    end
+end
+compat(pkg::String; kwargs...) = compat(pkg, nothing; kwargs...)
+compat(pkg::String, compat_str::Union{Nothing,String}; kwargs...) = compat(Context(), pkg, compat_str; kwargs...)
+compat(;kwargs...) = compat(Context(); kwargs...)
 
 ########
 # Undo #
@@ -1659,7 +1870,7 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
     write_env(ctx.env; update_undo=false)
-    Operations.show_update(ctx.env; io=ctx.io)
+    Operations.show_update(ctx.env, ctx.registries; io=ctx.io)
 end
 
 
@@ -1685,6 +1896,14 @@ function handle_package_input!(pkg::PackageSpec)
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
+function upgrade_manifest(man_path::String)
+    dir = mktempdir()
+    cp(man_path, joinpath(dir, "Manifest.toml"))
+    Pkg.activate(dir) do
+        Pkg.upgrade_manifest()
+    end
+    mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
+end
 function upgrade_manifest(ctx::Context = Context())
     before_format = ctx.env.manifest.manifest_format
     if before_format == v"2.0"
