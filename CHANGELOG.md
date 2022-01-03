@@ -1,6 +1,8 @@
 Pkg v1.8 Release Notes
 ======================
 
+- New `⌃` and `⌅` indicators beside packages in `pkg> status` that have new versions available.
+  `⌅` indicates when new versions cannot be installed.
 - New `outdated::Bool` kwarg to `Pkg.status` (`--outdated` or `-o` in the REPL mode) to show
   information about packages not at the latest version.
 - New `compat::Bool` kwarg to `Pkg.status` (`--compat` or `-c` in the REPL mode) to show any [compat]
