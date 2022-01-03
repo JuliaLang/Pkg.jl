@@ -1866,7 +1866,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
                       mode::PackageMode, hidden_upgrades_info::Bool)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
-    heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.info_color()), "⌅", context=io)
+    heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.warn_color()), "⌅", context=io)
     filter = !isempty(uuids) || !isempty(names)
     # setup
     xs = diff_array(old_env, env; manifest=manifest)
