@@ -451,7 +451,7 @@ Interactively edit the [compat] entries within the current Project.
 
 Set the [compat] string for the given package within the current Project.
 
-See [`Compatibility`](@ref) for more information on the project [compat] section.
+See [Compatibility](@ref) for more information on the project [compat] section.
 """
 const compat = API.compat
 
