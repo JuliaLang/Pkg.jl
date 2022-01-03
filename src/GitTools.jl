@@ -4,7 +4,7 @@ module GitTools
 
 using ..Pkg
 using ..MiniProgressBars
-import ..get_bool_env, ..can_fancyprint, ..printpkgstyle
+import ..get_bool_env, ..can_fancyprint, ..printpkgstyle, ..stdout_f
 using SHA
 import Base: SHA1
 import LibGit2
@@ -25,7 +25,7 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
         bar.max = progress.total_objects
         bar.current = progress.received_objects
     end
-    show_progress(stdout, bar)
+    show_progress(stdout_f(), bar)
     return Cint(0)
 end
 

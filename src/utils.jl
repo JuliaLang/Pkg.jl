@@ -6,7 +6,7 @@ function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=fa
     println(io, " ", text)
 end
 
-function linewrap(str::String; io = stdout, padding = 0, width = Base.displaysize(io)[2])
+function linewrap(str::String; io = stdout_f(), padding = 0, width = Base.displaysize(io)[2])
     text_chunks = split(str, ' ')
     lines = String[""]
     for chunk in text_chunks

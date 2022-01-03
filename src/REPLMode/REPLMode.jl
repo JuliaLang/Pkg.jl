@@ -10,6 +10,7 @@ import REPL: TerminalMenus
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
+import ..stdout_f, ..stderr_f
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)
@@ -453,7 +454,7 @@ struct MiniREPL <: REPL.AbstractREPL
     t::REPL.Terminals.TTYTerminal
 end
 function MiniREPL()
-    MiniREPL(TextDisplay(stdout), REPL.Terminals.TTYTerminal(get(ENV, "TERM", Sys.iswindows() ? "" : "dumb"), stdin, stdout, stderr))
+    MiniREPL(TextDisplay(stdout_f()), REPL.Terminals.TTYTerminal(get(ENV, "TERM", Sys.iswindows() ? "" : "dumb"), stdin, stdout_f(), stderr_f()))
 end
 REPL.REPLDisplay(repl::MiniREPL) = repl.display
 

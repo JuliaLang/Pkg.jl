@@ -3,6 +3,7 @@
 module Utils
 
 import ..Pkg
+import Pkg: stderr_f
 using Tar
 using TOML
 using UUIDs
@@ -26,14 +27,14 @@ function init_reg()
     if Pkg.Registry.registry_use_pkg_server()
         url = Pkg.Registry.pkg_server_registry_urls()[GENERAL_UUID]
         @info "Downloading General registry from $url"
-        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
+        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr_f())
         tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")
         hash = Pkg.Registry.pkg_server_url_hash(url)
         write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
     else
         Base.shred!(LibGit2.CachedCredentials()) do creds
             LibGit2.with(Pkg.GitTools.clone(
-                stderr,
+                stderr_f(),
                 "https://github.com/JuliaRegistries/General.git",
                 REGISTRY_DIR,
                 credentials = creds)) do repo
@@ -150,7 +151,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
                     rm && Base.rm(depot_dir; force=true, recursive=true)
                 catch err
                     # Avoid raising an exception here as it will mask the original exception
-                    println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+                    println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
                 end
             end
         end
@@ -176,7 +177,7 @@ function cd_tempdir(f; rm=true)
         rm && Base.rm(tmp; force = true, recursive = true)
     catch err
         # Avoid raising an exception here as it will mask the original exception
-        println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+        println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
     end
 end
 
@@ -213,7 +214,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
             rm && Base.rm(env_path; force = true, recursive = true)
         catch err
             # Avoid raising an exception here as it will mask the original exception
-            println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+            println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
         end
     end
 end
