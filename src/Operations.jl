@@ -1858,6 +1858,7 @@ struct PackageStatusData
     upgradable::Bool
     heldback::Bool
     compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
+    changed::Bool
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
@@ -1892,7 +1893,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
     all_packages_downloaded = true
     no_packages_upgradable = true
-    no_packages_held_back = true
+    no_visible_packages_heldback = true
+    no_packages_heldback = true
     lpadding = 2
 
     package_statuses = PackageStatusData[]
@@ -1903,7 +1905,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         latest_version = true
         # Outdated info
         cinfo = nothing
-        if !is_stdlib(new.uuid)
+        if !isnothing(new) && !is_stdlib(new.uuid)
             cinfo = status_compat_info(new, env, registries)
             if cinfo !== nothing
                 latest_version = false
@@ -1924,15 +1926,16 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             # allow space in the gutter for two icons on a single line
             lpadding = 3
         end
-
-        all_packages_downloaded &= pkg_downloaded
-        no_packages_upgradable &= !pkg_upgradable
-        no_packages_held_back &= !pkg_heldback
-        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo))
+        changed = old != new
+        all_packages_downloaded &= (!changed || pkg_downloaded)
+        no_packages_upgradable &= (!changed || !pkg_upgradable)
+        no_visible_packages_heldback &= (!changed || !pkg_heldback)
+        no_packages_heldback &= !pkg_heldback
+        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed))
     end
 
     for pkg in package_statuses
-        pkg.old == pkg.new && continue # don't print packages that didn't change
+        pkg.changed || continue # don't print packages that didn't change
         if !pkg.downloaded
             print(io, not_installed_indicator)
         elseif lpadding > 2
@@ -1968,20 +1971,20 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     end
 
     if !no_changes && !all_packages_downloaded
-        printpkgstyle(io, :Info, "packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", ignore_indent)
+        printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", ignore_indent)
     end
     if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
-        if !no_changes && !no_packages_upgradable && no_packages_held_back
-            printpkgstyle(io, :Info, "packages marked with $upgradable_indicator have new versions available", ignore_indent)
+        if !no_packages_upgradable && no_visible_packages_heldback
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", ignore_indent)
         end
-        if !no_changes && !no_packages_held_back && no_packages_upgradable
-            printpkgstyle(io, :Info, "packages marked with $heldback_indicator have new versions available but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+        if !no_visible_packages_heldback && no_packages_upgradable
+            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
         end
-        if !no_changes && !no_packages_held_back && !no_packages_upgradable
-            printpkgstyle(io, :Info, "packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with ⌅ cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+        if !no_visible_packages_heldback && !no_packages_upgradable
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with ⌅ cannot be upgraded. To see why use `status --outdated`", ignore_indent)
         end
-        if no_changes && diff && !no_packages_held_back
-            printpkgstyle(io, :Info, "some packages have new versions but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+        if header == :Updating && no_visible_packages_heldback && !no_packages_heldback
+            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
         end
     end
 
