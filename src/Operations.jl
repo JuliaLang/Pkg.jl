@@ -1861,7 +1861,7 @@ struct PackageStatusData
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO)
+                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO, mode::PackageMode)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=:red), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=:normal), "⌅", context=io)
@@ -1874,21 +1874,22 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
                       (manifest ? "manifest" : "project") * ")", ignore_indent)
         return nothing
     end
-    xs = !diff ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if old != new]
-    if isempty(xs)
+    no_changes = all(p-> p[2] == p[3], xs)
+    if no_changes
         printpkgstyle(io, Symbol("No Changes"), "to $(pathrepr(manifest ? env.manifest_file : env.project_file))", ignore_indent)
-        return nothing
+    else
+        xs = !filter ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
+        if isempty(xs)
+            printpkgstyle(io, Symbol("No Matches"),
+                        "in $(diff ? "diff for " : "")$(pathrepr(manifest ? env.manifest_file : env.project_file))", ignore_indent)
+            return nothing
+        end
+        # main print
+        printpkgstyle(io, header, pathrepr(manifest ? env.manifest_file : env.project_file), ignore_indent)
+        # Sort stdlibs and _jlls towards the end in status output
+        xs = sort!(xs, by = (x -> (is_stdlib(x[1]), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
     end
-    xs = !filter ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
-    if isempty(xs)
-        printpkgstyle(io, Symbol("No Matches"),
-                      "in $(diff ? "diff for " : "")$(pathrepr(manifest ? env.manifest_file : env.project_file))", ignore_indent)
-        return nothing
-    end
-    # main print
-    printpkgstyle(io, header, pathrepr(manifest ? env.manifest_file : env.project_file), ignore_indent)
-    # Sort stdlibs and _jlls towards the end in status output
-    xs = sort!(xs, by = (x -> (is_stdlib(x[1]), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
+
     all_packages_downloaded = true
     no_packages_upgradable = true
     no_packages_held_back = true
@@ -1902,8 +1903,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         latest_version = true
         # Outdated info
         cinfo = nothing
-        if diff == false && !is_stdlib(new.uuid)
-            @assert old == nothing
+        if !is_stdlib(new.uuid)
             cinfo = status_compat_info(new, env, registries)
             if cinfo !== nothing
                 latest_version = false
@@ -1932,6 +1932,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     end
 
     for pkg in package_statuses
+        pkg.old == pkg.new && continue # don't print packages that didn't change
         if !pkg.downloaded
             print(io, not_installed_indicator)
         elseif lpadding > 2
@@ -1966,17 +1967,22 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         println(io)
     end
 
-    if !all_packages_downloaded
+    if !no_changes && !all_packages_downloaded
         printpkgstyle(io, :Info, "packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", ignore_indent)
     end
-    if !no_packages_upgradable && no_packages_held_back
-        printpkgstyle(io, :Info, "packages marked with $upgradable_indicator have new versions available", ignore_indent)
-    end
-    if !no_packages_held_back && no_packages_upgradable
-        printpkgstyle(io, :Info, "packages marked with $heldback_indicator have new versions available but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
-    end
-    if !no_packages_held_back && !no_packages_upgradable
-        printpkgstyle(io, :Info, "packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with ⌅ cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+    if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
+        if !no_changes && !no_packages_upgradable && no_packages_held_back
+            printpkgstyle(io, :Info, "packages marked with $upgradable_indicator have new versions available", ignore_indent)
+        end
+        if !no_changes && !no_packages_held_back && no_packages_upgradable
+            printpkgstyle(io, :Info, "packages marked with $heldback_indicator have new versions available but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+        end
+        if !no_changes && !no_packages_held_back && !no_packages_upgradable
+            printpkgstyle(io, :Info, "packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with ⌅ cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+        end
+        if no_changes && diff && !no_packages_held_back
+            printpkgstyle(io, :Info, "some packages have new versions but cannot be upgraded. To see why use `status --outdated`", ignore_indent)
+        end
     end
 
     return nothing
@@ -2036,10 +2042,10 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode)
     end
     if is_manifest_current(env) === false
         printpkgstyle(io, :Warning, """The project dependencies or compat requirements have changed since the manifest was last resolved. \
