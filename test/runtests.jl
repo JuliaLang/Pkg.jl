@@ -4,7 +4,7 @@ module PkgTests
 
 import Pkg
 
-using Test
+using Test, Logging
 
 @testset "Test that we have imported the correct package" begin
     @test realpath(dirname(dirname(Base.pathof(Pkg)))) == realpath(dirname(@__DIR__))
@@ -20,28 +20,33 @@ end
 Pkg.DEFAULT_IO[] = IOBuffer()
 Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
 
+### LOGGING OUTPUT IS SUPPRESSED BY DEFAULT
+quiet = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
+
 include("utils.jl")
 
-@testset "Pkg" begin
-    @testset "$f" for f in [
-        "new.jl",
-        "pkg.jl",
-        "repl.jl",
-        "pkg.jl",
-        "repl.jl",
-        "api.jl",
-        "registry.jl",
-        "subdir.jl",
-        "artifacts.jl",
-        "binaryplatforms.jl",
-        "platformengines.jl",
-        "sandbox.jl",
-        "resolve.jl",
-        "misc.jl",
-        "force_latest_compatible_version.jl",
-        "manifests.jl",
-        ]
-        include(f)
+Logging.with_logger(quiet ? Logging.NullLogger() : Logging.current_logger()) do
+    @testset "Pkg" begin
+        @testset "$f" for f in [
+            "new.jl",
+            "pkg.jl",
+            "repl.jl",
+            "pkg.jl",
+            "repl.jl",
+            "api.jl",
+            "registry.jl",
+            "subdir.jl",
+            "artifacts.jl",
+            "binaryplatforms.jl",
+            "platformengines.jl",
+            "sandbox.jl",
+            "resolve.jl",
+            "misc.jl",
+            "force_latest_compatible_version.jl",
+            "manifests.jl",
+            ]
+            include(f)
+        end
     end
 end
 
