@@ -129,6 +129,8 @@ The following table describes the command line arguments to `--preserve` (in ord
 | `none`   | Do not attempt to preserve any version information                                  |
 | `tiered` | Use the tier which will preserve the most version information (this is the default) |
 
+After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
+
 !!! compat "Julia 1.5"
     Subdirectory specification requires at least Julia 1.5.
 
@@ -309,6 +311,8 @@ in `--manifest` mode they match any manifest package. Bound level options force
 the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
+
+After any package updates the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
 ],
 PSA[:name => "generate",

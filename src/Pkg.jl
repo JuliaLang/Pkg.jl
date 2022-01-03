@@ -129,6 +129,8 @@ Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local g
 Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl)") # With subdir
 ```
 
+After the installation of new packages the project will be precompiled. See more at [`Project Precompilation`](@ref).
+
 See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 """
 const add = API.add
@@ -179,7 +181,7 @@ const rm = API.rm
 Update a package `pkg`. If no posistional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
 If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
 
-`Pkg.update` automatically calls [`Pkg.precompile`](@ref) after its call. Set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0` to disable this.
+After any package updates the project will be precompiled. See more at [`Project Precompilation`](@ref).
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
@@ -395,7 +397,7 @@ any packages listed as arguments, the output will be limited to those packages.
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 
-See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest 
+See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
 
 !!! compat "Julia 1.1"
