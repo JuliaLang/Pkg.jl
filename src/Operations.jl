@@ -1662,6 +1662,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             flush(stdout)
             cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
             p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io))
+            ctx.io isa IOBuffer && (ctx.io.writable = true) # the sandbox julia proccess `closewrite`'s the io
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
             else
