@@ -18,6 +18,7 @@ if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
 end
 
 Pkg.DEFAULT_IO[] = IOBuffer()
+Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
 
 include("utils.jl")
 
