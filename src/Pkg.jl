@@ -130,6 +130,8 @@ Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local g
 Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl)") # With subdir
 ```
 
+After the installation of new packages the project will be precompiled. See more at [Project Precompilation](@ref).
+
 See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 """
 const add = API.add
@@ -186,6 +188,8 @@ const rm = API.rm
 
 Update a package `pkg`. If no posistional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
 If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
+
+After any package updates the project will be precompiled. See more at [Project Precompilation](@ref).
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
@@ -379,6 +383,9 @@ and install them.
 redirecting to the `build.log` file.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
+
+After packages have been installed the project will be precompiled.
+See more at [Project Precompilation](@ref).
 """
 const instantiate = API.instantiate
 
@@ -444,7 +451,7 @@ Interactively edit the [compat] entries within the current Project.
 
 Set the [compat] string for the given package within the current Project.
 
-See [`Compatibility`](@ref) for more information on the project [compat] section.
+See [Compatibility](@ref) for more information on the project [compat] section.
 """
 const compat = API.compat
 
