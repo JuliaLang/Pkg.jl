@@ -476,6 +476,30 @@ end
             @test !isdir(artifact_path(disengaged_hash))
         end
     end
+
+    # Also run a test of "cross-installation" use `Pkg.API.instantiate(;platform)`
+    temp_pkg_dir() do project_path
+        copy_test_package(project_path, "AugmentedPlatform")
+        ap_path = joinpath(project_path, "AugmentedPlatform")
+        generate_flooblegrank_artifacts(ap_path)
+
+        Pkg.activate(ap_path)
+        @test !isdir(artifact_path(engaged_hash))
+        @test !isdir(artifact_path(disengaged_hash))
+
+        # Instantiate with the environment variable set, but with an explicit
+        # tag set in the platform object, which overrides.
+        withenv("FLOOBLECRANK" => "disengaged") do
+            add_this_pkg()
+
+            p = HostPlatform()
+            p["flooblecrank"] = "engaged"
+            Pkg.API.instantiate(; platform=p)
+
+            @test isdir(artifact_path(engaged_hash))
+            @test isdir(artifact_path(disengaged_hash))
+        end
+    end
 end
 
 @testset "Artifact GC collect delay" begin
