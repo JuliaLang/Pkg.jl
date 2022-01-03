@@ -465,7 +465,7 @@ end
         Pkg.activate(ap_path)
         @test !isdir(artifact_path(engaged_hash))
         @test !isdir(artifact_path(disengaged_hash))
-    
+
         # Instantiate with the environment variable set, but with an explicit
         # tag set in the platform object, which overrides.
         withenv("FLOOBLECRANK" => "disengaged") do
@@ -657,7 +657,7 @@ end
 
         # Verify that the name-based override worked; extract paths from module that
         # loads overridden package artifacts.
-        Pkg.activate(depot_container) do
+        Pkg.Operations.activate(depot_container) do
             copy_test_package(depot_container, "ArtifactOverrideLoading")
             add_this_pkg()
             Pkg.develop(Pkg.Types.PackageSpec(
@@ -706,7 +706,7 @@ end
 
         # Verify that the name-based override worked; extract paths from module that
         # loads overridden package artifacts.
-        Pkg.activate(depot_container) do
+        Pkg.Operations.activate(depot_container) do
             (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
                 using ArtifactOverrideLoading
                 arty_path, barty_path

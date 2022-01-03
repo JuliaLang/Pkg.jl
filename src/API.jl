@@ -1671,15 +1671,9 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
     add_snapshot_to_undo()
     return nothing
 end
-function activate(f::Function, new_project::AbstractString)
-    old = Base.ACTIVE_PROJECT[]
-    Base.ACTIVE_PROJECT[] = new_project
-    try
-        f()
-    finally
-        Base.ACTIVE_PROJECT[] = old
-    end
-end
+
+@deprecate activate(f::Function, new_project::AbstractString) Operations.activate(f::Function, new_project::AbstractString)
+
 
 function compat(ctx::Context; io = nothing)
     io = something(io, ctx.io)
@@ -1899,7 +1893,7 @@ end
 function upgrade_manifest(man_path::String)
     dir = mktempdir()
     cp(man_path, joinpath(dir, "Manifest.toml"))
-    Pkg.activate(dir) do
+    Pkg.Operations.activate(dir) do
         Pkg.upgrade_manifest()
     end
     mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
