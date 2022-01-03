@@ -383,6 +383,9 @@ and install them.
 redirecting to the `build.log` file.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
+
+After packages have been installed the project will be precompiled.
+See more at [`Project Precompilation`](@ref).
 """
 const instantiate = API.instantiate
 

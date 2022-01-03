@@ -54,6 +54,8 @@ PSA[:name => "instantiate",
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+
+After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
 ],
 PSA[:name => "remove",
