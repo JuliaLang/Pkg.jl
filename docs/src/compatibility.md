@@ -61,7 +61,7 @@ remains backward compatible with 0.2.0.  See also [The `version` field](@ref).
 
 ### Caret specifiers
 
-A caret specifier allows upgrade that would be compatible according to semver.
+A caret (`^`) specifier allows upgrade that would be compatible according to semver. This is the default behavior if no specifier is used.
 An updated dependency is considered compatible if the new version does not modify the left-most non zero digit in the version specifier.
 
 Some examples are shown below.
@@ -100,11 +100,12 @@ For all versions with a major version of 0 the tilde and caret specifiers are eq
 
 ### Equality specifier
 
-Equality can be used to specify an exact version:
+Equality can be used to specify exact versions:
 
 ```toml
 [compat]
-PkgA = "= 1.2.3"  # [1.2.3, 1.2.3]
+PkgA = "=1.2.3"           # [1.2.3, 1.2.3]
+PkgA = "=0.10.1, =0.10.3" # 0.10.1 or 0.10.3
 ```
 
 ### Inequality specifiers
