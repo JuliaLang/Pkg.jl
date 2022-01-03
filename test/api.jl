@@ -5,7 +5,7 @@ import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, Test, REPL
 import Pkg.Types.PkgError, Pkg.Resolve.ResolverError
-using Pkg: ..stdout_f, ..stderr_f
+using Pkg: stdout_f, stderr_f
 using UUIDs
 
 using ..Utils
