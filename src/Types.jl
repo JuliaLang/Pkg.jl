@@ -411,6 +411,8 @@ function stdlibs()
     end
     return STDLIB[]
 end
+stdlibs() # store into STDLIB at precompile time
+
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 
 # Find the entry in `STDLIBS_BY_VERSION`
