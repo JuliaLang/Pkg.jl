@@ -973,7 +973,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         fancyprint && show_progress(ctx.io, bar)
 
         sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override) do
-            flush(stdout)
+            flush(ctx.io)
             ok = open(log_file, "w") do log
                 std = verbose ? ctx.io : log
                 success(pipeline(gen_build_code(buildfile(source_path)),
@@ -1659,7 +1659,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false)
             Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
-            flush(stdout)
+            flush(ctx.io)
             cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
             p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io))
             ctx.io isa IOBuffer && (ctx.io.writable = true) # the sandbox julia proccess `closewrite`'s the io

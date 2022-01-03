@@ -3,6 +3,7 @@
 module Resolve
 
 using ..Versions
+import ..stdout_f, ..stderr_f
 
 using Printf
 using Random
