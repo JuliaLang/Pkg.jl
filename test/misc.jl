@@ -1,11 +1,12 @@
+module PkgMisc
+using ..Pkg
 using Test
-using Pkg
 
 @testset "inference" begin
-    f() = Pkg.Types.STDLIBS_BY_VERSION
-    @inferred f()
-    f() = Pkg.Types.UNREGISTERED_STDLIBS
-    @inferred f()
+    f1() = Pkg.Types.STDLIBS_BY_VERSION
+    @inferred f1()
+    f2() = Pkg.Types.UNREGISTERED_STDLIBS
+    @inferred f2()
 end
 
 @testset "hashing" begin
@@ -16,3 +17,4 @@ end
     hash(Pkg.Types.VersionSpec()) # hash isn't stable
     hash(Pkg.Types.PackageEntry()) # hash isn't stable because the internal `repo` field is a mutable struct
 end
+end # module
