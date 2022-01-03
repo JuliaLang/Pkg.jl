@@ -405,9 +405,9 @@ As an example, a status output like:
 ```
 pkg> Pkg.status(; outdated=true)
 Status `Manifest.toml`
- [a8cc5b0e] Crayons          v2.0.0 [<v3.0.0], (<v4.0.4)
- [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
- [2ab3a3ac] LogExpFunctions  v0.2.5 (<v0.3.0): SpecialFunctions
+⌃ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
+⌅ [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
+⌅ [2ab3a3ac] LogExpFunctions v0.2.5 (<v0.3.0): SpecialFunctions
 ```
 means that the latest version of Crayons is 4.0.4 but the latest version compatible
 with the `[compat]` section in the current project is 3.0.0.
