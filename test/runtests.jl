@@ -31,8 +31,6 @@ Logging.with_logger(quiet ? Logging.NullLogger() : Logging.current_logger()) do
             "new.jl",
             "pkg.jl",
             "repl.jl",
-            "pkg.jl",
-            "repl.jl",
             "api.jl",
             "registry.jl",
             "subdir.jl",
