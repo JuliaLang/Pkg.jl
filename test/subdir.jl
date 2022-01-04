@@ -107,6 +107,7 @@ function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
     run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
+end
 
 @testset "subdir" begin
     temp_pkg_dir() do depot
