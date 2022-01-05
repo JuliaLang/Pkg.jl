@@ -3,7 +3,7 @@
 module Utils
 
 import ..Pkg
-import Pkg: stdout_f, stderr_f
+import Pkg: stderr_f
 using Tar
 using TOML
 using UUIDs
@@ -11,7 +11,7 @@ using UUIDs
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-       list_tarball_files, ensure_default_ios_writable
+       list_tarball_files
 
 const CACHE_DIRECTORY = mktempdir(; cleanup = true)
 
@@ -290,11 +290,6 @@ function list_tarball_files(tarball_path::AbstractString)
         push!(names, hdr.path)
     end
     return names
-end
-
-function ensure_default_ios_writable()
-    stdout_f() isa IOBuffer && (stdout_f().writable = true)
-    stderr_f() isa IOBuffer && (stderr_f().writable = true)
 end
 
 end

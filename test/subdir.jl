@@ -105,11 +105,8 @@ function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
 
     git = gitcmd(dir)
     run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
-    ensure_default_ios_writable()
     run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
-    ensure_default_ios_writable()
     run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
-    ensure_default_ios_writable()
 end
 
 @testset "subdir" begin

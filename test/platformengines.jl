@@ -2,7 +2,7 @@ module PlatformEngineTests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
-using ..Utils: list_tarball_files, ensure_default_ios_writable
+using ..Utils: list_tarball_files
 
 @testset "Packaging" begin
     # Gotta set this guy up beforehand
@@ -33,7 +33,6 @@ using ..Utils: list_tarball_files, ensure_default_ios_writable
         mktempdir() do output_dir
             tarball_path =  joinpath(output_dir, "foo.tar.gz")
             package(prefix, tarball_path)
-            ensure_default_ios_writable() # needed after 7zip closewrites the iobuffer
             @test isfile(tarball_path)
 
             # Test that we can inspect the contents of the tarball
