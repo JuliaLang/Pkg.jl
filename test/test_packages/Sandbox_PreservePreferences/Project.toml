@@ -1,0 +1,11 @@
+name = "Sandbox_PreservePreferences"
+uuid = "3872bf94-3adb-11e9-01dc-bf80c7641364"
+authors = ["David Varela <00.varela.david@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+Foo = "48898bec-3adb-11e9-02a6-a164ba74aeae"
+
+[preferences]
+Sandbox_PreservePreferences.tree = "birch"

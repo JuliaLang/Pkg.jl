@@ -910,6 +910,17 @@ function gen_build_code(build_file::String)
         ```
 end
 
+with_load_path(f::Function, new_load_path::String) = with_load_path(f, [new_load_path])
+function with_load_path(f::Function, new_load_path::Vector{String})
+    old_load_path = copy(Base.LOAD_PATH)
+    copy!(Base.LOAD_PATH, new_load_path)
+    try
+        f()
+    finally
+        copy!(LOAD_PATH, old_load_path)
+    end
+end
+
 const PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
 
@@ -959,9 +970,18 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         pkg = PackageSpec(;uuid=uuid, name=name, version=version)
         build_file = buildfile(source_path)
         # compatibility shim
-        build_project_override = isfile(projectfile_path(builddir(source_path))) ?
-            nothing :
-            gen_target_project(ctx.env, ctx.registries, pkg, source_path, "build")
+        local build_project_override, build_project_preferences
+        if isfile(projectfile_path(builddir(source_path)))
+            build_project_override = nothing
+            with_load_path([builddir(source_path)]) do
+                build_project_preferences = Base.get_preferences()
+            end
+        else
+            build_project_override = gen_target_project(ctx.env, ctx.registries, pkg, source_path, "build")
+            with_load_path([projectfile_path(source_path)]) do
+                build_project_preferences = Base.get_preferences()
+            end
+        end
 
         # Put log output in Pkg's scratchspace if the package is content adressed
         # by tree sha and in the build directory if it is tracked by path etc.
@@ -991,7 +1011,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         fancyprint && show_progress(ctx.io, bar)
 
         let log_file=log_file
-            sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override) do
+            sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override; preferences=build_project_preferences) do
                 flush(ctx.io)
                 ok = open(log_file, "w") do log
                     std = verbose ? ctx.io : log
@@ -1483,6 +1503,7 @@ end
 # ctx + pkg used to compute parent dep graph
 function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::String,
                  sandbox_path::String, sandbox_project_override;
+                 preferences::Union{Nothing,Dict{String,Any}} = nothing,
                  force_latest_compatible_version::Bool=false,
                  allow_earlier_backwards_compatible_versions::Bool=true,
                  allow_reresolve::Bool=true)
@@ -1492,6 +1513,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
     mktempdir() do tmp
         tmp_project  = projectfile_path(tmp)
         tmp_manifest = manifestfile_path(tmp)
+        tmp_preferences = joinpath(tmp, first(Base.preferences_names))
 
         # Copy env info over to temp env
         if sandbox_project_override !== nothing
@@ -1522,6 +1544,13 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         end
 
         Types.write_manifest(working_manifest, tmp_manifest)
+        # Copy over preferences
+        if preferences !== nothing
+            open(tmp_preferences, "w") do io
+                TOML.print(io, preferences)
+            end
+        end
+
         # sandbox
         with_temp_env(tmp) do
             temp_ctx = Context()
@@ -1671,12 +1700,21 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     pkgs_errored = Tuple{String, Base.Process}[]
     for (pkg, source_path) in zip(pkgs, source_paths)
         # compatibility shim between "targets" and "test/Project.toml"
-        test_project_override = isfile(projectfile_path(testdir(source_path))) ?
-            nothing :
-            gen_target_project(ctx.env, ctx.registries, pkg, source_path, "test")
+        local test_project_preferences, test_project_override
+        if isfile(projectfile_path(testdir(source_path)))
+            test_project_override = nothing
+            with_load_path(testdir(source_path)) do
+                test_project_preferences = Base.get_preferences()
+            end
+        else
+            test_project_override = gen_target_project(ctx.env, ctx.registries, pkg, source_path, "test")
+            with_load_path(projectfile_path(source_path)) do
+                test_project_preferences = Base.get_preferences()
+            end
+        end
         # now we sandbox
         printpkgstyle(ctx.io, :Testing, pkg.name)
-        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
+        sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; preferences=test_project_preferences, force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false)
