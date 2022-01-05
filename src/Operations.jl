@@ -604,8 +604,10 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
 
             # If there is a dynamic artifact selector, run that in an appropriate sandbox to select artifacts
             if isfile(selector_path)
-                select_cmd = Cmd(`$(gen_build_code(selector_path)) $(triplet(platform))`)
-                addenv(select_cmd, "JULIA_LOAD_PATH" => "@stdlib")
+                # Despite the fact that we inherit the project, since the in-memory manifest
+                # has not been updated yet, if we try to load any dependencies, it may fail.
+                # Therefore, this project inheritance is really only for Preferences, not dependencies.
+                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) $(triplet(platform))`)
                 meta_toml = String(read(select_cmd))
                 push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
             else
@@ -896,7 +898,7 @@ function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID,I
     return order
 end
 
-function gen_build_code(build_file::String)
+function gen_build_code(build_file::String; inherit_project::Bool = false)
     code = """
         $(Base.load_path_setup_code(false))
         cd($(repr(dirname(build_file))))
@@ -906,6 +908,7 @@ function gen_build_code(build_file::String)
         $(Base.julia_cmd()) -O0 --color=no --history-file=no
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
+        $(inherit_project ? `--project=$(Base.active_project())` : ``)
         --eval $code
         ```
 end
