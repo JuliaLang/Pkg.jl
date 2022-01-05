@@ -18,17 +18,17 @@ if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
 end
 
 ### Disable logging output if true (default)
-quiet = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
+hide_logs = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
 
-### Send all Pkg output to a BufferStream if false (default)
-verbose = !quiet
+### Send all Pkg output to a BufferStream if true (default)
+hide_stdoutstderr = hide_logs
 
-Pkg.DEFAULT_IO[] = verbose ? stdout : Base.BufferStream()
+Pkg.DEFAULT_IO[] = hide_stdoutstderr ? Base.BufferStream() : stdout
 Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
 
 include("utils.jl")
 
-Logging.with_logger(quiet ? Logging.NullLogger() : Logging.current_logger()) do
+Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
     @testset "Pkg" begin
         @testset "$f" for f in [
             "new.jl",
