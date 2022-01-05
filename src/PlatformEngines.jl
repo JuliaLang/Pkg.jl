@@ -390,10 +390,10 @@ end
 
 Compress `src_dir` into a tarball located at `tarball_path`.
 """
-function package(src_dir::AbstractString, tarball_path::AbstractString)
+function package(src_dir::AbstractString, tarball_path::AbstractString; io=stderr_f())
     rm(tarball_path, force=true)
     cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
-    open(pipeline(cmd, stdout=devnull), write=true) do io
+    open(pipeline(cmd, stdout=devnull, stderr=io), write=true) do io
         Tar.create(src_dir, io)
     end
 end

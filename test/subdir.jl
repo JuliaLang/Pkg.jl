@@ -4,6 +4,7 @@ import ..Pkg # ensure we are using the correct Pkg
 using Pkg, UUIDs, Test
 using Pkg.REPLMode: pkgstr
 using Pkg.Types: PackageSpec
+using Pkg: stdout_f, stderr_f
 
 using ..Utils
 
@@ -43,9 +44,9 @@ function setup_packages_repository(dir)
         """)
 
     git = gitcmd(dir)
-    run(`$git init -q`)
-    run(`$git add .`)
-    run(`$git commit -qm 'Create repository.'`)
+    run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
     package_tree_hash = readchomp(`$git rev-parse HEAD:julia`)
     dep_tree_hash = readchomp(`$git rev-parse HEAD:dependencies/Dep`)
     return package_tree_hash, dep_tree_hash
@@ -103,9 +104,9 @@ function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
         """)
 
     git = gitcmd(dir)
-    run(`$git init -q`)
-    run(`$git add .`)
-    run(`$git commit -qm 'Create repository.'`)
+    run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
 end
 
 @testset "subdir" begin

@@ -3,7 +3,7 @@
 module Utils
 
 import ..Pkg
-import Pkg: stderr_f
+import Pkg: stdout_f, stderr_f
 using Tar
 using TOML
 using UUIDs
@@ -106,9 +106,10 @@ function isolate_and_pin_registry(fn::Function; registry_url::String, registry_c
     isolate(loaded_depot = false, linked_reg = true) do
         this_gen_reg_path = joinpath(last(Base.DEPOT_PATH), "registries", "General")
         rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
-        run(`git clone $(registry_url) $(this_gen_reg_path)`)
+        cmd = `git clone $(registry_url) $(this_gen_reg_path)`
+        run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
         cd(this_gen_reg_path) do
-            run(`git checkout $(registry_commit)`)
+            run(pipeline(`git checkout $(registry_commit)`, stdout = stdout_f(), stderr = stderr_f()))
         end
         fn()
     end

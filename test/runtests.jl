@@ -17,15 +17,18 @@ if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
     @info "Pkg Server metadata:\n$s"
 end
 
-Pkg.DEFAULT_IO[] = IOBuffer()
-Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
+### Disable logging output if true (default)
+hide_logs = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
 
-### LOGGING OUTPUT IS SUPPRESSED BY DEFAULT
-quiet = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
+### Send all Pkg output to a BufferStream if true (default)
+hide_stdoutstderr = hide_logs
+
+Pkg.DEFAULT_IO[] = hide_stdoutstderr ? Base.BufferStream() : stdout
+Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
 
 include("utils.jl")
 
-Logging.with_logger(quiet ? Logging.NullLogger() : Logging.current_logger()) do
+Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
     @testset "Pkg" begin
         @testset "$f" for f in [
             "new.jl",
@@ -43,6 +46,7 @@ Logging.with_logger(quiet ? Logging.NullLogger() : Logging.current_logger()) do
             "force_latest_compatible_version.jl",
             "manifests.jl",
             ]
+            @info "==== Testing `test/$f`"
             flush(Pkg.DEFAULT_IO[])
             include(f)
         end
