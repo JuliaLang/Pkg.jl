@@ -46,6 +46,7 @@ Logging.with_logger(quiet ? Logging.NullLogger() : Logging.current_logger()) do
             "force_latest_compatible_version.jl",
             "manifests.jl",
             ]
+            @info "=== Testing `test/$f` ==="
             flush(Pkg.DEFAULT_IO[])
             include(f)
         end
