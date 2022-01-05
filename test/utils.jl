@@ -3,7 +3,7 @@
 module Utils
 
 import ..Pkg
-import Pkg: stderr_f
+import Pkg: stdout_f, stderr_f
 using Tar
 using TOML
 using UUIDs
