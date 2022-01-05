@@ -1771,16 +1771,6 @@ function compat(ctx::Context; io = nothing)
     end
     new_entry = strip(resp)
     compat(ctx, dep, string(new_entry))
-    printpkgstyle(io, :Resolve, "checking for complance with the new compat rules...")
-    try
-        resolve(ctx)
-    catch e
-        if e isa ResolverError
-            printpkgstyle(io, :Error, e.msg, color = Base.warn_color())
-        else
-            rethrow()
-        end
-    end
     return
 end
 function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io = nothing, kwargs...)
