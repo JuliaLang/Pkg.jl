@@ -21,7 +21,7 @@ end
 quiet = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
 
 ### Send all Pkg output to a BufferStream if false (default)
-verbose = false
+verbose = !quiet
 
 Pkg.DEFAULT_IO[] = verbose ? stdout : Base.BufferStream()
 Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
