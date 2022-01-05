@@ -17,7 +17,7 @@ if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
     @info "Pkg Server metadata:\n$s"
 end
 
-Pkg.DEFAULT_IO[] = IOBuffer()
+Pkg.DEFAULT_IO[] = Base.BufferStream()
 Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
 
 ### LOGGING OUTPUT IS SUPPRESSED BY DEFAULT
