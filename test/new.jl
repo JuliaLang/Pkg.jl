@@ -145,7 +145,7 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
 @testset "test: printing" begin
     isolate(loaded_depot=true) do
         Pkg.add(name="Example")
-        io = IOBuffer()
+        io = Base.BufferStream()
         Pkg.test("Example"; io=io)
         output = String(take!(io))
         @test occursin(r"Testing Example", output)
