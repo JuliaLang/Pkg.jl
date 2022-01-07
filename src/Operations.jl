@@ -1792,7 +1792,8 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
             reg_compat_info = Registry.compat_info(info)
             compat_info_v = get(reg_compat_info, dep_info.version, nothing)
             compat_info_v === nothing && continue
-            compat_info_v_uuid = compat_info_v[pkg.uuid]
+            compat_info_v_uuid = get(compat_info_v, pkg.uuid, nothing)
+            compat_info_v_uuid === nothing && continue
             if !(max_version in compat_info_v_uuid)
                 push!(packages_holding_back, dep_pkg.name)
             end
