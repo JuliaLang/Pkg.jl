@@ -2849,4 +2849,29 @@ end
     end
 end
 
+@testset "Issue #2931" begin
+    isolate(loaded_depot=false) do
+        temp_pkg_dir() do path
+            name = "GMP_jll"
+            uuid = UUID("781609d7-10c4-51f6-84f2-b8444358ff6d")
+            tree_hash = Base.SHA1("40388878122d491a2e55b0e730196098595d8a90")
+
+            # Activate new environment
+            Pkg.activate(; temp=true)
+
+            julia_version = v"1.6"
+            ctx = Pkg.Types.Context(;julia_version)
+            Pkg.add(ctx, [Pkg.PackageSpec(name)])
+
+            # From here on out, we're using `julia_version=nothing` to install stdlib dependencies
+            ctx = Pkg.Types.Context!(ctx; julia_version=nothing)
+            ctx.env.manifest[uuid].tree_hash = tree_hash
+            # Force empty version number for good measure
+            ctx.env.manifest[uuid].version = nothing
+
+            Pkg.Operations.download_source(ctx)
+        end
+    end
+end
+
 end #module
