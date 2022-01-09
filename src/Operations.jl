@@ -1661,10 +1661,30 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
-            p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io))
+            p = run(pipeline(ignorestatus(cmd), stdin = stdin, stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
+            interrupted = false
+            try
+                wait(p)
+            catch e
+                if e isa InterruptException && process_running(p)
+                    interrupted = true
+                    # Interrupting a test often results in the child process orphaned and continuing to run & print,
+                    # so give some time for the child interrupt handler to print a stacktrace and exit,
+                    # then kill the process if still running
+                    print("\n")
+                    printpkgstyle(ctx.io, :Testing, "Tests interrupted. Exiting the test process\n", color = Base.error_color())
+                    sleep(2)
+                    while process_running(p)
+                        kill(p, Base.SIGKILL)
+                        sleep(0.1)
+                    end
+                else
+                    rethrow()
+                end
+            end
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
-            else
+            elseif !interrupted
                 push!(pkgs_errored, (pkg.name, p))
             end
         end
