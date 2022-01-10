@@ -2852,24 +2852,26 @@ end
 @testset "Issue #2931" begin
     isolate(loaded_depot=false) do
         temp_pkg_dir() do path
-            name = "GMP_jll"
-            uuid = UUID("781609d7-10c4-51f6-84f2-b8444358ff6d")
-            tree_hash = Base.SHA1("40388878122d491a2e55b0e730196098595d8a90")
+            name = "Example"
+            version = "0.5.3"
+            tree_hash = Base.SHA1("46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc")
 
-            # Activate new environment
-            Pkg.activate(; temp=true)
+            # Install Example.jl
+            Pkg.add(; name, version)
 
-            julia_version = v"1.6"
-            ctx = Pkg.Types.Context(;julia_version)
-            Pkg.add(ctx, [Pkg.PackageSpec(name)])
+            # Force empty version number in the manifest
+            ctx = Pkg.Types.Context()
+            ctx.env.manifest[exuuid].version = nothing
 
-            # From here on out, we're using `julia_version=nothing` to install stdlib dependencies
-            ctx = Pkg.Types.Context!(ctx; julia_version=nothing)
-            ctx.env.manifest[uuid].tree_hash = tree_hash
-            # Force empty version number for good measure
-            ctx.env.manifest[uuid].version = nothing
+            # Delete directory where the package would be installed
+            pkg_dir = Pkg.Operations.find_installed(name, exuuid, tree_hash)
+            rm(pkg_dir; recursive=true, force=true)
 
+            # (Re-)download sources
             Pkg.Operations.download_source(ctx)
+
+            # Make sure the package directory is there
+            @test isdir(pkg_dir)
         end
     end
 end
