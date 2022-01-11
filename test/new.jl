@@ -2849,4 +2849,31 @@ end
     end
 end
 
+@testset "Issue #2931" begin
+    isolate(loaded_depot=false) do
+        temp_pkg_dir() do path
+            name = "Example"
+            version = "0.5.3"
+            tree_hash = Base.SHA1("46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc")
+
+            # Install Example.jl
+            Pkg.add(; name, version)
+
+            # Force empty version number in the manifest
+            ctx = Pkg.Types.Context()
+            ctx.env.manifest[exuuid].version = nothing
+
+            # Delete directory where the package would be installed
+            pkg_dir = Pkg.Operations.find_installed(name, exuuid, tree_hash)
+            rm(pkg_dir; recursive=true, force=true)
+
+            # (Re-)download sources
+            Pkg.Operations.download_source(ctx)
+
+            # Make sure the package directory is there
+            @test isdir(pkg_dir)
+        end
+    end
+end
+
 end #module
