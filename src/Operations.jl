@@ -754,8 +754,12 @@ function download_source(ctx::Context; readonly=true)
                 str = sprint(; context=ctx.io) do io
                     if success
                         fancyprint && print_progress_bottom(io)
-                        short_treehash = string(pkg.tree_hash)[1:16]
-                        vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$short_treehash]"
+                        vstr = if pkg.version !== nothing
+                            "v$(pkg.version)"
+                        else
+                            short_treehash = string(pkg.tree_hash)[1:16]
+                            "[$short_treehash]"
+                        end
                         printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
                         fancyprint && show_progress(io, bar)
                     end
@@ -775,8 +779,12 @@ function download_source(ctx::Context; readonly=true)
         uuid = pkg.uuid
         install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
         readonly && set_readonly(path)
-        short_treehash = string(pkg.tree_hash)[1:16]
-        vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$short_treehash]"
+        vstr = if pkg.version !== nothing
+            "v$(pkg.version)"
+        else
+            short_treehash = string(pkg.tree_hash)[1:16]
+            "[$short_treehash]"
+        end
         printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
 
