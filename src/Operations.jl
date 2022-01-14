@@ -1773,7 +1773,9 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         reg_pkg === nothing && continue
         info = Registry.registry_info(reg_pkg)
         reg_compat_info = Registry.compat_info(info)
-        max_version_reg = maximum(keys(reg_compat_info); init=v"0")
+        versions = keys(reg_compat_info)  
+        versions = filter(v -> !Registry.isyanked(info, v), versions)
+        max_version_reg = maximum(versions; init=v"0")
         max_version = max(max_version, max_version_reg)
         compat_spec = get_compat(env.project, pkg.name)
         versions_in_compat = filter(in(compat_spec), keys(reg_compat_info))
