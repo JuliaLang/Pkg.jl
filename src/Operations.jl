@@ -1355,7 +1355,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     build_versions(ctx, new)
 end
 
-function update_package_free!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::PackageEntry)
+function update_package_free!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::PackageEntry, err_if_free::Bool)
     if entry.pinned
         pkg.pinned = false
         is_stdlib(pkg.uuid) && return # nothing left to do
@@ -1371,14 +1371,17 @@ function update_package_free!(registries::Vector{Registry.RegistryInstance}, pkg
         end
         return # -> name, uuid
     end
-    pkgerror("expected package $(err_rep(pkg)) to be pinned, tracking a path,",
+    if err_if_free
+        pkgerror("expected package $(err_rep(pkg)) to be pinned, tracking a path,",
              " or tracking a repository")
+    end
+    return
 end
 
 # TODO: this is two techinically different operations with the same name
 # split into two subfunctions ...
-function free(ctx::Context, pkgs::Vector{PackageSpec})
-    foreach(pkg -> update_package_free!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
+function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
+    foreach(pkg -> update_package_free!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid), err_if_free), pkgs)
 
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
         pkgs = load_direct_deps(ctx.env, pkgs)

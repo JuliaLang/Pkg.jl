@@ -403,7 +403,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx.env.manifest, pkgs)
 
-    Operations.free(ctx, pkgs)
+    Operations.free(ctx, pkgs; err_if_free = !all_pkgs)
     return
 end
 
