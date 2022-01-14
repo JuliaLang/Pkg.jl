@@ -1210,7 +1210,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                         GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                     catch e
                         e isa PkgError || rethrow()
-                        push!(errors, (reg.path, "failed to fetch from repo"))
+                        push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
                         @goto done
                     end
                     ff_succeeded = try
