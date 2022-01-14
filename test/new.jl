@@ -1867,6 +1867,9 @@ end
             @test pkg.name == "Example"
             @test !pkg.is_pinned
         end
+        Pkg.add("Profile")
+        Pkg.pin("Example")
+        Pkg.free(all_pkgs = true) # test that this doesn't error because Profile is already free
         Pkg.rm(all_pkgs = true)
         @test !haskey(Pkg.dependencies(), exuuid)
 
