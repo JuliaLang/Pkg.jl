@@ -73,6 +73,14 @@ using  ..Utils
             end
 
         end
+
+        m = Pkg.Types.read_manifest(env_manifest)
+        msg = r"The active manifest file has dependencies that were resolved with a different julia version"
+        @test_logs (:warn, msg) Pkg.Types.check_warn_manifest_julia_version_compat(m, env_manifest)
+
+        m.julia_version = nothing
+        msg = r"The active manifest file is missing a julia version entry"
+        @test_logs (:warn, msg) Pkg.Types.check_warn_manifest_julia_version_compat(m, env_manifest)
     end
 
     @testset "v3.0: unknown format, warn" begin
