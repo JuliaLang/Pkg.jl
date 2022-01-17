@@ -1666,23 +1666,14 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             try
                 wait(p)
             catch e
-                if e isa InterruptException && process_running(p)
+                if e isa InterruptException
                     interrupted = true
-                    # Interrupting a test often results in the child process orphaned and continuing to run & print,
-                    # so give some time for the child interrupt handler to print a stacktrace and exit,
-                    # then kill the process if still running
                     print("\n")
                     printpkgstyle(ctx.io, :Testing, "Tests interrupted. Exiting the test process\n", color = Base.error_color())
-                    sleep(2)
-                    if process_running(p)
-                        # try to interrupt for a short while to get the interrupt stacktrace from the child
-                        # and trigger normal shutdown with any atexit cleanup
-                        t = Timer(2)
-                        while process_running(p) && isopen(t)
-                            kill(p, Base.SIGINT)
-                            sleep(0.2)
-                        end
-                        process_running(p) && kill(p, Base.SIGKILL) # otherwise kill
+                    # Give some time for the child interrupt handler to print a stacktrace and exit,
+                    # then kill the process if still running
+                    if timedwait(() -> !process_running(p), 4) == :timed_out
+                        kill(p, Base.SIGKILL)
                     end
                 else
                     rethrow()
