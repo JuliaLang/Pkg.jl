@@ -44,7 +44,7 @@ function setup_packages_repository(dir)
         """)
 
     git = gitcmd(dir)
-    run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git init -b master -q`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
     package_tree_hash = readchomp(`$git rev-parse HEAD:julia`)
@@ -104,7 +104,7 @@ function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
         """)
 
     git = gitcmd(dir)
-    run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git init -b master -q`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
 end
