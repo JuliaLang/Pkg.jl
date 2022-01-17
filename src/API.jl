@@ -1241,8 +1241,13 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     Base.LOADING_CACHE[] = Base.LoadingCache()
     for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
-        sourcepath = Base.locate_package(pkg)
-        if sourcepath === nothing
+        pkgpath = Base.manifest_uuid_path(ctx.env.project_file, pkg)
+        if pkgpath !== nothing
+            sourcepath = Base.entry_path(pkgpath, pkg.name)
+        else
+            sourcepath = Base.locate_package(pkg)
+        end
+        if sourcepath === nothing || !isfile(sourcepath)
             failed_deps[pkg] = "Error: Missing source file for $(pkg)"
             notify(was_processed[pkg])
             continue

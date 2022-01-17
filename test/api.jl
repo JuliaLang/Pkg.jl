@@ -263,4 +263,19 @@ end
     end
 end
 
+@testset "operate via contexts" begin
+    isolate() do
+        mktempdir() do dir
+            cd(dir) do
+                Pkg.generate("MyProj")
+            end
+            ctx = Pkg.Types.Context(env=Pkg.Types.EnvCache(joinpath(dir, "MyProj", "Project.toml")))
+            Pkg.add(ctx, [PackageSpec("Example")])
+            Pkg.precompile(ctx)
+        end
+    end
+end
+
+
+
 end # module APITests
