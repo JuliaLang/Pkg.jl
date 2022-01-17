@@ -326,8 +326,7 @@ function check_warn_manifest_julia_version_compat(manifest::Manifest, manifest_f
         "been resolved with a different julia version.") maxlog = 1 _file = manifest_file _line = 0 _module = nothing
         return
     end
-    if v.major != VERSION.major && v.minor != VERSION.minor
-        ver_str = something(manifest.julia_version, "pre-1.7")
+    if Base.thisminor(v) != Base.thisminor(VERSION)
         @warn string("The active manifest file has dependencies that were resolved with a different julia ",
         "version ($(manifest.julia_version)). Unexpected behavior may occur.") maxlog = 1 _file = manifest_file _line = 0 _module = nothing
     end
