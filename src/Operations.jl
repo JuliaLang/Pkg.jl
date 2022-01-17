@@ -1674,9 +1674,15 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
                     print("\n")
                     printpkgstyle(ctx.io, :Testing, "Tests interrupted. Exiting the test process\n", color = Base.error_color())
                     sleep(2)
-                    while process_running(p)
-                        kill(p, Base.SIGKILL)
-                        sleep(0.1)
+                    if process_running(p)
+                        # try to interrupt for a short while to get the interrupt stacktrace from the child
+                        # and trigger normal shutdown with any atexit cleanup
+                        t = Timer(2)
+                        while process_running(p) && isopen(t)
+                            kill(p, Base.SIGINT)
+                            sleep(0.2)
+                        end
+                        process_running(p) && kill(p, Base.SIGKILL) # otherwise kill
                     end
                 else
                     rethrow()
