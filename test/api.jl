@@ -270,6 +270,7 @@ end
                 Pkg.generate("MyProj")
             end
             ctx = Pkg.Types.Context(env=Pkg.Types.EnvCache(joinpath(dir, "MyProj", "Project.toml")))
+            Pkg.API.up(ctx)
             Pkg.add(ctx, [PackageSpec("Example")])
             Pkg.precompile(ctx)
         end
