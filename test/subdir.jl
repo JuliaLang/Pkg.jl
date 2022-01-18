@@ -14,6 +14,20 @@ function gitcmd(path::AbstractString)
          "-c", "user.email=ci@juliacomputing.com"])
 end
 
+function git_default_branch()
+    raw_version = read(`git --version`, String)
+    m = match(r"git version (\d+\.\d+\.\d+).*$", raw_version)
+    if m !== nothing
+        version = VersionNumber(only(m.captures))
+        if version >= v"2.28.0"
+            return `-b master`
+        else
+            return ``
+        end
+    end
+    error("Could not parse git version: " * raw_version)
+end
+
 # Create a repository containing two packages in different
 # subdirectories, `Package` and `Dep`, where the former depends on the
 # latter. Return the tree hashes for the two packages.
@@ -44,7 +58,7 @@ function setup_packages_repository(dir)
         """)
 
     git = gitcmd(dir)
-    run(pipeline(`$git init -b master -q`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git init $(git_default_branch()) -q`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
     package_tree_hash = readchomp(`$git rev-parse HEAD:julia`)
@@ -104,7 +118,7 @@ function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
         """)
 
     git = gitcmd(dir)
-    run(pipeline(`$git init -b master -q`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git init $(git_default_branch()) -q`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
 end
