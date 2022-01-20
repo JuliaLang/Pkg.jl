@@ -127,8 +127,7 @@ end
 # Note: we cannot use `git init -b`, because that requires Git 2.28.0+, and we want to
 # support older versions of Git. Therefore, we instead use `git branch -f` and `git branch -D`,
 # which only require Git 1.2.0+ or Git 2.0.0+.
-function fix_default_branch(; dir::String)
-    new_branch_name = "master"
+function fix_default_branch(; dir::String, new_branch_name::String = "master")
     old_branch_name = _current_branch_name(; dir)
     git = gitcmd(dir)
     if old_branch_name != new_branch_name
