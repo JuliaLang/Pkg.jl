@@ -1,9 +1,46 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>10. REPL Mode Reference · Pkg.jl</title><link rel="canonical" href="https://julialang.github.io/Pkg.jl/v1/repl/index.html"/><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/documenter.css" rel="stylesheet" type="text/css"/><link href="../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><nav class="toc"><a href="../index.html"><img class="logo" src="../assets/logo.png" alt="Pkg.jl logo"/></a><h1>Pkg.jl</h1><select id="version-selector" onChange="window.location.href=this.value" style="visibility: hidden"></select><form class="search" id="search-form" action="../search/"><input id="search-query" name="q" type="text" placeholder="Search docs"/></form><ul><li><a class="toctext" href="../"><strong>1.</strong> Introduction</a></li><li><a class="toctext" href="../getting-started/"><strong>2.</strong> Getting Started</a></li><li><a class="toctext" href="../managing-packages/"><strong>3.</strong> Managing Packages</a></li><li><a class="toctext" href="../environments/"><strong>4.</strong> Working with Environments</a></li><li><a class="toctext" href="../creating-packages/"><strong>5.</strong> Creating Packages</a></li><li><a class="toctext" href="../compatibility/"><strong>6.</strong> Compatibility</a></li><li><a class="toctext" href="../registries/"><strong>7.</strong> Registries</a></li><li><a class="toctext" href="../glossary/"><strong>8.</strong> Glossary</a></li><li><a class="toctext" href="../toml-files/"><strong>9.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></a></li><li class="current"><a class="toctext" href><strong>10.</strong> REPL Mode Reference</a><ul class="internal"><li><a class="toctext" href="#package-commands-1"><code>package</code> commands</a></li><li><a class="toctext" href="#registry-commands-1"><code>registry</code> commands</a></li><li><a class="toctext" href="#Other-commands-1">Other commands</a></li></ul></li><li><a class="toctext" href="../api/"><strong>11.</strong> API Reference</a></li></ul></nav><article id="docs"><header><nav><ul><li><a href><strong>10.</strong> REPL Mode Reference</a></li></ul><a class="edit-page" href="https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/repl.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>10. REPL Mode Reference</span><a class="fa fa-bars" href="#"></a></div></header><h1><a class="nav-anchor" id="REPL-Mode-Reference-1" href="#REPL-Mode-Reference-1"><strong>10.</strong> REPL Mode Reference</a></h1><p>This section describes available commands in the Pkg REPL. The REPL mode is mostly meant for interactive use, and for non-interactive use it is recommended to use the &quot;API mode&quot;, see <a href="../api/#API-Reference-1">API Reference</a>.</p><h2><a class="nav-anchor" id="package-commands-1" href="#package-commands-1"><code>package</code> commands</a></h2><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-add" href="#repl-add">
-        <code>add</code>
-    </a>
+<!DOCTYPE html><HTML lang="en"><head><meta charset="UTF-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><title>10. REPL Mode Reference · Pkg.jl</title><link href="https://julialang.github.io/Pkg.jl/v1/repl/index.html" rel="canonical"/><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script data-main="../assets/documenter.js" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/documenter.css" rel="stylesheet" type="text/css"/><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script data-outdated-warner="">function maybeAddWarning () {
+    const head = document.getElementsByTagName('head')[0];
+
+    // Add a noindex meta tag (unless one exists) so that search engines don't index this version of the docs.
+    if (document.body.querySelector('meta[name="robots"]') === null) {
+        const meta = document.createElement('meta');
+        meta.name = 'robots';
+        meta.content = 'noindex';
+
+        head.appendChild(meta);
+    };
+
+    // Add a stylesheet to avoid inline styling
+    const style = document.createElement('style');
+    style.type = 'text/css';
+    style.appendChild(document.createTextNode('.outdated-warning-overlay {  position: fixed;  top: 0;  left: 0;  right: 0;  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);  z-index: 999;  background-color: #ffaba7;  color: rgba(0, 0, 0, 0.7);  border-bottom: 3px solid #da0b00;  padding: 10px 35px;  text-align: center;  font-size: 15px; }  .outdated-warning-overlay .outdated-warning-closer {    position: absolute;    top: calc(50% - 10px);    right: 18px;    cursor: pointer;    width: 12px; }  .outdated-warning-overlay a {    color: #2e63b8; }    .outdated-warning-overlay a:hover {      color: #363636; }'));
+    head.appendChild(style);
+
+    const div = document.createElement('div');
+    div.classList.add('outdated-warning-overlay');
+    const closer = document.createElement('div');
+    closer.classList.add('outdated-warning-closer');
+
+    // Icon by font-awesome (license: https://fontawesome.com/license, link: https://fontawesome.com/icons/times?style=solid)
+    closer.innerHTML = '<svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="times" class="svg-inline--fa fa-times fa-w-11" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 512"><path fill="currentColor" d="M242.72 256l100.07-100.07c12.28-12.28 12.28-32.19 0-44.48l-22.24-22.24c-12.28-12.28-32.19-12.28-44.48 0L176 189.28 75.93 89.21c-12.28-12.28-32.19-12.28-44.48 0L9.21 111.45c-12.28 12.28-12.28 32.19 0 44.48L109.28 256 9.21 356.07c-12.28 12.28-12.28 32.19 0 44.48l22.24 22.24c12.28 12.28 32.2 12.28 44.48 0L176 322.72l100.07 100.07c12.28 12.28 32.2 12.28 44.48 0l22.24-22.24c12.28-12.28 12.28-32.19 0-44.48L242.72 256z"></path></svg>';
+    closer.addEventListener('click', function () {
+        document.body.removeChild(div);
+    });
+    let href = '/';
+    if (window.documenterBaseURL) {
+        href = window.documenterBaseURL + '/../';
+    }
+    div.innerHTML = 'This documentation is not for the latest version. <br> <a href="' + href + '">Go to the latest documentation</a>.';
+    div.appendChild(closer);
+    document.body.appendChild(div);
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', maybeAddWarning);
+} else {
+    maybeAddWarning();
+};
+</script></head><body><nav class="toc"><a href="../index.html"><img alt="Pkg.jl logo" class="logo" src="../assets/logo.png"/></a><h1>Pkg.jl</h1><select id="version-selector" onchange="window.location.href=this.value" style="visibility: hidden"></select><form action="../search/" class="search" id="search-form"><input id="search-query" name="q" placeholder="Search docs" type="text"/></form><ul><li><a class="toctext" href="../"><strong>1.</strong> Introduction</a></li><li><a class="toctext" href="../getting-started/"><strong>2.</strong> Getting Started</a></li><li><a class="toctext" href="../managing-packages/"><strong>3.</strong> Managing Packages</a></li><li><a class="toctext" href="../environments/"><strong>4.</strong> Working with Environments</a></li><li><a class="toctext" href="../creating-packages/"><strong>5.</strong> Creating Packages</a></li><li><a class="toctext" href="../compatibility/"><strong>6.</strong> Compatibility</a></li><li><a class="toctext" href="../registries/"><strong>7.</strong> Registries</a></li><li><a class="toctext" href="../glossary/"><strong>8.</strong> Glossary</a></li><li><a class="toctext" href="../toml-files/"><strong>9.</strong><code>Project.toml</code> and <code>Manifest.toml</code></a></li><li class="current"><a class="toctext" href=""><strong>10.</strong> REPL Mode Reference</a><ul class="internal"><li><a class="toctext" href="#package-commands-1"><code>package</code> commands</a></li><li><a class="toctext" href="#registry-commands-1"><code>registry</code> commands</a></li><li><a class="toctext" href="#Other-commands-1">Other commands</a></li></ul></li><li><a class="toctext" href="../api/"><strong>11.</strong> API Reference</a></li></ul></nav><article id="docs"><header><nav><ul><li><a href=""><strong>10.</strong> REPL Mode Reference</a></li></ul><a class="edit-page" href="https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/repl.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>10. REPL Mode Reference</span><a class="fa fa-bars" href="#"></a></div></header><h1><a class="nav-anchor" href="#REPL-Mode-Reference-1" id="REPL-Mode-Reference-1"><strong>10.</strong> REPL Mode Reference</a></h1><p>This section describes available commands in the Pkg REPL. The REPL mode is mostly meant for interactive use, and for non-interactive use it is recommended to use the "API mode", see <a href="../api/#API-Reference-1">API Reference</a>.</p><h2><a class="nav-anchor" href="#package-commands-1" id="package-commands-1"><code>package</code> commands</a></h2><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-add" id="repl-add"><code>add</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
@@ -13,172 +50,96 @@ pkg&gt; add Example#master
 pkg&gt; add Example#c37b675
 pkg&gt; add https://github.com/JuliaLang/Example.jl#master
 pkg&gt; add git@github.com:JuliaLang/Example.jl.git
-pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-build" href="#repl-build">
-        <code>build</code>
-    </a>
+pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-build" id="repl-build"><code>build</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">build [-v|verbose] pkg[=uuid] ...</code></pre><p>Run the build script in <code>deps/build.jl</code> for <code>pkg</code> and all of its dependencies in depth-first recursive order. If no packages are given, run the build scripts for all packages in the manifest. The <code>-v</code>/<code>--verbose</code> option redirects build output to <code>stdout</code>/<code>stderr</code> instead of the <code>build.log</code> file. The <code>startup.jl</code> file is disabled during building unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-develop" href="#repl-develop">
-        <code>develop</code>
-    </a>
+</div><div><pre><code class="language-none">build [-v|verbose] pkg[=uuid] ...</code></pre><p>Run the build script in <code>deps/build.jl</code> for <code>pkg</code> and all of its dependencies in depth-first recursive order. If no packages are given, run the build scripts for all packages in the manifest. The <code>-v</code>/<code>--verbose</code> option redirects build output to <code>stdout</code>/<code>stderr</code> instead of the <code>build.log</code> file. The <code>startup.jl</code> file is disabled during building unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-develop" id="repl-develop"><code>develop</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">develop [--shared|--local] pkg[=uuid] ...</code></pre><p>Make a package available for development. If <code>pkg</code> is an existing local path, that path will be recorded in the manifest and used. Otherwise, a full git clone of <code>pkg</code> is made. The location of the clone is controlled by the <code>--shared</code> (default) and <code>--local</code> arguments. The <code>--shared</code> location defaults to <code>~/.julia/dev</code>, but can be controlled with the <code>JULIA_PKG_DEVDIR</code> environment variable. When <code>--local</code> is given, the clone is placed in a <code>dev</code> folder in the current project. This operation is undone by <code>free</code>.</p><p><strong>Examples</strong></p><pre><code class="language-jl">pkg&gt; develop Example
 pkg&gt; develop https://github.com/JuliaLang/Example.jl
 pkg&gt; develop ~/mypackages/Example
-pkg&gt; develop --local Example</code></pre></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-free" href="#repl-free">
-        <code>free</code>
-    </a>
+pkg&gt; develop --local Example</code></pre></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-free" id="repl-free"><code>free</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">free pkg[=uuid] ...</code></pre><p>Free a pinned package <code>pkg</code>, which allows it to be upgraded or downgraded again. If the package is checked out (see <code>help develop</code>) then this command makes the package no longer being checked out.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-generate" href="#repl-generate">
-        <code>generate</code>
-    </a>
+</div><div><pre><code class="language-none">free pkg[=uuid] ...</code></pre><p>Free a pinned package <code>pkg</code>, which allows it to be upgraded or downgraded again. If the package is checked out (see <code>help develop</code>) then this command makes the package no longer being checked out.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-generate" id="repl-generate"><code>generate</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">generate pkgname</code></pre><p>Create a project called <code>pkgname</code> in the current folder.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-pin" href="#repl-pin">
-        <code>pin</code>
-    </a>
+</div><div><pre><code class="language-none">generate pkgname</code></pre><p>Create a project called <code>pkgname</code> in the current folder.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-pin" id="repl-pin"><code>pin</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">pin pkg[=uuid] ...</code></pre><p>Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded. A pinned package has the symbol <code>⚲</code> next to its version in the status list.</p><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; pin Example
 pkg&gt; pin Example@0.5.0
-pkg&gt; pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0</code></pre></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-remove" href="#repl-remove">
-        <code>remove</code>
-    </a>
+pkg&gt; pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0</code></pre></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-remove" id="repl-remove"><code>remove</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">rm [-p|--project] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the project file. Since the name <code>pkg</code> can only refer to one package in a project this is unambiguous, but you can specify a <code>uuid</code> anyway, and the command is ignored, with a warning, if package name and UUID do not match. When a package is removed from the project file, it may still remain in the manifest if it is required by some other package in the project. Project mode operation is the default, so passing <code>-p</code> or <code>--project</code> is optional unless it is preceded by the <code>-m</code> or <code>--manifest</code> options at some earlier point.</p><pre><code class="language-none">rm [-m|--manifest] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the manifest file. If the name <code>pkg</code> refers to multiple packages in the manifest, <code>uuid</code> disambiguates it. Removing a package from the manifest forces the removal of all packages that depend on it, as well as any no-longer-necessary manifest packages due to project package removals.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-test" href="#repl-test">
-        <code>test</code>
-    </a>
+</div><div><pre><code class="language-none">rm [-p|--project] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the project file. Since the name <code>pkg</code> can only refer to one package in a project this is unambiguous, but you can specify a <code>uuid</code> anyway, and the command is ignored, with a warning, if package name and UUID do not match. When a package is removed from the project file, it may still remain in the manifest if it is required by some other package in the project. Project mode operation is the default, so passing <code>-p</code> or <code>--project</code> is optional unless it is preceded by the <code>-m</code> or <code>--manifest</code> options at some earlier point.</p><pre><code class="language-none">rm [-m|--manifest] pkg[=uuid] ...</code></pre><p>Remove package <code>pkg</code> from the manifest file. If the name <code>pkg</code> refers to multiple packages in the manifest, <code>uuid</code> disambiguates it. Removing a package from the manifest forces the removal of all packages that depend on it, as well as any no-longer-necessary manifest packages due to project package removals.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-test" id="repl-test"><code>test</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">test [--coverage] pkg[=uuid] ...</code></pre><p>Run the tests for package <code>pkg</code>. This is done by running the file <code>test/runtests.jl</code> in the package directory. The option <code>--coverage</code> can be used to run the tests with coverage enabled. The <code>startup.jl</code> file is disabled during testing unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-update" href="#repl-update">
-        <code>update</code>
-    </a>
+</div><div><pre><code class="language-none">test [--coverage] pkg[=uuid] ...</code></pre><p>Run the tests for package <code>pkg</code>. This is done by running the file <code>test/runtests.jl</code> in the package directory. The option <code>--coverage</code> can be used to run the tests with coverage enabled. The <code>startup.jl</code> file is disabled during testing unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-update" id="repl-update"><code>update</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">up [-p|--project]  [opts] pkg[=uuid] [@version] ...
 up [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
-opts: --major | --minor | --patch | --fixed</code></pre><p>Update <code>pkg</code> within the constraints of the indicated version specifications. These specifications are of the form <code>@1</code>, <code>@1.2</code> or <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. In <code>--project</code> mode, package specifications only match project packages, while in <code>manifest</code> mode they match any manifest package. Bound level options force the following packages to be upgraded only within the current major, minor, patch version; if the <code>--fixed</code> upgrade level is given, then the following packages will not be upgraded at all.</p></div></section><h2><a class="nav-anchor" id="registry-commands-1" href="#registry-commands-1"><code>registry</code> commands</a></h2><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-registry-add" href="#repl-registry-add">
-        <code>registry add</code>
-    </a>
+opts: --major | --minor | --patch | --fixed</code></pre><p>Update <code>pkg</code> within the constraints of the indicated version specifications. These specifications are of the form <code>@1</code>, <code>@1.2</code> or <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. In <code>--project</code> mode, package specifications only match project packages, while in <code>manifest</code> mode they match any manifest package. Bound level options force the following packages to be upgraded only within the current major, minor, patch version; if the <code>--fixed</code> upgrade level is given, then the following packages will not be upgraded at all.</p></div></section><h2><a class="nav-anchor" href="#registry-commands-1" id="registry-commands-1"><code>registry</code> commands</a></h2><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-registry-add" id="repl-registry-add"><code>registry add</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">registry add reg...</code></pre><p>Add package registries <code>reg...</code> to the user depot.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry add General
-pkg&gt; registry add https://www.my-custom-registry.com</code></pre></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-registry-remove" href="#repl-registry-remove">
-        <code>registry remove</code>
-    </a>
+</div><div><pre><code class="language-none">registry add reg...</code></pre><p>Add package registries <code>reg...</code> to the user depot.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg's registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry add General
+pkg&gt; registry add https://www.my-custom-registry.com</code></pre></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-registry-remove" id="repl-registry-remove"><code>registry remove</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">registry rm reg...</code></pre><p>Remove package registries <code>reg...</code>.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry rm General</code></pre></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-registry-status" href="#repl-registry-status">
-        <code>registry status</code>
-    </a>
+</div><div><pre><code class="language-none">registry rm reg...</code></pre><p>Remove package registries <code>reg...</code>.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg's registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry rm General</code></pre></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-registry-status" id="repl-registry-status"><code>registry status</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">registry status</code></pre><p>Display information about installed registries.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry status</code></pre></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-registry-update" href="#repl-registry-update">
-        <code>registry update</code>
-    </a>
+</div><div><pre><code class="language-none">registry status</code></pre><p>Display information about installed registries.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg's registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry status</code></pre></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-registry-update" id="repl-registry-update"><code>registry update</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">registry up
-registry up reg...</code></pre><p>Update package registries <code>reg...</code>. If no registries are specified all registries will be updated.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg&#39;s registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry up
-pkg&gt; registry up General</code></pre></div></section><h2><a class="nav-anchor" id="Other-commands-1" href="#Other-commands-1">Other commands</a></h2><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-activate" href="#repl-activate">
-        <code>activate</code>
-    </a>
+registry up reg...</code></pre><p>Update package registries <code>reg...</code>. If no registries are specified all registries will be updated.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p>Pkg's registry handling requires at least Julia 1.1.</p></div></div><p><strong>Examples</strong></p><pre><code class="language-none">pkg&gt; registry up
+pkg&gt; registry up General</code></pre></div></section><h2><a class="nav-anchor" href="#Other-commands-1" id="Other-commands-1">Other commands</a></h2><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-activate" id="repl-activate"><code>activate</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">activate
-activate [--shared] path</code></pre><p>Activate the environment at the given <code>path</code>, or the home project environment if no <code>path</code> is specified. The active environment is the environment that is modified by executing package commands. When the option <code>--shared</code> is given, <code>path</code> will be assumed to be a directory name and searched for in the <code>environments</code> folders of the depots in the depot stack. In case no such environment exists in any of the depots, it will be placed in the first depot of the stack.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-gc" href="#repl-gc">
-        <code>gc</code>
-    </a>
+activate [--shared] path</code></pre><p>Activate the environment at the given <code>path</code>, or the home project environment if no <code>path</code> is specified. The active environment is the environment that is modified by executing package commands. When the option <code>--shared</code> is given, <code>path</code> will be assumed to be a directory name and searched for in the <code>environments</code> folders of the depots in the depot stack. In case no such environment exists in any of the depots, it will be placed in the first depot of the stack.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-gc" id="repl-gc"><code>gc</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">gc</code></pre><p>Deletes packages that cannot be reached from any existing environment.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-help" href="#repl-help">
-        <code>help</code>
-    </a>
+</div><div><pre><code class="language-none">gc</code></pre><p>Deletes packages that cannot be reached from any existing environment.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-help" id="repl-help"><code>help</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">help</code></pre><p>List available commands along with short descriptions.</p><pre><code class="language-none">help cmd</code></pre><p>If <code>cmd</code> is a partial command, display help for all subcommands. If <code>cmd</code> is a full command, display help for <code>cmd</code>.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-instantiate" href="#repl-instantiate">
-        <code>instantiate</code>
-    </a>
+</div><div><pre><code class="language-none">help</code></pre><p>List available commands along with short descriptions.</p><pre><code class="language-none">help cmd</code></pre><p>If <code>cmd</code> is a partial command, display help for all subcommands. If <code>cmd</code> is a full command, display help for <code>cmd</code>.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-instantiate" id="repl-instantiate"><code>instantiate</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">instantiate
 instantiate [-m|--manifest]
-instantiate [-p|--project]</code></pre><p>Download all the dependencies for the current project at the version given by the project&#39;s manifest. If no manifest exists or the <code>--project</code> option is given, resolve and download the dependencies compatible with the project.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-precompile" href="#repl-precompile">
-        <code>precompile</code>
-    </a>
+instantiate [-p|--project]</code></pre><p>Download all the dependencies for the current project at the version given by the project's manifest. If no manifest exists or the <code>--project</code> option is given, resolve and download the dependencies compatible with the project.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-precompile" id="repl-precompile"><code>precompile</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">precompile</code></pre><p>Precompile all the dependencies of the project by running <code>import</code> on all of them in a new process. The <code>startup.jl</code> file is disabled during precompilation unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-resolve" href="#repl-resolve">
-        <code>resolve</code>
-    </a>
+</div><div><pre><code class="language-none">precompile</code></pre><p>Precompile all the dependencies of the project by running <code>import</code> on all of them in a new process. The <code>startup.jl</code> file is disabled during precompilation unless julia is started with <code>--startup-file=yes</code>.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-resolve" id="repl-resolve"><code>resolve</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
-</div><div><pre><code class="language-none">resolve</code></pre><p>Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed packages have changed causing the current Manifest to be out of sync.</p></div></section><section class="docstring">
-<div class="docstring-header">
-    <a class="docstring-binding" id="repl-status" href="#repl-status">
-        <code>status</code>
-    </a>
+</div><div><pre><code class="language-none">resolve</code></pre><p>Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed packages have changed causing the current Manifest to be out of sync.</p></div></section><section class="docstring"><div class="docstring-header"><a class="docstring-binding" href="#repl-status" id="repl-status"><code>status</code></a>
     —
     <span class="docstring-category">REPL command</span>
 .
 </div><div><pre><code class="language-none">status [pkgs...]
 status [-p|--project] [pkgs...]
-status [-m|--manifest] [pkgs...]</code></pre><p>Show the status of the current environment. By default, the full contents of the project file is summarized, showing what version each package is on and how it has changed since the last git commit (if in a git repository), as well as any changes to manifest packages not already listed. In <code>--project</code> mode, the status of the project file is summarized. In <code>--manifest</code> mode the output also includes the recursive dependencies of added packages. If there are any packages listed as arguments the output will be limited to those packages.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p><code>pkg&gt; status</code> with package arguments requires at least Julia 1.1.</p></div></div></div></section><footer><hr/><a class="previous" href="../toml-files/"><span class="direction">Previous</span><span class="title"><strong>9.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></span></a><a class="next" href="../api/"><span class="direction">Next</span><span class="title"><strong>11.</strong> API Reference</span></a></footer></article></body></html>
+status [-m|--manifest] [pkgs...]</code></pre><p>Show the status of the current environment. By default, the full contents of the project file is summarized, showing what version each package is on and how it has changed since the last git commit (if in a git repository), as well as any changes to manifest packages not already listed. In <code>--project</code> mode, the status of the project file is summarized. In <code>--manifest</code> mode the output also includes the recursive dependencies of added packages. If there are any packages listed as arguments the output will be limited to those packages.</p><div class="admonition compat"><div class="admonition-title">Julia 1.1</div><div class="admonition-text"><p><code>pkg&gt; status</code> with package arguments requires at least Julia 1.1.</p></div></div></div></section><footer><hr/><a class="previous" href="../toml-files/"><span class="direction">Previous</span><span class="title"><strong>9.</strong><code>Project.toml</code> and <code>Manifest.toml</code></span></a><a class="next" href="../api/"><span class="direction">Next</span><span class="title"><strong>11.</strong> API Reference</span></a></footer></article></body></HTML>

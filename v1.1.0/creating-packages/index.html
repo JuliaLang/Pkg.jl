@@ -1,5 +1,46 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>5. Creating Packages · Pkg.jl</title><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/documenter.css" rel="stylesheet" type="text/css"/><link href="../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><nav class="toc"><h1>Pkg.jl</h1><select id="version-selector" onChange="window.location.href=this.value" style="visibility: hidden"></select><form class="search" id="search-form" action="../search/"><input id="search-query" name="q" type="text" placeholder="Search docs"/></form><ul><li><a class="toctext" href="../"><strong>1.</strong> Introduction</a></li><li><a class="toctext" href="../getting-started/"><strong>2.</strong> Getting Started</a></li><li><a class="toctext" href="../managing-packages/"><strong>3.</strong> Managing Packages</a></li><li><a class="toctext" href="../environments/"><strong>4.</strong> Working with Environments</a></li><li class="current"><a class="toctext" href><strong>5.</strong> Creating Packages</a><ul class="internal"></ul></li><li><a class="toctext" href="../compatibility/"><strong>6.</strong> Compatibility</a></li><li><a class="toctext" href="../registries/"><strong>7.</strong> Registries</a></li><li><a class="toctext" href="../glossary/"><strong>9.</strong> Glossary</a></li><li><a class="toctext" href="../api/"><strong>10.</strong> API Reference</a></li></ul></nav><article id="docs"><header><nav><ul><li><a href><strong>5.</strong> Creating Packages</a></li></ul><a class="edit-page" href="https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/creating-packages.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>5. Creating Packages</span><a class="fa fa-bars" href="#"></a></div></header><h1><a class="nav-anchor" id="**5.**-Creating-Packages-1" href="#**5.**-Creating-Packages-1"><strong>5.</strong> Creating Packages</a></h1><p>A package is a project with a <code>name</code>, <code>uuid</code> and <code>version</code> entry in the <code>Project.toml</code> file <code>src/PackageName.jl</code> file that defines the module <code>PackageName</code>. This file is executed when the package is loaded.</p><h3><a class="nav-anchor" id="Generating-files-for-a-package-1" href="#Generating-files-for-a-package-1">Generating files for a package</a></h3><p>To generate files for a new package, use <code>pkg&gt; generate</code>.</p><pre><code class="language-none">(v1.0) pkg&gt; generate HelloWorld</code></pre><p>This creates a new project <code>HelloWorld</code> with the following files (visualized with the external <a href="https://linux.die.net/man/1/tree"><code>tree</code> command</a>):</p><pre><code class="language-jl">shell&gt; cd HelloWorld
+<!DOCTYPE html><HTML lang="en"><head><meta charset="UTF-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><title>5. Creating Packages · Pkg.jl</title><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script data-main="../assets/documenter.js" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/documenter.css" rel="stylesheet" type="text/css"/><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script data-outdated-warner="">function maybeAddWarning () {
+    const head = document.getElementsByTagName('head')[0];
+
+    // Add a noindex meta tag (unless one exists) so that search engines don't index this version of the docs.
+    if (document.body.querySelector('meta[name="robots"]') === null) {
+        const meta = document.createElement('meta');
+        meta.name = 'robots';
+        meta.content = 'noindex';
+
+        head.appendChild(meta);
+    };
+
+    // Add a stylesheet to avoid inline styling
+    const style = document.createElement('style');
+    style.type = 'text/css';
+    style.appendChild(document.createTextNode('.outdated-warning-overlay {  position: fixed;  top: 0;  left: 0;  right: 0;  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);  z-index: 999;  background-color: #ffaba7;  color: rgba(0, 0, 0, 0.7);  border-bottom: 3px solid #da0b00;  padding: 10px 35px;  text-align: center;  font-size: 15px; }  .outdated-warning-overlay .outdated-warning-closer {    position: absolute;    top: calc(50% - 10px);    right: 18px;    cursor: pointer;    width: 12px; }  .outdated-warning-overlay a {    color: #2e63b8; }    .outdated-warning-overlay a:hover {      color: #363636; }'));
+    head.appendChild(style);
+
+    const div = document.createElement('div');
+    div.classList.add('outdated-warning-overlay');
+    const closer = document.createElement('div');
+    closer.classList.add('outdated-warning-closer');
+
+    // Icon by font-awesome (license: https://fontawesome.com/license, link: https://fontawesome.com/icons/times?style=solid)
+    closer.innerHTML = '<svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="times" class="svg-inline--fa fa-times fa-w-11" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 512"><path fill="currentColor" d="M242.72 256l100.07-100.07c12.28-12.28 12.28-32.19 0-44.48l-22.24-22.24c-12.28-12.28-32.19-12.28-44.48 0L176 189.28 75.93 89.21c-12.28-12.28-32.19-12.28-44.48 0L9.21 111.45c-12.28 12.28-12.28 32.19 0 44.48L109.28 256 9.21 356.07c-12.28 12.28-12.28 32.19 0 44.48l22.24 22.24c12.28 12.28 32.2 12.28 44.48 0L176 322.72l100.07 100.07c12.28 12.28 32.2 12.28 44.48 0l22.24-22.24c12.28-12.28 12.28-32.19 0-44.48L242.72 256z"></path></svg>';
+    closer.addEventListener('click', function () {
+        document.body.removeChild(div);
+    });
+    let href = '/';
+    if (window.documenterBaseURL) {
+        href = window.documenterBaseURL + '/../';
+    }
+    div.innerHTML = 'This documentation is not for the latest version. <br> <a href="' + href + '">Go to the latest documentation</a>.';
+    div.appendChild(closer);
+    document.body.appendChild(div);
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', maybeAddWarning);
+} else {
+    maybeAddWarning();
+};
+</script></head><body><nav class="toc"><h1>Pkg.jl</h1><select id="version-selector" onchange="window.location.href=this.value" style="visibility: hidden"></select><form action="../search/" class="search" id="search-form"><input id="search-query" name="q" placeholder="Search docs" type="text"/></form><ul><li><a class="toctext" href="../"><strong>1.</strong> Introduction</a></li><li><a class="toctext" href="../getting-started/"><strong>2.</strong> Getting Started</a></li><li><a class="toctext" href="../managing-packages/"><strong>3.</strong> Managing Packages</a></li><li><a class="toctext" href="../environments/"><strong>4.</strong> Working with Environments</a></li><li class="current"><a class="toctext" href=""><strong>5.</strong> Creating Packages</a><ul class="internal"></ul></li><li><a class="toctext" href="../compatibility/"><strong>6.</strong> Compatibility</a></li><li><a class="toctext" href="../registries/"><strong>7.</strong> Registries</a></li><li><a class="toctext" href="../glossary/"><strong>9.</strong> Glossary</a></li><li><a class="toctext" href="../api/"><strong>10.</strong> API Reference</a></li></ul></nav><article id="docs"><header><nav><ul><li><a href=""><strong>5.</strong> Creating Packages</a></li></ul><a class="edit-page" href="https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/creating-packages.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>5. Creating Packages</span><a class="fa fa-bars" href="#"></a></div></header><h1><a class="nav-anchor" href="#**5.**-Creating-Packages-1" id="**5.**-Creating-Packages-1"><strong>5.</strong> Creating Packages</a></h1><p>A package is a project with a <code>name</code>, <code>uuid</code> and <code>version</code> entry in the <code>Project.toml</code> file <code>src/PackageName.jl</code> file that defines the module <code>PackageName</code>. This file is executed when the package is loaded.</p><h3><a class="nav-anchor" href="#Generating-files-for-a-package-1" id="Generating-files-for-a-package-1">Generating files for a package</a></h3><p>To generate files for a new package, use <code>pkg&gt; generate</code>.</p><pre><code class="language-none">(v1.0) pkg&gt; generate HelloWorld</code></pre><p>This creates a new project <code>HelloWorld</code> with the following files (visualized with the external <a href="https://linux.die.net/man/1/tree"><code>tree</code> command</a>):</p><pre><code class="language-jl">shell&gt; cd HelloWorld
 
 shell&gt; tree .
 .
@@ -7,26 +48,26 @@ shell&gt; tree .
 └── src
     └── HelloWorld.jl
 
-1 directory, 2 files</code></pre><p>The <code>Project.toml</code> file contains the name of the package, its unique UUID, its version, the author and eventual dependencies:</p><pre><code class="language-toml">name = &quot;HelloWorld&quot;
-uuid = &quot;b4cd1eb8-1e24-11e8-3319-93036a3eb9f3&quot;
-version = &quot;0.1.0&quot;
-author = [&quot;Some One &lt;someone@email.com&gt;&quot;]
+1 directory, 2 files</code></pre><p>The <code>Project.toml</code> file contains the name of the package, its unique UUID, its version, the author and eventual dependencies:</p><pre><code class="language-toml">name = "HelloWorld"
+uuid = "b4cd1eb8-1e24-11e8-3319-93036a3eb9f3"
+version = "0.1.0"
+author = ["Some One &lt;someone@email.com&gt;"]
 
 [deps]</code></pre><p>The content of <code>src/HelloWorld.jl</code> is:</p><pre><code class="language-jl">module HelloWorld
 
-greet() = print(&quot;Hello World!&quot;)
+greet() = print("Hello World!")
 
 end # module</code></pre><p>We can now activate the project and load the package:</p><pre><code class="language-jl">pkg&gt; activate .
 
 julia&gt; import HelloWorld
 
 julia&gt; HelloWorld.greet()
-Hello World!</code></pre><h3><a class="nav-anchor" id="Adding-dependencies-to-the-project-1" href="#Adding-dependencies-to-the-project-1">Adding dependencies to the project</a></h3><p>Let’s say we want to use the standard library package <code>Random</code> and the registered package <code>JSON</code> in our project. We simply <code>add</code> these packages (note how the prompt now shows the name of the newly generated project, since we are inside the <code>HelloWorld</code> project directory):</p><pre><code class="language-none">(HelloWorld) pkg&gt; add Random JSON
+Hello World!</code></pre><h3><a class="nav-anchor" href="#Adding-dependencies-to-the-project-1" id="Adding-dependencies-to-the-project-1">Adding dependencies to the project</a></h3><p>Let’s say we want to use the standard library package <code>Random</code> and the registered package <code>JSON</code> in our project. We simply <code>add</code> these packages (note how the prompt now shows the name of the newly generated project, since we are inside the <code>HelloWorld</code> project directory):</p><pre><code class="language-none">(HelloWorld) pkg&gt; add Random JSON
  Resolving package versions...
-  Updating &quot;~/Documents/HelloWorld/Project.toml&quot;
+  Updating "~/Documents/HelloWorld/Project.toml"
  [682c06a0] + JSON v0.17.1
  [9a3f8284] + Random
-  Updating &quot;~/Documents/HelloWorld/Manifest.toml&quot;
+  Updating "~/Documents/HelloWorld/Manifest.toml"
  [34da2185] + Compat v0.57.0
  [682c06a0] + JSON v0.17.1
  [4d1e1d77] + Nullables v0.0.4
@@ -35,11 +76,11 @@ Hello World!</code></pre><h3><a class="nav-anchor" id="Adding-dependencies-to-th
 import Random
 import JSON
 
-greet() = print(&quot;Hello World!&quot;)
-greet_alien() = print(&quot;Hello &quot;, Random.randstring(8))
+greet() = print("Hello World!")
+greet_alien() = print("Hello ", Random.randstring(8))
 
 end # module</code></pre><p>and reloading the package, the new <code>greet_alien</code> function that uses <code>Random</code> can be used:</p><pre><code class="language-none">julia&gt; HelloWorld.greet_alien()
-Hello aT157rHV</code></pre><h3><a class="nav-anchor" id="Adding-a-build-step-to-the-package.-1" href="#Adding-a-build-step-to-the-package.-1">Adding a build step to the package.</a></h3><p>The build step is executed the first time a package is installed or when explicitly invoked with <code>build</code>. A package is built by executing the file <code>deps/build.jl</code>.</p><pre><code class="language-none">shell&gt; cat deps/build.log
+Hello aT157rHV</code></pre><h3><a class="nav-anchor" href="#Adding-a-build-step-to-the-package.-1" id="Adding-a-build-step-to-the-package.-1">Adding a build step to the package.</a></h3><p>The build step is executed the first time a package is installed or when explicitly invoked with <code>build</code>. A package is built by executing the file <code>deps/build.jl</code>.</p><pre><code class="language-none">shell&gt; cat deps/build.log
 I am being built...
 
 (HelloWorld) pkg&gt; build
@@ -48,7 +89,7 @@ I am being built...
 
 shell&gt; cat deps/build.log
 I am being built...</code></pre><p>If the build step fails, the output of the build step is printed to the console</p><pre><code class="language-none">shell&gt; cat deps/build.jl
-error(&quot;Ooops&quot;)
+error("Ooops")
 
 (HelloWorld) pkg&gt; build
   Building HelloWorld → `deps/build.log`
@@ -64,17 +105,17 @@ error(&quot;Ooops&quot;)
 │  [6] include(::String) at ./client.jl:393
 │  [7] top-level scope at none:0
 │ in expression starting at /Users/kristoffer/.julia/dev/Pkg/HelloWorld/deps/build.jl:1
-└ @ Pkg.Operations Operations.jl:938</code></pre><h3><a class="nav-anchor" id="Adding-tests-to-the-package-1" href="#Adding-tests-to-the-package-1">Adding tests to the package</a></h3><p>When a package is tested the file <code>test/runtests.jl</code> is executed.</p><pre><code class="language-none">shell&gt; cat test/runtests.jl
-println(&quot;Testing...&quot;)
+└ @ Pkg.Operations Operations.jl:938</code></pre><h3><a class="nav-anchor" href="#Adding-tests-to-the-package-1" id="Adding-tests-to-the-package-1">Adding tests to the package</a></h3><p>When a package is tested the file <code>test/runtests.jl</code> is executed.</p><pre><code class="language-none">shell&gt; cat test/runtests.jl
+println("Testing...")
 (HelloWorld) pkg&gt; test
    Testing HelloWorld
  Resolving package versions...
 Testing...
-   Testing HelloWorld tests passed</code></pre><h4><a class="nav-anchor" id="Test-specific-dependencies-1" href="#Test-specific-dependencies-1">Test-specific dependencies</a></h4><p>Sometimes one might want to use some packages only at testing time but not enforce a dependency on them when the package is used. This is possible by adding dependencies to <code>[extras]</code> and a <code>test</code> target in <code>[targets]</code> to the Project file. Here we add the <code>Test</code> standard library as a test-only dependency by adding the following to the Project file:</p><pre><code class="language-none">[extras]
-Test = &quot;8dfed614-e22c-5e08-85e1-65c5234f0b40&quot;
+   Testing HelloWorld tests passed</code></pre><h4><a class="nav-anchor" href="#Test-specific-dependencies-1" id="Test-specific-dependencies-1">Test-specific dependencies</a></h4><p>Sometimes one might want to use some packages only at testing time but not enforce a dependency on them when the package is used. This is possible by adding dependencies to <code>[extras]</code> and a <code>test</code> target in <code>[targets]</code> to the Project file. Here we add the <code>Test</code> standard library as a test-only dependency by adding the following to the Project file:</p><pre><code class="language-none">[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = [&quot;Test&quot;]</code></pre><p>We can now use <code>Test</code> in the test script and we can see that it gets installed on testing:</p><pre><code class="language-none">shell&gt; cat test/runtests.jl
+test = ["Test"]</code></pre><p>We can now use <code>Test</code> in the test script and we can see that it gets installed on testing:</p><pre><code class="language-none">shell&gt; cat test/runtests.jl
 using Test
 @test 1 == 1
 
@@ -86,4 +127,4 @@ using Test
   [8dfed614] + Test
   Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Manifest.toml`
   [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]
-   Testing HelloWorld tests passed```</code></pre><h3><a class="nav-anchor" id="Package-naming-guidelines-1" href="#Package-naming-guidelines-1">Package naming guidelines</a></h3><p>Package names should be sensible to most Julia users, <em>even to those who are not domain experts</em>. The following guidelines applies to the <code>General</code> registry, but may be useful for other package registries as well.</p><p>Since the <code>General</code> registry belongs to the entire community people may have opinions about your package name when you publish it, especially if it&#39;s ambiguous or can be confused with something other than what it is. Usually you will then get suggestions for a new name that may fit your package better.</p><ol><li><p>Avoid jargon. In particular, avoid acronyms unless there is minimal possibility of confusion.</p><ul><li>It&#39;s ok to say <code>USA</code> if you&#39;re talking about the USA.</li><li>It&#39;s not ok to say <code>PMA</code>, even if you&#39;re talking about positive mental attitude.</li></ul></li><li><p>Avoid using <code>Julia</code> in your package name.</p><ul><li>It is usually clear from context and to your users that the package is a Julia package.</li><li>Having Julia in the name can imply that the package is connected to, or endorsed by, contributors to the Julia language itself.</li></ul></li><li><p>Packages that provide most of their functionality in association with a new type should have pluralized names.</p><ul><li><code>DataFrames</code> provides the <code>DataFrame</code> type.</li><li><code>BloomFilters</code> provides the <code>BloomFilter</code> type.</li><li>In contrast, <code>JuliaParser</code> provides no new type, but instead new functionality in the <code>JuliaParser.parse()</code> function.</li></ul></li><li><p>Err on the side of clarity, even if clarity seems long-winded to you.</p><ul><li><code>RandomMatrices</code> is a less ambiguous name than <code>RndMat</code> or <code>RMT</code>, even though the latter are shorter.</li></ul></li><li><p>A less systematic name may suit a package that implements one of several possible approaches to its domain.</p><ul><li>Julia does not have a single comprehensive plotting package. Instead, <code>Gadfly</code>, <code>PyPlot</code>, <code>Winston</code> and other packages each implement a unique approach based on a particular design philosophy.</li><li>In contrast, <code>SortingAlgorithms</code> provides a consistent interface to use many well-established sorting algorithms.</li></ul></li><li><p>Packages that wrap external libraries or programs should be named after those libraries or programs.</p><ul><li><code>CPLEX.jl</code> wraps the <code>CPLEX</code> library, which can be identified easily in a web search.</li><li><code>MATLAB.jl</code> provides an interface to call the MATLAB engine from within Julia.</li></ul></li></ol><footer><hr/><a class="previous" href="../environments/"><span class="direction">Previous</span><span class="title"><strong>4.</strong> Working with Environments</span></a><a class="next" href="../compatibility/"><span class="direction">Next</span><span class="title"><strong>6.</strong> Compatibility</span></a></footer></article></body></html>
+   Testing HelloWorld tests passed```</code></pre><h3><a class="nav-anchor" href="#Package-naming-guidelines-1" id="Package-naming-guidelines-1">Package naming guidelines</a></h3><p>Package names should be sensible to most Julia users, <em>even to those who are not domain experts</em>. The following guidelines applies to the <code>General</code> registry, but may be useful for other package registries as well.</p><p>Since the <code>General</code> registry belongs to the entire community people may have opinions about your package name when you publish it, especially if it's ambiguous or can be confused with something other than what it is. Usually you will then get suggestions for a new name that may fit your package better.</p><ol><li><p>Avoid jargon. In particular, avoid acronyms unless there is minimal possibility of confusion.</p><ul><li>It's ok to say <code>USA</code> if you're talking about the USA.</li><li>It's not ok to say <code>PMA</code>, even if you're talking about positive mental attitude.</li></ul></li><li><p>Avoid using <code>Julia</code> in your package name.</p><ul><li>It is usually clear from context and to your users that the package is a Julia package.</li><li>Having Julia in the name can imply that the package is connected to, or endorsed by, contributors to the Julia language itself.</li></ul></li><li><p>Packages that provide most of their functionality in association with a new type should have pluralized names.</p><ul><li><code>DataFrames</code> provides the <code>DataFrame</code> type.</li><li><code>BloomFilters</code> provides the <code>BloomFilter</code> type.</li><li>In contrast, <code>JuliaParser</code> provides no new type, but instead new functionality in the <code>JuliaParser.parse()</code> function.</li></ul></li><li><p>Err on the side of clarity, even if clarity seems long-winded to you.</p><ul><li><code>RandomMatrices</code> is a less ambiguous name than <code>RndMat</code> or <code>RMT</code>, even though the latter are shorter.</li></ul></li><li><p>A less systematic name may suit a package that implements one of several possible approaches to its domain.</p><ul><li>Julia does not have a single comprehensive plotting package. Instead, <code>Gadfly</code>, <code>PyPlot</code>, <code>Winston</code> and other packages each implement a unique approach based on a particular design philosophy.</li><li>In contrast, <code>SortingAlgorithms</code> provides a consistent interface to use many well-established sorting algorithms.</li></ul></li><li><p>Packages that wrap external libraries or programs should be named after those libraries or programs.</p><ul><li><code>CPLEX.jl</code> wraps the <code>CPLEX</code> library, which can be identified easily in a web search.</li><li><code>MATLAB.jl</code> provides an interface to call the MATLAB engine from within Julia.</li></ul></li></ol><footer><hr/><a class="previous" href="../environments/"><span class="direction">Previous</span><span class="title"><strong>4.</strong> Working with Environments</span></a><a class="next" href="../compatibility/"><span class="direction">Next</span><span class="title"><strong>6.</strong> Compatibility</span></a></footer></article></body></HTML>
