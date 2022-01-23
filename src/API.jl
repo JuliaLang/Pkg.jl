@@ -139,12 +139,15 @@ end
 
 # Provide some convenience calls
 for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
+    f_internal = Symbol(string("_",f))
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; io::IO=$(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
             Registry.download_default_registries(io)
-            ctx = Context()
+            return $f(Context(), pkgs; kwargs...)
+        end
+        function $f(ctx::Context, pkgs::Vector{PackageSpec}; io::IO=$(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
             # Save initial environment for undo/redo functionality
             if !saved_initial_snapshot[]
                 add_snapshot_to_undo(ctx.env)
@@ -153,7 +156,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
             kwargs = merge((;kwargs...), (:io => io,))
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(pkg -> handle_package_input!(pkg), pkgs)
-            ret = $f(ctx, pkgs; kwargs...)
+            ret = $f_internal(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
             return ret
@@ -179,7 +182,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
     end
 end
 
-function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
+function _develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
@@ -223,7 +226,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     return
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
+function _add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
              platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
@@ -276,7 +279,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     return
 end
 
-function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_pkgs::Bool=false, kwargs...)
+function _rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_pkgs::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -318,7 +321,7 @@ function append_all_pkgs!(pkgs, ctx, mode)
     return
 end
 
-function up(ctx::Context, pkgs::Vector{PackageSpec};
+function _up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             update_registry::Bool=true,
             skip_writing_project::Bool=false,
@@ -348,7 +351,7 @@ function resolve(ctx::Context; skip_writing_project::Bool=false, kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function _pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -380,7 +383,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function _free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -407,7 +410,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     return
 end
 
-function test(ctx::Context, pkgs::Vector{PackageSpec};
+function _test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, test_fn=nothing,
               julia_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
               test_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
@@ -986,7 +989,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     return
 end
 
-function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
+function _build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
@@ -1579,7 +1582,7 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, io::IO=stdout_f(), kwargs...)
+function _status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, io::IO=stdout_f(), kwargs...)
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
