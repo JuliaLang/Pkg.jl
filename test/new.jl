@@ -461,6 +461,15 @@ end
         end
         @test haskey(Pkg.project().dependencies, "Example")
     end
+    # Basic add with context by version. Issue #2938
+    isolate(loaded_depot=true) do
+        Pkg.add(Pkg.Types.Context(), [Pkg.PackageSpec(;name="Example", version="0.5.3")])
+        Pkg.dependencies(exuuid) do ex
+            @test ex.is_tracking_registry
+            @test ex.version == v"0.5.3"
+        end
+        @test haskey(Pkg.project().dependencies, "Example")
+    end
     # Basic Add by VersionRange
     #= TODO
     isolate(loaded_depot=true) do
