@@ -28,6 +28,8 @@ url::Union{String,Nothing}=nothing, path::Union{String,Nothing}=nothing, linked:
 
 Add new package registries.
 
+The no-argument `Pkg.Registry.add()` will install the default registries.
+
 !!! compat "Julia 1.1"
     Pkg's registry handling requires at least Julia 1.1.
 
