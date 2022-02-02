@@ -288,10 +288,15 @@ end
     download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
                       verbose::Bool = false, io::IO=stderr)
 
-Download/install an artifact into the artifact store.  Returns `true` on success.
+Download/install an artifact into the artifact store.  Returns `true` on success,
+returns an error object on failure.
 
 !!! compat "Julia 1.3"
     This function requires at least Julia 1.3.
+
+!!! compat "Julia 1.8"
+    As of Julia 1.8 this function returns the error object rather than `false` when
+    failure occurs
 """
 function download_artifact(
     tree_hash::SHA1,
@@ -326,7 +331,7 @@ function download_artifact(
             if isa(err, InterruptException)
                 rethrow(err)
             end
-            return false
+            return err
         end
     else
         # We download by using `create_artifact()`.  We do this because the download may
@@ -346,8 +351,8 @@ function download_artifact(
             if isa(err, InterruptException)
                 rethrow(err)
             end
-            # If something went wrong during download, return false
-            return false
+            # If something went wrong during download, return the error
+            return err
         end
 
         # Did we get what we expected?  If not, freak out.
@@ -361,16 +366,14 @@ function download_artifact(
             ignore_hash = get_bool_env("JULIA_PKG_IGNORE_HASHES")
             if ignore_hash
                 msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
-            end
-            @error(msg)
-            if ignore_hash
+                @error(msg)
                 # Move it to the location we expected
                 src = artifact_path(calc_hash; honor_overrides=false)
                 dst = artifact_path(tree_hash; honor_overrides=false)
                 mv(src, dst; force=true)
                 return true
             end
-            return false
+            return ErrorException(msg)
         end
     end
 
@@ -414,6 +417,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
+        errors = Any[]
         # first try downloading from Pkg server
         # TODO: only do this if Pkg server knows about this package
         if (server = pkg_server()) !== nothing
@@ -421,7 +425,12 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
             download_success = with_show_download_info(io, name, quiet_download) do
                 download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download, io=io)
             end
-            download_success && return artifact_path(hash)
+            # download_success is either `true` or an error object
+            if download_success === true
+                return artifact_path(hash)
+            else
+                push!(errors, (url, download_success))
+            end
         end
 
         # If this artifact does not exist on-disk already, ensure it has download
@@ -437,9 +446,22 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
             download_success = with_show_download_info(io, name, quiet_download) do
                 download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download, io=io)
             end
-            download_success && return artifact_path(hash)
+            # download_success is either `true` or an error object
+            if download_success === true
+                return artifact_path(hash)
+            else
+                push!(errors, (url, download_success))
+            end
         end
-        error("Unable to automatically install '$(name)' from '$(artifacts_toml)'")
+        errmsg = """
+        Unable to automatically download/install artifact '$(name)' from sources listed in '$(artifacts_toml)'.
+        Sources attempted:
+        """
+        for (url, err) in errors
+            errmsg *= "- $(url)\n"
+            errmsg *= "    Error: $(sprint(showerror, err))\n"
+        end
+        error(errmsg)
     else
         return artifact_path(hash)
     end

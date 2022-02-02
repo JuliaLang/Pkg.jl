@@ -355,12 +355,12 @@ function download_verify(
             # Download and verify from scratch
             download(url, dest; verbose=verbose || !quiet_download)
             if hash !== nothing && !verify(dest, hash; verbose=verbose)
-                error("Verification failed")
+                error("Verification failed. Download does not match expected hash")
             end
         else
             # If it didn't verify properly and we didn't resume, something is
             # very wrong and we must complain mightily.
-            error("Verification failed")
+            error("Verification failed. Download does not match expected hash")
         end
     end
 
