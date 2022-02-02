@@ -271,10 +271,10 @@ end
         for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
             with_artifacts_directory(dir) do
                 @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
-                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
-                    if !ignore_hash
-                        @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                    else
+                if !ignore_hash
+                    @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                else
+                    @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
                         path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
                         @test endswith(path, "0000000000000000000000000000000000000000")
                         @test isdir(path)
@@ -290,6 +290,9 @@ end
             @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
                 @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
             end
+
+            artifact_toml = joinpath(badifact_dir, "doesnotexist.toml")
+            @test_throws ErrorException ensure_artifact_installed("does_not_exist", artifact_toml)
         end
     end
 end
@@ -465,7 +468,7 @@ end
         Pkg.activate(ap_path)
         @test !isdir(artifact_path(engaged_hash))
         @test !isdir(artifact_path(disengaged_hash))
-    
+
         # Instantiate with the environment variable set, but with an explicit
         # tag set in the platform object, which overrides.
         withenv("FLOOBLECRANK" => "disengaged") do
