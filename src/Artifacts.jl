@@ -455,11 +455,11 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         end
         errmsg = """
         Unable to automatically download/install artifact '$(name)' from sources listed in '$(artifacts_toml)'.
-        Sources attempted:\n
+        Sources attempted:
         """
         for (url, err) in errors
-            errmsg *= "$(url)\n"
-            errmsg *= "  Error: $(sprint(showerror, err))\n\n"
+            errmsg *= "- $(url)\n"
+            errmsg *= "    Error: $(sprint(showerror, err))\n"
         end
         error(errmsg)
     else
