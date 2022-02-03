@@ -788,13 +788,15 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
     # `Artifacts.toml` files that will be deleted by the future culling operation.
     # printpkgstyle(ctx.io, :Active, "artifacts:")
-    let packages_to_delete=packages_to_delete
-        artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete),
-            all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
-        repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print=false)
-        # printpkgstyle(ctx.io, :Active, "scratchspaces:")
-        spaces_to_keep = mark(x -> process_scratchspace(x, packages_to_delete),
-            all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
+    artifacts_to_keep = let packages_to_delete=packages_to_delete
+        mark(x -> process_artifacts_toml(x, packages_to_delete),
+             all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
+    end
+    repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print=false)
+    # printpkgstyle(ctx.io, :Active, "scratchspaces:")
+    spaces_to_keep = let packages_to_delete=packages_to_delete
+        mark(x -> process_scratchspace(x, packages_to_delete),
+             all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
     end
 
     # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
