@@ -269,10 +269,12 @@ function download(
     progress = if do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
         start_progress(io, bar)
-        (total, now) -> begin
-            bar.max = total
-            bar.current = now
-            show_progress(io, bar)
+        let bar=bar
+            (total, now) -> begin
+                bar.max = total
+                bar.current = now
+                show_progress(io, bar)
+            end
         end
     else
         (total, now) -> nothing

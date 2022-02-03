@@ -157,9 +157,11 @@ function destructure(project::Project)::Dict
     end
 
     # if a field is set to its default value, don't include it in the write
-    should_delete(x::Dict) = isempty(x)
-    should_delete(x)       = x === nothing
-    entry!(key::String, src) = should_delete(src) ? delete!(raw, key) : (raw[key] = src)
+    function entry!(key::String, src)
+        should_delete(x::Dict) = isempty(x)
+        should_delete(x)       = x === nothing
+        should_delete(src) ? delete!(raw, key) : (raw[key] = src)
+    end
 
     entry!("name",     project.name)
     entry!("uuid",     project.uuid)

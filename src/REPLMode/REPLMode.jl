@@ -565,14 +565,16 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
 
     repl_keymap = Dict()
     if shell_mode !== nothing
-        repl_keymap[';'] = function (s,o...)
-            if isempty(s) || position(LineEdit.buffer(s)) == 0
-                buf = copy(LineEdit.buffer(s))
-                LineEdit.transition(s, shell_mode) do
-                    LineEdit.state(s, shell_mode).input_buffer = buf
+        let shell_mode=shell_mode
+            repl_keymap[';'] = function (s,o...)
+                if isempty(s) || position(LineEdit.buffer(s)) == 0
+                    buf = copy(LineEdit.buffer(s))
+                    LineEdit.transition(s, shell_mode) do
+                        LineEdit.state(s, shell_mode).input_buffer = buf
+                    end
+                else
+                    LineEdit.edit_insert(s, ';')
                 end
-            else
-                LineEdit.edit_insert(s, ';')
             end
         end
     end
