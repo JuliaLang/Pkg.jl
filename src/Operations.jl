@@ -511,7 +511,15 @@ function install_archive(
         url_success || continue
         dir = joinpath(tempdir(), randstring(12))
         push!(tmp_objects, dir) # for cleanup
-        unpack(path, dir; verbose=false)
+        # Might fail to extract an archive (https://github.com/JuliaPackaging/PkgServer.jl/issues/126)
+        try
+            unpack(path, dir; verbose=false)
+        catch e
+            e isa InterruptException && rethrow()
+            @warn "failed to extract archive downloaded from $(url)"
+            url_success = false
+        end
+        url_success || continue
         if top
             unpacked = dir
         else
