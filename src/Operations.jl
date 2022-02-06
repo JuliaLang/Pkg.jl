@@ -1792,6 +1792,7 @@ function print_diff(io::IO, old::Union{Nothing,PackageSpec}, new::Union{Nothing,
 end
 
 function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance})
+    pkg.version isa VersionNumber || return nothing # Can happen when there is no manifest
     manifest, project = env.manifest, env.project
     packages_holding_back = String[]
     max_version, max_version_in_compat = v"0", v"0"
@@ -1809,7 +1810,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         max_version_in_compat = max(max_version_in_compat, maximum(versions_in_compat; init=v"0"))
     end
     max_version == v"0" && return nothing
-    pkg.version == max_version && return nothing
+    pkg.version >= max_version && return nothing
 
     # Check compat of project
     if pkg.version == max_version_in_compat && max_version_in_compat != max_version
