@@ -422,8 +422,10 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         # TODO: only do this if Pkg server knows about this package
         if (server = pkg_server()) !== nothing
             url = "$server/artifact/$hash"
-            download_success = with_show_download_info(io, name, quiet_download) do
-                download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download, io=io)
+            download_success = let url=url
+                with_show_download_info(io, name, quiet_download) do
+                    download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download, io=io)
+                end
             end
             # download_success is either `true` or an error object
             if download_success === true
@@ -443,8 +445,10 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         for entry in meta["download"]
             url = entry["url"]
             tarball_hash = entry["sha256"]
-            download_success = with_show_download_info(io, name, quiet_download) do
-                download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download, io=io)
+            download_success = let url=url
+                with_show_download_info(io, name, quiet_download) do
+                    download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download, io=io)
+                end
             end
             # download_success is either `true` or an error object
             if download_success === true

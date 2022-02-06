@@ -875,7 +875,7 @@ end
 function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID,Int}
     order = Dict{UUID,Int}()
     seen = UUID[]
-    k = 0
+    k::Int = 0
     function visit(uuid::UUID)
         uuid in seen &&
             return @warn("Dependency graph not a DAG, linearizing anyway")
@@ -990,26 +990,28 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
 
         fancyprint && show_progress(ctx.io, bar)
 
-        sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override) do
-            flush(ctx.io)
-            ok = open(log_file, "w") do log
-                std = verbose ? ctx.io : log
-                success(pipeline(gen_build_code(buildfile(source_path)),
-                                 stdout=std, stderr=std))
+        let log_file=log_file
+            sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override) do
+                flush(ctx.io)
+                ok = open(log_file, "w") do log
+                    std = verbose ? ctx.io : log
+                    success(pipeline(gen_build_code(buildfile(source_path)),
+                                    stdout=std, stderr=std))
+                end
+                ok && return
+                n_lines = isinteractive() ? 100 : 5000
+                # TODO: Extract last n  lines more efficiently
+                log_lines = readlines(log_file)
+                log_show = join(log_lines[max(1, length(log_lines) - n_lines):end], '\n')
+                full_log_at, last_lines =
+                if length(log_lines) > n_lines
+                    "\n\nFull log at $log_file",
+                    ", showing the last $n_lines of log"
+                else
+                    "", ""
+                end
+                pkgerror("Error building `$(pkg.name)`$last_lines: \n$log_show$full_log_at")
             end
-            ok && return
-            n_lines = isinteractive() ? 100 : 5000
-            # TODO: Extract last n  lines more efficiently
-            log_lines = readlines(log_file)
-            log_show = join(log_lines[max(1, length(log_lines) - n_lines):end], '\n')
-            full_log_at, last_lines =
-            if length(log_lines) > n_lines
-                "\n\nFull log at $log_file",
-                ", showing the last $n_lines of log"
-            else
-                "", ""
-            end
-            pkgerror("Error building `$(pkg.name)`$last_lines: \n$log_show$full_log_at")
         end
     end
     finally
@@ -1798,7 +1800,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         reg_pkg === nothing && continue
         info = Registry.registry_info(reg_pkg)
         reg_compat_info = Registry.compat_info(info)
-        versions = keys(reg_compat_info)  
+        versions = keys(reg_compat_info)
         versions = filter(v -> !Registry.isyanked(info, v), versions)
         max_version_reg = maximum(versions; init=v"0")
         max_version = max(max_version, max_version_reg)

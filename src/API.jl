@@ -504,30 +504,36 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         # into the overall list across depots to create a single, coherent view across
         # all depots.
         usage = UsageDict()
-        reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
-            # For Manifest usage, store only the last DateTime for each filename found
-            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+        let usage=usage
+            reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
+                # For Manifest usage, store only the last DateTime for each filename found
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+            end
         end
         manifest_usage_by_depot[depot] = usage
 
         usage = UsageDict()
-        reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
-            # For Artifact usage, store only the last DateTime for each filename found
-            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+        let usage=usage
+            reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
+                # For Artifact usage, store only the last DateTime for each filename found
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+            end
         end
         artifact_usage_by_depot[depot] = usage
 
         # track last-used
         usage = UsageDict()
         parents = Dict{String, Set{String}}()
-        reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
-            # For Artifact usage, store only the last DateTime for each filename found
-            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
-            if !haskey(parents, filename)
-                parents[filename] = Set{String}()
-            end
-            for parent in info["parent_projects"]
-                push!(parents[filename], parent)
+        let usage=usage
+            reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
+                # For Artifact usage, store only the last DateTime for each filename found
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                if !haskey(parents, filename)
+                    parents[filename] = Set{String}()
+                end
+                for parent in info["parent_projects"]
+                    push!(parents[filename], parent)
+                end
             end
         end
         scratch_usage_by_depot[depot] = usage
@@ -567,41 +573,51 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     end
 
     # Write condensed Manifest usage
-    write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
-        # Keep only manifest usage markers that are still existent
-        filter!(((k,v),) -> k in all_manifest_tomls, usage)
+    let all_manifest_tomls=all_manifest_tomls
+        write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
+            # Keep only manifest usage markers that are still existent
+            let usage=usage
+                filter!(((k,v),) -> k in all_manifest_tomls, usage)
 
-        # Expand it back into a dict-of-dicts
-        return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+                # Expand it back into a dict-of-dicts
+                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+            end
+        end
     end
 
     # Write condensed Artifact usage
-    write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
-        filter!(((k,v),) -> k in all_artifact_tomls, usage)
-        return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+    let all_artifact_tomls=all_artifact_tomls
+        write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
+            let usage = usage
+                filter!(((k,v),) -> k in all_artifact_tomls, usage)
+                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+            end
+        end
     end
 
     # Write condensed scratch space usage
-    write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
-        # Keep only scratch directories that still exist
-        filter!(((k,v),) -> k in all_scratch_dirs, usage)
+    let all_scratch_parents=all_scratch_parents, all_scratch_dirs=all_scratch_dirs
+        write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
+            # Keep only scratch directories that still exist
+            filter!(((k,v),) -> k in all_scratch_dirs, usage)
 
-        # Expand it back into a dict-of-dicts
-        expanded_usage = Dict{String,Vector{Dict}}()
-        for (k, v) in usage
-            # Drop scratch spaces whose parents are all non-existant
-            parents = scratch_parents_by_depot[depot][k]
-            filter!(p -> p in all_scratch_parents, parents)
-            if isempty(parents)
-                continue
+            # Expand it back into a dict-of-dicts
+            expanded_usage = Dict{String,Vector{Dict}}()
+            for (k, v) in usage
+                # Drop scratch spaces whose parents are all non-existant
+                parents = scratch_parents_by_depot[depot][k]
+                filter!(p -> p in all_scratch_parents, parents)
+                if isempty(parents)
+                    continue
+                end
+
+                expanded_usage[k] = [Dict(
+                    "time" => v,
+                    "parent_projects" => collect(parents),
+                )]
             end
-
-            expanded_usage[k] = [Dict(
-                "time" => v,
-                "parent_projects" => collect(parents),
-            )]
+            return expanded_usage
         end
-        return expanded_usage
     end
 
     function process_manifest_pkgs(path)
@@ -632,13 +648,13 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         return [Types.add_repo_cache_path(e.repo.source) for (u, e) in manifest if e.repo.source !== nothing]
     end
 
-    function process_artifacts_toml(path, packages_to_delete)
+    function process_artifacts_toml(path, pkgs_to_delete)
         # Not only do we need to check if this file doesn't exist, we also need to check
         # to see if it this artifact is contained within a package that is going to go
         # away.  This places an implicit ordering between marking packages and marking
         # artifacts; the package marking must be done first so that we can ensure that
         # all artifacts that are solely bound within such packages also get reaped.
-        if any(startswith(path, package_dir) for package_dir in packages_to_delete)
+        if any(startswith(path, package_dir) for package_dir in pkgs_to_delete)
             return nothing
         end
 
@@ -663,7 +679,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         return artifact_path_list
     end
 
-    function process_scratchspace(path, packages_to_delete)
+    function process_scratchspace(path, pkgs_to_delete)
         # Find all parents of this path
         parents = String[]
 
@@ -679,7 +695,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         # Look to see if all parents are packages that will be removed, if so, filter
         # this scratchspace out by returning `nothing`
-        if all(any(startswith(p, dir) for dir in packages_to_delete) for p in parents)
+        if all(any(startswith(p, dir) for dir in pkgs_to_delete) for p in parents)
             return nothing
         end
         return [path]
@@ -772,12 +788,16 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
     # `Artifacts.toml` files that will be deleted by the future culling operation.
     # printpkgstyle(ctx.io, :Active, "artifacts:")
-    artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete),
-        all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
+    artifacts_to_keep = let packages_to_delete=packages_to_delete
+        mark(x -> process_artifacts_toml(x, packages_to_delete),
+             all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
+    end
     repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print=false)
     # printpkgstyle(ctx.io, :Active, "scratchspaces:")
-    spaces_to_keep = mark(x -> process_scratchspace(x, packages_to_delete),
-        all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
+    spaces_to_keep = let packages_to_delete=packages_to_delete
+        mark(x -> process_scratchspace(x, packages_to_delete),
+             all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
+    end
 
     # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
     # are implicitly defined in that we walk all packages/artifacts installed, then if
@@ -1138,10 +1158,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     printloop_should_exit::Bool = !fancyprint # exit print loop immediately if not fancy printing
     interrupted_or_done = Base.Event()
 
-    function color_string(str::String, col::Symbol)
+    function color_string(cstr::String, col::Symbol)
         enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
         disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
-        return string(enable_ansi, str, disable_ansi)
+        return string(enable_ansi, cstr, disable_ansi)
     end
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
@@ -1190,7 +1210,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     else
                         pkg_queue
                     end
-                    str = sprint() do iostr
+                    str_ = sprint() do iostr
                         if i > 1
                             print(iostr, ansi_moveup(n_print_rows), ansi_movecol1, ansi_cleartoend)
                         end
@@ -1223,8 +1243,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         end
                     end
                     last_length = length(pkg_queue_show)
-                    n_print_rows = count("\n", str)
-                    print(io, str)
+                    n_print_rows = count("\n", str_)
+                    print(io, str_)
                 end
                 printloop_should_exit = interrupted_or_done.set && final_loop
                 final_loop = interrupted_or_done.set # ensures one more loop to tidy last task after finish
@@ -1373,10 +1393,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                 )
             end
             if !isempty(precomperr_deps)
-                plural = length(precomperr_deps) == 1 ? "y" : "ies"
+                pluralpc = length(precomperr_deps) == 1 ? "y" : "ies"
                 print(iostr, "\n  ",
                     color_string(string(length(precomperr_deps)), Base.warn_color()),
-                    " dependenc$(plural) failed but may be precompilable after restarting julia"
+                    " dependenc$(pluralpc) failed but may be precompilable after restarting julia"
                 )
             end
             if internal_call && !isempty(failed_deps)
@@ -1386,8 +1406,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                 print(iostr, "To see a full report either run `import Pkg; Pkg.precompile()` or load the package$(plural2)")
             end
         end
-        lock(print_lock) do
-            println(io, str)
+        let str=str
+            lock(print_lock) do
+                println(io, str)
+            end
         end
         if !internal_call
             err_str = ""
@@ -1400,9 +1422,9 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
             end
             if err_str != ""
                 println(io, "")
-                plural = n_direct_errs == 1 ? "y" : "ies"
+                pluralde = n_direct_errs == 1 ? "y" : "ies"
                 direct = strict ? "" : "direct "
-                pkgerror("The following $n_direct_errs $(direct)dependenc$(plural) failed to precompile:\n$(err_str[1:end-1])")
+                pkgerror("The following $n_direct_errs $(direct)dependenc$(pluralde) failed to precompile:\n$(err_str[1:end-1])")
             end
         end
     end
