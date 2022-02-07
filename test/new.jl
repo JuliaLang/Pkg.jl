@@ -986,7 +986,7 @@ end
         Pkg.develop("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(Pkg.devdir(), "Example")
+            @test Base.samefile(pkg.source, joinpath(Pkg.devdir(), "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -996,7 +996,7 @@ end
         Pkg.develop("Example"; shared=false)
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(dirname(Pkg.project().path), "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(dirname(Pkg.project().path), "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1006,7 +1006,7 @@ end
         Pkg.develop(uuid=exuuid)
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(DEPOT_PATH[1], "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(DEPOT_PATH[1], "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1016,7 +1016,7 @@ end
         Pkg.develop(url="https://github.com/JuliaLang/Example.jl")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(DEPOT_PATH[1], "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(DEPOT_PATH[1], "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1041,17 +1041,17 @@ end
         Pkg.dependencies(UUID("0829fd7c-1e7e-4927-9afa-b8c61d5e0e42")) do pkg # dep A
             @test haskey(pkg.dependencies, "B")
             @test haskey(pkg.dependencies, "C")
-            @test pkg.source == joinpath(@__DIR__, "test_packages", "A")
+            @test Base.samefile(pkg.source, joinpath(@__DIR__, "test_packages", "A"))
         end
         Pkg.dependencies(UUID("4ee78ca3-4e78-462f-a078-747ed543fa85")) do pkg # dep C
             @test haskey(pkg.dependencies, "D")
-            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "C")
+            @test Base.samefile(pkg.source, joinpath(@__DIR__, "test_packages", "A", "dev", "C"))
         end
         Pkg.dependencies(UUID("dd0d8fba-d7c4-4f8e-a2bb-3a090b3e34f1")) do pkg # dep B
-            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "B")
+            @test Base.samefile(pkg.source, joinpath(@__DIR__, "test_packages", "A", "dev", "B"))
         end
         Pkg.dependencies(UUID("bf733257-898a-45a0-b2f2-c1c188bdd879")) do pkg # dep D
-            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "D")
+            @test Base.samefile(pkg.source, joinpath(@__DIR__, "test_packages", "A", "dev", "D"))
         end
     end
     # primary depot is a relative path
@@ -1060,7 +1060,7 @@ end
         push!(DEPOT_PATH, "temp")
         Pkg.develop("JSON")
         Pkg.dependencies(json_uuid) do pkg
-            @test pkg.source == abspath(joinpath("temp", "dev", "JSON"))
+            @test Base.samefile(pkg.source, abspath(joinpath("temp", "dev", "JSON")))
         end
     end end
 end
@@ -1073,7 +1073,7 @@ end
         end
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(tempdir, "Example")
+            @test Base.samefile(pkg.source, joinpath(tempdir, "Example"))
         end
         @test haskey(Pkg.project().dependencies, "Example")
     end end
@@ -1084,7 +1084,7 @@ end
         end
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(dirname(Pkg.project().path), "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(dirname(Pkg.project().path), "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1107,7 +1107,7 @@ end
         Pkg.dependencies(simple_package_uuid) do pkg
             @test pkg.name == "SimplePackage"
             @test isdir(pkg.source)
-            @test pkg.source == package_path
+            @test Base.samefile(pkg.source, package_path)
             original_source = pkg.source
         end
         # Now we move the project, but preserve the relative structure.
@@ -1117,7 +1117,7 @@ end
             # We check that we can still find the source.
             Pkg.dependencies(simple_package_uuid) do pkg
                 @test isdir(pkg.source)
-                @test pkg.source == realpath(joinpath(tempdir, "SimplePackage"))
+                @test Base.samefile(pkg.source, realpath(joinpath(tempdir, "SimplePackage")))
             end
         end
     end
@@ -1140,7 +1140,7 @@ end
             Pkg.activate(tempdir2)
             Pkg.dependencies(simple_package_uuid) do pkg
                 @test isdir(pkg.source)
-                @test pkg.source == original_source
+                @test Base.samefile(pkg.source, original_source)
             end
         end
     end end
@@ -1190,7 +1190,7 @@ end
         Pkg.develop("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(DEPOT_PATH[1], "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(DEPOT_PATH[1], "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1202,7 +1202,7 @@ end
         Pkg.develop("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(DEPOT_PATH[1], "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(DEPOT_PATH[1], "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1214,7 +1214,7 @@ end
         Pkg.develop("Example"; shared=false)
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(dirname(Pkg.project().path), "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(dirname(Pkg.project().path), "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -2276,7 +2276,7 @@ end
         Pkg.add(url="https://github.com/JuliaLang/Example.jl")
         Pkg.dependencies(exuuid) do pkg
             @test isdir(pkg.source)
-            @test pkg.source == s1
+            @test Base.samefile(pkg.source, s1)
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             @test Pkg.Types.add_repo_cache_path(pkg.git_source) == c1
             @test mtime(pkg.source) == t1
@@ -2302,7 +2302,7 @@ end
         Pkg.add(url="https://github.com/JuliaLang/Example.jl")
         Pkg.dependencies(exuuid) do pkg
             @test isdir(pkg.source)
-            @test pkg.source == s1
+            @test Base.samefile(pkg.source, s1)
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             @test Pkg.Types.add_repo_cache_path(pkg.git_source) == c1
             @test mtime(pkg.source) == t1
