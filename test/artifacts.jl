@@ -452,10 +452,11 @@ end
             @test success(cmd)
             @test artifact_path(right_hash) == using_output
 
-            mkpath("/tmp/foo/$(flooblecrank_status)")
-            rm("/tmp/foo/$(flooblecrank_status)"; recursive=true, force=true)
-            cp(project_path, "/tmp/foo/$(flooblecrank_status)")
-            cp(Base.DEPOT_PATH[1], "/tmp/foo/$(flooblecrank_status)/depot")
+            tmpdir = mktempdir()
+            mkpath("$tmpdir/foo/$(flooblecrank_status)")
+            rm("$tmpdir/foo/$(flooblecrank_status)"; recursive=true, force=true)
+            cp(project_path, "$tmpdir/foo/$(flooblecrank_status)")
+            cp(Base.DEPOT_PATH[1], "$tmpdir/foo/$(flooblecrank_status)/depot")
         end
     end
 
