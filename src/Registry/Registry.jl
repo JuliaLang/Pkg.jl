@@ -23,7 +23,6 @@ url::Union{String,Nothing}=nothing, path::Union{String,Nothing}=nothing, linked:
     RegistrySpec(name, isa(uuid, String) ? UUID(uuid) : uuid, url, path, linked)
 
 """
-    Pkg.Registry.add(url::String)
     Pkg.Registry.add(registry::RegistrySpec)
 
 Add new package registries.
