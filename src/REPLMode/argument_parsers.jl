@@ -200,7 +200,8 @@ function parse_activate(args::Vector{QString}, options)
             return []
         elseif first(x) == '@'
             options[:shared] = true
-            return [x[2:end]]
+            name = chop(x; head = 1, tail = 0)
+            return [name]
         else
             return [expanduser(x)]
         end
