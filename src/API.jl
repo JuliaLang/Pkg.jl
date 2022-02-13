@@ -1649,9 +1649,17 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f())
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f(), show_shared_hint::Bool=true)
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
+        if show_shared_hint && first(path) == '@'
+            name = chop(path; head = 1, tail = 0)
+            if !isempty(name)
+                suggested_cmd = "Pkg.activate(\"$(name)\"; shared = true)"
+                hint_msg = "INFO: if you want to activate a shared environment, you need to do: $(suggested_cmd)"
+                println(io, hint_msg)
+            end
+        end
         # `pkg> activate path`/`Pkg.activate(path)` does the following
         # 1. if path exists, activate that
         # 2. if path exists in deps, and the dep is deved, activate that path (`devpath` above)
