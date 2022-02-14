@@ -261,7 +261,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
     stdlib_resolve!(pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs, registry=true)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs, registry=true)
 
     for pkg in pkgs
         if Types.collides_with_project(ctx.env, pkg)
@@ -298,7 +298,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
 
     mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
     mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
 
     Operations.rm(ctx, pkgs; mode)
     return
@@ -336,7 +336,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
         project_deps_resolve!(ctx.env, pkgs)
         manifest_resolve!(ctx.env.manifest, pkgs)
-        ensure_resolved(ctx.env.manifest, pkgs)
+        ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
     Operations.up(ctx, pkgs, level; skip_writing_project)
     return
@@ -375,7 +375,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     end
 
     project_deps_resolve!(ctx.env, pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
     Operations.pin(ctx, pkgs)
     return
 end
@@ -401,7 +401,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     end
 
     manifest_resolve!(ctx.env.manifest, pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
 
     Operations.free(ctx, pkgs; err_if_free = !all_pkgs)
     return
@@ -426,7 +426,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         project_resolve!(ctx.env, pkgs)
         project_deps_resolve!(ctx.env, pkgs)
         manifest_resolve!(ctx.env.manifest, pkgs)
-        ensure_resolved(ctx.env.manifest, pkgs)
+        ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
     Operations.test(
         ctx,
@@ -1020,7 +1020,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     end
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
     Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
 end
 

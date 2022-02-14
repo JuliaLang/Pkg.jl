@@ -627,7 +627,7 @@ function set_repo_source_from_registry!(ctx, pkg)
         Pkg.Operations.update_registries(ctx; force=false)
         registry_resolve!(ctx.registries, pkg)
     end
-    ensure_resolved(ctx.env.manifest, [pkg]; registry=true)
+    ensure_resolved(ctx, ctx.env.manifest, [pkg]; registry=true)
     # We might have been given a name / uuid combo that does not have an entry in the registry
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
@@ -885,7 +885,7 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
 end
 
 # Ensure that all packages are fully resolved
-function ensure_resolved(manifest::Manifest,
+function ensure_resolved(ctx::Context, manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
         registry::Bool=false,)::Nothing
     unresolved_uuids = Dict{String,Vector{UUID}}()
@@ -901,21 +901,29 @@ function ensure_resolved(manifest::Manifest,
         push!(unresolved_names, pkg.uuid)
     end
     isempty(unresolved_uuids) && isempty(unresolved_names) && return
-    msg = sprint() do io
+    msg = sprint(context = ctx.io) do io
         if !isempty(unresolved_uuids)
-            println(io, "The following package names could not be resolved:")
+            print(io, "The following package names could not be resolved:")
             for (name, uuids) in sort!(collect(unresolved_uuids), by=lowercase ∘ first)
-                print(io, " * $name (")
+                print(io, "\n * $name (")
                 if length(uuids) == 0
                     what = ["project", "manifest"]
                     registry && push!(what, "registry")
                     print(io, "not found in ")
                     join(io, what, ", ", " or ")
+                    print(io, ")")
+                    all_names = available_names(ctx; manifest, include_registries = registry)
+                    all_names_ranked, any_score_gt_zero = fuzzysort(name, all_names)
+                    if any_score_gt_zero
+                        println(io)
+                        prefix = "   Suggestions:"
+                        printstyled(io, prefix, color = Base.info_color())
+                        REPL.printmatches(io, name, all_names_ranked; cols = REPL._displaysize(ctx.io)[2] - length(prefix))
+                    end
                 else
                     join(io, uuids, ", ", " or ")
-                    print(io, " in manifest but not in project")
+                    print(io, " in manifest but not in project)")
                 end
-                println(io, ")")
             end
         end
         if !isempty(unresolved_names)
@@ -926,6 +934,27 @@ function ensure_resolved(manifest::Manifest,
         end
     end
     pkgerror(msg)
+end
+
+# copied from REPL to efficiently expose if any score is >0
+function fuzzysort(search::String, candidates::Vector{String})
+    scores = map(cand -> (REPL.fuzzyscore(search, cand), -Float64(REPL.levenshtein(search, cand))), candidates)
+    candidates[sortperm(scores)] |> reverse, any(s -> s[1] > 0, scores)
+end
+
+function available_names(ctx::Context = Context(); manifest::Manifest = ctx.env.manifest, include_registries::Bool = true)
+    all_names = String[]
+    for (_, pkgentry) in manifest
+        push!(all_names, pkgentry.name)
+    end
+    if include_registries
+        for reg in ctx.registries
+            for (_, pkgentry) in reg.pkgs
+                push!(all_names, pkgentry.name)
+            end
+        end
+    end
+    return unique(all_names)
 end
 
 function registered_uuids(registries::Vector{Registry.RegistryInstance}, name::String)
