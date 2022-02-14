@@ -753,7 +753,7 @@ function deps_graph(
                         end
                         return
                     end
-                    add_compat!(all_compat_u, Registry.compat_info(info))
+                    add_compat!(all_compat_u, Registry.compat_info(info; pkgentry = pkg))
                     weak_compat_info = Registry.weak_compat_info(info)
                     if weak_compat_info !== nothing
                         add_compat!(all_compat_u, weak_compat_info)
@@ -2753,7 +2753,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         reg_pkg = get(reg, pkg.uuid, nothing)
         reg_pkg === nothing && continue
         info = Registry.registry_info(reg_pkg)
-        reg_compat_info = Registry.compat_info(info)
+        reg_compat_info = Registry.compat_info(info; pkgentry = reg_pkg)
         versions = keys(reg_compat_info)
         versions = filter(v -> !Registry.isyanked(info, v), versions)
         max_version_reg = maximum(versions; init = v"0")
@@ -2793,7 +2793,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
             reg_pkg = get(reg, uuid, nothing)
             reg_pkg === nothing && continue
             info = Registry.registry_info(reg_pkg)
-            reg_compat_info = Registry.compat_info(info)
+            reg_compat_info = Registry.compat_info(info; pkgentry = reg_pkg)
             compat_info_v = get(reg_compat_info, dep_info.version, nothing)
             compat_info_v === nothing && continue
             compat_info_v_uuid = get(compat_info_v, pkg.uuid, nothing)
@@ -2810,7 +2810,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         reg_pkg = get(reg, pkg.uuid, nothing)
         reg_pkg === nothing && continue
         info = Registry.registry_info(reg_pkg)
-        reg_compat_info = Registry.compat_info(info)
+        reg_compat_info = Registry.compat_info(info; pkgentry = reg_pkg)
         compat_info_v = get(reg_compat_info, pkg.version, nothing)
         versions = keys(reg_compat_info)
         for v in versions

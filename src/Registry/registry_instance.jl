@@ -67,7 +67,12 @@ end
 isyanked(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].yanked
 treehash(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].git_tree_sha1
 
-function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Vector{VersionNumber}) where {T}
+function uncompress(
+        compressed::Dict{VersionRange, Dict{String, T}},
+        vsorted::Vector{VersionNumber};
+        pkgentry,
+        pkginfo
+    ) where {T}
     @assert issorted(vsorted)
     uncompressed = Dict{VersionNumber, Dict{String, T}}()
     for v in vsorted
@@ -92,6 +97,11 @@ function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Ve
             for (key, value) in data
                 if haskey(uv, key)
                     error("Overlapping ranges for $(key) for version $v in registry.")
+                    pkginfo_summary = summarize_pkginfo(pkginfo)
+                    pkgentry_summary = summarize_pkgentry(pkgentry)
+                    error_msg = "Overlapping ranges for key $(key) and version $(v). " *
+                        pkginfo_summary * ".  " * pkgentry_summary * "."
+                    throw(ErrorException(error_msg))
                 else
                     uv[key] = value
                 end
@@ -102,15 +112,15 @@ function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Ve
 end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
-function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
+function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info); pkgentry)
     # Only valid to call this with existing versions of the package
     # Remove all versions we have already uncompressed
     versions = filter!(v -> !isdefined(pkg.version_info[v], :uncompressed_compat), collect(versions))
 
     sort!(versions)
 
-    uncompressed_compat = uncompress(pkg.compat, versions)
-    uncompressed_deps = uncompress(pkg.deps, versions)
+    uncompressed_compat = uncompress(pkg.compat, versions; pkgentry, pkginfo = pkg)
+    uncompressed_deps = uncompress(pkg.deps, versions; pkgentry, pkginfo = pkg)
 
     for v in versions
         vinfo = pkg.version_info[v]
@@ -154,8 +164,8 @@ function initialize_weak_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version
     return pkg
 end
 
-function compat_info(pkg::PkgInfo)
-    initialize_uncompressed!(pkg)
+function compat_info(pkg::PkgInfo; pkgentry)
+    initialize_uncompressed!(pkg; pkgentry)
     return Dict(v => info.uncompressed_compat for (v, info) in pkg.version_info)
 end
 
@@ -181,6 +191,45 @@ mutable struct PkgEntry
     info::PkgInfo # lazily initialized
 
     PkgEntry(path, registry_path, name, uuid, in_memory_registry) = new(path, registry_path, name, uuid, in_memory_registry, ReentrantLock() #= undef =#)
+end
+
+function summarize_pkginfo(pkginfo::Union{PkgInfo, Nothing})
+    # Package.toml
+    repo = getproperty_maybe(pkginfo, :repo)
+    subdir = getproperty_maybe(pkginfo, :subdir)
+    summary = "PkgInfo(repo=$(repo), subdir=$(subdir))"
+    return summary
+end
+
+function summarize_pkgentry(pkgentry::Union{PkgEntry, Nothing})
+    # Registry.toml
+    path = getproperty_maybe(pkgentry, :path)
+    registry_path = getproperty_maybe(pkgentry, :registry_path)
+    name = getproperty_maybe(pkgentry, :name)
+    uuid = getproperty_maybe(pkgentry, :uuid)
+    summary = "PkgEntry(" *
+        "path=$(path), " *
+        "registry_path=$(registry_path), " *
+        "name=$(name), " *
+        "uuid=$(uuid)" *
+        ")"
+    return summary
+end
+
+function getproperty_maybe(x::Union{PkgInfo, PkgEntry, Nothing}, field::Symbol)
+    default_value = ""
+    if x isa PkgInfo
+        return something(getproperty(x, field), default_value)
+    elseif x isa PkgEntry
+        if !LazilyInitializedFields.islazyfield(typeof(x), field)
+            return something(getproperty(x, field), default_value)
+        end
+        if !isinit(x, field)
+            return default_value
+        end
+        return something(getproperty(x, field), default_value)
+    end
+    return default_value
 end
 
 registry_info(pkg::PkgEntry) = init_package_info!(pkg)
