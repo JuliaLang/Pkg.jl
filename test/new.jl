@@ -410,7 +410,7 @@ end
         # Adding with a slight typo gives suggestions
         try
             Pkg.add("Examplle")
-            @assert false # to fail if add doesn't error
+            @test false # to fail if add doesn't error
          catch err
             @test err isa PkgError
             @test occursin("The following package names could not be resolved:", err.msg)
@@ -442,7 +442,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         close(LibGit2.init(tempdir))
         try Pkg.add(path=tempdir)
-            @assert false
+            @test false # to fail if add doesn't error
         catch err
             @test err isa PkgError
             @test match(r"^invalid git HEAD", err.msg) !== nothing
