@@ -407,6 +407,19 @@ end
         @test_throws PkgError(
             "version specification invalid when tracking a repository: `0.5.0` specified for package `Example`"
             ) Pkg.add(name="Example", rev="master", version="0.5.0")
+        # Adding with a slight typo gives suggestions
+        try Pkg.add("Examplle")
+            @assert false # to fail if add doesn't error
+        catch err
+            @test err isa PkgError
+            @test match(r"ERROR: The following package names could not be resolved:", err.msg) !== nothing
+            @test match(r"* Examplle (not found in project, manifest or registry)", err.msg) !== nothing
+            @test match(r"Suggestions:", err.msg) !== nothing
+            @test match(r"Example", err.msg) !== nothing
+        end
+        @test_throws PkgError(
+            "name, UUID, URL, or filesystem path specification required when calling `add`"
+            ) Pkg.add(Pkg.PackageSpec())
         # Adding an unregistered package
         @test_throws PkgError Pkg.add("ThisIsHopefullyRandom012856014925701382")
         # Wrong UUID
