@@ -1652,7 +1652,7 @@ end
 function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f(), show_shared_hint::Bool=true)
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
-        if show_shared_hint && first(path) == '@'
+        if show_shared_hint && !isempty(path) &&  first(path) == '@'
             name = chop(path; head = 1, tail = 0)
             if !isempty(name)
                 suggested_cmd = "Pkg.activate(\"$(name)\"; shared = true)"
