@@ -980,7 +980,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
                 build_project_preferences = Base.get_preferences()
             end
         else
-            build_project_override = gen_target_project(ctx.env, ctx.registries, pkg, source_path, "build")
+            build_project_override = gen_target_project(ctx, pkg, source_path, "build")
             with_load_path([projectfile_path(source_path)]) do
                 build_project_preferences = Base.get_preferences()
             end
@@ -1617,7 +1617,9 @@ function parse_REQUIRE(require_path::String)
 end
 
 # "targets" based test deps -> "test/Project.toml" based deps
-function gen_target_project(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, source_path::String, target::String)
+function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String, target::String)
+    env = ctx.env
+    registries = ctx.registries
     test_project = Types.Project()
     if projectfile_path(source_path; strict=true) === nothing
         # no project file, assuming this is an old REQUIRE package
@@ -1630,7 +1632,7 @@ function gen_target_project(env::EnvCache, registries::Vector{Registry.RegistryI
                 package_specs = [PackageSpec(name=pkg) for pkg in test_pkgs]
                 registry_resolve!(registries, package_specs)
                 stdlib_resolve!(package_specs)
-                ensure_resolved(env.manifest, package_specs, registry=true)
+                ensure_resolved(ctx, env.manifest, package_specs, registry=true)
                 for spec in package_specs
                     test_project.deps[spec.name] = spec.uuid
                 end
@@ -1710,7 +1712,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
                 test_project_preferences = Base.get_preferences()
             end
         else
-            test_project_override = gen_target_project(ctx.env, ctx.registries, pkg, source_path, "test")
+            test_project_override = gen_target_project(ctx, pkg, source_path, "test")
             with_load_path(projectfile_path(source_path)) do
                 test_project_preferences = Base.get_preferences()
             end

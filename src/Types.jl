@@ -627,7 +627,7 @@ function set_repo_source_from_registry!(ctx, pkg)
         Pkg.Operations.update_registries(ctx; force=false)
         registry_resolve!(ctx.registries, pkg)
     end
-    ensure_resolved(ctx.env.manifest, [pkg]; registry=true)
+    ensure_resolved(ctx, ctx.env.manifest, [pkg]; registry=true)
     # We might have been given a name / uuid combo that does not have an entry in the registry
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
@@ -885,7 +885,7 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
 end
 
 # Ensure that all packages are fully resolved
-function ensure_resolved(manifest::Manifest,
+function ensure_resolved(ctx::Context, manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
         registry::Bool=false,)::Nothing
     unresolved_uuids = Dict{String,Vector{UUID}}()
@@ -901,7 +901,6 @@ function ensure_resolved(manifest::Manifest,
         push!(unresolved_names, pkg.uuid)
     end
     isempty(unresolved_uuids) && isempty(unresolved_names) && return
-    ctx = Context()
     msg = sprint(context = ctx.io) do io
         if !isempty(unresolved_uuids)
             print(io, "The following package names could not be resolved:")
