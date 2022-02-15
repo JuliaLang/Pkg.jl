@@ -58,7 +58,7 @@ uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 version = "0.5.3"
 ```
 
-This new environment is completely separate from the one we used earlier. See [`Project.toml` and `Manifest.toml`](@ref Project-and-Manifest) for more detailed explaination on them.
+This new environment is completely separate from the one we used earlier. See [`Project.toml` and `Manifest.toml`](@ref Project-and-Manifest) for a more detailed explanation.
 
 ## Project Precompilation
 
@@ -114,14 +114,16 @@ Otherwise, it will resolve the latest versions of the dependencies compatible wi
     ```
 
 
-## Temporary environment
+## Temporary environments
 
-It is not uncommon to test some package without installing it into your usual environment. For instance,
-when you try to write a bug report with a consistent way to reproduce, or you want to try out a very
-old/new package version that is incompatible with your current environment.
+It is not uncommon to test some package without installing it into your usual environment.
+For instance, when writing a bug report, you may want to test your minimal reproducible
+example in a 'clean' environment to ensure it's actually reproducible as written. You might
+also want a scratch space to try out a new package, or a sandbox to resolve version conflicts
+between several incompatible packages.
 
 ```julia-repl
-(@v1.6) pkg> activate --temp # require Julia 1.5 or later
+(@v1.6) pkg> activate --temp # requires Julia 1.5 or later
   Activating new environment at `/var/folders/34/km3mmt5930gc4pzq1d08jvjw0000gn/T/jl_a31egx/Project.toml`
 
 (jl_a31egx) pkg> add Example
@@ -133,14 +135,14 @@ old/new package version that is incompatible with your current environment.
   [7876af07] + Example v0.5.3
 ```
 
-The temporary directory will be removed when you exit Julia so you don't need to worry this operation
-breaks your common workflow.
+The temporary directory containing this environment will be removed when you exit Julia,
+so you don't need to worry about interference with your main package environment(s).
 
-Note that this still reuses the contents in the global depot path in `~/.julia`. Thus you might still hit
-reproducible issue, see [shared environment](@ref shared-environment) section below.
-An even more cleaner way to avoid this is to set
-[`JULIA_DEPOT_PATH`](https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_DEPOT_PATH) environment variable.
-For instance, in Linux Bash:
+Note that this still uses the global package depot (typically `~/.julia`), which is shared between environments.
+Perhaps when troubleshooting an especially thorny package management issue, you may want to ensure the
+temporary environment's package depot is completely independent from any other package environment by
+setting the [`JULIA_DEPOT_PATH`](https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_DEPOT_PATH) environment variable.
+For example,
 
 ```console
 # Linux Bash
@@ -162,18 +164,16 @@ Precompiling project...
   1 dependency successfully precompiled in 0 seconds
 ```
 
-This way, anything you did with Pkg will be stored in the temporary directory `/tmp/juliatmp` so you
-do not need to worry that it will break your common workflow.
+This way, anything downloaded or modified by package operations will be stored in the temporary directory
+`/tmp/juliatmp`, with no need to worry that it might break your regular workflow.
 
 ## [shared environment](@id shared-environment)
 
-For package development, it is a good practice to maintain a as small as possible set of dependencies in independent project folder.
-However, from the users' perspective, it is often the case that we want to have convenient tools installed globally so that we don't
-need to switch between different environments too often. The default version-specific global environment is `@v#.#` stored
-in `~/.julia/environments` folder.
+For package development, the best practice is to maintain the smallest possible set of dependencies in an independent project folder.
+However, from a user's perspective, one often wants to have convenient tools installed globally to reduce the
+need to switch between environments. Note that each minor version of Julia has its own default global shared environment stored in the `~/.julia/environments` folder.
 
-For instance, [BenchmarkTools.jl](https://github.com/JuliaCI/BenchmarkTools.jl) provides a set of utilities we need to properly
-benchmark the function runtime and memory usage.
+For instance, [BenchmarkTools.jl](https://github.com/JuliaCI/BenchmarkTools.jl) provides a popular set of tools to accurately measure function runtime and memory usage.
 
 ```julia-repl
 (@v1.6) pkg> st
@@ -188,7 +188,7 @@ julia> using BenchmarkTools
 ```
 
 Loading `BenchmarkTools` in MyProject environment works even if this package is not recorded in `~/MyProject/Project.toml`. This is
-because Julia maintains a environments stack via the `LOAD_PATH` variable, see also the [environment stacks](https://docs.julialang.org/en/v1/manual/code-loading/#Environment-stacks) section in the julia manual.
+because Julia maintains a environments stack via the `LOAD_PATH` variable; see also the [environment stacks](https://docs.julialang.org/en/v1/manual/code-loading/#Environment-stacks) section in the Julia manual.
 
 ```julia-repl
 julia> LOAD_PATH
@@ -198,23 +198,24 @@ julia> LOAD_PATH
  "@stdlib"
 ```
 
-Briefly speaking, Julia will try to load package `BenchmarkTools` in `@` environment, which is the current activated project.
-If not found then try the version-specific global environment `@v#.#`, which is stored in `~/.julia/environments/v1.6` for Julia 1.6.
-In the previous case, Julia found `BenchmarkTools` in `@v#.#`, i.e., `~/.julia/environments/v1.6/Project.toml`,
-thus it successfully loads the package.
+With this `LOAD_PATH`, Julia will first try to load the `BenchmarkTools` package in the `@` environment, which is the current activated project.
+If it's not found there, Julia will then look in the version-specific global environment `@v#.#`, which is stored in `~/.julia/environments/v1.6` for Julia 1.6. Finally, it will check the standard library.
+In the example above, Julia found `BenchmarkTools` in `@v#.#`, i.e., `~/.julia/environments/v1.6/Project.toml`,
+and successfully loaded the package.
 
-A convenient command to create custom shared environment is to prefix the name with `@`:
+A convenient command to create a custom shared environment is to prefix the name with `@`:
 
 ```julia-repl
-(@v1.6) pkg> activate @mytoolbox # require Julia 1.4 or later
+(@v1.6) pkg> activate @mytoolbox # requires Julia 1.4 or later
   Activating new project at `~/.julia/environments/mytoolbox`
 ```
 
 This provides a quick way to activate the project environment stored in `~/.julia/environments` folder.
 
-### Shared environment caveat: the reproducibility issue
+### Caveat for package developers: Shared environments and reproducibility
 
-Using shared environment can cause reproducibility issues. For instance,
+Because shared environments allow you to load packages without specifying them in a particular environment's
+`Project.toml` and `Manifest.toml`, you may encounter problems with reproducibility.
 
 ```julia
 (MyProject) pkg> generate MyPackage
@@ -239,8 +240,7 @@ greet() = print("Hello World!")
 end # module
 ```
 
-Now when you tries to load `MyPackage`, because `BenchmarkTools` is recorded in the global shared environment `v#.#`,
-Julia still succeeds loading it but will print a warning message:
+When you try to load `MyPackage`, Julia searches for and finds `BenchmarkTools` in the global shared environment `v#.#`, so loading is successful, but a warning message is printed:
 
 ```julia
 julia> using MyPackage
@@ -252,6 +252,5 @@ julia> using MyPackage
 └ Loading BenchmarkTools into MyPackage from project dependency, future warnings for MyPackage are suppressed.
 ```
 
-Imaging that you want to ship your wonderful package to other people, because `BenchmarkTools` is not recoreded in `MyPackage/Project.toml`,
-you can't ensure that `BenchmarkTools` can be successfully loaded even if they initialize your package with `pkg> instantiate`.
-In such sense, this is a reproducibility warning; when you develop a package that meant to be shared by others, you should avoid doing this.
+Imagine that you want to ship your wonderful package to other people. Because `BenchmarkTools` is not recorded in `MyPackage/Project.toml`,
+you can't ensure that `BenchmarkTools` will be successfully loaded. For this reason, developers of shared packages should be especially mindful of reproducibility issues when using shared environments.
