@@ -496,7 +496,7 @@ connection to Github and AWS S3 is not stable, it is usually not a good experien
 update packages. Fortunately, the pkg client/server feature improves the experience in the sense that:
 
 1. If set, pkg client would first try to download data from the pkg server,
-2. if that fails, then it falls back to download from the origianl sources (e.g., Github).
+2. if that fails, then it falls back to download from the original sources (e.g., Github).
 
 Since Julia 1.5, `https://pkg.julialang.org` provided by the JuliaLang org. is used as the default
 pkg server. In most cases this should be transparent, but users can still set/unset an pkg server
