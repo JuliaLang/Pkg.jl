@@ -116,7 +116,8 @@ Otherwise, it will resolve the latest versions of the dependencies compatible wi
 
 ## Temporary environments
 
-It is not uncommon to test some package without installing it into your usual environment.
+Temporary environments make it easy to start an environment from a blank slate to test a package or set of
+packages, and have Pkg automatically delete the environment when you're done.
 For instance, when writing a bug report, you may want to test your minimal reproducible
 example in a 'clean' environment to ensure it's actually reproducible as written. You might
 also want a scratch space to try out a new package, or a sandbox to resolve version conflicts
