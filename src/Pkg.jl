@@ -56,6 +56,7 @@ include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
 include("REPLMode/REPLMode.jl")
+include("diagnostics.jl")
 
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED

@@ -45,6 +45,7 @@ Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger())
             "misc.jl",
             "force_latest_compatible_version.jl",
             "manifests.jl",
+            "diagnostics.jl",
             ]
             @info "==== Testing `test/$f`"
             flush(Pkg.DEFAULT_IO[])
