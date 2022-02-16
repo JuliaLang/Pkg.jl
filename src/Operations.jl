@@ -2074,7 +2074,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if !no_visible_packages_heldback && !no_packages_upgradable
             printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
         end
-        if hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
+        if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
+            # only warn if showing project and outdated indirect deps are hidden
             printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
         end
     end
