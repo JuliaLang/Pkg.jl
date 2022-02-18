@@ -287,6 +287,9 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     return fixed
 end
 
+# drops build detail in version but keeps the main prerelease context
+# i.e. dropbuild(v"2.0.1-rc1.21321") == v"2.0.1-rc1"
+dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v.prerelease) ? () : (v.prerelease[1],))
 
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
@@ -302,7 +305,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
     else
-        env.manifest.julia_version = VERSION
+        env.manifest.julia_version = dropbuild(VERSION)
     end
     names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in stdlibs())
     # recursive search for packages which are tracking a path

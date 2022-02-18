@@ -143,21 +143,27 @@ end
 
 @testset "Manifest metadata" begin
     @testset "julia_version" begin
-        @testset "new environment: value is `nothing`, then `VERSION` after resolve" begin
+        @testset "dropbuild" begin
+            @test Pkg.Operations.dropbuild(v"1.2.3-DEV.2134") == v"1.2.3-DEV"
+            @test Pkg.Operations.dropbuild(v"1.2.3-DEV") == v"1.2.3-DEV"
+            @test Pkg.Operations.dropbuild(v"1.2.3") == v"1.2.3"
+            @test Pkg.Operations.dropbuild(v"1.2.3-rc1") == v"1.2.3-rc1"
+        end
+        @testset "new environment: value is `nothing`, then ~`VERSION` after resolve" begin
             isolate(loaded_depot=true) do
                 Pkg.activate(; temp=true)
                 @test Pkg.Types.Context().env.manifest.julia_version == nothing
                 Pkg.add("Profile")
-                @test Pkg.Types.Context().env.manifest.julia_version == VERSION
+                @test Pkg.Types.Context().env.manifest.julia_version == Pkg.Operations.dropbuild(VERSION)
             end
         end
-        @testset "activating old environment: maintains old version, then `VERSION` after resolve" begin
+        @testset "activating old environment: maintains old version, then ~`VERSION` after resolve" begin
             reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
                 Pkg.activate(env_dir)
-                @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV.1199"
+                @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV"
 
                 Pkg.add("Profile")
-                @test Pkg.Types.Context().env.manifest.julia_version == VERSION
+                @test Pkg.Types.Context().env.manifest.julia_version == Pkg.Operations.dropbuild(VERSION)
             end
         end
         @testset "instantiate manifest from different julia_version" begin
@@ -170,7 +176,7 @@ end
                 reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
                     Pkg.activate(env_dir)
                     @test_logs (:warn, r"The active manifest file") Pkg.instantiate()
-                    @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV.1199"
+                    @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV"
                 end
             end
         end
