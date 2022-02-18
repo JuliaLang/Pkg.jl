@@ -299,11 +299,6 @@ dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v
 function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
     # compatibility
     if julia_version !== nothing
-        try
-            error()
-        catch err
-            @error "julia_version branch hit" exception=(err, catch_backtrace())
-        end
         # only set the manifest julia_version if ctx.julia_version is not nothing
         env.manifest.julia_version = dropbuild(VERSION)
         v = intersect(julia_version, get_compat(env.project, "julia"))
