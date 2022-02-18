@@ -348,6 +348,9 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
     return fixed
 end
 
+# drops build detail in version but keeps the main prerelease context
+# i.e. dropbuild(v"2.0.1-rc1.21321") == v"2.0.1-rc1"
+dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v.prerelease) ? () : (v.prerelease[1],))
 
 function project_compatibility(ctx::Context, name::String)
     return VersionSpec(Types.semver_spec(get(ctx.env.project.compat, name, ">= 0")))
@@ -357,11 +360,12 @@ end
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
-# all versioned packges should have a `tree_hash`
+# all versioned packages should have a `tree_hash`
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # compatibility
     if ctx.julia_version !== nothing
-        ctx.env.manifest.julia_version = ctx.julia_version
+        # only set the manifest julia_version if ctx.julia_version is not nothing
+        ctx.env.manifest.julia_version = dropbuild(VERSION)
         v = intersect(ctx.julia_version, project_compatibility(ctx, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
