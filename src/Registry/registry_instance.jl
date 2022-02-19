@@ -188,7 +188,7 @@ function init_package_info!(pkg::PkgEntry)
 end
 
 
-function uncompress_registry(tar_gz::AbstractString)
+function uncompress_registry(tar_gz::AbstractString; store::Bool = true)
     if !isfile(tar_gz)
         error("$(repr(tar_gz)): No such file")
     end
@@ -200,7 +200,10 @@ function uncompress_registry(tar_gz::AbstractString)
             Tar.read_tarball(x->true, tar; buf=buf) do hdr, _
                 if hdr.type == :file
                     Tar.read_data(tar, io; size=hdr.size, buf=buf)
-                    data[hdr.path] = String(take!(io))
+                    d = String(take!(io))
+                    if store
+                        data[hdr.path] = d
+                    end
                 end
             end
         end

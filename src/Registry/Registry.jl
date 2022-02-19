@@ -369,7 +369,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                     @goto done_tarball_read
                                 end
                                 try
-                                    uncompress_registry(tmp) # check that it is uncompressable before moving into place
+                                    uncompress_registry(tmp; store = false) # check that it is uncompressable before moving into place
                                 catch err
                                     push!(errors, (reg.path, "downloaded registry from $(url) cannot be uncompressed. Exception: $(sprint(showerror, err))"))
                                     @goto done_tarball_read
