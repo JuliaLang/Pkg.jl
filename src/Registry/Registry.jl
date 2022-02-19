@@ -368,6 +368,12 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                     push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
                                     @goto done_tarball_read
                                 end
+                                try
+                                    uncompress_registry(tmp) # check that it is uncompressable before moving into place
+                                catch err
+                                    push!(errors, (reg.path, "downloaded registry from $(url) cannot be uncompressed. Exception: $(sprint(showerror, err))"))
+                                    @goto done_tarball_read
+                                end
                                 # If we have an uncompressed Pkg server registry, remove it and get the compressed version
                                 if isdir(reg.path)
                                     Base.rm(reg.path; recursive=true, force=true)
