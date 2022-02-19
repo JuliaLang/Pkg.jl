@@ -151,13 +151,13 @@ function init_package_info!(pkg::PkgEntry)
     subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
 
     # Versions.toml
-    d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ? 
+    d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
     version_info = Dict{VersionNumber, VersionInfo}(VersionNumber(k) =>
         VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v)
 
     # Compat.toml
-    compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ? 
+    compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) : Dict{String, Any}()
     # The Compat.toml file might have string or vector values
     compat_data_toml = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, compat_data_toml)
@@ -195,13 +195,20 @@ function uncompress_registry(tar_gz::AbstractString)
     data = Dict{String, String}()
     buf = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE)
     io = IOBuffer()
-    open(`$(exe7z()) x $tar_gz -so`) do tar
-        Tar.read_tarball(x->true, tar; buf=buf) do hdr, _
-            if hdr.type == :file
-                Tar.read_data(tar, io; size=hdr.size, buf=buf)
-                data[hdr.path] = String(take!(io))
+    try
+        open(`$(exe7z()) x $tar_gz -so`) do tar
+            Tar.read_tarball(x->true, tar; buf=buf) do hdr, _
+                if hdr.type == :file
+                    Tar.read_data(tar, io; size=hdr.size, buf=buf)
+                    data[hdr.path] = String(take!(io))
+                end
             end
         end
+    catch err
+        Pkg.Types.pkgerror("""
+        Failed to uncompress registry at `$tar_gz`.
+        """, sprint(showerror, err)
+        )
     end
     return data
 end
