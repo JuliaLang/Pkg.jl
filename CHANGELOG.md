@@ -15,9 +15,9 @@ Pkg v1.8 Release Notes
 - `Pkg.instantiate` will now warn when a Project.toml is out of sync with a Manifest.toml. It does this by storing a hash
   of the project deps and compat entries (other fields are ignored) in the manifest when it is resolved, so that any change
   to the Project.toml deps or compat entries without a re-resolve can be detected.
-- If `pkg> add` cannot find a package with the provided name it will now suggest similarly named packages that can be added
-- The julia version stored in the manifest no longer includes the build number i.e. master will now record as `1.9.0-DEV`
-- Interrupting a `pkg> test` will now be caught more reliably and exit back to the REPL gracefully
+- If `pkg> add` cannot find a package with the provided name it will now suggest similarly named packages that can be added.
+- The julia version stored in the manifest no longer includes the build number i.e. master will now record as `1.9.0-DEV`.
+- Interrupting a `pkg> test` will now be caught more reliably and exit back to the REPL gracefully.
 
 Pkg v1.7 Release Notes
 ======================
