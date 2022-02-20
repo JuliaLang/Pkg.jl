@@ -1,3 +1,4 @@
+__precompile__(false)
 module ArtifactOverrideLoading
 using Pkg.Artifacts
 export arty_path, barty_path

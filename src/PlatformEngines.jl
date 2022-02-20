@@ -54,6 +54,7 @@ function get_server_dir(
         @warn "malformed Pkg server value" server
         return
     end
+    isempty(Base.DEPOT_PATH) && return
     joinpath(depots1(), "servers", String(m.captures[1]))
 end
 
@@ -232,6 +233,17 @@ function get_metadata_headers(url::AbstractString)
     end
     push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
     push!(headers, "Julia-Interactive" => string(isinteractive()))
+    for (key, val) in ENV
+        m = match(r"^JULIA_PKG_SERVER_([A-Z0-9_]+)$"i, key)
+        m === nothing && continue
+        val = strip(val)
+        isempty(val) && continue
+        words = split(m.captures[1], '_', keepempty=false)
+        isempty(words) && continue
+        hdr = "Julia-" * join(map(titlecase, words), '-')
+        any(hdr == k for (k, v) in headers) && continue
+        push!(headers, hdr => val)
+    end
     return headers
 end
 
@@ -257,10 +269,12 @@ function download(
     progress = if do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
         start_progress(io, bar)
-        (total, now) -> begin
-            bar.max = total
-            bar.current = now
-            show_progress(io, bar)
+        let bar=bar
+            (total, now) -> begin
+                bar.max = total
+                bar.current = now
+                show_progress(io, bar)
+            end
         end
     else
         (total, now) -> nothing
@@ -343,12 +357,12 @@ function download_verify(
             # Download and verify from scratch
             download(url, dest; verbose=verbose || !quiet_download)
             if hash !== nothing && !verify(dest, hash; verbose=verbose)
-                error("Verification failed")
+                error("Verification failed. Download does not match expected hash")
             end
         else
             # If it didn't verify properly and we didn't resume, something is
             # very wrong and we must complain mightily.
-            error("Verification failed")
+            error("Verification failed. Download does not match expected hash")
         end
     end
 
@@ -378,10 +392,10 @@ end
 
 Compress `src_dir` into a tarball located at `tarball_path`.
 """
-function package(src_dir::AbstractString, tarball_path::AbstractString)
+function package(src_dir::AbstractString, tarball_path::AbstractString; io=stderr_f())
     rm(tarball_path, force=true)
     cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
-    open(pipeline(cmd, stdout=devnull), write=true) do io
+    open(pipeline(cmd, stdout=devnull, stderr=io), write=true) do io
         Tar.create(src_dir, io)
     end
 end

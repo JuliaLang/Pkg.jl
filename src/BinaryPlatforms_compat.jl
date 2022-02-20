@@ -1,7 +1,7 @@
 module BinaryPlatforms
 
 using Base.BinaryPlatforms
-export platform_key_abi, platform_dlext, valid_dl_path, arch, libc, compiler_abi,
+export platform_key_abi, platform_dlext, valid_dl_path, arch, libc,
        libgfortran_version, libstdcxx_version, cxxstring_abi, parse_dl_name_version,
        detect_libgfortran_version, detect_libstdcxx_version, detect_cxxstring_abi,
        call_abi, wordsize, triplet, select_platform, platforms_match,

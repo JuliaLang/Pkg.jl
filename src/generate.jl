@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-function generate(path::String; io::IO=stdout_f())
+function generate(path::String; io::IO=stderr_f())
     base = basename(path)
     pkg = endswith(lowercase(base), ".jl") ? chop(base, tail=3) : base
     Base.isidentifier(pkg) || pkgerror("$(repr(pkg)) is not a valid package name")
@@ -66,7 +66,7 @@ function entrypoint(io::IO, pkg::AbstractString, dir)
 
             greet() = print("Hello World!")
 
-            end # module
+            end # module $pkg
             """
         )
     end

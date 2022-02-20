@@ -13,8 +13,11 @@ mutable struct MaxSumParams
                           # step
 
     function MaxSumParams()
-        accuracy = parse(Int, get(ENV, "JULIA_PKGRESOLVE_ACCURACY", "1"))
-        accuracy > 0 || error("JULIA_PKGRESOLVE_ACCURACY must be > 0")
+        accuracy = parse(Int, get(ENV, "JULIA_PKG_RESOLVE_ACCURACY",
+                                  # Allow for `JULIA_PKGRESOLVE_ACCURACY` for backward
+                                  # compatibility with Julia v1.7-
+                                  get(ENV, "JULIA_PKGRESOLVE_ACCURACY", "1")))
+        accuracy > 0 || error("JULIA_PKG_RESOLVE_ACCURACY must be > 0")
         dec_interval = accuracy * 5
         dec_fraction = 0.05 / accuracy
         return new(dec_interval, dec_fraction)

@@ -40,7 +40,7 @@ const test_package_parent_dir = joinpath(
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "OldOnly1")
                 cp(joinpath(test_package_parent_dir, "OldOnly1"), test_package; force = true)
-                Utils.isolate() do
+                Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
                     Pkg.build()
@@ -73,7 +73,7 @@ const test_package_parent_dir = joinpath(
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "OldOnly2")
                 cp(joinpath(test_package_parent_dir, "OldOnly2"), test_package; force = true)
-                Utils.isolate() do
+                Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
                     Pkg.build()
@@ -133,7 +133,7 @@ const test_package_parent_dir = joinpath(
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "BothOldAndNew")
                 cp(joinpath(test_package_parent_dir, "BothOldAndNew"), test_package; force = true)
-                Utils.isolate() do
+                Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
                     Pkg.build()
@@ -198,7 +198,7 @@ const test_package_parent_dir = joinpath(
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "NewOnly")
                 cp(joinpath(test_package_parent_dir, "NewOnly"), test_package; force = true)
-                Utils.isolate() do
+                Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
                     Pkg.build()

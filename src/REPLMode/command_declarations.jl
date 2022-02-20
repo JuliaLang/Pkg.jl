@@ -54,6 +54,8 @@ PSA[:name => "instantiate",
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+
+After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
 ],
 PSA[:name => "remove",
@@ -129,6 +131,8 @@ The following table describes the command line arguments to `--preserve` (in ord
 | `none`   | Do not attempt to preserve any version information                                  |
 | `tiered` | Use the tier which will preserve the most version information (this is the default) |
 
+After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
+
 !!! compat "Julia 1.5"
     Subdirectory specification requires at least Julia 1.5.
 
@@ -141,6 +145,7 @@ pkg> add Example#master
 pkg> add Example#c37b675
 pkg> add https://github.com/JuliaLang/Example.jl#master
 pkg> add git@github.com:JuliaLang/Example.jl.git
+pkg> add "git@github.com:JuliaLang/Example.jl.git"#master
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
 """,
@@ -309,6 +314,8 @@ in `--manifest` mode they match any manifest package. Bound level options force
 the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
+
+After any package updates the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
 ],
 PSA[:name => "generate",
@@ -364,14 +371,17 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
-Show the status of the current environment. In `--project` mode (default), the
-status of the project file is summarized. In `--manifest` mode the output also
-includes the recursive dependencies of added packages given in the manifest.
+Show the status of the current environment.
+Packages marked with `⌃` have new versions that can be installed, e.g. via `pkg> up`.
+Those marked with `⌅` have new versions available, but that cannot be installed. To see why
+use `pkg> status --outdated` which shows any packages that are not at their latest version
+and if any packages are holding them back.
+
+In `--project` mode (default), the status of the project file is summarized. In `--manifest`
+mode the output also includes the recursive dependencies of added packages given in the manifest.
 If there are any packages listed as arguments the output will be limited to those packages.
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
-The `--outdated` option in addition show if some packages are not at their latest version
-and what packages are holding them back.
 The `--compat` option alone shows project compat entries.
 
 !!! compat "Julia 1.1"
@@ -382,6 +392,7 @@ The `--compat` option alone shows project compat entries.
     is the default for environments in git repositories.
 
 !!! compat "Julia 1.8"
+    The `⌃` and `⌅` indicators were added in Julia 1.8
     The `--outdated` and `--compat` options require at least Julia 1.8.
 """,
 ],
@@ -389,13 +400,15 @@ PSA[:name => "compat",
     :api => API.compat,
     :arg_count => 0 => 2,
     :completions => complete_installed_packages_and_compat,
-    :description => "edit compat entries in the current Project",
+    :description => "edit compat entries in the current Project and re-resolve",
     :help => md"""
     compat [pkg] [compat_string]
 
 Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments.
 When directly editing use tab to complete the package name and any existing compat entry.
 Specifying a package with a blank compat entry will remove the entry.
+After changing compat entries a `resolve` will be attempted to check whether the current
+environment is compliant with the new compat rules.
 """,
 ],
 PSA[:name => "gc",

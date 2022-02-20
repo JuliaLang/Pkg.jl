@@ -508,4 +508,17 @@ end
     end
 end
 
+@testset "Stdlib resolve smoketest" begin
+    # All stdlibs should be installable and resolvable
+    temp_pkg_dir() do dir
+        Pkg.activate(temp=true)
+        Pkg.add(map(first, values(Pkg.Types.load_stdlib())))    # add all stdlibs
+        iob = IOBuffer()
+        Pkg.resolve(io = iob)
+        str = String(take!(iob))
+        @test occursin(r"No Changes to .*Project.toml", str)
+        @test occursin(r"No Changes to .*Manifest.toml", str)
+    end
+end
+
 end # module

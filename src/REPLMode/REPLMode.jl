@@ -10,6 +10,7 @@ import REPL: TerminalMenus
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
+import ..stdout_f, ..stderr_f
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)
@@ -283,8 +284,8 @@ end
 
 parse(input::String) =
     map(Base.Iterators.filter(!isempty, tokenize(input))) do words
-        statement, _ = core_parse(words)
-        statement.spec === nothing && pkgerror("Could not determine command")
+        statement, input_word = core_parse(words)
+        statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. Type ? for help with available commands")
         statement.options = map(parse_option, statement.options)
         statement
     end
@@ -453,7 +454,7 @@ struct MiniREPL <: REPL.AbstractREPL
     t::REPL.Terminals.TTYTerminal
 end
 function MiniREPL()
-    MiniREPL(TextDisplay(stdout), REPL.Terminals.TTYTerminal(get(ENV, "TERM", Sys.iswindows() ? "" : "dumb"), stdin, stdout, stderr))
+    MiniREPL(TextDisplay(stdout_f()), REPL.Terminals.TTYTerminal(get(ENV, "TERM", Sys.iswindows() ? "" : "dumb"), stdin, stdout_f(), stderr_f()))
 end
 REPL.REPLDisplay(repl::MiniREPL) = repl.display
 
@@ -564,14 +565,16 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
 
     repl_keymap = Dict()
     if shell_mode !== nothing
-        repl_keymap[';'] = function (s,o...)
-            if isempty(s) || position(LineEdit.buffer(s)) == 0
-                buf = copy(LineEdit.buffer(s))
-                LineEdit.transition(s, shell_mode) do
-                    LineEdit.state(s, shell_mode).input_buffer = buf
+        let shell_mode=shell_mode
+            repl_keymap[';'] = function (s,o...)
+                if isempty(s) || position(LineEdit.buffer(s)) == 0
+                    buf = copy(LineEdit.buffer(s))
+                    LineEdit.transition(s, shell_mode) do
+                        LineEdit.state(s, shell_mode).input_buffer = buf
+                    end
+                else
+                    LineEdit.edit_insert(s, ';')
                 end
-            else
-                LineEdit.edit_insert(s, ';')
             end
         end
     end
@@ -633,6 +636,8 @@ function gen_help()
 **Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
 backspace when the input line is empty or press Ctrl+C.
 
+Full documentation available at https://pkgdocs.julialang.org/
+
 **Synopsis**
 
     pkg> cmd [opts] [args]
@@ -650,10 +655,23 @@ Some commands have an alias, indicated below.
 end
 
 const help = gen_help()
+const REG_WARNED = Ref{Bool}(false)
 
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
     ctx = Context()
+    if isempty(ctx.registries)
+        if !REG_WARNED[]
+            printstyled(ctx.io, " │ "; color=:green)
+            printstyled(ctx.io, "Attempted to find missing packages in package registries but no registries are installed.\n")
+            printstyled(ctx.io, " └ "; color=:green)
+            printstyled(ctx.io, "Use package mode to install a registry. `pkg> registry add` will install the default registries.\n\n")
+            REG_WARNED[] = true
+        end
+        return false
+    end
     available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
+    filter!(u -> all(!isequal(Operations.JULIA_UUID), u), available_uuids) # "julia" is in General but not installable
+    isempty(available_uuids) && return false
     available_pkgs = pkgs[isempty.(available_uuids) .== false]
     isempty(available_pkgs) && return false
     resp = try

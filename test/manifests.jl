@@ -87,6 +87,16 @@ end
                 @test m.other == m2.other
             end
         end
+        reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
+            m = Pkg.Types.read_manifest(env_manifest)
+            m.julia_version = v"1.5.0"
+            msg = r"The active manifest file has dependencies that were resolved with a different julia version"
+            @test_logs (:warn, msg) Pkg.Types.check_warn_manifest_julia_version_compat(m, env_manifest)
+
+            m.julia_version = nothing
+            msg = r"The active manifest file is missing a julia version entry"
+            @test_logs (:warn, msg) Pkg.Types.check_warn_manifest_julia_version_compat(m, env_manifest)
+        end
     end
 
     @testset "v3.0: unknown format, warn" begin
@@ -113,25 +123,47 @@ end
             @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
         end
     end
+    @testset "Pkg.upgrade_manifest(manifest_path)" begin
+        reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
+            io = IOBuffer()
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+
+            Pkg.upgrade_manifest(env_manifest)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            Pkg.activate(env_dir; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+        end
+    end
 end
 
 @testset "Manifest metadata" begin
     @testset "julia_version" begin
-        @testset "new environment: value is `nothing`, then `VERSION` after resolve" begin
+        @testset "dropbuild" begin
+            @test Pkg.Operations.dropbuild(v"1.2.3-DEV.2134") == v"1.2.3-DEV"
+            @test Pkg.Operations.dropbuild(v"1.2.3-DEV") == v"1.2.3-DEV"
+            @test Pkg.Operations.dropbuild(v"1.2.3") == v"1.2.3"
+            @test Pkg.Operations.dropbuild(v"1.2.3-rc1") == v"1.2.3-rc1"
+        end
+        @testset "new environment: value is `nothing`, then ~`VERSION` after resolve" begin
             isolate(loaded_depot=true) do
                 Pkg.activate(; temp=true)
                 @test Pkg.Types.Context().env.manifest.julia_version == nothing
                 Pkg.add("Profile")
-                @test Pkg.Types.Context().env.manifest.julia_version == VERSION
+                @test Pkg.Types.Context().env.manifest.julia_version == Pkg.Operations.dropbuild(VERSION)
             end
         end
-        @testset "activating old environment: maintains old version, then `VERSION` after resolve" begin
+        @testset "activating old environment: maintains old version, then ~`VERSION` after resolve" begin
             reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
                 Pkg.activate(env_dir)
-                @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV.1199"
+                @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV"
 
                 Pkg.add("Profile")
-                @test Pkg.Types.Context().env.manifest.julia_version == VERSION
+                @test Pkg.Types.Context().env.manifest.julia_version == Pkg.Operations.dropbuild(VERSION)
             end
         end
         @testset "instantiate manifest from different julia_version" begin
@@ -144,8 +176,39 @@ end
                 reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
                     Pkg.activate(env_dir)
                     @test_logs (:warn, r"The active manifest file") Pkg.instantiate()
-                    @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV.1199"
+                    @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV"
                 end
+            end
+        end
+        @testset "project_hash for identifying out of sync manifest" begin
+            isolate(loaded_depot=true) do
+                iob = IOBuffer()
+
+                Pkg.activate(; temp=true)
+                Pkg.add("Example")
+                @test Pkg.is_manifest_current() === true
+
+                Pkg.compat("Example", "0.4")
+                @test Pkg.is_manifest_current() === false
+                Pkg.status(io = iob)
+                sync_msg_str = r"The project dependencies or compat requirements have changed since the manifest was last resolved."
+                @test occursin(sync_msg_str, String(take!(iob)))
+                @test_logs (:warn, sync_msg_str) Pkg.instantiate()
+
+                Pkg.update()
+                @test Pkg.is_manifest_current() === true
+                Pkg.status(io = iob)
+                @test !occursin(sync_msg_str, String(take!(iob)))
+
+                Pkg.compat("Example", "0.5")
+                Pkg.status(io = iob)
+                @test occursin(sync_msg_str, String(take!(iob)))
+                @test_logs (:warn, sync_msg_str) Pkg.instantiate()
+
+                Pkg.rm("Example")
+                @test Pkg.is_manifest_current() === true
+                Pkg.status(io = iob)
+                @test !occursin(sync_msg_str, String(take!(iob)))
             end
         end
     end

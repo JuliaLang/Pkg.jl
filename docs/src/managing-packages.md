@@ -182,6 +182,10 @@ When tracking a path, the package manager will never modify the files at that pa
 If `dev` is used on a local path, that path to that package is recorded and used when loading that package.
 The path will be recorded relative to the project file, unless it is given as an absolute path.
 
+```julia-repl
+(v1.0) pkg> dev /Users/kristoffer/Desktop/Example
+```
+
 To stop tracking a path and use the registered version again, use `free`:
 
 ```julia-repl
@@ -465,6 +469,14 @@ To run a typical garbage collection with default arguments, simply use the `gc` 
 
 Note that only packages in `~/.julia/packages` are deleted.
 
+## Offline Mode
+
+In offline mode Pkg tries to do as much as possible without connecting
+to internet. For example, when adding a package Pkg only considers
+versions that are already downloaded in version resolution.
+
+To work in offline mode use `import Pkg; Pkg.offline(true)` or set the environment 
+variable `JULIA_PKG_OFFLINE` to `"true"`.
 
 ## Pkg client/server
 
@@ -484,7 +496,7 @@ connection to Github and AWS S3 is not stable, it is usually not a good experien
 update packages. Fortunately, the pkg client/server feature improves the experience in the sense that:
 
 1. If set, pkg client would first try to download data from the pkg server,
-2. if that fails, then it falls back to download from the origianl sources (e.g., Github).
+2. if that fails, then it falls back to download from the original sources (e.g., Github).
 
 Since Julia 1.5, `https://pkg.julialang.org` provided by the JuliaLang org. is used as the default
 pkg server. In most cases this should be transparent, but users can still set/unset an pkg server

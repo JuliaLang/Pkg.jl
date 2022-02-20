@@ -145,9 +145,10 @@ inside_test_sandbox(fn; kwargs...)       = Pkg.test(;test_fn=fn, kwargs...)
 @testset "test: printing" begin
     isolate(loaded_depot=true) do
         Pkg.add(name="Example")
-        io = IOBuffer()
+        io = Base.BufferStream()
         Pkg.test("Example"; io=io)
-        output = String(take!(io))
+        closewrite(io)
+        output = read(io, String)
         @test occursin(r"Testing Example", output)
         @test occursin(r"Status `.+Project\.toml`", output)
         @test occursin(r"Status `.+Manifest\.toml`", output)
@@ -285,7 +286,12 @@ end
 @testset "test: fallback when no project file exists" begin
     isolate(loaded_depot=true) do
         Pkg.add(name="Permutations", version="0.3.2")
-        Pkg.test("Permutations")
+        if Sys.WORD_SIZE == 32
+            # The Permutations.jl v0.3.2 tests are known to fail on 32-bit Julia
+            @test_skip Pkg.test("Permutations")
+        else
+            Pkg.test("Permutations")
+        end
     end
 end
 
@@ -401,6 +407,20 @@ end
         @test_throws PkgError(
             "version specification invalid when tracking a repository: `0.5.0` specified for package `Example`"
             ) Pkg.add(name="Example", rev="master", version="0.5.0")
+        # Adding with a slight typo gives suggestions
+        try
+            Pkg.add("Examplle")
+            @test false # to fail if add doesn't error
+         catch err
+            @test err isa PkgError
+            @test occursin("The following package names could not be resolved:", err.msg)
+            @test occursin("Examplle (not found in project, manifest or registry)", err.msg)
+            @test occursin("Suggestions:", err.msg)
+            # @test occursin("Example", err.msg) # can't test this as each char in "Example" is individually colorized
+        end
+        @test_throws PkgError(
+            "name, UUID, URL, or filesystem path specification required when calling `add`"
+            ) Pkg.add(Pkg.PackageSpec())
         # Adding an unregistered package
         @test_throws PkgError Pkg.add("ThisIsHopefullyRandom012856014925701382")
         # Wrong UUID
@@ -422,7 +442,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         close(LibGit2.init(tempdir))
         try Pkg.add(path=tempdir)
-            @assert false
+            @test false # to fail if add doesn't error
         catch err
             @test err isa PkgError
             @test match(r"^invalid git HEAD", err.msg) !== nothing
@@ -980,7 +1000,7 @@ end
         Pkg.develop("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(Pkg.devdir(), "Example")
+            @test Base.samefile(pkg.source, joinpath(Pkg.devdir(), "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -990,7 +1010,7 @@ end
         Pkg.develop("Example"; shared=false)
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(dirname(Pkg.project().path), "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(dirname(Pkg.project().path), "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1000,7 +1020,7 @@ end
         Pkg.develop(uuid=exuuid)
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(DEPOT_PATH[1], "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(DEPOT_PATH[1], "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1010,7 +1030,7 @@ end
         Pkg.develop(url="https://github.com/JuliaLang/Example.jl")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(DEPOT_PATH[1], "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(DEPOT_PATH[1], "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1035,17 +1055,17 @@ end
         Pkg.dependencies(UUID("0829fd7c-1e7e-4927-9afa-b8c61d5e0e42")) do pkg # dep A
             @test haskey(pkg.dependencies, "B")
             @test haskey(pkg.dependencies, "C")
-            @test pkg.source == joinpath(@__DIR__, "test_packages", "A")
+            @test Base.samefile(pkg.source, joinpath(@__DIR__, "test_packages", "A"))
         end
         Pkg.dependencies(UUID("4ee78ca3-4e78-462f-a078-747ed543fa85")) do pkg # dep C
             @test haskey(pkg.dependencies, "D")
-            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "C")
+            @test Base.samefile(pkg.source, joinpath(@__DIR__, "test_packages", "A", "dev", "C"))
         end
         Pkg.dependencies(UUID("dd0d8fba-d7c4-4f8e-a2bb-3a090b3e34f1")) do pkg # dep B
-            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "B")
+            @test Base.samefile(pkg.source, joinpath(@__DIR__, "test_packages", "A", "dev", "B"))
         end
         Pkg.dependencies(UUID("bf733257-898a-45a0-b2f2-c1c188bdd879")) do pkg # dep D
-            @test pkg.source == joinpath(@__DIR__, "test_packages", "A", "dev", "D")
+            @test Base.samefile(pkg.source, joinpath(@__DIR__, "test_packages", "A", "dev", "D"))
         end
     end
     # primary depot is a relative path
@@ -1054,7 +1074,7 @@ end
         push!(DEPOT_PATH, "temp")
         Pkg.develop("JSON")
         Pkg.dependencies(json_uuid) do pkg
-            @test pkg.source == abspath(joinpath("temp", "dev", "JSON"))
+            @test Base.samefile(pkg.source, abspath(joinpath("temp", "dev", "JSON")))
         end
     end end
 end
@@ -1067,7 +1087,7 @@ end
         end
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(tempdir, "Example")
+            @test Base.samefile(pkg.source, joinpath(tempdir, "Example"))
         end
         @test haskey(Pkg.project().dependencies, "Example")
     end end
@@ -1078,7 +1098,7 @@ end
         end
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(dirname(Pkg.project().path), "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(dirname(Pkg.project().path), "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1101,7 +1121,7 @@ end
         Pkg.dependencies(simple_package_uuid) do pkg
             @test pkg.name == "SimplePackage"
             @test isdir(pkg.source)
-            @test pkg.source == package_path
+            @test Base.samefile(pkg.source, package_path)
             original_source = pkg.source
         end
         # Now we move the project, but preserve the relative structure.
@@ -1111,7 +1131,7 @@ end
             # We check that we can still find the source.
             Pkg.dependencies(simple_package_uuid) do pkg
                 @test isdir(pkg.source)
-                @test pkg.source == realpath(joinpath(tempdir, "SimplePackage"))
+                @test Base.samefile(pkg.source, realpath(joinpath(tempdir, "SimplePackage")))
             end
         end
     end
@@ -1134,7 +1154,7 @@ end
             Pkg.activate(tempdir2)
             Pkg.dependencies(simple_package_uuid) do pkg
                 @test isdir(pkg.source)
-                @test pkg.source == original_source
+                @test Base.samefile(pkg.source, original_source)
             end
         end
     end end
@@ -1184,7 +1204,7 @@ end
         Pkg.develop("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(DEPOT_PATH[1], "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(DEPOT_PATH[1], "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1196,7 +1216,7 @@ end
         Pkg.develop("Example")
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(DEPOT_PATH[1], "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(DEPOT_PATH[1], "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1208,7 +1228,7 @@ end
         Pkg.develop("Example"; shared=false)
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
-            @test pkg.source == joinpath(dirname(Pkg.project().path), "dev", "Example")
+            @test Base.samefile(pkg.source, joinpath(dirname(Pkg.project().path), "dev", "Example"))
             @test !pkg.is_tracking_registry
         end
         @test haskey(Pkg.project().dependencies, "Example")
@@ -1861,8 +1881,16 @@ end
             @test pkg.name == "Example"
             @test !pkg.is_pinned
         end
+        Pkg.add("Profile")
+        Pkg.pin("Example")
+        Pkg.free(all_pkgs = true) # test that this doesn't error because Profile is already free
         Pkg.rm(all_pkgs = true)
         @test !haskey(Pkg.dependencies(), exuuid)
+
+        # test that the noops don't error
+        Pkg.rm(all_pkgs = true)
+        Pkg.pin(all_pkgs = true)
+        Pkg.free(all_pkgs = true)
     end
     isolate() do
         Pkg.REPLMode.TEST_MODE[] = true
@@ -2091,9 +2119,9 @@ end
         Pkg.add(url="https://github.com/00vareladavid/Unregistered.jl")
         Pkg.status(; io = io)
         @test occursin(r"Status `.+Project\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] Example v\d\.\d\.\d `.+`", readline(io))
-        @test occursin(r"\[682c06a0\] JSON v0.18.0", readline(io))
-        @test occursin(r"\[dcb67f36\] Unregistered v\d\.\d\.\d `https://github\.com/00vareladavid/Unregistered\.jl#master`", readline(io))
+        @test occursin(r"\[7876af07\] Example\s*v\d\.\d\.\d\s*`.+`", readline(io))
+        @test occursin(r"\[682c06a0\] JSON\s*v0.18.0", readline(io))
+        @test occursin(r"\[dcb67f36\] Unregistered\s*v\d\.\d\.\d\s*`https://github\.com/00vareladavid/Unregistered\.jl#master`", readline(io))
         @test occursin(r"\[d6f4376e\] Markdown", readline(io))
     end
     ## status warns when package not installed
@@ -2103,15 +2131,17 @@ end
         io = PipeBuffer()
         Pkg.status(; io=io)
         @test occursin(r"Status `.+Project.toml`", readline(io))
-        @test occursin(r"→ \[7876af07\] Example v\d\.\d\.\d", readline(io))
+        @test occursin(r"→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"\[d6f4376e\] Markdown", readline(io))
-        @test "Info packages marked with → not downloaded, use `instantiate` to download" == strip(readline(io))
+        @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
-        @test occursin(r"→ \[7876af07\] Example v\d\.\d\.\d", readline(io))
+        @test occursin(r"→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"\[2a0f44e3\] Base64", readline(io))
         @test occursin(r"\[d6f4376e\] Markdown", readline(io))
-        @test "Info packages marked with → not downloaded, use `instantiate` to download" == strip(readline(io))
+        @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
     end
     # Manifest Status API
     isolate(loaded_depot=true) do
@@ -2125,7 +2155,7 @@ end
         Pkg.add("Markdown")
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] Example v0\.3\.0", readline(io))
+        @test occursin(r"\[7876af07\] Example\s*v0\.3\.0", readline(io))
         @test occursin(r"\[2a0f44e3\] Base64", readline(io))
         @test occursin(r"\[d6f4376e\] Markdown", readline(io))
     end
@@ -2160,14 +2190,16 @@ end
         ## diff project
         Pkg.status(; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
-        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
+        @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
+        @test occursin("Info Packages marked with ⌃ have new versions available", readline(io))
         ## diff manifest
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"Diff `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", readline(io))
+        @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
         @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
+        @test occursin("Info Packages marked with ⌃ have new versions available", readline(io))
         ## diff project with filtering
         Pkg.status("Markdown"; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -2192,7 +2224,7 @@ end
         Pkg.add(Pkg.PackageSpec(name="Example", version="0.4.0"); io=devnull)
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
-        @test occursin("[7876af07] Example v0.4.0 (<v$v)", str)
+        @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\(<v$v\\)"), str)
         open(Base.active_project(), "a") do io
             write(io, """
                   [compat]
@@ -2201,7 +2233,7 @@ end
         end
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
-        @test occursin("[7876af07] Example v0.4.0 [<v0.4.1], (<v$v)", str)
+        @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\[<v0.4.1\\], \\(<v$v\\)"), str)
     end
 end
 
@@ -2258,7 +2290,7 @@ end
         Pkg.add(url="https://github.com/JuliaLang/Example.jl")
         Pkg.dependencies(exuuid) do pkg
             @test isdir(pkg.source)
-            @test pkg.source == s1
+            @test Base.samefile(pkg.source, s1)
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             @test Pkg.Types.add_repo_cache_path(pkg.git_source) == c1
             @test mtime(pkg.source) == t1
@@ -2284,7 +2316,7 @@ end
         Pkg.add(url="https://github.com/JuliaLang/Example.jl")
         Pkg.dependencies(exuuid) do pkg
             @test isdir(pkg.source)
-            @test pkg.source == s1
+            @test Base.samefile(pkg.source, s1)
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             @test Pkg.Types.add_repo_cache_path(pkg.git_source) == c1
             @test mtime(pkg.source) == t1
@@ -2404,6 +2436,7 @@ end
             for property in propertynames(a)
                 @test getproperty(a, property) == getproperty(b, property)
             end
+            @test a == b
         end
         rm(dirname(temp); recursive = true, force = true)
     end
@@ -2592,6 +2625,18 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
               tree_hash(joinpath(dir, "FooGit")) ==
               "2f42e2c1c1afd4ef8c66a2aaba5d5e1baddcab33"
     end
+
+    # Test for symlinks that are a prefix of another directory, causing sorting issues
+    if !Sys.iswindows()
+        mktempdir() do dir
+            mkdir(joinpath(dir, "5.28.1"))
+            write(joinpath(dir, "5.28.1", "foo"), "")
+            chmod(joinpath(dir, "5.28.1", "foo"), 0o644)
+            symlink("5.28.1", joinpath(dir, "5.28"))
+
+            @test tree_hash(dir) == "5e50a4254773a7c689bebca79e2954630cab9c04"
+       end
+   end
 end
 
 @testset "multiple registries overlapping version ranges for different versions" begin
@@ -2733,20 +2778,6 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, nothing)
 end
 
-@testset "STDLIBS_BY_VERSION up-to-date" begin
-    last_stdlibs = Pkg.Types.get_last_stdlibs(VERSION)
-    # Drop version numbers
-    last_stdlibs = Dict(uuid => name for (uuid, (name, vers)) in last_stdlibs)
-    test_result = last_stdlibs == Pkg.Types.load_stdlib()
-    if !test_result
-        @error("STDLIBS_BY_VERSION out of date!  Manually fix given the info below, or re-run generate_historical_stdlibs.jl!")
-        @show length(last_stdlibs) length(Pkg.Types.load_stdlib())
-        @show setdiff(last_stdlibs, Pkg.Types.load_stdlib())
-        @show setdiff(Pkg.Types.load_stdlib(), last_stdlibs)
-    end
-    @test test_result
-end
-
 @testset "Pkg.add() with julia_version" begin
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
@@ -2832,6 +2863,33 @@ end
         Pkg.add("p7zip_jll")
         p7zip_jll_uuid = UUID("3f19e933-33d8-53b3-aaab-bd5110c3b7a0")
         @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
+    end
+end
+
+@testset "Issue #2931" begin
+    isolate(loaded_depot=false) do
+        temp_pkg_dir() do path
+            name = "Example"
+            version = "0.5.3"
+            tree_hash = Base.SHA1("46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc")
+
+            # Install Example.jl
+            Pkg.add(; name, version)
+
+            # Force empty version number in the manifest
+            ctx = Pkg.Types.Context()
+            ctx.env.manifest[exuuid].version = nothing
+
+            # Delete directory where the package would be installed
+            pkg_dir = Pkg.Operations.find_installed(name, exuuid, tree_hash)
+            rm(pkg_dir; recursive=true, force=true)
+
+            # (Re-)download sources
+            Pkg.Operations.download_source(ctx)
+
+            # Make sure the package directory is there
+            @test isdir(pkg_dir)
+        end
     end
 end
 

@@ -160,7 +160,7 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
                 deps = read_deps(get(info::Dict, "deps", nothing))
             catch
                 # TODO: Should probably not unconditionally log something
-                @error "Could not parse entry for `$name`" f_or_io
+                @debug "Could not parse manifest entry for `$name`" f_or_io
                 rethrow()
             end
             entry.other = info::Union{Dict,Nothing}
@@ -285,7 +285,8 @@ end
 function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     if manifest.manifest_format.major == 1
         @warn """The active manifest file at `$(manifest_file)` has an old format that is being maintained.
-            To update to the new format run `Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.""" maxlog = 1 _id = Symbol(manifest_file)
+            To update to the new format, which is supported by Julia versions ≥ 1.6.2, run `Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.
+            To then record the julia version re-resolve with `Pkg.resolve()` and if there are resolve conflicts consider `Pkg.update()`.""" maxlog = 1 _id = Symbol(manifest_file)
     end
     return write_manifest(destructure(manifest), manifest_file)
 end
@@ -322,8 +323,7 @@ function check_warn_manifest_julia_version_compat(manifest::Manifest, manifest_f
         been resolved with a different julia version.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
         return
     end
-    if v.major != VERSION.major && v.minor != VERSION.minor
-        ver_str = something(manifest.julia_version, "pre-1.7")
+    if Base.thisminor(v) != Base.thisminor(VERSION)
         @warn """The active manifest file has dependencies that were resolved with a different julia \
         version ($(manifest.julia_version)). Unexpected behavior may occur.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
     end

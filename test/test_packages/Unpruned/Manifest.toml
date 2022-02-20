@@ -1,9 +1,11 @@
 # This file is machine-generated - editing it directly is not advised
 
-[[Example]]
+manifest_format = "2.0"
+
+[[deps.Example]]
 git-tree-sha1 = "686e1ac14b35cce47f90c91200f904c603ace29e"
 uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 version = "0.4.0"
 
-[[Unicode]]
+[[deps.Unicode]]
 uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"

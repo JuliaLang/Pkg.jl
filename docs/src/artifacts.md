@@ -230,8 +230,8 @@ This is deduced automatically by the `artifacts""` string macro, however if you 
 
 ## Extending Platform Selection
 
-!!! compat "Julia 1.6"
-    Pkg's extended platform selection requires at least Julia 1.6, and is considered experimental.
+!!! compat "Julia 1.7"
+    Pkg's extended platform selection requires at least Julia 1.7, and is considered experimental.
 
 New in Julia 1.6, `Platform` objects can have extended attributes applied to them, allowing artifacts to be tagged with things such as CUDA driver version compatibility, microarchitectural compatibility, julia version compatibility and more!
 Note that this feature is considered experimental and may change in the future.

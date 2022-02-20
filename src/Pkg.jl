@@ -130,6 +130,8 @@ Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local g
 Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl)") # With subdir
 ```
 
+After the installation of new packages the project will be precompiled. See more at [Project Precompilation](@ref).
+
 See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 """
 const add = API.add
@@ -186,6 +188,8 @@ const rm = API.rm
 
 Update a package `pkg`. If no posistional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
 If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
+
+After any package updates the project will be precompiled. See more at [Project Precompilation](@ref).
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
@@ -379,6 +383,9 @@ and install them.
 redirecting to the `build.log` file.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
+
+After packages have been installed the project will be precompiled.
+See more at [Project Precompilation](@ref).
 """
 const instantiate = API.instantiate
 
@@ -394,13 +401,9 @@ const resolve = API.resolve
     Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
 
 Print out the status of the project/manifest.
-If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
-that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`,
-print status also about those in the manifest (recursive dependencies). If there are
-any packages listed as arguments, the output will be limited to those packages.
 
-Setting `diff=true` will, if the environment is in a git repository, limit
-the output to the difference as compared to the last git commit.
+Packages marked with `⌃` have new versions that can be installed, e.g. via [`Pkg.up`](@ref).
+Those marked with `⌅` have new versions available, but that cannot be installed. To see why use the `outdated` kwarg.
 
 Setting `outdated=true` will only show packages that are not on the latest version,
 their maximum version and why they are not on the latest version (either due to other
@@ -409,9 +412,9 @@ As an example, a status output like:
 ```
 pkg> Pkg.status(; outdated=true)
 Status `Manifest.toml`
- [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
- [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
- [2ab3a3ac] LogExpFunctions v0.2.5 (<v0.3.0): SpecialFunctions
+⌃ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
+⌅ [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
+⌅ [2ab3a3ac] LogExpFunctions v0.2.5 (<v0.3.0): SpecialFunctions
 ```
 means that the latest version of Crayons is 4.0.4 but the latest version compatible
 with the `[compat]` section in the current project is 3.0.0.
@@ -419,6 +422,14 @@ The latest version of NearestNeighbors is 0.4.9 but due to compat constrains in 
 it is held back to 0.4.8.
 The latest version of LogExpFunctions is 0.3.0 but SpecialFunctions
 is holding it back to 0.2.5.
+
+If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
+that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`,
+print status also about those in the manifest (recursive dependencies). If there are
+any packages listed as arguments, the output will be limited to those packages.
+
+Setting `diff=true` will, if the environment is in a git repository, limit
+the output to the difference as compared to the last git commit.
 
 See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
@@ -431,7 +442,9 @@ status as a Julia object instead of printing it.
     is the default for environments in git repositories.
 
 !!! compat "Julia 1.8"
-    The `outdated` keyword argument reguires at least Julia 1.8
+    The `⌃` and `⌅` indicators were added in Julia 1.8.
+    The `outdated` keyword argument requires at least Julia 1.8.
+
 """
 const status = API.status
 
@@ -444,7 +457,7 @@ Interactively edit the [compat] entries within the current Project.
 
 Set the [compat] string for the given package within the current Project.
 
-See [`Compatibility`](@ref) for more information on the project [compat] section.
+See [Compatibility](@ref) for more information on the project [compat] section.
 """
 const compat = API.compat
 
@@ -607,12 +620,24 @@ const RegistrySpec = Registry.RegistrySpec
 
 """
     upgrade_manifest()
+    upgrade_manifest(manifest_path::String)
 
-Upgrades the format of the manifest file from v1.0 to v2.0 without re-resolving.
+Upgrades the format of the current or specified manifest file from v1.0 to v2.0 without re-resolving.
 """
 const upgrade_manifest = API.upgrade_manifest
 
+"""
+    is_manifest_current(ctx::Context = Context())
+
+Returns whether the active manifest was resolved from the active project state.
+For instance, if the project had compat entries changed, but the manifest wasn't re-resolved, this would return false.
+
+If the manifest doesn't have the project hash recorded, `nothing` is returned.
+"""
+const is_manifest_current = API.is_manifest_current
+
 function __init__()
+    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else
@@ -624,7 +649,7 @@ function __init__()
         end
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
-    OFFLINE_MODE[] = get(ENV, "JULIA_PKG_OFFLINE", nothing) == "true"
+    OFFLINE_MODE[] = get_bool_env("JULIA_PKG_OFFLINE")
     return nothing
 end
 
@@ -692,9 +717,9 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context; warn_loaded = true)
-    if Base.JLOptions().use_compiled_modules == 1 && tryparse(Int, get(ENV, "JULIA_PKG_PRECOMPILE_AUTO", "1")) == 1
-        Pkg.precompile(ctx; internal_call=true, warn_loaded = warn_loaded)
+function _auto_precompile(ctx::Types.Context; warn_loaded = true, already_instantiated = false)
+    if Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
+        Pkg.precompile(ctx; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
 
@@ -746,7 +771,8 @@ function _run_precompilation_script_setup()
         repo = "$(escape_string(tmp))/TestPkg.jl"
         """)
     Tar.create("registries/Registry", "registries/Registry.tar")
-    run(`$(Pkg.PlatformEngines.exe7z()) a "registries/Registry.tar.gz" -tgzip "registries/Registry.tar"`)
+    cmd = `$(Pkg.PlatformEngines.exe7z()) a "registries/Registry.tar.gz" -tgzip "registries/Registry.tar"`
+    run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
     write("registries/Registry.toml", """
           git-tree-sha1 = "11b5fad51c4f98cfe0c145ceab0b8fb63fed6f81"
           uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
@@ -774,13 +800,14 @@ const CTRL_C = '\x03'
 const precompile_script = """
     import Pkg
     _pwd = pwd()
+    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     tmp = Pkg._run_precompilation_script_setup()
     $CTRL_C
     Pkg.add("TestPkg")
     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
     Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
     Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
-    Pkg.update()
+    Pkg.update(; update_registry=false)
     Pkg.precompile()
     ] add Te\t\t$CTRL_C
     ] st

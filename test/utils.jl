@@ -3,6 +3,7 @@
 module Utils
 
 import ..Pkg
+import Pkg: stdout_f, stderr_f
 using Tar
 using TOML
 using UUIDs
@@ -12,9 +13,11 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
        list_tarball_files
 
-const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
+const CACHE_DIRECTORY = mktempdir(; cleanup = true)
 
-const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
+const LOADED_DEPOT = joinpath(CACHE_DIRECTORY, "loaded_depot")
+
+const REGISTRY_DEPOT = joinpath(CACHE_DIRECTORY, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
@@ -24,14 +27,14 @@ function init_reg()
     if Pkg.Registry.registry_use_pkg_server()
         url = Pkg.Registry.pkg_server_registry_urls()[GENERAL_UUID]
         @info "Downloading General registry from $url"
-        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
+        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr_f())
         tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")
         hash = Pkg.Registry.pkg_server_url_hash(url)
         write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
     else
         Base.shred!(LibGit2.CachedCredentials()) do creds
             LibGit2.with(Pkg.GitTools.clone(
-                stderr,
+                stderr_f(),
                 "https://github.com/JuliaRegistries/General.git",
                 REGISTRY_DIR,
                 credentials = creds)) do repo
@@ -103,9 +106,10 @@ function isolate_and_pin_registry(fn::Function; registry_url::String, registry_c
     isolate(loaded_depot = false, linked_reg = true) do
         this_gen_reg_path = joinpath(last(Base.DEPOT_PATH), "registries", "General")
         rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
-        run(`git clone $(registry_url) $(this_gen_reg_path)`)
+        cmd = `git clone $(registry_url) $(this_gen_reg_path)`
+        run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
         cd(this_gen_reg_path) do
-            run(`git checkout $(registry_commit)`)
+            run(pipeline(`git checkout $(registry_commit)`, stdout = stdout_f(), stderr = stderr_f()))
         end
         fn()
     end
@@ -148,7 +152,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
                     rm && Base.rm(depot_dir; force=true, recursive=true)
                 catch err
                     # Avoid raising an exception here as it will mask the original exception
-                    println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+                    println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
                 end
             end
         end
@@ -174,7 +178,7 @@ function cd_tempdir(f; rm=true)
         rm && Base.rm(tmp; force = true, recursive = true)
     catch err
         # Avoid raising an exception here as it will mask the original exception
-        println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+        println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
     end
 end
 
@@ -211,7 +215,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
             rm && Base.rm(env_path; force = true, recursive = true)
         catch err
             # Avoid raising an exception here as it will mask the original exception
-            println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+            println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
         end
     end
 end

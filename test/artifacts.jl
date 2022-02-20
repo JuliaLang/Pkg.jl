@@ -6,6 +6,13 @@ import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory,
 using TOML, Dates
 import Base: SHA1
 
+# Order-dependence in the tests, so we delay this until we need it
+if Base.find_package("Preferences") === nothing
+    @info "Installing Preferences for Pkg tests"
+    Pkg.add("Preferences") # Needed for sandbox and artifacts tests
+end
+using Preferences
+
 using ..Utils
 
 # Helper function to create an artifact, then chmod() the whole thing to 0o644.  This is
@@ -271,10 +278,10 @@ end
         for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
             with_artifacts_directory(dir) do
                 @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
-                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
-                    if !ignore_hash
-                        @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                    else
+                if !ignore_hash
+                    @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                else
+                    @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
                         path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
                         @test endswith(path, "0000000000000000000000000000000000000000")
                         @test isdir(path)
@@ -290,6 +297,9 @@ end
             @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
                 @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
             end
+
+            artifact_toml = joinpath(badifact_dir, "doesnotexist.toml")
+            @test_throws ErrorException ensure_artifact_installed("does_not_exist", artifact_toml)
         end
     end
 end
@@ -426,11 +436,16 @@ end
                 wrong_hash = engaged_hash
             end
 
-            withenv("FLOOBLECRANK" => flooblecrank_status) do
-                add_this_pkg()
-                @test isdir(artifact_path(right_hash))
-                @test !isdir(artifact_path(wrong_hash))
-            end
+            # Set the flooblecrank via its preference
+            set_preferences!(
+                joinpath(ap_path, "LocalPreferences.toml"),
+                "AugmentedPlatform",
+                "flooblecrank" => flooblecrank_status,
+            )
+
+            add_this_pkg()
+            @test isdir(artifact_path(right_hash))
+            @test !isdir(artifact_path(wrong_hash))
 
             # Manual test that artifact is installed by instantiate()
             artifacts_toml = joinpath(ap_path, "Artifacts.toml")
@@ -449,10 +464,11 @@ end
             @test success(cmd)
             @test artifact_path(right_hash) == using_output
 
-            mkpath("/tmp/foo/$(flooblecrank_status)")
-            rm("/tmp/foo/$(flooblecrank_status)"; recursive=true, force=true)
-            cp(project_path, "/tmp/foo/$(flooblecrank_status)")
-            cp(Base.DEPOT_PATH[1], "/tmp/foo/$(flooblecrank_status)/depot")
+            tmpdir = mktempdir()
+            mkpath("$tmpdir/foo/$(flooblecrank_status)")
+            rm("$tmpdir/foo/$(flooblecrank_status)"; recursive=true, force=true)
+            cp(project_path, "$tmpdir/foo/$(flooblecrank_status)")
+            cp(Base.DEPOT_PATH[1], "$tmpdir/foo/$(flooblecrank_status)/depot")
         end
     end
 
@@ -465,16 +481,46 @@ end
         Pkg.activate(ap_path)
         @test !isdir(artifact_path(engaged_hash))
         @test !isdir(artifact_path(disengaged_hash))
+
+        # Set the flooblecrank via its preference
+        set_preferences!(
+            joinpath(ap_path, "LocalPreferences.toml"),
+            "AugmentedPlatform",
+            "flooblecrank" => "disengaged",
+        )
     
-        # Instantiate with the environment variable set, but with an explicit
-        # tag set in the platform object, which overrides.
-        withenv("FLOOBLECRANK" => "disengaged") do
-            p = HostPlatform()
-            p["flooblecrank"] = "engaged"
-            add_this_pkg(; platform=p)
-            @test isdir(artifact_path(engaged_hash))
-            @test !isdir(artifact_path(disengaged_hash))
-        end
+        p = HostPlatform()
+        p["flooblecrank"] = "engaged"
+        add_this_pkg(; platform=p)
+        @test isdir(artifact_path(engaged_hash))
+        @test !isdir(artifact_path(disengaged_hash))
+    end
+
+    # Also run a test of "cross-installation" use `Pkg.API.instantiate(;platform)`
+    temp_pkg_dir() do project_path
+        copy_test_package(project_path, "AugmentedPlatform")
+        ap_path = joinpath(project_path, "AugmentedPlatform")
+        generate_flooblegrank_artifacts(ap_path)
+
+        Pkg.activate(ap_path)
+        @test !isdir(artifact_path(engaged_hash))
+        @test !isdir(artifact_path(disengaged_hash))
+
+        # Set the flooblecrank via its preference
+        set_preferences!(
+            joinpath(ap_path, "LocalPreferences.toml"),
+            "AugmentedPlatform",
+            "flooblecrank" => "disengaged",
+        )
+
+        add_this_pkg()
+
+        p = HostPlatform()
+        p["flooblecrank"] = "engaged"
+        Pkg.API.instantiate(; platform=p)
+
+        @test isdir(artifact_path(engaged_hash))
+        @test isdir(artifact_path(disengaged_hash))
     end
 end
 
@@ -589,7 +635,7 @@ end
         end
 
         # Next, set up our depot path, with `depot1` as the "innermost" depot.
-        old_depot_path = DEPOT_PATH
+        old_depot_path = copy(DEPOT_PATH)
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, [depot1, depot2, depot3])
 
@@ -635,15 +681,15 @@ end
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
             copy_test_package(depot_container, "ArtifactOverrideLoading")
-            git_init_and_commit(joinpath(depot_container, "ArtifactOverrideLoading"))
             add_this_pkg()
-            Pkg.add(Pkg.Types.PackageSpec(
+            Pkg.develop(Pkg.Types.PackageSpec(
                 name="ArtifactOverrideLoading",
                 uuid=aol_uuid,
                 path=joinpath(depot_container, "ArtifactOverrideLoading"),
             ))
 
             (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
+                # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
                 using ArtifactOverrideLoading
                 arty_path, barty_path
             end)
@@ -673,7 +719,9 @@ end
 
         # Force Julia to re-load ArtifactOverrideLoading from scratch
         pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
+        delete!(Base.module_keys, Base.loaded_modules[pkgid])
         delete!(Base.loaded_modules, pkgid)
+        touch(joinpath(depot_container, "ArtifactOverrideLoading", "src", "ArtifactOverrideLoading.jl"))
 
         # Verify that the hash-based overrides (and clears) worked
         @test artifact_path(foo_hash) == barty_override_path
@@ -682,6 +730,7 @@ end
         # Verify that the name-based override worked; extract paths from module that
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
+            # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
             (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
                 using ArtifactOverrideLoading
                 arty_path, barty_path

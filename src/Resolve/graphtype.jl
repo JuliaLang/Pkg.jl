@@ -711,19 +711,24 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
     other_p, other_entry = pkgs[p0], rlog.pool[pkgs[p0]]
     other_id = pkgID(other_p, rlog)
     if any(vmask)
-        msg = "restricted by "
-        if other_p == uuid_julia
-            msg *= "julia compatibility requirements "
-            other_entry = nothing # don't propagate the log
+        if all(vmask[1:(end-1)])    # Check if all versions are allowed(except uninstalled)
+            msg = ""
+            other_entry = nothing   # Don't propagate the log if all versions allowed
         else
-            msg *= "compatibility requirements with $(logstr(other_id)) "
-        end
-        msg *= "to versions: $(vs_string(p1, vmask))"
-        if vmask ≠ gconstr[p1]
-            if any(gconstr[p1])
-                msg *= ", leaving only versions: $(vs_string(p1, gconstr[p1]))"
+            msg = "restricted by "
+            if other_p == uuid_julia
+                msg *= "julia compatibility requirements "
+                other_entry = nothing # don't propagate the log
             else
-                msg *= " — no versions left"
+                msg *= "compatibility requirements with $(logstr(other_id)) "
+            end
+            msg *= "to versions: $(vs_string(p1, vmask))"
+            if vmask ≠ gconstr[p1]
+                if any(gconstr[p1])
+                    msg *= ", leaving only versions: $(vs_string(p1, gconstr[p1]))"
+                else
+                    msg *= " — no versions left"
+                end
             end
         end
     else
@@ -878,9 +883,9 @@ get_resolve_log(graph::Graph) = deepcopy(graph.data.rlog)
 
 const _logindent = " "
 
-showlog(graph::Graph, args...; kw...) = showlog(stdout, graph, args...; kw...)
+showlog(graph::Graph, args...; kw...) = showlog(stdout_f(), graph, args...; kw...)
 showlog(io::IO, graph::Graph, args...; kw...) = showlog(io, graph.data.rlog, args...; kw...)
-showlog(rlog::ResolveLog, args...; kw...) = showlog(stdout, rlog, args...; kw...)
+showlog(rlog::ResolveLog, args...; kw...) = showlog(stdout_f(), rlog, args...; kw...)
 
 """
 Show the full resolution log. The `view` keyword controls how the events are displayed/grouped:

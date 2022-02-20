@@ -5,6 +5,7 @@ import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, Test, REPL
 import Pkg.Types.PkgError, Pkg.Resolve.ResolverError
+using Pkg: stdout_f, stderr_f
 using UUIDs
 
 using ..Utils
@@ -130,7 +131,7 @@ end
 
         iob = IOBuffer()
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
-        println("Auto precompilation enabled")
+        @info "Auto precompilation enabled"
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
         Pkg.develop(Pkg.PackageSpec(path="packages/NoVersion")) # a package with no version number
         Pkg.build(io=iob) # should trigger auto-precomp
@@ -144,7 +145,7 @@ end
         @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
-        println("Auto precompilation disabled")
+        @info "Auto precompilation disabled"
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
         Pkg.precompile(io=iob)
         @test occursin("Precompiling", String(take!(iob)))
@@ -213,7 +214,21 @@ end
 
         Pkg.activate(".")
         Pkg.resolve()
-        Pkg.precompile()
+
+        ## Tests when circularity is in dependencies
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+
+        ## Tests when circularity goes through the active project
+        Pkg.activate("CircularDep1")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+        Pkg.activate(".")
+        Pkg.activate("CircularDep2")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+        Pkg.activate(".")
+        Pkg.activate("CircularDep3")
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
     end end
 end
 

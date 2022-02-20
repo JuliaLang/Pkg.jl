@@ -309,5 +309,5 @@ To support the various usecases in the Julia package ecosystem, the Pkg develope
 * [`Preferences.jl`](https://github.com/JuliaPackaging/Preferences.jl) allows packages to read and write preferences to the top-level `Project.toml`.
   These preferences can be read at runtime or compile-time, to enable or disable different aspects of package behavior.
   Packages previously would write out files to their own package directories to record options set by the user or environment, but this is highly discouraged now that `Preferences` is available.
-  Preferences are available from Juilia 1.6 onward.
+  Preferences are available from Julia 1.6 onward.
  

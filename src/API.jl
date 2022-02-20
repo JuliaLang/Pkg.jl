@@ -20,6 +20,7 @@ using Base.BinaryPlatforms
 import ..stderr_f, ..stdout_f
 using ..Artifacts: artifact_paths
 using ..MiniProgressBars
+import ..Resolve: ResolverError
 
 include("generate.jl")
 
@@ -260,7 +261,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
     stdlib_resolve!(pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs, registry=true)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs, registry=true)
 
     for pkg in pkgs
         if Types.collides_with_project(ctx.env, pkg)
@@ -280,8 +281,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, mode)
+    else
+        require_not_empty(pkgs, :rm)
     end
-    require_not_empty(pkgs, :rm)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -296,7 +298,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
 
     mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
     mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
 
     Operations.rm(ctx, pkgs; mode)
     return
@@ -334,7 +336,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
         project_deps_resolve!(ctx.env, pkgs)
         manifest_resolve!(ctx.env.manifest, pkgs)
-        ensure_resolved(ctx.env.manifest, pkgs)
+        ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
     Operations.up(ctx, pkgs, level; skip_writing_project)
     return
@@ -351,8 +353,9 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+    else
+        require_not_empty(pkgs, :pin)
     end
-    require_not_empty(pkgs, :pin)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -372,7 +375,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     end
 
     project_deps_resolve!(ctx.env, pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
     Operations.pin(ctx, pkgs)
     return
 end
@@ -382,8 +385,9 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+    else
+        require_not_empty(pkgs, :free)
     end
-    require_not_empty(pkgs, :free)
 
     for pkg in pkgs
         if pkg.name === nothing && pkg.uuid === nothing
@@ -397,9 +401,9 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     end
 
     manifest_resolve!(ctx.env.manifest, pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
 
-    Operations.free(ctx, pkgs)
+    Operations.free(ctx, pkgs; err_if_free = !all_pkgs)
     return
 end
 
@@ -422,7 +426,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         project_resolve!(ctx.env, pkgs)
         project_deps_resolve!(ctx.env, pkgs)
         manifest_resolve!(ctx.env.manifest, pkgs)
-        ensure_resolved(ctx.env.manifest, pkgs)
+        ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
     Operations.test(
         ctx,
@@ -437,6 +441,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     )
     return
 end
+
+is_manifest_current(ctx::Context = Context()) = Operations.is_manifest_current(ctx.env)
 
 const UsageDict = Dict{String,DateTime}
 const UsageByDepotDict = Dict{String,UsageDict}
@@ -498,30 +504,36 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         # into the overall list across depots to create a single, coherent view across
         # all depots.
         usage = UsageDict()
-        reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
-            # For Manifest usage, store only the last DateTime for each filename found
-            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+        let usage=usage
+            reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
+                # For Manifest usage, store only the last DateTime for each filename found
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+            end
         end
         manifest_usage_by_depot[depot] = usage
 
         usage = UsageDict()
-        reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
-            # For Artifact usage, store only the last DateTime for each filename found
-            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+        let usage=usage
+            reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
+                # For Artifact usage, store only the last DateTime for each filename found
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+            end
         end
         artifact_usage_by_depot[depot] = usage
 
         # track last-used
         usage = UsageDict()
         parents = Dict{String, Set{String}}()
-        reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
-            # For Artifact usage, store only the last DateTime for each filename found
-            usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
-            if !haskey(parents, filename)
-                parents[filename] = Set{String}()
-            end
-            for parent in info["parent_projects"]
-                push!(parents[filename], parent)
+        let usage=usage
+            reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
+                # For Artifact usage, store only the last DateTime for each filename found
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                if !haskey(parents, filename)
+                    parents[filename] = Set{String}()
+                end
+                for parent in info["parent_projects"]
+                    push!(parents[filename], parent)
+                end
             end
         end
         scratch_usage_by_depot[depot] = usage
@@ -561,41 +573,51 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     end
 
     # Write condensed Manifest usage
-    write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
-        # Keep only manifest usage markers that are still existent
-        filter!(((k,v),) -> k in all_manifest_tomls, usage)
+    let all_manifest_tomls=all_manifest_tomls
+        write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
+            # Keep only manifest usage markers that are still existent
+            let usage=usage
+                filter!(((k,v),) -> k in all_manifest_tomls, usage)
 
-        # Expand it back into a dict-of-dicts
-        return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+                # Expand it back into a dict-of-dicts
+                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+            end
+        end
     end
 
     # Write condensed Artifact usage
-    write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
-        filter!(((k,v),) -> k in all_artifact_tomls, usage)
-        return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+    let all_artifact_tomls=all_artifact_tomls
+        write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
+            let usage = usage
+                filter!(((k,v),) -> k in all_artifact_tomls, usage)
+                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+            end
+        end
     end
 
     # Write condensed scratch space usage
-    write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
-        # Keep only scratch directories that still exist
-        filter!(((k,v),) -> k in all_scratch_dirs, usage)
+    let all_scratch_parents=all_scratch_parents, all_scratch_dirs=all_scratch_dirs
+        write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
+            # Keep only scratch directories that still exist
+            filter!(((k,v),) -> k in all_scratch_dirs, usage)
 
-        # Expand it back into a dict-of-dicts
-        expanded_usage = Dict{String,Vector{Dict}}()
-        for (k, v) in usage
-            # Drop scratch spaces whose parents are all non-existant
-            parents = scratch_parents_by_depot[depot][k]
-            filter!(p -> p in all_scratch_parents, parents)
-            if isempty(parents)
-                continue
+            # Expand it back into a dict-of-dicts
+            expanded_usage = Dict{String,Vector{Dict}}()
+            for (k, v) in usage
+                # Drop scratch spaces whose parents are all non-existant
+                parents = scratch_parents_by_depot[depot][k]
+                filter!(p -> p in all_scratch_parents, parents)
+                if isempty(parents)
+                    continue
+                end
+
+                expanded_usage[k] = [Dict(
+                    "time" => v,
+                    "parent_projects" => collect(parents),
+                )]
             end
-
-            expanded_usage[k] = [Dict(
-                "time" => v,
-                "parent_projects" => collect(parents),
-            )]
+            return expanded_usage
         end
-        return expanded_usage
     end
 
     function process_manifest_pkgs(path)
@@ -626,13 +648,13 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         return [Types.add_repo_cache_path(e.repo.source) for (u, e) in manifest if e.repo.source !== nothing]
     end
 
-    function process_artifacts_toml(path, packages_to_delete)
+    function process_artifacts_toml(path, pkgs_to_delete)
         # Not only do we need to check if this file doesn't exist, we also need to check
         # to see if it this artifact is contained within a package that is going to go
         # away.  This places an implicit ordering between marking packages and marking
         # artifacts; the package marking must be done first so that we can ensure that
         # all artifacts that are solely bound within such packages also get reaped.
-        if any(startswith(path, package_dir) for package_dir in packages_to_delete)
+        if any(startswith(path, package_dir) for package_dir in pkgs_to_delete)
             return nothing
         end
 
@@ -657,7 +679,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         return artifact_path_list
     end
 
-    function process_scratchspace(path, packages_to_delete)
+    function process_scratchspace(path, pkgs_to_delete)
         # Find all parents of this path
         parents = String[]
 
@@ -673,7 +695,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         # Look to see if all parents are packages that will be removed, if so, filter
         # this scratchspace out by returning `nothing`
-        if all(any(startswith(p, dir) for dir in packages_to_delete) for p in parents)
+        if all(any(startswith(p, dir) for dir in pkgs_to_delete) for p in parents)
             return nothing
         end
         return [path]
@@ -766,12 +788,16 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
     # `Artifacts.toml` files that will be deleted by the future culling operation.
     # printpkgstyle(ctx.io, :Active, "artifacts:")
-    artifacts_to_keep = mark(x -> process_artifacts_toml(x, packages_to_delete),
-        all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
+    artifacts_to_keep = let packages_to_delete=packages_to_delete
+        mark(x -> process_artifacts_toml(x, packages_to_delete),
+             all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
+    end
     repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print=false)
     # printpkgstyle(ctx.io, :Active, "scratchspaces:")
-    spaces_to_keep = mark(x -> process_scratchspace(x, packages_to_delete),
-        all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
+    spaces_to_keep = let packages_to_delete=packages_to_delete
+        mark(x -> process_scratchspace(x, packages_to_delete),
+             all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
+    end
 
     # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
     # are implicitly defined in that we walk all packages/artifacts installed, then if
@@ -994,7 +1020,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     end
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
-    ensure_resolved(ctx.env.manifest, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
     Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
 end
 
@@ -1006,21 +1032,33 @@ function _is_stale(paths::Vector{String}, sourcepath::String)
     return true
 end
 
-function make_pkgspec(man, uuid)
-    pkgent = man[uuid]
-    # If we have an unusual situation such as an un-versioned package (like an stdlib that
-    # is being overridden) its `version` may be `nothing`.
-    pkgver = something(pkgent.version, VersionSpec())
-    return PackageSpec(uuid = uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash)
+function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
+    i = findfirst(ps -> ps.uuid == uuid, pkgspecs)
+    if !isnothing(i)
+        return pkgspecs[i]
+    elseif !isnothing(ctx.env.pkg) && uuid == ctx.env.pkg.uuid
+        # uuid is of the active Project
+        return ctx.env.pkg
+    elseif haskey(ctx.env.manifest, uuid)
+        pkgent = ctx.env.manifest[uuid]
+        # If we have an unusual situation such as an un-versioned package (like an stdlib that
+        # is being overridden) its `version` may be `nothing`.
+        pkgver = something(pkgent.version, VersionSpec())
+        return PackageSpec(uuid = uuid, name = pkgent.name, version = pkgver, tree_hash = pkgent.tree_hash)
+    else
+        # this branch should never be hit, so if it is throw a regular error with a stacktrace
+        error("UUID $uuid not found. It does not match the Project uuid nor any dependency")
+    end
 end
 
 precompile(pkgs...; kwargs...) = precompile(Context(), [pkgs...]; kwargs...)
 precompile(pkg::String; kwargs...) = precompile(Context(), pkg; kwargs...)
 precompile(ctx::Context, pkg::String; kwargs...) = precompile(ctx, [pkg]; kwargs...)
 precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkgs; kwargs...)
-function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false, strict::Bool=false, warn_loaded = true, kwargs...)
+function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
+                    strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
     Context!(ctx; kwargs...)
-    instantiate(ctx; allow_autoprecomp=false, kwargs...)
+    already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
 
     # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
@@ -1069,9 +1107,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
-        if haskey(man, pkgid.uuid)
-            push!(pkg_specs, make_pkgspec(man, pkgid.uuid))
-        end
+        push!(pkg_specs, get_or_make_pkgspec(pkg_specs, ctx, pkgid.uuid))
     end
     precomp_prune_suspended!(pkg_specs)
 
@@ -1086,11 +1122,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         if in_deps([pkg], deps, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
-            precomp_suspend!(make_pkgspec(man, pkg.uuid))
-            if !internal_call && (isempty(pkgs) || in(first(pkg).name, pkgs))
-                @warn "Circular dependency detected. Precompilation skipped for $pkg"
-            end
         end
+    end
+    if !isempty(circular_deps)
+        @warn """Circular dependency detected. Precompilation will be skipped for:\n  $(join(string.(circular_deps), "\n  "))"""
     end
 
     if !isempty(pkgs)
@@ -1118,15 +1153,15 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     skipped_deps = Base.PkgId[]
     precomperr_deps = Base.PkgId[] # packages that may succeed after a restart (i.e. loaded packages with no cache file)
 
-    print_lock = stdout isa Base.LibuvStream ? stdout.lock::ReentrantLock : ReentrantLock()
+    print_lock = ctx.io isa Base.LibuvStream ? ctx.io.lock::ReentrantLock : ReentrantLock()
     first_started = Base.Event()
     printloop_should_exit::Bool = !fancyprint # exit print loop immediately if not fancy printing
     interrupted_or_done = Base.Event()
 
-    function color_string(str::String, col::Symbol)
+    function color_string(cstr::String, col::Symbol)
         enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
         disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
-        return string(enable_ansi, str, disable_ansi)
+        return string(enable_ansi, cstr, disable_ansi)
     end
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
@@ -1168,14 +1203,14 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
             n_print_rows = 0
             while !printloop_should_exit
                 lock(print_lock) do
-                    term_size = Base.displaysize(stdout)::Tuple{Int,Int}
+                    term_size = Base.displaysize(ctx.io)::Tuple{Int,Int}
                     num_deps_show = term_size[1] - 3
                     pkg_queue_show = if !interrupted_or_done.set && length(pkg_queue) > num_deps_show
                         last(pkg_queue, num_deps_show)
                     else
                         pkg_queue
                     end
-                    str = sprint() do iostr
+                    str_ = sprint() do iostr
                         if i > 1
                             print(iostr, ansi_moveup(n_print_rows), ansi_movecol1, ansi_cleartoend)
                         end
@@ -1208,8 +1243,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         end
                     end
                     last_length = length(pkg_queue_show)
-                    n_print_rows = count("\n", str)
-                    print(io, str)
+                    n_print_rows = count("\n", str_)
+                    print(io, str_)
                 end
                 printloop_should_exit = interrupted_or_done.set && final_loop
                 final_loop = interrupted_or_done.set # ensures one more loop to tidy last task after finish
@@ -1223,6 +1258,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         end
     end
     tasks = Task[]
+    Base.LOADING_CACHE[] = Base.LoadingCache()
     for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
@@ -1244,17 +1280,15 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     wait(was_processed[dep])
                 end
 
-                if haskey(man, pkg.uuid) # to handle the working environment uuid
-                    suspended = precomp_suspended(make_pkgspec(man, pkg.uuid))
-                    queued = precomp_queued(make_pkgspec(man, pkg.uuid))
-                else
-                    suspended = false
-                    queued = false
-                end
+                pkgspec = get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid)
+                suspended = precomp_suspended(pkgspec)
+                queued = precomp_queued(pkgspec)
+
+                circular = pkg in circular_deps
                 # skip stale checking and force compilation if any dep was recompiled in this session
                 any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
                 is_stale = true
-                if (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
+                if !circular && (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
@@ -1277,12 +1311,12 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
-                            haskey(man, pkg.uuid) && precomp_queue!(make_pkgspec(man, pkg.uuid))
+                            precomp_queue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ? ", Base.warn_color()), name))
                             end
                         else
-                            queued && (haskey(man, pkg.uuid) && precomp_dequeue!(make_pkgspec(man, pkg.uuid)))
+                            queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name))
                             end
@@ -1295,10 +1329,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                             !fancyprint && lock(print_lock) do
                                 println(io, string(color_string("  ✗ ", Base.error_color()), name))
                             end
-                            if haskey(man, pkg.uuid)
-                                queued && precomp_dequeue!(make_pkgspec(man, pkg.uuid))
-                                precomp_suspend!(make_pkgspec(man, pkg.uuid))
-                            end
+                            queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
+                            precomp_suspend!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                         else
                             rethrow(err)
                         end
@@ -1313,7 +1345,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         catch # file might be read-only and then we fail to update timestamp, which is fine
                         end
                     end
-                    suspended && !in(pkg, circular_deps) && push!(skipped_deps, pkg)
+                    suspended && push!(skipped_deps, pkg)
                 end
                 n_done += 1
                 notify(was_processed[pkg])
@@ -1332,6 +1364,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         wait(interrupted_or_done)
     catch err
         handle_interrupt(err)
+    finally
+        Base.LOADING_CACHE[] = nothing
     end
     notify(first_started) # in cases of no-op or !fancyprint
     save_precompile_state() # save lists to scratch space
@@ -1343,12 +1377,11 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         plural = ndeps == 1 ? "y" : "ies"
         str = sprint() do iostr
             print(iostr, "  $(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
-            if n_already_precomp > 0 || !isempty(skipped_deps)
-                print(iostr, " (")
-                n_already_precomp > 0 && (print(iostr, "$n_already_precomp already precompiled"))
-                !isempty(circular_deps) && (print(iostr, ", $(length(circular_deps)) skipped due to circular dependency"))
-                !isempty(skipped_deps) && (print(iostr, ", $(length(skipped_deps)) skipped during auto due to previous errors"))
-                print(iostr, ")")
+            if n_already_precomp > 0 || !isempty(circular_deps) || !isempty(skipped_deps)
+                n_already_precomp > 0 && (print(iostr, ". $n_already_precomp already precompiled"))
+                !isempty(circular_deps) && (print(iostr, ". $(length(circular_deps)) skipped due to circular dependency"))
+                !isempty(skipped_deps) && (print(iostr, ". $(length(skipped_deps)) skipped during auto due to previous errors"))
+                print(iostr, ".")
             end
             if n_loaded > 0
                 plural1 = n_loaded == 1 ? "y" : "ies"
@@ -1360,10 +1393,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                 )
             end
             if !isempty(precomperr_deps)
-                plural = length(precomperr_deps) == 1 ? "y" : "ies"
+                pluralpc = length(precomperr_deps) == 1 ? "y" : "ies"
                 print(iostr, "\n  ",
                     color_string(string(length(precomperr_deps)), Base.warn_color()),
-                    " dependenc$(plural) failed but may be precompilable after restarting julia"
+                    " dependenc$(pluralpc) failed but may be precompilable after restarting julia"
                 )
             end
             if internal_call && !isempty(failed_deps)
@@ -1373,8 +1406,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                 print(iostr, "To see a full report either run `import Pkg; Pkg.precompile()` or load the package$(plural2)")
             end
         end
-        lock(print_lock) do
-            println(io, str)
+        let str=str
+            lock(print_lock) do
+                println(io, str)
+            end
         end
         if !internal_call
             err_str = ""
@@ -1387,9 +1422,9 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
             end
             if err_str != ""
                 println(io, "")
-                plural = n_direct_errs == 1 ? "y" : "ies"
+                pluralde = n_direct_errs == 1 ? "y" : "ies"
                 direct = strict ? "" : "direct "
-                pkgerror("The following $n_direct_errs $(direct)dependenc$(plural) failed to precompile:\n$(err_str[1:end-1])")
+                pkgerror("The following $n_direct_errs $(direct)dependenc$(pluralde) failed to precompile:\n$(err_str[1:end-1])")
             end
         end
     end
@@ -1427,12 +1462,22 @@ function recall_precompile_state()
     end
     return nothing
 end
-precomp_suspend!(pkg::PackageSpec) = push!(pkgs_precompile_suspended, pkg)
+function precomp_suspend!(pkg::PackageSpec)
+    precomp_suspended(pkg) || push!(pkgs_precompile_suspended, pkg)
+    return
+end
 precomp_unsuspend!() = empty!(pkgs_precompile_suspended)
 precomp_suspended(pkg::PackageSpec) = pkg in pkgs_precompile_suspended
-precomp_prune_suspended!(pkgs::Vector{PackageSpec}) = filter!(in(pkgs), pkgs_precompile_suspended)
+function precomp_prune_suspended!(pkgs::Vector{PackageSpec})
+    filter!(in(pkgs), pkgs_precompile_suspended)
+    unique!(pkgs_precompile_suspended)
+    return
+end
 
-precomp_queue!(pkg::PackageSpec) = push!(pkgs_precompile_pending, pkg)
+function precomp_queue!(pkg::PackageSpec)
+    precomp_suspended(pkg) || push!(pkgs_precompile_pending, pkg)
+    return
+end
 precomp_dequeue!(pkg::PackageSpec) = filter!(!isequal(pkg), pkgs_precompile_pending)
 precomp_queued(pkg::PackageSpec) = pkg in pkgs_precompile_pending
 
@@ -1477,6 +1522,12 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
     Types.check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
+
+    if Operations.is_manifest_current(ctx.env) === false
+        @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
+        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
+    end
+
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
@@ -1486,8 +1537,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Finally, run `Pkg.instantiate()` again.")
     end
     # check if all source code and artifacts are downloaded to exit early
-    if Operations.is_instantiated(ctx.env)
-        allow_autoprecomp && Pkg._auto_precompile(ctx)
+    if Operations.is_instantiated(ctx.env; platform)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
 
@@ -1544,13 +1595,13 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
 
-    allow_autoprecomp && Pkg._auto_precompile(ctx)
+    allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
 end
 
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, io::IO=stdout, kwargs...)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, io::IO=stdout_f(), kwargs...)
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
@@ -1757,6 +1808,16 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         else
             printpkgstyle(io, :Compat, "entry set:\n  $(pkg) = $(repr(compat_str))")
         end
+        printpkgstyle(io, :Resolve, "checking for compliance with the new compat rules...")
+        try
+            resolve(ctx)
+        catch e
+            if e isa ResolverError
+                printpkgstyle(io, :Error, e.msg, color = Base.warn_color())
+            else
+                rethrow()
+            end
+        end
         return
     else
         pkgerror("No package named $pkg in current Project")
@@ -1847,6 +1908,14 @@ function handle_package_input!(pkg::PackageSpec)
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
+function upgrade_manifest(man_path::String)
+    dir = mktempdir()
+    cp(man_path, joinpath(dir, "Manifest.toml"))
+    Pkg.activate(dir) do
+        Pkg.upgrade_manifest()
+    end
+    mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
+end
 function upgrade_manifest(ctx::Context = Context())
     before_format = ctx.env.manifest.manifest_format
     if before_format == v"2.0"
