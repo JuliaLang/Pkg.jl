@@ -184,7 +184,7 @@ function manifestfile_path(env_path::String; strict=false)
             if strict && !isfile(man_path)
                 return nothing
             else
-                return joinpath(env_path, only(man_names))
+                return man_path
             end
         end
     end
