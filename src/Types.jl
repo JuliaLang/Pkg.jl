@@ -178,7 +178,7 @@ function projectfile_path(env_path::String; strict=false)
 end
 
 function manifestfile_path(env_path::String; strict=false)
-    man_names = Base.manifest_names isa Vector ? Base.manifest_names : Base.manifest_names()
+    man_names = Base.manifest_names isa Tuple ? Base.manifest_names : Base.manifest_names()
     if length(man_names) == 1
         man_path = joinpath(env_path, only(man_names))
         if strict && !isfile(man_path)
