@@ -180,12 +180,11 @@ end
 function manifestfile_path(env_path::String; strict=false)
     man_names = Base.manifest_names isa Tuple ? Base.manifest_names : Base.manifest_names()
     if length(man_names) == 1
-            man_path = joinpath(env_path, only(man_names))
-            if strict && !isfile(man_path)
-                return nothing
-            else
-                return man_path
-            end
+        man_path = joinpath(env_path, only(man_names))
+        if strict && !isfile(man_path)
+            return nothing
+        else
+            return man_path
         end
     end
     for name in man_names
