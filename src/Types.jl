@@ -913,7 +913,7 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
                     join(io, what, ", ", " or ")
                     print(io, ")")
                     all_names = available_names(ctx; manifest, include_registries = registry)
-                    closest_names_ranked = REPL.levsort(name, all_names)
+                    closest_names_ranked = levsort(name, all_names)
                     if !isempty(closest_names_ranked)
                         println(io)
                         prefix = "   Suggestions:"
@@ -940,6 +940,15 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
         end
     end
     pkgerror(msg)
+end
+
+# a little more efficient than the version in REPL
+function levsort(search::String, candidates::Vector{String})
+    name_scores = map(cand -> (Float64(REPL.levenshtein(search, cand)), -REPL.fuzzyscore(search, cand), cand), candidates)
+    filter!(s->s[3] != "julia", name_scores)
+    filter!(s->s[1] <= 3, name_scores)
+    sort!(name_scores)
+    return map(s->s[3], name_scores)
 end
 
 function available_names(ctx::Context = Context(); manifest::Manifest = ctx.env.manifest, include_registries::Bool = true)
