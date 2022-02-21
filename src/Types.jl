@@ -178,15 +178,7 @@ function projectfile_path(env_path::String; strict=false)
 end
 
 function manifestfile_path(env_path::String; strict=false)
-    man_names = Base.manifest_names isa Tuple ? Base.manifest_names : Base.manifest_names()
-    if first(man_names) == last(man_names) # indicative of a custom manifest name
-        man_path = joinpath(env_path, first(man_names))
-        if strict && !isfile(man_path)
-            return nothing
-        else
-            return man_path
-        end
-    end
+    man_names = Base.manifest_names isa Vector ? Base.manifest_names : Base.manifest_names()
     for name in man_names
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
@@ -194,10 +186,16 @@ function manifestfile_path(env_path::String; strict=false)
     if strict
         return nothing
     else
-        project = basename(projectfile_path(env_path)::String)
-        idx = findfirst(x -> x == project, Base.project_names)
-        @assert idx !== nothing
-        return joinpath(env_path, man_names[idx])
+        n_names = length(man_names)
+        if n_names == 1
+            return joinpath(env_path, only(man_name))
+        else
+            project = basename(projectfile_path(env_path)::String)
+            idx = findfirst(x -> x == project, Base.project_names)
+            @assert idx !== nothing
+            idx = idx + (n_names - length(Base.project_names)) # ignore custom name if present
+            return joinpath(env_path, man_names[idx])
+        end
     end
 end
 
