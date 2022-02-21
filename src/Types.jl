@@ -178,7 +178,17 @@ function projectfile_path(env_path::String; strict=false)
 end
 
 function manifestfile_path(env_path::String; strict=false)
-    for name in Base.manifest_names
+    man_names = Base.manifest_names isa Tuple ? Base.manifest_names : Base.manifest_names()
+    if length(man_names) == 1
+            man_path = joinpath(env_path, only(man_names))
+            if strict && !isfile(man_path)
+                return nothing
+            else
+                return joinpath(env_path, only(man_names))
+            end
+        end
+    end
+    for name in man_names
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
@@ -188,7 +198,7 @@ function manifestfile_path(env_path::String; strict=false)
         project = basename(projectfile_path(env_path)::String)
         idx = findfirst(x -> x == project, Base.project_names)
         @assert idx !== nothing
-        return joinpath(env_path, Base.manifest_names[idx])
+        return joinpath(env_path, man_names[idx])
     end
 end
 
