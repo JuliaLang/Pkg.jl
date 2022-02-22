@@ -178,7 +178,7 @@ function projectfile_path(env_path::String; strict=false)
 end
 
 function manifestfile_path(env_path::String; strict=false)
-    man_names = Base.manifest_names isa Tuple ? Base.manifest_names : Base.manifest_names()
+    man_names = @static Base.manifest_names isa Tuple ? Base.manifest_names : Base.manifest_names()
     for name in man_names
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
