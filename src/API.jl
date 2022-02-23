@@ -320,6 +320,7 @@ end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
+            preserve::Union{Nothing,PreserveLevel}= isempty(pkgs) ? nothing : PRESERVE_ALL,
             update_registry::Bool=true,
             skip_writing_project::Bool=false,
             kwargs...)
@@ -338,7 +339,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
-    Operations.up(ctx, pkgs, level; skip_writing_project)
+    Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
     return
 end
 

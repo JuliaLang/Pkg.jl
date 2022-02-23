@@ -311,6 +311,7 @@ PSA[:name => "update",
         PSA[:name => "minor", :api => :level => UPLEVEL_MINOR],
         PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
         PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
+        PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
     :completions => complete_installed_packages,
     :description => "update packages in manifest",
@@ -319,6 +320,7 @@ PSA[:name => "update",
     [up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
     opts: --major | --minor | --patch | --fixed
+          --preserve=<all/direct/none>
 
 Update `pkg` within the constraints of the indicated version
 specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
