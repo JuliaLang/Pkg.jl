@@ -624,7 +624,13 @@ function init_log!(data::GraphData)
         else
             vspec = range_compressed_versionspec(versions)
             vers = logstr(id, vspec)
+            uuid = data.pkgs[p0]
+            name = data.uuid_to_name[uuid]
+            pkgid = Base.PkgId(uuid, name)
             msg = "possible versions are: $vers or uninstalled"
+            if Base.in_sysimage(pkgid)
+                msg *= " (package in sysimage!)"
+            end
         end
         first_entry = get!(rlog.pool, p) do
             ResolveLogEntry(rlog.journal, p, "$(logstr(id)) log:")

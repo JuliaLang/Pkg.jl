@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS
 
 #########
 # Utils #
@@ -389,6 +389,7 @@ end
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
+const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID,String},
                     reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version)
     uuids = Set{UUID}()
@@ -454,6 +455,17 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                         if Pkg.OFFLINE_MODE[]
                             pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
                             is_package_downloaded(env.project_file, pkg_spec) || continue
+                        end
+
+                        # Skip package version that are not the same as external packages in sysimage
+                        pkgid = Base.PkgId(uuid, pkg.name)
+                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && Base.in_sysimage(pkgid)
+                            pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+                            if pkgorigin !== nothing && pkgorigin.version !== nothing
+                                if v !== pkgorigin.version
+                                    continue
+                                end
+                            end
                         end
 
                         all_compat_u[v] = compat_info
@@ -1857,6 +1869,14 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     max_version == v"0" && return nothing
     pkg.version >= max_version && return nothing
 
+    pkgid = Base.PkgId(pkg.uuid, pkg.name)
+    if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && Base.in_sysimage(pkgid)
+        pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+        if pkgorigin !== nothing && pkg.version !== nothing && pkg.version == pkgorigin.version
+            return ["sysimage"], max_version, max_version_in_compat
+        end
+    end
+
     # Check compat of project
     if pkg.version == max_version_in_compat && max_version_in_compat != max_version
         return ["compat"], max_version, max_version_in_compat
@@ -2055,6 +2075,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             printstyled(io, " (<v", max_version, ")"; color=Base.warn_color())
             if packages_holding_back == ["compat"]
                 printstyled(io, " [compat]"; color=:light_magenta)
+            elseif packages_holding_back == ["sysimage"]
+                printstyled(io, " [sysimage]"; color=:light_magenta)
             else
                 pkg_str = isempty(packages_holding_back) ? "" : string(": ", join(packages_holding_back, ", "))
                 printstyled(io, pkg_str; color=Base.warn_color())
