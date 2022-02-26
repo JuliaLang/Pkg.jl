@@ -458,12 +458,14 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                         end
 
                         # Skip package version that are not the same as external packages in sysimage
-                        pkgid = Base.PkgId(uuid, pkg.name)
-                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && Base.in_sysimage(pkgid)
-                            pkgorigin = get(Base.pkgorigins, pkgid, nothing)
-                            if pkgorigin !== nothing && pkgorigin.version !== nothing
-                                if v !== pkgorigin.version
-                                    continue
+                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
+                            pkgid = Base.PkgId(uuid, pkg.name)
+                            if Base.in_sysimage(pkgid)
+                                pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+                                if pkgorigin !== nothing && pkgorigin.version !== nothing
+                                    if v != pkgorigin.version
+                                        continue
+                                    end
                                 end
                             end
                         end
