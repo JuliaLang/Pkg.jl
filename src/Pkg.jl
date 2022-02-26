@@ -33,6 +33,7 @@ devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depot, "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
+const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 stderr_f() = something(DEFAULT_IO[], stderr)
@@ -512,6 +513,19 @@ set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
     Pkg's offline mode requires Julia 1.5 or later.
 """
 offline(b::Bool=true) = (OFFLINE_MODE[] = b; nothing)
+
+"""
+    Pkg.respect_sysimage_versions(b::Bool=true)
+
+Enable (`b=true`) or disable (`b=false`) respecting versions that are in the
+sysimage (enabled by default).
+
+If this option is enabled, Pkg will only install packages that have been put into the sysimage
+(e.g. via PackageCompiler) at the version of the package in the sysimage.
+Also, trying to add a package at a URL or `develop` a package that is in the sysimage
+will error.
+"""
+respect_sysimage_versions(b::Bool=true) = (RESPECT_SYSIMAGE_VERSIONS[] = b; nothing)
 
 """
     PackageSpec(name::String, [uuid::UUID, version::VersionNumber])

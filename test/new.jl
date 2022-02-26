@@ -561,7 +561,7 @@ end
         Pkg.add("Markdown")
         Pkg.add("Markdown")
         Pkg.dependencies(markdown_uuid) do pkg
-            pkg.name == "Markdown"
+            @test pkg.name == "Markdown"
         end
         @test haskey(Pkg.project().dependencies, "Markdown")
     end
@@ -2891,6 +2891,43 @@ end
             @test isdir(pkg_dir)
         end
     end
+end
+
+if :version in fieldnames(Base.PkgOrigin)
+@testset "sysimage functionality" begin
+    old_sysimage_modules = copy(Base._sysimage_modules)
+    old_pkgorigins = copy(Base.pkgorigins)
+    try
+        # Fake having a packages in the sysimage.
+        json_pkgid = Base.PkgId(json_uuid, "JSON")
+        push!(Base._sysimage_modules, json_pkgid)
+        Base.pkgorigins[json_pkgid] = Base.PkgOrigin(nothing, nothing, v"0.20.1")
+        isolate(loaded_depot=true) do
+            Pkg.add("JSON"; io=devnull)
+            Pkg.dependencies(json_uuid) do pkg
+                pkg.version == v"0.20.1"
+            end
+            io = IOBuffer()
+            Pkg.status(; outdated=true, io=io)
+            str = String(take!(io))
+            @test occursin("⌅ [682c06a0] JSON v0.20.1", str)
+            @test occursin("[sysimage]", str)
+
+            @test_throws PkgError Pkg.add(name="JSON", rev="master"; io=devnull)
+            @test_throws PkgError Pkg.develop("JSON"; io=devnull)
+
+            Pkg.respect_sysimage_versions(false)
+            Pkg.add("JSON"; io=devnull)
+            Pkg.dependencies(json_uuid) do pkg
+                pkg.version != v"0.20.1"
+            end
+        end
+    finally
+        copy!(Base._sysimage_modules, old_sysimage_modules)
+        copy!(Base.pkgorigins, old_pkgorigins)
+        Pkg.respect_sysimage_versions(true)
+    end
+end
 end
 
 end #module

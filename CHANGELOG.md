@@ -1,3 +1,10 @@
+Pkg v1.9 Release Notes
+=======================
+
+- Pkg will now respect the version of packages put into the sysimage using e.g. PackageCompiler. For example,
+  if version 1.3.2 of package A is in the sysimage, Pkg will always install that version when adding the package,
+  or when the packge is installed as a dependency to some other package. This can be disabled by calling `Pkg.respect_sysimage_versions(false)`.
+
 Pkg v1.8 Release Notes
 ======================
 
