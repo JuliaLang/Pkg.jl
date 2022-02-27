@@ -534,7 +534,12 @@ function error_if_in_sysimage(pkg::PackageSpec)
     end
     pkgid = Base.PkgId(pkg.uuid, pkg.name)
     if Base.in_sysimage(pkgid)
-        pkgerror("tried to develop or add a package by URL that is already in the sysimage")
+        @show Base.active_project()
+        @info "IN SYSIMAGE:"
+        for pkg in Base._sysimage_modules
+            println(pkg)
+        end
+        pkgerror("tried to develop or add package $(pkg) by URL that is already in the sysimage")
     end
 end
 
