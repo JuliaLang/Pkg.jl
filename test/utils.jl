@@ -275,14 +275,19 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
 end
 
 function add_this_pkg(; platform=Base.BinaryPlatforms.HostPlatform())
-    pkg_dir = dirname(@__DIR__)
-    pkg_uuid = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
-    spec = Pkg.PackageSpec(
-        name="Pkg",
-        uuid=UUID(pkg_uuid),
-        path=pkg_dir,
-    )
-    Pkg.develop(spec; platform)
+    try
+        Pkg.respect_sysimage_versions(false)
+        pkg_dir = dirname(@__DIR__)
+        pkg_uuid = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
+        spec = Pkg.PackageSpec(
+            name="Pkg",
+            uuid=UUID(pkg_uuid),
+            path=pkg_dir,
+        )
+        Pkg.develop(spec; platform)
+    finally
+        Pkg.respect_sysimage_versions(true)
+    end
 end
 
 function list_tarball_files(tarball_path::AbstractString)
