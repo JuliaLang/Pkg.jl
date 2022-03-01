@@ -522,12 +522,12 @@ end
 function error_if_in_sysimage(pkg::PackageSpec)
     RESPECT_SYSIMAGE_VERSIONS[] || return false
     if pkg.uuid === nothing
-        @error "Expected package to have a set UUID, please file a bug report"
+        @error "Expected package $(pkg.name) to have a set UUID, please file a bug report."
         return false
     end
     pkgid = Base.PkgId(pkg.uuid, pkg.name)
     if Base.in_sysimage(pkgid)
-        pkgerror("tried to develop or add a package by URL that is already in the sysimage")
+        pkgerror("Tried to develop or add by URL package $(pkgid) which is already in the sysimage, use `Pkg.respect_sysimage_versions(false)` to disable this check.")
     end
 end
 
