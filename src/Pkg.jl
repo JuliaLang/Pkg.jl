@@ -404,7 +404,7 @@ const resolve = API.resolve
 Print out the status of the project/manifest.
 
 Packages marked with `⌃` have new versions that can be installed, e.g. via [`Pkg.up`](@ref).
-Those marked with `⌅` have new versions available, but that cannot be installed. To see why, set the
+Those marked with `⌅` have new versions available, but cannot be installed due to compatibility conflicts with other packages. To see why, set the
 keyword argument `outdated=true`.
 
 Setting `outdated=true` will only show packages that are not on the latest version,
