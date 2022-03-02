@@ -399,12 +399,13 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
 
 Print out the status of the project/manifest.
 
 Packages marked with `⌃` have new versions that can be installed, e.g. via [`Pkg.up`](@ref).
-Those marked with `⌅` have new versions available, but that cannot be installed. To see why use the `outdated` kwarg.
+Those marked with `⌅` have new versions available, but that cannot be installed. To see why, set the
+keyword argument `outdated=true`.
 
 Setting `outdated=true` will only show packages that are not on the latest version,
 their maximum version and why they are not on the latest version (either due to other
