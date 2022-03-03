@@ -1450,19 +1450,20 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
     end
 end
 
-function gen_test_code(testfile::String;
+function gen_test_code(source_path::String;
         coverage=false,
         julia_args::Cmd=``,
         test_args::Cmd=``)
+    test_file = testfile(source_path)
     code = """
         $(Base.load_path_setup_code(false))
-        cd($(repr(dirname(testfile))))
+        cd($(repr(dirname(test_file))))
         append!(empty!(ARGS), $(repr(test_args.exec)))
-        include($(repr(testfile)))
+        include($(repr(test_file)))
         """
     return ```
         $(Base.julia_cmd())
-        --code-coverage=$(coverage ? "user" : "none")
+        --code-coverage=$(coverage ? string("@", source_path) : "none")
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes
@@ -1742,7 +1743,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
-            cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
+            cmd = gen_test_code(source_path; coverage=coverage, julia_args=julia_args, test_args=test_args)
             p = run(pipeline(ignorestatus(cmd), stdin = stdin, stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
             interrupted = false
             try
