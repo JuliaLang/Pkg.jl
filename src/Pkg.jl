@@ -6,6 +6,7 @@ import Random
 import REPL
 import TOML
 using Dates
+using Base.BinaryPlatforms
 
 export @pkg_str
 export PackageSpec
