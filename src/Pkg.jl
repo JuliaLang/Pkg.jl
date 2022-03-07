@@ -6,7 +6,6 @@ import Random
 import REPL
 import TOML
 using Dates
-using Base.BinaryPlatforms
 
 export @pkg_str
 export PackageSpec
@@ -57,6 +56,40 @@ include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
 include("REPLMode/REPLMode.jl")
+
+@eval Base.BinaryPlatforms begin   # from the old BinaryPlatforms_compat. TODO: delete for Julia 2.0
+export platform_key_abi, valid_dl_path
+"""
+    platform_key_abi(machine::AbstractString)
+Returns the platform key for the current platform, or any other though the
+the use of the `machine` parameter.
+This method is deprecated, import `Base.BinaryPlatforms` and use either `HostPlatform()`
+to get the current host platform, or `parse(Base.BinaryPlatforms.Platform, triplet)`
+to parse the triplet for some other platform instead.
+"""
+platform_key_abi() = HostPlatform()
+platform_key_abi(triplet::AbstractString) = parse(Platform, triplet)
+
+"""
+    valid_dl_path(path::AbstractString, platform::Platform)
+Return `true` if the given `path` ends in a valid dynamic library filename.
+E.g. returns `true` for a path like `"usr/lib/libfoo.so.3.5"`, but returns
+`false` for a path like `"libbar.so.f.a"`.
+This method is deprecated and will be removed in Julia 2.0.
+"""
+function valid_dl_path(path::AbstractString, platform::AbstractPlatform)
+    try
+        parse_dl_name_version(path, string(os(platform))::String)
+        return true
+    catch e
+        if isa(e, ArgumentError)
+            return false
+        end
+        rethrow(e)
+    end
+end
+end
+using Base.BinaryPlatforms   # we need the two new exports before `using`
 
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
