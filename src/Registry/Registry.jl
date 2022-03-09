@@ -159,6 +159,29 @@ function check_registry_state(reg)
     return nothing
 end
 
+function safe_mv(src, dest; kwargs...)
+    # work-around for JuliaLang/julia#29658 JuliaLang/julia#39457
+    @static if Sys.iswindows()
+        t = Timer(5);
+        while true
+            try
+                mv(src, dest; kwargs...)
+                break
+            catch err
+                err isa Base.IOError || rethrow()
+                if isopen(t)
+                    @error "mv failed. Retrying" ex=err
+                else
+                    rethrow()
+                end
+                sleep(1)
+            end
+        end
+    else
+        mv(src, dest; kwargs...)
+    end
+end
+
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
     populate_known_registries_with_urls!(regs)
     regdir = joinpath(depot, "registries")
@@ -181,7 +204,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 reg_unc = uncompress_registry(tmp)
                 reg.name = TOML.parse(reg_unc["Registry.toml"])["name"]::String
             end
-            mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force=true)
+            safe_mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force=true)
             _hash = pkg_server_url_hash(url)
             reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ".tar.gz")
             open(joinpath(regdir, reg.name * ".toml"), "w") do io
