@@ -60,31 +60,33 @@ for T in (:Linux, :Windows, :MacOS, :FreeBSD)
             end
         end
     end
+end
 
-    # First, methods we need to coerce to Symbol for backwards-compatibility
-    for f in (:arch, :libc, :call_abi, :cxxstring_abi)
-        @eval begin
-            function $(f)(p::$(T))
-                str = $(f)(p.p)
-                if str === nothing
-                    return nothing
-                end
-                return Symbol(str)
-            end
-        end
-    end
+const PlatformUnion = Union{Linux,MacOS,Windows,FreeBSD}
 
-    # Next, things we don't need to coerce
-    for f in (:libgfortran_version, :libstdcxx_version, :platform_name, :wordsize, :platform_dlext, :tags, :triplet)
-        @eval begin
-            $(f)(p::$(T)) = $(f)(p.p)
-        end
-    end
-
-    # Finally, add equality testing between these wrapper types and other AbstractPlatforms
+# First, methods we need to coerce to Symbol for backwards-compatibility
+for f in (:arch, :libc, :call_abi, :cxxstring_abi)
     @eval begin
-        Base.:(==)(a::$(T), b::AbstractPlatform) = b == a.p
+        function $(f)(p::PlatformUnion)
+            str = $(f)(p.p)
+            if str === nothing
+                return nothing
+            end
+            return Symbol(str)
+        end
     end
+end
+
+# Next, things we don't need to coerce
+for f in (:libgfortran_version, :libstdcxx_version, :platform_name, :wordsize, :platform_dlext, :tags, :triplet)
+    @eval begin
+        $(f)(p::PlatformUnion) = $(f)(p.p)
+    end
+end
+
+# Finally, add equality testing between these wrapper types and other AbstractPlatforms
+@eval begin
+    Base.:(==)(a::PlatformUnion, b::AbstractPlatform) = b == a.p
 end
 
 # Add one-off functions
