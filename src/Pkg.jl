@@ -664,6 +664,7 @@ function __init__()
         end
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
+    push!(Base.active_project_callbacks, Types.check_active_project_manifest_version)
     OFFLINE_MODE[] = get_bool_env("JULIA_PKG_OFFLINE")
     return nothing
 end

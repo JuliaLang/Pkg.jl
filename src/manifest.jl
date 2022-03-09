@@ -328,3 +328,10 @@ function check_warn_manifest_julia_version_compat(manifest::Manifest, manifest_f
         version ($(manifest.julia_version)). Unexpected behavior may occur.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
     end
 end
+
+function check_active_project_manifest_version()
+    ctx = Context()
+    if isfile(ctx.env.manifest_file)
+        check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
+    end
+end
