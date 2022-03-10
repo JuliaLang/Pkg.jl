@@ -349,6 +349,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
     depot = depots1()
     isempty(regs) && (regs = reachable_registries(; depots=depot))
     regdir = joinpath(depot, "registries")
+    isdir(regdir) || mkpath(regdir)
     # only allow one julia process to update registries at a time
     FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
     errors = Tuple{String, String}[]
