@@ -164,8 +164,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     populate_known_registries_with_urls!(regs)
     regdir = joinpath(depot, "registries")
     isdir(regdir) || mkpath(regdir)
-    FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
     # only allow one julia process to download and install registries at a time
+    FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
     registry_urls = pkg_server_registry_urls()
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
@@ -253,7 +253,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             end
         end
     end
-    end
+    end # mkpidlock
     return nothing
 end
 
@@ -346,14 +346,16 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
 function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true)
-    isempty(regs) && (regs = reachable_registries(; depots=depots1()))
+    depot = depots1()
+    isempty(regs) && (regs = reachable_registries(; depots=depot))
+    regdir = joinpath(depot, "registries")
+    # only allow one julia process to update registries at a time
+    FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
     errors = Tuple{String, String}[]
     registry_urls = pkg_server_registry_urls()
     for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{UUID}())
         let reg=reg, errors=errors
             regpath = pathrepr(reg.path)
-            FileWatching.mkpidlock(joinpath(dirname(dirname(reg.path)), ".$(reg.name).pid"), stale_age = 10) do
-            # only allow one julia process to update a registry at a time
             let regpath=regpath
                 if reg.tree_info !== nothing
                     printpkgstyle(io, :Updating, "registry at " * regpath)
@@ -445,7 +447,6 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                     end
                 end
             end
-            end
         end
     end
     if !isempty(errors)
@@ -455,6 +456,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
         end
         @error warn_str
     end
+    end # mkpidlock
     return
 end
 
