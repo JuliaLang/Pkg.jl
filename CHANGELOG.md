@@ -4,6 +4,8 @@ Pkg v1.9 Release Notes
 - Pkg will now respect the version of packages put into the sysimage using e.g. PackageCompiler. For example,
   if version 1.3.2 of package A is in the sysimage, Pkg will always install that version when adding the package,
   or when the packge is installed as a dependency to some other package. This can be disabled by calling `Pkg.respect_sysimage_versions(false)`.
+- Writes to `manifest_usage.toml` and Registry downloads/updates are now protected from process concurrency clashes via
+  a pidfile lock ([#2793]).
 
 Pkg v1.8 Release Notes
 ======================
@@ -54,6 +56,7 @@ Pkg v1.7 Release Notes
 [#2580]: https://github.com/JuliaLang/Pkg.jl/issues/2580
 [#2689]: https://github.com/JuliaLang/Pkg.jl/issues/2689
 [#2702]: https://github.com/JuliaLang/Pkg.jl/issues/2702
+[#2793]: https://github.com/JuliaLang/Pkg.jl/issues/2793
 [#2815]: https://github.com/JuliaLang/Pkg.jl/issues/2815
 [#2906]: https://github.com/JuliaLang/Pkg.jl/issues/2906
 [#2933]: https://github.com/JuliaLang/Pkg.jl/issues/2933
