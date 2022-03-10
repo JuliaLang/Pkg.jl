@@ -15,6 +15,7 @@ import ..Pkg, ..Registry
 import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
+import FileWatching
 
 import Base: SHA1
 using SHA
@@ -484,16 +485,31 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     # Ensure that log dir exists
     !ispath(logdir()) && mkpath(logdir())
 
-    # Generate entire entry as a string first
-    entry = sprint() do io
-        TOML.print(io, Dict(source_file => [Dict("time" => now())]))
-    end
-
-    # Append entry to log file in one chunk
     usage_file = joinpath(logdir(), usage_filepath)
-    open(usage_file, append=true) do io
-        write(io, entry)
+    timestamp = now()
+
+    ## Atomically write usage file using process id locking
+    FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
+        usage = if isfile(usage_file)
+            TOML.parsefile(usage_file)
+        else
+            Dict{String, Any}()
+        end
+
+        # record new usage
+        usage[source_file] = [Dict("time" => timestamp)]
+
+        # keep only latest usage info
+        for k in keys(usage)
+            times = map(d -> Dates.DateTime(d["time"]), usage[k])
+            usage[k] = [Dict("time" => maximum(times))]
+        end
+
+        open(usage_file, "w") do io
+            TOML.print(io, usage, sorted=true)
+        end
     end
+    return
 end
 
 function read_package(path::String)

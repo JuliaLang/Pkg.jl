@@ -9,6 +9,8 @@ Pkg v1.9 Release Notes
   to the directory of the package being tested. Previously the `--code-coverage=user` option was used, which tracked files
   in all code outside of Core & Base, i.e. all stdlibs and all user packages, which often made running tests with
   code coverage a lot slower ([#3021]).
+- Writes to `manifest_usage.toml` and Registry downloads/updates are now protected from process concurrency clashes via
+  a pidfile lock ([#2793]).
 
 Pkg v1.8 Release Notes
 ======================
@@ -59,6 +61,7 @@ Pkg v1.7 Release Notes
 [#2580]: https://github.com/JuliaLang/Pkg.jl/issues/2580
 [#2689]: https://github.com/JuliaLang/Pkg.jl/issues/2689
 [#2702]: https://github.com/JuliaLang/Pkg.jl/issues/2702
+[#2793]: https://github.com/JuliaLang/Pkg.jl/issues/2793
 [#2815]: https://github.com/JuliaLang/Pkg.jl/issues/2815
 [#2906]: https://github.com/JuliaLang/Pkg.jl/issues/2906
 [#2933]: https://github.com/JuliaLang/Pkg.jl/issues/2933

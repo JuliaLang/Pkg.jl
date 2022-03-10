@@ -5,6 +5,7 @@ using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_serv
              GitTools, get_bool_env
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z
 using UUIDs, LibGit2, TOML
+import FileWatching
 
 include("registry_instance.jl")
 
@@ -163,6 +164,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     populate_known_registries_with_urls!(regs)
     regdir = joinpath(depot, "registries")
     isdir(regdir) || mkpath(regdir)
+    # only allow one julia process to download and install registries at a time
+    FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
     registry_urls = pkg_server_registry_urls()
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
@@ -250,6 +253,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             end
         end
     end
+    end # mkpidlock
     return nothing
 end
 
@@ -342,7 +346,12 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
 function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true)
-    isempty(regs) && (regs = reachable_registries(; depots=depots1()))
+    depot = depots1()
+    isempty(regs) && (regs = reachable_registries(; depots=depot))
+    regdir = joinpath(depot, "registries")
+    isdir(regdir) || mkpath(regdir)
+    # only allow one julia process to update registries at a time
+    FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
     errors = Tuple{String, String}[]
     registry_urls = pkg_server_registry_urls()
     for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{UUID}())
@@ -448,6 +457,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
         end
         @error warn_str
     end
+    end # mkpidlock
     return
 end
 
