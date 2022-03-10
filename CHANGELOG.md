@@ -3,7 +3,12 @@ Pkg v1.9 Release Notes
 
 - Pkg will now respect the version of packages put into the sysimage using e.g. PackageCompiler. For example,
   if version 1.3.2 of package A is in the sysimage, Pkg will always install that version when adding the package,
-  or when the packge is installed as a dependency to some other package. This can be disabled by calling `Pkg.respect_sysimage_versions(false)`.
+  or when the packge is installed as a dependency to some other package. This can be disabled by calling
+  `Pkg.respect_sysimage_versions(false)` ([#3002]).
+- When code coverage tracking is enabled for `Pkg.test` the new path-specific code-coverage option is used to limit coverage
+  to the directory of the package being tested. Previously the `--code-coverage=user` option was used, which tracked files
+  in all code outside of Core & Base, i.e. all stdlibs and all user packages, which often made running tests with
+  code coverage a lot slower ([#3021]).
 - Writes to `manifest_usage.toml` and Registry downloads/updates are now protected from process concurrency clashes via
   a pidfile lock ([#2793]).
 
@@ -62,3 +67,5 @@ Pkg v1.7 Release Notes
 [#2933]: https://github.com/JuliaLang/Pkg.jl/issues/2933
 [#2985]: https://github.com/JuliaLang/Pkg.jl/issues/2985
 [#2995]: https://github.com/JuliaLang/Pkg.jl/issues/2995
+[#3002]: https://github.com/JuliaLang/Pkg.jl/issues/3002
+[#3021]: https://github.com/JuliaLang/Pkg.jl/issues/3021
