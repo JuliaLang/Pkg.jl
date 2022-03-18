@@ -24,6 +24,7 @@ Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add([RegistrySpec(name = name) for name in regs]; kwargs...)
 add(regs::Vector{RegistrySpec}; kwargs...) = add(Context(), regs; kwargs...)
+add(; kwargs...) = add(RegistrySpec[]; kwargs...)
 function add(ctx::Context, regs::Vector{RegistrySpec}; kwargs...)
     Context!(ctx; kwargs...)
     if isempty(regs)

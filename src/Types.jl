@@ -332,7 +332,7 @@ include("manifest.jl")
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
     io::IO = stderr_f()
-    use_libgit2_for_all_downloads::Bool = false
+    use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = 8
     graph_verbose::Bool = false
@@ -1210,7 +1210,7 @@ function update_registries(ctx::Context, regs::Vector{RegistrySpec} = collect_re
                         GitTools.fetch(ctx, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                     catch e
                         e isa PkgError || rethrow()
-                        push!(errors, (reg.path, "failed to fetch from repo"))
+                        push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
                         @goto done
                     end
                     ff_succeeded = try

@@ -6,6 +6,7 @@ using Artifacts
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
                   artifacts_dirs, pack_platform!, unpack_platform, load_artifacts_toml,
                   query_override, with_artifacts_directory, load_overrides
+import ..get_bool_env
 import ..set_readonly
 import ..GitTools
 import ..TOML
@@ -361,7 +362,7 @@ function download_artifact(
             # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
             # and Pkg.jl#2317 so we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
             # error and move the artifact to the expected location and return true
-            ignore_hash = get(ENV, "JULIA_PKG_IGNORE_HASHES", nothing) == "1"
+            ignore_hash = get_bool_env("JULIA_PKG_IGNORE_HASHES")
             if ignore_hash
                 msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
             end

@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.0-DEV.1199"
+julia_version = "1.7.0-DEV"
 manifest_format = "3.0" # NOT ACTUALLY v3.0 format. Just here to test a warning!
 
 [[deps.Logging]]

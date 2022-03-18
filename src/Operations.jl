@@ -348,6 +348,9 @@ function collect_fixed!(ctx::Context, pkgs::Vector{PackageSpec}, names::Dict{UUI
     return fixed
 end
 
+# drops build detail in version but keeps the main prerelease context
+# i.e. dropbuild(v"2.0.1-rc1.21321") == v"2.0.1-rc1"
+dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v.prerelease) ? () : (v.prerelease[1],))
 
 function project_compatibility(ctx::Context, name::String)
     return VersionSpec(Types.semver_spec(get(ctx.env.project.compat, name, ">= 0")))
@@ -357,11 +360,12 @@ end
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
-# all versioned packges should have a `tree_hash`
+# all versioned packages should have a `tree_hash`
 function resolve_versions!(ctx::Context, pkgs::Vector{PackageSpec})
     # compatibility
     if ctx.julia_version !== nothing
-        ctx.env.manifest.julia_version = ctx.julia_version
+        # only set the manifest julia_version if ctx.julia_version is not nothing
+        ctx.env.manifest.julia_version = dropbuild(VERSION)
         v = intersect(ctx.julia_version, project_compatibility(ctx, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
@@ -770,7 +774,7 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
         for i in 1:ctx.num_concurrent_downloads
             @async begin
                 for (pkg, path) in jobs
-                    if ctx.use_libgit2_for_all_downloads
+                    if ctx.use_git_for_all_downloads
                         put!(results, (pkg, false, path))
                         continue
                     end
@@ -815,7 +819,12 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
                 str = sprint(; context=ctx.io) do io
                     if success
                         fancyprint && print_progress_bottom(io)
-                        vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
+                        vstr = if pkg.version !== nothing
+                            "v$(pkg.version)"
+                        else
+                            short_treehash = string(pkg.tree_hash)[1:16]
+                            "[$short_treehash]"
+                        end
                         printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
                         fancyprint && show_progress(io, bar)
                     end
@@ -835,7 +844,12 @@ function download_source(ctx::Context, pkgs::Vector{PackageSpec},
         uuid = pkg.uuid
         install_git(ctx, pkg.uuid, pkg.name, pkg.tree_hash, urls[uuid], pkg.version::VersionNumber, path)
         readonly && set_readonly(path)
-        vstr = pkg.version !== nothing ? "v$(pkg.version)" : "[$h]"
+        vstr = if pkg.version !== nothing
+            "v$(pkg.version)"
+        else
+            short_treehash = string(pkg.tree_hash)[1:16]
+            "[$short_treehash]"
+        end
         printpkgstyle(ctx, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
 
