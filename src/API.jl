@@ -1056,7 +1056,8 @@ precompile(pkg::String; kwargs...) = precompile(Context(), pkg; kwargs...)
 precompile(ctx::Context, pkg::String; kwargs...) = precompile(ctx, [pkg]; kwargs...)
 precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkgs; kwargs...)
 function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
-                    strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
+                    strict::Bool=false, warn_loaded = true, already_instantiated = false,
+                    throw_on_failure::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1427,6 +1428,9 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                 pkgerror("The following $n_direct_errs $(direct)dependenc$(pluralde) failed to precompile:\n$(err_str[1:end-1])")
             end
         end
+    end
+    if !isempty(failed_deps) && throw_on_failure
+        pkgerror("Precompilation was not successful.")
     end
     nothing
 end
