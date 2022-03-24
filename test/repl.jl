@@ -689,7 +689,7 @@ function withreply(f, ans)
     p = Pipe()
     try
         redirect_stdin(p) do
-            println(p, ans)
+            @async println(p, ans)
             f()
         end
     finally
