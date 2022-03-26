@@ -2049,23 +2049,27 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
     for pkg in package_statuses
         diff && !pkg.changed && continue # in diff mode don't print packages that didn't change
-        first_indicator_printed = false
+
+        pad = 0
+        print_padding(x) = (print(io, x); pad += 1)
+
         if !pkg.downloaded
-            print(io, not_installed_indicator)
-            first_indicator_printed = true
+            print_padding(not_installed_indicator)
         elseif lpadding > 2
-            print(io, " ")
-            first_indicator_printed = true
+            print_padding(" ")
         end
         if pkg.upgradable
-            print(io, upgradable_indicator)
+            print_padding(upgradable_indicator)
         elseif pkg.heldback
-            print(io, heldback_indicator)
-        elseif lpadding == 2 && !first_indicator_printed
-            print(io, " ")
+            print_padding(heldback_indicator)
         end
 
-        printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
+        # Fill the remaining padding with spaces
+        while pad < lpadding
+            print_padding(" ")
+        end
+
+        printstyled(io, "[", string(pkg.uuid)[1:8], "] "; color = :light_black)
 
         diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
 
