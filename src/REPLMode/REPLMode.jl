@@ -717,13 +717,19 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         API.add(string.(available_pkgs))
     elseif lower_resp in ["o"]
         editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
-        expanded_envs = Base.load_path_expand.(editable_envs)
-        envs = convert(Vector{String}, filter(x -> !isnothing(x), expanded_envs))
         option_list = String[]
         keybindings = Char[]
-        for i in 1:length(envs)
-            push!(option_list, "$(i): $(pathrepr(envs[i])) ($(editable_envs[i]))")
-            push!(keybindings, only("$i"))
+        # We use digits 1-9 as keybindings in the env selection menu
+        # That's why we can display at most 9 items in the menu
+        for i in 1:min(length(editable_envs), 9)
+            env = editable_envs[i]
+            expanded_env = Base.load_path_expand(env)
+
+            isnothing(expanded_env) && continue
+
+            n = length(option_list) + 1
+            push!(option_list, "$(n): $(pathrepr(expanded_env)) ($(env))")
+            push!(keybindings, only("$n"))
         end
         menu = TerminalMenus.RadioMenu(option_list, keybindings=keybindings, pagesize=length(option_list))
         print(ctx.io, "\e[1A\e[1G\e[0J") # go up one line, to the start, and clear it
