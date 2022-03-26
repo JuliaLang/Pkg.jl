@@ -719,7 +719,9 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
         option_list = String[]
         keybindings = Char[]
-        for i in 1:length(editable_envs)
+        # We use digits 1-9 as keybindings in the env selection menu
+        # That's why we can display at most 9 items in the menu
+        for i in 1:min(length(editable_envs), 9)
             env = editable_envs[i]
             expanded_env = Base.load_path_expand(env)
 
