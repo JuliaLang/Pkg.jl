@@ -5,6 +5,7 @@ import ..Pkg, LibGit2
 using  Pkg.Types: PkgError
 using  Pkg.Resolve: ResolverError
 import Pkg.Artifacts: artifact_meta, artifact_path
+import Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using  ..Utils
 
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
@@ -2283,6 +2284,7 @@ end
 # # Caching
 #
 @testset "Repo caching" begin
+    default_branch = LibGit2.getconfig("init.defaultBranch", "master")
     # Add by URL should not overwrite files.
     isolate(loaded_depot=true) do
         Pkg.add(url="https://github.com/JuliaLang/Example.jl")
@@ -2341,7 +2343,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                original_master = string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                original_master = string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
@@ -2362,7 +2364,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                @test original_master == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                @test original_master == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
@@ -2377,7 +2379,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                @test new_commit == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                @test new_commit == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
@@ -2822,15 +2824,28 @@ end
         artifacts_toml = joinpath(gmp_jll_dir, "Artifacts.toml")
         @test isfile(artifacts_toml)
         meta = artifact_meta("GMP", artifacts_toml)
-        @test meta !== nothing
 
-        gmp_artifact_path = artifact_path(Base.SHA1(meta["git-tree-sha1"]))
-        @test isdir(gmp_artifact_path)
+        # `meta` can be `nothing` on some of our newer platforms; we _know_ this should
+        # not be the case on the following platforms, so we check these explicitly to
+        # ensure that we haven't accidentally broken something, and then we gate some
+        # following tests on whether or not `meta` is `nothing`:
+        for arch in ("x86_64", "i686"), os in ("linux", "mac", "windows")
+            if platforms_match(HostPlatform(), Platform(arch, os))
+                @test meta !== nothing
+            end
+        end
 
-        # On linux, we can check the filename to ensure it's grabbing the correct library
-        if Sys.islinux()
-            libgmp_filename = joinpath(gmp_artifact_path, "lib", "libgmp.so.10.3.2")
-            @test isfile(libgmp_filename)
+        # These tests require a matching platform artifact for this old version of GMP_jll,
+        # which is not the case on some of our newer platforms.
+        if meta !== nothing
+            gmp_artifact_path = artifact_path(Base.SHA1(meta["git-tree-sha1"]))
+            @test isdir(gmp_artifact_path)
+
+            # On linux, we can check the filename to ensure it's grabbing the correct library
+            if Sys.islinux()
+                libgmp_filename = joinpath(gmp_artifact_path, "lib", "libgmp.so.10.3.2")
+                @test isfile(libgmp_filename)
+            end
         end
     end
 
