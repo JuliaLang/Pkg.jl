@@ -2284,6 +2284,7 @@ end
 # # Caching
 #
 @testset "Repo caching" begin
+    default_branch = LibGit2.getconfig("init.defaultBranch", "master")
     # Add by URL should not overwrite files.
     isolate(loaded_depot=true) do
         Pkg.add(url="https://github.com/JuliaLang/Example.jl")
@@ -2342,7 +2343,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                original_master = string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                original_master = string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
@@ -2363,7 +2364,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                @test original_master == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                @test original_master == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
@@ -2378,7 +2379,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                @test new_commit == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                @test new_commit == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
