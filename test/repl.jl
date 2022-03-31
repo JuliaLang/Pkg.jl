@@ -684,31 +684,43 @@ end
     @inferred Pkg.REPLMode.CompoundSpecs(Pair{String,Vector{Pkg.REPLMode.CommandDeclaration}}[])
 end
 
-# To be used to reply to a prompt
-function withreply(f, ans)
-    p = Pipe()
-    try
-        redirect_stdin(p) do
-            @async println(p, ans)
-            f()
-        end
-    finally
-        close(p)
-    end
+
+# stdin not available on other workers, so if we're being run on a Distributed worker
+# make sure this stuff happens on worker 1:
+using Distributed
+@everywhere [1] quote
+    using Pkg, Test
+    include("utils.jl")
+    using .Utils
 end
 
-@testset "REPL missing package install hook" begin
-    isolate(loaded_depot=true) do
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
-
-        # don't offer to install the dummy "julia" entry that's in General
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
-
-        withreply("n") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+@spawnat 1 begin
+    # To be used to reply to a prompt
+    function withreply(f, ans)
+        p = Pipe()
+        try
+            redirect_stdin(p) do
+                @async println(p, ans)
+                f()
+            end
+        finally
+            close(p)
         end
-        withreply("y") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+    end
+
+    @testset "REPL missing package install hook" begin
+        isolate(loaded_depot=true) do
+            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+
+            # don't offer to install the dummy "julia" entry that's in General
+            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
+
+            withreply("n") do
+                @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+            end
+            withreply("y") do
+                @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+            end
         end
     end
 end
