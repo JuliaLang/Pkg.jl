@@ -111,8 +111,8 @@ function get_stdlibs(scratch_dir, julia_installer_name)
             end
 
             # This will give us a dictionary of UUID => (name, version) mappings for all standard libraries
-            if jlvers < v"1.8"
-                stdlibs = Dict{Base.UUID, Tuple}(uuid => (name, nothing) for (uuid, name) in eval(Meta.parse(stdlibs_str)))
+            if jlvers < v"1.8-"
+                stdlibs = Dict{Base.UUID, Tuple{AbstractString,Any}}(uuid => (name, nothing) for (uuid, name) in eval(Meta.parse(stdlibs_str)))
 
                 # We're going to try and get versions for each stdlib:
                 stdlib_path = readchomp(`$(jlexe) $(jlflags) -e 'import Pkg; print(Pkg.Types.stdlib_path(""))'`)
