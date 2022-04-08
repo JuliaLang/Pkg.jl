@@ -203,19 +203,24 @@ const update = API.up
 
 **Keyword arguments:**
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
+  - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
 
 !!! compat "Julia 1.3"
     `julia_args` and `test_args` requires at least Julia 1.3.
 
+!!! compat "Julia 1.9"
+    `allow_reresolve` requires at least Julia 1.9.
+
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its
 `test/runtests.jl` file.
 
-The tests are run by generating a temporary environment with only `pkg` and its (recursive) dependencies
-in it. If a manifest exists, the versions in that manifest are used, otherwise
-a feasible set of packages is resolved and installed.
+The tests are run by generating a temporary environment with only the `pkg` package
+and its (recursive) dependencies in it. If a manifest file exists and the `allow_reresolve`
+keyword argument is set to `false`, the versions in the manifest file are used.
+Otherwise a feasible set of packages is resolved and installed.
 
 During the tests, test-specific dependencies are active, which are
 given in the project file as e.g.
