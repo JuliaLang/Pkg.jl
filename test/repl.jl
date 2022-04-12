@@ -659,6 +659,9 @@ end
         git_init_and_commit(project_path)
         @test_logs () pkg"status --diff"
         @test_logs () pkg"status -d"
+
+        # comma-separated packages get parsed
+        pkg"status Example, Random"
     end
 end
 
