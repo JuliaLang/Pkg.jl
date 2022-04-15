@@ -298,4 +298,16 @@ function list_tarball_files(tarball_path::AbstractString)
     return names
 end
 
+function show_output_if_command_errors(cmd::Cmd)
+    out = IOBuffer()
+    proc = run(pipeline(cmd; stdout=out); wait = false)
+    wait(proc)
+    if !success(proc)
+        seekstart(out)
+        println(read(out, String))
+        Base.pipeline_error(proc)
+    end
+    return nothing
+end
+
 end

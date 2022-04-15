@@ -370,7 +370,7 @@ temp_pkg_dir() do project_path
         # to precompile Pkg given we're in a different depot
         run(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg"`)
         # make sure the General registry is installed
-        run(pipeline(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg; Pkg.Registry.add()"`; stdout=devnull, stderr=devnull))
+        Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg; Pkg.Registry.add()"`)
         flag_start_dir = tempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
         flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
         for i in 1:Sys.CPU_THREADS
