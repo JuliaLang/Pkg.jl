@@ -692,7 +692,10 @@ function withreply(f, ans)
     p = Pipe()
     try
         redirect_stdin(p) do
-            @async println(p, ans)
+            Timer(5) do t
+                # send after 5s just incase the prompt is slow to show
+                println(p, ans)
+            end
             f()
         end
     finally
