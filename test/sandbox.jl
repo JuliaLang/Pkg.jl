@@ -64,6 +64,7 @@ end
     # Preferences should be copied over into sandbox
     temp_pkg_dir() do project_path; mktempdir() do tmp
         copy_test_package(tmp, "Sandbox_PreservePreferences")
+        spp_uuid = UUID("3872bf94-3adb-11e9-01dc-bf80c7641364")
         Pkg.activate(joinpath(tmp, "Sandbox_PreservePreferences"))
 
         # Create fake test/Project.toml and test/LocalPreferences.toml
@@ -79,15 +80,53 @@ end
             "scent" => "juniper",
         )
 
-        # This test should have completely different preferences
+        # This test should have a set of preferences that have nothing to do with those
+        # exported within `Sandbox_PreservePreferences/Project.toml`
         test_test() do
-            uuid =  UUID("3872bf94-3adb-11e9-01dc-bf80c7641364")
-            @test !Preferences.has_preference(uuid, "does_not_exist")
-            # `tree` has no mapping because we do not know anything about the project
-            # in the root directory; test environments are not stacked!
-            @test Preferences.load_preference(uuid, "tree") === nothing
-            @test Preferences.load_preference(uuid, "scent") == "juniper"
-            @test Preferences.load_preference(uuid, "default") === nothing
+            @test !Preferences.has_preference(spp_uuid, "does_not_exist")
+            # Because we are testing with the project set as the active project, we inherit
+            # preferences set in the SPP project
+            @test Preferences.load_preference(spp_uuid, "tree") === "birch"
+            @test Preferences.load_preference(spp_uuid, "scent") == "juniper"
+            @test Preferences.load_preference(spp_uuid, "default") === nothing
+        end
+
+        # Test that `Pkg.test()` layers the test project onto the `LOAD_PATH`,
+        # so that preferences set in the calling environment can leak through.
+        mktempdir() do outer_layer
+            # Create a fake project that references SPP
+            open(joinpath(outer_layer, "Project.toml"), write=true) do io
+                println(io, """
+                    [deps]
+                    Sandbox_PreservePreferences = "$(spp_uuid)"
+
+                    [preferences.Sandbox_PreservePreferences]
+                    tree = "pine"
+                    scent = "shadowed"
+                """)
+            end
+
+            # Use `/` on windows as well
+            spp_path = joinpath(tmp, "Sandbox_PreservePreferences")
+            if Sys.iswindows()
+                spp_path = replace(spp_path, "\\" => "/")
+            end
+            open(joinpath(outer_layer, "Manifest.toml"), write=true) do io
+                println(io, """
+                [[Sandbox_PreservePreferences]]
+                path = "$(spp_path)"
+                uuid = "$(spp_uuid)"
+                """)
+            end
+
+            Pkg.activate(outer_layer)
+            test_test("Sandbox_PreservePreferences") do
+                # The tree that leaks through is from the outer layer,
+                # rather than the overall project
+                @test Preferences.load_preference(spp_uuid, "tree") === "pine"
+                # The scent is still the inner test preference, since that takes priority.
+                @test Preferences.load_preference(spp_uuid, "scent") == "juniper"
+            end
         end
     end end
 end
