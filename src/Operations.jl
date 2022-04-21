@@ -1744,7 +1744,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             cmd = gen_test_code(source_path; coverage=coverage, julia_args=julia_args, test_args=test_args)
-            p = run(pipeline(ignorestatus(cmd), stdin = stdin, stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
+            p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
             interrupted = false
             try
                 wait(p)
