@@ -992,12 +992,12 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         local build_project_override, build_project_preferences
         if isfile(projectfile_path(builddir(source_path)))
             build_project_override = nothing
-            with_load_path([builddir(source_path)]) do
+            with_load_path([builddir(source_path), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         else
             build_project_override = gen_target_project(ctx, pkg, source_path, "build")
-            with_load_path([projectfile_path(source_path)]) do
+            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         end
@@ -1725,12 +1725,12 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         local test_project_preferences, test_project_override
         if isfile(projectfile_path(testdir(source_path)))
             test_project_override = nothing
-            with_load_path(testdir(source_path)) do
+            with_load_path([testdir(source_path), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         else
             test_project_override = gen_target_project(ctx, pkg, source_path, "test")
-            with_load_path(projectfile_path(source_path)) do
+            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         end
