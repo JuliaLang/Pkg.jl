@@ -930,6 +930,7 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
     unresolved_uuids = Dict{String,Vector{UUID}}()
     for pkg in pkgs
         has_uuid(pkg) && continue
+        !has_name(pkg) && !has_uuid(pkg) && pkgerror("Package $pkg has neither name nor uuid")
         uuids = [uuid for (uuid, entry) in manifest if entry.name == pkg.name]
         sort!(uuids, by=uuid -> uuid.value)
         unresolved_uuids[pkg.name] = uuids
