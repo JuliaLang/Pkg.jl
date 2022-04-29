@@ -921,4 +921,9 @@ end
     end
 end
 
+@testset "Issue #3069" begin
+    p = PackageSpec(; path="test_packages/Example")
+    @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
+end
+
 end # module
