@@ -699,7 +699,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             println(ctx.io, line)
         end
         printstyled(ctx.io, " └ "; color=:green)
-        flush(stdin)
+        readavailable(stdin) # ignore any keypresses before the prompt shows
         Base.prompt(stdin, ctx.io, "(y/n/o)", default = "y")
     catch err
         if err isa InterruptException # if ^C is entered
