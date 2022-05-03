@@ -11,7 +11,7 @@ using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
-                    artifact_exists, select_downloadable_artifacts
+                    artifact_exists, select_downloadable_artifacts, query_override
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS
@@ -665,7 +665,9 @@ end
 function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform=HostPlatform())
     for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
         for name in keys(artifacts)
-            if !artifact_exists(Base.SHA1(artifacts[name]["git-tree-sha1"]))
+            hash = Base.SHA1(artifacts[name]["git-tree-sha1"])
+            overridden = query_override(hash) !== nothing
+            if !overridden && !artifact_exists(hash)
                 return false
             end
             break

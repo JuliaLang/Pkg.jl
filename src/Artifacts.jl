@@ -415,8 +415,8 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
                                    quiet_download::Bool = false,
                                    io::IO=stderr_f())
     hash = SHA1(meta["git-tree-sha1"])
-
-    if !artifact_exists(hash)
+    overridden = query_override(hash) !== nothing
+    if !overridden && !artifact_exists(hash)
         errors = Any[]
         # first try downloading from Pkg server
         # TODO: only do this if Pkg server knows about this package
