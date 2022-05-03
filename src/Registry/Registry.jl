@@ -275,7 +275,7 @@ Pkg.Registry.rm(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 rm(reg::Union{String,RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
 rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
 function rm(regs::Vector{RegistrySpec}; io::IO=stderr_f())
-    for registry in find_installed_registries(io, regs)
+    for registry in find_installed_registries(io, regs; depots=first(Base.DEPOT_PATH))
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         if isfile(registry.path)
             d = TOML.parsefile(registry.path)
@@ -290,8 +290,9 @@ end
 
 # Search for the input registries among installed ones
 function find_installed_registries(io::IO,
-                                   needles::Union{Vector{Registry.RegistryInstance}, Vector{RegistrySpec}})
-    haystack = reachable_registries()
+                                   needles::Union{Vector{Registry.RegistryInstance}, Vector{RegistrySpec}};
+                                   depots=Base.DEPOT_PATH)
+    haystack = reachable_registries(; depots)
     output = Registry.RegistryInstance[]
     for needle in needles
         if needle.name === nothing && needle.uuid === nothing
