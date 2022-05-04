@@ -10,7 +10,7 @@ function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector
     words′ = package_lex(args)
     words = String[]
     for word in words′
-        if (m = match(r"https://github.com/(.*?)/(.*?)/tree/(.*?)$", word)) !== nothing
+        if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", word)) !== nothing
             push!(words, "https://github.com/$(m.captures[1])/$(m.captures[2])")
             push!(words, "#$(m.captures[3])")
         else
