@@ -116,6 +116,9 @@ function is_instantiated(env::EnvCache; platform = HostPlatform())::Bool
         if idx === nothing
             push!(pkgs, Types.PackageSpec(name=env.pkg.name, uuid=env.pkg.uuid, version=env.pkg.version, path=dirname(env.project_file)))
         end
+    else
+        # Make sure artifacts for project exist even if it is not a package
+        check_artifacts_downloaded(dirname(env.project_file); platform) || return false
     end
     # Make sure all paths/artifacts exist
     return all(pkg -> is_package_downloaded(env.project_file, pkg; platform), pkgs)
@@ -634,8 +637,7 @@ function download_artifacts(env::EnvCache;
         pkg_root = source_path(env.project_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_roots, pkg_root)
     end
-    envpkg = env.pkg
-    envpkg === nothing || push!(pkg_roots, envpkg.path)
+    push!(pkg_roots, dirname(env.project_file))
     for pkg_root in pkg_roots
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
