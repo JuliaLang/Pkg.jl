@@ -336,6 +336,11 @@ end
         api, opts = first(Pkg.pkg"activate -")
         @test api == Pkg.activate
         @test opts == Dict(:prev => true)
+        # github branch rewriting
+        api, args, opts = first(Pkg.pkg"add https://github.com/JuliaLang/Pkg.jl/tree/aa/gitlab")
+        arg = args[1]
+        @test arg.url == "https://github.com/JuliaLang/Pkg.jl"
+        @test arg.rev == "aa/gitlab"
     end
 end
 

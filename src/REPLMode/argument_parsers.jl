@@ -7,7 +7,18 @@ import ..isdir_nothrow, ..Registry.RegistrySpec, ..isurl
 Parser for PackageSpec objects.
 """
 function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
-    args = PackageToken[PackageToken(pkgword) for pkgword in package_lex(args)]
+    words′ = package_lex(args)
+    words = String[]
+    for word in words′
+        if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", word)) !== nothing
+            push!(words, "https://github.com/$(m.captures[1])/$(m.captures[2])")
+            push!(words, "#$(m.captures[3])")
+        else
+            push!(words, word)
+        end
+    end
+    args = PackageToken[PackageToken(pkgword) for pkgword in words]
+
     return parse_package_args(args; add_or_dev=add_or_dev)
 end
 
