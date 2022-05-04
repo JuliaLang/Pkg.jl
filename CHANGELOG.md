@@ -11,6 +11,7 @@ Pkg v1.9 Release Notes
   code coverage a lot slower ([#3021]).
 - Writes to `manifest_usage.toml` and Registry downloads/updates are now protected from process concurrency clashes via
   a pidfile lock ([#2793]).
+- The Pkg REPL now understands Github URLs to branches so you can e.g. do `pkg> add https://github.com/Org/Package.jl/tree/branch`.
 
 Pkg v1.8 Release Notes
 ======================
