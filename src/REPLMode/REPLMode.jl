@@ -604,6 +604,11 @@ function repl_init(repl::REPL.AbstractREPL)
         end
     )
     main_mode.keymap_dict = LineEdit.keymap_merge(main_mode.keymap_dict, keymap)
+    shell_mode_index = findfirst(x->startswith(x.prompt, REPL.SHELL_PROMPT), repl.interface.modes)
+    if !isnothing(shell_mode_index)
+        shell_mode = repl.interface.modes[shell_mode_index]
+        shell_mode.keymap_dict = LineEdit.keymap_merge(shell_mode.keymap_dict, keymap)
+    end
     return
 end
 
