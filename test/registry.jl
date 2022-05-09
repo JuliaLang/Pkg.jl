@@ -145,15 +145,6 @@ end
         @test is_pkg_available(Example1)
         @test is_pkg_available(Example2)
 
-        # Behaviour with conflicting registry names
-        @test_throws PkgError pkgstr("registry up RegistryFoo")
-        @test_throws PkgError Registry.update("RegistryFoo")
-        @test_throws PkgError Registry.update(RegistrySpec("RegistryFoo"))
-        @test_throws PkgError Registry.update(RegistrySpec(name = "RegistryFoo"))
-        @test_throws PkgError pkgstr("registry remove RegistryFoo")
-        @test_throws PkgError Registry.rm("RegistryFoo")
-        @test_throws PkgError Registry.rm(RegistrySpec("RegistryFoo"))
-        @test_throws PkgError Registry.rm(RegistrySpec(name = "RegistryFoo"))
 
         pkgstr("registry up $(Foo1.uuid)")
         pkgstr("registry update $(Foo1.name)=$(Foo1.uuid)")
@@ -173,7 +164,9 @@ end
         test_installed([Foo2])
         @test !is_pkg_available(Example1)
         @test is_pkg_available(Example2)
-        pkgstr("registry rm $(Foo2.name)")
+        with_depot2() do
+            pkgstr("registry rm $(Foo2.name)")
+        end
         test_installed([])
         @test !is_pkg_available(Example1)
         @test !is_pkg_available(Example2)
@@ -195,7 +188,9 @@ end
         test_installed([Foo2])
         @test !is_pkg_available(Example1)
         @test is_pkg_available(Example2)
-        Registry.rm(RegistrySpec(Foo2.name))
+        with_depot2() do
+            Registry.rm(RegistrySpec(Foo2.name))
+        end
         test_installed([])
         @test !is_pkg_available(Example1)
         @test !is_pkg_available(Example2)
@@ -208,7 +203,10 @@ end
         @test is_pkg_available(Example1)
         @test is_pkg_available(Example2)
         pkgstr("registry up General $(Foo1.uuid) $(Foo2.name)=$(Foo2.uuid)")
-        pkgstr("registry rm General $(Foo1.uuid) $(Foo2.name)=$(Foo2.uuid)")
+        pkgstr("registry rm General $(Foo1.uuid)")
+        with_depot2() do
+            pkgstr("registry rm General $(Foo2.name)=$(Foo2.uuid)")
+        end
         test_installed([])
         @test !is_pkg_available(Example)
         @test !is_pkg_available(Example1)
@@ -226,7 +224,10 @@ end
                          RegistrySpec(name = Foo2.name, uuid = Foo2.uuid)])
         Registry.rm([RegistrySpec("General"),
                      RegistrySpec(uuid = Foo1.uuid),
-                     RegistrySpec(name = Foo2.name, uuid = Foo2.uuid)])
+                     ])
+        with_depot2() do
+            Registry.rm(RegistrySpec(name = Foo2.name, uuid = Foo2.uuid))
+        end
         test_installed([])
         @test !is_pkg_available(Example)
         @test !is_pkg_available(Example1)
@@ -327,12 +328,12 @@ if Pkg.Registry.registry_use_pkg_server()
                 # These get restored by temp_pkg_dir
                 Pkg.Registry.DEFAULT_REGISTRIES[1].path = nothing
                 Pkg.Registry.DEFAULT_REGISTRIES[1].url = "https://github.com/JuliaRegistries/General.git"
-                
+
                 # This should not uncompress the registry
                 Registry.add(RegistrySpec(uuid = UUID("23338594-aafe-5451-b93e-139f81909106")))
                 @test isfile(joinpath(DEPOT_PATH[1], "registries", "General.tar.gz")) != something(unpack, false)
                 Pkg.add("Example")
-                
+
                 # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
                 if unpack == true
                     write(joinpath(DEPOT_PATH[1], "registries", "General", ".tree_info.toml"),
