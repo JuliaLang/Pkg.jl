@@ -2112,6 +2112,11 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
         end
     end
+    if outdated
+        if !no_packages_upgradable || !no_visible_packages_heldback
+            printpkgstyle(io, :Info, "To install a package at a specific version, use e.g. `] add Example@1.2.3`")
+        end
+    end
 
     return nothing
 end
