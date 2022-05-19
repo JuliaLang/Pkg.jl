@@ -250,6 +250,27 @@ end
         @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
     end end
 
+    # Test Registry.add and Registry.update with explicit depot values
+    temp_pkg_dir() do depot_on_path; mktempdir() do depot_off_path
+        # No registries anywhere
+        @test isempty(Registry.reachable_registries())
+        @test isempty(Registry.reachable_registries(; depots=[depot_off_path]))
+
+        # After this, we have depots only in the depot that's off the path
+        Registry.add("General"; depot=depot_off_path)
+        @test isempty(Registry.reachable_registries())
+        @test length(Registry.reachable_registries(; depots=[depot_off_path])) == 1
+
+        # Test that `update()` with `depots` runs
+        Registry.update(; depots=[depot_off_path])
+
+        # Show that we can install `Example` off of that depot
+        empty!(Base.DEPOT_PATH)
+        push!(Base.DEPOT_PATH, depot_off_path)
+        Pkg.add("Example")
+        @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
+    end end
+
     # only clone default registry if there are no registries installed at all
     temp_pkg_dir() do depot1; mktempdir() do depot2
         append!(empty!(DEPOT_PATH), [depot1, depot2])
