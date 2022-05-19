@@ -262,7 +262,11 @@ end
         @test length(Registry.reachable_registries(; depots=[depot_off_path])) == 1
 
         # Test that `update()` with `depots` runs
-        Registry.update(; depots=[depot_off_path])
+        io = Base.BufferStream()
+        Registry.update(; depots=[depot_off_path], io)
+        closewrite(io)
+        output = read(io, String)
+        @test occursin("registry at `$(depot_off_path)", output)
 
         # Show that we can install `Example` off of that depot
         empty!(Base.DEPOT_PATH)

@@ -355,7 +355,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
         FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
         errors = Tuple{String, String}[]
         registry_urls = pkg_server_registry_urls()
-        for reg in unique(r -> r.uuid, find_installed_registries(io, depot_regs); seen=Set{UUID}())
+        for reg in unique(r -> r.uuid, find_installed_registries(io, depot_regs; depots=[depot]); seen=Set{UUID}())
             let reg=reg, errors=errors
                 regpath = pathrepr(reg.path)
                 let regpath=regpath
