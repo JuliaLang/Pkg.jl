@@ -488,7 +488,7 @@ end
             "AugmentedPlatform",
             "flooblecrank" => "disengaged",
         )
-    
+
         p = HostPlatform()
         p["flooblecrank"] = "engaged"
         add_this_pkg(; platform=p)
@@ -767,6 +767,18 @@ end
         )
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
+    end
+end
+
+@testset "artifacts for non package project" begin
+    temp_pkg_dir() do tmpdir
+        artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
+        cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
+        Pkg.activate(tmpdir)
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml)
+        @test !artifact_exists(cts_hash)
+        Pkg.instantiate()
+        @test artifact_exists(cts_hash)
     end
 end
 

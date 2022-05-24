@@ -2,33 +2,53 @@ Pkg v1.8 Release Notes
 ======================
 
 - New `⌃` and `⌅` indicators beside packages in `pkg> status` that have new versions available.
-  `⌅` indicates when new versions cannot be installed.
+  `⌅` indicates when new versions cannot be installed ([#2906]).
 - New `outdated::Bool` kwarg to `Pkg.status` (`--outdated` or `-o` in the REPL mode) to show
-  information about packages not at the latest version.
+  information about packages not at the latest version ([#2284]).
 - New `compat::Bool` kwarg to `Pkg.status` (`--compat` or `-c` in the REPL mode) to show any [compat]
-  entries in the Project.toml.
+  entries in the Project.toml ([#2702]).
 - New `pkg> compat` (and `Pkg.compat`) mode for setting Project compat entries. Provides an interactive editor
   via `pkg> compat`, or direct entry manipulation via `pkg> Foo 0.4,0.5` which can load current entries via tab-completion.
-  i.e. `pkg> compat Fo<TAB>` autocompletes to `pkg> Foo 0.4,0.5` so that the existing entry can be edited.
-- Pkg now only tries to download packages from the package server in case the
-  server tracks a registry that contains the package.
+  i.e. `pkg> compat Fo<TAB>` autocompletes to `pkg> Foo 0.4,0.5` so that the existing entry can be edited ([#2702]).
+- Pkg now only tries to download packages from the package server in case the server tracks a registry that contains
+  the package ([#2689]).
 - `Pkg.instantiate` will now warn when a Project.toml is out of sync with a Manifest.toml. It does this by storing a hash
   of the project deps and compat entries (other fields are ignored) in the manifest when it is resolved, so that any change
-  to the Project.toml deps or compat entries without a re-resolve can be detected.
+  to the Project.toml deps or compat entries without a re-resolve can be detected ([#2815]).
+- If `pkg> add` cannot find a package with the provided name it will now suggest similarly named packages that can be added ([#2985]).
+- The julia version stored in the manifest no longer includes the build number i.e. master will now record as `1.9.0-DEV` ([#2995]).
+- Interrupting a `pkg> test` will now be caught more reliably and exit back to the REPL gracefully ([#2933]).
 
 Pkg v1.7 Release Notes
 ======================
 
 - The format of the `Manifest.toml` file have changed. New manifests will use
-  the new format while old manifest will have their existing format in place.
-  Julia 1.6.2 is compatible with the new format.
+  the new format while old manifest will have their existing format in place ([#2580]).
+  Julia 1.6.2 is compatible with the new format ([#2561]).
 - Registries downloaded from the Pkg Server (not git) are no longer uncompressed into files but instead read directly from the compressed tarball into memory. This improves performance on
-  filesystems which do not handle a large number of files well. To turn this feature off, set the environment variable `JULIA_PKG_UNPACK_REGISTRY=true`.
+  filesystems which do not handle a large number of files well. To turn this feature off, set the environment variable `JULIA_PKG_UNPACK_REGISTRY=true` ([#2431]).
 - It is now possible to use an external `git` executable instead of the default libgit2 library for
-  the downloads that happen via the Git protocol by setting the environment variable `JULIA_PKG_USE_CLI_GIT=true`.
+  the downloads that happen via the Git protocol by setting the environment variable `JULIA_PKG_USE_CLI_GIT=true` ([#2448]).
 - Registries downloaded from the Pkg Server (not git) is now assumed to be immutable. Manual changes to their files might not be picked up by a running Pkg session.
 - The number of packags precompiled in parallel are now limited to 16 unless the
-  environment variable `JULIA_NUM_PRECOMPILE_TASKS` is set.
-- Adding packages by folder name in the REPL mode now requires a prepending a `./` to the folder name package folder is in the current folder, e.g. `add ./Package` is required instead of `add Pacakge`. This is to avoid confusion between the package name `Package` and the local directory `Package`.
-- `rm`, `pin`, and `free` now support the `--all` option, and the api variants gain the `all_pkgs::Bool` kwarg, to perform the operation on all packages within the project or manifest, depending on the mode of the operation.
-- The `mode` keyword for `PackageSpec` has been removed.
+  environment variable `JULIA_NUM_PRECOMPILE_TASKS` is set ([#2552]).
+- Adding packages by folder name in the REPL mode now requires a prepending a `./` to the folder name package folder is in the current folder, e.g. `add ./Package` is required instead of `add Package`. This is to avoid confusion between the package name `Package` and the local directory `Package`.
+- `rm`, `pin`, and `free` now support the `--all` option, and the api variants gain the `all_pkgs::Bool` kwarg, to perform the operation on all packages within the project or manifest, depending on the mode of the operation ([#2432]).
+- The `mode` keyword for `PackageSpec` has been removed ([#2454]).
+
+<!--- Generated by NEWS-update.jl --->
+[#2284]: https://github.com/JuliaLang/Pkg.jl/issues/2284
+[#2431]: https://github.com/JuliaLang/Pkg.jl/issues/2431
+[#2432]: https://github.com/JuliaLang/Pkg.jl/issues/2432
+[#2448]: https://github.com/JuliaLang/Pkg.jl/issues/2448
+[#2454]: https://github.com/JuliaLang/Pkg.jl/issues/2454
+[#2552]: https://github.com/JuliaLang/Pkg.jl/issues/2552
+[#2561]: https://github.com/JuliaLang/Pkg.jl/issues/2561
+[#2580]: https://github.com/JuliaLang/Pkg.jl/issues/2580
+[#2689]: https://github.com/JuliaLang/Pkg.jl/issues/2689
+[#2702]: https://github.com/JuliaLang/Pkg.jl/issues/2702
+[#2815]: https://github.com/JuliaLang/Pkg.jl/issues/2815
+[#2906]: https://github.com/JuliaLang/Pkg.jl/issues/2906
+[#2933]: https://github.com/JuliaLang/Pkg.jl/issues/2933
+[#2985]: https://github.com/JuliaLang/Pkg.jl/issues/2985
+[#2995]: https://github.com/JuliaLang/Pkg.jl/issues/2995

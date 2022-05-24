@@ -684,6 +684,19 @@ end
     @inferred Pkg.REPLMode.CompoundSpecs(Pair{String,Vector{Pkg.REPLMode.CommandDeclaration}}[])
 end
 
+# To be used to reply to a prompt
+function withreply(f, ans)
+    p = Pipe()
+    try
+        redirect_stdin(p) do
+            @async println(p, ans)
+            f()
+        end
+    finally
+        close(p)
+    end
+end
+
 @testset "REPL missing package install hook" begin
     isolate(loaded_depot=true) do
         @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
@@ -691,13 +704,12 @@ end
         # don't offer to install the dummy "julia" entry that's in General
         @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
 
-        println(stdin.buffer, "n") # simulate rejecting prompt with `n\n`
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
-        flush(stdin.buffer)
-
-        println(stdin.buffer, "y") # simulate accepting prompt with `y\n`
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
-        flush(stdin.buffer)
+        withreply("n") do
+            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+        end
+        withreply("y") do
+            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+        end
     end
 end
 

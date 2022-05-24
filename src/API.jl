@@ -1813,7 +1813,7 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
             resolve(ctx)
         catch e
             if e isa ResolverError
-                printpkgstyle(io, :Error, e.msg, color = Base.warn_color())
+                printpkgstyle(io, :Error, string(e.msg), color = Base.warn_color())
             else
                 rethrow()
             end

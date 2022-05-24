@@ -116,6 +116,9 @@ function is_instantiated(env::EnvCache; platform = HostPlatform())::Bool
         if idx === nothing
             push!(pkgs, Types.PackageSpec(name=env.pkg.name, uuid=env.pkg.uuid, version=env.pkg.version, path=dirname(env.project_file)))
         end
+    else
+        # Make sure artifacts for project exist even if it is not a package
+        check_artifacts_downloaded(dirname(env.project_file); platform) || return false
     end
     # Make sure all paths/artifacts exist
     return all(pkg -> is_package_downloaded(env.project_file, pkg; platform), pkgs)
@@ -287,22 +290,24 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     return fixed
 end
 
+# drops build detail in version but keeps the main prerelease context
+# i.e. dropbuild(v"2.0.1-rc1.21321") == v"2.0.1-rc1"
+dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v.prerelease) ? () : (v.prerelease[1],))
 
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
-# all versioned packges should have a `tree_hash`
+# all versioned packages should have a `tree_hash`
 function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
     # compatibility
     if julia_version !== nothing
-        env.manifest.julia_version = julia_version
+        # only set the manifest julia_version if ctx.julia_version is not nothing
+        env.manifest.julia_version = dropbuild(VERSION)
         v = intersect(julia_version, get_compat(env.project, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
-    else
-        env.manifest.julia_version = VERSION
     end
     names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in stdlibs())
     # recursive search for packages which are tracking a path
@@ -632,8 +637,7 @@ function download_artifacts(env::EnvCache;
         pkg_root = source_path(env.project_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_roots, pkg_root)
     end
-    envpkg = env.pkg
-    envpkg === nothing || push!(pkg_roots, envpkg.path)
+    push!(pkg_roots, dirname(env.project_file))
     for pkg_root in pkg_roots
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
@@ -976,12 +980,12 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         local build_project_override, build_project_preferences
         if isfile(projectfile_path(builddir(source_path)))
             build_project_override = nothing
-            with_load_path([builddir(source_path)]) do
+            with_load_path([builddir(source_path), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         else
             build_project_override = gen_target_project(ctx, pkg, source_path, "build")
-            with_load_path([projectfile_path(source_path)]) do
+            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         end
@@ -1708,12 +1712,12 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         local test_project_preferences, test_project_override
         if isfile(projectfile_path(testdir(source_path)))
             test_project_override = nothing
-            with_load_path(testdir(source_path)) do
+            with_load_path([testdir(source_path), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         else
             test_project_override = gen_target_project(ctx, pkg, source_path, "test")
-            with_load_path(projectfile_path(source_path)) do
+            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         end
@@ -1727,7 +1731,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
-            p = run(pipeline(ignorestatus(cmd), stdin = stdin, stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
+            p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
             interrupted = false
             try
                 wait(p)
