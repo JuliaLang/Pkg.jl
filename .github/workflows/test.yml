@@ -35,8 +35,7 @@ jobs:
           - ""
           - "pkg.julialang.org"
         julia-version:
-          # - '1.6'
-          - 'nightly'
+          - '1.8-nightly'
         exclude:
           - os: macOS-latest
             julia-arch: x86
