@@ -33,6 +33,7 @@ devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depot, "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
+const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 stderr_f() = something(DEFAULT_IO[], stderr)
@@ -202,19 +203,24 @@ const update = API.up
 
 **Keyword arguments:**
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
+  - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
 
 !!! compat "Julia 1.3"
     `julia_args` and `test_args` requires at least Julia 1.3.
 
+!!! compat "Julia 1.9"
+    `allow_reresolve` requires at least Julia 1.9.
+
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its
 `test/runtests.jl` file.
 
-The tests are run by generating a temporary environment with only `pkg` and its (recursive) dependencies
-in it. If a manifest exists, the versions in that manifest are used, otherwise
-a feasible set of packages is resolved and installed.
+The tests are run by generating a temporary environment with only the `pkg` package
+and its (recursive) dependencies in it. If a manifest file exists and the `allow_reresolve`
+keyword argument is set to `false`, the versions in the manifest file are used.
+Otherwise a feasible set of packages is resolved and installed.
 
 During the tests, test-specific dependencies are active, which are
 given in the project file as e.g.
@@ -398,12 +404,13 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
 
 Print out the status of the project/manifest.
 
 Packages marked with `⌃` have new versions that can be installed, e.g. via [`Pkg.up`](@ref).
-Those marked with `⌅` have new versions available, but that cannot be installed. To see why use the `outdated` kwarg.
+Those marked with `⌅` have new versions available, but cannot be installed due to compatibility conflicts with other packages. To see why, set the
+keyword argument `outdated=true`.
 
 Setting `outdated=true` will only show packages that are not on the latest version,
 their maximum version and why they are not on the latest version (either due to other
@@ -512,6 +519,19 @@ set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
     Pkg's offline mode requires Julia 1.5 or later.
 """
 offline(b::Bool=true) = (OFFLINE_MODE[] = b; nothing)
+
+"""
+    Pkg.respect_sysimage_versions(b::Bool=true)
+
+Enable (`b=true`) or disable (`b=false`) respecting versions that are in the
+sysimage (enabled by default).
+
+If this option is enabled, Pkg will only install packages that have been put into the sysimage
+(e.g. via PackageCompiler) at the version of the package in the sysimage.
+Also, trying to add a package at a URL or `develop` a package that is in the sysimage
+will error.
+"""
+respect_sysimage_versions(b::Bool=true) = (RESPECT_SYSIMAGE_VERSIONS[] = b; nothing)
 
 """
     PackageSpec(name::String, [uuid::UUID, version::VersionNumber])

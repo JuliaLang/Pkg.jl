@@ -354,8 +354,8 @@ end
 
         # Manual test that artifact is installed by instantiate()
         artifacts_toml = joinpath(project_path, "ArtifactInstallation", "Artifacts.toml")
-        c_simple_hash = artifact_hash("c_simple", artifacts_toml)
-        @test artifact_exists(c_simple_hash)
+        hwc_hash = artifact_hash("HelloWorldC", artifacts_toml)
+        @test artifact_exists(hwc_hash)
     end
 
     # Ensure that porous platform coverage works with ensure_all_installed()
@@ -363,24 +363,24 @@ end
         copy_test_package(project_path, "ArtifactInstallation")
         artifacts_toml = joinpath(project_path, "ArtifactInstallation", "Artifacts.toml")
 
-        # Install artifacts such that `c_simple` is not installed properly
-        # because of the platform we requested, but `socrates` is.
-        missing_platform = Platform("powerpc64le", "linux")
-        artifacts = select_downloadable_artifacts(artifacts_toml; platform=missing_platform)
+        # Try to install all artifacts for the given platform, knowing full well that
+        # HelloWorldC will fail to match any artifact to this bogus platform
+        bogus_platform = Platform("bogus", "linux")
+        artifacts = select_downloadable_artifacts(artifacts_toml; platform=bogus_platform)
         for name in keys(artifacts)
-            ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=missing_platform)
+            ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=bogus_platform)
         end
 
-        # Test that c_simple doesn't even show up
-        c_simple_hash = artifact_hash("c_simple", artifacts_toml; platform=missing_platform)
-        @test c_simple_hash == nothing
+        # Test that HelloWorldC doesn't even show up
+        hwc_hash = artifact_hash("HelloWorldC", artifacts_toml; platform=bogus_platform)
+        @test hwc_hash === nothing
 
-        # Test that socrates shows up, but is not installed
-        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=missing_platform)
+        # Test that socrates shows up, but is not installed, because it's lazy
+        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=bogus_platform)
         @test !artifact_exists(socrates_hash)
 
         # Test that collapse_the_symlink is installed
-        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=missing_platform)
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=bogus_platform)
         @test artifact_exists(cts_hash)
     end
 
@@ -488,7 +488,7 @@ end
             "AugmentedPlatform",
             "flooblecrank" => "disengaged",
         )
-    
+
         p = HostPlatform()
         p["flooblecrank"] = "engaged"
         add_this_pkg(; platform=p)
@@ -767,6 +767,18 @@ end
         )
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
+    end
+end
+
+@testset "artifacts for non package project" begin
+    temp_pkg_dir() do tmpdir
+        artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
+        cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
+        Pkg.activate(tmpdir)
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml)
+        @test !artifact_exists(cts_hash)
+        Pkg.instantiate()
+        @test artifact_exists(cts_hash)
     end
 end
 

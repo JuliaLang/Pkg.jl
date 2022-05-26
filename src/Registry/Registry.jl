@@ -5,6 +5,7 @@ using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_serv
              GitTools, get_bool_env
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z
 using UUIDs, LibGit2, TOML
+import FileWatching
 
 include("registry_instance.jl")
 
@@ -42,11 +43,11 @@ Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
 add(; kwargs...) = add(RegistrySpec[]; kwargs...)
-function add(regs::Vector{RegistrySpec}; io::IO=stderr_f())
+function add(regs::Vector{RegistrySpec}; io::IO=stderr_f(), depot=depots1())
     if isempty(regs)
-        download_default_registries(io, only_if_empty = false)
+        download_default_registries(io, only_if_empty = false; depot)
     else
-        download_registries(io, regs)
+        download_registries(io, regs, depot)
     end
 end
 
@@ -94,12 +95,12 @@ end
 
 pkg_server_url_hash(url::String) = Base.SHA1(split(url, '/')[end])
 
-function download_default_registries(io::IO; only_if_empty::Bool = true)
+function download_default_registries(io::IO; only_if_empty::Bool = true, depot=depots1())
     installed_registries = reachable_registries()
     # Only clone if there are no installed registries, unless called
     # with false keyword argument.
     if isempty(installed_registries) || !only_if_empty
-        printpkgstyle(io, :Installing, "known registries into $(pathrepr(depots1()))")
+        printpkgstyle(io, :Installing, "known registries into $(pathrepr(depot))")
         registries = copy(DEFAULT_REGISTRIES)
         for uuid in keys(pkg_server_registry_urls())
             if !(uuid in (reg.uuid for reg in registries))
@@ -107,7 +108,7 @@ function download_default_registries(io::IO; only_if_empty::Bool = true)
             end
         end
         filter!(reg -> !(reg.uuid in installed_registries), registries)
-        download_registries(io, registries)
+        download_registries(io, registries, depot)
         return true
     end
     return false
@@ -163,6 +164,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     populate_known_registries_with_urls!(regs)
     regdir = joinpath(depot, "registries")
     isdir(regdir) || mkpath(regdir)
+    # only allow one julia process to download and install registries at a time
+    FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
     registry_urls = pkg_server_registry_urls()
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
@@ -250,6 +253,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             end
         end
     end
+    end # mkpidlock
     return nothing
 end
 
@@ -271,7 +275,7 @@ Pkg.Registry.rm(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 rm(reg::Union{String,RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
 rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
 function rm(regs::Vector{RegistrySpec}; io::IO=stderr_f())
-    for registry in find_installed_registries(io, regs)
+    for registry in find_installed_registries(io, regs; depots=first(Base.DEPOT_PATH))
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
         if isfile(registry.path)
             d = TOML.parsefile(registry.path)
@@ -286,8 +290,9 @@ end
 
 # Search for the input registries among installed ones
 function find_installed_registries(io::IO,
-                                   needles::Union{Vector{Registry.RegistryInstance}, Vector{RegistrySpec}})
-    haystack = reachable_registries()
+                                   needles::Union{Vector{Registry.RegistryInstance}, Vector{RegistrySpec}};
+                                   depots=Base.DEPOT_PATH)
+    haystack = reachable_registries(; depots)
     output = Registry.RegistryInstance[]
     for needle in needles
         if needle.name === nothing && needle.uuid === nothing
@@ -341,112 +346,119 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true)
-    isempty(regs) && (regs = reachable_registries(; depots=depots1()))
-    errors = Tuple{String, String}[]
-    registry_urls = pkg_server_registry_urls()
-    for reg in unique(r -> r.uuid, find_installed_registries(io, regs); seen=Set{UUID}())
-        let reg=reg, errors=errors
-            regpath = pathrepr(reg.path)
-            let regpath=regpath
-                if reg.tree_info !== nothing
-                    printpkgstyle(io, :Updating, "registry at " * regpath)
-                    old_hash = reg.tree_info
-                    url = get(registry_urls, reg.uuid, nothing)
-                    if url !== nothing
-                        check_registry_state(reg)
-                    end
-                    if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
-                        # TODO: update faster by using a diff, if available
-                        # TODO: DRY with the code in `download_default_registries`
-                        let new_hash = new_hash, url = url
-                            if registry_read_from_tarball()
-                                tmp = tempname()
-                                try
-                                    download_verify(url, nothing, tmp)
-                                catch err
-                                    push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
-                                    @goto done_tarball_read
-                                end
-                                # If we have an uncompressed Pkg server registry, remove it and get the compressed version
-                                if isdir(reg.path)
-                                    Base.rm(reg.path; recursive=true, force=true)
-                                end
-                                registry_path = dirname(reg.path)
-                                mv(tmp, joinpath(registry_path, reg.name * ".tar.gz"); force=true)
-                                hash = pkg_server_url_hash(url)
-                                reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ".tar.gz")
-                                open(joinpath(registry_path, reg.name * ".toml"), "w") do io
-                                    TOML.print(io, reg_info)
-                                end
-                                @label done_tarball_read
-                            else
-                                mktempdir() do tmp
+function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true, depots = [depots1()])
+    for depot in depots
+        depot_regs = isempty(regs) ? reachable_registries(; depots=depot) : regs
+        regdir = joinpath(depot, "registries")
+        isdir(regdir) || mkpath(regdir)
+        # only allow one julia process to update registries in this depot at a time
+        FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
+        errors = Tuple{String, String}[]
+        registry_urls = pkg_server_registry_urls()
+        for reg in unique(r -> r.uuid, find_installed_registries(io, depot_regs; depots=[depot]); seen=Set{UUID}())
+            let reg=reg, errors=errors
+                regpath = pathrepr(reg.path)
+                let regpath=regpath
+                    if reg.tree_info !== nothing
+                        printpkgstyle(io, :Updating, "registry at " * regpath)
+                        old_hash = reg.tree_info
+                        url = get(registry_urls, reg.uuid, nothing)
+                        if url !== nothing
+                            check_registry_state(reg)
+                        end
+                        if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
+                            # TODO: update faster by using a diff, if available
+                            # TODO: DRY with the code in `download_default_registries`
+                            let new_hash = new_hash, url = url
+                                if registry_read_from_tarball()
+                                    tmp = tempname()
                                     try
-                                        download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
+                                        download_verify(url, nothing, tmp)
                                     catch err
-                                        push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
-                                        @goto done_tarball_unpack
+                                        push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
+                                        @goto done_tarball_read
                                     end
-                                    tree_info_file = joinpath(tmp, ".tree_info.toml")
-                                    write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
-                                    mv(tmp, reg.path, force=true)
-                                    @label done_tarball_unpack
+                                    # If we have an uncompressed Pkg server registry, remove it and get the compressed version
+                                    if isdir(reg.path)
+                                        Base.rm(reg.path; recursive=true, force=true)
+                                    end
+                                    registry_path = dirname(reg.path)
+                                    mv(tmp, joinpath(registry_path, reg.name * ".tar.gz"); force=true)
+                                    hash = pkg_server_url_hash(url)
+                                    reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ".tar.gz")
+                                    open(joinpath(registry_path, reg.name * ".toml"), "w") do io
+                                        TOML.print(io, reg_info)
+                                    end
+                                    @label done_tarball_read
+                                else
+                                    mktempdir() do tmp
+                                        try
+                                            download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
+                                        catch err
+                                            push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
+                                            @goto done_tarball_unpack
+                                        end
+                                        tree_info_file = joinpath(tmp, ".tree_info.toml")
+                                        write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
+                                        mv(tmp, reg.path, force=true)
+                                        @label done_tarball_unpack
+                                    end
                                 end
                             end
                         end
-                    end
-                elseif isdir(joinpath(reg.path, ".git"))
-                    printpkgstyle(io, :Updating, "registry at " * regpath)
-                    LibGit2.with(LibGit2.GitRepo(reg.path)) do repo
-                        if LibGit2.isdirty(repo)
-                            push!(errors, (regpath, "registry dirty"))
-                            @goto done_git
-                        end
-                        if !LibGit2.isattached(repo)
-                            push!(errors, (regpath, "registry detached"))
-                            @goto done_git
-                        end
-                        if !("origin" in LibGit2.remotes(repo))
-                            push!(errors, (regpath, "origin not in the list of remotes"))
-                            @goto done_git
-                        end
-                        branch = LibGit2.headname(repo)
-                        try
-                            GitTools.fetch(io, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
-                        catch e
-                            e isa Pkg.Types.PkgError || rethrow()
-                            push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
-                            @goto done_git
-                        end
-                        ff_succeeded = try
-                            LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
-                        catch e
-                            e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
-                            push!(errors, (reg.path, "branch origin/$branch not found"))
-                            @goto done_git
-                        end
-
-                        if !ff_succeeded
-                            try LibGit2.rebase!(repo, "origin/$branch")
-                            catch e
-                                e isa LibGit2.GitError || rethrow()
-                                push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
+                    elseif isdir(joinpath(reg.path, ".git"))
+                        printpkgstyle(io, :Updating, "registry at " * regpath)
+                        LibGit2.with(LibGit2.GitRepo(reg.path)) do repo
+                            if LibGit2.isdirty(repo)
+                                push!(errors, (regpath, "registry dirty"))
                                 @goto done_git
                             end
+                            if !LibGit2.isattached(repo)
+                                push!(errors, (regpath, "registry detached"))
+                                @goto done_git
+                            end
+                            if !("origin" in LibGit2.remotes(repo))
+                                push!(errors, (regpath, "origin not in the list of remotes"))
+                                @goto done_git
+                            end
+                            branch = LibGit2.headname(repo)
+                            try
+                                GitTools.fetch(io, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
+                            catch e
+                                e isa Pkg.Types.PkgError || rethrow()
+                                push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
+                                @goto done_git
+                            end
+                            ff_succeeded = try
+                                LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
+                            catch e
+                                e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
+                                push!(errors, (reg.path, "branch origin/$branch not found"))
+                                @goto done_git
+                            end
+
+                            if !ff_succeeded
+                                try LibGit2.rebase!(repo, "origin/$branch")
+                                catch e
+                                    e isa LibGit2.GitError || rethrow()
+                                    push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
+                                    @goto done_git
+                                end
+                            end
+                            @label done_git
                         end
-                        @label done_git
                     end
                 end
             end
         end
-    end
-    if !isempty(errors)
-        warn_str = "Some registries failed to update:"
-        for (reg, err) in errors
-            warn_str *= "\n    — $reg — $err"
+        if !isempty(errors)
+            warn_str = "Some registries failed to update:"
+            for (reg, err) in errors
+                warn_str *= "\n    — $reg — $err"
+            end
+            @error warn_str
         end
-        @error warn_str
+        end # mkpidlock
     end
     return
 end

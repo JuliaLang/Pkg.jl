@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS
 
 #########
 # Utils #
@@ -116,6 +116,9 @@ function is_instantiated(env::EnvCache; platform = HostPlatform())::Bool
         if idx === nothing
             push!(pkgs, Types.PackageSpec(name=env.pkg.name, uuid=env.pkg.uuid, version=env.pkg.version, path=dirname(env.project_file)))
         end
+    else
+        # Make sure artifacts for project exist even if it is not a package
+        check_artifacts_downloaded(dirname(env.project_file); platform) || return false
     end
     # Make sure all paths/artifacts exist
     return all(pkg -> is_package_downloaded(env.project_file, pkg; platform), pkgs)
@@ -389,6 +392,7 @@ end
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
+const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID,String},
                     reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version)
     uuids = Set{UUID}()
@@ -454,6 +458,19 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                         if Pkg.OFFLINE_MODE[]
                             pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
                             is_package_downloaded(env.project_file, pkg_spec) || continue
+                        end
+
+                        # Skip package version that are not the same as external packages in sysimage
+                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
+                            pkgid = Base.PkgId(uuid, pkg.name)
+                            if Base.in_sysimage(pkgid)
+                                pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+                                if pkgorigin !== nothing && pkgorigin.version !== nothing
+                                    if v != pkgorigin.version
+                                        continue
+                                    end
+                                end
+                            end
                         end
 
                         all_compat_u[v] = compat_info
@@ -634,8 +651,7 @@ function download_artifacts(env::EnvCache;
         pkg_root = source_path(env.project_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_roots, pkg_root)
     end
-    envpkg = env.pkg
-    envpkg === nothing || push!(pkg_roots, envpkg.path)
+    push!(pkg_roots, dirname(env.project_file))
     for pkg_root in pkg_roots
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
@@ -978,12 +994,12 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         local build_project_override, build_project_preferences
         if isfile(projectfile_path(builddir(source_path)))
             build_project_override = nothing
-            with_load_path([builddir(source_path)]) do
+            with_load_path([builddir(source_path), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         else
             build_project_override = gen_target_project(ctx, pkg, source_path, "build")
-            with_load_path([projectfile_path(source_path)]) do
+            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         end
@@ -1436,19 +1452,20 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
     end
 end
 
-function gen_test_code(testfile::String;
+function gen_test_code(source_path::String;
         coverage=false,
         julia_args::Cmd=``,
         test_args::Cmd=``)
+    test_file = testfile(source_path)
     code = """
         $(Base.load_path_setup_code(false))
-        cd($(repr(dirname(testfile))))
+        cd($(repr(dirname(test_file))))
         append!(empty!(ARGS), $(repr(test_args.exec)))
-        include($(repr(testfile)))
+        include($(repr(test_file)))
         """
     return ```
         $(Base.julia_cmd())
-        --code-coverage=$(coverage ? "user" : "none")
+        --code-coverage=$(coverage ? string("@", source_path) : "none")
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes
@@ -1710,12 +1727,12 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         local test_project_preferences, test_project_override
         if isfile(projectfile_path(testdir(source_path)))
             test_project_override = nothing
-            with_load_path(testdir(source_path)) do
+            with_load_path([testdir(source_path), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         else
             test_project_override = gen_target_project(ctx, pkg, source_path, "test")
-            with_load_path(projectfile_path(source_path)) do
+            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         end
@@ -1728,8 +1745,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
-            cmd = gen_test_code(testfile(source_path); coverage=coverage, julia_args=julia_args, test_args=test_args)
-            p = run(pipeline(ignorestatus(cmd), stdin = stdin, stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
+            cmd = gen_test_code(source_path; coverage=coverage, julia_args=julia_args, test_args=test_args)
+            p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
             interrupted = false
             try
                 wait(p)
@@ -1856,6 +1873,14 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     end
     max_version == v"0" && return nothing
     pkg.version >= max_version && return nothing
+
+    pkgid = Base.PkgId(pkg.uuid, pkg.name)
+    if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && Base.in_sysimage(pkgid)
+        pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+        if pkgorigin !== nothing && pkg.version !== nothing && pkg.version == pkgorigin.version
+            return ["sysimage"], max_version, max_version_in_compat
+        end
+    end
 
     # Check compat of project
     if pkg.version == max_version_in_compat && max_version_in_compat != max_version
@@ -2026,23 +2051,27 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
     for pkg in package_statuses
         diff && !pkg.changed && continue # in diff mode don't print packages that didn't change
-        first_indicator_printed = false
+
+        pad = 0
+        print_padding(x) = (print(io, x); pad += 1)
+
         if !pkg.downloaded
-            print(io, not_installed_indicator)
-            first_indicator_printed = true
+            print_padding(not_installed_indicator)
         elseif lpadding > 2
-            print(io, " ")
-            first_indicator_printed = true
+            print_padding(" ")
         end
         if pkg.upgradable
-            print(io, upgradable_indicator)
+            print_padding(upgradable_indicator)
         elseif pkg.heldback
-            print(io, heldback_indicator)
-        elseif lpadding == 2 && !first_indicator_printed
-            print(io, " ")
+            print_padding(heldback_indicator)
         end
 
-        printstyled(io, " [", string(pkg.uuid)[1:8], "] "; color = :light_black)
+        # Fill the remaining padding with spaces
+        while pad < lpadding
+            print_padding(" ")
+        end
+
+        printstyled(io, "[", string(pkg.uuid)[1:8], "] "; color = :light_black)
 
         diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
 
@@ -2055,6 +2084,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             printstyled(io, " (<v", max_version, ")"; color=Base.warn_color())
             if packages_holding_back == ["compat"]
                 printstyled(io, " [compat]"; color=:light_magenta)
+            elseif packages_holding_back == ["sysimage"]
+                printstyled(io, " [sysimage]"; color=:light_magenta)
             else
                 pkg_str = isempty(packages_holding_back) ? "" : string(": ", join(packages_holding_back, ", "))
                 printstyled(io, pkg_str; color=Base.warn_color())

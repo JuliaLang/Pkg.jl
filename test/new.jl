@@ -5,6 +5,7 @@ import ..Pkg, LibGit2
 using  Pkg.Types: PkgError
 using  Pkg.Resolve: ResolverError
 import Pkg.Artifacts: artifact_meta, artifact_path
+import Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using  ..Utils
 
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
@@ -335,6 +336,11 @@ end
         api, opts = first(Pkg.pkg"activate -")
         @test api == Pkg.activate
         @test opts == Dict(:prev => true)
+        # github branch rewriting
+        api, args, opts = first(Pkg.pkg"add https://github.com/JuliaLang/Pkg.jl/tree/aa/gitlab")
+        arg = args[1]
+        @test arg.url == "https://github.com/JuliaLang/Pkg.jl"
+        @test arg.rev == "aa/gitlab"
     end
 end
 
@@ -561,7 +567,7 @@ end
         Pkg.add("Markdown")
         Pkg.add("Markdown")
         Pkg.dependencies(markdown_uuid) do pkg
-            pkg.name == "Markdown"
+            @test pkg.name == "Markdown"
         end
         @test haskey(Pkg.project().dependencies, "Markdown")
     end
@@ -2131,16 +2137,23 @@ end
         io = PipeBuffer()
         Pkg.status(; io=io)
         @test occursin(r"Status `.+Project.toml`", readline(io))
-        @test occursin(r"→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
-        @test occursin(r"\[d6f4376e\] Markdown", readline(io))
+        @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
+        @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
         @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
-        @test occursin(r"→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
-        @test occursin(r"\[2a0f44e3\] Base64", readline(io))
-        @test occursin(r"\[d6f4376e\] Markdown", readline(io))
+        @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
+        @test occursin(r"^   \[2a0f44e3\] Base64", readline(io))
+        @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
+        Pkg.instantiate(;io=devnull) # download Example
+        Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
+        @test occursin(r"Status `.+Manifest.toml`", readline(io))
+        @test occursin(r"^⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
+        @test occursin(r"^  \[2a0f44e3\] Base64", readline(io))
+        @test occursin(r"^  \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
     end
     # Manifest Status API
@@ -2276,6 +2289,7 @@ end
 # # Caching
 #
 @testset "Repo caching" begin
+    default_branch = LibGit2.getconfig("init.defaultBranch", "master")
     # Add by URL should not overwrite files.
     isolate(loaded_depot=true) do
         Pkg.add(url="https://github.com/JuliaLang/Example.jl")
@@ -2334,7 +2348,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                original_master = string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                original_master = string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
@@ -2355,7 +2369,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                @test original_master == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                @test original_master == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
@@ -2370,7 +2384,7 @@ end
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
             cache = Pkg.Types.add_repo_cache_path(pkg.git_source)
             LibGit2.with(LibGit2.GitRepo(cache)) do repo
-                @test new_commit == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/master")))
+                @test new_commit == string(LibGit2.GitHash(LibGit2.GitObject(repo, "refs/heads/$(default_branch)")))
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
@@ -2815,15 +2829,28 @@ end
         artifacts_toml = joinpath(gmp_jll_dir, "Artifacts.toml")
         @test isfile(artifacts_toml)
         meta = artifact_meta("GMP", artifacts_toml)
-        @test meta !== nothing
 
-        gmp_artifact_path = artifact_path(Base.SHA1(meta["git-tree-sha1"]))
-        @test isdir(gmp_artifact_path)
+        # `meta` can be `nothing` on some of our newer platforms; we _know_ this should
+        # not be the case on the following platforms, so we check these explicitly to
+        # ensure that we haven't accidentally broken something, and then we gate some
+        # following tests on whether or not `meta` is `nothing`:
+        for arch in ("x86_64", "i686"), os in ("linux", "mac", "windows")
+            if platforms_match(HostPlatform(), Platform(arch, os))
+                @test meta !== nothing
+            end
+        end
 
-        # On linux, we can check the filename to ensure it's grabbing the correct library
-        if Sys.islinux()
-            libgmp_filename = joinpath(gmp_artifact_path, "lib", "libgmp.so.10.3.2")
-            @test isfile(libgmp_filename)
+        # These tests require a matching platform artifact for this old version of GMP_jll,
+        # which is not the case on some of our newer platforms.
+        if meta !== nothing
+            gmp_artifact_path = artifact_path(Base.SHA1(meta["git-tree-sha1"]))
+            @test isdir(gmp_artifact_path)
+
+            # On linux, we can check the filename to ensure it's grabbing the correct library
+            if Sys.islinux()
+                libgmp_filename = joinpath(gmp_artifact_path, "lib", "libgmp.so.10.3.2")
+                @test isfile(libgmp_filename)
+            end
         end
     end
 
@@ -2891,6 +2918,43 @@ end
             @test isdir(pkg_dir)
         end
     end
+end
+
+if :version in fieldnames(Base.PkgOrigin)
+@testset "sysimage functionality" begin
+    old_sysimage_modules = copy(Base._sysimage_modules)
+    old_pkgorigins = copy(Base.pkgorigins)
+    try
+        # Fake having a packages in the sysimage.
+        json_pkgid = Base.PkgId(json_uuid, "JSON")
+        push!(Base._sysimage_modules, json_pkgid)
+        Base.pkgorigins[json_pkgid] = Base.PkgOrigin(nothing, nothing, v"0.20.1")
+        isolate(loaded_depot=true) do
+            Pkg.add("JSON"; io=devnull)
+            Pkg.dependencies(json_uuid) do pkg
+                pkg.version == v"0.20.1"
+            end
+            io = IOBuffer()
+            Pkg.status(; outdated=true, io=io)
+            str = String(take!(io))
+            @test occursin("⌅ [682c06a0] JSON v0.20.1", str)
+            @test occursin("[sysimage]", str)
+
+            @test_throws PkgError Pkg.add(name="JSON", rev="master"; io=devnull)
+            @test_throws PkgError Pkg.develop("JSON"; io=devnull)
+
+            Pkg.respect_sysimage_versions(false)
+            Pkg.add("JSON"; io=devnull)
+            Pkg.dependencies(json_uuid) do pkg
+                pkg.version != v"0.20.1"
+            end
+        end
+    finally
+        copy!(Base._sysimage_modules, old_sysimage_modules)
+        copy!(Base.pkgorigins, old_pkgorigins)
+        Pkg.respect_sysimage_versions(true)
+    end
+end
 end
 
 end #module
