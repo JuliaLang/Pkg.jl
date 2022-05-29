@@ -429,6 +429,9 @@ function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_curre
         return stdlibs()
     end
     last_stdlibs = UNREGISTERED_STDLIBS
+    if isempty(STDLIBS_BY_VERSION)
+        pkgerror("If you want to set `julia_version`, you must first populate the `STDLIBS_BY_VERSION` global constant")
+    end
     for (version, stdlibs) in STDLIBS_BY_VERSION
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
             break

@@ -15,6 +15,8 @@ using .Utils
 include("resolve_utils.jl")
 using .ResolveUtils
 
+include("historical_stdlib_data.jl")
+
 # Check that VersionWeight keeps the same ordering as VersionNumber
 
 vlst = [
@@ -464,6 +466,7 @@ end
 end
 
 @testset "Resolving for another version of Julia" begin
+    append!(Pkg.Types.STDLIBS_BY_VERSION, HistoricalStdlibData.STDLIBS_BY_VERSION)
     temp_pkg_dir() do dir
         function find_by_name(versions, name)
             idx = findfirst(p -> p.name == name, versions)
@@ -506,6 +509,7 @@ end
         @test mpfr !== nothing
         @test mpfr.version.major == 4 && mpfr.version.minor == 0
     end
+    empty!(Pkg.Types.STDLIBS_BY_VERSION)
 end
 
 @testset "Stdlib resolve smoketest" begin
