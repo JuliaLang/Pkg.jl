@@ -431,7 +431,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
             # unregistered stdlib we must special-case it here.  This is further
             # complicated by the fact that we can ask this question relative to
             # a Julia version.
-            if is_unregistered_stdlib(uuid) || uuid_is_stdlib
+            if (julia_version != VERSION && is_unregistered_stdlib(uuid)) || uuid_is_stdlib
                 path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
