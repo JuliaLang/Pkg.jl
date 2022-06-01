@@ -2796,6 +2796,9 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, nothing)
 
     empty!(Pkg.Types.STDLIBS_BY_VERSION)
+    
+    # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
+    # but that we throw a PkgError if we ask for a particular julia version.
     @test is_stdlib(networkoptions_uuid)
     @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
