@@ -505,6 +505,11 @@ end
         mpfr = find_by_name(versions, "MPFR_jll")
         @test mpfr !== nothing
         @test mpfr.version.major == 4 && mpfr.version.minor == 0
+
+        # Test for issue #2942
+        libjulia_jll = "libjulia_jll"
+        Pkg.add(Pkg.Types.Context(; julia_version = v"1.6"), [PackageSpec(; name = libjulia_jll)])
+        @test isinstalled(libjulia_jll)
     end
 end
 
