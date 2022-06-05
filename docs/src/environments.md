@@ -105,6 +105,13 @@ Activating project at `~/Example.jl`
 If the project contains a manifest, this will install the packages in the same state that is given by that manifest.
 Otherwise, it will resolve the latest versions of the dependencies compatible with the project.
 
+Note that `activate` by itself does not install missing dependencies.
+In particular, if you attempt to import a package listed as a dependency in the project file, Julia will throw an error if this package is not already installed in the local depot.
+If the package is installed, but there is a manifest file, Julia will only load it if it finds an installed version matching the version listed in the manifest file.
+For this reason, `instantiate` is also needed in this example, since it will install all dependencies locally and in the versions required by the environment manifest file, if one is present.
+If the dependencies are already installed, `instantiate` does nothing.
+
+
 !!! note "Specifying project on startup"
     Instead of using `activate` from within Julia you can specify the project on startup using
     the `--project=<path>` flag. For example, to run a script from the command line using the
