@@ -2098,7 +2098,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color=Base.info_color(), ignore_indent)
     end
     if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
-        tip = show_usagetips ? " To see why use `status --outdated`" : ""
+        tipend = manifest ? " -m" : ""
+        tip = show_usagetips ? " To see why use `status --outdated$tipend`" : ""
         if !no_packages_upgradable && no_visible_packages_heldback
             printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", color=Base.info_color(), ignore_indent)
         end
