@@ -1740,7 +1740,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; preferences=test_project_preferences, force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
-            status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false)
+            status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
             Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
@@ -1976,7 +1976,7 @@ end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO,
-                      mode::PackageMode, hidden_upgrades_info::Bool)
+                      mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.warn_color()), "⌅", context=io)
@@ -2093,18 +2093,19 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color=Base.info_color(), ignore_indent)
     end
     if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
+        tip = show_usagetips ? " To see why use `status --outdated`" : ""
         if !no_packages_upgradable && no_visible_packages_heldback
             printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
         end
         if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
             # only warn if showing project and outdated indirect deps are hidden
-            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
         end
     end
 
@@ -2138,7 +2139,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, outdated::Bool=false, hidden_upgrades_info::Bool=false)
+                io::IO, outdated::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2165,14 +2166,15 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode, hidden_upgrades_info)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode, hidden_upgrades_info)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
-        printpkgstyle(io, :Warning, """The project dependencies or compat requirements have changed since the manifest was last resolved. \
-        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary.""", ignore_indent; color=Base.warn_color())
+        tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""
+        printpkgstyle(io, :Warning, "The project dependencies or compat requirements have changed since the manifest was last resolved.$tip",
+            ignore_indent; color=Base.warn_color())
     end
 end
 
