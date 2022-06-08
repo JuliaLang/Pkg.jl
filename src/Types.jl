@@ -12,7 +12,7 @@ using REPL.TerminalMenus
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 
@@ -519,6 +519,18 @@ function devpath(env::EnvCache, name::AbstractString, shared::Bool)
     return joinpath(dev_dir, name)
 end
 
+function error_if_in_sysimage(pkg::PackageSpec)
+    RESPECT_SYSIMAGE_VERSIONS[] || return false
+    if pkg.uuid === nothing
+        @error "Expected package $(pkg.name) to have a set UUID, please file a bug report."
+        return false
+    end
+    pkgid = Base.PkgId(pkg.uuid, pkg.name)
+    if Base.in_sysimage(pkgid)
+        pkgerror("Tried to develop or add by URL package $(pkgid) which is already in the sysimage, use `Pkg.respect_sysimage_versions(false)` to disable this check.")
+    end
+end
+
 function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     # First, check if we can compute the path easily (which requires a given local path or name)
     is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
@@ -537,6 +549,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         end
         if isdir(dev_path)
             resolve_projectfile!(ctx.env, pkg, dev_path)
+            error_if_in_sysimage(pkg)
             if is_local_path
                 pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
             else
@@ -598,6 +611,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     if !has_uuid(pkg)
         resolve_projectfile!(ctx.env, pkg, dev_path)
     end
+    error_if_in_sysimage(pkg)
     pkg.path = shared ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
     if pkg.repo.subdir !== nothing
         pkg.path = joinpath(pkg.path, pkg.repo.subdir)
@@ -728,13 +742,15 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
             if has_uuid(pkg)
+                error_if_in_sysimage(pkg)
                 version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
                 isdir(version_path) && return false
             end
 
             temp_path = mktempdir()
             GitTools.checkout_tree_to_path(repo, tree_hash_object, temp_path)
-            package = resolve_projectfile!(ctx.env, pkg, temp_path)
+            resolve_projectfile!(ctx.env, pkg, temp_path)
+            error_if_in_sysimage(pkg)
 
             # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
             # check to see if the package exists at its canonical path.

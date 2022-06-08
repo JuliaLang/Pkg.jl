@@ -43,6 +43,7 @@ Pkg.status
 Pkg.compat
 Pkg.precompile
 Pkg.offline
+Pkg.respect_sysimage_versions
 Pkg.setprotocol!
 Pkg.dependencies
 Pkg.project

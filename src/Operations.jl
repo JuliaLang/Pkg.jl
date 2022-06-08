@@ -14,7 +14,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS
 
 #########
 # Utils #
@@ -392,6 +392,7 @@ end
 get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
+const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID,String},
                     reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version)
     uuids = Set{UUID}()
@@ -431,7 +432,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
             # unregistered stdlib we must special-case it here.  This is further
             # complicated by the fact that we can ask this question relative to
             # a Julia version.
-            if is_unregistered_stdlib(uuid) || uuid_is_stdlib
+            if (julia_version != VERSION && is_unregistered_stdlib(uuid)) || uuid_is_stdlib
                 path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
@@ -457,6 +458,19 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                         if Pkg.OFFLINE_MODE[]
                             pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
                             is_package_downloaded(env.project_file, pkg_spec) || continue
+                        end
+
+                        # Skip package version that are not the same as external packages in sysimage
+                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
+                            pkgid = Base.PkgId(uuid, pkg.name)
+                            if Base.in_sysimage(pkgid)
+                                pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+                                if pkgorigin !== nothing && pkgorigin.version !== nothing
+                                    if v != pkgorigin.version
+                                        continue
+                                    end
+                                end
+                            end
                         end
 
                         all_compat_u[v] = compat_info
@@ -1726,7 +1740,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; preferences=test_project_preferences, force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
-            status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false)
+            status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
             Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
@@ -1859,6 +1873,14 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     max_version == v"0" && return nothing
     pkg.version >= max_version && return nothing
 
+    pkgid = Base.PkgId(pkg.uuid, pkg.name)
+    if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && Base.in_sysimage(pkgid)
+        pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+        if pkgorigin !== nothing && pkg.version !== nothing && pkg.version == pkgorigin.version
+            return ["sysimage"], max_version, max_version_in_compat
+        end
+    end
+
     # Check compat of project
     if pkg.version == max_version_in_compat && max_version_in_compat != max_version
         return ["compat"], max_version, max_version_in_compat
@@ -1954,7 +1976,7 @@ end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO,
-                      mode::PackageMode, hidden_upgrades_info::Bool)
+                      mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.warn_color()), "⌅", context=io)
@@ -2057,6 +2079,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             printstyled(io, " (<v", max_version, ")"; color=Base.warn_color())
             if packages_holding_back == ["compat"]
                 printstyled(io, " [compat]"; color=:light_magenta)
+            elseif packages_holding_back == ["sysimage"]
+                printstyled(io, " [sysimage]"; color=:light_magenta)
             else
                 pkg_str = isempty(packages_holding_back) ? "" : string(": ", join(packages_holding_back, ", "))
                 printstyled(io, pkg_str; color=Base.warn_color())
@@ -2069,18 +2093,20 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color=Base.info_color(), ignore_indent)
     end
     if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
+        tipend = manifest ? " -m" : ""
+        tip = show_usagetips ? " To see why use `status --outdated$tipend`" : ""
         if !no_packages_upgradable && no_visible_packages_heldback
             printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
         end
         if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
             # only warn if showing project and outdated indirect deps are hidden
-            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
         end
     end
 
@@ -2114,7 +2140,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, outdated::Bool=false, hidden_upgrades_info::Bool=false)
+                io::IO, outdated::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2141,14 +2167,15 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode, hidden_upgrades_info)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode, hidden_upgrades_info)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
-        printpkgstyle(io, :Warning, """The project dependencies or compat requirements have changed since the manifest was last resolved. \
-        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary.""", ignore_indent; color=Base.warn_color())
+        tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""
+        printpkgstyle(io, :Warning, "The project dependencies or compat requirements have changed since the manifest was last resolved.$tip",
+            ignore_indent; color=Base.warn_color())
     end
 end
 
