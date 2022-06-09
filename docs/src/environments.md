@@ -62,28 +62,60 @@ This new environment is completely separate from the one we used earlier. See [`
 
 ## Project Precompilation
 
-By default any package that is added to a project or updated in a Pkg action will be automatically precompiled, along
-with its dependencies. The exception is the `develop` command, which neither builds nor precompiles the package, when
-that happens is left up to the user to decide.
+### Auto-precompilation
 
-If a package that has been updated is already loaded in the session, the precompilation process will go ahead and precompile
-the new version, and any packages that depend on it, but will note that the package cannot be used until session restart.
+By default, any package that is added to a project or updated in a Pkg action will be automatically precompiled, along
+with its dependencies.
 
-To disable this auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`, after which precompilation can be triggered
-manually either serially via code loading
+```julia-repl
+(@v1.9) pkg> add Images
+   Resolving package versions...
+    Updating `~/.julia/environments/v1.9/Project.toml`
+  [916415d5] + Images v0.25.2
+    Updating `~/.julia/environments/v1.9/Manifest.toml`
+    ...
+Precompiling project...
+  Progress [===================>                     ]  45/97
+  ✓ NaNMath
+  ✓ IntervalSets
+  ◐ CoordinateTransformations
+  ◑ ArnoldiMethod
+  ◑ IntegralArrays
+  ◒ RegionTrees
+  ◐ ChangesOfVariables
+  ◓ PaddedViews
+```
+
+The exception is the `develop` command, which neither builds nor precompiles the package. When
+that happens is left up to the user to manually build and precompile the package.
+
+If a given package version errors during auto-precompilation, Pkg will remember for the next time it
+automatically tries, and will skip that package with a brief warning. Note that manual precompilation will
+always retry all packages i.e. `pkg> precompile`
+
+To disable the auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
+
+### Maunal precompilation
+
+Precompilation can be triggered manually either serially via code loading
 
 ```julia-repl
 julia> using Example
 [ Info: Precompiling Example [7876af07-990d-54b4-ab0e-23690620f79a]
 ```
 
- or the parallel precompilation, which can be significantly faster when many dependencies are involved, via
+or using Pkg's parallel precompilation, which can be significantly faster when many dependencies are involved, via
 
 ```julia-repl
-pkg> precompile
+(@v1.9) pkg> precompile
 Precompiling project...
   23 dependencies successfully precompiled in 36 seconds
 ```
+
+### Precompiling new versions of loaded packages
+
+If a package that has been updated is already loaded in the session, the precompilation process will go ahead and precompile
+the new version, and any packages that depend on it, but will note that the package cannot be used until session restart.
 
 ## Using someone else's project
 
