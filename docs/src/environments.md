@@ -87,7 +87,7 @@ Precompiling project...
 ```
 
 The exception is the `develop` command, which neither builds nor precompiles the package. When
-that happens is left up to the user decide.
+that happens is left up to the user to decide.
 
 If a given package version errors during auto-precompilation, Pkg will remember for the following times it
 automatically tries, and will skip that package with a brief warning. Note that manual precompilation will
