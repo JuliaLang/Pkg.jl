@@ -89,7 +89,7 @@ Precompiling project...
 The exception is the `develop` command, which neither builds nor precompiles the package. When
 that happens is left up to the user decide.
 
-If a given package version errors during auto-precompilation, Pkg will remember for the next time it
+If a given package version errors during auto-precompilation, Pkg will remember for the following times it
 automatically tries, and will skip that package with a brief warning. Note that manual precompilation will
 always retry all packages i.e. `pkg> precompile`
 
