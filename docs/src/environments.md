@@ -112,7 +112,6 @@ If you already have a resolved `Manifest.toml`, then you will still need to ensu
 
 In short, `instantiate` is your friend to make sure an environment is ready to use. If there's nothing to do, `instantiate` does nothing.
 
-
 !!! note "Specifying project on startup"
     Instead of using `activate` from within Julia you can specify the project on startup using
     the `--project=<path>` flag. For example, to run a script from the command line using the
