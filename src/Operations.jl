@@ -1418,7 +1418,7 @@ function update_package_free!(registries::Vector{Registry.RegistryInstance}, pkg
     if entry.path !== nothing || entry.repo.source !== nothing
         # make sure the package is registered so we have something to free to
         if is_all_registered(registries, [pkg]) !== true
-            pkgerror("unable to free unregistered package $(err_rep(pkg))")
+            pkgerror("unregistered package $(err_rep(pkg)) cannot be freed but must be re-added")
         end
         return # -> name, uuid
     end
