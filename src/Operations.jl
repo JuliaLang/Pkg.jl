@@ -613,7 +613,7 @@ function install_git(
     end
 end
 
-function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform())
+function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform(), include_lazy::Bool=false)
     # Check to see if this package has an (Julia)Artifacts.toml
     artifacts_tomls = Tuple{String,Base.TOML.TOMLDict}[]
     for f in artifact_names
@@ -631,7 +631,7 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
             else
                 # Otherwise, use the standard selector from `Artifacts`
-                artifacts = select_downloadable_artifacts(artifacts_toml; platform)
+                artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy)
                 push!(artifacts_tomls, (artifacts_toml, artifacts))
             end
             break
@@ -644,7 +644,8 @@ function download_artifacts(env::EnvCache;
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
                             verbose::Bool=false,
-                            io::IO=stderr_f())
+                            io::IO=stderr_f(),
+                            include_lazy::Bool=false)
     pkg_roots = String[]
     for (uuid, pkg) in env.manifest
         pkg = manifest_info(env.manifest, uuid)
@@ -653,7 +654,7 @@ function download_artifacts(env::EnvCache;
     end
     push!(pkg_roots, dirname(env.project_file))
     for pkg_root in pkg_roots
-        for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
+        for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform, include_lazy)
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
                 ensure_artifact_installed(name, artifacts[name], artifacts_toml;
