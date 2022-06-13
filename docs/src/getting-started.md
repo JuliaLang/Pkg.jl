@@ -187,6 +187,9 @@ We do this with `free`:
 (tutorial) pkg> free Example
 ```
 
+!!! warning
+    For an unregistered package, one instead needs to re-`add` the package.
+
 When you are done experimenting with `tutorial`, you can return to the **default
 environment** by running `activate` with no arguments:
 
