@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module Pkg
+module Pkg # hello world
 
 import Random
 import REPL
