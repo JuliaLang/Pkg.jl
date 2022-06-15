@@ -3,7 +3,7 @@ uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 keywords = ["package management"]
 license = "MIT"
 desc = "The next-generation Julia package manager."
-version = "1.6.6"
+version = "1.6.7"
 
 [deps]
 Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
