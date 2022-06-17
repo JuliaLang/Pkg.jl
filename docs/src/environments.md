@@ -63,20 +63,23 @@ This new environment is completely separate from the one we used earlier. See [`
 ## Project Precompilation
 
 Before a package can be imported, Julia will "precompile" the source code into an intermediate more efficient cache on disc.
-This precompilation can be triggered via code loading any time an un-imported package has changed
+This precompilation can be triggered via code loading if the un-imported package is new or has changed since the last cache
 
 ```julia-repl
 julia> using Example
 [ Info: Precompiling Example [7876af07-990d-54b4-ab0e-23690620f79a]
 ```
 
-or using Pkg's parallel precompilation, which can be significantly faster when many dependencies are involved, via
+or using Pkg's precompile option, which can precompile the entire project, or a given dependency, and do so in parallel,
+which can be significantly faster than the code-load route above.
 
 ```julia-repl
 (@v1.9) pkg> precompile
 Precompiling project...
   23 dependencies successfully precompiled in 36 seconds
 ```
+
+However, neither of these should be required routinely due to Pkg's automatic precompilation.
 
 ### Automatic Precompilation
 
@@ -110,6 +113,7 @@ automatically tries, and will skip that package with a brief warning. Manual pre
 force these packages to be retried, as `pkg> precompile` will always retry all packages.
 
 To disable the auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
+
 ### Precompiling new versions of loaded packages
 
 If a package that has been updated is already loaded in the session, the precompilation process will go ahead and precompile
