@@ -90,8 +90,8 @@ The exception is the `develop` command, which neither builds nor precompiles the
 that happens is left up to the user to decide.
 
 If a given package version errors during auto-precompilation, Pkg will remember for the following times it
-automatically tries, and will skip that package with a brief warning. Manual precompilation can be used to force these packages to be retried, as `pkg> precompile` will
-always retry all packages.
+automatically tries, and will skip that package with a brief warning. Manual precompilation can be used to
+force these packages to be retried, as `pkg> precompile` will always retry all packages.
 
 To disable the auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
 
