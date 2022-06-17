@@ -626,9 +626,15 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 # Despite the fact that we inherit the project, since the in-memory manifest
                 # has not been updated yet, if we try to load any dependencies, it may fail.
                 # Therefore, this project inheritance is really only for Preferences, not dependencies.
-                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) $(triplet(platform))`)
+                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) --startup-file=no $(triplet(platform))`)
                 meta_toml = String(read(select_cmd))
-                push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
+                res = TOML.tryparse(meta_toml)
+                if res isa TOML.ParserError
+                    errstr = sprint(showerror, res; context=stderr)
+                    pkgerror("failed to parse TOML output from running $(repr(selector_path)), got: \n$errstr")
+                else
+                    push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
+                end
             else
                 # Otherwise, use the standard selector from `Artifacts`
                 artifacts = select_downloadable_artifacts(artifacts_toml; platform)
@@ -2098,7 +2104,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color=Base.info_color(), ignore_indent)
     end
     if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
-        tip = show_usagetips ? " To see why use `status --outdated`" : ""
+        tipend = manifest ? " -m" : ""
+        tip = show_usagetips ? " To see why use `status --outdated$tipend`" : ""
         if !no_packages_upgradable && no_visible_packages_heldback
             printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", color=Base.info_color(), ignore_indent)
         end
