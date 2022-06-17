@@ -74,7 +74,7 @@ or using Pkg's precompile option, which can precompile the entire project, or a 
 which can be significantly faster than the code-load route above.
 
 ```julia-repl
-(@v1.9) pkg> precompile
+(@v1.6) pkg> precompile
 Precompiling project...
   23 dependencies successfully precompiled in 36 seconds
 ```
@@ -87,7 +87,7 @@ By default, any package that is added to a project or updated in a Pkg action wi
 with its dependencies.
 
 ```julia-repl
-(@v1.9) pkg> add Images
+(@v1.6) pkg> add Images
    Resolving package versions...
     Updating `~/.julia/environments/v1.9/Project.toml`
   [916415d5] + Images v0.25.2
