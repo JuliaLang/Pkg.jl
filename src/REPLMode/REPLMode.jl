@@ -658,7 +658,13 @@ const help = gen_help()
 const REG_WARNED = Ref{Bool}(false)
 
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
-    ctx = Context()
+    ctx = try
+        Context()
+    catch
+        # Context() will error if there isn't an active project.
+        # If we can't even do that, exit early.
+        return false
+    end
     if isempty(ctx.registries)
         if !REG_WARNED[]
             printstyled(ctx.io, " │ "; color=:green)
