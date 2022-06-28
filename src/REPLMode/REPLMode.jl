@@ -226,7 +226,7 @@ end
 
 function tokenize(cmd::String)
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ") # for multiline commands
-    qstrings = lex(cmd)
+    qstrings = lex(string(lstrip(cmd, ']')))  # remove accidental leading `]`
     statements = foldl(qstrings; init=[QString[]]) do collection, next
         (next.raw == ";" && !next.isquoted) ?
             push!(collection, QString[]) :

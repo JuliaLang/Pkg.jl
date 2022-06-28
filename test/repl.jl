@@ -23,6 +23,25 @@ using ..Utils
     @test_throws PkgError pkg"helpadd"
 end
 
+@testset "accidental" begin
+    pkg"]?"
+    pkg"]]?"
+    pkg"] ?"
+    pkg"]] ?"
+    pkg"]st"
+    pkg"]]st"
+    pkg"] st"
+    pkg"]] st"
+    pkg"]st -m"
+    pkg"]]st -m"
+    pkg"] st -m"
+    pkg"]] st -m"
+    # noop
+    pkg"]"
+    pkg"]]"
+    @test true
+end
+
 temp_pkg_dir() do project_path
     with_pkg_env(project_path; change_dir=true) do;
         pkg"generate HelloWorld"
