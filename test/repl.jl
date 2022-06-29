@@ -25,20 +25,12 @@ end
 
 @testset "accidental" begin
     @test_logs (:warn, r"Removing leading.*") pkg"]?"
-    @test_logs (:warn, r"Removing leading.*") pkg"]]?"
     @test_logs (:warn, r"Removing leading.*") pkg"] ?"
-    @test_logs (:warn, r"Removing leading.*") pkg"]] ?"
     @test_logs (:warn, r"Removing leading.*") pkg"]st"
-    @test_logs (:warn, r"Removing leading.*") pkg"]]st"
     @test_logs (:warn, r"Removing leading.*") pkg"] st"
-    @test_logs (:warn, r"Removing leading.*") pkg"]] st"
     @test_logs (:warn, r"Removing leading.*") pkg"]st -m"
-    @test_logs (:warn, r"Removing leading.*") pkg"]]st -m"
     @test_logs (:warn, r"Removing leading.*") pkg"] st -m"
-    @test_logs (:warn, r"Removing leading.*") pkg"]] st -m"
-    # noop
-    @test_logs (:warn, r"Removing leading.*") pkg"]"
-    @test_logs (:warn, r"Removing leading.*") pkg"]]"
+    @test_logs (:warn, r"Removing leading.*") pkg"]"  # noop
 end
 
 temp_pkg_dir() do project_path
