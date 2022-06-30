@@ -138,7 +138,7 @@ Updating `~/.julia/environments/v1/Manifest.toml`
 Instead of giving a URL of a git repo to `add` we could instead have given a local path to a git repo.
 This works similar to adding a URL. The local repository will be tracked (at some branch) and updates
 from that local repo are pulled when packages are updated.
-Note tracking a package through `add` is distinct from `develop`:
+Note that tracking a package through `add` is distinct from `develop`:
 changes to files in the local package repository will not immediately be reflected when loading that package.
 The changes would have to be committed and the packages updated in order to pull in the changes.
 
@@ -165,9 +165,9 @@ Let's try to `dev` a registered package:
 
 The `dev` command fetches a full clone of the package to `~/.julia/dev/` (the path can be changed by setting the environment variable `JULIA_PKG_DEVDIR`, the default being `joinpath(DEPOT_PATH[1],"dev")`).
 When importing `Example` julia will now import it from `~/.julia/dev/Example` and whatever local changes have been made to the files in that path are consequently
-reflected in the code loaded. When we used `add` we said that we tracked the package repository, we here say that we track the path itself.
-Note the package manager will never touch any of the files at a tracked path. It is therefore up to you to pull updates, change branches etc.
-If we try to `dev` a package at some branch that already exists at `~/.julia/dev/` the package manager we will simply use the existing path.
+reflected in the code loaded. When we used `add` we said that we tracked the package repository; we here say that we track the path itself.
+Note the package manager will never touch any of the files at a tracked path. It is therefore up to you to pull updates, change branches, etc.
+If we try to `dev` a package at some branch that already exists at `~/.julia/dev/` the package manager will simply use the existing path.
 For example:
 
 ```julia-repl
@@ -444,7 +444,7 @@ and what packages/artifacts those projects used.
 If a package or artifact is not marked as used by any project, it is added to a list of orphaned packages.
 Packages and artifacts that are in the orphan list for 30 days without being used again are deleted from the system on the next garbage collection.
 This timing is configurable via the `collect_delay` keyword argument to `Pkg.gc()`.
-A value of `0` will cause anything currently not in use immediately, skipping the orphans list entirely;
+A value of `0` will cause anything currently not in use to be collected immediately, skipping the orphans list entirely;
 If you are short on disk space and want to clean out as many unused packages and artifacts as possible, you may want to try this, but if you need these versions again, you will have to download them again.
 To run a typical garbage collection with default arguments, simply use the `gc` command at the `pkg>` REPL:
 
@@ -487,19 +487,19 @@ variable `JULIA_PKG_OFFLINE` to `"true"`.
 When you add a new registered package, usually three things would happen:
 
 1. update registries,
-2. download source codes of the package,
+2. download source code of the package,
 3. if not available, download [artifacts](@ref Artifacts) required by the package.
 
 The [General](https://github.com/JuliaRegistries/General) registry and most packages in it are
-developed on Github, while the artifacts data are hosted in various platforms. When the network
-connection to Github and AWS S3 is not stable, it is usually not a good experience to install or
+developed on GitHub, while the artifacts data are hosted in various platforms. When the network
+connection to GitHub and AWS S3 is not stable, it is usually not a good experience to install or
 update packages. Fortunately, the pkg client/server feature improves the experience in the sense that:
 
-1. If set, pkg client would first try to download data from the pkg server,
-2. if that fails, then it falls back to download from the original sources (e.g., Github).
+1. If set, the pkg client would first try to download data from the pkg server,
+2. if that fails, then it falls back to download from the original sources (e.g., GitHub).
 
-Since Julia 1.5, `https://pkg.julialang.org` provided by the JuliaLang org. is used as the default
-pkg server. In most cases this should be transparent, but users can still set/unset an pkg server
+Since Julia 1.5, `https://pkg.julialang.org` provided by the JuliaLang organization is used as the default
+pkg server. In most cases this should be transparent, but users can still set/unset a pkg server
 upstream via the environment variable `JULIA_PKG_SERVER`.
 
 ```julia
@@ -524,8 +524,8 @@ For clarification, some sources are not provided by Pkg server
 
 !!! note
     If you have a new registry installed via pkg server, then it's impossible for old Julia versions to
-    update the registry because Julia before 1.4 don't know how to fetch new data.
-    Hence, for users that frequently switches between multiple julia versions, it is recommended to
-    still use git-controlled regsitries.
+    update the registry because Julia before 1.4 doesn't know how to fetch new data.
+    Hence, for users that frequently switch between multiple Julia versions, it is recommended to
+    still use git-controlled registries.
 
 For the deployment of pkg server, please refer to [PkgServer.jl](https://github.com/JuliaPackaging/PkgServer.jl).
