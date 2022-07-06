@@ -253,7 +253,25 @@ function download(
     verbose::Bool = false,
     headers::Vector{Pair{String,String}} = Pair{String,String}[],
     auth_header::Union{Pair{String,String}, Nothing} = nothing,
-    io::IO=stderr_f()
+    io::IO=stderr_f(),
+)
+    response = request(url; dest, verbose, headers, auth_header, io)
+    if !Downloads.status_ok(response.proto, response.status) # TODO: delete this line once https://github.com/JuliaLang/Downloads.jl/pull/199 is merged
+    # if !Downloads.status_ok(response) # TODO: uncomment this line once https://github.com/JuliaLang/Downloads.jl/pull/199 is merged
+        ex = Downloads.RequestError(url, Downloads.Curl.CURLE_OK, "", response)
+        throw(ex)
+    end
+    return nothing
+end
+
+function request(
+    url::AbstractString;
+    dest::Union{AbstractString, Base.AbstractCmd, IO, Nothing} = nothing,
+    verbose::Bool = false,
+    headers::Vector{Pair{String,String}} = Pair{String,String}[],
+    auth_header::Union{Pair{String,String}, Nothing} = nothing,
+    io::IO=stderr_f(),
+    allow_fancyprint_if_available::Bool=true,
 )
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
@@ -265,7 +283,7 @@ function download(
         push!(headers, header)
     end
 
-    do_fancy = verbose && can_fancyprint(io)
+    do_fancy = verbose && can_fancyprint(io) && allow_fancyprint_if_available
     progress = if do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
         start_progress(io, bar)
@@ -279,8 +297,13 @@ function download(
     else
         (total, now) -> nothing
     end
-    try
-        Downloads.download(url, dest; headers, progress)
+    return try
+        if verbose && !do_fancy
+            response = Downloads.request(url; output = dest, headers, verbose)
+        else
+            response = Downloads.request(url; output = dest, headers, progress)
+        end
+        response
     finally
         do_fancy && end_progress(io, bar)
     end
