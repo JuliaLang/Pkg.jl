@@ -142,6 +142,15 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         else
             entry.deps = deps_map[pkg.uuid]
         end
+        v = joinpath(source_path(env.project_file, pkg), "Project.toml")
+        if isfile(v)
+            p = Types.read_project(v)
+            entry.gluedeps = p.gluedeps
+            entry.gluepkgs = p.gluepkgs
+            for (name, _) in p.gluedeps
+                delete!(entry.deps, name)
+            end
+        end
         env.manifest[pkg.uuid] = entry
     end
     prune_manifest(env)
@@ -198,24 +207,29 @@ function reset_all_compat!(proj::Project)
     return nothing
 end
 
-function collect_project!(pkg::PackageSpec, path::String,
-                          deps_map::Dict{UUID,Vector{PackageSpec}})
-    deps_map[pkg.uuid] = PackageSpec[]
+function collect_project(pkg::PackageSpec, path::String)
+    deps = PackageSpec[]
+    glues = Set{UUID}()
     project_file = projectfile_path(path; strict=true)
     if project_file === nothing
         pkgerror("could not find project file for package $(err_rep(pkg)) at `$path`")
     end
     project = read_package(project_file)
-    julia_compat = get_compat(project, "julia")
     #=
     # TODO, this should either error or be quiet
+    julia_compat = get_compat(project, "julia")
     if julia_compat !== nothing && !(VERSION in julia_compat)
         println(io, "julia version requirement for package $(err_rep(pkg)) not satisfied")
     end
     =#
     for (name, uuid) in project.deps
         vspec = get_compat(project, name)
-        push!(deps_map[pkg.uuid], PackageSpec(name, uuid, vspec))
+        push!(deps, PackageSpec(name, uuid, vspec))
+    end
+    for (name, uuid) in project.gluedeps
+        vspec = get_compat(project, name)
+        push!(deps, PackageSpec(name, uuid, vspec))
+        push!(glues, uuid)
     end
     if project.version !== nothing
         pkg.version = project.version
@@ -223,7 +237,7 @@ function collect_project!(pkg::PackageSpec, path::String,
         # @warn("project file for $(pkg.name) is missing a `version` entry")
         pkg.version = VersionNumber(0)
     end
-    return
+    return deps, glues
 end
 
 is_tracking_path(pkg) = pkg.path !== nothing
@@ -258,9 +272,12 @@ end
 
 function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     deps_map = Dict{UUID,Vector{PackageSpec}}()
+    glue_map = Dict{UUID,Set{UUID}}()
     if env.pkg !== nothing
         pkg = env.pkg
-        collect_project!(pkg, dirname(env.project_file), deps_map)
+        deps, glues = collect_project(pkg, dirname(env.project_file))
+        deps_map[pkg.uuid] = deps
+        glue_map[pkg.uuid] = glues
         names[pkg.uuid] = pkg.name
     end
     for pkg in pkgs
@@ -268,7 +285,9 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
         end
-        collect_project!(pkg, path, deps_map)
+        deps, glues = collect_project(pkg, path)
+        deps_map[pkg.uuid] = deps
+        glue_map[pkg.uuid] = glues
     end
 
     fixed = Dict{UUID,Resolve.Fixed}()
@@ -285,7 +304,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
             fix_pkg = pkgs[idx]
         end
-        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q)
+        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q, glue_map[uuid])
     end
     return fixed
 end
@@ -407,6 +426,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
 
     # pkg -> version -> (dependency => compat):
     all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
+    glue_compat = Dict{UUID,Dict{VersionNumber,Set{UUID}}}()
 
     for (fp, fx) in fixed
         all_compat[fp]   = Dict(fx.version => Dict{UUID,VersionSpec}())
@@ -418,7 +438,8 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
         for uuid in unseen
             push!(seen, uuid)
             uuid in keys(fixed) && continue
-            all_compat_u = get_or_make!(all_compat,   uuid)
+            all_compat_u = get_or_make!(all_compat, uuid)
+            glue_compat_u = get_or_make!(glue_compat, uuid)
 
             uuid_is_stdlib = false
             stdlib_name = ""
@@ -446,35 +467,56 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                     push!(uuids, other_uuid)
                     all_compat_u_vr[other_uuid] = VersionSpec()
                 end
+
+                if !isempty(proj.gluedeps)
+                    glue_all_compat_u_vr = get_or_make!(glue_compat_u, v)
+                    for (_, other_uuid) in proj.gluedeps
+                        push!(uuids, other_uuid)
+                        all_compat_u_vr[other_uuid] = VersionSpec()
+                        push!(glue_all_compat_u_vr, other_uuid)
+                    end
+                end
             else
                 for reg in registries
                     pkg = get(reg, uuid, nothing)
                     pkg === nothing && continue
                     info = Registry.registry_info(pkg)
-                    for (v, compat_info) in Registry.compat_info(info)
-                        # Filter yanked and if we are in offline mode also downloaded packages
-                        # TODO, pull this into a function
-                        Registry.isyanked(info, v) && continue
-                        if Pkg.OFFLINE_MODE[]
-                            pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
-                            is_package_downloaded(env.project_file, pkg_spec) || continue
-                        end
 
-                        # Skip package version that are not the same as external packages in sysimage
-                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
-                            pkgid = Base.PkgId(uuid, pkg.name)
-                            if Base.in_sysimage(pkgid)
-                                pkgorigin = get(Base.pkgorigins, pkgid, nothing)
-                                if pkgorigin !== nothing && pkgorigin.version !== nothing
-                                    if v != pkgorigin.version
-                                        continue
+                    function add_compat!(d, cinfo)
+                        for (v, compat_info) in cinfo
+                            # Filter yanked and if we are in offline mode also downloaded packages
+                            # TODO, pull this into a function
+                            Registry.isyanked(info, v) && continue
+                            if Pkg.OFFLINE_MODE[]
+                                pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
+                                is_package_downloaded(env.project_file, pkg_spec) || continue
+                            end
+
+                            # Skip package version that are not the same as external packages in sysimage
+                            if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
+                                pkgid = Base.PkgId(uuid, pkg.name)
+                                if Base.in_sysimage(pkgid)
+                                    pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+                                    if pkgorigin !== nothing && pkgorigin.version !== nothing
+                                        if v != pkgorigin.version
+                                            continue
+                                        end
                                     end
                                 end
                             end
+                            dv = get_or_make!(d, v)
+                            merge!(dv, compat_info)
+                            union!(uuids, keys(compat_info))
                         end
-
-                        all_compat_u[v] = compat_info
-                        union!(uuids, keys(compat_info))
+                    end
+                    add_compat!(all_compat_u, Registry.compat_info(info))
+                    glue_compat_info = Registry.glue_compat_info(info)
+                    if glue_compat_info !== nothing
+                        add_compat!(all_compat_u, glue_compat_info)
+                        # Version to Set
+                        for (v, compat_info) in  glue_compat_info
+                            glue_compat_u[v] = keys(compat_info)
+                        end
                     end
                 end
             end
@@ -493,7 +535,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
         end
     end
 
-    return Resolve.Graph(all_compat, uuid_to_name, reqs, fixed, false, julia_version),
+    return Resolve.Graph(all_compat, glue_compat, uuid_to_name, reqs, fixed, false, julia_version),
            all_compat
 end
 
@@ -1127,7 +1169,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     # only declare `compat` for remaining direct or `extra` dependencies
     # `julia` is always an implicit direct dependency
     filter!(ctx.env.project.compat) do (name, _)
-        name == "julia" || name in keys(ctx.env.project.deps) || name in keys(ctx.env.project.extras)
+        name == "julia" || name in keys(ctx.env.project.deps) || name in keys(ctx.env.project.extras) || name in keys(ctx.env.project.gluedeps)
     end
     deps_names = union(keys(ctx.env.project.deps), keys(ctx.env.project.extras))
     filter!(ctx.env.project.targets) do (target, deps)
@@ -1735,9 +1777,13 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     test_project.deps = source_env.project.deps
     # collect test dependencies
     for name in get(source_env.project.targets, target, String[])
-        uuid = get(source_env.project.extras, name, nothing)
+        uuid = nothing
+        for list in [source_env.project.extras, source_env.project.gluedeps]
+            uuid = get(list, name, nothing)
+            uuid === nothing || break
+        end
         if uuid === nothing
-            pkgerror("`$name` declared as a `$target` dependency, but no such entry in `extras`")
+            pkgerror("`$name` declared as a `$target` dependency, but no such entry in `extras` or `gluedeps`")
         end
         test_project.deps[name] = uuid
     end
@@ -2083,6 +2129,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     lpadding = 2
 
     package_statuses = PackageStatusData[]
+    installed_cache = Dict{Base.PkgId, Bool}()
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
             continue
@@ -2116,6 +2163,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         no_packages_upgradable &= (!changed || !pkg_upgradable)
         no_visible_packages_heldback &= (!changed || !pkg_heldback)
         no_packages_heldback &= !pkg_heldback
+
         push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed))
     end
 

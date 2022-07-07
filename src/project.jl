@@ -2,7 +2,7 @@
 # UTILS #
 #########
 listed_deps(project::Project) =
-    append!(collect(keys(project.deps)), collect(keys(project.extras)))
+    append!(collect(keys(project.deps)), collect(keys(project.extras)), collect(keys(project.gluedeps)))
 
 ###########
 # READING #
@@ -73,21 +73,26 @@ end
 read_project_compat(raw, project::Project) =
     pkgerror("Expected `compat` section to be a key-value list")
 
-function validate(project::Project)
+function validate(project::Project; file=nothing)
     # deps
+    location_string = file === nothing ? "" : " at $(repr(file))."
     dep_uuids = collect(values(project.deps))
     if length(dep_uuids) != length(unique(dep_uuids))
-        pkgerror("Two different dependencies can not have the same uuid")
+        pkgerror("Two different dependencies can not have the same uuid" * location_string)
+    end
+    glue_dep_uuids = collect(values(project.gluedeps))
+    if length(glue_dep_uuids) != length(unique(glue_dep_uuids))
+        pkgerror("Two different glue dependencies can not have the same uuid" * location_string)
     end
     # extras
     extra_uuids = collect(values(project.extras))
     if length(extra_uuids) != length(unique(extra_uuids))
-        pkgerror("Two different `extra` dependencies can not have the same uuid")
+        pkgerror("Two different `extra` dependencies can not have the same uuid" * location_string)
     end
-    dep_names = keys(project.deps)
     # TODO decide what to do in when `add`ing a dep that is already in `extras`
     #   also, reintroduce test files for this
     #=
+    dep_names = keys(project.deps)
     for (name, uuid) in project.extras
         name in dep_names && pkgerror("name `$name` is listed in both `deps` and `extras`")
         uuid in dep_uuids && pkgerror("uuid `$uuid` is listed in both `deps` and `extras`")
@@ -100,18 +105,18 @@ function validate(project::Project)
             pkgerror("A dependency was named twice in target `$target`")
         end
         dep in listed || pkgerror("""
-            Dependency `$dep` in target `$target` not listed in `deps` or `extras` section.
-            """)
+            Dependency `$dep` in target `$target` not listed in `deps`, `gluedeps` or `extras` section
+            """ * location_string)
     end
     # compat
     for (name, version) in project.compat
         name == "julia" && continue
         name in listed ||
-            pkgerror("Compat `$name` not listed in `deps` or `extras` section.")
+            pkgerror("Compat `$name` not listed in `deps`, `gluedeps` or `extras` section" * location_string)
     end
 end
 
-function Project(raw::Dict)
+function Project(raw::Dict; file=nothing)
     project = Project()
     project.other    = raw
     project.name     = get(raw, "name", nothing)::Union{String, Nothing}
@@ -119,10 +124,12 @@ function Project(raw::Dict)
     project.uuid     = read_project_uuid(get(raw, "uuid", nothing))
     project.version  = read_project_version(get(raw, "version", nothing))
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
+    project.gluedeps = read_project_deps(get(raw, "gluedeps", nothing), "gluedeps")
+    project.gluepkgs = get(Dict{String, String}, raw, "gluepkgs")
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
-    validate(project)
+    validate(project; file)
     return project
 end
 
@@ -139,7 +146,7 @@ function read_project(f_or_io::Union{String, IO})
         end
         rethrow()
     end
-    return Project(raw)
+    return Project(raw; file= f_or_io isa IO ? nothing : f_or_io)
 end
 
 
@@ -168,6 +175,7 @@ function destructure(project::Project)::Dict
     entry!("version",  project.version)
     entry!("manifest", project.manifest)
     entry!("deps",     project.deps)
+    entry!("gluedeps", project.gluedeps)
     entry!("extras",   project.extras)
     entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
     entry!("targets",  project.targets)
