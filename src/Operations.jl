@@ -142,6 +142,11 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         else
             entry.deps = deps_map[pkg.uuid]
         end
+        v = joinpath(source_path(env.project_file, pkg), "Project.toml")
+        if isfile(v)
+            p = Types.read_project(v)
+            entry.weakdeps = p.weakdeps
+        end
         env.manifest[pkg.uuid] = entry
     end
     prune_manifest(env)
