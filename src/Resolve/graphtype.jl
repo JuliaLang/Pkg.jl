@@ -236,13 +236,12 @@ mutable struct Graph
 
     function Graph(
             compat::Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}},
+            compat_glue::Dict{UUID,Dict{VersionNumber,Set{UUID}}},
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
             fixed::Dict{UUID,Fixed},
             verbose::Bool = false,
             julia_version::Union{VersionNumber,Nothing} = VERSION
-            ;
-            compat_weak::Dict{UUID,Dict{VersionNumber,Set{UUID}}} = Dict{UUID,Dict{VersionNumber,Set{UUID}}}(),
         )
 
         # Tell the resolver about julia itself
@@ -256,7 +255,6 @@ mutable struct Graph
 
         data = GraphData(compat, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
-
         extended_deps = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
             [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
         end
@@ -276,14 +274,14 @@ mutable struct Graph
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
             req_msk = Dict{Int,BitVector}()
-            maybe_weak = haskey(compat_weak, uuid0) && haskey(compat_weak[uuid0], vn)
+            maybe_weak = haskey(compat_glue, uuid0) && haskey(compat_glue[uuid0], vn)
             for (p1, vs) in req
                 pv = pvers[p1]
                 req_msk_p1 = BitVector(undef, spp[p1])
                 @inbounds for i in 1:spp[p1] - 1
                     req_msk_p1[i] = pv[i] ∈ vs
                 end
-                weak = maybe_weak && (pkgs[p1] ∈ compat_weak[uuid0][vn])
+                weak = maybe_weak && (pkgs[p1] ∈ compat_glue[uuid0][vn])
                 req_msk_p1[end] = weak
                 req_msk[p1] = req_msk_p1
             end

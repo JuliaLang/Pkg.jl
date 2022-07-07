@@ -154,7 +154,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
+            $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx) # rm does too, but it's handled differently
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
             return ret
         end
@@ -301,8 +301,10 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
 
     Operations.rm(ctx, pkgs; mode)
+
     return
 end
+
 
 function append_all_pkgs!(pkgs, ctx, mode)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
@@ -1163,6 +1165,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs))")
     end
 
+    target = string(isempty(pkgs) ? "project" : join(pkgs, ", "), "...")
+
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
     skipped_deps = Base.PkgId[]
@@ -1309,7 +1313,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     iob = IOBuffer()
                     name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
                     !fancyprint && lock(print_lock) do
-                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "environment...")
+                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, target)
                     end
                     push!(pkg_queue, pkg)
                     started[pkg] = true
@@ -1613,6 +1617,7 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
+
         Operations.print_compat(ctx, pkgs; io)
     else
         Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated)

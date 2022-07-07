@@ -245,6 +245,81 @@ using Test
 Every dependency should in general have a compatibility constraint on it.
 This is an important topic so there is a separate chapter about it: [Compatibility](@ref Compatibility).
 
+## Conditional loading of code in packages (Glue packages)
+
+!!! note
+    This is a somewhat advanced section which can be skipped for people new to Julia and Julia packages.
+
+It is sometimes desirable to be able to extend some functionality of a package without having to
+unconditionally take on the cost (in terms of e.g. load time) of adding an extra dependency.
+A *glue package* is a file that gets automatically loaded when some other set of packages are
+loaded into the Julia session.
+
+A useful application of glue packages could be for a plotting package that should be able to plot
+objects from a wide variety of different Julia packages.
+Adding all those different Julia packages as dependencies
+could be expensive since they would end up getting loaded even if they were never used.
+Instead, these code required to plot objects for specific packages can be put into separate files
+(glue packages) which is only loaded when 
+
+Below is an example of how the code can be structured for a use case as outlined above.
+
+ `Project.toml`:
+ ```toml
+name = "Plotting"
+version = "0.1.0"
+uuid = "..."
+
+[deps]
+Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
+
+[gluedeps]
+Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
+
+[gluepkgs] 
+# name of glue package to the left
+# glue dependencies required to load the glue pkg to the right
+# use a list for multiple glue dependencies
+GlueContour = "Contour" 
+
+[compat] # compat can also be given on glue dependencies
+Colors = "0.12.8"
+Contour = "0.6.2"
+```
+
+`src/Plotting.jl`:
+```julia
+module Plotting
+using Colors
+
+function plot(x::Colors.Color)
+    # Some functionality for plotting a color here
+end
+
+end # module
+```
+
+`glue/GlueContour.jl` (can also be in `glue/GlueContour/GlueContour.jl`):
+```julia
+module GlueContour
+
+using Plotting, Contour
+
+function Plotting.plot(c::Contour.ContourCollection)
+    # Some functionality for plotting a contour here
+end
+
+end # module
+```
+
+A user that depends on `Plotting` will not pay the code of the "glue code" inside the `GlueContour` module.
+It is only when the `Contour` package actually gets loaded that the `GlueCountour` glue package will get loaded
+and provide the new functionality.
+
+Compatibility can be set on glue dependencies just like normal dependencies.
+
+A glue package will only be loaded if the glue dependencies are loaded from the same environment or environments higher in the environment stack than the package itself.
+
 ## Package naming guidelines
 
 Package names should be sensible to most Julia users, *even to those who are not domain experts*.
