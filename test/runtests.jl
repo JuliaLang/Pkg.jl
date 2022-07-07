@@ -28,29 +28,35 @@ Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO
 
 include("utils.jl")
 
-Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
-    @testset "Pkg" begin
-        @testset "$f" for f in [
-            "new.jl",
-            "pkg.jl",
-            "repl.jl",
-            "api.jl",
-            "registry.jl",
-            "subdir.jl",
-            "artifacts.jl",
-            "binaryplatforms.jl",
-            "platformengines.jl",
-            "sandbox.jl",
-            "resolve.jl",
-            "misc.jl",
-            "force_latest_compatible_version.jl",
-            "manifests.jl",
-            ]
-            @info "==== Testing `test/$f`"
-            flush(Pkg.DEFAULT_IO[])
-            include(f)
-        end
-    end
-end
+ENV["JULIA_PKG_SERVER"] = "http://localhost:8888"
+@info "" ENV["JULIA_PKG_SERVER"] Pkg.PlatformEngines.get_server_dir(ENV["JULIA_PKG_SERVER"])
+
+ENV["JULIA_PKG_SERVER"] = "http://localhost:8888/"
+@info "" ENV["JULIA_PKG_SERVER"] Pkg.PlatformEngines.get_server_dir(ENV["JULIA_PKG_SERVER"])
+
+# Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
+#     @testset "Pkg" begin
+#         @testset "$f" for f in [
+#             "new.jl",
+#             "pkg.jl",
+#             "repl.jl",
+#             "api.jl",
+#             "registry.jl",
+#             "subdir.jl",
+#             "artifacts.jl",
+#             "binaryplatforms.jl",
+#             "platformengines.jl",
+#             "sandbox.jl",
+#             "resolve.jl",
+#             "misc.jl",
+#             "force_latest_compatible_version.jl",
+#             "manifests.jl",
+#             ]
+#             @info "==== Testing `test/$f`"
+#             flush(Pkg.DEFAULT_IO[])
+#             include(f)
+#         end
+#     end
+# end
 
 end # module
