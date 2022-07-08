@@ -49,13 +49,19 @@ function get_server_dir(
 )
     server === nothing && return
     url == server || startswith(url, "$server/") || return
-    m = match(r"^\w+://([^\\/]+)(?:$|/)", server)
+    m = match(r"^\w+://(?:[^\\/@]+@)?([^\\/:]+)(:(\d*?))?(?:$|/|:)", server)
     if m === nothing
         @warn "malformed Pkg server value" server
         return
     end
     isempty(Base.DEPOT_PATH) && return
-    joinpath(depots1(), "servers", String(m.captures[1]))
+    m_1 = m[1]::AbstractString
+    if m[2] === nothing
+        return joinpath(Pkg.depots1(), "servers", m_1)
+    else
+        m_3 = m[3]::AbstractString
+        return joinpath(Pkg.depots1(), "servers", m_1 * "_" * m_3)
+    end
 end
 
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex},Any}[]
