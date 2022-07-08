@@ -343,6 +343,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "Example" in c
         c, r = test_complete("rm --manifest Exam")
         @test "Example" in c
+        c, r = test_complete("why PackageWithDep")
+        @test "PackageWithDependency" in c
 
         c, r = test_complete("rm PackageWithDep")
         @test "PackageWithDependency" in c

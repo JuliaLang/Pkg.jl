@@ -1831,7 +1831,7 @@ compat(;kwargs...) = compat(Context(); kwargs...)
 # why #
 #######
 
-function why(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
+function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
     require_not_empty(pkgs, :why)
 
     manifest_resolve!(ctx.env.manifest, pkgs)
@@ -1867,16 +1867,16 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; kwargs...)
 
     first = true
     for pkg in pkgs
-        !first && println()
+        !first && println(io)
         first = false
         final_paths = []
         find_paths!(final_paths, pkg.uuid)
         foreach(reverse!, final_paths)
         final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], final_paths)
         sort!(final_paths_names, by = x -> (x, length(x)))
-        delimiter = sprint((io, args) -> printstyled(io, args...; color=:light_green), "→", context=ctx.io)
+        delimiter = sprint((io, args) -> printstyled(io, args...; color=:light_green), "→", context=io)
         for path in final_paths_names
-            println("  ", join(path, " $delimiter "))
+            println(io, "  ", join(path, " $delimiter "))
         end
     end
 end
