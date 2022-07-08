@@ -40,14 +40,12 @@ Pkg.status
 Pkg.compat
 Pkg.precompile
 Pkg.offline
-Pkg.respect_sysimage_versions
-Pkg.setprotocol!
 Pkg.why
 Pkg.dependencies
+Pkg.respect_sysimage_versions
 Pkg.project
 Pkg.undo
 Pkg.redo
-Pkg.precompile
 Pkg.setprotocol!
 PackageSpec
 PackageMode
