@@ -191,7 +191,7 @@ The output is a the different way to reach the package
 through the dependency graph starting from the dependencies.
 
 !!! compat "Julia 1.9"
-    This function requires at least Julia 1.6.
+    This function requires at least Julia 1.9.
 """
 const why = API.why
 
