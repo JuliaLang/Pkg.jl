@@ -2048,11 +2048,12 @@ struct PackageStatusData
     heldback::Bool
     compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
     changed::Bool
+    weakdeps::Vector{Tuple{String, Bool}} # name, installed
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO,
-                      mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
+                      mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true, weak::Bool=false)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.warn_color()), "⌅", context=io)
@@ -2088,6 +2089,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     lpadding = 2
 
     package_statuses = PackageStatusData[]
+    installed_cache = Dict{Base.PkgId, Bool}()
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
             continue
@@ -2121,7 +2123,23 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         no_packages_upgradable &= (!changed || !pkg_upgradable)
         no_visible_packages_heldback &= (!changed || !pkg_heldback)
         no_packages_heldback &= !pkg_heldback
-        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed))
+
+        weakdeps = Tuple{String, Bool}[]
+        if weak
+            entry = get(env.manifest.deps, uuid, nothing)
+            if entry !== nothing
+                for (weakname, weakuuid) in entry.weakdeps
+                    pkgid = Base.PkgId(weakuuid, weakname)
+                    # TODO: Use Base.collect_installed_weak_deps instead?
+                    installed = get!(() -> Base.locate_package(pkgid, env.project_file) !== nothing, installed_cache, pkgid)
+                    push!(weakdeps, (weakname, installed))
+                end
+            end
+            # Sort according to installation status?
+            isempty(weakdeps) && continue
+        end
+
+        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, weakdeps))
     end
 
     for pkg in package_statuses
@@ -2149,6 +2167,23 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         printstyled(io, "[", string(pkg.uuid)[1:8], "] "; color = :light_black)
 
         diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
+
+        if weak && !diff && !isempty(pkg.weakdeps)
+            print(io, " (weak: ")
+            first = true
+            for (name, installed) in pkg.weakdeps
+                if !first
+                    print(io, ", ")
+                end
+                first = false
+                if installed
+                    print(io, string("✓ ", name))
+                else
+                    printstyled(io, string("✘ ", name); color=:light_black)
+                end
+            end
+            print(io, ")")
+        end
 
         if outdated && !diff && pkg.compat_data !== nothing
             packages_holding_back, max_version, max_version_compat = pkg.compat_data
@@ -2220,7 +2255,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, outdated::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
+                io::IO, outdated::Bool=false, weak::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2247,10 +2282,10 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, weak, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, weak, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
         tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""

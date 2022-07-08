@@ -448,6 +448,9 @@ it is held back to 0.4.8.
 The latest version of LogExpFunctions is 0.3.0 but SpecialFunctions
 is holding it back to 0.2.5.
 
+The `--weak` flag to `pkg> status` will show the weak dependencies of packages and colorize the
+results whether these are installed or not.
+
 If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
 that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`,
 print status also about those in the manifest (recursive dependencies). If there are
