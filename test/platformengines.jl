@@ -209,7 +209,12 @@ end
         if observed != expected
             @error "Test failure" url server expected_directory observed expected
         end
+
         @test observed == expected
+
+        # Test for Windows drive letter shenanigans
+        @test startswith(observed, Pkg.depots1())
+        @test startswith(observed, joinpath(Pkg.depots1(), "servers"))
     end
 
     @testset "get_server_dir" begin
