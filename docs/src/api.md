@@ -24,9 +24,6 @@ but more complicated commands, which e.g. specify URLs or version range, require
 This is done by creating an instance of [`PackageSpec`](@ref) which is passed in to functions.
 
 ```@docs
-PackageSpec
-PackageMode
-UpgradeLevel
 Pkg.add
 Pkg.develop
 Pkg.activate
@@ -43,12 +40,16 @@ Pkg.status
 Pkg.compat
 Pkg.precompile
 Pkg.offline
-Pkg.respect_sysimage_versions
-Pkg.setprotocol!
+Pkg.why
 Pkg.dependencies
+Pkg.respect_sysimage_versions
 Pkg.project
 Pkg.undo
 Pkg.redo
+Pkg.setprotocol!
+PackageSpec
+PackageMode
+UpgradeLevel
 ```
 
 

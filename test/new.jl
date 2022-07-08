@@ -1430,6 +1430,42 @@ end
 end
 
 #
+# # Why
+#
+@testset "why: REPL" begin
+    isolate() do
+        Pkg.REPLMode.TEST_MODE[] = true
+        api, opts = first(Pkg.pkg"why Foo")
+        @test api == Pkg.why
+        @test first(opts).name == "Foo"
+        @test_throws PkgError Pkg.pkg"why Foo Bar"
+    end
+end
+
+@testset "why" begin
+    isolate() do
+        Pkg.add(name = "StaticArrays", version = "1.5.0")
+
+        io = IOBuffer()
+        Pkg.why("StaticArrays"; io)
+        str = String(take!(io))
+        @test str == "  StaticArrays\n"
+
+        Pkg.why("StaticArraysCore"; io)
+        str = String(take!(io))
+        @test str ==  "  StaticArrays → StaticArraysCore\n"
+
+        Pkg.why("LinearAlgebra"; io)
+        str = String(take!(io))
+        @test str == 
+        """  StaticArrays → LinearAlgebra
+          StaticArrays → Statistics → LinearAlgebra
+          StaticArrays → Statistics → SparseArrays → LinearAlgebra
+        """
+    end
+end
+
+#
 # # Update
 #
 @testset "update: input checking" begin

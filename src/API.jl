@@ -138,7 +138,7 @@ function require_not_empty(pkgs, f::Symbol)
 end
 
 # Provide some convenience calls
-for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
+for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
@@ -1826,6 +1826,61 @@ end
 compat(pkg::String; kwargs...) = compat(pkg, nothing; kwargs...)
 compat(pkg::String, compat_str::Union{Nothing,String}; kwargs...) = compat(Context(), pkg, compat_str; kwargs...)
 compat(;kwargs...) = compat(Context(); kwargs...)
+
+#######
+# why #
+#######
+
+function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
+    require_not_empty(pkgs, :why)
+
+    manifest_resolve!(ctx.env.manifest, pkgs)
+    project_deps_resolve!(ctx.env, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
+
+    # Store all packages that has a dependency on us (all dependees)
+    incoming = Dict{UUID, Set{UUID}}()
+    for (uuid, dep_pkgs) in ctx.env.manifest
+        for (dep, dep_uuid) in dep_pkgs.deps
+            haskey(incoming, dep_uuid) || (incoming[dep_uuid] = Set{UUID}())
+            push!(incoming[dep_uuid], uuid)
+        end
+    end
+
+    function find_paths!(final_paths, current, path = UUID[])
+        push!(path, current)
+        if !(current in values(ctx.env.project.deps))
+            for p in incoming[current]
+                if p in path
+                    # detected dependency cycle and none of the dependencies in the cycle
+                    # are in the project could happen when manually modifying
+                    # the project and running this function function before a
+                    # resolve
+                    continue
+                end
+                find_paths!(final_paths, p, copy(path))
+            end
+        else
+            push!(final_paths, path)
+        end
+    end
+
+    first = true
+    for pkg in pkgs
+        !first && println(io)
+        first = false
+        final_paths = []
+        find_paths!(final_paths, pkg.uuid)
+        foreach(reverse!, final_paths)
+        final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], final_paths)
+        sort!(final_paths_names, by = x -> (x, length(x)))
+        delimiter = sprint((io, args) -> printstyled(io, args...; color=:light_green), "→", context=io)
+        for path in final_paths_names
+            println(io, "  ", join(path, " $delimiter "))
+        end
+    end
+end
+
 
 ########
 # Undo #

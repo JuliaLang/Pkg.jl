@@ -205,6 +205,20 @@ Free pinned packages, which allows it to be upgraded or downgraded again. If the
 makes the package no longer being checked out.
 """,
 ],
+PSA[:name => "why",
+    :api => API.why,
+    :should_splat => false,
+    :arg_count => 1 => 1,
+    :arg_parser => parse_package,
+    :completions => complete_all_installed_packages,
+    :description => "shows why a package is in the manifest",
+    :help => md"""
+    why pkg[=uuid] ...
+
+Show the reason why packages are in the manifest, printed as a path through the
+dependency graph starting at the direct dependencies.
+""",
+],
 PSA[:name => "pin",
     :api => API.pin,
     :should_splat => false,

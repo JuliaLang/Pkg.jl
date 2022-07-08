@@ -1,10 +1,7 @@
 Pkg v1.9 Release Notes
 =======================
 
-- Pkg will now respect the version of packages put into the sysimage using e.g. PackageCompiler. For example,
-  if version 1.3.2 of package A is in the sysimage, Pkg will always install that version when adding the package,
-  or when the packge is installed as a dependency to some other package. This can be disabled by calling
-  `Pkg.respect_sysimage_versions(false)` ([#3002]).
+- New functionality: `Pkg.why` and `pkg> why` to show why a package is inside the environment (shows all "paths" to a package starting at the direct dependencies).
 - When code coverage tracking is enabled for `Pkg.test` the new path-specific code-coverage option is used to limit coverage
   to the directory of the package being tested. Previously the `--code-coverage=user` option was used, which tracked files
   in all code outside of Core & Base, i.e. all stdlibs and all user packages, which often made running tests with
@@ -17,6 +14,10 @@ Pkg v1.9 Release Notes
 Pkg v1.8 Release Notes
 ======================
 
+- Pkg will now respect the version of packages put into the sysimage using e.g. PackageCompiler. For example,
+  if version 1.3.2 of package A is in the sysimage, Pkg will always install that version when adding the package,
+  or when the packge is installed as a dependency to some other package. This can be disabled by calling
+  `Pkg.respect_sysimage_versions(false)` ([#3002]).
 - New `⌃` and `⌅` indicators beside packages in `pkg> status` that have new versions available.
   `⌅` indicates when new versions cannot be installed ([#2906]).
 - New `outdated::Bool` kwarg to `Pkg.status` (`--outdated` or `-o` in the REPL mode) to show
