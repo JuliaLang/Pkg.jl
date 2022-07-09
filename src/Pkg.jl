@@ -758,9 +758,9 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context; warn_loaded = true, already_instantiated = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{String}=String[]; warn_loaded = true, already_instantiated = false)
     if Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
-        Pkg.precompile(ctx; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
 
