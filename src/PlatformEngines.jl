@@ -55,9 +55,8 @@ function get_server_dir(
         return
     end
     isempty(Base.DEPOT_PATH) && return
-    m_1 = only(m)::AbstractString
     invalid_filename_chars = [':', '/', '<', '>', '"', '/', '\\', '|', '?', '*']
-    dir = join(replace(c -> c in invalid_filename_chars ? '_' : c, collect(m_1)))
+    dir = replace(String(only(m)), (c => '_' for c in invalid_filename_chars)...);
     return joinpath(depots1(), "servers", dir)
 end
 
