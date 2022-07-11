@@ -197,21 +197,47 @@ end
 
     ENV["JULIA_PKG_SERVER"] = ""
 
-    test_server_dir(url, server, ::Nothing) =
-        @test PlatformEngines.get_server_dir(url, server) == nothing
-    test_server_dir(url, server, domain) =
-        @test PlatformEngines.get_server_dir(url, server) ==
-            joinpath(Pkg.depots1(), "servers", domain)
+    function test_server_dir(url, server, ::Nothing)
+        observed = PlatformEngines.get_server_dir(url, server)
+        expected = nothing
+        @test observed === expected
+    end
+    function test_server_dir(url, server, expected_directory::AbstractString)
+        observed = PlatformEngines.get_server_dir(url, server)
+        expected = joinpath(Pkg.depots1(), "servers", expected_directory)
+        @debug "" url server expected_directory observed expected
+        if observed != expected
+            @error "Test failure" url server expected_directory observed expected
+        end
+
+        @test observed == expected
+
+        # Test for Windows drive letter shenanigans
+        @test startswith(observed, Pkg.depots1())
+        @test startswith(observed, joinpath(Pkg.depots1(), "servers"))
+    end
 
     @testset "get_server_dir" begin
         test_server_dir("https://foo.bar/baz/a", nothing, nothing)
         test_server_dir("https://foo.bar/baz/a", "https://bar", nothing)
         test_server_dir("https://foo.bar/baz/a", "foo.bar", nothing)
         test_server_dir("https://foo.bar/bazx", "https://foo.bar/baz", nothing)
-        test_server_dir("https://foo.bar/baz/a", "https://foo.bar", "foo.bar")
-        test_server_dir("https://foo.bar/baz", "https://foo.bar/baz", "foo.bar")
-        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
-        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
+
+        for host in ["localhost", "foo", "foo.bar", "foo.bar.baz"]
+            for protocol in ["http", "https"]
+                for port in [("", ""), (":1234", "_1234")]
+                    port_original, port_transformed = port
+
+                    for server_suffix in ["", "/hello", "/hello/world"]
+                        server = "$(protocol)://$(host)$(port_original)$(server_suffix)"
+                        for url_suffix in ["/", "/foo", "/foo/bar", "/foo/bar/baz"]
+                            url = "$(server)$(url_suffix)"
+                            test_server_dir(url, server, "$(host)$(port_transformed)")
+                        end
+                    end
+                end
+            end
+        end
     end
 
     called = 0
