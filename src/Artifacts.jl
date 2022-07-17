@@ -1,21 +1,17 @@
 module Artifacts
 
+using Artifacts, Base.BinaryPlatforms, SHA
+using ..MiniProgressBars, ..PlatformEngines
+
+import ..get_bool_env, ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
+       ..stderr_f, ..printpkgstyle
+
 import Base: get, SHA1
-using Base.BinaryPlatforms
-using Artifacts
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
                   artifacts_dirs, pack_platform!, unpack_platform, load_artifacts_toml,
                   query_override, with_artifacts_directory, load_overrides
-import ..get_bool_env
-import ..set_readonly
-import ..GitTools
-import ..TOML
-using ..MiniProgressBars
-using ..PlatformEngines
-import ..pkg_server, ..can_fancyprint, ..stderr_f, ..printpkgstyle
 import ..Types: write_env_usage, parse_toml
 
-using SHA
 
 export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
