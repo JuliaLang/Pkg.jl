@@ -75,7 +75,7 @@ read_project_compat(raw, project::Project) =
 
 function validate(project::Project)
     # deps
-    dep_uuids = collect(values(project.deps))
+    dep_uuids = vcat(collect(values(project.deps)), collect(values(project.weakdeps)))
     if length(dep_uuids) != length(unique(dep_uuids))
         pkgerror("Two different dependencies can not have the same uuid")
     end
@@ -100,14 +100,14 @@ function validate(project::Project)
             pkgerror("A dependency was named twice in target `$target`")
         end
         dep in listed || pkgerror("""
-            Dependency `$dep` in target `$target` not listed in `deps` or `extras` section.
+            Dependency `$dep` in target `$target` not listed in `deps`, `weakdeps` or `extras` section.
             """)
     end
     # compat
     for (name, version) in project.compat
         name == "julia" && continue
         name in listed ||
-            pkgerror("Compat `$name` not listed in `deps` or `extras` section.")
+            pkgerror("Compat `$name` not listed in `deps`, `weakdeps` or `extras` section.")
     end
 end
 

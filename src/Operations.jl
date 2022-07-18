@@ -146,6 +146,9 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         if isfile(v)
             p = Types.read_project(v)
             entry.weakdeps = p.weakdeps
+            for (name, _) in p.weakdeps
+                delete!(entry.deps, name)
+            end
         end
         env.manifest[pkg.uuid] = entry
     end
@@ -412,6 +415,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
 
     # pkg -> version -> (dependency => compat):
     all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
+    weak_compat = Dict{UUID,Dict{VersionNumber,Set{UUID}}}()
 
     for (fp, fx) in fixed
         all_compat[fp]   = Dict(fx.version => Dict{UUID,VersionSpec}())
@@ -423,7 +427,8 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
         for uuid in unseen
             push!(seen, uuid)
             uuid in keys(fixed) && continue
-            all_compat_u = get_or_make!(all_compat,   uuid)
+            all_compat_u = get_or_make!(all_compat, uuid)
+            weak_compat_u = get_or_make!(weak_compat, uuid)
 
             uuid_is_stdlib = false
             stdlib_name = ""
@@ -451,35 +456,56 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                     push!(uuids, other_uuid)
                     all_compat_u_vr[other_uuid] = VersionSpec()
                 end
+
+                if !isempty(proj.weakdeps)
+                    weak_all_compat_u_vr = get_or_make!(weak_compat_u, v)
+                    for (_, other_uuid) in proj.weakdeps
+                        push!(uuids, other_uuid)
+                        all_compat_u_vr[other_uuid] = VersionSpec()
+                        push!(weak_all_compat_u_vr, other_uuid)
+                    end
+                end
             else
                 for reg in registries
                     pkg = get(reg, uuid, nothing)
                     pkg === nothing && continue
                     info = Registry.registry_info(pkg)
-                    for (v, compat_info) in Registry.compat_info(info)
-                        # Filter yanked and if we are in offline mode also downloaded packages
-                        # TODO, pull this into a function
-                        Registry.isyanked(info, v) && continue
-                        if Pkg.OFFLINE_MODE[]
-                            pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
-                            is_package_downloaded(env.project_file, pkg_spec) || continue
-                        end
 
-                        # Skip package version that are not the same as external packages in sysimage
-                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
-                            pkgid = Base.PkgId(uuid, pkg.name)
-                            if Base.in_sysimage(pkgid)
-                                pkgorigin = get(Base.pkgorigins, pkgid, nothing)
-                                if pkgorigin !== nothing && pkgorigin.version !== nothing
-                                    if v != pkgorigin.version
-                                        continue
+                    function add_compat!(d, cinfo)
+                        for (v, compat_info) in cinfo
+                            # Filter yanked and if we are in offline mode also downloaded packages
+                            # TODO, pull this into a function
+                            Registry.isyanked(info, v) && continue
+                            if Pkg.OFFLINE_MODE[]
+                                pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
+                                is_package_downloaded(env.project_file, pkg_spec) || continue
+                            end
+
+                            # Skip package version that are not the same as external packages in sysimage
+                            if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
+                                pkgid = Base.PkgId(uuid, pkg.name)
+                                if Base.in_sysimage(pkgid)
+                                    pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+                                    if pkgorigin !== nothing && pkgorigin.version !== nothing
+                                        if v != pkgorigin.version
+                                            continue
+                                        end
                                     end
                                 end
                             end
+                            dv = get_or_make!(d, v)
+                            merge!(dv, compat_info)
+                            union!(uuids, keys(compat_info))
                         end
-
-                        all_compat_u[v] = compat_info
-                        union!(uuids, keys(compat_info))
+                    end
+                    add_compat!(all_compat_u, Registry.compat_info(info))
+                    weak_compat_info = Registry.weak_compat_info(info)
+                    if weak_compat_info !== nothing
+                        add_compat!(all_compat_u, weak_compat_info)
+                        # Version to Set
+                        for (v, compat_info) in  weak_compat_info
+                            weak_compat_u[v] = keys(compat_info)
+                        end
                     end
                 end
             end
@@ -498,7 +524,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
         end
     end
 
-    return Resolve.Graph(all_compat, uuid_to_name, reqs, fixed, false, julia_version),
+    return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
            all_compat
 end
 
