@@ -1740,9 +1740,13 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     test_project.deps = source_env.project.deps
     # collect test dependencies
     for name in get(source_env.project.targets, target, String[])
-        uuid = get(source_env.project.extras, name, nothing)
+        uuid = nothing
+        for list in [source_env.project.extras, source_env.project.weakdeps]
+            uuid = get(list, name, nothing)
+            uuid === nothing || break
+        end
         if uuid === nothing
-            pkgerror("`$name` declared as a `$target` dependency, but no such entry in `extras`")
+            pkgerror("`$name` declared as a `$target` dependency, but no such entry in `extras` or `weakdeps`")
         end
         test_project.deps[name] = uuid
     end

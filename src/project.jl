@@ -2,7 +2,7 @@
 # UTILS #
 #########
 listed_deps(project::Project) =
-    append!(collect(keys(project.deps)), collect(keys(project.extras)))
+    append!(collect(keys(project.deps)), collect(keys(project.extras)), collect(keys(project.weakdeps)))
 
 ###########
 # READING #
