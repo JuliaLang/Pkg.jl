@@ -2795,12 +2795,13 @@ end
         mktempdir() do tmp
             ENV["JULIA_DEPOT_PATH"] = "tmp"
             Base.init_depot_path()
-            Pkg.Registry.DEFAULT_REGISTRIES[1].url = Utils.REGISTRY_DIR
-            Pkg.Registry.DEFAULT_REGISTRIES[1].path = nothing
-            cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
-            git_init_and_commit(joinpath(tmp, "BasicSandbox"))
-            cd(tmp) do
-                Pkg.add(path="BasicSandbox")
+            withenv("JULIA_PKG_DEFAULT_REGISTRY_URL" => Utils.REGISTRY_DIR,
+                    "JULIA_PKG_DEFAULT_REGISTRY_PATH" => nothing) do
+                cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
+                git_init_and_commit(joinpath(tmp, "BasicSandbox"))
+                cd(tmp) do
+                    Pkg.add(path="BasicSandbox")
+                end
             end
         end
     end

@@ -4,13 +4,13 @@ module GitTools
 
 using ..Pkg
 using ..MiniProgressBars
-import ..get_bool_env, ..can_fancyprint, ..printpkgstyle, ..stdout_f
+import ..can_fancyprint, ..printpkgstyle
 using SHA
 import Base: SHA1
 import LibGit2
 using Printf
 
-use_cli_git() = get_bool_env("JULIA_PKG_USE_CLI_GIT")
+use_cli_git() = Pkg.get_bool_env("JULIA_PKG_USE_CLI_GIT")
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
@@ -25,7 +25,7 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
         bar.max = progress.total_objects
         bar.current = progress.received_objects
     end
-    show_progress(stdout_f(), bar)
+    show_progress(Pkg.stdout_f(), bar)
     return Cint(0)
 end
 

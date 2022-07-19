@@ -512,6 +512,27 @@ julia> ENV["JULIA_PKG_SERVER"] = ""
 ""
 ```
 
+A local registry path can be used by setting the `JULIA_PKG_DEFAULT_REGISTRY_PATH` environment variables, it is
+best used in combination with `JULIA_PKG_SERVER` and `JULIA_PKG_DEFAULT_REGISTRY_URL`:
+
+```julia
+# use a .git repo instead of data from the default pkg server
+julia> ENV["JULIA_PKG_SERVER"] = "";
+
+# do not use default url https://github.com/JuliaRegistries/General [1]
+julia> ENV["JULIA_PKG_DEFAULT_REGISTRY_URL"] = "";
+
+# given path is a local clone of [1]
+julia> ENV["JULIA_PKG_DEFAULT_REGISTRY_PATH"] = "file:///home/user/General";
+
+# clones the `General` registry from local path
+(v1.0) pkg> status
+  Installing known registries into `~/.julia`
+     Cloning registry from "file:///home/user/General"
+       Added registry `General` to `~/.julia/registries/General`
+[...]
+```
+
 For clarification, some sources are not provided by Pkg server
 
 * packages/registries fetched via `git`

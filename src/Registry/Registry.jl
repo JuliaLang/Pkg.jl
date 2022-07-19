@@ -2,7 +2,7 @@ module Registry
 
 import ..Pkg
 using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-             GitTools, get_bool_env
+             GitTools
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z
 using UUIDs, LibGit2, TOML
 import FileWatching
@@ -51,10 +51,18 @@ function add(regs::Vector{RegistrySpec}; io::IO=stderr_f(), depot=depots1())
     end
 end
 
-const DEFAULT_REGISTRIES =
-    RegistrySpec[RegistrySpec(name = "General",
-                              uuid = UUID("23338594-aafe-5451-b93e-139f81909106"),
-                              url = "https://github.com/JuliaRegistries/General.git")]
+function default_registries()
+    url = get(ENV, "JULIA_PKG_DEFAULT_REGISTRY_URL", "https://github.com/JuliaRegistries/General.git")
+    path = get(ENV, "JULIA_PKG_DEFAULT_REGISTRY_PATH", "")
+    linked = get(ENV, "JULIA_PKG_DEFAULT_REGISTRY_LINKED", "")
+    return RegistrySpec[RegistrySpec(
+        name = "General",
+        uuid = UUID("23338594-aafe-5451-b93e-139f81909106"),
+        linked = isempty(linked) ? nothing : Pkg.str2bool(linked),
+        path = isempty(path) ? nothing : path,
+        url = isempty(url) ? nothing : url,
+    )]
+end
 
 function pkg_server_registry_info()
     registry_info = Dict{UUID, Base.SHA1}()
@@ -101,7 +109,7 @@ function download_default_registries(io::IO; only_if_empty::Bool = true, depot=d
     # with false keyword argument.
     if isempty(installed_registries) || !only_if_empty
         printpkgstyle(io, :Installing, "known registries into $(pathrepr(depot))")
-        registries = copy(DEFAULT_REGISTRIES)
+        registries = default_registries()
         for uuid in keys(pkg_server_registry_urls())
             if !(uuid in (reg.uuid for reg in registries))
                 push!(registries, RegistrySpec(uuid = uuid))
@@ -116,7 +124,7 @@ end
 
 # Hacky way to make e.g. `registry add General` work.
 function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
-    known_registries = DEFAULT_REGISTRIES # TODO: Some way to add stuff here?
+    known_registries = default_registries() # TODO: Some way to add stuff here?
     for reg in registries, known in known_registries
         if reg.uuid !== nothing
             if reg.uuid === known.uuid
@@ -144,7 +152,7 @@ function registry_use_pkg_server()
 end
 
 registry_read_from_tarball() =
-    registry_use_pkg_server() && !get_bool_env("JULIA_PKG_UNPACK_REGISTRY")
+    registry_use_pkg_server() && !Pkg.get_bool_env("JULIA_PKG_UNPACK_REGISTRY")
 
 function check_registry_state(reg)
     reg_currently_uses_pkg_server = reg.tree_info !== nothing
@@ -169,7 +177,12 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     registry_urls = pkg_server_registry_urls()
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
-            Pkg.Types.pkgerror("ambiguous registry specification; both url and path is set.")
+            Pkg.Types.pkgerror("""
+                ambiguous registry specification; both `url` and `path` is set:
+                    url=\"$(reg.url)\"
+                    path=\"$(reg.path)\"
+                """
+            )
         end
         url = get(registry_urls, reg.uuid, nothing)
         if url !== nothing && registry_read_from_tarball()

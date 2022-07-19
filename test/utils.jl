@@ -49,9 +49,6 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
     old_working_directory = pwd()
-    old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
-    old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
-    old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
         # Clone/download the registry only once
         if !isdir(REGISTRY_DIR)
@@ -63,13 +60,13 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-        Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
-        Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
-        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         Pkg.REPLMode.TEST_MODE[] = false
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
-                "JULIA_PKG_DEVDIR" => nothing) do
+                "JULIA_PKG_DEVDIR" => nothing,
+                "JULIA_PKG_DEFAULT_REGISTRY_URL" => "",
+                "JULIA_PKG_DEFAULT_REGISTRY_PATH" => REGISTRY_DIR,
+                "JULIA_PKG_DEFAULT_REGISTRY_LINKED" => linked_reg) do
             target_depot = nothing
             try
                 target_depot = mktempdir()
@@ -96,9 +93,6 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         Base.ACTIVE_PROJECT[] = old_active_project
         cd(old_working_directory)
         Pkg.REPLMode.TEST_MODE[] = false # reset unconditionally
-        Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
-        Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
-        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = old_general_registry_linked
     end
 end
 
@@ -121,9 +115,6 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
     old_active_project = Base.ACTIVE_PROJECT[]
-    old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
-    old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
-    old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
         # Clone/download the registry only once
         if !isdir(REGISTRY_DIR)
@@ -134,12 +125,12 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
         empty!(DEPOT_PATH)
         Base.HOME_PROJECT[] = nothing
         Base.ACTIVE_PROJECT[] = nothing
-        Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
-        Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
-        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
-                "JULIA_PKG_DEVDIR" => nothing) do
+                "JULIA_PKG_DEVDIR" => nothing,
+                "JULIA_PKG_DEFAULT_REGISTRY_URL" => "",
+                "JULIA_PKG_DEFAULT_REGISTRY_PATH" => REGISTRY_DIR,
+                "JULIA_PKG_DEFAULT_REGISTRY_LINKED" => linked_reg) do
             env_dir = mktempdir()
             depot_dir = mktempdir()
             try
@@ -163,9 +154,6 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
         append!(DEPOT_PATH, old_depot_path)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
-        Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
-        Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
-        Pkg.Registry.DEFAULT_REGISTRIES[1].linked = old_general_registry_linked
     end
 end
 

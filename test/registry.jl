@@ -71,9 +71,10 @@ end
         # set up registries
         regdir = mktempdir()
         setup_test_registries(regdir)
-        general_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
-        general_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
-        general_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
+        default_registry = first(Pkg.Registry.default_registries())
+        general_url = default_registry.url
+        general_path = default_registry.path
+        general_linked = default_registry.linked
         General = RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106",
             url = general_url, path = general_path, linked = general_linked)
         Foo1 = RegistrySpec(name = "RegistryFoo", uuid = "e9fceed0-5623-4384-aff0-6db4c442647a",
@@ -350,32 +351,31 @@ if Pkg.Registry.registry_use_pkg_server()
     for unpack in (true, nothing)
         withenv("JULIA_PKG_UNPACK_REGISTRY" => unpack) do
             temp_pkg_dir(;linked_reg=false) do depot
-                # These get restored by temp_pkg_dir
-                Pkg.Registry.DEFAULT_REGISTRIES[1].path = nothing
-                Pkg.Registry.DEFAULT_REGISTRIES[1].url = "https://github.com/JuliaRegistries/General.git"
+                withenv("JULIA_PKG_DEFAULT_REGISTRY_URL" => "https://github.com/JuliaRegistries/General.git",
+                        "JULIA_PKG_DEFAULT_REGISTRY_PATH" => nothing) do
+                    # This should not uncompress the registry
+                    Registry.add(RegistrySpec(uuid = UUID("23338594-aafe-5451-b93e-139f81909106")))
+                    @test isfile(joinpath(DEPOT_PATH[1], "registries", "General.tar.gz")) != something(unpack, false)
+                    Pkg.add("Example")
 
-                # This should not uncompress the registry
-                Registry.add(RegistrySpec(uuid = UUID("23338594-aafe-5451-b93e-139f81909106")))
-                @test isfile(joinpath(DEPOT_PATH[1], "registries", "General.tar.gz")) != something(unpack, false)
-                Pkg.add("Example")
-
-                # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
-                if unpack == true
-                    write(joinpath(DEPOT_PATH[1], "registries", "General", ".tree_info.toml"),
-                        """
-                        git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
-                        """)
-                else
-                    write(joinpath(DEPOT_PATH[1], "registries", "General.toml"),
-                        """
-                        git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
-                        uuid = "23338594-aafe-5451-b93e-139f81909106"
-                        path = "General.tar.gz"
-                        """)
+                    # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
+                    if unpack == true
+                        write(joinpath(DEPOT_PATH[1], "registries", "General", ".tree_info.toml"),
+                            """
+                            git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
+                            """)
+                    else
+                        write(joinpath(DEPOT_PATH[1], "registries", "General.toml"),
+                            """
+                            git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
+                            uuid = "23338594-aafe-5451-b93e-139f81909106"
+                            path = "General.tar.gz"
+                            """)
+                    end
+                    Pkg.update()
+                    Pkg.Registry.rm(RegistrySpec(name = "General"))
+                    @test isempty(readdir(joinpath(DEPOT_PATH[1], "registries")))
                 end
-                Pkg.update()
-                Pkg.Registry.rm(RegistrySpec(name = "General"))
-                @test isempty(readdir(joinpath(DEPOT_PATH[1], "registries")))
             end
         end
     end
