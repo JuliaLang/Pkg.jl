@@ -20,7 +20,7 @@ end
 ### Disable logging output if true (default)
 hide_logs = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
 
-logfile = haskey(ENV,"JULIA_PKG_LOG_PATH") ? ENV["JULIA_PKG_LOG_PATH"] : nothing
+logfile = get(ENV, "JULIA_PKG_LOG_PATH", nothing)
 ### Send all Pkg output to a BufferStream if true (default)
 hide_stdoutstderr = hide_logs
 
