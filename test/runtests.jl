@@ -20,7 +20,7 @@ end
 ### Disable logging output if true (default)
 hide_logs = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
 
-logfile = get(ENV, "JULIA_PKG_LOG_PATH", nothing)
+logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
 ### Send all Pkg output to a BufferStream if true (default)
 hide_stdoutstderr = hide_logs
 
@@ -54,8 +54,9 @@ Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger())
     end
 end
 
-if logfile !== nothing
-    open(logfile, "w") do io
+if logdir !== nothing
+    logfile = joinpath(logdir, "Pkg.log")
+    open(logfile, "a") do io
         write(io, Pkg.DEFAULT_IO[])
     end
 end
