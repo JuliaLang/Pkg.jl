@@ -40,27 +40,30 @@ include("utils.jl")
 
 Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
     @testset "Pkg" begin
-        @testset "$f" for f in [
-            "new.jl",
-            "pkg.jl",
-            "repl.jl",
-            "api.jl",
-            "registry.jl",
-            "subdir.jl",
-            "artifacts.jl",
-            "binaryplatforms.jl",
-            "platformengines.jl",
-            "sandbox.jl",
-            "resolve.jl",
-            "misc.jl",
-            "force_latest_compatible_version.jl",
-            "manifests.jl",
-            ]
-            @info "==== Testing `test/$f`"
-            flush(Pkg.DEFAULT_IO[])
-            include(f)
+        try
+            @testset "$f" for f in [
+                "new.jl",
+                "pkg.jl",
+                "repl.jl",
+                "api.jl",
+                "registry.jl",
+                "subdir.jl",
+                "artifacts.jl",
+                "binaryplatforms.jl",
+                "platformengines.jl",
+                "sandbox.jl",
+                "resolve.jl",
+                "misc.jl",
+                "force_latest_compatible_version.jl",
+                "manifests.jl",
+                ]
+                @info "==== Testing `test/$f`"
+                flush(Pkg.DEFAULT_IO[])
+                include(f)
+            end
+        finally
+            islogging && close(Pkg.DEFAULT_IO[])
         end
-    islogging && close(Pkg.DEFAULT_IO[])
     end
 end
 
