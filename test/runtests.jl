@@ -29,7 +29,7 @@ if islogging
     logfile = joinpath(logdir, "Pkg.log")
     Pkg.DEFAULT_IO[] = open(logfile, "a")
 elseif hide_logs
-    Pkg.DEFAULT_IO[] = devnull
+    Pkg.DEFAULT_IO[] = BufferStream()
 else
     Pkg.DEFAULT_IO[] = stdout
 end
