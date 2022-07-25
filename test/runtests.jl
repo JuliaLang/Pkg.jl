@@ -38,7 +38,7 @@ Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO
 
 include("utils.jl")
 
-redirect_stdio(stdout=Pkg.DEFAULT_IO[], stderr=Pkg.DEFAULT_IO[]) do
+Utils.io_to_buffer(Pkg.DEFAULT_IO[]) do
     @testset "Pkg" begin
                 @testset "$f" for f in [
                     "new.jl",

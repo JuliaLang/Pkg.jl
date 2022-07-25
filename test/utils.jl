@@ -310,4 +310,20 @@ function show_output_if_command_errors(cmd::Cmd)
     return nothing
 end
 
+function io_to_buffer(f::Function, io::IO)
+    old_stderr = stderr
+    rd2, = redirect_stderr()
+    task2 = Threads.@spawn write(io, rd2)
+    try
+        ret = f()
+        Libc.flush_cstdio()
+        flush(stderr)
+        return ret
+    finally
+        close(rd)
+        redirect_stderr(old_stderr)
+        wait(task2)
+    end
+end
+
 end
