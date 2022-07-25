@@ -38,7 +38,7 @@ Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO
 
 include("utils.jl")
 
-Utils.io_to_buffer(Pkg.DEFAULT_IO[]) do
+Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
     @testset "Pkg" begin
                 @testset "$f" for f in [
                     "new.jl",
