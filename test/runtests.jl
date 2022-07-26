@@ -28,6 +28,7 @@ islogging = logdir !== nothing
 if islogging
     logfile = joinpath(logdir, "Pkg.log")
     Pkg.DEFAULT_IO[] = open(logfile, "a")
+    @info "Pkg test output is being logged to file" logfile
 elseif hide_logs
     Pkg.DEFAULT_IO[] = Base.BufferStream()
 else
