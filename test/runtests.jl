@@ -31,6 +31,7 @@ if islogging
     @info "Pkg test output is being logged to file" logfile
 elseif hide_logs
     Pkg.DEFAULT_IO[] = Base.BufferStream()
+    @info "Pkg test output is silenced"
 else
     Pkg.DEFAULT_IO[] = stdout
 end
