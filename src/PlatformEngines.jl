@@ -55,7 +55,9 @@ function get_server_dir(
         return
     end
     isempty(Base.DEPOT_PATH) && return
-    joinpath(depots1(), "servers", String(m.captures[1]))
+    invalid_filename_chars = [':', '/', '<', '>', '"', '/', '\\', '|', '?', '*']
+    dir = join(replace(c -> c in invalid_filename_chars ? '_' : c, collect(String(m[1]))))
+    return joinpath(depots1(), "servers", dir)
 end
 
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex},Any}[]
