@@ -1211,7 +1211,8 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
             println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
         end
         return PackageSpec(; uuid=pkg.uuid, name=pkg.name, pinned=true,
-                           version=entry.version, tree_hash=entry.tree_hash)
+                           version=entry.version, tree_hash=entry.tree_hash,
+                           path=entry.path, repo=entry.repo)
     end
     if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
         return pkg # overwrite everything, nothing to copy over
