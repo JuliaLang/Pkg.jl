@@ -939,4 +939,27 @@ end
     @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
 end
 
+@testset "Issue #3147" begin
+    get_info() = Pkg.dependencies()[UUID("7876af07-990d-54b4-ab0e-23690620f79a")]
+    url = "https://github.com/JuliaLang/Example.jl"
+    mktempdir() do tmp_dir
+        LibGit2.close(LibGit2.clone(url, tmp_dir))
+        Pkg.develop(path=tmp_dir)
+        Pkg.pin("Example")
+        Pkg.add("Example")
+        info = get_info()
+        @test info.is_pinned
+        @test info.is_tracking_path
+        @test !info.is_tracking_repo
+        Pkg.rm("Example")
+    end
+    Pkg.add(url=url, rev="29aa1b4")
+    Pkg.pin("Example")
+    Pkg.add("Example")
+    info = get_info()
+    @test info.is_pinned
+    @test !info.is_tracking_path
+    @test info.is_tracking_repo
+end
+
 end # module
