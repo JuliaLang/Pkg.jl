@@ -352,7 +352,7 @@ Even if you have never `add`ed `D` directly, this kind of error can arise
 if `D` is required by other packages that you are trying to use.
 
 !!! note
-    When tackling these conflicts, first consider that the bigger an project gets, the more likely this is to happen.
+    When tackling these conflicts, first consider that the bigger a project gets, the more likely this is to happen.
     Using targeted projects for a given task is highly recommended, and removing unused dependencies is a good first
     step when hitting these issues.
     For instance, a common pitfall is having more than a few packages in your default (i.e. `(@1.7)`) environment,
