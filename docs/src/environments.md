@@ -5,7 +5,7 @@ The following discusses Pkg's interaction with environments. For more on the rol
 ## Creating your own projects
 
 So far we have added packages to the default project at `~/.julia/environments/v1.6`. It is however easy to create other, independent, projects.
-This approach has the benefit of allowing you to check-in a Project.toml (and even a Manifest.toml if you wish) into version control (e.g. git)
+This approach has the benefit of allowing you to check-in a Project.toml, and even a Manifest.toml if you wish, into version control (e.g. git) alongside your code.
 It should be pointed out that when two projects use the same package at the same version, the content of this package is not duplicated.
 In order to create a new project, create a directory for it and then activate that directory to make it the "active project", which package operations manipulate:
 
