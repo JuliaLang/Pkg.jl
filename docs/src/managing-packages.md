@@ -355,7 +355,7 @@ if `D` is required by other packages that you are trying to use.
     When tackling these conflicts, first consider that the bigger a project gets, the more likely this is to happen.
     Using targeted projects for a given task is highly recommended, and removing unused dependencies is a good first
     step when hitting these issues.
-    For instance, a common pitfall is having more than a few packages in your default (i.e. `(@1.7)`) environment,
+    For instance, a common pitfall is having more than a few packages in your default (i.e. `(@$(Base.VERSION.minor).$(Base.VERSION.minor))`) environment,
     and using that as an environment for all tasks you're using julia for. It's better to create a dedicated project
     for the task you're working on, and keeping the dependencies there minimal. To read more see
     [Working with Environments](@ref)
