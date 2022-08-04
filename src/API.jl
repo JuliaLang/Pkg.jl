@@ -162,12 +162,12 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
                       url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
-            pkg = PackageSpec(; name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, subdir=subdir)
+            pkg = PackageSpec(; name, uuid, version, url, rev, path, subdir)
             if $f === status || $f === rm || $f === up
                 kwargs = merge((;kwargs...), (:mode => mode,))
             end
             # Handle $f() case
-            if unique([name,uuid,version,url,rev,path,subdir]) == [nothing]
+            if pkg == PackageSpec(; version=nothing)
                 $f(PackageSpec[]; kwargs...)
             else
                 $f(pkg; kwargs...)
