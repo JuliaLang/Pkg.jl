@@ -252,8 +252,6 @@ mutable struct Graph
             compat[uuid_julia] = Dict{VersionNumber,Dict{UUID,VersionSpec}}()
         end
 
-        extra_uuids = union(collect(keys(reqs)), union(collect(keys(fixed)), map(fx->keys(fx.requires), values(fixed))...))
-
         data = GraphData(compat, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
 
