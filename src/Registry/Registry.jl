@@ -170,7 +170,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
             Pkg.Types.pkgerror("""
-                ambiguous registry specification; both `url` and `path` is set:
+                ambiguous registry specification; both `url` and `path` are set:
                     url=\"$(reg.url)\"
                     path=\"$(reg.path)\"
                 """
