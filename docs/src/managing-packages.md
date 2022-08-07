@@ -351,6 +351,15 @@ This message means that a package named `D` has a version conflict.
 Even if you have never `add`ed `D` directly, this kind of error can arise
 if `D` is required by other packages that you are trying to use.
 
+!!! note
+    When tackling these conflicts, first consider that the bigger a project gets, the more likely this is to happen.
+    Using targeted projects for a given task is highly recommended, and removing unused dependencies is a good first
+    step when hitting these issues.
+    For instance, a common pitfall is having more than a few packages in your default (i.e. `(@1.8)`) environment,
+    and using that as an environment for all tasks you're using julia for. It's better to create a dedicated project
+    for the task you're working on, and keeping the dependencies there minimal. To read more see
+    [Working with Environments](@ref)
+
 The error message has a lot of crucial information.
 It may be easiest to interpret piecewise:
 
