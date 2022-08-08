@@ -442,7 +442,7 @@ To fix such errors, you have a number of options:
 - remove either `A` or `B` from your environment. Perhaps `B` is left over from something you were previously working on, and you don't need it anymore. If you don't need `A` and `B` at the same time, this is the easiest way to fix the problem.
 - try reporting your conflict. In this case, we were able to deduce that `B` requires an outdated version of `D`. You could thus report an issue in the development repository of `B.jl` asking for an updated version.
 - try fixing the problem yourself.
-  This becomes easier once you understand `Project.toml` files and how they declare their compatiblity requirements. We'll return to this example in [Fixing conflicts](@ref).
+  This becomes easier once you understand `Project.toml` files and how they declare their compatibility requirements. We'll return to this example in [Fixing conflicts](@ref).
 
 ## Garbage collecting old, unused packages
 

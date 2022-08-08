@@ -177,7 +177,7 @@ test-specific dependencies, are available, see below.
 
 In Julia 1.2 and later the test environment is given by `test/Project.toml`. Thus, when running
 tests, this will be the active project, and only dependencies to the `test/Project.toml` project
-can be used. Note that Pkg will add the tested package itself implictly.
+can be used. Note that Pkg will add the tested package itself implicitly.
 
 !!! note
     If no `test/Project.toml` exists Pkg will use the old style test-setup, as
@@ -293,7 +293,7 @@ In addition to `Registrator`, [`TagBot`](https://github.com/marketplace/actions/
 
 Packages should avoid mutating their own state (writing to files within their package directory).
 Packages should, in general, not assume that they are located in a writable location (e.g. if installed as part of a system-wide depot) or even a stable one (e.g. if they are bundled into a system image by [PackageCompiler.jl](https://github.com/JuliaLang/PackageCompiler.jl)).
-To support the various usecases in the Julia package ecosystem, the Pkg developers have created a number of auxilliary packages and techniques to help package authors create self-contained, immutable and relocatable packages:
+To support the various usecases in the Julia package ecosystem, the Pkg developers have created a number of auxillary packages and techniques to help package authors create self-contained, immutable and relocatable packages:
 
 * [`Artifacts`](https://pkgdocs.julialang.org/v1/artifacts/) can be used to bundle chunks of data alongside your package, or even allow them to be downloaded on-demand.
   Prefer artifacts over attempting to open a file via a path such as `joinpath(@__DIR__, "data", "my_dataset.csv")` as this is non-relocatable.

@@ -221,7 +221,7 @@ To remove an override and re-enable default location logic for an artifact, inse
 libfoo = ""
 ```
 
-If the two `Overrides.toml` snippets as given above are layered on top of eachother, the end result will be mapping the content-hash `78f35e74ff113f02274ce60dab6e92b4546ef806` to `"/path/to/new/replacement"`, and mapping `Foo.libbar` to the artifact identified by the content-hash `683942669b4639019be7631caa28c38f3e1924fe`.
+If the two `Overrides.toml` snippets as given above are layered on top of each other, the end result will be mapping the content-hash `78f35e74ff113f02274ce60dab6e92b4546ef806` to `"/path/to/new/replacement"`, and mapping `Foo.libbar` to the artifact identified by the content-hash `683942669b4639019be7631caa28c38f3e1924fe`.
 Note that while that hash was previously overridden, it is no longer, and therefore `Foo.libbar` will look directly at locations such as `~/.julia/artifacts/683942669b4639019be7631caa28c38f3e1924fe`.
 
 Most methods that are affected by overrides have the ability to ignore overrides by setting `honor_overrides=false` as a keyword argument within them.
@@ -236,7 +236,7 @@ This is deduced automatically by the `artifacts""` string macro, however if you 
 New in Julia 1.6, `Platform` objects can have extended attributes applied to them, allowing artifacts to be tagged with things such as CUDA driver version compatibility, microarchitectural compatibility, julia version compatibility and more!
 Note that this feature is considered experimental and may change in the future.
 If you as a package developer find yourself needing this feature, please get in contact with us so it can evolve for the benefit of the whole ecosystem.
-In order to support artifact selection at `Pkg.add()` time, `Pkg` will run the specially-named file `<project_root>/.pkg/select_artifacts.jl`, passing the current platform triplet as the first arugment.
+In order to support artifact selection at `Pkg.add()` time, `Pkg` will run the specially-named file `<project_root>/.pkg/select_artifacts.jl`, passing the current platform triplet as the first argument.
 This artifact selection script should print a `TOML`-serialized dictionary representing the artifacts that this package needs according to the given platform, and performing any inspection of the system as necessary to auto-detect platform capabilities, if they are not explicitly provided by the given platform triplet.
 The format of the dictionary should match that returned from `Artifacts.select_downloadable_artifacts()`, and indeed most packages should simply call that function with an augmented `Platform` object.
 An example artifact selection hook definition might look like the following, split across two files:
