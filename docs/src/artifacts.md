@@ -301,3 +301,5 @@ end
 ```
 
 This ensures that the same artifact is used by your code as Pkg attempted to install.
+
+Artifact selection hooks are only allowed to use `Base`, `Artifacts`, `Libdl`, and `TOML`. They are not allowed to use any other standard libraries, and they are not allowed to use any packages (including the package to which they belong).
