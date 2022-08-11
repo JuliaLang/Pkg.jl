@@ -2872,6 +2872,7 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, nothing)
 end
 
+#=
 @testset "Pkg.add() with julia_version" begin
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
@@ -2972,6 +2973,7 @@ end
         @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
     end
 end
+=#
 
 @testset "Issue #2931" begin
     isolate(loaded_depot=false) do
