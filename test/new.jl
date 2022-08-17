@@ -2140,21 +2140,21 @@ end
         @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
-        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^   \[2a0f44e3\] Base64", readline(io))
         @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
-        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
         Pkg.instantiate(;io=devnull) # download Example
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"^⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^  \[2a0f44e3\] Base64", readline(io))
         @test occursin(r"^  \[d6f4376e\] Markdown", readline(io))
-        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
     end
     # Manifest Status API
     isolate(loaded_depot=true) do
@@ -2205,14 +2205,14 @@ end
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
         @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
-        @test occursin("Info Packages marked with ⌃ have new versions available", readline(io))
+        @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
         ## diff manifest
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"Diff `.+Manifest.toml`", readline(io))
         @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
         @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
-        @test occursin("Info Packages marked with ⌃ have new versions available", readline(io))
+        @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
         ## diff project with filtering
         Pkg.status("Markdown"; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
