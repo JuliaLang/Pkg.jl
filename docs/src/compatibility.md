@@ -16,7 +16,7 @@ After a compatibility entry is put into the project file, `up` can be used to ap
 The format of the version specifier is described in detail below.
 
 !!! info
-    There is currently no way to give compatibility from the Pkg REPL mode so for now, one has to manually edit the project file.
+    Use the command `compat` to edit the compat entries in the Pkg REPL, or manually edit the project file.
 
 ## Version specifier format
 
