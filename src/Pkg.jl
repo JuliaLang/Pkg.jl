@@ -589,7 +589,7 @@ Below is a comparison between the REPL mode and the functional API:
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
 | `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
 | `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
-| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
+| `--major Package`    | `PackageSpec(name="Package", version=UPLEVEL_MAJOR)` |
 
 """
 const PackageSpec = Types.PackageSpec
