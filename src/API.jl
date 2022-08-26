@@ -508,7 +508,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
                 # For Manifest usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
             end
         end
         manifest_usage_by_depot[depot] = usage
@@ -517,7 +517,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
             end
         end
         artifact_usage_by_depot[depot] = usage
@@ -528,7 +528,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
                 if !haskey(parents, filename)
                     parents[filename] = Set{String}()
                 end
