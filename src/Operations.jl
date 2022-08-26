@@ -1526,9 +1526,16 @@ function gen_test_code(source_path::String;
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
         """
+    coverage_arg = if coverage isa Bool
+        coverage ? string("@", source_path) : "none"
+    elseif coverage isa AbstractString
+        coverage
+    else
+        throw(ArgumentError("coverage should be a boolean or a string."))
+    end
     return ```
         $(Base.julia_cmd())
-        --code-coverage=$(coverage ? string("@", source_path) : "none")
+        --code-coverage=$(coverage_arg)
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes

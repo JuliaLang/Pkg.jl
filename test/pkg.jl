@@ -240,6 +240,16 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
     end
 
+    @testset "coverage specific path" begin
+        mktempdir() do tmp
+            coverage_path = joinpath(tmp, "tracefile.info")
+            Pkg.add(TEST_PKG.name)
+            Pkg.test(TEST_PKG.name; coverage = coverage_path)
+            @test isfile(coverage_path)
+        end
+        Pkg.rm(TEST_PKG.name)
+    end
+
     @testset "pinning / freeing" begin
         Pkg.add(TEST_PKG.name)
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
