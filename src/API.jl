@@ -565,7 +565,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
             # Write out the TOML file for this depot
             usage_path = joinpath(logdir(depot), fname)
-            if !isempty(usage) || isfile(usage_path)
+            if !(isempty(usage)::Bool) || isfile(usage_path)
                 open(usage_path, "w") do io
                     TOML.print(io, usage, sorted=true)
                 end
