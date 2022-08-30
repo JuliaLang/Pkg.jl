@@ -133,7 +133,7 @@ end
 function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
     julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]) : nothing
     manifest_format = VersionNumber(raw["manifest_format"])
-    if !in(manifest_format.major, 1:2)
+    if !(in(manifest_format.major, 1:2)::Bool)
         if f_or_io isa IO
             @warn "Unknown Manifest.toml format version detected in streamed manifest. Unexpected behavior may occur" manifest_format
         else
