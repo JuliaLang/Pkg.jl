@@ -2102,17 +2102,17 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         tipend = manifest ? " -m" : ""
         tip = show_usagetips ? " To see why use `status --outdated$tipend`" : ""
         if !no_packages_upgradable && no_visible_packages_heldback
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available and may be upgradable.", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
             # only warn if showing project and outdated indirect deps are hidden
-            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Some packages have new versions but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
     end
 
