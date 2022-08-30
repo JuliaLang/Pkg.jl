@@ -387,11 +387,11 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
-Show the status of the current environment.
-Packages marked with `⌃` have new versions that can be installed, e.g. via `pkg> up`.
-Those marked with `⌅` have new versions available, but that cannot be installed. To see why
-use `pkg> status --outdated` which shows any packages that are not at their latest version
-and if any packages are holding them back.
+Show the status of the current environment. Packages marked with `⌃` have new
+versions that may be installed, e.g. via `pkg> up`. Those marked with `⌅` have
+new versions available, but cannot be installed due to compatibility
+constraints. To see why use `pkg> status --outdated` which shows any packages
+that are not at their latest version and if any packages are holding them back.
 
 In `--project` mode (default), the status of the project file is summarized. In `--manifest`
 mode the output also includes the recursive dependencies of added packages given in the manifest.
