@@ -1005,7 +1005,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
             end
         else
             build_project_override = gen_target_project(ctx, pkg, source_path, "build")
-            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
+            with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         end
@@ -1795,7 +1795,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             end
         else
             test_project_override = gen_target_project(ctx, pkg, source_path, "test")
-            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
+            with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         end
