@@ -1,5 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+@info "Before the Pkg tests" Base.DEPOT_PATH
+
 module PkgTests
 
 import Pkg
@@ -72,3 +74,5 @@ end
 @showtime Base.Filesystem.temp_cleanup_purge(force=true)
 
 end # module
+
+@info "After the Pkg tests" Base.DEPOT_PATH
