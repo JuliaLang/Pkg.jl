@@ -1,6 +1,11 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module PkgTests
+module PkgTestsOuter
+
+original_depot_path = copy(Base.DEPOT_PATH)
+original_load_path = copy(Base.LOAD_PATH)
+
+module PkgTestsInner
 
 import Pkg
 
@@ -70,5 +75,12 @@ Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger())
 end
 
 @showtime Base.Filesystem.temp_cleanup_purge(force=true)
+
+end # module
+
+empty!(Base.DEPOT_PATH)
+empty!(Base.LOAD_PATH)
+append!(Base.DEPOT_PATH, original_depot_path)
+append!(Base.LOAD_PATH, original_load_path)
 
 end # module
