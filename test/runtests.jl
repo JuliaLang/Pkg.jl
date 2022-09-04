@@ -4,6 +4,7 @@ module PkgTestsOuter
 
 original_depot_path = copy(Base.DEPOT_PATH)
 original_load_path = copy(Base.LOAD_PATH)
+original_env = copy(ENV)
 
 module PkgTestsInner
 
@@ -82,5 +83,12 @@ empty!(Base.DEPOT_PATH)
 empty!(Base.LOAD_PATH)
 append!(Base.DEPOT_PATH, original_depot_path)
 append!(Base.LOAD_PATH, original_load_path)
+
+for k in setdiff(collect(keys(ENV)), collect(keys(original_env)))
+    delete!(ENV, k)
+end
+for (k, v) in pairs(original_env)
+    ENV[k] = v
+end
 
 end # module
