@@ -1219,7 +1219,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         end
                         bar.current = n_done - n_already_precomp
                         bar.max = n_total - n_already_precomp
-                        final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
+                        final_loop || print(iostr, sprint(io -> show_progress(io, bar; termwidth = displaysize(ctx.io)[2]); context=io), "\n")
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
                             name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
