@@ -1261,7 +1261,16 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         end
     end
     tasks = Task[]
-    Base.LOADING_CACHE[] = Base.LoadingCache()
+    if isdefined(Base, :LOADING_CACHE)
+        Base.LOADING_CACHE[] = Base.LoadingCache()
+    end
+    if isdefined(Base, :CACHED_ENV_STACK)
+        Base.CACHED_ENV_STACK[] = Base.EnvironmentStack()
+        ftmp, iotmp = mktemp()
+        Serialization.serialize(iotmp, Base.CACHED_ENV_STACK[])
+        close(iotmp)
+        Base.ENV_SERIALIZATION_FILE[] = ftmp
+    end
     for (pkg, deps) in depsmap # precompilation loop
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
@@ -1368,7 +1377,13 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     catch err
         handle_interrupt(err)
     finally
-        Base.LOADING_CACHE[] = nothing
+        if isdefined(Base, :LOADING_CACHE)
+            Base.LOADING_CACHE[] = nothing
+        end
+        if isdefined(Base, :CACHED_ENV_STACK)
+            Base.CACHED_ENV_STACK[] = nothing
+            Base.ENV_SERIALIZATION_FILE[] = nothing
+        end
     end
     notify(first_started) # in cases of no-op or !fancyprint
     save_precompile_state() # save lists to scratch space
