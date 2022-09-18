@@ -240,7 +240,9 @@ mutable struct Graph
             reqs::Requires,
             fixed::Dict{UUID,Fixed},
             verbose::Bool = false,
-            julia_version::Union{VersionNumber,Nothing} = VERSION,
+            julia_version::Union{VersionNumber,Nothing} = VERSION
+            ;
+            compat_weak::Dict{UUID,Dict{VersionNumber,Set{UUID}}} = Dict{UUID,Dict{VersionNumber,Set{UUID}}}(),
         )
 
         # Tell the resolver about julia itself
@@ -261,10 +263,10 @@ mutable struct Graph
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
             vn = pvers[p0][v0]
             req = Dict{Int,VersionSpec}()
-            uuid = pkgs[p0]
-            vnmap = get(Dict{String,VersionSpec}, compat[pkgs[p0]], vn)
-            for (uuid, vs) in vnmap
-                p1 = pdict[uuid]
+            uuid0 = pkgs[p0]
+            vnmap = get(Dict{String,VersionSpec}, compat[uuid0], vn)
+            for (uuid1, vs) in vnmap
+                p1 = pdict[uuid1]
                 p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
                 # check conflicts instead of intersecting?
                 # (intersecting is used by fixed packages though...)
@@ -274,12 +276,15 @@ mutable struct Graph
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
             req_msk = Dict{Int,BitVector}()
+            maybe_weak = haskey(compat_weak, uuid0) && haskey(compat_weak[uuid0], vn)
             for (p1, vs) in req
                 pv = pvers[p1]
-                req_msk_p1 = BitVector(undef, spp[p1] - 1)
+                req_msk_p1 = BitVector(undef, spp[p1])
                 @inbounds for i in 1:spp[p1] - 1
                     req_msk_p1[i] = pv[i] ∈ vs
                 end
+                weak = maybe_weak && (pkgs[p1] ∈ compat_weak[uuid0][vn])
+                req_msk_p1[end] = weak
                 req_msk[p1] = req_msk_p1
             end
             extended_deps[p0][v0] = req_msk
@@ -319,13 +324,11 @@ mutable struct Graph
                 bmt = gmsk[p1][j1]
             end
 
-            for v1 = 1:(spp[p1]-1)
+            for v1 = 1:spp[p1]
                 rmsk1[v1] && continue
                 bm[v1, v0] = false
                 bmt[v0, v1] = false
             end
-            bm[end,v0] = false
-            bmt[v0,end] = false
         end
 
         req_inds = Set{Int}()
