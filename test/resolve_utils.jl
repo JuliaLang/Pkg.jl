@@ -33,7 +33,7 @@ wantuuids(want_data) = Dict{UUID,VersionNumber}(pkguuid(p) => v for (p,v) in wan
 Generate a package dependency graph from the entries in the array `deps_data`, where each entry
 is an array of the form `["PkgName", v"x.y.z", "DependencyA", v"Ax.Ay.Az", ...]`.
 This states that the package "PkgName" with version `v"x.y.z"` depends on "DependencyA" with the
-specified compatibility information.
+specified compatibility information. The last entry of the array can optionally be `:weak`.
 """
 function graph_from_data(deps_data)
     uuid_to_name = Dict{UUID,String}()
@@ -52,7 +52,8 @@ function graph_from_data(deps_data)
         end
         isempty(r) && continue
         rp = r[1]
-        rvs = VersionSpec(r[2:end]...)
+        weak = length(r) > 1 && r[end] == :weak
+        rvs = VersionSpec(r[2:(end-weak)]...; weak)
         deps[p][vn][rp] = rvs
     end
     for (p,preq) in deps
