@@ -218,16 +218,20 @@ end
 ###############
 struct VersionSpec
     ranges::Vector{VersionRange}
-    VersionSpec(r::Vector{<:VersionRange}) = new(union!(r))
+    weak::Bool
+    VersionSpec(r::Vector{<:VersionRange}; weak::Bool = false) = new(union!(r), weak)
     VersionSpec(vs::VersionSpec) = vs
 end
 
-VersionSpec(r::VersionRange) = VersionSpec(VersionRange[r])
-VersionSpec(v::VersionNumber) = VersionSpec(VersionRange(v))
+VersionSpec(r::VersionRange; weak::Bool = false) = VersionSpec(VersionRange[r]; weak)
+VersionSpec(v::VersionNumber; weak::Bool = false) = VersionSpec(VersionRange(v); weak)
 const _all_versionsspec = VersionSpec(VersionRange())
-VersionSpec() = _all_versionsspec
-VersionSpec(s::AbstractString) = VersionSpec(VersionRange(s))
-VersionSpec(v::AbstractVector) = VersionSpec(map(VersionRange, v))
+const _all_versionsspec_w = VersionSpec(VersionRange(); weak=true)
+VersionSpec(; weak::Bool = false) = weak ? _all_versionsspec_w : _all_versionsspec
+VersionSpec(s::AbstractString; weak::Bool = false) = VersionSpec(VersionRange(s); weak)
+VersionSpec(v::AbstractVector; weak::Bool = false) = VersionSpec(map(VersionRange, v); weak)
+
+isweak(s::VersionSpec) = s.weak
 
 # Hot code
 function Base.in(v::VersionNumber, s::VersionSpec)
@@ -240,25 +244,29 @@ end
 Base.copy(vs::VersionSpec) = VersionSpec(vs)
 
 const empty_versionspec = VersionSpec(VersionRange[])
+const empty_versionspec_w = VersionSpec(VersionRange[]; weak=true)
 const _empty_symbol = "∅"
+const _weak_symbol = "ʷ"
 
 Base.isempty(s::VersionSpec) = all(isempty, s.ranges)
 @assert isempty(empty_versionspec)
 # Hot code, measure performance before changing
 function Base.intersect(A::VersionSpec, B::VersionSpec)
-    (isempty(A) || isempty(B)) && return copy(empty_versionspec)
+    weak = isweak(A) & isweak(B)
+    (isempty(A) || isempty(B)) && return weak ? copy(empty_versionspec_w) : copy(empty_versionspec)
     ranges = Vector{VersionRange}(undef, length(A.ranges) * length(B.ranges))
     i = 1
     @inbounds for a in A.ranges, b in B.ranges
         ranges[i] = intersect(a, b)
         i += 1
     end
-    VersionSpec(ranges)
+    VersionSpec(ranges; weak)
 end
-Base.intersect(a::VersionNumber, B::VersionSpec) = a in B ? VersionSpec(a) : empty_versionspec
+Base.intersect(a::VersionNumber, B::VersionSpec) = a in B ? VersionSpec(a) : empty_versionspec # here a is considered non-weak
 Base.intersect(A::VersionSpec, b::VersionNumber) = intersect(b, A)
 
 function Base.union(A::VersionSpec, B::VersionSpec)
+    (isweak(A) ⊻ isweak(B)) && error("Union of a weak and non-weak VersionSpec is not allowed") # TODO revise?
     A == B && return A
     Ar = copy(A.ranges)
     append!(Ar, B.ranges)
@@ -266,11 +274,11 @@ function Base.union(A::VersionSpec, B::VersionSpec)
     return VersionSpec(Ar)
 end
 
-Base.:(==)(A::VersionSpec, B::VersionSpec) = A.ranges == B.ranges
-Base.hash(s::VersionSpec, h::UInt) = hash(s.ranges, h + (0x2fd2ca6efa023f44 % UInt))
+Base.:(==)(A::VersionSpec, B::VersionSpec) = A.ranges == B.ranges && A.weak == B.weak
+Base.hash(s::VersionSpec, h::UInt) = hash((s.ranges, s.weak), h + (0x2fd2ca6efa023f44 % UInt))
 
 function Base.print(io::IO, s::VersionSpec)
-    isempty(s) && return print(io, _empty_symbol)
+    isempty(s) && return print(io, _empty_symbol, isweak(s) ? _weak_symbol : "")
     length(s.ranges) == 1 && return print(io, s.ranges[1])
     print(io, '[')
     for i = 1:length(s.ranges)
