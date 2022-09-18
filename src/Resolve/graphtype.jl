@@ -581,7 +581,7 @@ Finds a minimal collection of ranges as a `VersionSpec`, that permits everything
 `subset`, but does not permit anything else from the `pool`.
 """
 function range_compressed_versionspec(pool, subset=pool)
-    length(subset)==1 && return VersionSpec(only(subset))
+    length(subset) == 1 && return VersionSpec(only(subset))
     # PREM-OPT: we keep re-sorting these, probably not required.
     sort!(pool)
     sort!(subset)
@@ -597,10 +597,10 @@ function range_compressed_versionspec(pool, subset=pool)
             push!(contiguous_subsets, VersionRange(range_start, range_end))
             range_start = s  # start a new range
             while (s != pool[pool_ii])  # advance til time to start
-                pool_ii+=1
+                pool_ii += 1
             end
         end
-        pool_ii+=1
+        pool_ii += 1
     end
     push!(contiguous_subsets, VersionRange(range_start, last(subset)))
 
@@ -1467,8 +1467,8 @@ function prune_graph!(graph::Graph)
         new_j0 > length(new_gadj[new_p0]) || continue
         push!(new_gadj[new_p0], new_p1)
         push!(new_gadj[new_p1], new_p0)
-        new_j0 = length(new_gadj[new_p0])
-        new_j1 = length(new_gadj[new_p1])
+        @assert new_j0 == length(new_gadj[new_p0])
+        @assert new_j1 == length(new_gadj[new_p1])
 
         new_adjdict[new_p1][new_p0] = new_j0
         new_adjdict[new_p0][new_p1] = new_j1
