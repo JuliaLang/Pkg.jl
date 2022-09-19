@@ -1439,13 +1439,12 @@ function prune_graph!(graph::Graph)
         return pvers0[vmsk0[1:(end-1)]]
     end
     new_pvers = [compute_pvers(new_p0) for new_p0 = 1:new_np]
+    
+    # explicitly writing out the following loop since the generator equivalent caused type inference failure
     new_vdict = Vector{Dict{VersionNumber, Int}}(undef, length(new_pvers))
     for new_p0 in eachindex(new_vdict)
         new_vdict[new_p0] = Dict(vn => v0 for (v0,vn) in enumerate(new_pvers[new_p0]))
     end
-    # The code above is essentially equivalent to
-    # new_vdict = [Dict(vn => v0 for (v0,vn) in enumerate(new_pvers[new_p0])) for new_p0 = 1:new_np]
-    # but leads to improved type stability and reduced invalidations.
 
     # The new constraints are all going to be `true`, except possibly
     # for the "uninstalled" state, which we copy over from the old
