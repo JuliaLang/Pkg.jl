@@ -1562,8 +1562,8 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     new_git = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
-        pkg.repo.source !== nothing || continue
-        repo_source = pkg.repo.source::String
+        repo_source = pkg.repo.source
+        repo_source !== nothing || continue
         sourcepath = Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
