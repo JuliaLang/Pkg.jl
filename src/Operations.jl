@@ -2260,7 +2260,7 @@ end
 
 function compat_line(io, pkg, uuid, compat_str, longest_dep_len; indent = "  ")
     iob = IOBuffer()
-    ioc = IOContext(iob, :color => get(io, :color, false))
+    ioc = IOContext(iob, :color => get(io, :color, false)::Bool)
     if isnothing(uuid)
         print(ioc, "$indent           ")
     else
