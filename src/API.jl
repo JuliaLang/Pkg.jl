@@ -60,8 +60,8 @@ end
 
 function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
     git_source = pkg.repo.source === nothing ? nothing :
-        isurl(pkg.repo.source) ? pkg.repo.source :
-        Operations.project_rel_path(env, pkg.repo.source)
+        isurl(pkg.repo.source::String) ? pkg.repo.source::String :
+        Operations.project_rel_path(env, pkg.repo.source::String)
     info = PackageInfo(
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
@@ -370,8 +370,11 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
             pkgerror("git revision specification invalid when calling `pin`:",
                      " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))")
         end
-        if pkg.version.ranges[1].lower != pkg.version.ranges[1].upper # TODO test this
-            pkgerror("pinning a package requires a single version, not a versionrange")
+        version = pkg.version
+        if version isa VersionSpec
+            if version.ranges[1].lower != version.ranges[1].upper # TODO test this
+                pkgerror("pinning a package requires a single version, not a versionrange")
+            end
         end
     end
 
@@ -1559,15 +1562,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     new_git = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
-        pkg.repo.source !== nothing || continue
+        repo_source = pkg.repo.source
+        repo_source !== nothing || continue
         sourcepath = Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
-        if isurl(pkg.repo.source)
-            repo_source = pkg.repo.source
-        else
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
+        if !isurl(repo_source)
+            repo_source = normpath(joinpath(dirname(ctx.env.project_file), repo_source))
         end
         if !isurl(repo_source) && !isdir(repo_source)
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
@@ -1648,7 +1650,7 @@ function _activate_dep(dep_name::AbstractString)
     if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
         if entry.path !== nothing
-            return joinpath(dirname(ctx.env.project_file), entry.path)
+            return joinpath(dirname(ctx.env.project_file), entry.path::String)
         end
     end
 end
