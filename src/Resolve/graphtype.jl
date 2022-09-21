@@ -377,7 +377,7 @@ function add_reqs!(graph::Graph, reqs::Requires)
     return graph
 end
 
-function _add_reqs!(graph::Graph, reqs::Requires, reason)
+function _add_reqs!(graph::Graph, reqs::Requires, reason; weak_reqs::Set{UUID} = Set{UUID}())
     gconstr = graph.gconstr
     spp = graph.spp
     req_inds = graph.req_inds
@@ -392,7 +392,8 @@ function _add_reqs!(graph::Graph, reqs::Requires, reason)
             rvn = pvers[rp0][rv0]
             rvn ∈ rvs || (new_constr[rv0] = false)
         end
-        new_constr[end] = false
+        weak = rp ∈ weak_reqs
+        new_constr[end] = weak
         old_constr = copy(gconstr[rp0])
         gconstr[rp0] .&= new_constr
         reason ≡ :explicit_requirement && push!(req_inds, rp0)
@@ -425,7 +426,7 @@ function _add_fixed!(graph::Graph, fixed::Dict{UUID,Fixed})
         gconstr[fp0] .&= new_constr
         push!(fix_inds, fp0)
         bkitem = log_event_fixed!(graph, fp, fx)
-        _add_reqs!(graph, fx.requires, (fp, bkitem))
+        _add_reqs!(graph, fx.requires, (fp, bkitem); weak_reqs=fx.weak)
     end
     return graph
 end
