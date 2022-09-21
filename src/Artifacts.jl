@@ -590,7 +590,7 @@ ensure_artifact_installed(name::AbstractString, artifacts_toml::AbstractString; 
 ensure_artifact_installed(name::AbstractString, meta::Dict, artifacts_toml::AbstractString; kwargs...) =
     ensure_artifact_installed(string(name)::String, meta, string(artifacts_toml)::String; kwargs...)
 ensure_all_artifacts_installed(artifacts_toml::AbstractString; kwargs...) =
-    ensure_all_artifacts_installed(string(name)::String; kwargs...)
+    ensure_all_artifacts_installed(string(artifacts_toml)::String; kwargs...)
 extract_all_hashes(artifacts_toml::AbstractString; kwargs...) =
     extract_all_hashes(string(artifacts_toml)::String; kwargs...)
 
