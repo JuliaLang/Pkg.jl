@@ -91,9 +91,9 @@ function CommandSpec(;name::Union{Nothing,String}           = nothing,
                      arg_count::Pair                        = (0=>0),
                      arg_parser::Function                   = default_parser,
                      )::CommandSpec
-    @assert name !== nothing "Supply a canonical name"
-    @assert description !== nothing "Supply a description"
-    @assert api !== nothing "Supply API dispatch function for `$(name)`"
+    name === nothing        && error("Supply a canonical name")
+    description === nothing && error("Supply a description")
+    api === nothing         && error("Supply API dispatch function for `$(name)`")
     # TODO assert isapplicable completions dict, string
     return CommandSpec(name, short_name, api, should_splat, ArgSpec(arg_count, arg_parser),
                        OptionSpecs(option_spec), completions, description, help)
@@ -150,8 +150,8 @@ is_opt(word::AbstractString) = first(word) == '-' && word != "-"
 function parse_option(word::AbstractString)::Option
     m = match(r"^(?: -([a-z]) | --((?:[a-z]{1,}-?)*)(?:\s*=\s*(\S*))? )$"ix, word)
     m === nothing && pkgerror("malformed option: ", repr(word))
-    option_name = m.captures[1] !== nothing ? m.captures[1] : m.captures[2]
-    option_arg  = m.captures[3] === nothing ? nothing : String(m.captures[3])
+    option_name = m.captures[1] !== nothing ? something(m.captures[1]) : something(m.captures[2])
+    option_arg  = m.captures[3] === nothing ? nothing : String(something(m.captures[3]))
     return Option(option_name, option_arg)
 end
 
@@ -365,7 +365,7 @@ function Command(statement::Statement)::Command
     # arguments
     arg_spec = statement.spec.argument_spec
     arguments = arg_spec.parser(statement.arguments, options)
-    if !(arg_spec.count.first <= length(arguments) <= arg_spec.count.second)
+    if !((arg_spec.count.first <= length(arguments) <= arg_spec.count.second)::Bool)
         pkgerror("Wrong number of arguments")
     end
     return Command(statement.spec, options, arguments)
@@ -490,7 +490,7 @@ function projname(project_file::String)
     if project === nothing || project.name === nothing
         name = basename(dirname(project_file))
     else
-        name = project.name
+        name = project.name::String
     end
     for depot in Base.DEPOT_PATH
         envdir = joinpath(depot, "environments")
@@ -648,7 +648,7 @@ Some commands have an alias, indicated below.
 **Commands**
 """
     for (command, spec) in canonical_names()
-        short_name = spec.short_name === nothing ? "" : ", `" * spec.short_name * '`'
+        short_name = spec.short_name === nothing ? "" : ", `" * spec.short_name::String * '`'
         push!(help.content, Markdown.parse("`$command`$short_name: $(spec.description)"))
     end
     return help
