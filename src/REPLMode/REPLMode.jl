@@ -365,7 +365,7 @@ function Command(statement::Statement)::Command
     # arguments
     arg_spec = statement.spec.argument_spec
     arguments = arg_spec.parser(statement.arguments, options)
-    if !(arg_spec.count.first <= length(arguments) <= arg_spec.count.second)
+    if !((arg_spec.count.first <= length(arguments) <= arg_spec.count.second)::Bool)
         pkgerror("Wrong number of arguments")
     end
     return Command(statement.spec, options, arguments)
