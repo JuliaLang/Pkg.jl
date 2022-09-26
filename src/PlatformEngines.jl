@@ -11,6 +11,9 @@ using Base.BinaryPlatforms, p7zip_jll
 
 export verify, unpack, package, download_verify_unpack
 
+const DOWNLOADER_LOCK = ReentrantLock()
+const DOWNLOADER = Ref{Downloads.Downloader}()
+
 const EXE7Z_LOCK = ReentrantLock()
 const EXE7Z = Ref{String}()
 
@@ -282,7 +285,15 @@ function download(
         (total, now) -> nothing
     end
     try
-        Downloads.download(url, dest; headers, progress)
+        lock(DOWNLOADER_LOCK) do
+            if !isassigned(DOWNLOADER)
+                downloader = Downloads.Downloader()
+                timeout = parse(Int, get(ENV, "JULIA_PKG_LOW_SPEED_TIME", "20"))
+                downloader.easy_hook = (easy, info) -> Downloads.Curl.setopt(easy, Downloads.Curl.CURLOPT_LOW_SPEED_TIME, timeout)
+                DOWNLOADER[] = downloader
+            end
+        end
+        Downloads.download(url, dest; headers, progress, downloader=DOWNLOADER[])
     finally
         do_fancy && end_progress(io, bar)
     end
