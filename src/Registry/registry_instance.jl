@@ -15,21 +15,26 @@ function to_tar_path_format(file::AbstractString)
     return file
 end
 
+struct InMemoryRegistry
+    data::String
+    d::Dict{String, SubString{String}}
+end
+
 # See loading.jl
 const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
 const TOML_LOCK = ReentrantLock()
 _parsefile(toml_file::AbstractString) = Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK)
-function parsefile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, file::AbstractString)
+function parsefile(in_memory_registry::Union{InMemoryRegistry, Nothing}, folder::AbstractString, file::AbstractString)
     if in_memory_registry === nothing
         return _parsefile(joinpath(folder, file))
     else
-        content = in_memory_registry[to_tar_path_format(file)]
+        content = in_memory_registry.d[to_tar_path_format(file)]
         return TOML.Internals.parse(TOML.Parser(content; filepath=file))
     end
 end
 
-custom_isfile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, file::AbstractString) =
-    in_memory_registry === nothing ? isfile(joinpath(folder, file)) : haskey(in_memory_registry, to_tar_path_format(file))
+custom_isfile(in_memory_registry::Union{InMemoryRegistry, Nothing}, folder::AbstractString, file::AbstractString) =
+    in_memory_registry === nothing ? isfile(joinpath(folder, file)) : haskey(in_memory_registry.d, to_tar_path_format(file))
 
 # Info about each version of a package
 @lazy mutable struct VersionInfo
@@ -186,23 +191,42 @@ function init_package_info!(pkg::PkgEntry)
     return pkg.info
 end
 
-
 function uncompress_registry(tar_gz::AbstractString)
     if !isfile(tar_gz)
         error("$(repr(tar_gz)): No such file")
     end
-    data = Dict{String, String}()
     buf = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE)
     io = IOBuffer()
+
+    offsets = Pair{String, Int}[]
+    offset = 1
     open(`$(exe7z()) x $tar_gz -so`) do tar
         Tar.read_tarball(x->true, tar; buf=buf) do hdr, _
             if hdr.type == :file
-                Tar.read_data(tar, io; size=hdr.size, buf=buf)
-                data[hdr.path] = String(take!(io))
+                interesting_file = endswith(hdr.path, ".toml") && !contains(hdr.path, ".ci") &&
+                    contains(hdr.path, "ACME")
+                if !interesting_file
+                    Tar.read_data(tar, devnull; size=hdr.size, buf=buf)
+                else
+                    @show hdr.path
+                    p0 = position(io)
+                    Tar.read_data(tar, io; size=hdr.size, buf=buf)
+                    p1 = position(io)
+                    offset += p1 - p0 - 1 # ???
+                    push!(offsets, hdr.path => offset)
+                end
             end
         end
     end
-    return data
+    display(offsets)
+    str = String(take!(io))
+    d = Dict{String, SubString{String}}()
+    p0 = 1
+    for (path, p1) in offsets
+        d[path] = SubString(str, p0, p1)
+        p0 = p1+1
+    end
+    return InMemoryRegistry(str, d)
 end
 
 struct RegistryInstance
@@ -213,10 +237,11 @@ struct RegistryInstance
     description::Union{String, Nothing}
     pkgs::Dict{UUID, PkgEntry}
     tree_info::Union{Base.SHA1, Nothing}
-    in_memory_registry::Union{Nothing, Dict{String, String}}
+    in_memory_registry::Union{Nothing, InMemoryRegistry}
     # various caches
     name_to_uuids::Dict{String, Vector{UUID}}
 end
+
 
 const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
 
