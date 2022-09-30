@@ -311,6 +311,7 @@ PSA[:name => "update",
         PSA[:name => "minor", :api => :level => UPLEVEL_MINOR],
         PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
         PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
+        PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
     :completions => complete_installed_packages,
     :description => "update packages in manifest",
@@ -319,6 +320,7 @@ PSA[:name => "update",
     [up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
     opts: --major | --minor | --patch | --fixed
+          --preserve=<all/direct/none>
 
 Update `pkg` within the constraints of the indicated version
 specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
@@ -385,11 +387,11 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
-Show the status of the current environment.
-Packages marked with `⌃` have new versions that can be installed, e.g. via `pkg> up`.
-Those marked with `⌅` have new versions available, but that cannot be installed. To see why
-use `pkg> status --outdated` which shows any packages that are not at their latest version
-and if any packages are holding them back.
+Show the status of the current environment. Packages marked with `⌃` have new
+versions that may be installed, e.g. via `pkg> up`. Those marked with `⌅` have
+new versions available, but cannot be installed due to compatibility
+constraints. To see why use `pkg> status --outdated` which shows any packages
+that are not at their latest version and if any packages are holding them back.
 
 In `--project` mode (default), the status of the project file is summarized. In `--manifest`
 mode the output also includes the recursive dependencies of added packages given in the manifest.

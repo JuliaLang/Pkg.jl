@@ -82,8 +82,7 @@ function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Ve
             uv = uncompressed[v]
             for (key, value) in data
                 if haskey(uv, key)
-                    # Change to an error?
-                    error("Overlapping ranges for $(key) in $(repr(path)) for version $v.")
+                    error("Overlapping ranges for $(key) for version $v in registry.")
                 else
                     uv[key] = value
                 end
