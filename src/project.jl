@@ -73,21 +73,26 @@ end
 read_project_compat(raw, project::Project) =
     pkgerror("Expected `compat` section to be a key-value list")
 
-function validate(project::Project)
+function validate(project::Project; file=nothing)
     # deps
-    dep_uuids = vcat(collect(values(project.deps)), collect(values(project.weakdeps)))
+    location_string = file === nothing ? "" : " at $(repr(file))."
+    dep_uuids = collect(values(project.deps))
     if length(dep_uuids) != length(unique(dep_uuids))
-        pkgerror("Two different dependencies can not have the same uuid")
+        pkgerror("Two different dependencies can not have the same uuid" * location_string)
+    end
+    weak_dep_uuids = collect(values(project.weakdeps))
+    if length(weak_dep_uuids) != length(unique(weak_dep_uuids))
+        pkgerror("Two different weak dependencies can not have the same uuid" * location_string)
     end
     # extras
     extra_uuids = collect(values(project.extras))
     if length(extra_uuids) != length(unique(extra_uuids))
-        pkgerror("Two different `extra` dependencies can not have the same uuid")
+        pkgerror("Two different `extra` dependencies can not have the same uuid" * location_string)
     end
-    dep_names = keys(project.deps)
     # TODO decide what to do in when `add`ing a dep that is already in `extras`
     #   also, reintroduce test files for this
     #=
+    dep_names = keys(project.deps)
     for (name, uuid) in project.extras
         name in dep_names && pkgerror("name `$name` is listed in both `deps` and `extras`")
         uuid in dep_uuids && pkgerror("uuid `$uuid` is listed in both `deps` and `extras`")
@@ -100,18 +105,18 @@ function validate(project::Project)
             pkgerror("A dependency was named twice in target `$target`")
         end
         dep in listed || pkgerror("""
-            Dependency `$dep` in target `$target` not listed in `deps`, `weakdeps` or `extras` section.
-            """)
+            Dependency `$dep` in target `$target` not listed in `deps`, `weakdeps` or `extras` section
+            """ * location_string)
     end
     # compat
     for (name, version) in project.compat
         name == "julia" && continue
         name in listed ||
-            pkgerror("Compat `$name` not listed in `deps`, `weakdeps` or `extras` section.")
+            pkgerror("Compat `$name` not listed in `deps`, `weakdeps` or `extras` section" * location_string)
     end
 end
 
-function Project(raw::Dict)
+function Project(raw::Dict; file=nothing)
     project = Project()
     project.other    = raw
     project.name     = get(raw, "name", nothing)::Union{String, Nothing}
@@ -123,7 +128,7 @@ function Project(raw::Dict)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
-    validate(project)
+    validate(project; file)
     return project
 end
 
@@ -140,7 +145,7 @@ function read_project(f_or_io::Union{String, IO})
         end
         rethrow()
     end
-    return Project(raw)
+    return Project(raw; file= f_or_io isa IO ? nothing : f_or_io)
 end
 
 
