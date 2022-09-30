@@ -152,7 +152,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
             end
             kwargs = merge((;kwargs...), (:io => io,))
             pkgs = deepcopy(pkgs) # don't mutate input
-            foreach(pkg -> handle_package_input!(pkg), pkgs)
+            foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
