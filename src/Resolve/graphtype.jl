@@ -655,6 +655,18 @@ function log_event_fixed!(graph::Graph, fp::UUID, fx::Fixed)
     return entry
 end
 
+function _vs_string(p0::Int, vmask::BitVector, id::String, pvers::Vector{Vector{VersionNumber}})
+    if any(vmask[1:(end-1)])
+        vspec = range_compressed_versionspec(pvers[p0], pvers[p0][vmask[1:(end-1)]])
+        vns = logstr(id, vspec)
+        vmask[end] && (vns *= " or uninstalled")
+    else
+        @assert vmask[end]
+        vns = "uninstalled"
+    end
+    return vns
+end
+
 function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
     rlog = graph.data.rlog
     gconstr = graph.gconstr
@@ -676,11 +688,9 @@ function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
         end
     end
     rp0 = pdict[rp]
-    @assert !gconstr[rp0][end]
+    @assert !gconstr[rp0][end] || reason ≢ :explicit_requirement
     if any(gconstr[rp0])
-        vspec = range_compressed_versionspec(pvers[rp0], pvers[rp0][gconstr[rp0][1:(end-1)]])
-        vers = logstr(id, vspec)
-        msg *= ", leaving only versions $vers"
+        msg *= ", leaving only versions: $(_vs_string(rp0, gconstr[rp0], id, pvers))"
     else
         msg *= " — no versions left"
     end
@@ -704,22 +714,10 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
     p = pkgs[p1]
     id = pkgID(p, rlog)
 
-    function vs_string(p0::Int, vmask::BitVector)
-        if any(vmask[1:(end-1)])
-            vspec = range_compressed_versionspec(pvers[p0], pvers[p0][vmask[1:(end-1)]])
-            vns = logstr(id, vspec)
-            vmask[end] && (vns *= " or uninstalled")
-        else
-            @assert vmask[end]
-            vns = "uninstalled"
-        end
-        return vns
-    end
-
     other_p, other_entry = pkgs[p0], rlog.pool[pkgs[p0]]
     other_id = pkgID(other_p, rlog)
     if any(vmask)
-        if all(vmask[1:(end-1)])    # Check if all versions are allowed(except uninstalled)
+        if all(vmask[1:(end-1)])    # Check if all versions are allowed (except uninstalled)
             msg = ""
             other_entry = nothing   # Don't propagate the log if all versions allowed
         else
@@ -730,10 +728,10 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
             else
                 msg *= "compatibility requirements with $(logstr(other_id)) "
             end
-            msg *= "to versions: $(vs_string(p1, vmask))"
+            msg *= "to versions: $(_vs_string(p1, vmask, id, pvers))"
             if vmask ≠ gconstr[p1]
                 if any(gconstr[p1])
-                    msg *= ", leaving only versions: $(vs_string(p1, gconstr[p1]))"
+                    msg *= ", leaving only versions: $(_vs_string(p1, gconstr[p1], id, pvers))"
                 else
                     msg *= " — no versions left"
                 end
