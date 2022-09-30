@@ -206,24 +206,29 @@ function reset_all_compat!(proj::Project)
     return nothing
 end
 
-function collect_project!(pkg::PackageSpec, path::String,
-                          deps_map::Dict{UUID,Vector{PackageSpec}})
-    deps_map[pkg.uuid] = PackageSpec[]
+function collect_project(pkg::PackageSpec, path::String)
+    deps = PackageSpec[]
+    weaks = Set{UUID}()
     project_file = projectfile_path(path; strict=true)
     if project_file === nothing
         pkgerror("could not find project file for package $(err_rep(pkg)) at `$path`")
     end
     project = read_package(project_file)
-    julia_compat = get_compat(project, "julia")
     #=
     # TODO, this should either error or be quiet
+    julia_compat = get_compat(project, "julia")
     if julia_compat !== nothing && !(VERSION in julia_compat)
         println(io, "julia version requirement for package $(err_rep(pkg)) not satisfied")
     end
     =#
     for (name, uuid) in project.deps
         vspec = get_compat(project, name)
-        push!(deps_map[pkg.uuid], PackageSpec(name, uuid, vspec))
+        push!(deps, PackageSpec(name, uuid, vspec))
+    end
+    for (name, uuid) in project.weakdeps
+        vspec = get_compat(project, name)
+        push!(deps, PackageSpec(name, uuid, vspec))
+        push!(weaks, uuid)
     end
     if project.version !== nothing
         pkg.version = project.version
@@ -231,7 +236,7 @@ function collect_project!(pkg::PackageSpec, path::String,
         # @warn("project file for $(pkg.name) is missing a `version` entry")
         pkg.version = VersionNumber(0)
     end
-    return
+    return deps, weaks
 end
 
 is_tracking_path(pkg) = pkg.path !== nothing
@@ -266,9 +271,12 @@ end
 
 function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     deps_map = Dict{UUID,Vector{PackageSpec}}()
+    weak_map = Dict{UUID,Set{UUID}}()
     if env.pkg !== nothing
         pkg = env.pkg
-        collect_project!(pkg, dirname(env.project_file), deps_map)
+        deps, weaks = collect_project(pkg, dirname(env.project_file))
+        deps_map[pkg.uuid] = deps
+        weak_map[pkg.uuid] = weaks
         names[pkg.uuid] = pkg.name
     end
     for pkg in pkgs
@@ -276,7 +284,9 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
         end
-        collect_project!(pkg, path, deps_map)
+        deps, weaks = collect_project(pkg, path)
+        deps_map[pkg.uuid] = deps
+        weak_map[pkg.uuid] = weaks
     end
 
     fixed = Dict{UUID,Resolve.Fixed}()
@@ -293,7 +303,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
             fix_pkg = pkgs[idx]
         end
-        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q)
+        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q, weak_map[uuid])
     end
     return fixed
 end
