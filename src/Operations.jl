@@ -1005,7 +1005,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
             end
         else
             build_project_override = gen_target_project(ctx, pkg, source_path, "build")
-            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
+            with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         end
@@ -1802,7 +1802,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             end
         else
             test_project_override = gen_target_project(ctx, pkg, source_path, "test")
-            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
+            with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         end
@@ -2171,17 +2171,17 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         tipend = manifest ? " -m" : ""
         tip = show_usagetips ? " To see why use `status --outdated$tipend`" : ""
         if !no_packages_upgradable && no_visible_packages_heldback
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available and may be upgradable.", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
             # only warn if showing project and outdated indirect deps are hidden
-            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Some packages have new versions but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
     end
 
@@ -2267,7 +2267,7 @@ end
 
 function compat_line(io, pkg, uuid, compat_str, longest_dep_len; indent = "  ")
     iob = IOBuffer()
-    ioc = IOContext(iob, :color => get(io, :color, false))
+    ioc = IOContext(iob, :color => get(io, :color, false)::Bool)
     if isnothing(uuid)
         print(ioc, "$indent           ")
     else

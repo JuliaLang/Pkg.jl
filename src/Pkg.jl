@@ -702,7 +702,7 @@ function installed()
     for (uuid, dep) in deps
         dep.is_direct_dep || continue
         dep.version === nothing && continue
-        installs[dep.name] = dep.version
+        installs[dep.name] = dep.version::VersionNumber
     end
     return installs
 end
