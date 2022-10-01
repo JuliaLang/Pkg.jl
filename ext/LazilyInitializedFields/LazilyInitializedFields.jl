@@ -3,7 +3,7 @@ A package for handling lazily initialized fields.
 
 ### Exports:
 * macros: `@lazy`, `@init!`, `@uninit!`, `@isinit`.
-* functions: `init!` `uninit!`, `isinit`.
+* functions: `init!` `uninit!`, `isinit`, `islazyfield`.
 * objects: `uninit`.
 * exceptions: `NonLazyFieldException`, `UninitializedFieldException`, `AlreadyInitializedException`
 
@@ -53,7 +53,7 @@ module LazilyInitializedFields
 
 export @lazy, uninit,
        @init!, @isinit, @uninit!,
-        init!,  isinit,  uninit!,
+        init!,  isinit,  uninit!, islazyfield,
         NonLazyFieldException, UninitializedFieldException, AlreadyInitializedException
 
 
@@ -93,8 +93,12 @@ struct UninitializedFieldException <: Exception
     T::DataType
     s::Symbol
 end
-Base.showerror(io::IO, err::UninitializedFieldException) =
+function Base.showerror(io::IO, err::UninitializedFieldException)
     print(io, "field `", err.s, "` in struct of type `$(err.T)` is not initialized")
+    @static if isdefined(Base, :Experimental) && isdefined(Base.Experimental, :show_error_hints)
+        Base.Experimental.show_error_hints(io, err)
+    end
+end
 
 struct AlreadyInitializedException <: Exception
     T::DataType
@@ -264,7 +268,7 @@ macro lazy(expr)
     elseif expr isa Expr && expr.head === :(::) && length(expr.args) == 2
         return lazy_field(expr)
     else
-        _throw_invalid_usage()
+        error("invalid usage of @lazy macro")
     end
 end
 

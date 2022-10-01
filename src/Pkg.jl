@@ -359,7 +359,7 @@ const generate = API.generate
 !!! compat "Julia 1.4"
     This feature requires Julia 1.4, and is considered experimental.
 
-Query the dependency graph.
+Query the dependency graph of the active project.
 The result is a `Dict` that maps a package UUID to a `PackageInfo` struct representing the dependency (a package).
 
 # `PackageInfo` fields
@@ -594,7 +594,7 @@ Below is a comparison between the REPL mode and the functional API:
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
 | `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
 | `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
-| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
+| `--major Package`    | `PackageSpec(name="Package", version=UPLEVEL_MAJOR)` |
 
 """
 const PackageSpec = Types.PackageSpec
@@ -707,7 +707,7 @@ function installed()
     for (uuid, dep) in deps
         dep.is_direct_dep || continue
         dep.version === nothing && continue
-        installs[dep.name] = dep.version
+        installs[dep.name] = dep.version::VersionNumber
     end
     return installs
 end

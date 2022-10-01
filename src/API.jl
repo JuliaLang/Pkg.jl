@@ -60,8 +60,8 @@ end
 
 function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
     git_source = pkg.repo.source === nothing ? nothing :
-        isurl(pkg.repo.source) ? pkg.repo.source :
-        Operations.project_rel_path(env, pkg.repo.source)
+        isurl(pkg.repo.source::String) ? pkg.repo.source::String :
+        Operations.project_rel_path(env, pkg.repo.source::String)
     info = PackageInfo(
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
@@ -152,7 +152,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
             end
             kwargs = merge((;kwargs...), (:io => io,))
             pkgs = deepcopy(pkgs) # don't mutate input
-            foreach(pkg -> handle_package_input!(pkg), pkgs)
+            foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
@@ -370,8 +370,11 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
             pkgerror("git revision specification invalid when calling `pin`:",
                      " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))")
         end
-        if pkg.version.ranges[1].lower != pkg.version.ranges[1].upper # TODO test this
-            pkgerror("pinning a package requires a single version, not a versionrange")
+        version = pkg.version
+        if version isa VersionSpec
+            if version.ranges[1].lower != version.ranges[1].upper # TODO test this
+                pkgerror("pinning a package requires a single version, not a versionrange")
+            end
         end
     end
 
@@ -508,7 +511,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
                 # For Manifest usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
             end
         end
         manifest_usage_by_depot[depot] = usage
@@ -517,7 +520,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
             end
         end
         artifact_usage_by_depot[depot] = usage
@@ -528,7 +531,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
                 if !haskey(parents, filename)
                     parents[filename] = Set{String}()
                 end
@@ -565,9 +568,11 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
             # Write out the TOML file for this depot
             usage_path = joinpath(logdir(depot), fname)
-            if !isempty(usage) || isfile(usage_path)
-                open(usage_path, "w") do io
-                    TOML.print(io, usage, sorted=true)
+            if !(isempty(usage)::Bool) || isfile(usage_path)
+                let usage=usage
+                    open(usage_path, "w") do io
+                        TOML.print(io, usage, sorted=true)
+                    end
                 end
             end
         end
@@ -1028,7 +1033,16 @@ end
 function _is_stale(paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
         staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
-        staledeps === true ? continue : return false
+        if staledeps !== true
+            try
+                # update timestamp of precompilation file so that it is the first to be tried by code loading
+                touch(path_to_try)
+            catch ex
+                # file might be read-only and then we fail to update timestamp, which is fine
+                ex isa IOError || rethrow()
+            end
+            return false
+        end
     end
     return true
 end
@@ -1217,7 +1231,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         end
                         bar.current = n_done - n_already_precomp
                         bar.max = n_total - n_already_precomp
-                        final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
+                        final_loop || print(iostr, sprint(io -> show_progress(io, bar; termwidth = displaysize(ctx.io)[2]); context=io), "\n")
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
                             name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
@@ -1339,13 +1353,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         Base.release(parallel_limiter)
                     end
                 else
-                    if !is_stale
-                        n_already_precomp += 1
-                        try
-                            touch(path_to_try) # update timestamp of precompilation file
-                        catch # file might be read-only and then we fail to update timestamp, which is fine
-                        end
-                    end
+                    is_stale || (n_already_precomp += 1)
                     suspended && push!(skipped_deps, pkg)
                 end
                 n_done += 1
@@ -1557,15 +1565,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     new_git = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
-        pkg.repo.source !== nothing || continue
+        repo_source = pkg.repo.source
+        repo_source !== nothing || continue
         sourcepath = Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
-        if isurl(pkg.repo.source)
-            repo_source = pkg.repo.source
-        else
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
+        if !isurl(repo_source)
+            repo_source = normpath(joinpath(dirname(ctx.env.project_file), repo_source))
         end
         if !isurl(repo_source) && !isdir(repo_source)
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
@@ -1646,7 +1653,7 @@ function _activate_dep(dep_name::AbstractString)
     if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
         if entry.path !== nothing
-            return joinpath(dirname(ctx.env.project_file), entry.path)
+            return joinpath(dirname(ctx.env.project_file), entry.path::String)
         end
     end
 end
