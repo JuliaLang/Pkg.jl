@@ -571,7 +571,7 @@ function gc(
     all_manifest_tomls = Set(filter(isfile_fn, all_manifest_tomls))
     all_artifact_tomls = Set(filter(isfile_fn, all_artifact_tomls))
     all_scratch_dirs = Set(filter(Pkg.isdir_nothrow, all_scratch_dirs))
-    all_scratch_parents = Set(filter(isfile_fn, all_scratch_parents))
+    all_scratch_parents = Set(filter(Pkg.isfile_nothrow, all_scratch_parents))
 
     # Immediately write these back as condensed toml files
     function write_condensed_toml(f::Function, usage_by_depot, fname)
