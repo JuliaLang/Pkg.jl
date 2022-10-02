@@ -467,7 +467,14 @@ admin privileges depending on the setup).
 
 Use verbose mode (`verbose=true`) for detailed output.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, force=false, kwargs...)
+function gc(
+        ctx::Context=Context();
+        collect_delay::Period=Day(7),
+        verbose=false,
+        force=false,
+        include_deleted_manifests=false,
+        kwargs...,
+    )
     Context!(ctx; kwargs...)
     env = ctx.env
 
@@ -555,10 +562,16 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         end
     end
 
-    all_manifest_tomls = Set(filter(Pkg.isfile_nothrow, all_manifest_tomls))
-    all_artifact_tomls = Set(filter(Pkg.isfile_nothrow, all_artifact_tomls))
+    if include_deleted_manifests
+        isfile_fn = x -> true
+    else
+        isfile_fn = Pkg.isfile_nothrow
+    end
+
+    all_manifest_tomls = Set(filter(isfile_fn, all_manifest_tomls))
+    all_artifact_tomls = Set(filter(isfile_fn, all_artifact_tomls))
     all_scratch_dirs = Set(filter(Pkg.isdir_nothrow, all_scratch_dirs))
-    all_scratch_parents = Set(filter(Pkg.isfile_nothrow, all_scratch_parents))
+    all_scratch_parents = Set(filter(isfile_fn, all_scratch_parents))
 
     # Immediately write these back as condensed toml files
     function write_condensed_toml(f::Function, usage_by_depot, fname)
