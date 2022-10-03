@@ -1,4 +1,4 @@
-module HasWeakDeps
+module HasWeakDepsNoTarget
 
 using Example
 

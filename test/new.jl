@@ -3039,11 +3039,4 @@ if :version in fieldnames(Base.PkgOrigin)
 end
 end
 
-@testset "weak deps" begin
-    isolate() do
-        Pkg.develop(path=joinpath(@__DIR__, "test_packages/", "HasWeakDeps"))
-        Pkg.test("HasWeakDeps")
-    end
-end
-
 end #module
