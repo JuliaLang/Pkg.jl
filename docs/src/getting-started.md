@@ -1,90 +1,113 @@
 # **2.** Getting Started
 
-What follows is a quick overview of Pkg, Julia's package manager.
-It should help new users become familiar with basic Pkg features.
+What follows is a quick overview of the basic features of Pkg.
+It should help new users become familiar with basic Pkg features such as adding and removing packages and
+working with environments.
 
+!!! note
+    Some Pkg output is omitted in this section in order to keep this basic guide focused.
+    This will help maintain a good pace and not get bogged down in details.
+    If you require more details, refer to subsequent sections of the Pkg manual.
+
+!!! note
+    This guide uses the Pkg REPL to execute Pkg commands.
+    For non-interactive use, we recommend the Pkg API.
+    The Pkg API is fully documented in the [API Reference](@ref) section of the Pkg documentation.
 ## Basic Usage
 
 Pkg comes with a REPL.
 Enter the Pkg REPL by pressing `]` from the Julia REPL.
-To get back to the Julia REPL, press backspace or ^C.
+To get back to the Julia REPL, press `Ctrl+C` or backspace (when the REPL cursor is at the beginning of the input).
 
-!!! note
-    This guide relies on the Pkg REPL to execute Pkg commands.
-    For non-interactive use, we recommend the Pkg API.
-    The Pkg API is fully documented in the [API Reference](@ref) section of the Pkg documentation.
-
-Upon entering the Pkg REPL, you should see a similar prompt:
+Upon entering the Pkg REPL, you should see the following prompt:
 
 ```julia-repl
-(v1.1) pkg>
+(@v1.8) pkg>
 ```
 
 To add a package, use `add`:
 
 ```julia-repl
-(v1.1) pkg> add Example
+(@v1.8) pkg> add Example
+   Resolving package versions...
+   Installed Example ─ v0.5.3
+    Updating `~/.julia/environments/v1.8/Project.toml`
+  [7876af07] + Example v0.5.3
+    Updating `~/.julia/environments/v1.8/Manifest.toml`
+  [7876af07] + Example v0.5.3
+```
+
+After the package is installed, it can be loaded into the Julia session:
+
+```julia-repl
+julia> import Example
+
+julia> Example.hello("friend")
+"Hello, friend"
+```
+
+We can also specify multiple packages at once to install:
+
+```julia-repl
+(@v1.8) pkg> add JSON StaticArrays
+```
+
+The `status` command (or the shorter `st` command) can be used to see installed packages.
+
+```julia-repl
+(@v1.8) pkg> st
+Status `~/.julia/environments/v1.6/Project.toml`
+  [7876af07] Example v0.5.3
+  [682c06a0] JSON v0.21.3
+  [90137ffa] StaticArrays v1.5.9
 ```
 
 !!! note
-    Some Pkg output has been omitted in order to keep this guide focused.
-    This will help maintain a good pace and not get bogged down in details.
-    If you require more details, refer to subsequent sections of the Pkg manual.
+    Some Pkg REPL commands have a short and a long version of the command, for example `status` and `st`.
 
-We can also specify multiple packages at once:
+To remove packages, use `rm` (or `remove`):
 
 ```julia-repl
-(v1.1) pkg> add JSON StaticArrays
+(@v1.8) pkg> rm JSON StaticArrays
 ```
 
-To remove packages, use `rm`:
+Use `up` (or `update`) to update the installed packages
 
 ```julia-repl
-(v1.1) pkg> rm JSON StaticArrays
+(@v1.8) pkg> up
 ```
 
-So far, we have referred only to registered packages.
-Pkg also supports working with unregistered packages.
-To add an unregistered package, specify a URL:
+If you have been following this guide it is likely that the packages installed are at the latest version
+so `up` will not do anything. Below we show the status output in the case where we delibirately have installed
+an old version of the Example package and then upgrade it:
 
 ```julia-repl
-(v1.1) pkg> add https://github.com/JuliaLang/Example.jl
+(@v1.8) pkg> st
+Status `~/.julia/environments/v1.8/Project.toml`
+⌃ [7876af07] Example v0.5.1
+Info Packages marked with ⌃ have new versions available and may be upgradable.
+
+(@v1.8) pkg> up
+    Updating `~/.julia/environments/v1.8/Project.toml`
+  [7876af07] ↑ Example v0.5.1 ⇒ v0.5.3
 ```
 
-Use `rm` to remove this package by name:
-
-```julia-repl
-(v1.1) pkg> rm Example
-```
-
-Use `update` to update an installed package:
-
-```julia-repl
-(v1.1) pkg> update Example
-```
-
-To update all installed packages, use `update` without any arguments:
-
-```julia-repl
-(v1.1) pkg> update
-```
+We can see that the status output tells us that there is a newer version available and that `up` upgrades the package.
 
 ## Getting Started with Environments
 
 Up to this point, we have covered basic package management: adding, updating and removing packages.
-This will be familiar if you have used other package managers.
-Pkg offers significant advantages over traditional package managers
-by organizing dependencies into **environments**.
 
-You may have noticed the `(v1.1)` in the REPL prompt.
-This lets us know `v1.1` is the **active environment**.
+You may have noticed the `(@v1.8)` in the REPL prompt.
+This lets us know `v1.8` is the **active environment**.
 The active environment is the environment that will be modified by Pkg commands such as `add`, `rm` and `update`.
+
 
 Let's set up a new environment so we may experiment.
 To set the active environment, use `activate`:
 
 ```julia-repl
-(v1.1) pkg> activate tutorial
+(@v1.8) pkg> activate tutorial
 [ Info: activating new environment at `/tmp/tutorial/Project.toml`.
 ```
 
@@ -193,7 +216,26 @@ environment** by running `activate` with no arguments:
 ```julia-repl
 (tutorial) pkg> activate
 
-(v1.1) pkg>
+(@v1.8) pkg>
+```
+
+## Unregistered packages
+
+So far, we have only added "registered" packages which can be added by their name[^1].
+
+[^1]: [JuliaHub](https://juliahub.com/ui/Packages) is a good resource for exploring registered packages.
+
+Pkg also supports working with unregistered packages.
+To add an unregistered package, specify a URL:
+
+```julia-repl
+(@v1.8) pkg> add https://github.com/JuliaLang/Example.jl
+```
+
+Use `rm` to remove this package by name:
+
+```julia-repl
+(@v1.8) pkg> rm Example
 ```
 
 ## Asking for Help
@@ -201,14 +243,14 @@ environment** by running `activate` with no arguments:
 If you are ever stuck, you can ask `Pkg` for help:
 
 ```julia-repl
-(v1.1) pkg> ?
+(@v1.8) pkg> ?
 ```
 
 You should see a list of available commands along with short descriptions.
 You can ask for more detailed help by specifying a command:
 
 ```julia-repl
-(v1.1) pkg> ?develop
+(@v1.8) pkg> ?develop
 ```
 
 This guide should help you get started with `Pkg`.
