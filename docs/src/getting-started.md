@@ -78,7 +78,7 @@ Use `up` (or `update`) to update the installed packages
 ```
 
 If you have been following this guide it is likely that the packages installed are at the latest version
-so `up` will not do anything. Below we show the status output in the case where we delibirately have installed
+so `up` will not do anything. Below we show the status output in the case where we deliberately have installed
 an old version of the Example package and then upgrade it:
 
 ```julia-repl
@@ -94,14 +94,17 @@ Info Packages marked with ⌃ have new versions available and may be upgradable.
 
 We can see that the status output tells us that there is a newer version available and that `up` upgrades the package.
 
+For more information about managing packages, see the [Managing Packages](@ref Managing-Packages) section of the documentation.
+
+
 ## Getting Started with Environments
 
-Up to this point, we have covered basic package management: adding, updating and removing packages.
+Up to this point, we have covered basic package management: adding, updating, and removing packages.
 
 You may have noticed the `(@v1.8)` in the REPL prompt.
-This lets us know `v1.8` is the **active environment**.
+This lets us know that `v1.8` is the **active environment**.
+Different environments can have different totally different packages and versions installed from another environment.
 The active environment is the environment that will be modified by Pkg commands such as `add`, `rm` and `update`.
-
 
 Let's set up a new environment so we may experiment.
 To set the active environment, use `activate`:
@@ -130,113 +133,32 @@ We can ask for information about the active environment by using `status`:
 ```
 
 `/tmp/tutorial/Project.toml` is the location of the active environment's **project file**.
-A project file is where Pkg stores metadata for an environment.
+A project file is a [TOML](https://toml.io/en/) file here Pkg stores the packages that have been explicitly installed.
 Notice this new environment is empty.
 Let us add a package and observe:
 
 ```julia-repl
-(tutorial) pkg> add Example
+(tutorial) pkg> add Example JSON
 ...
 
 (tutorial) pkg> status
     Status `/tmp/tutorial/Project.toml`
-  [7876af07] Example v0.5.1
+  [7876af07] Example v0.5.3
+  [682c06a0] JSON v0.21.3
 ```
 
-We can see `tutorial` now contains `Example` as a dependency.
+We can see that the `tutorial` environment now contains `Example` and `JSON`.
 
-## Modifying A Dependency
+!!! note
+    If you have the same
+    package (at the same version) installed in multiple environments, the package
+    will only be downloaded and stored on the hard drive once. This makes environments
+    very lightweight and effectively free to create. Only using the default
+    environment with a huge number of packages in it is a common beginners mistake in
+    Julia. Learning how to use environments effectively will improve your experience with
+    Julia packages.
 
-Say we are working on `Example` and feel it needs new functionality.
-How can we modify the source code?
-We can use `develop` to set up a git clone of the `Example` package.
-
-```julia-repl
-(tutorial) pkg> develop --local Example
-...
-
-(tutorial) pkg> status
-    Status `/tmp/tutorial/Project.toml`
-  [7876af07] Example v0.5.1+ [`dev/Example`]
-```
-
-Notice the feedback has changed.
-`dev/Example` refers to the location of the newly created clone.
-If we look inside the `/tmp/tutorial` directory, we will notice the following files:
-
-```
-tutorial
-├── dev
-│   └── Example
-├── Manifest.toml
-└── Project.toml
-```
-
-Instead of loading a registered version of `Example`,
-Julia will load the source code contained in `tutorial/dev/Example`.
-
-Let's try it out.
-First we modify the file at `tutorial/dev/Example/src/Example.jl` and add a simple function:
-
-```julia
-plusone(x::Int) = x + 1
-```
-
-Now we can go back to the Julia REPL and load the package:
-
-```julia-repl
-julia> import Example
-```
-
-!!! warning
-    A package can only be loaded once per Julia session.
-    If you have run `import Example` in the current Julia session, you will
-    have to restart Julia and rerun `activate tutorial` in the Pkg REPL.
-    [Revise.jl](https://github.com/timholy/Revise.jl/) can make this process
-    significantly more pleasant, but setting it up is beyond the scope of this guide.
-
-Julia should load our new code. Let's test it:
-
-```julia-repl
-julia> Example.plusone(1)
-2
-```
-
-Say we have a change of heart and decide the world is not ready for such elegant code.
-We can tell Pkg to stop using the local clone and use a registered version instead.
-We do this with `free`:
-
-```julia-repl
-(tutorial) pkg> free Example
-```
-
-When you are done experimenting with `tutorial`, you can return to the **default
-environment** by running `activate` with no arguments:
-
-```julia-repl
-(tutorial) pkg> activate
-
-(@v1.8) pkg>
-```
-
-## Unregistered packages
-
-So far, we have only added "registered" packages which can be added by their name[^1].
-
-[^1]: [JuliaHub](https://juliahub.com/ui/Packages) is a good resource for exploring registered packages.
-
-Pkg also supports working with unregistered packages.
-To add an unregistered package, specify a URL:
-
-```julia-repl
-(@v1.8) pkg> add https://github.com/JuliaLang/Example.jl
-```
-
-Use `rm` to remove this package by name:
-
-```julia-repl
-(@v1.8) pkg> rm Example
-```
+For more information about environments, see the [Working with Environments](@ref Working-with-Environments) section of the documentation.
 
 ## Asking for Help
 
