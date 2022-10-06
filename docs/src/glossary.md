@@ -28,7 +28,7 @@ identify the package in projects that depend on it.
 
 **Application:** a project which provides standalone functionality not intended
 to be reused by other Julia projects. For example a web application or a
-commmand-line utility, or simulation/analytics code accompanying a scientific paper.
+command-line utility, or simulation/analytics code accompanying a scientific paper.
 An application may have a UUID but does not need one.
 An application may also provide global configuration options for packages it
 depends on. Packages, on the other hand, may not provide global configuration
