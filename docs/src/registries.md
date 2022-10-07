@@ -44,6 +44,15 @@ Registry Status
 
 Registries are always added to the user depot, which is the first entry in `DEPOT_PATH` (cf. the [Glossary](@ref) section).
 
+!!! note "Registries from a package server"
+
+    It is possible for a package server to be advertising additional available package
+    registries. When Pkg runs with a clean Julia depot (e.g. after a fresh install), with
+    a custom package server configured with `JULIA_PKG_SERVER`, it will automatically
+    add all such available registries. If the depot already has some registries installed
+    (e.g. General), the additional ones can easily be installed with the no-argument
+    `registry add` command.
+
 ### Removing registries
 
 Registries can be removed with the `registry remove` (or `registry rm`) command.
