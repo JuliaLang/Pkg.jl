@@ -7,8 +7,8 @@ Compatibility for a dependency is entered in the `Project.toml` file as for exam
 
 ```toml
 [compat]
-julia = "1.0"
-Example = "0.4.3"
+julia = "1.6"
+Example = "0.5"
 ```
 
 After a compatibility entry is put into the project file, `up` can be used to apply it.
@@ -157,13 +157,6 @@ PkgA = "0.2 - 0.5"     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
 PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```
 
-!!! compat "Julia 1.4"
-    Hyphen specifiers requires at least Julia 1.4, so it is strongly recommended to also add
-    ```toml
-    [compat]
-    julia = "1.4"
-    ```
-    to the project file when using them.
 
 ## Fixing conflicts
 
