@@ -10,8 +10,6 @@ It should be pointed out that when two projects use the same package at the same
 In order to create a new project, create a directory for it and then activate that directory to make it the "active project", which package operations manipulate:
 
 ```julia-repl
-julia> mkdir("MyProject")
-
 (@v1.8) pkg> activate MyProject
 Activating new environment at `~/MyProject/Project.toml`
 
@@ -19,11 +17,11 @@ Activating new environment at `~/MyProject/Project.toml`
     Status `~/MyProject/Project.toml` (empty project)
 ```
 
-Note that the REPL prompt changes when the new project is activated. Since this is a newly created project, the status command shows that it contains no packages, and in fact, it has no project or manifest file until we add a package to it:
+Note that the REPL prompt changes when the new project is activated. Until a package is added, there are no files in this environment and the directory to the environment might not even be created:
 
 ```julia-repl
-julia> readdir()
-String[]
+julia> isdir("MyProject")
+false
 
 (MyProject) pkg> add Example
    Resolving package versions...
@@ -35,16 +33,16 @@ String[]
 Precompiling environment...
   1 dependency successfully precompiled in 2 seconds
 
-julia> readdir()
+julia> readdir("MyProject")
 2-element Vector{String}:
  "Manifest.toml"
  "Project.toml"
 
-julia> print(read("Project.toml", String))
+julia> print(read(joinpath("MyProject", "Project.toml"), String))
 [deps]
 Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 
-julia> print(read("Manifest.toml", String))
+julia> print(read(joinpath("MyProject", "Manifest.toml"), String))
 # This file is machine-generated - editing it directly is not advised
 
 julia_version = "1.8.2"
@@ -136,7 +134,7 @@ Shared environments can be activated with the `--shared` flag to `activate`:
 (@mysharedenv) pkg>
 ```
 
-Shared environemtns have a `@` before their name in the Pkg REPL prompt.
+Shared environments have a `@` before their name in the Pkg REPL prompt.
 
 
 ## Environment Precompilation
@@ -158,7 +156,7 @@ Precompiling environment...
   23 dependencies successfully precompiled in 36 seconds
 ```
 
-However, neither of these should be required routinely due to Pkg's automatic precompilation.
+However, neither of these should be routinely required thanks to Pkg's automatic precompilation.
 
 
 ### Automatic Precompilation

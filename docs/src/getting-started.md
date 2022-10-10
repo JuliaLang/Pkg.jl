@@ -111,11 +111,12 @@ To set the active environment, use `activate`:
 
 ```julia-repl
 (@v1.8) pkg> activate tutorial
-[ Info: activating new environment at `/tmp/tutorial/Project.toml`.
+[ Info: activating new environment at `~/tutorial/Project.toml`.
 ```
 
 Pkg lets us know we are creating a new environment and that this environment
-will be stored in the `/tmp/tutorial` directory.
+will be stored in the `~/tutorial` directory. The path to the environment
+is created relative to the current working directory of the REPL.
 
 Pkg has also updated the REPL prompt in order to reflect the new
 active environment:
@@ -128,21 +129,21 @@ We can ask for information about the active environment by using `status`:
 
 ```julia-repl
 (tutorial) pkg> status
-    Status `/tmp/tutorial/Project.toml`
+    Status `~/tutorial/Project.toml`
    (empty environment)
 ```
 
-`/tmp/tutorial/Project.toml` is the location of the active environment's **project file**.
+`~/tutorial/Project.toml` is the location of the active environment's **project file**.
 A project file is a [TOML](https://toml.io/en/) file here Pkg stores the packages that have been explicitly installed.
 Notice this new environment is empty.
-Let us add a package and observe:
+Let us add some packages and observe:
 
 ```julia-repl
 (tutorial) pkg> add Example JSON
 ...
 
 (tutorial) pkg> status
-    Status `/tmp/tutorial/Project.toml`
+    Status `~/tutorial/Project.toml`
   [7876af07] Example v0.5.3
   [682c06a0] JSON v0.21.3
 ```

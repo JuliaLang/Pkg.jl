@@ -70,7 +70,7 @@ julia> JSON.json(Dict("foo" => [1, "bar"])) |> print
 ```
 
 !!! note
-    Only packages that have been added with `add` can be loaded (which are packages that are shown when using `st` in the Pkg REPL). Packages that are pulled in only as dependencies (for example the Parsers package above) can not be loaded.
+    Only packages that have been added with `add` can be loaded (which are packages that are shown when using `st` in the Pkg REPL). Packages that are pulled in only as dependencies (for example the `Parsers` package above) can not be loaded.
 
 A specific version of a package can be installed by appending a version after a `@` symbol to the package name:
 
@@ -159,7 +159,7 @@ Updating `~/.julia/environments/v1/Manifest.toml`
 
 #### Adding a package in a subdirectory of a repository
 
-If the package you want to add by URL is not in the root of the repository, then you need pass `:subdir` to `add`.
+If the package you want to add by URL is not in the root of the repository, then you need pass that subdirectory using `:`.
 For instance, to add the `SnoopCompileCore` package in the [SnoopCompile](https://github.com/timholy/SnoopCompile.jl)
 repository:
 
@@ -185,7 +185,7 @@ from that local repo are pulled when packages are updated.
     `develop` (which is described in the next session). When using `add` on a local
     git repository, changes to files in the local package repository will not
     immediately be reflected when loading that package. The changes would have to be
-    committed and the packages updated in order to pull in the changes. In the vast
+    committed and the packages updated in order to pull in the changes. In the
     majority of cases, you want to use `develop` on a local path, **not `add`**.
 
 ### [Developing packages](@id developing)

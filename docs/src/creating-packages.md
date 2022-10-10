@@ -3,7 +3,7 @@
 ## Generating files for a package
 
 !!! note
-    The [PkgTemplates](https://github.com/invenia/PkgTemplates.jl) package offers a very easy, repeatable, and
+    The [PkgTemplates](https://github.com/invenia/PkgTemplates.jl) package offers an easy, repeatable, and
     customizable way to generate the files for a new package. It can also generate files needed for Documentation, CI, etc.
     We recommend that you use PkgTemplates for creating
     new packages instead of using the minimal `pkg> generate` functionality described below.

@@ -26,7 +26,7 @@ can simply materialize the environment described by its manifest file and
 immediately be up and running with a known-good set of dependencies.
 
 Since environments are managed and updated independently from each other,
-“dependency hell” is significantly alleviated in Pkg. If you want to use the
+[“dependency hell”](https://en.wikipedia.org/wiki/Dependency_hell) is significantly alleviated in Pkg. If you want to use the
 latest and greatest version of some package in a new project but you’re stuck on
 an older version in a different project, that’s no problem – since they have
 separate environments they can just use different versions, which are both
