@@ -1121,9 +1121,22 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
     # TODO: Investigate why this happens in windows and restore the full task limit
     default_num_tasks = Sys.iswindows() ? div(Sys.CPU_THREADS::Int, 2) + 1 : Sys.CPU_THREADS::Int + 1
-    default_num_tasks = min(default_num_tasks, 16) # limit for better stability on shared resource systems
+    num_task_env = get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", nothing)
+    if num_task_env === nothing
+        # limit for better stability on shared resource systems
+        num_tasks = min(default_num_tasks, 16)::Int
+    else
+        m = match(r"^<=(\d*?)$", num_task_env)
+        if m === nothing
+            # JULIA_NUM_PRECOMPILE_TASKS="n"
+            num_tasks = parse(Int, num_task_env)::Int
+        else
+            # JULIA_NUM_PRECOMPILE_TASKS="<=n"
+            max_num_tasks = parse(Int, m[1])::Int
+            num_tasks = min(default_num_tasks, max_num_tasks)::Int
+        end
+    end
 
-    num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(default_num_tasks)))
     parallel_limiter = Base.Semaphore(num_tasks)
     io = ctx.io
     fancyprint = can_fancyprint(io) && !timing
