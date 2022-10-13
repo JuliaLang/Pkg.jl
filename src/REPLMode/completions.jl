@@ -61,7 +61,7 @@ function complete_remote_package(partial)
             name in cmp && continue
             if startswith(regpkg.name, partial)
                 pkg = Registry.registry_info(regpkg)
-                compat_info = Registry.compat_info(pkg)
+                compat_info = Registry.compat_info(pkg; pkgentry=regpkg)
                 # Filter versions
                 for (v, uncompressed_compat) in compat_info
                     Registry.isyanked(pkg, v) && continue
