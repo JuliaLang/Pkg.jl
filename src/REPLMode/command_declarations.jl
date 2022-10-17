@@ -133,9 +133,6 @@ The following table describes the command line arguments to `--preserve` (in ord
 
 After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
 
-!!! compat "Julia 1.5"
-    Subdirectory specification requires at least Julia 1.5.
-
 **Examples**
 ```
 pkg> add Example
@@ -400,13 +397,6 @@ The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 The `--compat` option alone shows project compat entries.
 
-!!! compat "Julia 1.1"
-    `pkg> status` with package arguments requires at least Julia 1.1.
-
-!!! compat "Julia 1.3"
-    The `--diff` option requires at least Julia 1.3. In earlier versions `--diff`
-    is the default for environments in git repositories.
-
 !!! compat "Julia 1.8"
     The `⌃` and `⌅` indicators were added in Julia 1.8
     The `--outdated` and `--compat` options require at least Julia 1.8.
@@ -476,12 +466,6 @@ Add package registries `reg...` to the user depot. Without arguments
 it adds known registries, i.e. the General registry and registries
 served by the configured package server.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
-!!! compat "Julia 1.5"
-    `registry add` without arguments requires at least Julia 1.5.
-
 **Examples**
 ```
 pkg> registry add General
@@ -501,9 +485,6 @@ PSA[:name => "remove",
     registry [rm|remove] reg...
 
 Remove package registries `reg...`.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 **Examples**
 ```
@@ -525,9 +506,6 @@ PSA[:name => "update",
 Update package registries `reg...`. If no registries are specified
 all registries will be updated.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 **Examples**
 ```
 pkg> registry up
@@ -543,9 +521,6 @@ PSA[:name => "status",
     registry [st|status]
 
 Display information about installed registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 **Examples**
 ```

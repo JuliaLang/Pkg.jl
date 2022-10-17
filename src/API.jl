@@ -1204,7 +1204,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
             fancyprint && lock(print_lock) do
-                printpkgstyle(io, :Precompiling, "project...")
+                printpkgstyle(io, :Precompiling, "environment...")
                 print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
@@ -1309,7 +1309,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     iob = IOBuffer()
                     name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
                     !fancyprint && lock(print_lock) do
-                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...")
+                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "environment...")
                     end
                     push!(pkg_queue, pkg)
                     started[pkg] = true
