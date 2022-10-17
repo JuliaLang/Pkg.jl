@@ -24,9 +24,6 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 Creates a new artifact by running `f(artifact_path)`, hashing the result, and moving it
 to the artifact store (`~/.julia/artifacts` on a typical installation).  Returns the
 identifying tree hash of this artifact.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function create_artifact(f::Function)
     # Ensure the `artifacts` directory exists in our default depot
@@ -77,9 +74,6 @@ will never attempt to remove an overridden artifact.
 In general, we recommend that you use `Pkg.gc()` to manage artifact installations and do
 not use `remove_artifact()` directly, as it can be difficult to know if an artifact is
 being used by another package.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function remove_artifact(hash::SHA1)
     if query_override(hash) !== nothing
@@ -102,9 +96,6 @@ end
 Verifies that the given artifact (identified by its SHA1 git tree hash) is installed on-
 disk, and retains its integrity.  If the given artifact is overridden, skips the
 verification unless `honor_overrides` is set to `true`.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
     # Silently skip overridden artifacts unless we really ask for it
@@ -129,9 +120,6 @@ end
 Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256 of the
 resultant tarball as a hexidecimal string. Throws an error if the artifact does not
 exist.  If the artifact is overridden, throws an error unless `honor_overrides` is set.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
     if !honor_overrides
@@ -171,9 +159,6 @@ URLs will be listed as possible locations where this artifact can be obtained.  
 is set to `true`, even if download information is available, this artifact will not be
 downloaded until it is accessed via the `artifact"name"` syntax, or
 `ensure_artifact_installed()` is called upon it.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         platform::Union{AbstractPlatform,Nothing} = nothing,
@@ -254,9 +239,6 @@ end
 
 Unbind the given `name` from an `(Julia)Artifacts.toml` file.
 Silently fails if no such binding exists within the file.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function unbind_artifact!(artifacts_toml::String, name::String;
                          platform::Union{AbstractPlatform,Nothing} = nothing)
@@ -286,9 +268,6 @@ end
 
 Download/install an artifact into the artifact store.  Returns `true` on success,
 returns an error object on failure.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 
 !!! compat "Julia 1.8"
     As of Julia 1.8 this function returns the error object rather than `false` when
@@ -386,9 +365,6 @@ end
 
 Ensures an artifact is installed, downloading it via the download information stored in
 `artifacts_toml` if necessary.  Throws an error if unable to install.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::AbstractPlatform = HostPlatform(),
@@ -504,9 +480,6 @@ This function is deprecated and should be replaced with the following snippet:
     for name in keys(artifacts)
         ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=platform)
     end
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 
 !!! warning
     This function is deprecated in Julia 1.6 and will be removed in a future version.

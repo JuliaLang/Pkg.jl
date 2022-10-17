@@ -7,8 +7,8 @@ Compatibility for a dependency is entered in the `Project.toml` file as for exam
 
 ```toml
 [compat]
-julia = "1.0"
-Example = "0.4.3"
+julia = "1.6"
+Example = "0.5"
 ```
 
 After a compatibility entry is put into the project file, `up` can be used to apply it.
@@ -157,13 +157,6 @@ PkgA = "0.2 - 0.5"     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
 PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```
 
-!!! compat "Julia 1.4"
-    Hyphen specifiers requires at least Julia 1.4, so it is strongly recomended to also add
-    ```toml
-    [compat]
-    julia = "1.4"
-    ```
-    to the project file when using them.
 
 ## Fixing conflicts
 
@@ -194,7 +187,7 @@ Before proceeding further, you should update all packages and then run `B`'s tes
 output of `pkg> test B` to be sure that `v0.2` of `D` is in fact being used.
 (It is possible that an additional dependency of `D` pins it to `v0.1`, and you wouldn't want to be misled into thinking that you had tested `B` on the newer version.)
 If the new version was used and the tests still pass,
-you can assume that `B` didn't need any further updating to accomodate `v0.2` of `D`;
+you can assume that `B` didn't need any further updating to accommodate `v0.2` of `D`;
 you can safely submit this change as a pull request to `B` so that a new release is made.
 If instead an error is thrown, it indicates that `B` requires more extensive updates to be
 compatible with the latest version of `D`; those updates will need to be completed before

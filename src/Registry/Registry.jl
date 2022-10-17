@@ -30,9 +30,6 @@ Add new package registries.
 
 The no-argument `Pkg.Registry.add()` will install the default registries.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 # Examples
 ```julia
 Pkg.Registry.add("General")
@@ -268,9 +265,6 @@ end
 
 Remove registries.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 # Examples
 ```julia
 Pkg.Registry.rm("General")
@@ -338,9 +332,6 @@ end
 
 Update registries. If no registries are given, update
 all available registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 # Examples
 ```julia
@@ -473,9 +464,6 @@ end
     Pkg.Registry.status()
 
 Display information about available registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 # Examples
 ```julia
