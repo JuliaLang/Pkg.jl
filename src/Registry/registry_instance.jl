@@ -36,8 +36,9 @@ custom_isfile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, 
     git_tree_sha1::Base.SHA1
     yanked::Bool
     @lazy uncompressed_compat::Union{Dict{UUID, VersionSpec}}
+    @lazy weak_uncompressed_compat::Union{Dict{UUID, VersionSpec}}
 end
-VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = VersionInfo(git_tree_sha1, yanked, uninit)
+VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = VersionInfo(git_tree_sha1, yanked, uninit, uninit)
 
 # This is the information that exists in e.g. General/A/ACME
 struct PkgInfo
@@ -53,6 +54,12 @@ struct PkgInfo
 
     # Deps.toml
     deps::Dict{VersionRange, Dict{String, UUID}}
+
+    # WeakCompat.toml
+    weak_compat::Dict{VersionRange, Dict{String, VersionSpec}}
+
+    # WeakDeps.toml
+    weak_deps::Dict{VersionRange, Dict{String, UUID}}
 end
 
 isyanked(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].yanked
@@ -119,9 +126,41 @@ function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info
     return pkg
 end
 
+function initialize_weak_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
+    # Only valid to call this with existing versions of the package
+    # Remove all versions we have already uncompressed
+    versions = filter!(v -> !isinit(pkg.version_info[v], :weak_uncompressed_compat), collect(versions))
+
+    sort!(versions)
+
+    weak_uncompressed_compat = uncompress(pkg.weak_compat, versions)
+    weak_uncompressed_deps   = uncompress(pkg.weak_deps,   versions)
+
+    for v in versions
+        vinfo = pkg.version_info[v]
+        weak_compat = Dict{UUID, VersionSpec}()
+        weak_uncompressed_deps_v = weak_uncompressed_deps[v]
+        weak_uncompressed_compat_v = weak_uncompressed_compat[v]
+        for (pkg, uuid) in weak_uncompressed_deps_v
+            vspec = get(weak_uncompressed_compat_v, pkg, nothing)
+            weak_compat[uuid] = vspec === nothing ? VersionSpec() : vspec
+        end
+        @init! vinfo.weak_uncompressed_compat = weak_compat
+    end
+    return pkg
+end
+
 function compat_info(pkg::PkgInfo)
     initialize_uncompressed!(pkg)
     return Dict(v => info.uncompressed_compat for (v, info) in pkg.version_info)
+end
+
+function weak_compat_info(pkg::PkgInfo)
+    if isempty(pkg.weak_deps)
+        return nothing
+    end
+    initialize_weak_uncompressed!(pkg)
+    return Dict(v => info.weak_uncompressed_compat for (v, info) in pkg.version_info)
 end
 
 @lazy struct PkgEntry
@@ -150,13 +189,13 @@ function init_package_info!(pkg::PkgEntry)
     subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
 
     # Versions.toml
-    d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ? 
+    d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
     version_info = Dict{VersionNumber, VersionInfo}(VersionNumber(k) =>
         VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v)
 
     # Compat.toml
-    compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ? 
+    compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) : Dict{String, Any}()
     # The Compat.toml file might have string or vector values
     compat_data_toml = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, compat_data_toml)
@@ -181,7 +220,29 @@ function init_package_info!(pkg::PkgEntry)
     # All packages depend on julia
     deps[VersionRange()] = Dict("julia" => JULIA_UUID)
 
-    @init! pkg.info = PkgInfo(repo, subdir, version_info, compat, deps)
+    # WeakCompat.toml
+    weak_compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) ?
+    parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) : Dict{String, Any}()
+    weak_compat_data_toml = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, weak_compat_data_toml)
+    weak_compat = Dict{VersionRange, Dict{String, VersionSpec}}()
+    for (v, data) in weak_compat_data_toml
+        vr = VersionRange(v)
+        d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep) in data)
+        weak_compat[vr] = d
+    end
+
+    # WeakDeps.toml
+    weak_deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) ?
+        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) : Dict{String, Any}()
+    weak_deps_data_toml = convert(Dict{String, Dict{String, String}}, weak_deps_data_toml)
+    weak_deps = Dict{VersionRange, Dict{String, UUID}}()
+    for (v, data) in weak_deps_data_toml
+        vr = VersionRange(v)
+        d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid) in data)
+        weak_deps[vr] = d
+    end
+
+    @init! pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps)
 
     return pkg.info
 end

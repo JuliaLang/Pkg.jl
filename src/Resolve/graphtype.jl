@@ -236,13 +236,12 @@ mutable struct Graph
 
     function Graph(
             compat::Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}},
+            compat_weak::Dict{UUID,Dict{VersionNumber,Set{UUID}}},
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
             fixed::Dict{UUID,Fixed},
             verbose::Bool = false,
             julia_version::Union{VersionNumber,Nothing} = VERSION
-            ;
-            compat_weak::Dict{UUID,Dict{VersionNumber,Set{UUID}}} = Dict{UUID,Dict{VersionNumber,Set{UUID}}}(),
         )
 
         # Tell the resolver about julia itself
@@ -256,7 +255,6 @@ mutable struct Graph
 
         data = GraphData(compat, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
-
         extended_deps = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
             [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
         end
@@ -1441,7 +1439,7 @@ function prune_graph!(graph::Graph)
         return pvers0[vmsk0[1:(end-1)]]
     end
     new_pvers = [compute_pvers(new_p0) for new_p0 = 1:new_np]
-    
+
     # explicitly writing out the following loop since the generator equivalent caused type inference failure
     new_vdict = Vector{Dict{VersionNumber, Int}}(undef, length(new_pvers))
     for new_p0 in eachindex(new_vdict)

@@ -18,6 +18,27 @@ The format of the version specifier is described in detail below.
 !!! info
     Use the command `compat` to edit the compat entries in the Pkg REPL, or manually edit the project file.
 
+## Compatibility on "weak dependencies"
+
+!!! compat "Julia 1.9"
+    This feature requires Julia 1.9
+
+A weak dependency is a package that you do not depend on but still want to be able to add
+compatibility constraints on. This is for example useful when using Requires.jl to load
+dependencies "conditionally". This is done by adding the weak dependency under the `weakdeps` section
+and then adding a normal compat entry on it:
+
+```toml
+[weakdeps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+
+[compat]
+Example = "0.5"
+```
+
+Possible use cases for this is when using Requires.jl and one wants to add a compat constrained
+on the "conditional dependency" that Requires.jl tends to be used for.
+
 ## Version specifier format
 
 Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver).
