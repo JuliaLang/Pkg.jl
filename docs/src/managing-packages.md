@@ -1,4 +1,4 @@
-# [**3.** Managing Packages](@id Managing-Packages)
+# **3.** Managing Packages
 
 ## Adding packages
 
