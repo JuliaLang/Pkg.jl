@@ -223,9 +223,11 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
 
     # Spit it out onto disk
     let artifact_dict = artifact_dict
-        open(artifacts_toml, "w") do io
+        temp_artifacts_toml = tempname(dirname(artifacts_toml))
+        open(temp_artifacts_toml, "w") do io
             TOML.print(io, artifact_dict, sorted=true)
         end
+        mv(temp_artifacts_toml, artifacts_toml; force=true)
     end
 
     # Mark that we have used this Artifact.toml
