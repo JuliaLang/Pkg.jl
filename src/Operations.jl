@@ -432,7 +432,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
             # unregistered stdlib we must special-case it here.  This is further
             # complicated by the fact that we can ask this question relative to
             # a Julia version.
-            if is_unregistered_stdlib(uuid) || uuid_is_stdlib
+            if (julia_version != VERSION && is_unregistered_stdlib(uuid)) || uuid_is_stdlib
                 path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
@@ -626,9 +626,15 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 # Despite the fact that we inherit the project, since the in-memory manifest
                 # has not been updated yet, if we try to load any dependencies, it may fail.
                 # Therefore, this project inheritance is really only for Preferences, not dependencies.
-                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) $(triplet(platform))`)
+                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) --startup-file=no $(triplet(platform))`)
                 meta_toml = String(read(select_cmd))
-                push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
+                res = TOML.tryparse(meta_toml)
+                if res isa TOML.ParserError
+                    errstr = sprint(showerror, res; context=stderr)
+                    pkgerror("failed to parse TOML output from running $(repr(selector_path)), got: \n$errstr")
+                else
+                    push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
+                end
             else
                 # Otherwise, use the standard selector from `Artifacts`
                 artifacts = select_downloadable_artifacts(artifacts_toml; platform)
@@ -999,7 +1005,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
             end
         else
             build_project_override = gen_target_project(ctx, pkg, source_path, "build")
-            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
+            with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         end
@@ -1235,13 +1241,9 @@ end
 
 function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     if preserve == PRESERVE_ALL
-        pkgs = load_all_deps(env, pkgs)
-    elseif preserve == PRESERVE_DIRECT
-        pkgs = load_direct_deps(env, pkgs)
-    elseif preserve == PRESERVE_SEMVER
-        pkgs = load_direct_deps(env, pkgs; preserve=preserve)
-    elseif preserve == PRESERVE_NONE
-        pkgs = load_direct_deps(env, pkgs; preserve=preserve)
+        pkgs = load_all_deps(env, pkgs; preserve)
+    else
+        pkgs = load_direct_deps(env, pkgs; preserve)
     end
     check_registered(registries, pkgs)
 
@@ -1340,8 +1342,65 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
 
+
+function load_manifest_deps_up(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
+                            preserve::PreserveLevel=PRESERVE_ALL)
+    manifest = env.manifest
+    project = env.project
+    explicit_upgraded = Set(pkg.uuid for pkg in pkgs)
+
+    recursive_indirect_dependencies_of_explicitly_upgraded = Set{UUID}()
+    frontier = copy(explicit_upgraded)
+    new_frontier = Set{UUID}()
+    while !(isempty(frontier))
+        for uuid in frontier
+            entry = get(env.manifest, uuid, nothing)
+            entry === nothing && continue
+            uuid_deps = values(entry.deps)
+            for uuid_dep in uuid_deps
+                if !(uuid_dep in recursive_indirect_dependencies_of_explicitly_upgraded) #
+                    push!(recursive_indirect_dependencies_of_explicitly_upgraded, uuid_dep)
+                    push!(new_frontier, uuid_dep)
+                end
+            end
+        end
+        copy!(frontier, new_frontier)
+        empty!(new_frontier)
+    end
+
+    pkgs = copy(pkgs)
+    for (uuid, entry) in manifest
+        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        uuid in explicit_upgraded && continue # Allow explicit upgraded packages to upgrade.
+        if preserve == PRESERVE_NONE && uuid in recursive_indirect_dependencies_of_explicitly_upgraded
+            continue
+        elseif preserve == PRESERVE_DIRECT && uuid in recursive_indirect_dependencies_of_explicitly_upgraded && !(uuid in values(project.deps))
+            continue
+        end
+
+        # The rest of the packages get fixed
+        push!(pkgs, PackageSpec(
+            uuid      = uuid,
+            name      = entry.name,
+            path      = entry.path,
+            pinned    = entry.pinned,
+            repo      = entry.repo,
+            tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
+            version   = something(entry.version, VersionSpec())
+        ))
+    end
+    return pkgs
+end
+
+function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+    pkgs = load_manifest_deps_up(env, pkgs; preserve=preserve)
+    check_registered(registries, pkgs)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version)
+    return pkgs, deps_map
+end
+
 function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
-            skip_writing_project::Bool=false)
+            skip_writing_project::Bool=false, preserve::Union{Nothing,PreserveLevel}=nothing)
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
@@ -1353,9 +1412,13 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     for pkg in pkgs
         up_load_manifest_info!(pkg, manifest_info(ctx.env.manifest, pkg.uuid))
     end
-    pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
-    check_registered(ctx.registries, pkgs)
-    deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version)
+    if preserve !== nothing
+        pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+    else
+        pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
+        check_registered(ctx.registries, pkgs)
+        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version)
+    end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
     download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
@@ -1463,9 +1526,16 @@ function gen_test_code(source_path::String;
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
         """
+    coverage_arg = if coverage isa Bool
+        coverage ? string("@", source_path) : "none"
+    elseif coverage isa AbstractString
+        coverage
+    else
+        throw(ArgumentError("coverage should be a boolean or a string."))
+    end
     return ```
         $(Base.julia_cmd())
-        --code-coverage=$(coverage ? string("@", source_path) : "none")
+        --code-coverage=$(coverage_arg)
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes
@@ -1732,7 +1802,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             end
         else
             test_project_override = gen_target_project(ctx, pkg, source_path, "test")
-            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
+            with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         end
@@ -1741,7 +1811,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         sandbox(ctx, pkg, source_path, testdir(source_path), test_project_override; preferences=test_project_preferences, force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
-            status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false)
+            status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
             Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
@@ -1977,7 +2047,7 @@ end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
                       uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO,
-                      mode::PackageMode, hidden_upgrades_info::Bool)
+                      mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.warn_color()), "⌅", context=io)
@@ -2098,18 +2168,20 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color=Base.info_color(), ignore_indent)
     end
     if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
+        tipend = manifest ? " -m" : ""
+        tip = show_usagetips ? " To see why use `status --outdated$tipend`" : ""
         if !no_packages_upgradable && no_visible_packages_heldback
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available and may be upgradable.", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
             # only warn if showing project and outdated indirect deps are hidden
-            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded. To see why use `status --outdated`", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Some packages have new versions but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
     end
 
@@ -2143,7 +2215,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, outdated::Bool=false, hidden_upgrades_info::Bool=false)
+                io::IO, outdated::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2170,14 +2242,15 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode, hidden_upgrades_info)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode, hidden_upgrades_info)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
-        printpkgstyle(io, :Warning, """The project dependencies or compat requirements have changed since the manifest was last resolved. \
-        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary.""", ignore_indent; color=Base.warn_color())
+        tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""
+        printpkgstyle(io, :Warning, "The project dependencies or compat requirements have changed since the manifest was last resolved.$tip",
+            ignore_indent; color=Base.warn_color())
     end
 end
 
@@ -2194,7 +2267,7 @@ end
 
 function compat_line(io, pkg, uuid, compat_str, longest_dep_len; indent = "  ")
     iob = IOBuffer()
-    ioc = IOContext(iob, :color => get(io, :color, false))
+    ioc = IOContext(iob, :color => get(io, :color, false)::Bool)
     if isnothing(uuid)
         print(ioc, "$indent           ")
     else

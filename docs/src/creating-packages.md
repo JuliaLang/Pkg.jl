@@ -1,19 +1,17 @@
 # **5.** Creating Packages
 
-A package is a project with a `name`, `uuid` and `version` entry in the `Project.toml` file, and a `src/PackageName.jl` file that defines the module `PackageName`.
-This file is executed when the package is loaded.
-
 ## Generating files for a package
 
 !!! note
-    The [PkgTemplates](https://github.com/invenia/PkgTemplates.jl) package offers a very easy, repeatable, and 
-    customizable way to generate the files for a new package. We recommend that you use PkgTemplates for creating
+    The [PkgTemplates](https://github.com/invenia/PkgTemplates.jl) package offers an easy, repeatable, and
+    customizable way to generate the files for a new package. It can also generate files needed for Documentation, CI, etc.
+    We recommend that you use PkgTemplates for creating
     new packages instead of using the minimal `pkg> generate` functionality described below.
 
-To generate files for a new package, use `pkg> generate`.
+To generate the bare minimum files for a new package, use `pkg> generate`.
 
 ```julia-repl
-(v1.0) pkg> generate HelloWorld
+(@v1.8) pkg> generate HelloWorld
 ```
 
 This creates a new project `HelloWorld` with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
@@ -70,14 +68,14 @@ since we `activate`d it):
 
 ```julia-repl
 (HelloWorld) pkg> add Random JSON
- Resolving package versions...
-  Updating "~/Documents/HelloWorld/Project.toml"
- [682c06a0] + JSON v0.17.1
- [9a3f8284] + Random
-  Updating "~/Documents/HelloWorld/Manifest.toml"
- [34da2185] + Compat v0.57.0
- [682c06a0] + JSON v0.17.1
- [4d1e1d77] + Nullables v0.0.4
+   Resolving package versions...
+    Updating `~/HelloWorld/Project.toml`
+  [682c06a0] + JSON v0.21.3
+  [9a3f8284] + Random
+    Updating `~/HelloWorld/Manifest.toml`
+  [682c06a0] + JSON v0.21.3
+  [69de0a69] + Parsers v2.4.0
+  [ade2ca70] + Dates
  ...
 ```
 
@@ -129,21 +127,24 @@ julia> print(read("deps/build.jl", String))
 error("Ooops")
 
 (HelloWorld) pkg> build
-  Building HelloWorld → `deps/build.log`
- Resolving package versions...
-┌ Error: Error building `HelloWorld`:
-│ ERROR: LoadError: Ooops
-│ Stacktrace:
-│  [1] error(::String) at ./error.jl:33
-│  [2] top-level scope at none:0
-│  [3] include at ./boot.jl:317 [inlined]
-│  [4] include_relative(::Module, ::String) at ./loading.jl:1071
-│  [5] include(::Module, ::String) at ./sysimg.jl:29
-│  [6] include(::String) at ./client.jl:393
-│  [7] top-level scope at none:0
-│ in expression starting at /Users/kristoffer/.julia/dev/Pkg/HelloWorld/deps/build.jl:1
-└ @ Pkg.Operations Operations.jl:938
+    Building HelloWorld → `~/HelloWorld/deps/build.log`
+ERROR: Error building `HelloWorld`:
+ERROR: LoadError: Ooops
+Stacktrace:
+ [1] error(s::String)
+   @ Base ./error.jl:35
+ [2] top-level scope
+   @ ~/HelloWorld/deps/build.jl:1
+ [3] include(fname::String)
+   @ Base.MainInclude ./client.jl:476
+ [4] top-level scope
+   @ none:5
+in expression starting at /home/kc/HelloWorld/deps/build.jl:1
 ```
+
+!!! warning
+    A build step should generally not create or modify any files in the package directory. If you need to store some files
+    from the build step, use the [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) package.
 
 ## Adding tests to the package
 
@@ -163,30 +164,51 @@ Testing...
 Tests are run in a new Julia process, where the package itself, and any
 test-specific dependencies, are available, see below.
 
-### Test-specific dependencies in Julia 1.2 and above
 
-!!! compat "Julia 1.2"
-    This section only applies to Julia 1.2 and above. For specifying test dependencies
-    on previous Julia versions, see [Test-specific dependencies in Julia 1.0 and 1.1](@ref).
+!!! warning
+    Tests should generally not create or modify any files in the package directory. If you need to store some files
+    from the build step, use the [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) package.
+
+### Test-specific dependencies
+
+There are two ways of adding test-specific dependencies (dependencies that are not dependencies of the package but will still be available to
+load when the package is tested).
+
+#### `target` based test specific dependencies
+
+Using this method of adding test-specific dependencies, the packages are added under an `[extras]` section and to a test target,
+e.g. to add `Markdown` and `Test` as test dependencies, add the following:
+
+```toml
+[extras]
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Markdown", "Test"]
+```
+
+to the `Project.toml` file. There are no other "targets" than `test`.
+
+#### `test/Project.toml` file test specific dependencies
 
 !!! note
     The exact interaction between `Project.toml`, `test/Project.toml` and their corresponding
-    `Manifest.toml`s are not fully worked out, and may be subject to change in future versions.
+    `Manifest.toml`s are not fully worked out and may be subject to change in future versions.
     The old method of adding test-specific dependencies, described in the next section, will
     therefore be supported throughout all Julia 1.X releases.
 
-In Julia 1.2 and later the test environment is given by `test/Project.toml`. Thus, when running
+ is given by `test/Project.toml`. Thus, when running
 tests, this will be the active project, and only dependencies to the `test/Project.toml` project
-can be used. Note that Pkg will add the tested package itself implictly.
+can be used. Note that Pkg will add the tested package itself implicitly.
 
 !!! note
-    If no `test/Project.toml` exists Pkg will use the old style test-setup, as
-    described in [Test-specific dependencies in Julia 1.0 and 1.1](@ref).
+    If no `test/Project.toml` exists Pkg will use the `target` based test specific dependencies.
 
 To add a test-specific dependency, i.e. a dependency that is available only when testing,
 it is thus enough to add this dependency to the `test/Project.toml` project. This can be
 done from the Pkg REPL by activating this environment, and then use `add` as one normally
-does. Lets add the `Test` standard library as a test dependency:
+does. Let's add the `Test` standard library as a test dependency:
 
 ```julia-repl
 (HelloWorld) pkg> activate ./test
@@ -218,35 +240,20 @@ using Test
    Testing HelloWorld tests passed```
 ```
 
-### Test-specific dependencies in Julia 1.0 and 1.1
+## Compatibility on dependencies
 
-!!! note
-    The method of adding test-specific dependencies described in this section will
-    be replaced by the method from the previous section in future Julia versions.
-    The method in this section will, however, be supported throughout all Julia 1.X
-    releases.
-
-In Julia 1.0 and Julia 1.1 test-specific dependencies are added to the main
-`Project.toml`. To add `Markdown` and `Test` as test-dependencies, add the following:
-
-```toml
-[extras]
-Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Markdown", "Test"]
-```
+Every dependency should in general have a compatibility constraint on it.
+This is an important topic so there is a separate chapter about it: [Compatibility](@ref Compatibility).
 
 ## Package naming guidelines
 
 Package names should be sensible to most Julia users, *even to those who are not domain experts*.
-The following guidelines applies to the `General` registry, but may be useful for other package
+The following guidelines apply to the `General` registry but may be useful for other package
 registries as well.
 
 Since the `General` registry belongs to the entire community, people may have opinions about
 your package name when you publish it, especially if it's ambiguous or can be confused with
-something other than what it is. Usually you will then get suggestions for a new name that
+something other than what it is. Usually, you will then get suggestions for a new name that
 may fit your package better.
 
 1. Avoid jargon. In particular, avoid acronyms unless there is minimal possibility of confusion.
@@ -286,28 +293,24 @@ may fit your package better.
 ## Registering packages
 
 Once a package is ready it can be registered with the [General Registry](https://github.com/JuliaRegistries/General#registering-a-package-in-general) (see also the [FAQ](https://github.com/JuliaRegistries/General#faq)).
-Currently packages are submitted via [`Registrator`](https://juliaregistrator.github.io/).
+Currently, packages are submitted via [`Registrator`](https://juliaregistrator.github.io/).
 In addition to `Registrator`, [`TagBot`](https://github.com/marketplace/actions/julia-tagbot) helps manage the process of tagging releases.
 
 ## Best Practices
 
 Packages should avoid mutating their own state (writing to files within their package directory).
 Packages should, in general, not assume that they are located in a writable location (e.g. if installed as part of a system-wide depot) or even a stable one (e.g. if they are bundled into a system image by [PackageCompiler.jl](https://github.com/JuliaLang/PackageCompiler.jl)).
-To support the various usecases in the Julia package ecosystem, the Pkg developers have created a number of auxilliary packages and techniques to help package authors create self-contained, immutable and relocatable packages:
+To support the various use cases in the Julia package ecosystem, the Pkg developers have created a number of auxiliary packages and techniques to help package authors create self-contained, immutable, and relocatable packages:
 
 * [`Artifacts`](https://pkgdocs.julialang.org/v1/artifacts/) can be used to bundle chunks of data alongside your package, or even allow them to be downloaded on-demand.
   Prefer artifacts over attempting to open a file via a path such as `joinpath(@__DIR__, "data", "my_dataset.csv")` as this is non-relocatable.
   Once your package has been precompiled, the result of `@__DIR__` will have been baked into your precompiled package data, and if you attempt to distribute this package, it will attempt to load files at the wrong location.
   Artifacts can be bundled and accessed easily using the `artifact"name"` string macro.
-  Artifacts are available from Julia 1.3 onward.
 
 * [`Scratch.jl`](https://github.com/JuliaPackaging/Scratch.jl) provides the notion of "scratch spaces", mutable containers of data for packages.
   Scratch spaces are designed for data caches that are completely managed by a package and should be removed when the package itself is uninstalled.
   For important user-generated data, packages should continue to write out to a user-specified path that is not managed by Julia or Pkg.
-  Scratch is usable from Julia 1.5 onward.
-  
+
 * [`Preferences.jl`](https://github.com/JuliaPackaging/Preferences.jl) allows packages to read and write preferences to the top-level `Project.toml`.
   These preferences can be read at runtime or compile-time, to enable or disable different aspects of package behavior.
   Packages previously would write out files to their own package directories to record options set by the user or environment, but this is highly discouraged now that `Preferences` is available.
-  Preferences are available from Julia 1.6 onward.
- 

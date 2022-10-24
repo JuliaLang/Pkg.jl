@@ -38,7 +38,7 @@ function generate()
         """)
     # list commands
     println(io, "## `package` commands")
-    foreach(command -> generate(io, command), ["add", "build", "develop", "free", "generate", "pin", "remove", "test", "update"])
+    foreach(command -> generate(io, command), ["add", "build", "compat", "develop", "free", "generate", "pin", "remove", "test", "update"])
     println(io, "## `registry` commands")
     foreach(command -> generate(io, command), ["registry add", "registry remove", "registry status", "registry update"])
     println(io, "## Other commands")

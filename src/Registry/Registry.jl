@@ -30,9 +30,6 @@ Add new package registries.
 
 The no-argument `Pkg.Registry.add()` will install the default registries.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 # Examples
 ```julia
 Pkg.Registry.add("General")
@@ -169,7 +166,12 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     registry_urls = pkg_server_registry_urls()
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
-            Pkg.Types.pkgerror("ambiguous registry specification; both url and path is set.")
+            Pkg.Types.pkgerror("""
+                ambiguous registry specification; both `url` and `path` are set:
+                    url=\"$(reg.url)\"
+                    path=\"$(reg.path)\"
+                """
+            )
         end
         url = get(registry_urls, reg.uuid, nothing)
         if url !== nothing && registry_read_from_tarball()
@@ -263,9 +265,6 @@ end
 
 Remove registries.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 # Examples
 ```julia
 Pkg.Registry.rm("General")
@@ -333,9 +332,6 @@ end
 
 Update registries. If no registries are given, update
 all available registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 # Examples
 ```julia
@@ -468,9 +464,6 @@ end
     Pkg.Registry.status()
 
 Display information about available registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 # Examples
 ```julia

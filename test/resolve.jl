@@ -169,7 +169,6 @@ end
     deps_data = Any[
         ["A", v"1", "B", "2-*"],
         ["A", v"1", "C", "2-*"],
-        # ["A", v"1", "julia", "10"],
         ["A", v"2", "B", "1"],
         ["A", v"2", "C", "1"],
         ["B", v"1", "C", "2-*"],
@@ -428,11 +427,122 @@ end
     want_data = Dict("A"=>v"1", "B"=>v"1", "C"=>v"1", "D"=>v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
+
+    VERBOSE && @info("SCHEME 12")
+    ## DEPENDENCY SCHEME 12: TWO PACKAGES, DAG, WEAK DEPENDENCY
+    deps_data = Any[
+        ["A", v"1", "B", "1-*", :weak],
+        ["A", v"2", "B", "2-*", :weak],
+        ["B", v"1"],
+        ["B", v"2"]
+    ]
+
+    @test sanity_tst(deps_data)
+    @test sanity_tst(deps_data, pkgs=["A", "B"])
+    @test sanity_tst(deps_data, pkgs=["B"])
+    @test sanity_tst(deps_data, pkgs=["A"])
+
+    # require just B
+    reqs_data = Any[
+        ["B", "*"]
+    ]
+    want_data = Dict("B"=>v"2")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require just A
+    reqs_data = Any[
+        ["A", "*"]
+    ]
+    want_data = Dict("A"=>v"2")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require A and B
+    reqs_data = Any[
+        ["A", "*"],
+        ["B", "*"]
+    ]
+    want_data = Dict("A"=>v"2", "B"=>v"2")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require A and B, invompatible versions
+    reqs_data = Any[
+        ["A", "2-*"],
+        ["B", "1"]
+    ]
+    @test_throws ResolverError resolve_tst(deps_data, reqs_data, want_data)
+
+
+    VERBOSE && @info("SCHEME 13")
+    ## DEPENDENCY SCHEME 13: LIKE 9 (SIX PACKAGES, DAG), WITH SOME WEAK DEPENDENCIES
+    deps_data = Any[
+        ["A", v"1"],
+        ["A", v"2"],
+        ["A", v"3"],
+        ["B", v"1", "A", "1"],
+        ["B", v"2", "A", "*"],
+        ["C", v"1", "A", "2", :weak],
+        ["C", v"2", "A", "2-*"],
+        ["D", v"1", "B", "1-*"],
+        ["D", v"2", "B", "2-*", :weak],
+        ["E", v"1", "D", "*"],
+        ["F", v"1", "A", "1-2"],
+        ["F", v"1", "E", "*"],
+        ["F", v"2", "C", "2-*"],
+        ["F", v"2", "E", "*"],
+    ]
+
+    @test sanity_tst(deps_data)
+
+    # require just F
+    reqs_data = Any[
+        ["F", "*"]
+    ]
+    want_data = Dict("A"=>v"3", "C"=>v"2",
+                    "D"=>v"2", "E"=>v"1", "F"=>v"2")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require just F, lower version
+    reqs_data = Any[
+        ["F", "1"]
+    ]
+    want_data = Dict("A"=>v"2", "D"=>v"2",
+                    "E"=>v"1", "F"=>v"1")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require F and B; force lower B version -> must bring down F, A, and D versions too
+    reqs_data = Any[
+        ["F", "*"],
+        ["B", "1"]
+    ]
+    want_data = Dict("A"=>v"1", "B"=>v"1", "D"=>v"1",
+                    "E"=>v"1", "F"=>v"1")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require F and D; force lower D version -> must not bring down F version, and bring in B
+    reqs_data = Any[
+        ["F", "*"],
+        ["D", "1"]
+    ]
+    want_data = Dict("A"=>v"3", "B"=>v"2", "C"=>v"2",
+                    "D"=>v"1", "E"=>v"1", "F"=>v"2")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require F and C; force lower C version -> must bring down F and A versions
+    reqs_data = Any[
+        ["F", "*"],
+        ["C", "1"]
+    ]
+    want_data = Dict("A"=>v"2", "C"=>v"1",
+                    "D"=>v"2", "E"=>v"1", "F"=>v"1")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+
+
 end
 
 @testset "realistic" begin
     VERBOSE && @info("SCHEME REALISTIC")
-    ## DEPENDENCY SCHEME 12: A REALISTIC EXAMPLE
+    ## DEPENDENCY SCHEME 14: A REALISTIC EXAMPLE
     ## ref Julia issue #21485
 
     include("resolvedata1.jl")
@@ -440,7 +550,7 @@ end
     @test sanity_tst(ResolveData.deps_data, ResolveData.problematic_data)
     @test resolve_tst(ResolveData.deps_data, ResolveData.reqs_data, ResolveData.want_data)
 
-    ## DEPENDENCY SCHEME 13: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
+    ## DEPENDENCY SCHEME 15: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
     ## ref Pkg.jl issue #1949
 
     include("resolvedata2.jl")
@@ -451,7 +561,7 @@ end
 
 @testset "nasty" begin
     VERBOSE && @info("SCHEME NASTY")
-    ## DEPENDENCY SCHEME 13: A NASTY CASE
+    ## DEPENDENCY SCHEME 16: A NASTY CASE
 
     include("NastyGenerator.jl")
     deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = true)
@@ -465,6 +575,7 @@ end
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 end
 
+#=
 @testset "Resolving for another version of Julia" begin
     append!(Pkg.Types.STDLIBS_BY_VERSION, HistoricalStdlibData.STDLIBS_BY_VERSION)
     temp_pkg_dir() do dir
@@ -511,6 +622,7 @@ end
     end
     empty!(Pkg.Types.STDLIBS_BY_VERSION)
 end
+=#
 
 @testset "Stdlib resolve smoketest" begin
     # All stdlibs should be installable and resolvable

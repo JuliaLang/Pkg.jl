@@ -13,6 +13,7 @@ include("historical_stdlib_data.jl")
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
 exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
 json_uuid = UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6")
+parsers_uuid = UUID("69de0a69-1ddd-5017-9359-2bf0b02dc9f0")
 markdown_uuid = UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
 test_stdlib_uuid = UUID("8dfed614-e22c-5e08-85e1-65c5234f0b40")
 unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
@@ -1432,6 +1433,42 @@ end
 end
 
 #
+# # Why
+#
+@testset "why: REPL" begin
+    isolate() do
+        Pkg.REPLMode.TEST_MODE[] = true
+        api, opts = first(Pkg.pkg"why Foo")
+        @test api == Pkg.why
+        @test first(opts).name == "Foo"
+        @test_throws PkgError Pkg.pkg"why Foo Bar"
+    end
+end
+
+@testset "why" begin
+    isolate() do
+        Pkg.add(name = "StaticArrays", version = "1.5.0")
+
+        io = IOBuffer()
+        Pkg.why("StaticArrays"; io)
+        str = String(take!(io))
+        @test str == "  StaticArrays\n"
+
+        Pkg.why("StaticArraysCore"; io)
+        str = String(take!(io))
+        @test str ==  "  StaticArrays → StaticArraysCore\n"
+
+        Pkg.why("LinearAlgebra"; io)
+        str = String(take!(io))
+        @test str ==
+        """  StaticArrays → LinearAlgebra
+          StaticArrays → Statistics → LinearAlgebra
+          StaticArrays → Statistics → SparseArrays → LinearAlgebra
+        """
+    end
+end
+
+#
 # # Update
 #
 @testset "update: input checking" begin
@@ -1594,14 +1631,57 @@ end
         @test haskey(Pkg.project().dependencies, "Markdown")
         @test haskey(Pkg.project().dependencies, "Unicode")
     end
-    # `--fixed` should prevent the target package from being updated, but update other dependencies
     isolate(loaded_depot=true) do
-        Pkg.add( name="Example", version="0.3.0")
-        Pkg.add( name="JSON", version="0.18.0")
-        Pkg.update("JSON"; level=Pkg.UPLEVEL_FIXED)
+        Pkg.add([(;name="Example", version="0.3.0"), (;name="JSON", version="0.21.0"), (;name="Parsers", version="1.1.2")])
+        Pkg.update("JSON")
         Pkg.dependencies(json_uuid) do pkg
-            @test pkg.version == v"0.18.0"
+            @test pkg.version > v"0.21.0"
         end
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.version == v"0.3.0"
+        end
+        Pkg.dependencies(parsers_uuid) do pkg
+            @test pkg.version == v"1.1.2"
+        end
+
+        Pkg.add(name="JSON", version="0.21.0")
+        Pkg.update("JSON"; preserve=Pkg.PRESERVE_DIRECT)
+        Pkg.dependencies(json_uuid) do pkg
+            @test pkg.version > v"0.21.0"
+        end
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.version == v"0.3.0"
+        end
+        Pkg.dependencies(parsers_uuid) do pkg
+            @test pkg.version == v"1.1.2"
+        end
+
+        Pkg.add(name="JSON", version="0.21.0")
+        Pkg.rm("Parsers")
+
+        Pkg.update("JSON"; preserve=Pkg.PRESERVE_DIRECT)
+        Pkg.dependencies(json_uuid) do pkg
+            @test pkg.version > v"0.21.0"
+        end
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.version == v"0.3.0"
+        end
+        Pkg.dependencies(parsers_uuid) do pkg
+            @test pkg.version > v"1.1.2"
+        end
+
+        Pkg.add([(;name="Example", version="0.3.0"), (;name="JSON", version="0.21.0"), (;name="Parsers", version="1.1.2")])
+        Pkg.update("JSON"; preserve=Pkg.PRESERVE_NONE)
+        Pkg.dependencies(json_uuid) do pkg
+            @test pkg.version > v"0.21.0"
+        end
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.version == v"0.3.0"
+        end
+        Pkg.dependencies(parsers_uuid) do pkg
+            @test pkg.version > v"1.1.2"
+        end
+        Pkg.update()
         Pkg.dependencies(exuuid) do pkg
             @test pkg.version > v"0.3.0"
         end
@@ -2142,21 +2222,21 @@ end
         @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
-        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^   \[2a0f44e3\] Base64", readline(io))
         @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
-        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
         Pkg.instantiate(;io=devnull) # download Example
         Pkg.status(;io=io, mode=Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"^⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^  \[2a0f44e3\] Base64", readline(io))
         @test occursin(r"^  \[d6f4376e\] Markdown", readline(io))
-        @test "Info Packages marked with ⌃ have new versions available" == strip(readline(io))
+        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
     end
     # Manifest Status API
     isolate(loaded_depot=true) do
@@ -2207,14 +2287,14 @@ end
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
         @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
-        @test occursin("Info Packages marked with ⌃ have new versions available", readline(io))
+        @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
         ## diff manifest
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
         @test occursin(r"Diff `.+Manifest.toml`", readline(io))
         @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
         @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
-        @test occursin("Info Packages marked with ⌃ have new versions available", readline(io))
+        @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
         ## diff project with filtering
         Pkg.status("Markdown"; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -2803,6 +2883,7 @@ using Pkg.Types: is_stdlib
     @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
 
+#=
 @testset "Pkg.add() with julia_version" begin
     append!(Pkg.Types.STDLIBS_BY_VERSION, HistoricalStdlibData.STDLIBS_BY_VERSION)
 
@@ -2907,6 +2988,7 @@ end
 
     empty!(Pkg.Types.STDLIBS_BY_VERSION)
 end
+=#
 
 @testset "Issue #2931" begin
     isolate(loaded_depot=false) do

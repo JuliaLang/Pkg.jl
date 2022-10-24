@@ -1,10 +1,7 @@
 Pkg v1.9 Release Notes
 =======================
 
-- Pkg will now respect the version of packages put into the sysimage using e.g. PackageCompiler. For example,
-  if version 1.3.2 of package A is in the sysimage, Pkg will always install that version when adding the package,
-  or when the packge is installed as a dependency to some other package. This can be disabled by calling
-  `Pkg.respect_sysimage_versions(false)` ([#3002]).
+- New functionality: `Pkg.why` and `pkg> why` to show why a package is inside the environment (shows all "paths" to a package starting at the direct dependencies).
 - When code coverage tracking is enabled for `Pkg.test` the new path-specific code-coverage option is used to limit coverage
   to the directory of the package being tested. Previously the `--code-coverage=user` option was used, which tracked files
   in all code outside of Core & Base, i.e. all stdlibs and all user packages, which often made running tests with
@@ -17,6 +14,10 @@ Pkg v1.9 Release Notes
 Pkg v1.8 Release Notes
 ======================
 
+- Pkg will now respect the version of packages put into the sysimage using e.g. PackageCompiler. For example,
+  if version 1.3.2 of package A is in the sysimage, Pkg will always install that version when adding the package,
+  or when the package is installed as a dependency to some other package. This can be disabled by calling
+  `Pkg.respect_sysimage_versions(false)` ([#3002]).
 - New `⌃` and `⌅` indicators beside packages in `pkg> status` that have new versions available.
   `⌅` indicates when new versions cannot be installed ([#2906]).
 - New `outdated::Bool` kwarg to `Pkg.status` (`--outdated` or `-o` in the REPL mode) to show
@@ -46,7 +47,7 @@ Pkg v1.7 Release Notes
 - It is now possible to use an external `git` executable instead of the default libgit2 library for
   the downloads that happen via the Git protocol by setting the environment variable `JULIA_PKG_USE_CLI_GIT=true` ([#2448]).
 - Registries downloaded from the Pkg Server (not git) is now assumed to be immutable. Manual changes to their files might not be picked up by a running Pkg session.
-- The number of packags precompiled in parallel are now limited to 16 unless the
+- The number of packages precompiled in parallel are now limited to 16 unless the
   environment variable `JULIA_NUM_PRECOMPILE_TASKS` is set ([#2552]).
 - Adding packages by folder name in the REPL mode now requires a prepending a `./` to the folder name package folder is in the current folder, e.g. `add ./Package` is required instead of `add Package`. This is to avoid confusion between the package name `Package` and the local directory `Package`.
 - `rm`, `pin`, and `free` now support the `--all` option, and the api variants gain the `all_pkgs::Bool` kwarg, to perform the operation on all packages within the project or manifest, depending on the mode of the operation ([#2432]).

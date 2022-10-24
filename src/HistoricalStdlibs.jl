@@ -15,7 +15,6 @@ const UNREGISTERED_STDLIBS = Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}
     UUID("2a0f44e3-6c83-55bd-87e4-b1978d98bd5f") => ("Base64", nothing),
     UUID("8bf52ea8-c179-5cab-976a-9e18b702a9bc") => ("CRC32c", nothing),
     UUID("ade2ca70-3891-5945-98fb-dc099432e06a") => ("Dates", nothing),
-    UUID("8bb1440f-4735-579b-a4ab-409b98df4dab") => ("DelimitedFiles", nothing),
     UUID("8ba89e20-285c-5b6f-9357-94700520ee1b") => ("Distributed", nothing),
     UUID("7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee") => ("FileWatching", nothing),
     UUID("9fa8497b-333b-5362-9e8d-4d0656e87820") => ("Future", nothing),
