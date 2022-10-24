@@ -234,6 +234,7 @@ end
         @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2)
         @test artifact_hash("foo_txt", artifacts_toml) == hash
         bind_artifact!(artifacts_toml, "foo_txt", hash2; force=true)
+        sleep(1)
         @test artifact_hash("foo_txt", artifacts_toml) == hash2
 
         # Test that we can un-bind
@@ -254,6 +255,7 @@ end
         @test artifact_hash("foo_txt", artifacts_toml; platform=Platform("x86_64", "macos")) == nothing
         @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64)
         bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
+        sleep(1)
         bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=win32)
         @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash2
         @test artifact_hash("foo_txt", artifacts_toml; platform=win32) == hash
