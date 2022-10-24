@@ -1039,7 +1039,7 @@ function _is_stale(paths::Vector{String}, sourcepath::String)
                 touch(path_to_try)
             catch ex
                 # file might be read-only and then we fail to update timestamp, which is fine
-                ex isa IOError || rethrow()
+                ex isa Base.IOError || rethrow()
             end
             return false
         end
