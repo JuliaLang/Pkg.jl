@@ -381,7 +381,7 @@ if `D` is required by other packages that you are trying to use.
     For instance, a common pitfall is having more than a few packages in your default (i.e. `(@1.8)`) environment,
     and using that as an environment for all tasks you're using julia for. It's better to create a dedicated project
     for the task you're working on, and keep the dependencies there minimal. To read more see
-    [Working with Environments](@ref)
+    [Working with Environments](@ref Working-with-Environments)
 
 The error message has a lot of crucial information.
 It may be easiest to interpret piecewise:
