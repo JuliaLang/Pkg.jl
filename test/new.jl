@@ -8,6 +8,8 @@ import Pkg.Artifacts: artifact_meta, artifact_path
 import Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using  ..Utils
 
+include("historical_stdlib_data.jl")
+
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
 exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
 json_uuid = UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6")
@@ -2852,6 +2854,8 @@ end
 
 using Pkg.Types: is_stdlib
 @testset "is_stdlib() across versions" begin
+    append!(Pkg.Types.STDLIBS_BY_VERSION, HistoricalStdlibData.STDLIBS_BY_VERSION)
+
     networkoptions_uuid = UUID("ca575930-c2e3-43a9-ace4-1e988b2c1908")
     pkg_uuid = UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
 
@@ -2870,10 +2874,19 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, v"999.999.999")
     @test is_stdlib(pkg_uuid, v"0.7")
     @test is_stdlib(pkg_uuid, nothing)
+
+    empty!(Pkg.Types.STDLIBS_BY_VERSION)
+    
+    # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
+    # but that we throw a PkgError if we ask for a particular julia version.
+    @test is_stdlib(networkoptions_uuid)
+    @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
 
 #=
 @testset "Pkg.add() with julia_version" begin
+    append!(Pkg.Types.STDLIBS_BY_VERSION, HistoricalStdlibData.STDLIBS_BY_VERSION)
+
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
     # A package that has always only ever been an stdlib
@@ -2972,6 +2985,8 @@ end
         p7zip_jll_uuid = UUID("3f19e933-33d8-53b3-aaab-bd5110c3b7a0")
         @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
     end
+
+    empty!(Pkg.Types.STDLIBS_BY_VERSION)
 end
 =#
 
