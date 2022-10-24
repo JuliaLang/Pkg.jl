@@ -1574,7 +1574,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         # Copy over preferences
         if preferences !== nothing
             open(tmp_preferences, "w") do io
-                TOML.print(io, preferences)
+                TOML.print(io, preferences::Dict{String, Any})
             end
         end
 
