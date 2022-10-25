@@ -368,6 +368,7 @@ The result is a `Dict` that maps a package UUID to a `PackageInfo` struct repres
 |:------------------    |:----------------------------------------------------------------------------------|
 | `name`                | The name of the package                                                           |
 | `version`             | The version of the package (this is `Nothing` for stdlibs)                        |
+| `tree_hash`           | A file hash of the package directory tree                                         |
 | `is_direct_dep`       | The package is a direct dependency                                                |
 | `is_pinned`           | Whether a package is pinned                                                       |
 | `is_tracking_path`    | Whether a package is tracking a path                                              |
