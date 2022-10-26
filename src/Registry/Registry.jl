@@ -60,7 +60,10 @@ function pkg_server_registry_info()
     tmp_path = tempname()
     download_ok = false
     try
-        download("$server/registries", tmp_path, verbose=false)
+        f = retry(delays = fill(1.0, 3)) do
+            download("$server/registries", tmp_path, verbose=false)
+        end
+        f()
         download_ok = true
     catch err
         @warn "could not download $server/registries" exception=err
