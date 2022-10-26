@@ -204,6 +204,11 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     registry = Registry.RegistryInstance(regpath)
                     printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                     return
+                elseif reg.url !== nothing && reg.linked == true
+                    pkgerror("""
+                    A symlinked registry was requested but `path` was not set and `url` was set to `$url`.
+                    Set only `path` and `linked = true` to use registry symlinking.
+                    """)
                 elseif url !== nothing && registry_use_pkg_server()
                     # download from Pkg server
                     try
