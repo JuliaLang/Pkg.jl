@@ -433,12 +433,24 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                 push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
                                 @goto done_git
                             end
+                            attempts = 0
+                            @label merge
                             ff_succeeded = try
                                 LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
                             catch e
-                                e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
-                                push!(errors, (reg.path, "branch origin/$branch not found"))
-                                @goto done_git
+                                attempts += 1
+                                if e isa LibGit2.GitError && e.code == LibGit2.Error.ELOCKED && attempts <= 3
+                                    @warn "Registry update attempt failed because repository is locked. Resetting and retrying." e
+                                    LibGit2.reset!(repo, LibGit2.head_oid(repo), LibGit2.Consts.RESET_HARD)
+                                    sleep(1)
+                                    @goto merge
+                                elseif e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND
+                                    push!(errors, (reg.path, "branch origin/$branch not found"))
+                                    @goto done_git
+                                else
+                                    rethrow()
+                                end
+
                             end
 
                             if !ff_succeeded
