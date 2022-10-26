@@ -2839,14 +2839,15 @@ end
 @testset "relative depot path" begin
     isolate(loaded_depot=false) do
         mktempdir() do tmp
-            ENV["JULIA_DEPOT_PATH"] = "tmp"
-            Base.init_depot_path()
-            Pkg.Registry.DEFAULT_REGISTRIES[1].url = Utils.REGISTRY_DIR
-            Pkg.Registry.DEFAULT_REGISTRIES[1].path = nothing
-            cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
-            git_init_and_commit(joinpath(tmp, "BasicSandbox"))
-            cd(tmp) do
-                Pkg.add(path="BasicSandbox")
+            withenv("JULIA_DEPOT_PATH" => "tmp") do
+                Base.init_depot_path()
+                Pkg.Registry.DEFAULT_REGISTRIES[1].path = Utils.REGISTRY_DIR # set path because symlink reg uses path
+                Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
+                cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
+                git_init_and_commit(joinpath(tmp, "BasicSandbox"))
+                cd(tmp) do
+                    Pkg.add(path="BasicSandbox")
+                end
             end
         end
     end
@@ -2876,7 +2877,7 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, nothing)
 
     empty!(Pkg.Types.STDLIBS_BY_VERSION)
-    
+
     # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
     # but that we throw a PkgError if we ask for a particular julia version.
     @test is_stdlib(networkoptions_uuid)
