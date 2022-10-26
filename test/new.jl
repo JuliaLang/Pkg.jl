@@ -2841,8 +2841,6 @@ end
         mktempdir() do tmp
             withenv("JULIA_DEPOT_PATH" => "tmp") do
                 Base.init_depot_path()
-                Pkg.Registry.DEFAULT_REGISTRIES[1].path = Utils.REGISTRY_DIR # set path because symlink reg uses path
-                Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
                 cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
                 git_init_and_commit(joinpath(tmp, "BasicSandbox"))
                 cd(tmp) do
