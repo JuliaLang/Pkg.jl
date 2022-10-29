@@ -5,7 +5,7 @@
 module PlatformEngines
 
 using SHA, Downloads, Tar
-import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f
+import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f, get_bool_env
 using ..MiniProgressBars
 using Base.BinaryPlatforms, p7zip_jll
 
@@ -618,14 +618,26 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
     end
 
     if calc_hash != hash
-        msg  = "Hash Mismatch!\n"
-        msg *= "  Expected sha256:   $hash\n"
-        msg *= "  Calculated sha256: $calc_hash"
-        @error(msg)
-        if report_cache_status
-            return false, :hash_mismatch
+        if get_bool_env("JULIA_PKG_IGNORE_HASHES")
+            msg  = "Hash Mismatch! (ignored due to `ENV[\"JULIA_PKG_IGNORE_HASHES\"]=$(ENV["JULIA_PKG_IGNORE_HASHES"])`)\n"
+            msg *= "  Expected sha256:   $hash\n"
+            msg *= "  Calculated sha256: $calc_hash"
+            @warn(msg)
+            if report_cache_status
+                return true, :hash_mismatch
+            else
+                return true
+            end
         else
-            return false
+            msg  = "Hash Mismatch!\n"
+            msg *= "  Expected sha256:   $hash\n"
+            msg *= "  Calculated sha256: $calc_hash"
+            @error(msg)
+            if report_cache_status
+                return false, :hash_mismatch
+            else
+                return false
+            end
         end
     end
 
