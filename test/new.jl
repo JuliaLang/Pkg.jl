@@ -7,6 +7,7 @@ using  Pkg.Resolve: ResolverError
 import Pkg.Artifacts: artifact_meta, artifact_path
 import Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using  ..Utils
+import HistoricalStdlibVersions
 
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
 exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
