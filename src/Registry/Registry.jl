@@ -231,7 +231,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                     return
                 elseif reg.url !== nothing # clone from url
-                    repo = GitTools.clone(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
+                    repo = retry(GitTools.clone, delays = fill(1.0, 3), check=(s,e)->isa(e, LibGit2.GitError))(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
                     LibGit2.close(repo)
                 else
                     Pkg.Types.pkgerror("no path or url specified for registry")
