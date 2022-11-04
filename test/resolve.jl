@@ -574,6 +574,7 @@ end
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 end
 
+#=
 @testset "Resolving for another version of Julia" begin
     append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
     temp_pkg_dir() do dir
@@ -620,6 +621,7 @@ end
     end
     empty!(Pkg.Types.STDLIBS_BY_VERSION)
 end
+=#
 
 @testset "Stdlib resolve smoketest" begin
     # All stdlibs should be installable and resolvable
