@@ -60,7 +60,7 @@ Pkg._auto_gc_enabled[] = false
         Pkg.dependencies(exuuid) do pkg
             @test pkg.version == v"0.5.1"
             @test isdir(pkg.source)
-            # - We also check the interaction between the previously intalled version.
+            # - We also check the interaction between the previously installed version.
             @test pkg.source != source053
         end
         # Now a few more versions:
@@ -177,7 +177,7 @@ end
             @test haskey(Pkg.project().dependencies, "BasicSandbox")
         end
     end end
-    # the active dependency graph is transfered to the test sandbox
+    # the active dependency graph is transferred to the test sandbox
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "TransferSubgraph")
         Pkg.activate(path)
@@ -186,7 +186,7 @@ end
             @test Pkg.dependencies()[json_uuid].version == active_json_version
         end
     end end
-    # the active dep graph is transfered to test sandbox, even when tracking unregistered repos
+    # the active dep graph is transferred to test sandbox, even when tracking unregistered repos
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "TestSubgraphTrackingRepo")
         Pkg.activate(path)
@@ -462,7 +462,7 @@ end
 # ## Changes to the active project
 #
 
-# Here we can use a loaded depot becuase we are only checking changes to the active project.
+# Here we can use a loaded depot because we are only checking changes to the active project.
 # We check that `add` supports basic operations on a clean project.
 # The package should be added as a direct dependency.
 @testset "add: changes to the active project" begin
@@ -561,10 +561,10 @@ end
     end end
 end
 
-# Here we can use a loaded depot becuase we are only checking changes to the active project.
+# Here we can use a loaded depot because we are only checking changes to the active project.
 @testset "add: package state changes" begin
     # Check that `add` on an already added stdlib works.
-    # Stdlibs are special cased throughtout the codebase.
+    # Stdlibs are special cased throughout the codebase.
     isolate(loaded_depot=true) do
         Pkg.add("Markdown")
         Pkg.add("Markdown")
@@ -627,7 +627,7 @@ end
         Pkg.add(name="Example", rev="master")
         @test !Pkg.dependencies()[exuuid].is_tracking_registry
         # Now we remove the package as a direct dependency.
-        # The package should still exist as an indirect dependency becuse `DependsOnExample` depends on it.
+        # The package should still exist as an indirect dependency because `DependsOnExample` depends on it.
         Pkg.rm("Example")
         Pkg.add(name="Example", version="0.3.0")
         # Now we check that we are tracking a registered version.
@@ -1575,7 +1575,7 @@ end
             @test !haskey(pkg.dependencies, "Unicode")
         end
         simple_package_node = Pkg.dependencies()[simple_package_uuid]
-        # now we bump the remote veresion
+        # now we bump the remote version
         mv(joinpath(path, "Project2.toml"), joinpath(path, "Project.toml"); force=true)
         new_commit = nothing
         LibGit2.with(LibGit2.GitRepo(path)) do repo
@@ -1714,13 +1714,13 @@ end
     isolate(loaded_depot=true) do
         @test_throws PkgError Pkg.pin("Example")
     end
-    # pinning to an arbritrary version should check for unregistered packages
+    # pinning to an arbitrary version should check for unregistered packages
     isolate(loaded_depot=true) do
         Pkg.add(url="https://github.com/00vareladavid/Unregistered.jl")
-        @test_throws PkgError("unable to pin unregistered package `Unregistered [dcb67f36]` to an arbritrary version"
+        @test_throws PkgError("unable to pin unregistered package `Unregistered [dcb67f36]` to an arbitrary version"
                               ) Pkg.pin(name="Unregistered", version="0.1.0")
     end
-    # pinning to an abritrary version should check version exists
+    # pinning to an arbitrary version should check version exists
     isolate(loaded_depot=true) do
         Pkg.add(name="Example",rev="master")
         @test_throws ResolverError Pkg.pin(name="Example",version="100.0.0")
@@ -1737,7 +1737,7 @@ end
             @test pkg.is_pinned
         end
     end
-    # packge tracking repo
+    # package tracking repo
     isolate(loaded_depot=true) do
         Pkg.add(url="https://github.com/00vareladavid/Unregistered.jl")
         Pkg.pin("Unregistered")
@@ -1766,7 +1766,7 @@ end
 # # Free
 #
 @testset "free: input checking" begin
-    # free checks for exisiting packge
+    # free checks for existing package
     isolate(loaded_depot=true) do
         @test_throws PkgError Pkg.free("Example")
     end
@@ -1799,7 +1799,7 @@ end
             @test pkg.is_tracking_registry
         end
     end
-    # free developed packge
+    # free developed package
     isolate(loaded_depot=true) do
         Pkg.develop("Example")
         Pkg.free("Example")
@@ -1910,7 +1910,7 @@ end
         @test !haskey(Pkg.Types.Context().env.project.compat, "DataFrames")
         @test haskey(Pkg.Types.Context().env.project.compat, "Aqua")
     end end
-    # rm removes unused recursive depdencies
+    # rm removes unused recursive dependencies
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         path = copy_test_package(tempdir, "SimplePackage")
         Pkg.develop(path=path)
@@ -2440,7 +2440,7 @@ end
             LibGit2.add!(repo, "*")
             new_commit = string(LibGit2.commit(repo, "new commit"; author=TEST_SIG, committer=TEST_SIG))
         end
-        # Use clone to generate source, _without_ unecessarily updating the clone
+        # Use clone to generate source, _without_ unnecessarily updating the clone
         rm(joinpath(DEPOT_PATH[1], "packages"); force=true, recursive=true)
         Pkg.instantiate()
         # check that `master` on the clone has not changed
@@ -2512,7 +2512,7 @@ end
                 y = b[uuid]
                 for property in propertynames(x)
                     # `other` caches the *whole* input dictionary. its ok to mutate the fields of
-                    # the input dictionary if that field will eventually be overwriten on `write_manifest`
+                    # the input dictionary if that field will eventually be overwritten on `write_manifest`
                     property == :other && continue
                     @test getproperty(x, property) == getproperty(y, property)
                 end

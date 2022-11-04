@@ -186,7 +186,7 @@ Base.string(mode::GitMode) = string(UInt32(mode); base=8)
 Base.print(io::IO, mode::GitMode) = print(io, string(mode))
 
 function gitmode(path::AbstractString)
-    # Windows doens't deal with executable permissions in quite the same way,
+    # Windows doesn't deal with executable permissions in quite the same way,
     # `stat()` gives a different answer than we actually want, so we use
     # `isexecutable()` which uses `uv_fs_access()` internally.  On other
     # platforms however, we just want to check via `stat()`.

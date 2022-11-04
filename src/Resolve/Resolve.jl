@@ -439,7 +439,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
         copy!(old_sol, sol)
         push!(allsols, copy(sol))
 
-        # step 1: uninstall unneded packages
+        # step 1: uninstall unneeded packages
         _uninstall_unreachable!(sol, why, graph)
 
         # setp 2: try to bump each installed package in turn

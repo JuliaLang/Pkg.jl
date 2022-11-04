@@ -87,7 +87,7 @@ end
 function dependencies(fn::Function, uuid::UUID)
     dep = get(dependencies(), uuid, nothing)
     if dep === nothing
-        pkgerror("depenendency with UUID `$uuid` does not exist")
+        pkgerror("dependency with UUID `$uuid` does not exist")
     end
     fn(dep)
 end
@@ -610,7 +610,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             # Expand it back into a dict-of-dicts
             expanded_usage = Dict{String,Vector{Dict}}()
             for (k, v) in usage
-                # Drop scratch spaces whose parents are all non-existant
+                # Drop scratch spaces whose parents are all non-existent
                 parents = scratch_parents_by_depot[depot][k]
                 filter!(p -> p in all_scratch_parents, parents)
                 if isempty(parents)
@@ -1984,7 +1984,7 @@ function upgrade_manifest(ctx::Context = Context())
     if before_format == v"2.0"
         pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` already up to date: manifest_format == $(before_format)")
     elseif before_format != v"1.0"
-        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` version is unrecogized: manifest_format == $(before_format)")
+        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` version is unrecognized: manifest_format == $(before_format)")
     end
     ctx.env.manifest.manifest_format = v"2.0"
     Types.write_manifest(ctx.env)
