@@ -3,9 +3,9 @@ using Base: UUID
 # Julia standard libraries with duplicate entries removed so as to store only the
 # first release in a set of releases that all contain the same set of stdlibs.
 #
-# This needs to be populated by consumers (e.g. BinaryBuilder) that want to use
-# the "resolve things as if it were a different Julia version than what is
-# currently running" feature.
+# This needs to be populated via HistoricalStdlibVersions.jl by consumers
+# (e.g. BinaryBuilder) that want to use the "resolve things as if it were a
+# different Julia version than what is currently running" feature.
 const STDLIBS_BY_VERSION = Pair{VersionNumber, Dict{UUID}}[]
 
 # This is a list of stdlibs that must _always_ be treated as stdlibs,

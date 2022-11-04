@@ -9,13 +9,12 @@ using Pkg.Types: VersionBound
 using UUIDs
 using Pkg.Resolve
 import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, Fixed, Requires
+import HistoricalStdlibVersions
 
 include("utils.jl")
 using .Utils
 include("resolve_utils.jl")
 using .ResolveUtils
-
-include("historical_stdlib_data.jl")
 
 # Check that VersionWeight keeps the same ordering as VersionNumber
 
@@ -577,7 +576,7 @@ end
 
 #=
 @testset "Resolving for another version of Julia" begin
-    append!(Pkg.Types.STDLIBS_BY_VERSION, HistoricalStdlibData.STDLIBS_BY_VERSION)
+    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
     temp_pkg_dir() do dir
         function find_by_name(versions, name)
             idx = findfirst(p -> p.name == name, versions)
