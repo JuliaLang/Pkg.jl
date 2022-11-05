@@ -345,7 +345,10 @@ function download_verify(
     mkpath(dirname(dest))
 
     # Download the file, optionally continuing
-    download(url, dest; verbose=verbose || !quiet_download)
+    f = retry(delays = fill(1.0, 3)) do
+        download(url, dest; verbose=verbose || !quiet_download)
+    end
+    f()
     if hash !== nothing && !verify(dest, hash; verbose=verbose)
         # If the file already existed, it's possible the initially downloaded chunk
         # was bad.  If verification fails after downloading, auto-delete the file
