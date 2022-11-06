@@ -6,10 +6,6 @@ if Base.find_package("Preferences") === nothing
     @info "Installing Preferences for Pkg tests"
     Pkg.add("Preferences") # Needed for sandbox and artifacts tests
 end
-if Base.find_package("HistoricalStdlibVersions") === nothing
-    @info "Installing HistoricalStdlibVersions for Pkg tests"
-    Pkg.add("HistoricalStdlibVersions") # Needed for custom julia version resolve tests
-end
 
 using Test
 using UUIDs
