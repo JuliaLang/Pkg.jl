@@ -10,6 +10,12 @@ module PkgTestsInner
 
 import Pkg
 
+# Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
+if Base.find_package("HistoricalStdlibVersions") === nothing
+    @info "Installing HistoricalStdlibVersions for Pkg tests"
+    Pkg.add("HistoricalStdlibVersions") # Needed for custom julia version resolve tests
+end
+
 using Test, Logging
 
 @testset "Test that we have imported the correct package" begin
