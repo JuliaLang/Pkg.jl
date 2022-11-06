@@ -9,7 +9,7 @@ using Pkg.Types: VersionBound
 using UUIDs
 using Pkg.Resolve
 import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, Fixed, Requires
-import HistoricalStdlibVersions
+import ..HistoricalStdlibVersions
 
 include("utils.jl")
 using .Utils

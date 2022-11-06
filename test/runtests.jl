@@ -16,6 +16,8 @@ if Base.find_package("HistoricalStdlibVersions") === nothing
     Pkg.add("HistoricalStdlibVersions") # Needed for custom julia version resolve tests
 end
 
+import HistoricalStdlibVersions
+
 using Test, Logging
 
 @testset "Test that we have imported the correct package" begin
