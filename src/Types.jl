@@ -453,9 +453,13 @@ function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
     end
 
     last_stdlibs = get_last_stdlibs(julia_version)
+    if haskey(last_stdlibs, uuid)
+        name, _ = last_stdlibs[uuid]
+        return !endswith(name, "_jll")
+    end
     # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
     # fall through with an empty `last_stdlibs`, which will always return `false`.
-    return uuid in keys(last_stdlibs)
+    return false
 end
 
 # Return the version of a stdlib with respect to a particular Julia version, or

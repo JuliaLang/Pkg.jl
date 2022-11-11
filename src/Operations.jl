@@ -426,6 +426,9 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
             if haskey(stdlibs_for_julia_version, uuid)
                 uuid_is_stdlib = true
                 stdlib_name, stdlib_version = stdlibs_for_julia_version[uuid]
+                if julia_version != VERSION && endswith(stdlib_name, "_jll")
+                    uuid_is_stdlib = false
+                end
             end
 
             # If we're requesting resolution of a package that is an
