@@ -1318,7 +1318,7 @@ function build_eq_classes_soft1!(graph::Graph, p0::Int)
     # find unique behaviors
     repr_vecs = unique(cvecs)
 
-    # number of equivaent classes
+    # number of equivalent classes
     neq = length(repr_vecs)
 
     neq == eff_spp0 && return # nothing to do here
@@ -1441,7 +1441,7 @@ function prune_graph!(graph::Graph)
         return pvers0[vmsk0[1:(end-1)]]
     end
     new_pvers = [compute_pvers(new_p0) for new_p0 = 1:new_np]
-    
+
     # explicitly writing out the following loop since the generator equivalent caused type inference failure
     new_vdict = Vector{Dict{VersionNumber, Int}}(undef, length(new_pvers))
     for new_p0 in eachindex(new_vdict)

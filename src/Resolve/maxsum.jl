@@ -309,7 +309,6 @@ function clean_forbidden!(graph::Graph, msgs::Messages)
     ignored = graph.ignored
     fld = msgs.fld
     affected = Tuple{Int,Int}[]
-    removed = 0
 
     for p0 = 1:np
         ignored[p0] && continue
@@ -318,7 +317,6 @@ function clean_forbidden!(graph::Graph, msgs::Messages)
         for v0 in findall(gconstr0)
             validmax(fld0[v0]) && continue
             push!(affected, (p0,v0))
-            removed += 1
         end
     end
     return affected
