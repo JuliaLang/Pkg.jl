@@ -61,6 +61,25 @@ include("maxsum.jl")
 
 "Resolve package dependencies."
 function resolve(graph::Graph)
+    sol = _resolve(graph::Graph, nothing, nothing)
+
+    # return the solution as a Dict mapping UUID => VersionNumber
+    return compute_output_dict(sol, graph)
+end
+
+function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previous_sol::Union{Vector{Int},Nothing})
+    np = graph.np
+    spp = graph.spp
+    gconstr = graph.gconstr
+
+    if lower_bound ≢ nothing
+        for p0 = 1:np
+            v0 = lower_bound[p0]
+            @assert v0 ≠ spp[p0]
+            gconstr[p0][1:(v0-1)] .= false
+        end
+    end
+
     # attempt trivial solution first
     greedy_ok, sol = greedysolver(graph)
 
@@ -75,6 +94,8 @@ function resolve(graph::Graph)
 
     log_event_global!(graph, "maxsum solver failed")
 
+    @assert previous_sol ≡ nothing
+
     # the problem is unsat, force-trigger a failure
     # in order to produce a log - this will contain
     # information about the best that the solver could
@@ -85,12 +106,31 @@ function resolve(graph::Graph)
 
     # verify solution (debug code) and enforce its optimality
     @assert verify_solution(sol, graph)
-    greedy_ok || enforce_optimality!(sol, graph)
-
-    log_event_global!(graph, "the solver found $(greedy_ok ? "an optimal" : "a feasible") configuration")
-
-    # return the solution as a Dict mapping UUID => VersionNumber
-    return compute_output_dict(sol, graph)
+    if greedy_ok
+        log_event_global!(graph, "the solver found an optimal configuration")
+        return sol
+    else
+        enforce_optimality!(sol, graph)
+        if lower_bound ≢ nothing
+            @assert all(sol .≥ lower_bound)
+            @assert all((sol .≥ previous_sol) .| (previous_sol .== spp))
+        end
+        if sol ≠ previous_sol
+            log_event_global!(graph, "the solver found a feasible configuration and will try to improve it")
+            new_lower_bound = copy(sol)
+            uninst_mask = sol .== spp
+            new_lower_bound[uninst_mask] .= 1
+            if lower_bound ≢ nothing
+                lb_mask = uninst_mask .& (lower_bound .≠ spp)
+                new_lower_bound[lb_mask] = lower_bound[lb_mask]
+                @assert all(new_lower_bound .≥ lower_bound)
+            end
+            return _resolve(graph, new_lower_bound, sol)
+        else
+            log_event_global!(graph, "the solver found a feasible configuration and can't improve it")
+            return sol
+        end
+    end
 end
 
 """

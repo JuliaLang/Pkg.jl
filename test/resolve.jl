@@ -426,25 +426,135 @@ end
     want_data = Dict("A"=>v"1", "B"=>v"1", "C"=>v"1", "D"=>v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
+    VERBOSE && @info("SCHEME 14")
+    ## DEPENDENCY SCHEME 14: A NASTY GRAPH WITH A LOCAL OPTIMUM
+    ## (REDUCED VERSION OF REALISTIC SCHEME 17 BELOW, ref Pkg.jl issue #3232)
+    deps_data = Any[
+        ["A", v"1", "X", "*"],
+        ["B", v"1"],
+        ["B", v"2"],
+        ["C", v"1"],
+        ["C", v"2", "G", "2"],
+        ["C", v"2", "H", "*"],
+        ["D", v"1"],
+        ["D", v"2", "C", "*"],
+        ["Y", v"0.1"],
+        ["Y", v"0.2.1", "B", "1"],
+        ["Y", v"0.2.2"],
+        ["X", v"0.1", "Y", "0.1"],
+        ["X", v"0.2", "Y", "0.2"],
+        ["E", v"1", "X", "0.1"],
+        ["F", v"1", "I", "1"],
+        ["G", v"1", "E", "*"],
+        ["G", v"2"],
+        ["H", v"1", "B", "*"],
+        ["H", v"1", "F", "*"],
+        ["H", v"1", "I", "*"],
+        ["I", v"1"],
+        ["I", v"2"],
+    ]
+
+    @test sanity_tst(deps_data)
+
+    # require A and D
+    reqs_data = Any[
+        ["A", "*"],
+        ["D", "*"],
+    ]
+    want_data = Dict(
+        "A"=>v"1",
+        "B"=>v"2",
+        "C"=>v"2",
+        "D"=>v"2",
+        "Y"=>v"0.2.2",
+        "X"=>v"0.2",
+        "F"=>v"1",
+        "G"=>v"2",
+        "H"=>v"1",
+        "I"=>v"1",
+    )
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require just D
+    reqs_data = Any[
+        ["D", "*"],
+    ]
+    want_data = Dict(
+        "B"=>v"2",
+        "C"=>v"2",
+        "D"=>v"2",
+        "F"=>v"1",
+        "G"=>v"2",
+        "H"=>v"1",
+        "I"=>v"1",
+    )
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require just A
+    reqs_data = Any[
+        ["A", "*"],
+    ]
+    want_data = Dict(
+        "A"=>v"1",
+        "Y"=>v"0.2.2",
+        "X"=>v"0.2",
+    )
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+
+    # require A, D, and lower version of Y
+    reqs_data = Any[
+        ["A", "*"],
+        ["D", "*"],
+        ["Y", "0.2.1"]
+    ]
+    want_data = Dict(
+        "A"=>v"1",
+        "B"=>v"1",
+        "C"=>v"2",
+        "D"=>v"2",
+        "Y"=>v"0.2.1",
+        "X"=>v"0.2",
+        "F"=>v"1",
+        "G"=>v"2",
+        "H"=>v"1",
+        "I"=>v"1",
+    )
+    @test resolve_tst(deps_data, reqs_data, want_data)
 end
 
 @testset "realistic" begin
-    VERBOSE && @info("SCHEME REALISTIC")
+    VERBOSE && @info("SCHEME REALISTIC 1")
     ## DEPENDENCY SCHEME 12: A REALISTIC EXAMPLE
     ## ref Julia issue #21485
 
-    include("resolvedata1.jl")
+    tmp = mktempdir()
+    Pkg.PlatformEngines.unpack(joinpath(@__DIR__, "resolvedata.tar.gz"), tmp; verbose=false)
+
+
+    include(joinpath(tmp, "resolvedata1.jl"))
 
     @test sanity_tst(ResolveData.deps_data, ResolveData.problematic_data)
     @test resolve_tst(ResolveData.deps_data, ResolveData.reqs_data, ResolveData.want_data)
 
     ## DEPENDENCY SCHEME 13: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
+    VERBOSE && @info("SCHEME REALISTIC 2")
+
     ## ref Pkg.jl issue #1949
 
-    include("resolvedata2.jl")
+    include(joinpath(tmp, "resolvedata2.jl"))
 
     @test sanity_tst(ResolveData2.deps_data, ResolveData2.problematic_data)
     @test resolve_tst(ResolveData2.deps_data, ResolveData2.reqs_data, ResolveData2.want_data)
+
+    VERBOSE && @info("SCHEME REALISTIC 3")
+    ## DEPENDENCY SCHEME 17: AN EVEN LARGER, MORE DIFFICULT REALISTIC EXAMPLE
+    ## ref Pkg.jl issue #3232
+
+    include(joinpath(tmp, "resolvedata3.jl"))
+
+    @test sanity_tst(ResolveData3.deps_data, ResolveData3.problematic_data)
+    @test resolve_tst(ResolveData3.deps_data, ResolveData3.reqs_data, ResolveData3.want_data)
 end
 
 @testset "nasty" begin
