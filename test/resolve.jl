@@ -640,7 +640,11 @@ end
     ## DEPENDENCY SCHEME 15: A REALISTIC EXAMPLE
     ## ref Julia issue #21485
 
-    include("resolvedata1.jl")
+    tmp = mktempdir()
+    Pkg.PlatformEngines.unpack(joinpath(@__DIR__, "resolvedata.tar.gz"), tmp; verbose=false)
+
+
+    include(joinpath(tmp, "resolvedata1.jl"))
 
     @test sanity_tst(ResolveData.deps_data, ResolveData.problematic_data)
     @test resolve_tst(ResolveData.deps_data, ResolveData.reqs_data, ResolveData.want_data)
@@ -649,7 +653,7 @@ end
     ## DEPENDENCY SCHEME 16: A LARGER, MORE DIFFICULT REALISTIC EXAMPLE
     ## ref Pkg.jl issue #1949
 
-    include("resolvedata2.jl")
+    include(joinpath(tmp, "resolvedata2.jl"))
 
     @test sanity_tst(ResolveData2.deps_data, ResolveData2.problematic_data)
     @test resolve_tst(ResolveData2.deps_data, ResolveData2.reqs_data, ResolveData2.want_data)
@@ -658,7 +662,7 @@ end
     ## DEPENDENCY SCHEME 17: AN EVEN LARGER, MORE DIFFICULT REALISTIC EXAMPLE
     ## ref Pkg.jl issue #3232
 
-    include("resolvedata3.jl")
+    include(joinpath(tmp, "resolvedata3.jl"))
 
     @test sanity_tst(ResolveData3.deps_data, ResolveData3.problematic_data)
     @test resolve_tst(ResolveData3.deps_data, ResolveData3.reqs_data, ResolveData3.want_data)
