@@ -1757,7 +1757,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
               test_fn=nothing,
               force_latest_compatible_version::Bool=false,
               allow_earlier_backwards_compatible_versions::Bool=true,
-              allow_reresolve::Bool=true)
+              allow_reresolve::Bool=true,
+              forward_stdin::Bool=false)
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
     # load manifest data
@@ -1816,7 +1817,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             cmd = gen_test_code(source_path; coverage=coverage, julia_args=julia_args, test_args=test_args)
-            p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
+            p = run(pipeline(ignorestatus(cmd), stdin = forward_stdin ? stdin : nothing, stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
             interrupted = false
             try
                 wait(p)
