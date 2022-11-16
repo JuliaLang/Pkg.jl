@@ -143,6 +143,7 @@ pkg> add Example#c37b675
 pkg> add https://github.com/JuliaLang/Example.jl#master
 pkg> add git@github.com:JuliaLang/Example.jl.git
 pkg> add "git@github.com:JuliaLang/Example.jl.git"#master
+pkg> add https://github.com/Company/MonoRepo:juliapkgs/Package.jl
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
 """,
