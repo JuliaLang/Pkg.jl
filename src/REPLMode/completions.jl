@@ -173,7 +173,7 @@ function complete_argument(spec::CommandSpec, options::Vector{String},
     # finish parsing opts
     local opts
     try
-        opts = APIOptions(map(parse_option, options), spec.option_specs)
+        opts = api_options(map(parse_option, options), spec.option_specs)
     catch e
         e isa PkgError && return String[]
         rethrow()

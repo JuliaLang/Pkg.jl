@@ -32,7 +32,7 @@ end
 
 # TODO assert names matching lex regex
 # assert now so that you don't fail at user time
-# see function `REPLMode.APIOptions`
+# see function `REPLMode.api_options`
 function OptionSpec(;name::String,
                     short_name::Union{Nothing,String}=nothing,
                     takes_arg::Bool=false,
@@ -293,20 +293,23 @@ parse(input::String) =
 #------------#
 # APIOptions #
 #------------#
+
+# Do NOT introduce a constructor for APIOptions
+# as long as it's an alias for Dict
 const APIOptions = Dict{Symbol, Any}
-function APIOptions(options::Vector{Option},
-                    specs::Dict{String, OptionSpec},
-                    )::APIOptions
-    api_options = Dict{Symbol, Any}()
+function api_options(options::Vector{Option},
+                     specs::Dict{String, OptionSpec})
+    api_opts = APIOptions()
     enforce_option(options, specs)
     for option in options
         spec = specs[option.val]
-        api_options[spec.api.first] = spec.takes_arg ?
+        api_opts[spec.api.first] = spec.takes_arg ?
             spec.api.second(option.argument) :
             spec.api.second
     end
-    return api_options
+    return api_opts
 end
+
 Context!(ctx::APIOptions)::Context = Types.Context!(collect(ctx))
 
 #---------#
@@ -361,7 +364,7 @@ This step is distinct from `parse` in that it relies on the command specificatio
 """
 function Command(statement::Statement)::Command
     # options
-    options = APIOptions(statement.options, statement.spec.option_specs)
+    options = api_options(statement.options, statement.spec.option_specs)
     # arguments
     arg_spec = statement.spec.argument_spec
     arguments = arg_spec.parser(statement.arguments, options)
