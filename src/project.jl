@@ -122,6 +122,7 @@ function Project(raw::Dict)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
+    project.paths    = get(() -> Dict{String, String}(), raw, "paths")
     validate(project)
     return project
 end
@@ -171,10 +172,11 @@ function destructure(project::Project)::Dict
     entry!("extras",   project.extras)
     entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
     entry!("targets",  project.targets)
+    entry!("paths",    project.paths)
     return raw
 end
 
-_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "compat"]
+_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "paths", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 

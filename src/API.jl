@@ -1644,6 +1644,9 @@ function _activate_dep(dep_name::AbstractString)
         err isa PkgError || rethrow()
         return
     end
+    if haskey(ctx.env.project.paths, dep_name)
+        return joinpath(dirname(ctx.env.project_file), ctx.env.project.paths[dep_name])
+    end
     uuid = get(ctx.env.project.deps, dep_name, nothing)
     if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)

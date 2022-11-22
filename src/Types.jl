@@ -242,6 +242,7 @@ Base.@kwdef mutable struct Project
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
+    paths::Dict{String, String} = Dict{String, String}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
