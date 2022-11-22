@@ -181,6 +181,31 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
     end
 end
 
+function update_source_if_set(project, pkg)
+    source = get(project.sources, pkg.name, nothing)
+    source === nothing && return
+    # This should probably not modify the dicts directly...
+    if pkg.repo.source !== nothing
+        source["url"] = pkg.repo.source
+    end
+    if pkg.repo.rev !== nothing
+        source["rev"] = pkg.repo.rev
+    end
+    if pkg.path !== nothing
+        source["path"] = pkg.path
+    end
+    path, repo = get_path_repo(project, pkg.name)
+    if path !== nothing
+        pkg.path = path
+    end
+    if repo.source !== nothing
+        pkg.repo.source = repo.source
+    end
+    if repo.rev !== nothing
+        pkg.repo.rev = repo.rev
+    end
+end
+
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=Operations.default_preserve(), platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
@@ -212,6 +237,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 
     new_git = handle_repos_develop!(ctx, pkgs, shared)
 
+
     for pkg in pkgs
         if Types.collides_with_project(ctx.env, pkg)
             pkgerror("package $(err_rep(pkg)) has the same name or UUID as the active project")
@@ -219,6 +245,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
+        update_source_if_set(ctx.env.project, pkg)
     end
 
     Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
@@ -272,6 +299,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
         if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
+        update_source_if_set(ctx.env.project, pkg)
     end
 
     Operations.add(ctx, pkgs, new_git; preserve, platform, target)
@@ -311,12 +339,14 @@ end
 function append_all_pkgs!(pkgs, ctx, mode)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         for (name::String, uuid::UUID) in ctx.env.project.deps
-            push!(pkgs, PackageSpec(name=name, uuid=uuid))
+            path, repo = get_path_repo(ctx.env.project, name)
+            push!(pkgs, PackageSpec(name=name, uuid=uuid, path=path, repo=repo))
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         for (uuid, entry) in ctx.env.manifest
-            push!(pkgs, PackageSpec(name=entry.name, uuid=uuid))
+            path, repo = get_path_repo(ctx.env.project, entry.name)
+            push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, path=path, repo=repo))
         end
     end
     return
@@ -347,6 +377,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
+
     Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
     return
 end

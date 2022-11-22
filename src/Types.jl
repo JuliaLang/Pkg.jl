@@ -25,7 +25,7 @@ export UUID, SHA1, VersionRange, VersionSpec,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
-    read_project, read_package, read_manifest,
+    read_project, read_package, read_manifest, get_path_repo,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED,
@@ -257,6 +257,7 @@ Base.@kwdef mutable struct Project
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
+    sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
@@ -1102,6 +1103,24 @@ function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry,Nothi
 end
 function write_env(env::EnvCache; update_undo=true,
                    skip_writing_project::Bool=false)
+    # Verify that the generated manifest is consistent with `sources`
+    for (pkg, uuid) in env.project.deps
+        path, repo = get_path_repo(env.project, pkg)
+        entry = manifest_info(env.manifest, uuid)
+        if path !== nothing
+            @assert entry.path == path
+        end
+        if repo != GitRepo()
+            @show repo, entry.repo
+            @assert entry.repo.source == repo.source
+            if repo.rev !== nothing
+                @assert entry.repo.rev == repo.rev
+            end
+            if entry.repo.subdir !== nothing
+                @assert entry.repo.subdir == repo.subdir
+            end
+        end
+    end
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end

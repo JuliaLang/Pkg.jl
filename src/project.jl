@@ -1,8 +1,24 @@
 #########
 # UTILS #
 #########
-listed_deps(project::Project) =
-    append!(collect(keys(project.deps)), collect(keys(project.extras)), collect(keys(project.weakdeps)))
+listed_deps(project::Project; include_weak::Bool) =
+    vcat(collect(keys(project.deps)), collect(keys(project.extras)), include_weak ? collect(keys(project.weakdeps)) : String[])
+
+function get_path_repo(project::Project, name::String)
+    source = get(project.sources, name, nothing)
+    if source === nothing
+        return nothing, GitRepo()
+    end
+    path   = get(source, "path",   nothing)::Union{String, Nothing}
+    url    = get(source, "url",    nothing)::Union{String, Nothing}
+    rev    = get(source, "rev",    nothing)::Union{String, Nothing}
+    subdir = get(source, "subdir", nothing)::Union{String, Nothing}
+    if path !== nothing && url !== nothing
+        pkgerror("`path` and `url` are conflicting specifications")
+    end
+    repo = GitRepo(url, rev, subdir)
+    return path, repo
+end
 
 ###########
 # READING #
@@ -74,6 +90,25 @@ end
 read_project_compat(raw, project::Project) =
     pkgerror("Expected `compat` section to be a key-value list")
 
+read_project_sources(::Nothing, project::Project) = Dict{String,Any}()
+function read_project_sources(raw::Dict{String,Any}, project::Project)
+    valid_keys = ("path", "url", "rev")
+    sources = Dict{String,Any}()
+    for (name, source) in raw
+        if !(source isa AbstractDict)
+            pkgerror("Expected `source` section to be a table")
+        end
+        for key in keys(source)
+            key in valid_keys || pkgerror("Invalid key `$key` in `source` section")
+        end
+        if haskey(source, "path") && (haskey(source, "url") || haskey(source, "rev"))
+            pkgerror("Both `path` and `url` or `rev` are specified in `source` section")
+        end
+        sources[name] = source
+    end
+    return sources
+end
+
 function validate(project::Project; file=nothing)
     # deps
     location_string = file === nothing ? "" : " at $(repr(file))."
@@ -100,7 +135,7 @@ function validate(project::Project; file=nothing)
     end
     =#
     # targets
-    listed = listed_deps(project)
+    listed = listed_deps(project; include_weak=true)
     for (target, deps) in project.targets, dep in deps
         if length(deps) != length(unique(deps))
             pkgerror("A dependency was named twice in target `$target`")
@@ -110,10 +145,16 @@ function validate(project::Project; file=nothing)
             """ * location_string)
     end
     # compat
-    for (name, version) in project.compat
+    for name in keys(project.compat)
         name == "julia" && continue
         name in listed ||
             pkgerror("Compat `$name` not listed in `deps`, `weakdeps` or `extras` section" * location_string)
+    end
+     # sources
+     listed_nonweak = listed_deps(project; include_weak=false)
+     for name in keys(project.sources)
+        name in listed_nonweak ||
+            pkgerror("Sources for `$name` not listed in `deps` or `extras` section" * location_string)
     end
 end
 
@@ -128,6 +169,7 @@ function Project(raw::Dict; file=nothing)
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
     project.weakdeps = read_project_deps(get(raw, "weakdeps", nothing), "weakdeps")
     project.exts     = get(Dict{String, String}, raw, "extensions")
+    project.sources  = read_project_sources(get(raw, "sources", nothing), project)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
@@ -183,13 +225,14 @@ function destructure(project::Project)::Dict
     entry!("path",     project.path)
     entry!("deps",     merge(project.deps, project._deps_weak))
     entry!("weakdeps", project.weakdeps)
+    entry!("sources",  project.sources)
     entry!("extras",   project.extras)
     entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
     entry!("targets",  project.targets)
     return raw
 end
 
-const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "weakdeps", "extensions", "compat"]
+const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "weakdeps", "sources", "extensions", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
@@ -200,7 +243,14 @@ end
 write_project(project::Project, project_file::AbstractString) =
     write_project(destructure(project), project_file)
 function write_project(io::IO, project::Dict)
-    TOML.print(io, project, sorted=true, by=key -> (project_key_order(key), key)) do x
+    inline_tables = Base.IdSet{Dict}()
+    if haskey(project, "sources")
+        for source in values(project["sources"])
+            source isa Dict || error("Expected `sources` to be a table")
+            push!(inline_tables, source)
+        end
+    end
+    TOML.print(io, project; inline_tables, sorted=true, by=key -> (project_key_order(key), key)) do x
         x isa UUID || x isa VersionNumber || pkgerror("unhandled type `$(typeof(x))`")
         return string(x)
     end

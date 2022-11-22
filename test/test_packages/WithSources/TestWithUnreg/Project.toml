@@ -1,0 +1,15 @@
+name = "TestWithUnreg"
+uuid = "b22516cc-aa7b-4e1f-935d-71632a5f0028"
+authors = ["KristofferC <kristoffer.carlsson@juliacomputing.com>"]
+version = "0.1.0"
+
+[extras]
+LocalPkg = "fcf55292-0d03-4e8a-9e0b-701580031fc3"
+Unregistered = "dcb67f36-efa0-11e8-0cef-2fc465ed98ae"
+
+[sources]
+LocalPkg = {path = "../LocalPkg"}
+Unregistered = {url = "https://github.com/00vareladavid/Unregistered.jl", rev = "1b7a462"}
+
+[targets]
+test = ["LocalPkg", "Unregistered"]
