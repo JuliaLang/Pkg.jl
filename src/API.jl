@@ -307,7 +307,8 @@ end
 function append_all_pkgs!(pkgs, ctx, mode)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         for (name::String, uuid::UUID) in ctx.env.project.deps
-            push!(pkgs, PackageSpec(name=name, uuid=uuid))
+            path = haskey(ctx.env.project.paths, name) ? ctx.env.project.paths[name] : nothing
+            push!(pkgs, PackageSpec(name=name, uuid=uuid, path=path))
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
