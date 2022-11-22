@@ -65,9 +65,10 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
     pkgs = copy(pkgs)
     for (name::String, uuid::UUID) in env.project.deps
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        path, repo = get_path_repo(env.project, name)
         entry = manifest_info(env.manifest, uuid)
         push!(pkgs, entry === nothing ?
-              PackageSpec(;uuid=uuid, name=name) :
+              PackageSpec(;uuid=uuid, name=name, path=path, repo=repo) :
               PackageSpec(;
                 uuid      = uuid,
                 name      = name,
@@ -214,8 +215,9 @@ function collect_project!(pkg::PackageSpec, path::String,
     end
     =#
     for (name, uuid) in project.deps
+        path, repo = get_path_repo(project, name)
         vspec = get_compat(project, name)
-        push!(deps_map[pkg.uuid], PackageSpec(name, uuid, vspec))
+        push!(deps_map[pkg.uuid], PackageSpec(name=name, uuid=uuid, version=vspec, path=path, repo=repo))
     end
     if project.version !== nothing
         pkg.version = project.version

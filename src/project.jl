@@ -4,6 +4,12 @@
 listed_deps(project::Project) =
     append!(collect(keys(project.deps)), collect(keys(project.extras)))
 
+function get_path_repo(project::Project, name::String)
+    source = get(project.sources, name, nothing)
+    source === nothing && return nothing, GitRepo()
+    return source isa String ? (source, GitRepo()) : (nothing, source)
+end
+
 ###########
 # READING #
 ###########
@@ -73,6 +79,30 @@ end
 read_project_compat(raw, project::Project) =
     pkgerror("Expected `compat` section to be a key-value list")
 
+function read_git_repo(source::Dict)
+    (haskey(source, "url") && haskey(source, "rev")) ||
+        pkgerror("Expected `url` and `rev` keys for source `$name` in Project.toml `[sources]` section")
+    repo = GitRepo()
+    repo.source = source["url"]
+    repo.rev = source["rev"]
+    repo.subdir = get(source, "subdir", nothing)
+    return repo
+end
+
+read_project_sources(::Nothing, project::Project) = Dict{String,Any}()
+function read_project_sources(raw::Dict{String,Any}, project::Project)
+    sources = Dict{String,Any}()
+    for (name, source) in raw
+        if source isa String
+            # relative path to local package location
+            sources[name] = source
+        else
+            sources[name] = read_git_repo(source)
+        end
+    end
+    return sources
+end
+
 function validate(project::Project)
     # deps
     dep_uuids = collect(values(project.deps))
@@ -111,6 +141,40 @@ function validate(project::Project)
     end
 end
 
+read_project_parent(::Nothing) = nothing
+function read_project_parent(path, parent::String)
+    path isa IO && return nothing
+    orig_path = dirname(path)
+    while true
+        path = dirname(path)
+        if path == "/"
+            @warn "Could not find parent project: `$parent`"
+            break
+        end
+        file = joinpath(path, "Project.toml")
+        if isfile(file)
+            raw = parse_toml(file)
+            if get(raw, "name", "") == parent
+                sources = get(raw, "sources", nothing)
+                if sources !== nothing
+                    # adjust relative path sources to subproject
+                    for (k, v) in sources
+                        if v isa String
+                            sources[k] = relpath(joinpath(path, v), orig_path)
+                        else
+                            sources[k] = read_git_repo(v)
+                        end
+                    end
+                    return sources
+                else
+                    break
+                end
+            end
+        end
+    end
+    return nothing
+end
+
 function Project(raw::Dict)
     project = Project()
     project.other    = raw
@@ -118,7 +182,9 @@ function Project(raw::Dict)
     project.manifest = get(raw, "manifest", nothing)::Union{String, Nothing}
     project.uuid     = read_project_uuid(get(raw, "uuid", nothing))
     project.version  = read_project_version(get(raw, "version", nothing))
+    project.parent   = get(raw, "parent", nothing)
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
+    project.sources  = read_project_sources(get(raw, "sources", nothing), project)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
@@ -139,7 +205,14 @@ function read_project(f_or_io::Union{String, IO})
         end
         rethrow()
     end
-    return Project(raw)
+    proj = Project(raw)
+    if proj.parent !== nothing
+        sources = read_project_parent(f_or_io, proj.parent)
+        if sources !== nothing
+            proj.sources = sources
+        end
+    end
+    return proj
 end
 
 
@@ -166,15 +239,17 @@ function destructure(project::Project)::Dict
     entry!("name",     project.name)
     entry!("uuid",     project.uuid)
     entry!("version",  project.version)
+    entry!("parent",   project.parent)
     entry!("manifest", project.manifest)
     entry!("deps",     project.deps)
+    entry!("sources",  project.sources)
     entry!("extras",   project.extras)
     entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
     entry!("targets",  project.targets)
     return raw
 end
 
-_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "compat"]
+_project_key_order = ["name", "uuid", "version", "parent", "keywords", "license", "desc", "deps", "sources", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 

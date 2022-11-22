@@ -1,0 +1,8 @@
+name = "C"
+uuid = "4ee78ca3-4e78-462f-a078-747ed543fa86"
+version = "0.0.0"
+parent = "A"
+
+[deps]
+D = "bf733257-898a-45a0-b2f2-c1c188bdd870"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

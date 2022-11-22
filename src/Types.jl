@@ -26,7 +26,7 @@ export UUID, SHA1, VersionRange, VersionSpec,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
-    read_project, read_package, read_manifest,
+    read_project, read_package, read_manifest, get_path_repo,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
@@ -236,12 +236,14 @@ Base.@kwdef mutable struct Project
     name::Union{String, Nothing} = nothing
     uuid::Union{UUID, Nothing} = nothing
     version::Union{VersionTypes, Nothing} = nothing
+    parent::Union{String, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
+    sources::Dict{String,Any} = Dict{String,Any}() # name = relative path or GitRepo
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)

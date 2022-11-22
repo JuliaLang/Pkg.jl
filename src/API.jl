@@ -307,7 +307,8 @@ end
 function append_all_pkgs!(pkgs, ctx, mode)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         for (name::String, uuid::UUID) in ctx.env.project.deps
-            push!(pkgs, PackageSpec(name=name, uuid=uuid))
+            path, repo = get_path_repo(ctx.env.project, name)
+            push!(pkgs, PackageSpec(name=name, uuid=uuid, path=path, repo=repo))
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
@@ -1648,6 +1649,9 @@ function _activate_dep(dep_name::AbstractString)
     catch err
         err isa PkgError || rethrow()
         return
+    end
+    if haskey(ctx.env.project.sources, dep_name) && ctx.env.project.sources[dep_name] isa String
+        return joinpath(dirname(ctx.env.project_file), ctx.env.project.sources[dep_name])
     end
     uuid = get(ctx.env.project.deps, dep_name, nothing)
     if uuid !== nothing
