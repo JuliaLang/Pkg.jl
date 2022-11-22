@@ -307,7 +307,8 @@ end
 function append_all_pkgs!(pkgs, ctx, mode)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         for (name::String, uuid::UUID) in ctx.env.project.deps
-            push!(pkgs, PackageSpec(name=name, uuid=uuid))
+            path = dep_path(ctx.env.project, uuid)
+            push!(pkgs, PackageSpec(name=name, uuid=uuid, path=path))
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
@@ -1645,6 +1646,10 @@ function _activate_dep(dep_name::AbstractString)
         return
     end
     uuid = get(ctx.env.project.deps, dep_name, nothing)
+    path = dep_path(ctx.env.project, uuid)
+    if path !== nothing
+        return path
+    end
     if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
         if entry.path !== nothing

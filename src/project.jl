@@ -4,6 +4,10 @@
 listed_deps(project::Project) =
     append!(collect(keys(project.deps)), collect(keys(project.extras)))
 
+dep_path(project::Project, uuid::UUID) =
+    project.pathregistry !== nothing && haskey(project.pathregistry, uuid) ?
+        project.pathregistry[uuid].path : nothing
+
 ###########
 # READING #
 ###########
@@ -27,6 +31,17 @@ function read_project_version(version::String)
     end
 end
 read_project_version(version) = pkgerror("Expected project version to be a string")
+
+read_project_pathregistry(f_or_io, ::Nothing) = nothing
+function read_project_pathregistry(f_or_io, pathregistry::String)
+    try
+        path = f_or_io isa AbstractString ? joinpath(dirname(f_or_io), pathregistry) : pathregistry
+        return RegistryInstance(path)
+    catch err
+        err isa ArgumentError || rethrow()
+        pkgerror("Could not parse project path registry as a path: `$pathregistry`")
+    end
+end
 
 read_project_deps(::Nothing, section::String) = Dict{String,UUID}()
 function read_project_deps(raw::Dict{String,Any}, section_name::String)
@@ -111,13 +126,14 @@ function validate(project::Project)
     end
 end
 
-function Project(raw::Dict)
+function Project(f_or_io, raw::Dict)
     project = Project()
     project.other    = raw
     project.name     = get(raw, "name", nothing)::Union{String, Nothing}
     project.manifest = get(raw, "manifest", nothing)::Union{String, Nothing}
     project.uuid     = read_project_uuid(get(raw, "uuid", nothing))
     project.version  = read_project_version(get(raw, "version", nothing))
+    project.pathregistry = read_project_pathregistry(f_or_io, get(raw, "pathregistry", nothing))
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
@@ -139,7 +155,7 @@ function read_project(f_or_io::Union{String, IO})
         end
         rethrow()
     end
-    return Project(raw)
+    return Project(f_or_io, raw)
 end
 
 
@@ -157,15 +173,16 @@ function destructure(project::Project)::Dict
     end
 
     # if a field is set to its default value, don't include it in the write
-    function entry!(key::String, src)
+    function entry!(key::String, src, field=nothing)
         should_delete(x::Dict) = isempty(x)
         should_delete(x)       = x === nothing
-        should_delete(src) ? delete!(raw, key) : (raw[key] = src)
+        should_delete(src) ? delete!(raw, key) : (raw[key] = field === nothing ? src : getfield(src, field))
     end
 
     entry!("name",     project.name)
     entry!("uuid",     project.uuid)
     entry!("version",  project.version)
+    entry!("pathregistry", project.pathregistry, :path)
     entry!("manifest", project.manifest)
     entry!("deps",     project.deps)
     entry!("extras",   project.extras)
@@ -174,7 +191,7 @@ function destructure(project::Project)::Dict
     return raw
 end
 
-_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "compat"]
+_project_key_order = ["name", "uuid", "keywords", "license", "desc", "pathregistry", "deps", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 

@@ -12,6 +12,7 @@ using REPL.TerminalMenus
 
 using TOML
 import ..Pkg, ..Registry
+import ..Registry: RegistryInstance
 import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
@@ -24,7 +25,7 @@ export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
-    registered_name,
+    registered_name, dep_path,
     manifest_info,
     read_project, read_package, read_manifest,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
@@ -236,6 +237,7 @@ Base.@kwdef mutable struct Project
     name::Union{String, Nothing} = nothing
     uuid::Union{UUID, Nothing} = nothing
     version::Union{VersionTypes, Nothing} = nothing
+    pathregistry::Union{Nothing, RegistryInstance} = nothing
     manifest::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
