@@ -160,6 +160,11 @@ function load_tree_hash!(registries::Vector{Registry.RegistryInstance}, pkg::Pac
         reg_pkg = get(reg, pkg.uuid, nothing)
         reg_pkg === nothing && continue
         pkg_info = Registry.registry_info(reg_pkg)
+        if pkg_info.path !== nothing
+            # registered fixed package
+            pkg.path = pkg_info.path
+            return pkg
+        end
         version_info = get(pkg_info.version_info, pkg.version, nothing)
         version_info === nothing && continue
         hash′ = version_info.git_tree_sha1

@@ -44,6 +44,8 @@ struct PkgInfo
     # Package.toml:
     repo::Union{String, Nothing}
     subdir::Union{String, Nothing}
+    # relative path to local package location
+    path::Union{String, Nothing}
 
     # Versions.toml:
     version_info::Dict{VersionNumber, VersionInfo}
@@ -149,6 +151,7 @@ function init_package_info!(pkg::PkgEntry)
     name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
     repo = get(d_p, "repo", nothing)::Union{Nothing, String}
     subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
+    path = get(d_p, "path", nothing)::Union{Nothing, String}
 
     # Versions.toml
     d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ? 
@@ -182,7 +185,7 @@ function init_package_info!(pkg::PkgEntry)
     # All packages depend on julia
     deps[VersionRange()] = Dict("julia" => JULIA_UUID)
 
-    @init! pkg.info = PkgInfo(repo, subdir, version_info, compat, deps)
+    @init! pkg.info = PkgInfo(repo, subdir, path, version_info, compat, deps)
 
     return pkg.info
 end
