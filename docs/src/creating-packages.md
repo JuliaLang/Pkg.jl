@@ -254,7 +254,7 @@ It is sometimes desirable to be able to extend some functionality of a package w
 unconditionally take on the cost (in terms of e.g. load time) of adding an extra dependency.
 A *glue package* is a file that gets automatically loaded when some other set of packages are
 loaded into the Julia session. This is very similar to functionality that the external package
-Requires.jl used to provide, but which is now aviable directly through Julia.
+Requires.jl used to provide, but which is now available directly through Julia.
 
 A useful application of glue packages could be for a plotting package that should be able to plot
 objects from a wide variety of different Julia packages.
