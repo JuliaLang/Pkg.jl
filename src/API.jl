@@ -1096,6 +1096,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
 
+    gluepkgs = Dict{Base.PkgId, String}() # gluepkg -> parent
     # make a flat map of each dep and its deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
     pkg_specs = PackageSpec[]
@@ -1117,6 +1118,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
             gluepkg = Base.PkgId(gluepkg_uuid, gluepkg_name)
             push!(pkg_specs, PackageSpec(uuid = gluepkg_uuid, name = gluepkg_name)) # create this here as the name cannot be looked up easily later via the uuid
             depsmap[gluepkg] = filter!(!Base.in_sysimage, gluepkg_deps)
+            gluepkgs[gluepkg] = pkg.name
         end
     end
 
@@ -1260,7 +1262,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         final_loop || print(iostr, sprint(io -> show_progress(io, bar; termwidth = displaysize(ctx.io)[2]); context=io), "\n")
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
-                            name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
+                            _name = haskey(gluepkgs, dep) ? string(gluepkgs[dep], " → ", dep.name) : dep.name
+                            name = dep in direct_deps ? _name : string(color_string(_name, :light_black))
                             if dep in precomperr_deps
                                 print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
                             elseif haskey(failed_deps, dep)
@@ -1334,7 +1337,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
-                    name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
+                    _name = haskey(gluepkgs, pkg) ? string(gluepkgs[pkg], " → ", pkg.name) : pkg.name
+                    name = is_direct_dep ? _name : string(color_string(_name, :light_black))
                     !fancyprint && lock(print_lock) do
                         isempty(pkg_queue) && printpkgstyle(io, :Precompiling, target)
                     end
