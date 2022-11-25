@@ -297,7 +297,7 @@ end # module
 
 `glue/GlueContour.jl` (can also be in `glue/GlueContour/GlueContour.jl`):
 ```julia
-module GlueContour
+module GlueContour # Should be same name as the file (just like a normal package)
 
 using Plotting, Contour
 
