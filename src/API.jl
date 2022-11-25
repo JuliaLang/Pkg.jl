@@ -1650,7 +1650,7 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
-        weak && pkgerror("Compat status has no `weak` mode")
+        glue && pkgerror("Compat status has no `glue` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
         Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, glue)
