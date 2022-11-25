@@ -167,7 +167,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
                 kwargs = merge((;kwargs...), (:mode => mode,))
             end
             # Handle $f() case
-            if pkg == PackageSpec(; version=nothing)
+            if all(isnothing, [name,uuid,version,url,rev,path,subdir])
                 $f(PackageSpec[]; kwargs...)
             else
                 $f(pkg; kwargs...)
