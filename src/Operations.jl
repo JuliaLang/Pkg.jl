@@ -154,13 +154,15 @@ end
 function fixup_glue!(env, pkgs)
     for pkg in pkgs
         v = joinpath(source_path(env.project_file, pkg), "Project.toml")
-        entry = env.manifest[pkg.uuid]
-        if isfile(v)
-            p = Types.read_project(v)
-            entry.gluedeps = p.gluedeps
-            entry.gluepkgs = p.gluepkgs
-            for (name, _) in p.gluedeps
-                delete!(entry.deps, name)
+        if haskey(env.manifest, pkg.uuid)
+            entry = env.manifest[pkg.uuid]
+            if isfile(v)
+                p = Types.read_project(v)
+                entry.gluedeps = p.gluedeps
+                entry.gluepkgs = p.gluepkgs
+                for (name, _) in p.gluedeps
+                    delete!(entry.deps, name)
+                end
             end
         end
     end
