@@ -253,7 +253,8 @@ This is an important topic so there is a separate chapter about it: [Compatibili
 It is sometimes desirable to be able to extend some functionality of a package without having to
 unconditionally take on the cost (in terms of e.g. load time) of adding an extra dependency.
 A *glue package* is a file that gets automatically loaded when some other set of packages are
-loaded into the Julia session.
+loaded into the Julia session. This is very similar to functionality that the external package
+Requires.jl used to provide, but which is now aviable directly through Julia.
 
 A useful application of glue packages could be for a plotting package that should be able to plot
 objects from a wide variety of different Julia packages.
@@ -270,9 +271,6 @@ name = "Plotting"
 version = "0.1.0"
 uuid = "..."
 
-[deps]
-Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
-
 [gluedeps]
 Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 
@@ -283,17 +281,15 @@ Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 GlueContour = "Contour" 
 
 [compat] # compat can also be given on glue dependencies
-Colors = "0.12.8"
 Contour = "0.6.2"
 ```
 
 `src/Plotting.jl`:
 ```julia
 module Plotting
-using Colors
 
-function plot(x::Colors.Color)
-    # Some functionality for plotting a color here
+function plot(x::Vector)
+    # Some functionality for plotting a vector here
 end
 
 end # module
@@ -312,13 +308,47 @@ end
 end # module
 ```
 
-A user that depends on `Plotting` will not pay the code of the "glue code" inside the `GlueContour` module.
-It is only when the `Contour` package actually gets loaded that the `GlueCountour` glue package will get loaded
+A user that depends on `Plotting` will not pay the cost of the "glue code" inside the `GlueContour` module.
+It is only when the `Contour` package actually gets loaded that the `GlueCountour` glue package is loaded
 and provide the new functionality.
 
-Compatibility can be set on glue dependencies just like normal dependencies.
+Compatibility can be set on glue dependencies just like normal dependencies and they can be used in the `test`
+target to make them available when testing.
 
 A glue package will only be loaded if the glue dependencies are loaded from the same environment or environments higher in the environment stack than the package itself.
+
+
+!!! compat
+    In order to be compatible with earlier versions of Julia, some extra steps have to be taken.
+    These are: Duplicate the packages under `[gluedeps]` into `[extras]`. This is an unfortunate
+    duplication but without doing this the project verifier under older Julia versions will complain (error).
+
+### Backwards compatibility with Requires.jl
+
+Since glue packages and Requires.jl are solving the same problem,
+it is useful to know how to use Requires.jl on older Julia versions while seamlessly
+transitioning into using glue packages on newer Julia versions that support it.
+This is done by making the following changes (using the example above):
+
+- Add the following to the package file. This makes it so that Requires.jl loads and inserts the
+  callback only when glue packages are not supported
+  ```julia
+  # This symbol is only defined on Julia versions that support glue packages
+  if isdefined(Base, :get_gluepkg)
+  using Requires
+  function __init__()
+      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../glue/GlueContour.jl)
+  end
+  end
+  ```
+
+- Do the following change in the glue packages for loading the glue dependency:
+ ```julia
+ isdefined(Base, :get_gluepkg) ? (using Contour) : (using ..Contour)
+ ```
+
+The package should now work with Requires.jl on Julia versions before glue packages were introduced
+and with glue packages afterward.
 
 ## Package naming guidelines
 
