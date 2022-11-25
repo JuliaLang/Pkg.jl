@@ -1196,8 +1196,6 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     end
     target = string(isempty(pkgs) ? "project" : join(pkgs, ", "), "...")
 
-    target = string(isempty(pkgs) ? "project" : join(pkgs, ", "), "...")
-
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
     skipped_deps = Base.PkgId[]
