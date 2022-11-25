@@ -133,9 +133,6 @@ The following table describes the command line arguments to `--preserve` (in ord
 
 After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
 
-!!! compat "Julia 1.5"
-    Subdirectory specification requires at least Julia 1.5.
-
 **Examples**
 ```
 pkg> add Example
@@ -146,6 +143,7 @@ pkg> add Example#c37b675
 pkg> add https://github.com/JuliaLang/Example.jl#master
 pkg> add git@github.com:JuliaLang/Example.jl.git
 pkg> add "git@github.com:JuliaLang/Example.jl.git"#master
+pkg> add https://github.com/Company/MonoRepo:juliapkgs/Package.jl
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
 """,
@@ -387,11 +385,11 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
-Show the status of the current environment.
-Packages marked with `⌃` have new versions that can be installed, e.g. via `pkg> up`.
-Those marked with `⌅` have new versions available, but that cannot be installed. To see why
-use `pkg> status --outdated` which shows any packages that are not at their latest version
-and if any packages are holding them back.
+Show the status of the current environment. Packages marked with `⌃` have new
+versions that may be installed, e.g. via `pkg> up`. Those marked with `⌅` have
+new versions available, but cannot be installed due to compatibility
+constraints. To see why use `pkg> status --outdated` which shows any packages
+that are not at their latest version and if any packages are holding them back.
 
 In `--project` mode (default), the status of the project file is summarized. In `--manifest`
 mode the output also includes the recursive dependencies of added packages given in the manifest.
@@ -399,13 +397,6 @@ If there are any packages listed as arguments the output will be limited to thos
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 The `--compat` option alone shows project compat entries.
-
-!!! compat "Julia 1.1"
-    `pkg> status` with package arguments requires at least Julia 1.1.
-
-!!! compat "Julia 1.3"
-    The `--diff` option requires at least Julia 1.3. In earlier versions `--diff`
-    is the default for environments in git repositories.
 
 !!! compat "Julia 1.8"
     The `⌃` and `⌅` indicators were added in Julia 1.8
@@ -476,12 +467,6 @@ Add package registries `reg...` to the user depot. Without arguments
 it adds known registries, i.e. the General registry and registries
 served by the configured package server.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
-!!! compat "Julia 1.5"
-    `registry add` without arguments requires at least Julia 1.5.
-
 **Examples**
 ```
 pkg> registry add General
@@ -501,9 +486,6 @@ PSA[:name => "remove",
     registry [rm|remove] reg...
 
 Remove package registries `reg...`.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 **Examples**
 ```
@@ -525,9 +507,6 @@ PSA[:name => "update",
 Update package registries `reg...`. If no registries are specified
 all registries will be updated.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 **Examples**
 ```
 pkg> registry up
@@ -543,9 +522,6 @@ PSA[:name => "status",
     registry [st|status]
 
 Display information about installed registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 **Examples**
 ```

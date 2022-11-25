@@ -30,9 +30,6 @@ Add new package registries.
 
 The no-argument `Pkg.Registry.add()` will install the default registries.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 # Examples
 ```julia
 Pkg.Registry.add("General")
@@ -63,7 +60,10 @@ function pkg_server_registry_info()
     tmp_path = tempname()
     download_ok = false
     try
-        download("$server/registries", tmp_path, verbose=false)
+        f = retry(delays = fill(1.0, 3)) do
+            download("$server/registries", tmp_path, verbose=false)
+        end
+        f()
         download_ok = true
     catch err
         @warn "could not download $server/registries" exception=err
@@ -169,7 +169,12 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
     registry_urls = pkg_server_registry_urls()
     for reg in regs
         if reg.path !== nothing && reg.url !== nothing
-            Pkg.Types.pkgerror("ambiguous registry specification; both url and path is set.")
+            Pkg.Types.pkgerror("""
+                ambiguous registry specification; both `url` and `path` are set:
+                    url=\"$(reg.url)\"
+                    path=\"$(reg.path)\"
+                """
+            )
         end
         url = get(registry_urls, reg.uuid, nothing)
         if url !== nothing && registry_read_from_tarball()
@@ -202,6 +207,11 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     registry = Registry.RegistryInstance(regpath)
                     printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                     return
+                elseif reg.url !== nothing && reg.linked == true
+                    pkgerror("""
+                    A symlinked registry was requested but `path` was not set and `url` was set to `$url`.
+                    Set only `path` and `linked = true` to use registry symlinking.
+                    """)
                 elseif url !== nothing && registry_use_pkg_server()
                     # download from Pkg server
                     try
@@ -221,7 +231,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                     return
                 elseif reg.url !== nothing # clone from url
-                    repo = GitTools.clone(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
+                    # retry to help spurious connection issues, particularly on CI
+                    repo = retry(GitTools.clone, delays = fill(1.0, 5), check=(s,e)->isa(e, LibGit2.GitError))(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
                     LibGit2.close(repo)
                 else
                     Pkg.Types.pkgerror("no path or url specified for registry")
@@ -262,9 +273,6 @@ end
     Pkg.Registry.rm(registry::RegistrySpec)
 
 Remove registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 # Examples
 ```julia
@@ -333,9 +341,6 @@ end
 
 Update registries. If no registries are given, update
 all available registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 # Examples
 ```julia
@@ -429,12 +434,24 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                 push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
                                 @goto done_git
                             end
+                            attempts = 0
+                            @label merge
                             ff_succeeded = try
                                 LibGit2.merge!(repo; branch="refs/remotes/origin/$branch", fastforward=true)
                             catch e
-                                e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND || rethrow()
-                                push!(errors, (reg.path, "branch origin/$branch not found"))
-                                @goto done_git
+                                attempts += 1
+                                if e isa LibGit2.GitError && e.code == LibGit2.Error.ELOCKED && attempts <= 3
+                                    @warn "Registry update attempt failed because repository is locked. Resetting and retrying." e
+                                    LibGit2.reset!(repo, LibGit2.head_oid(repo), LibGit2.Consts.RESET_HARD)
+                                    sleep(1)
+                                    @goto merge
+                                elseif e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND
+                                    push!(errors, (reg.path, "branch origin/$branch not found"))
+                                    @goto done_git
+                                else
+                                    rethrow()
+                                end
+
                             end
 
                             if !ff_succeeded
@@ -468,9 +485,6 @@ end
     Pkg.Registry.status()
 
 Display information about available registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 # Examples
 ```julia
