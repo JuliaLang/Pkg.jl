@@ -1,8 +1,22 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module PkgTests
+module PkgTestsOuter
+
+original_depot_path = copy(Base.DEPOT_PATH)
+original_load_path = copy(Base.LOAD_PATH)
+original_env = copy(ENV)
+
+module PkgTestsInner
 
 import Pkg
+
+# Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
+if Base.find_package("HistoricalStdlibVersions") === nothing
+    @info "Installing HistoricalStdlibVersions for Pkg tests"
+    Pkg.add("HistoricalStdlibVersions") # Needed for custom julia version resolve tests
+end
+
+import HistoricalStdlibVersions
 
 using Test, Logging
 
@@ -40,6 +54,8 @@ Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO
 
 include("utils.jl")
 
+Utils.check_init_reg()
+
 Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
     @testset "Pkg" begin
         try
@@ -67,6 +83,22 @@ Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger())
             islogging && close(Pkg.DEFAULT_IO[])
         end
     end
+end
+
+@showtime Base.Filesystem.temp_cleanup_purge(force=true)
+
+end # module
+
+empty!(Base.DEPOT_PATH)
+empty!(Base.LOAD_PATH)
+append!(Base.DEPOT_PATH, original_depot_path)
+append!(Base.LOAD_PATH, original_load_path)
+
+for k in setdiff(collect(keys(ENV)), collect(keys(original_env)))
+    delete!(ENV, k)
+end
+for (k, v) in pairs(original_env)
+    ENV[k] = v
 end
 
 end # module

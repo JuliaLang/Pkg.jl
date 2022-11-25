@@ -579,7 +579,7 @@ function install_git(
 )::Nothing
     repo = nothing
     tree = nothing
-    # TODO: Consolodate this with some of the repo handling in Types.jl
+    # TODO: Consolidate this with some of the repo handling in Types.jl
     try
         clones_dir = joinpath(depots1(), "clones")
         ispath(clones_dir) || mkpath(clones_dir)
@@ -879,7 +879,7 @@ function _get_deps!(collected_uuids::Set{UUID}, env::EnvCache, new_uuids)
     return collected_uuids
 end
 
-# TODO: This function should be replacable with `is_instantiated` but
+# TODO: This function should be replaceable with `is_instantiated` but
 # see https://github.com/JuliaLang/Pkg.jl/issues/2470
 function any_package_not_installed(manifest::Manifest)
     for (uuid, entry) in manifest
@@ -1005,12 +1005,12 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
             end
         else
             build_project_override = gen_target_project(ctx, pkg, source_path, "build")
-            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
+            with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
                 build_project_preferences = Base.get_preferences()
             end
         end
 
-        # Put log output in Pkg's scratchspace if the package is content adressed
+        # Put log output in Pkg's scratchspace if the package is content addressed
         # by tree sha and in the build directory if it is tracked by path etc.
         entry = manifest_info(ctx.env.manifest, uuid)
         if entry !== nothing && entry.tree_hash !== nothing
@@ -1018,7 +1018,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
             scratch = joinpath(pkg_scratchpath(), key)
             mkpath(scratch)
             log_file = joinpath(scratch, "build.log")
-            # Associate the logfile with the package beeing built
+            # Associate the logfile with the package being built
             dict = Dict{String,Any}(scratch => [
                 Dict{String,Any}("time" => Dates.now(), "parent_projects" => [projectfile_path(source_path)])
             ])
@@ -1133,7 +1133,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     filter!(ctx.env.project.targets) do (target, deps)
         !isempty(filter!(in(deps_names), deps))
     end
-    # only keep reachable manifest entires
+    # only keep reachable manifest entries
     prune_manifest(ctx.env)
     record_project_hash(ctx.env)
     # update project & manifest
@@ -1449,7 +1449,7 @@ function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg:
             # A pin in this case includes an implicit `free` to switch to tracking registered versions
             # First, make sure the package is registered so we have something to free to
             if is_all_registered(registries, [pkg]) !== true
-                pkgerror("unable to pin unregistered package $(err_rep(pkg)) to an arbritrary version")
+                pkgerror("unable to pin unregistered package $(err_rep(pkg)) to an arbitrary version")
             end
         end
     end
@@ -1492,7 +1492,7 @@ function update_package_free!(registries::Vector{Registry.RegistryInstance}, pkg
     return
 end
 
-# TODO: this is two techinically different operations with the same name
+# TODO: this is two technically different operations with the same name
 # split into two subfunctions ...
 function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
     foreach(pkg -> update_package_free!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid), err_if_free), pkgs)
@@ -1526,9 +1526,16 @@ function gen_test_code(source_path::String;
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
         """
+    coverage_arg = if coverage isa Bool
+        coverage ? string("@", source_path) : "none"
+    elseif coverage isa AbstractString
+        coverage
+    else
+        throw(ArgumentError("coverage should be a boolean or a string."))
+    end
     return ```
         $(Base.julia_cmd())
-        --code-coverage=$(coverage ? string("@", source_path) : "none")
+        --code-coverage=$(coverage_arg)
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes
@@ -1632,7 +1639,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         # Copy over preferences
         if preferences !== nothing
             open(tmp_preferences, "w") do io
-                TOML.print(io, preferences)
+                TOML.print(io, preferences::Dict{String, Any})
             end
         end
 
@@ -1795,7 +1802,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             end
         else
             test_project_override = gen_target_project(ctx, pkg, source_path, "test")
-            with_load_path([projectfile_path(source_path), Base.LOAD_PATH...]) do
+            with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
                 test_project_preferences = Base.get_preferences()
             end
         end
@@ -1953,7 +1960,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
 
-    # Check compat of dependees
+    # Check compat of dependencies
     for (uuid, dep_pkg) in manifest
         is_stdlib(uuid) && continue
         if !(pkg.uuid in values(dep_pkg.deps))
@@ -2164,17 +2171,17 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         tipend = manifest ? " -m" : ""
         tip = show_usagetips ? " To see why use `status --outdated$tipend`" : ""
         if !no_packages_upgradable && no_visible_packages_heldback
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available and may be upgradable.", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
             # only warn if showing project and outdated indirect deps are hidden
-            printpkgstyle(io, :Info, "Some packages have new versions but cannot be upgraded.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Some packages have new versions but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
     end
 
@@ -2260,7 +2267,7 @@ end
 
 function compat_line(io, pkg, uuid, compat_str, longest_dep_len; indent = "  ")
     iob = IOBuffer()
-    ioc = IOContext(iob, :color => get(io, :color, false))
+    ioc = IOContext(iob, :color => get(io, :color, false)::Bool)
     if isnothing(uuid)
         print(ioc, "$indent           ")
     else

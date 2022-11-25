@@ -240,6 +240,16 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
     end
 
+    @testset "coverage specific path" begin
+        mktempdir() do tmp
+            coverage_path = joinpath(tmp, "tracefile.info")
+            Pkg.add(TEST_PKG.name)
+            Pkg.test(TEST_PKG.name; coverage = coverage_path)
+            @test isfile(coverage_path)
+        end
+        Pkg.rm(TEST_PKG.name)
+    end
+
     @testset "pinning / freeing" begin
         Pkg.add(TEST_PKG.name)
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
@@ -370,7 +380,7 @@ temp_pkg_dir() do project_path
         # to precompile Pkg given we're in a different depot
         run(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg"`)
         # make sure the General registry is installed
-        Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg; Pkg.Registry.add()"`)
+        Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg; isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add()"`)
         flag_start_dir = tempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
         flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
         for i in 1:Sys.CPU_THREADS

@@ -55,9 +55,6 @@ UpgradeLevel
 
 ## Registry API Reference
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 The functional API for registries uses [`RegistrySpec`](@ref)s, similar to
 [`PackageSpec`](@ref).
 
@@ -70,9 +67,6 @@ Pkg.Registry.status
 ```
 
 ## [Artifacts API Reference](@id Artifacts-Reference)
-
-!!! compat "Julia 1.3"
-    Pkg's artifacts API requires at least Julia 1.3.
 
 ```@docs
 Pkg.Artifacts.create_artifact
