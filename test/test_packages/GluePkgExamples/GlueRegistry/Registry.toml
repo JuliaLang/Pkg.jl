@@ -1,0 +1,6 @@
+name = "GlueRegistry"
+uuid = "c22930c5-f744-4ce3-9117-e610c805c832"
+
+[packages]
+4d3288b3-3afc-4bb6-85f3-489fffe514c8 = { name = "HasGluePkgs", path = "H/HasGluePkgs" }
+d4ef3d4a-8e22-4710-85d8-c6cf2eb9efca = { name = "HasDepWithGluePkgs", path = "H/HasDepWithGluePkgs" }

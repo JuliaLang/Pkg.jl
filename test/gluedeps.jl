@@ -19,4 +19,16 @@ using Test
         Pkg.develop(path=joinpath(@__DIR__, "test_packages", "GluePkgExamples", "HasGluePkgs.jl"))
         @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "OffsetArrays", version = "0.9.0")
     end
+
+    isolate(loaded_depot=false) do
+        depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot)
+        Pkg.activate(; temp=true)
+        Pkg.Registry.add(Pkg.RegistrySpec(path=joinpath(@__DIR__, "test_packages", "GluePkgExamples", "GlueRegistry")))
+        Pkg.Registry.add("General")
+        Pkg.add("HasGluePkgs")
+        Pkg.test("HasGluePkgs")
+        Pkg.add("HasDepWithGluePkgs")
+        Pkg.test("HasDepWithGluePkgs")
+        @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "OffsetArrays", version = "0.9.0")
+    end
 end
