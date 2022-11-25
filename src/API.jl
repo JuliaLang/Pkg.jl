@@ -1098,6 +1098,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
 
     man = ctx.env.manifest
     deps_pair_or_nothing = Iterators.map(man) do dep
+    # make a flat map of each dep and its deps
         pkg = Base.PkgId(first(dep), last(dep).name)
         Base.in_sysimage(pkg) && return nothing
         deps = [Base.PkgId(last(x), first(x)) for x in last(dep).deps]
@@ -1105,6 +1106,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     end
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
 
+    # if the active environment is a package, add that
     ctx_env_pkg = ctx.env.pkg
     if ctx_env_pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", "$(ctx_env_pkg.name).jl") )
         depsmap[Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name)] = [
@@ -1114,8 +1116,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         push!(direct_deps, Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name))
     end
 
+    # return early if no deps
     isempty(depsmap) && return
 
+    # initialize signalling
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
@@ -1126,9 +1130,12 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         was_recompiled[pkgid] = false
         push!(pkg_specs, get_or_make_pkgspec(pkg_specs, ctx, pkgid.uuid))
     end
+
+    # remove packages that are suspended because they errored before
+    # note that when `Pkg.precompile` is manually called, all suspended packages are unsuspended
     precomp_prune_suspended!(pkg_specs)
 
-    # guarding against circular deps
+    # find and guard against circular deps
     circular_deps = Base.PkgId[]
     function in_deps(_pkgs, deps, dmap)
         isempty(deps) && return false
@@ -1145,8 +1152,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         @warn """Circular dependency detected. Precompilation will be skipped for:\n  $(join(string.(circular_deps), "\n  "))"""
     end
 
+    # if a list of packages is given, restrict to dependencies of given packages
     if !isempty(pkgs)
-        # if a list of packages is given, restrict to dependencies of given packages
         function collect_all_deps(depsmap, dep, alldeps=Base.PkgId[])
             append!(alldeps, depsmap[dep])
             for _dep in depsmap[dep]
@@ -1164,7 +1171,6 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         filter!(d->in(first(d), keep), depsmap)
         isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs))")
     end
-
     target = string(isempty(pkgs) ? "project" : join(pkgs, ", "), "...")
 
     pkg_queue = Base.PkgId[]
@@ -1203,7 +1209,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         end
     end
 
-    t_print = @async begin # fancy print loop
+    ## fancy print loop
+    t_print = @async begin
         try
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
@@ -1278,7 +1285,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     end
     tasks = Task[]
     Base.LOADING_CACHE[] = Base.LoadingCache()
-    for (pkg, deps) in depsmap # precompilation loop
+    ## precompilation loop
+    for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         if sourcepath === nothing
