@@ -1096,15 +1096,29 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
 
-    man = ctx.env.manifest
-    deps_pair_or_nothing = Iterators.map(man) do dep
     # make a flat map of each dep and its deps
+    depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
+    pkg_specs = PackageSpec[]
+    for dep in ctx.env.manifest
         pkg = Base.PkgId(first(dep), last(dep).name)
-        Base.in_sysimage(pkg) && return nothing
+        Base.in_sysimage(pkg) && continue
         deps = [Base.PkgId(last(x), first(x)) for x in last(dep).deps]
-        return pkg => filter!(!Base.in_sysimage, deps)
+        depsmap[pkg] = filter!(!Base.in_sysimage, deps)
+        # add any glue packages
+        for (gluepkg_name, gluedep_names) in last(dep).gluepkgs
+            gluepkg_deps = copy(deps) # depends on the deps of the parent package
+            push!(gluepkg_deps, pkg) # depends on parent package
+            gluedep_names = gluedep_names isa String ? String[gluedep_names] : gluedep_names
+            for gluedep_name in gluedep_names
+                gluedep = Base.identify_package(gluedep_name)
+                !isnothing(gluedep) && push!(gluepkg_deps, gluedep)
+            end
+            gluepkg_uuid = Base.uuid5(pkg.uuid, gluepkg_name)
+            gluepkg = Base.PkgId(gluepkg_uuid, gluepkg_name)
+            push!(pkg_specs, PackageSpec(uuid = gluepkg_uuid, name = gluepkg_name)) # create this here as the name cannot be looked up easily later via the uuid
+            depsmap[gluepkg] = filter!(!Base.in_sysimage, gluepkg_deps)
+        end
     end
-    depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
 
     # if the active environment is a package, add that
     ctx_env_pkg = ctx.env.pkg
@@ -1123,7 +1137,6 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
-    pkg_specs = PackageSpec[]
     for pkgid in keys(depsmap)
         started[pkgid] = false
         was_processed[pkgid] = Base.Event()
