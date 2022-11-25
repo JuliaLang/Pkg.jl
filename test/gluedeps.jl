@@ -11,6 +11,7 @@ using Test
         Pkg.activate(; temp=true)
         Pkg.develop(path=joinpath(@__DIR__, "test_packages", "GluePkgExamples", "HasDepWithGluePkgs.jl"))
         Pkg.test("HasDepWithGluePkgs")
+        Pkg.status(; glue=true, io=IOBuffer()) # TODO: Test output
     end
 
     isolate(loaded_depot=true) do

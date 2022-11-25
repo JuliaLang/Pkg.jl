@@ -154,7 +154,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx) # rm does too, but it's handled differently
+            $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
             return ret
         end
@@ -1640,14 +1640,14 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, io::IO=stdout_f(), kwargs...)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, glue::Bool=false, io::IO=stdout_f(), kwargs...)
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
-
+        weak && pkgerror("Compat status has no `weak` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, glue)
     end
     return nothing
 end

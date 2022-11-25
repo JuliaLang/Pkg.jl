@@ -419,7 +419,7 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, glue::Bool=false io::IO=stdout)
 
 Print out the status of the project/manifest.
 
@@ -449,6 +449,9 @@ If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
 that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`,
 print status also about those in the manifest (recursive dependencies). If there are
 any packages listed as arguments, the output will be limited to those packages.
+
+Setting `glue=true` will show dependencies with glue packages and what glue dependencies
+of those that are currently loaded.
 
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.

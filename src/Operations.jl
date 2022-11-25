@@ -2080,6 +2080,35 @@ function is_package_downloaded(project_file::String, pkg::PackageSpec; platform=
     return true
 end
 
+function status_glue_info(pkg::PackageSpec, env::EnvCache)
+    manifest = env.manifest
+    manifest_info = get(manifest, pkg.uuid, nothing)
+    manifest_info === nothing && return nothing
+    gluedepses = manifest_info.gluedeps
+    gluepkgs = manifest_info.gluepkgs
+    if !isempty(gluedepses) && !isempty(gluepkgs)
+        v = GlueInfo[]
+        for (gluepkg, gluedeps) in gluepkgs
+            gluedeps isa String && (gluedeps = String[gluedeps])
+            gluepkg_loaded = (Base.get_gluepkg(Base.PkgId(pkg.uuid, pkg.name), Symbol(gluepkg)) !== nothing)
+            # Check if deps are loaded
+            gluedeps_info= Tuple{String, Bool}[]
+            for gluedep in gluedeps
+                uuid = gluedepses[gluedep]
+                loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, gluedep))
+                push!(gluedeps_info, (gluedep, loaded))
+            end
+            push!(v, GlueInfo((gluepkg, gluepkg_loaded), gluedeps_info))
+        end
+        return v
+    end
+    return nothing
+end
+
+struct GlueInfo
+    gluepkg::Tuple{String, Bool} # name, loaded
+    gluedeps::Vector{Tuple{String, Bool}} # name, loaded
+end
 struct PackageStatusData
     uuid::UUID
     old::Union{Nothing, PackageSpec}
@@ -2089,10 +2118,11 @@ struct PackageStatusData
     heldback::Bool
     compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
     changed::Bool
+    glueinfo::Union{Nothing, Vector{GlueInfo}}
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, io::IO,
+                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, glue::Bool, io::IO,
                       mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
@@ -2129,7 +2159,6 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     lpadding = 2
 
     package_statuses = PackageStatusData[]
-    installed_cache = Dict{Base.PkgId, Bool}()
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
             continue
@@ -2137,6 +2166,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         latest_version = true
         # Outdated info
         cinfo = nothing
+        glue_info = nothing
         if !isnothing(new) && !is_stdlib(new.uuid)
             cinfo = status_compat_info(new, env, registries)
             if cinfo !== nothing
@@ -2147,6 +2177,17 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if outdated && latest_version
             continue
         end
+
+        if !isnothing(new) && !is_stdlib(new.uuid)
+            glue_info = status_glue_info(new, env)
+        end
+
+        if glue && glue_info == nothing
+            continue
+        end
+
+
+        # TODO: Show glue deps for project as well
 
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
 
@@ -2164,7 +2205,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         no_visible_packages_heldback &= (!changed || !pkg_heldback)
         no_packages_heldback &= !pkg_heldback
 
-        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed))
+        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, glue_info))
     end
 
     for pkg in package_statuses
@@ -2209,6 +2250,27 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
                 printstyled(io, pkg_str; color=Base.warn_color())
             end
         end
+
+        if glue && !diff && pkg.glueinfo !== nothing
+            println(io)
+            for (i, glue) in enumerate(pkg.glueinfo)
+                sym = i == length(pkg.glueinfo) ? '└' : '├'
+                function print_glue_entry(io, (name, installed))
+                    color = installed ? :light_green : :light_black
+                    printstyled(io, name, ;color)
+                end
+                print(io, "              ", sym, "─ ")
+                print_glue_entry(io, glue.gluepkg)
+
+                print(io, " [")
+                join(io,sprint.(print_glue_entry, glue.gluedeps; context=io), ", ")
+                print(io, "]")
+                if i != length(pkg.glueinfo)
+                    println(io)
+                end
+            end
+        end
+
         println(io)
     end
 
@@ -2263,7 +2325,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, outdated::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
+                io::IO, outdated::Bool=false, glue::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2290,10 +2352,10 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, glue, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, glue, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
         tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""
