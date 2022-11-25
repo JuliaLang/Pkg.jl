@@ -630,12 +630,12 @@ on all the registries in the vector.
 
 Below is a comparison between the REPL mode and the functional API::
 
-| `REPL`               | `API`                                           |
-|:---------------------|:------------------------------------------------|
-| `Registry`           | `RegistrySpec("Registry")`                      |
-| `Registry=a67d...`   | `RegistrySpec(name="Registry", uuid="a67d...")` |
-| `local/path`         | `RegistrySpec(path="local/path")`               |
-| `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`        |
+| `REPL`               | `API`                                             |
+|:---------------------|:--------------------------------------------------|
+| `MyRegistry`         | `RegistrySpec("MyRegistry")`                      |
+| `MyRegistry=a67d...` | `RegistrySpec(name="MyRegistry", uuid="a67d...")` |
+| `local/path`         | `RegistrySpec(path="local/path")`                 |
+| `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`          |
 """
 const RegistrySpec = Registry.RegistrySpec
 
