@@ -182,7 +182,7 @@ function destructure(project::Project)::Dict
     return raw
 end
 
-_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "compat"]
+_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "gluedeps", "gluepkgs", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
