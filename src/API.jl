@@ -1108,7 +1108,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         # add any glue packages
         gluedeps = last(dep).gluedeps
         for (gluepkg_name, gluedep_names) in last(dep).gluepkgs
-            gluepkg_deps = Base.PkgId[] # depends on the deps of the parent package
+            gluepkg_deps = Base.PkgId[]
             push!(gluepkg_deps, pkg) # depends on parent package
             all_gluedeps_available = true
             gluedep_names = gluedep_names isa String ? String[gluedep_names] : gluedep_names
