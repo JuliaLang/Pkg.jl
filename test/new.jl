@@ -2897,7 +2897,8 @@ end
 #
 @testset "Pkg.compat" begin
     # State changes
-    isolate(loaded_depot=true) do
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        Pkg.activate(tempdir)
         Pkg.add("Example")
         iob = IOBuffer()
         Pkg.status(compat=true, io = iob)
@@ -2923,8 +2924,73 @@ end
         @test occursin(r"Compat `.+Project.toml`", output)
         @test occursin(r"\[7876af07\] *Example *none", output)
         @test occursin(r"julia *1.8", output)
-    end
+    end end
+
+    # Test compat --current functionality
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "SimplePackage")
+        Pkg.activate(path)
+        # Add Example - this will automatically set a compat entry
+        Pkg.add("Example")
+
+        # Example now has a compat entry from the add operation
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") !== nothing
+
+        # Use compat current to set compat entry for packages without compat entries (like Markdown)
+        iob = IOBuffer()
+        Pkg.compat("Markdown", current=true, io=iob)
+        output = String(take!(iob))
+        @test occursin("new entry set for Markdown based on its current version", output)
+
+        Pkg.compat(current=true, io=iob)
+        output = String(take!(iob))
+        @test occursin("new entry set for julia based on its current version", output)
+
+        # Check that all compat entries are set
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "julia") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Markdown") !== nothing
+
+        # Test with no missing compat entries
+        iob = IOBuffer()
+        Pkg.compat(current=true, io=iob)
+        output = String(take!(iob))
+        @test occursin("no missing compat entries found. No changes made.", output)
+    end end
+
+    # Test compat current with multiple packages
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "SimplePackage")
+        Pkg.activate(path)
+        # Add both packages - this will automatically set compat entries for them
+        Pkg.add("Example")
+        Pkg.add("JSON")
+        Pkg.compat("Example", nothing)
+        Pkg.compat("JSON", nothing)
+
+        # Both packages now have compat entries from the add operations
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") === nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "JSON") === nothing
+
+        # Use compat current to set compat entries for packages without compat entries (like Markdown)
+        iob = IOBuffer()
+        Pkg.compat(current=true, io=iob)
+        output = String(take!(iob))
+        @test occursin("new entries set for", output)
+        @test occursin("julia", output)
+        @test occursin("Markdown", output)
+        @test occursin("Example", output)
+        @test occursin("JSON", output)
+
+        # Check that all compat entries are set
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "julia") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "JSON") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Markdown") !== nothing
+    end end
 end
+
+Pkg.activate()
 
 
 #

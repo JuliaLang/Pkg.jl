@@ -1,5 +1,5 @@
 # TODO: Overload
-function compat(ctx::Context; io = nothing)
+function _compat(ctx::Context; io = nothing)
     io = something(io, ctx.io)
     can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
     printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))

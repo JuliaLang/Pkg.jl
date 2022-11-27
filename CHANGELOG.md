@@ -6,6 +6,7 @@ Pkg v1.13 Release Notes
 - Packages are now automatically added to `[sources]` when they are added by url or devved.
 - `update` now shows a helpful tip when trying to upgrade a specific package that can be upgraded but is held back because it's part of a less optimal resolver solution ([#4266])
 - `Pkg.status` now displays yanked packages with a `[yanked]` indicator and shows a warning when yanked packages are present. `Pkg.resolve` errors also display warnings about yanked packages that are not resolvable. ([#4310])
+- Added `pkg> compat --current` command to automatically populate missing compat entries with the currently resolved package versions. Use `pkg> compat --current` for all packages or `pkg> compat Foo --current` for specific packages. ([#3266])
 
 Pkg v1.12 Release Notes
 =======================
@@ -127,3 +128,4 @@ Pkg v1.7 Release Notes
 [#2995]: https://github.com/JuliaLang/Pkg.jl/issues/2995
 [#3002]: https://github.com/JuliaLang/Pkg.jl/issues/3002
 [#3021]: https://github.com/JuliaLang/Pkg.jl/issues/3021
+[#3266]: https://github.com/JuliaLang/Pkg.jl/pull/3266

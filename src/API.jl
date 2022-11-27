@@ -1418,7 +1418,13 @@ function activate(f::Function, new_project::AbstractString)
     end
 end
 
-function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io = nothing, kwargs...)
+function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; current::Bool=false, io = nothing, kwargs...)
+    if current
+        if compat_str !== nothing
+            pkgerror("`current` is true, but `compat_str` is not nothing. This is not allowed.")
+        end
+        return set_current_compat(ctx, pkg; io=io)
+    end
     io = something(io, ctx.io)
     pkg = pkg == "Julia" ? "julia" : pkg
     isnothing(compat_str) || (compat_str = string(strip(compat_str, '"')))
@@ -1457,9 +1463,75 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         pkgerror("No package named $pkg in current Project")
     end
 end
-compat(pkg::String; kwargs...) = compat(pkg, nothing; kwargs...)
-compat(pkg::String, compat_str::Union{Nothing,String}; kwargs...) = compat(Context(), pkg, compat_str; kwargs...)
-compat(;kwargs...) = compat(Context(); kwargs...)
+function compat(ctx::Context=Context(); current::Bool=false, kwargs...)
+    if current
+        return set_current_compat(ctx; kwargs...)
+    end
+    return _compat(ctx; kwargs...)
+end
+compat(pkg::String, compat_str::Union{Nothing,String}=nothing;  kwargs...) = _compat(Context(), pkg, compat_str; kwargs...)
+
+
+function set_current_compat(ctx::Context, target_pkg::Union{Nothing,String}=nothing; io = nothing)
+    io = something(io, ctx.io)
+    updated_deps = String[]
+
+    deps_to_process = if target_pkg !== nothing
+        # Process only the specified package
+        if haskey(ctx.env.project.deps, target_pkg)
+            [(target_pkg, ctx.env.project.deps[target_pkg])]
+        else
+            pkgerror("Package $(target_pkg) not found in project dependencies")
+        end
+    else
+        # Process all packages (existing behavior)
+        collect(ctx.env.project.deps)
+    end
+
+    # Process regular package dependencies
+    for (dep, uuid) in deps_to_process
+        compat_str = Operations.get_compat_str(ctx.env.project, dep)
+        if target_pkg !== nothing || isnothing(compat_str)
+            entry = get(ctx.env.manifest, uuid, nothing)
+            entry === nothing && continue
+            v = entry.version
+            v === nothing && continue
+            pkgversion = string(Base.thispatch(v))
+            Operations.set_compat(ctx.env.project, dep, pkgversion) ||
+                pkgerror("invalid compat version specifier \"$(pkgversion)\"")
+            push!(updated_deps, dep)
+        end
+    end
+
+    # Also handle Julia compat entry when processing all packages (not when targeting a specific package)
+    if target_pkg === nothing
+        julia_compat_str = Operations.get_compat_str(ctx.env.project, "julia")
+        if isnothing(julia_compat_str)
+            # Set julia compat to current running version
+            julia_version = string(Base.thispatch(VERSION))
+            Operations.set_compat(ctx.env.project, "julia", julia_version) ||
+                pkgerror("invalid compat version specifier \"$(julia_version)\"")
+            push!(updated_deps, "julia")
+        end
+    end
+
+    # Update messaging
+    if isempty(updated_deps)
+        if target_pkg !== nothing
+            printpkgstyle(io, :Info, "$(target_pkg) already has a compat entry or is not in manifest. No changes made.", color = Base.info_color())
+        else
+            printpkgstyle(io, :Info, "no missing compat entries found. No changes made.", color = Base.info_color())
+        end
+    elseif length(updated_deps) == 1
+        printpkgstyle(io, :Info, "new entry set for $(only(updated_deps)) based on its current version", color = Base.info_color())
+    else
+        printpkgstyle(io, :Info, "new entries set for $(join(updated_deps, ", ", " and ")) based on their current versions", color = Base.info_color())
+    end
+
+    write_env(ctx.env)
+    Operations.print_compat(ctx; io)
+end
+set_current_compat(;kwargs...) = set_current_compat(Context(); kwargs...)
 
 #######
 # why #
