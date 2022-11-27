@@ -17,4 +17,12 @@ end
     hash(Pkg.Types.VersionSpec()) # hash isn't stable
     hash(Pkg.Types.PackageEntry()) # hash isn't stable because the internal `repo` field is a mutable struct
 end
+
+@testset "safe_realpath" begin
+    # issue #3085
+    for p in ("", "some-non-existing-path")
+        @test p == Pkg.safe_realpath(p)
+    end
+end
+
 end # module

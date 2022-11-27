@@ -22,7 +22,8 @@ const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 
-function init_reg()
+function check_init_reg()
+    isfile(joinpath(REGISTRY_DIR, "Registry.toml")) && return
     mkpath(REGISTRY_DIR)
     if Pkg.Registry.registry_use_pkg_server()
         url = Pkg.Registry.pkg_server_registry_urls()[GENERAL_UUID]
@@ -33,14 +34,18 @@ function init_reg()
         write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
     else
         Base.shred!(LibGit2.CachedCredentials()) do creds
-            LibGit2.with(Pkg.GitTools.clone(
-                stderr_f(),
-                "https://github.com/JuliaRegistries/General.git",
-                REGISTRY_DIR,
-                credentials = creds)) do repo
+            f = retry(delays = fill(5.0, 3), check=(s,e)->isa(e, Pkg.Types.PkgError)) do
+                LibGit2.with(Pkg.GitTools.clone(
+                    stderr_f(),
+                    "https://github.com/JuliaRegistries/General.git",
+                    REGISTRY_DIR,
+                    credentials = creds)) do repo
+                end
             end
+            f() # retry returns a function that should be called
         end
     end
+    isfile(joinpath(REGISTRY_DIR, "Registry.toml")) || error("Registry did not install properly")
 end
 
 function isolate(fn::Function; loaded_depot=false, linked_reg=true)
@@ -54,9 +59,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
         # Clone/download the registry only once
-        if !isdir(REGISTRY_DIR)
-            init_reg()
-        end
+        check_init_reg()
 
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
@@ -126,9 +129,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
         # Clone/download the registry only once
-        if !isdir(REGISTRY_DIR)
-            init_reg()
-        end
+        check_init_reg()
 
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
@@ -296,6 +297,18 @@ function list_tarball_files(tarball_path::AbstractString)
         push!(names, hdr.path)
     end
     return names
+end
+
+function show_output_if_command_errors(cmd::Cmd)
+    out = IOBuffer()
+    proc = run(pipeline(cmd; stdout=out); wait = false)
+    wait(proc)
+    if !success(proc)
+        seekstart(out)
+        println(read(out, String))
+        Base.pipeline_error(proc)
+    end
+    return nothing
 end
 
 end

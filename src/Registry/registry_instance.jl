@@ -82,8 +82,7 @@ function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Ve
             uv = uncompressed[v]
             for (key, value) in data
                 if haskey(uv, key)
-                    # Change to an error?
-                    error("Overlapping ranges for $(key) in $(repr(path)) for version $v.")
+                    error("Overlapping ranges for $(key) for version $v in registry.")
                 else
                     uv[key] = value
                 end
@@ -151,18 +150,18 @@ function init_package_info!(pkg::PkgEntry)
     subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
 
     # Versions.toml
-    d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ? 
+    d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
     version_info = Dict{VersionNumber, VersionInfo}(VersionNumber(k) =>
         VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v)
 
     # Compat.toml
-    compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ? 
+    compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) : Dict{String, Any}()
-    # The Compat.toml file might have string or vector values
-    compat_data_toml = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, compat_data_toml)
     compat = Dict{VersionRange, Dict{String, VersionSpec}}()
-    for (v, data) in compat_data_toml
+    for (v, _data) in compat_data_toml
+        # The Compat.toml file might have string or vector values
+        data = convert(Dict{String, Union{String, Vector{String}}}, _data::Dict)
         vr = VersionRange(v)
         d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep) in data)
         compat[vr] = d
@@ -171,10 +170,10 @@ function init_package_info!(pkg::PkgEntry)
     # Deps.toml
     deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) : Dict{String, Any}()
-    # But the Deps.toml only have strings as values
-    deps_data_toml = convert(Dict{String, Dict{String, String}}, deps_data_toml)
     deps = Dict{VersionRange, Dict{String, UUID}}()
-    for (v, data) in deps_data_toml
+    for (v, _data) in deps_data_toml
+        # But the Deps.toml only have strings as values
+        data = convert(Dict{String, String}, _data::Dict)
         vr = VersionRange(v)
         d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid) in data)
         deps[vr] = d

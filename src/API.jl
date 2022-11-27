@@ -60,8 +60,8 @@ end
 
 function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
     git_source = pkg.repo.source === nothing ? nothing :
-        isurl(pkg.repo.source) ? pkg.repo.source :
-        Operations.project_rel_path(env, pkg.repo.source)
+        isurl(pkg.repo.source::String) ? pkg.repo.source::String :
+        Operations.project_rel_path(env, pkg.repo.source::String)
     info = PackageInfo(
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
@@ -87,7 +87,7 @@ end
 function dependencies(fn::Function, uuid::UUID)
     dep = get(dependencies(), uuid, nothing)
     if dep === nothing
-        pkgerror("depenendency with UUID `$uuid` does not exist")
+        pkgerror("dependency with UUID `$uuid` does not exist")
     end
     fn(dep)
 end
@@ -138,7 +138,7 @@ function require_not_empty(pkgs, f::Symbol)
 end
 
 # Provide some convenience calls
-for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
+for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
@@ -152,7 +152,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
             end
             kwargs = merge((;kwargs...), (:io => io,))
             pkgs = deepcopy(pkgs) # don't mutate input
-            foreach(pkg -> handle_package_input!(pkg), pkgs)
+            foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
@@ -162,12 +162,12 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
                       url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
-            pkg = PackageSpec(; name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, subdir=subdir)
+            pkg = PackageSpec(; name, uuid, version, url, rev, path, subdir)
             if $f === status || $f === rm || $f === up
                 kwargs = merge((;kwargs...), (:mode => mode,))
             end
             # Handle $f() case
-            if unique([name,uuid,version,url,rev,path,subdir]) == [nothing]
+            if all(isnothing, [name,uuid,version,url,rev,path,subdir])
                 $f(PackageSpec[]; kwargs...)
             else
                 $f(pkg; kwargs...)
@@ -320,6 +320,7 @@ end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
+            preserve::Union{Nothing,PreserveLevel}= isempty(pkgs) ? nothing : PRESERVE_ALL,
             update_registry::Bool=true,
             skip_writing_project::Bool=false,
             kwargs...)
@@ -338,7 +339,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
-    Operations.up(ctx, pkgs, level; skip_writing_project)
+    Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
     return
 end
 
@@ -369,8 +370,11 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
             pkgerror("git revision specification invalid when calling `pin`:",
                      " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))")
         end
-        if pkg.version.ranges[1].lower != pkg.version.ranges[1].upper # TODO test this
-            pkgerror("pinning a package requires a single version, not a versionrange")
+        version = pkg.version
+        if version isa VersionSpec
+            if version.ranges[1].lower != version.ranges[1].upper # TODO test this
+                pkgerror("pinning a package requires a single version, not a versionrange")
+            end
         end
     end
 
@@ -507,7 +511,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
                 # For Manifest usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
             end
         end
         manifest_usage_by_depot[depot] = usage
@@ -516,7 +520,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
             end
         end
         artifact_usage_by_depot[depot] = usage
@@ -527,7 +531,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         let usage=usage
             reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"]))
+                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
                 if !haskey(parents, filename)
                     parents[filename] = Set{String}()
                 end
@@ -564,9 +568,11 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
             # Write out the TOML file for this depot
             usage_path = joinpath(logdir(depot), fname)
-            if !isempty(usage) || isfile(usage_path)
-                open(usage_path, "w") do io
-                    TOML.print(io, usage, sorted=true)
+            if !(isempty(usage)::Bool) || isfile(usage_path)
+                let usage=usage
+                    open(usage_path, "w") do io
+                        TOML.print(io, usage, sorted=true)
+                    end
                 end
             end
         end
@@ -604,7 +610,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             # Expand it back into a dict-of-dicts
             expanded_usage = Dict{String,Vector{Dict}}()
             for (k, v) in usage
-                # Drop scratch spaces whose parents are all non-existant
+                # Drop scratch spaces whose parents are all non-existent
                 parents = scratch_parents_by_depot[depot][k]
                 filter!(p -> p in all_scratch_parents, parents)
                 if isempty(parents)
@@ -1027,7 +1033,16 @@ end
 function _is_stale(paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
         staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
-        staledeps === true ? continue : return false
+        if staledeps !== true
+            try
+                # update timestamp of precompilation file so that it is the first to be tried by code loading
+                touch(path_to_try)
+            catch ex
+                # file might be read-only and then we fail to update timestamp, which is fine
+                ex isa Base.IOError || rethrow()
+            end
+            return false
+        end
     end
     return true
 end
@@ -1189,7 +1204,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
             fancyprint && lock(print_lock) do
-                printpkgstyle(io, :Precompiling, "project...")
+                printpkgstyle(io, :Precompiling, "environment...")
                 print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
@@ -1216,7 +1231,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         end
                         bar.current = n_done - n_already_precomp
                         bar.max = n_total - n_already_precomp
-                        final_loop || print(iostr, sprint(io -> show_progress(io, bar); context=io), "\n")
+                        final_loop || print(iostr, sprint(io -> show_progress(io, bar; termwidth = displaysize(ctx.io)[2]); context=io), "\n")
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
                             name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
@@ -1294,7 +1309,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     iob = IOBuffer()
                     name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
                     !fancyprint && lock(print_lock) do
-                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "project...")
+                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "environment...")
                     end
                     push!(pkg_queue, pkg)
                     started[pkg] = true
@@ -1338,13 +1353,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         Base.release(parallel_limiter)
                     end
                 else
-                    if !is_stale
-                        n_already_precomp += 1
-                        try
-                            touch(path_to_try) # update timestamp of precompilation file
-                        catch # file might be read-only and then we fail to update timestamp, which is fine
-                        end
-                    end
+                    is_stale || (n_already_precomp += 1)
                     suspended && push!(skipped_deps, pkg)
                 end
                 n_done += 1
@@ -1556,15 +1565,14 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     new_git = UUID[]
     # Handling packages tracking repos
     for pkg in pkgs
-        pkg.repo.source !== nothing || continue
+        repo_source = pkg.repo.source
+        repo_source !== nothing || continue
         sourcepath = Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
-        if isurl(pkg.repo.source)
-            repo_source = pkg.repo.source
-        else
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
+        if !isurl(repo_source)
+            repo_source = normpath(joinpath(dirname(ctx.env.project_file), repo_source))
         end
         if !isurl(repo_source) && !isdir(repo_source)
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
@@ -1645,7 +1653,7 @@ function _activate_dep(dep_name::AbstractString)
     if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
         if entry.path !== nothing
-            return joinpath(dirname(ctx.env.project_file), entry.path)
+            return joinpath(dirname(ctx.env.project_file), entry.path::String)
         end
     end
 end
@@ -1813,7 +1821,7 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
             resolve(ctx)
         catch e
             if e isa ResolverError
-                printpkgstyle(io, :Error, e.msg, color = Base.warn_color())
+                printpkgstyle(io, :Error, string(e.msg), color = Base.warn_color())
             else
                 rethrow()
             end
@@ -1826,6 +1834,61 @@ end
 compat(pkg::String; kwargs...) = compat(pkg, nothing; kwargs...)
 compat(pkg::String, compat_str::Union{Nothing,String}; kwargs...) = compat(Context(), pkg, compat_str; kwargs...)
 compat(;kwargs...) = compat(Context(); kwargs...)
+
+#######
+# why #
+#######
+
+function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
+    require_not_empty(pkgs, :why)
+
+    manifest_resolve!(ctx.env.manifest, pkgs)
+    project_deps_resolve!(ctx.env, pkgs)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs)
+
+    # Store all packages that has a dependency on us (all dependees)
+    incoming = Dict{UUID, Set{UUID}}()
+    for (uuid, dep_pkgs) in ctx.env.manifest
+        for (dep, dep_uuid) in dep_pkgs.deps
+            haskey(incoming, dep_uuid) || (incoming[dep_uuid] = Set{UUID}())
+            push!(incoming[dep_uuid], uuid)
+        end
+    end
+
+    function find_paths!(final_paths, current, path = UUID[])
+        push!(path, current)
+        if !(current in values(ctx.env.project.deps))
+            for p in incoming[current]
+                if p in path
+                    # detected dependency cycle and none of the dependencies in the cycle
+                    # are in the project could happen when manually modifying
+                    # the project and running this function function before a
+                    # resolve
+                    continue
+                end
+                find_paths!(final_paths, p, copy(path))
+            end
+        else
+            push!(final_paths, path)
+        end
+    end
+
+    first = true
+    for pkg in pkgs
+        !first && println(io)
+        first = false
+        final_paths = []
+        find_paths!(final_paths, pkg.uuid)
+        foreach(reverse!, final_paths)
+        final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], final_paths)
+        sort!(final_paths_names, by = x -> (x, length(x)))
+        delimiter = sprint((io, args) -> printstyled(io, args...; color=:light_green), "→", context=io)
+        for path in final_paths_names
+            println(io, "  ", join(path, " $delimiter "))
+        end
+    end
+end
+
 
 ########
 # Undo #
@@ -1921,7 +1984,7 @@ function upgrade_manifest(ctx::Context = Context())
     if before_format == v"2.0"
         pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` already up to date: manifest_format == $(before_format)")
     elseif before_format != v"1.0"
-        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` version is unrecogized: manifest_format == $(before_format)")
+        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` version is unrecognized: manifest_format == $(before_format)")
     end
     ctx.env.manifest.manifest_format = v"2.0"
     Types.write_manifest(ctx.env)

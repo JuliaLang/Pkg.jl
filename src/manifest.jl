@@ -132,7 +132,7 @@ end
 
 function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
     julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]) : nothing
-    manifest_format = VersionNumber(raw["manifest_format"])
+    manifest_format = VersionNumber(raw["manifest_format"]::String)
     if !in(manifest_format.major, 1:2)
         if f_or_io isa IO
             @warn "Unknown Manifest.toml format version detected in streamed manifest. Unexpected behavior may occur" manifest_format
@@ -285,7 +285,7 @@ end
 function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     if manifest.manifest_format.major == 1
         @warn """The active manifest file at `$(manifest_file)` has an old format that is being maintained.
-            To update to the new format, which is supported by Julia versions ≥ 1.6.2, run `Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.
+            To update to the new format, which is supported by Julia versions ≥ 1.6.2, run `import Pkg; Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.
             To then record the julia version re-resolve with `Pkg.resolve()` and if there are resolve conflicts consider `Pkg.update()`.""" maxlog = 1 _id = Symbol(manifest_file)
     end
     return write_manifest(destructure(manifest), manifest_file)

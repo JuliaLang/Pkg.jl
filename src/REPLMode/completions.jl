@@ -106,6 +106,15 @@ function complete_installed_packages(options, partial)
         unique!([entry.name for (uuid, entry) in env.manifest])
 end
 
+function complete_all_installed_packages(options, partial)
+    env = try EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    return unique!([entry.name for (uuid, entry) in env.manifest])
+end
+
 function complete_installed_packages_and_compat(options, partial)
     env = try EnvCache()
     catch err

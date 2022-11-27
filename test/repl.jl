@@ -224,7 +224,7 @@ temp_pkg_dir() do project_path
         @test_throws Pkg.Types.PkgError pkg"activate --shared ./Foo"
         @test_throws Pkg.Types.PkgError pkg"activate --shared Foo/Bar"
         @test_throws Pkg.Types.PkgError pkg"activate --shared ../Bar"
-        # check that those didn't change te enviroment
+        # check that those didn't change the environment
         @test Base.active_project() == joinpath(path, "Project.toml")
         mkdir("Foo")
         cd(mkdir("modules")) do
@@ -343,6 +343,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "Example" in c
         c, r = test_complete("rm --manifest Exam")
         @test "Example" in c
+        c, r = test_complete("why PackageWithDep")
+        @test "PackageWithDependency" in c
 
         c, r = test_complete("rm PackageWithDep")
         @test "PackageWithDependency" in c
@@ -659,6 +661,9 @@ end
         git_init_and_commit(project_path)
         @test_logs () pkg"status --diff"
         @test_logs () pkg"status -d"
+
+        # comma-separated packages get parsed
+        pkg"status Example, Random"
     end
 end
 

@@ -429,6 +429,9 @@ function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_curre
         return stdlibs()
     end
     last_stdlibs = UNREGISTERED_STDLIBS
+    if isempty(STDLIBS_BY_VERSION)
+        pkgerror("If you want to set `julia_version`, you must first populate the `STDLIBS_BY_VERSION` global constant")
+    end
     for (version, stdlibs) in STDLIBS_BY_VERSION
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
             break
@@ -930,6 +933,7 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
     unresolved_uuids = Dict{String,Vector{UUID}}()
     for pkg in pkgs
         has_uuid(pkg) && continue
+        !has_name(pkg) && pkgerror("Package $pkg has neither name nor uuid")
         uuids = [uuid for (uuid, entry) in manifest if entry.name == pkg.name]
         sort!(uuids, by=uuid -> uuid.value)
         unresolved_uuids[pkg.name] = uuids

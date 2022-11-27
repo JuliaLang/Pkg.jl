@@ -131,7 +131,7 @@ Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local g
 Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl)") # With subdir
 ```
 
-After the installation of new packages the project will be precompiled. See more at [Project Precompilation](@ref).
+After the installation of new packages the project will be precompiled. See more at [Environment Precompilation](@ref).
 
 See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 """
@@ -153,10 +153,6 @@ Precompile all or specific dependencies of the project in parallel.
     Any packages that have previously errored during precompilation won't be retried in auto mode
     until they have changed. To disable automatic precompilation set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
     To manually control the number of tasks used set `ENV["JULIA_NUM_PRECOMPILE_TASKS"]`.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3. On earlier versions
-    you can use `Pkg.API.precompile()` or the `precompile` Pkg REPL command.
 
 !!! compat "Julia 1.8"
     Specifying packages to precompile requires at least Julia 1.8.
@@ -183,14 +179,32 @@ See also [`PackageSpec`](@ref), [`PackageMode`](@ref).
 const rm = API.rm
 
 """
-    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT)
+    Pkg.why(pkg::Union{String, Vector{String}})
+    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}})
+
+Show the reason why this package is in the manifest.
+The output is a the different way to reach the package
+through the dependency graph starting from the dependencies.
+
+!!! compat "Julia 1.9"
+    This function requires at least Julia 1.9.
+"""
+const why = API.why
+
+"""
+    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel)
     Pkg.update(pkg::Union{String, Vector{String}})
     Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
-Update a package `pkg`. If no posistional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
+If no positional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
 If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
 
-After any package updates the project will be precompiled. See more at [Project Precompilation](@ref).
+If packages are given as positional arguments, the `preserve` argument can be used to control what other packages are allowed to update:
+- `PRESERVE_ALL` (default): Only allow `pkg` to update.
+- `PRESERVE_DIRECT`: Only allow `pkg` and indirect dependencies that are not a direct dependency in the project to update.
+- `PRESERVE_NONE`: Allow `pkg` and all its indirect dependencies to update.
+
+After any package updates the project will be precompiled. See more at [Environment Precompilation](@ref).
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
@@ -203,19 +217,21 @@ const update = API.up
 
 **Keyword arguments:**
   - `coverage::Bool=false`: enable or disable generation of coverage statistics.
+  - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
 
-!!! compat "Julia 1.3"
-    `julia_args` and `test_args` requires at least Julia 1.3.
+!!! compat "Julia 1.9"
+    `allow_reresolve` requires at least Julia 1.9.
 
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its
 `test/runtests.jl` file.
 
-The tests are run by generating a temporary environment with only `pkg` and its (recursive) dependencies
-in it. If a manifest exists, the versions in that manifest are used, otherwise
-a feasible set of packages is resolved and installed.
+The tests are run by generating a temporary environment with only the `pkg` package
+and its (recursive) dependencies in it. If a manifest file exists and the `allow_reresolve`
+keyword argument is set to `false`, the versions in the manifest file are used.
+Otherwise a feasible set of packages is resolved and installed.
 
 During the tests, test-specific dependencies are active, which are
 given in the project file as e.g.
@@ -333,31 +349,34 @@ const generate = API.generate
 """
     Pkg.dependencies()::Dict{UUID, PackageInfo}
 
-!!! compat "Julia 1.4"
-    This feature requires Julia 1.4, and is considered experimental.
+This feature is considered experimental.
 
-Query the dependency graph.
+Query the dependency graph of the active project.
 The result is a `Dict` that maps a package UUID to a `PackageInfo` struct representing the dependency (a package).
 
 # `PackageInfo` fields
 
-| Field             | Description                                                |
-|:------------------|:-----------------------------------------------------------|
-| `name`            | The name of the package                                    |
-| `version`         | The version of the package (this is `Nothing` for stdlibs) |
-| `is_direct_dep`   | The package is a direct dependency                         |
-| `is_tracking_path`| Whether a package is directly tracking a directory         |
-| `is_pinned`       | Whether a package is pinned                                |
-| `source`          | The directory containing the source code for that package  |
-| `dependencies`    | The dependencies of that package as a vector of UUIDs      |
+| Field                 | Description                                                                       |
+|:------------------    |:----------------------------------------------------------------------------------|
+| `name`                | The name of the package                                                           |
+| `version`             | The version of the package (this is `Nothing` for stdlibs)                        |
+| `tree_hash`           | A file hash of the package directory tree                                         |
+| `is_direct_dep`       | The package is a direct dependency                                                |
+| `is_pinned`           | Whether a package is pinned                                                       |
+| `is_tracking_path`    | Whether a package is tracking a path                                              |
+| `is_tracking_repo`    | Whether a package is tracking a repository                                        |
+| `is_tracking_registry`| Whether a package is being tracked by registry i.e. not by path nor by repository |
+| `git_revision`        | The git revision when tracking by repository                                      |
+| `git_source`          | The git source when tracking by repository                                        |
+| `source`              | The directory containing the source code for that package                         |
+| `dependencies`        | The dependencies of that package as a vector of UUIDs                             |
 """
 const dependencies = API.dependencies
 
 """
     Pkg.project()::ProjectInfo
 
-!!! compat "Julia 1.4"
-    This feature requires Julia 1.4, and is considered experimental.
+This feature is considered experimental.
 
 Request a `ProjectInfo` struct which contains information about the active project.
 
@@ -368,6 +387,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 | name         | The project's name                                                                          |
 | uuid         | The project's UUID                                                                          |
 | version      | The project's version                                                                       |
+| ispackage    | Whether the project is a package (has a name and uuid)                                      |
 | dependencies | The project's direct dependencies as a `Dict` which maps dependency name to dependency UUID |
 | path         | The location of the project file which defines the active project                           |
 """
@@ -386,7 +406,7 @@ If no `Project.toml` exist in the current active project, create one with all th
 dependencies in the manifest and instantiate the resulting project.
 
 After packages have been installed the project will be precompiled.
-See more at [Project Precompilation](@ref).
+See more at [Environment Precompilation](@ref).
 """
 const instantiate = API.instantiate
 
@@ -435,13 +455,6 @@ the output to the difference as compared to the last git commit.
 
 See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
-
-!!! compat "Julia 1.1"
-    `Pkg.status` with package arguments requires at least Julia 1.1.
-
-!!! compat "Julia 1.3"
-    The `diff` keyword argument requires at least Julia 1.3. In earlier versions `diff=true`
-    is the default for environments in git repositories.
 
 !!! compat "Julia 1.8"
     The `⌃` and `⌅` indicators were added in Julia 1.8.
@@ -492,9 +505,6 @@ Pkg.activate("local/path")
 Pkg.activate("MyDependency")
 Pkg.activate(; temp=true)
 ```
-
-!!! compat "Julia 1.4"
-    the `temp` option requires at least Julia 1.4.
 """
 const activate = API.activate
 
@@ -509,9 +519,6 @@ versions that are already downloaded in version resolution.
 
 To work in offline mode across Julia sessions you can
 set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
-
-!!! compat "Julia 1.5"
-    Pkg's offline mode requires Julia 1.5 or later.
 """
 offline(b::Bool=true) = (OFFLINE_MODE[] = b; nothing)
 
@@ -546,15 +553,14 @@ This includes:
 Most functions in Pkg take a `Vector` of `PackageSpec` and do the operation on all the packages
 in the vector.
 
-!!! compat "Julia 1.5"
-    Many functions that take a `PackageSpec` or a `Vector{PackageSpec}` can be called with a more concise notation with `NamedTuple`s.
-    For example, `Pkg.add` can be called either as the explicit or concise versions as:
+Many functions that take a `PackageSpec` or a `Vector{PackageSpec}` can be called with a more concise notation with `NamedTuple`s.
+For example, `Pkg.add` can be called either as the explicit or concise versions as:
 
-    | Explicit                                                            | Concise                                        |
-    |:--------------------------------------------------------------------|:-----------------------------------------------|
-    | `Pkg.add(PackageSpec(name="Package"))`                              | `Pkg.add(name = "Package")`                    |
-    | `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
-    |` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
+| Explicit                                                            | Concise                                        |
+|:--------------------------------------------------------------------|:-----------------------------------------------|
+| `Pkg.add(PackageSpec(name="Package"))`                              | `Pkg.add(name = "Package")`                    |
+| `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
+|` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
 
 Below is a comparison between the REPL mode and the functional API:
 
@@ -566,7 +572,7 @@ Below is a comparison between the REPL mode and the functional API:
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
 | `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
 | `www.mypkg.com`      | `PackageSpec(url="www.mypkg.com")`                    |
-| `--major Package`    | `PackageSpec(name="Package", version=PKGLEVEL_MAJOR)` |
+| `--major Package`    | `PackageSpec(name="Package", version=UPLEVEL_MAJOR)` |
 
 """
 const PackageSpec = Types.PackageSpec
@@ -617,19 +623,16 @@ A `RegistrySpec` is a representation of a registry with various metadata, much l
 Most registry functions in Pkg take a `Vector` of `RegistrySpec` and do the operation
 on all the registries in the vector.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 # Examples
 
 Below is a comparison between the REPL mode and the functional API::
 
-| `REPL`               | `API`                                           |
-|:---------------------|:------------------------------------------------|
-| `Registry`           | `RegistrySpec("Registry")`                      |
-| `Registry=a67d...`   | `RegistrySpec(name="Registry", uuid="a67d...")` |
-| `local/path`         | `RegistrySpec(path="local/path")`               |
-| `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`        |
+| `REPL`               | `API`                                             |
+|:---------------------|:--------------------------------------------------|
+| `MyRegistry`         | `RegistrySpec("MyRegistry")`                      |
+| `MyRegistry=a67d...` | `RegistrySpec(name="MyRegistry", uuid="a67d...")` |
+| `local/path`         | `RegistrySpec(path="local/path")`                 |
+| `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`          |
 """
 const RegistrySpec = Registry.RegistrySpec
 
@@ -679,7 +682,7 @@ function installed()
     for (uuid, dep) in deps
         dep.is_direct_dep || continue
         dep.version === nothing && continue
-        installs[dep.name] = dep.version
+        installs[dep.name] = dep.version::VersionNumber
     end
     return installs
 end

@@ -7,7 +7,18 @@ import ..isdir_nothrow, ..Registry.RegistrySpec, ..isurl
 Parser for PackageSpec objects.
 """
 function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
-    args = PackageToken[PackageToken(pkgword) for pkgword in package_lex(args)]
+    words′ = package_lex(args)
+    words = String[]
+    for word in words′
+        if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", word)) !== nothing
+            push!(words, "https://github.com/$(m.captures[1])/$(m.captures[2])")
+            push!(words, "#$(m.captures[3])")
+        else
+            push!(words, word)
+        end
+    end
+    args = PackageToken[PackageToken(pkgword) for pkgword in words]
+
     return parse_package_args(args; add_or_dev=add_or_dev)
 end
 
@@ -89,7 +100,7 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
         elseif modifier isa Rev
             pkg.rev = modifier.rev
         else
-            pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
+            pkgerror("Package name/uuid must precede subdir specifier `$args`.")
         end
     end
 
@@ -138,10 +149,11 @@ function parse_package_identifier(word::AbstractString; add_or_develop=false)::P
     if occursin(uuid_re, word)
         return PackageSpec(;uuid=UUID(word))
     elseif occursin(name_re, word)
-        return PackageSpec(String(match(name_re, word).captures[1]))
+        m = match(name_re, word)
+        return PackageSpec(String(something(m.captures[1])))
     elseif occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
-        return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
+        return PackageSpec(String(something(m.captures[1])), UUID(something(m.captures[2])))
     else
         pkgerror("Unable to parse `$word` as a package.")
     end
@@ -170,11 +182,12 @@ function parse_registry(word::AbstractString; add=false)::RegistrySpec
     elseif occursin(uuid_re, word)
         registry.uuid = UUID(word)
     elseif occursin(name_re, word)
-        registry.name = String(match(name_re, word).captures[1])
+        m = match(name_re, word)
+        registry.name = String(something(m.captures[1]))
     elseif occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
-        registry.name = String(m.captures[1])
-        registry.uuid = UUID(m.captures[2])
+        registry.name = String(something(m.captures[1]))
+        registry.uuid = UUID(something(m.captures[2]))
     elseif add
         # Guess it is a url then
         registry.url = String(word)
