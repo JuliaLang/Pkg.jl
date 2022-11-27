@@ -1,7 +1,7 @@
 using  .Utils
 using Test
 
-@testset "weak deps" begin
+@testset "glue deps" begin
     isolate(loaded_depot=true) do
         Pkg.activate(; temp=true)
         Pkg.develop(path=joinpath(@__DIR__, "test_packages", "GluePkgExamples", "HasGluePkgs.jl"))

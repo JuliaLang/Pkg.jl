@@ -10,6 +10,7 @@ module PkgTestsInner
 
 import Pkg
 
+#=
 # Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
 if Base.find_package("HistoricalStdlibVersions") === nothing
     @info "Installing HistoricalStdlibVersions for Pkg tests"
@@ -49,6 +50,8 @@ elseif hide_logs
 else
     Pkg.DEFAULT_IO[] = stdout
 end
+=#
+
 
 Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
 
@@ -56,35 +59,37 @@ include("utils.jl")
 
 Utils.check_init_reg()
 
-Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
+using Test
+
+#Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
     @testset "Pkg" begin
         try
             @testset "$f" for f in [
-                "new.jl",
-                "pkg.jl",
-                "repl.jl",
-                "api.jl",
-                "registry.jl",
-                "subdir.jl",
+                #"new.jl",
+                #"pkg.jl",
+                #"repl.jl",
+                #"api.jl",
+                #"registry.jl",
+                #"subdir.jl",
                 "gluedeps.jl",
-                "artifacts.jl",
-                "binaryplatforms.jl",
-                "platformengines.jl",
-                "sandbox.jl",
-                "resolve.jl",
-                "misc.jl",
-                "force_latest_compatible_version.jl",
-                "manifests.jl",
+                #"artifacts.jl",
+                #"binaryplatforms.jl",
+                #"platformengines.jl",
+                #"sandbox.jl",
+                #"resolve.jl",
+                #"misc.jl",
+                #"force_latest_compatible_version.jl",
+                #"manifests.jl",
                 ]
                 @info "==== Testing `test/$f`"
-                flush(Pkg.DEFAULT_IO[])
+                # flush(Pkg.DEFAULT_IO[])
                 include(f)
             end
         finally
-            islogging && close(Pkg.DEFAULT_IO[])
+            #islogging && close(Pkg.DEFAULT_IO[])
         end
     end
-end
+#end
 
 @showtime Base.Filesystem.temp_cleanup_purge(force=true)
 
