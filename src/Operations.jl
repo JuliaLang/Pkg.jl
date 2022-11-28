@@ -267,7 +267,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     end
     for pkg in pkgs
         # add repo package if necessary
-        if pkg.repo.source !== nothing
+        if pkg.repo.rev !== nothing
             # ensure revved package is installed
             Types.handle_repo_add!(Types.Context(env=env), pkg)
         end
