@@ -266,6 +266,11 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         names[pkg.uuid] = pkg.name
     end
     for pkg in pkgs
+        # add repo package if necessary
+        if pkg.repo.source !== nothing
+            # ensure revved package is installed
+            Types.handle_repo_add!(Types.Context(env=env), pkg)
+        end
         path = project_rel_path(env, source_path(env.project_file, pkg))
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")

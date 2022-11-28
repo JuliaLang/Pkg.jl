@@ -5,10 +5,11 @@ version = "0.0.0"
 [deps]
 B = "dd0d8fba-d7c4-4f8e-a2bb-3a090b3e34f2"
 C = "4ee78ca3-4e78-462f-a078-747ed543fa86"
-Parsers = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]
 B = "packages/B"
 C = "packages/C"
 D = "packages/D"
+Example = { url = "https://github.com/JuliaLang/Example.jl", rev = "f968c69dea24f851d0c7e686db23fa55826b5388"}
