@@ -1106,14 +1106,14 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         deps = [Base.PkgId(last(x), first(x)) for x in last(dep).deps]
         depsmap[pkg] = filter!(!Base.in_sysimage, deps)
         # add any glue packages
-        gluedeps = last(dep).gluedeps
+        weakdeps = last(dep).weakdeps
         for (gluepkg_name, gluedep_names) in last(dep).gluepkgs
             gluepkg_deps = Base.PkgId[]
             push!(gluepkg_deps, pkg) # depends on parent package
             all_gluedeps_available = true
             gluedep_names = gluedep_names isa String ? String[gluedep_names] : gluedep_names
             for gluedep_name in gluedep_names
-                gluedep_uuid = gluedeps[gluedep_name]
+                gluedep_uuid = weakdeps[gluedep_name]
                 if gluedep_uuid in keys(ctx.env.manifest.deps)
                     push!(gluepkg_deps, Base.PkgId(gluedep_uuid, gluedep_name))
                 else

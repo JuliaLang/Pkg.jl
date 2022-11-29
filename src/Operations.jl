@@ -158,9 +158,9 @@ function fixup_glue!(env, pkgs)
             entry = env.manifest[pkg.uuid]
             if isfile(v)
                 p = Types.read_project(v)
-                entry.gluedeps = p.gluedeps
+                entry.weakdeps = p.weakdeps
                 entry.gluepkgs = p.gluepkgs
-                for (name, _) in p.gluedeps
+                for (name, _) in p.weakdeps
                     delete!(entry.deps, name)
                 end
             end
@@ -236,7 +236,7 @@ function collect_project(pkg::PackageSpec, path::String)
         vspec = get_compat(project, name)
         push!(deps, PackageSpec(name, uuid, vspec))
     end
-    for (name, uuid) in project.gluedeps
+    for (name, uuid) in project.weakdeps
         vspec = get_compat(project, name)
         push!(deps, PackageSpec(name, uuid, vspec))
         push!(glues, uuid)
@@ -436,7 +436,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
 
     # pkg -> version -> (dependency => compat):
     all_compat = Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}}()
-    glue_compat = Dict{UUID,Dict{VersionNumber,Set{UUID}}}()
+    weak_compat = Dict{UUID,Dict{VersionNumber,Set{UUID}}}()
 
     for (fp, fx) in fixed
         all_compat[fp]   = Dict(fx.version => Dict{UUID,VersionSpec}())
@@ -449,7 +449,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
             push!(seen, uuid)
             uuid in keys(fixed) && continue
             all_compat_u = get_or_make!(all_compat, uuid)
-            glue_compat_u = get_or_make!(glue_compat, uuid)
+            weak_compat_u = get_or_make!(weak_compat, uuid)
 
             uuid_is_stdlib = false
             stdlib_name = ""
@@ -478,9 +478,9 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                     all_compat_u_vr[other_uuid] = VersionSpec()
                 end
 
-                if !isempty(proj.gluedeps)
-                    glue_all_compat_u_vr = get_or_make!(glue_compat_u, v)
-                    for (_, other_uuid) in proj.gluedeps
+                if !isempty(proj.weakdeps)
+                    glue_all_compat_u_vr = get_or_make!(weak_compat_u, v)
+                    for (_, other_uuid) in proj.weakdeps
                         push!(uuids, other_uuid)
                         all_compat_u_vr[other_uuid] = VersionSpec()
                         push!(glue_all_compat_u_vr, other_uuid)
@@ -520,12 +520,12 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                         end
                     end
                     add_compat!(all_compat_u, Registry.compat_info(info))
-                    glue_compat_info = Registry.glue_compat_info(info)
-                    if glue_compat_info !== nothing
-                        add_compat!(all_compat_u, glue_compat_info)
+                    weak_compat_info = Registry.weak_compat_info(info)
+                    if weak_compat_info !== nothing
+                        add_compat!(all_compat_u, weak_compat_info)
                         # Version to Set
-                        for (v, compat_info) in  glue_compat_info
-                            glue_compat_u[v] = keys(compat_info)
+                        for (v, compat_info) in  weak_compat_info
+                            weak_compat_u[v] = keys(compat_info)
                         end
                     end
                 end
@@ -545,7 +545,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
         end
     end
 
-    return Resolve.Graph(all_compat, glue_compat, uuid_to_name, reqs, fixed, false, julia_version),
+    return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
            all_compat
 end
 
@@ -1179,7 +1179,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     # only declare `compat` for remaining direct or `extra` dependencies
     # `julia` is always an implicit direct dependency
     filter!(ctx.env.project.compat) do (name, _)
-        name == "julia" || name in keys(ctx.env.project.deps) || name in keys(ctx.env.project.extras) || name in keys(ctx.env.project.gluedeps)
+        name == "julia" || name in keys(ctx.env.project.deps) || name in keys(ctx.env.project.extras) || name in keys(ctx.env.project.weakdeps)
     end
     deps_names = union(keys(ctx.env.project.deps), keys(ctx.env.project.extras))
     filter!(ctx.env.project.targets) do (target, deps)
@@ -1792,12 +1792,12 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     # collect test dependencies
     for name in get(source_env.project.targets, target, String[])
         uuid = nothing
-        for list in [source_env.project.extras, source_env.project.gluedeps]
+        for list in [source_env.project.extras, source_env.project.weakdeps]
             uuid = get(list, name, nothing)
             uuid === nothing || break
         end
         if uuid === nothing
-            pkgerror("`$name` declared as a `$target` dependency, but no such entry in `extras` or `gluedeps`")
+            pkgerror("`$name` declared as a `$target` dependency, but no such entry in `extras` or `weakdeps`")
         end
         test_project.deps[name] = uuid
     end
@@ -2098,9 +2098,9 @@ function status_glue_info(pkg::PackageSpec, env::EnvCache)
     manifest = env.manifest
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
-    gluedepses = manifest_info.gluedeps
+    weakdepses = manifest_info.weakdeps
     gluepkgs = manifest_info.gluepkgs
-    if !isempty(gluedepses) && !isempty(gluepkgs)
+    if !isempty(weakdepses) && !isempty(gluepkgs)
         v = GlueInfo[]
         for (gluepkg, gluedeps) in gluepkgs
             gluedeps isa String && (gluedeps = String[gluedeps])
@@ -2108,7 +2108,7 @@ function status_glue_info(pkg::PackageSpec, env::EnvCache)
             # Check if deps are loaded
             gluedeps_info= Tuple{String, Bool}[]
             for gluedep in gluedeps
-                uuid = gluedepses[gluedep]
+                uuid = weakdepses[gluedep]
                 loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, gluedep))
                 push!(gluedeps_info, (gluedep, loaded))
             end
@@ -2121,7 +2121,7 @@ end
 
 struct GlueInfo
     gluepkg::Tuple{String, Bool} # name, loaded
-    gluedeps::Vector{Tuple{String, Bool}} # name, loaded
+    weakdeps::Vector{Tuple{String, Bool}} # name, loaded
 end
 struct PackageStatusData
     uuid::UUID
@@ -2277,7 +2277,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
                 print_glue_entry(io, glue.gluepkg)
 
                 print(io, " [")
-                join(io,sprint.(print_glue_entry, glue.gluedeps; context=io), ", ")
+                join(io,sprint.(print_glue_entry, glue.weakdeps; context=io), ", ")
                 print(io, "]")
                 if i != length(pkg.glueinfo)
                     println(io)

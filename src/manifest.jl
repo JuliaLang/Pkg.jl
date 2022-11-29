@@ -83,7 +83,7 @@ struct Stage1
     uuid::UUID
     entry::PackageEntry
     deps::Union{Vector{String}, Dict{String,UUID}}
-    gluedeps::Union{Vector{String}, Dict{String,UUID}}
+    weakdeps::Union{Vector{String}, Dict{String,UUID}}
 end
 
 normalize_deps(name, uuid, deps, manifest; isglue=false) = deps
@@ -114,7 +114,7 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
         info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
     end
     for (name, infos) in stage1, info in infos
-        info.entry.gluedeps = normalize_deps(name, info.uuid, info.gluedeps, stage1; isglue=true)
+        info.entry.weakdeps = normalize_deps(name, info.uuid, info.weakdeps, stage1; isglue=true)
     end
     # invariant: all dependencies are now normalized to Dict{String,UUID}
     deps = Dict{UUID, PackageEntry}()
@@ -123,7 +123,7 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
     end
     # now just verify the graph structure
     for (entry_uuid, entry) in deps
-        for (deptype, isglue) in [(entry.deps, false), (entry.gluedeps, true)]
+        for (deptype, isglue) in [(entry.deps, false), (entry.weakdeps, true)]
             for (name, uuid) in deptype
                 dep_entry = get(deps, uuid, nothing)
                 if !isglue
@@ -159,7 +159,7 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
             entry.name = name
             uuid = nothing
             deps = nothing
-            gluedeps = nothing
+            weakdeps = nothing
             try
                 entry.pinned      = read_pinned(get(info, "pinned", nothing))
                 uuid              = read_field("uuid",          nothing, info, safe_uuid)::UUID
@@ -171,7 +171,7 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
                 entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
                 entry.uuid        = uuid
                 deps = read_deps(get(info::Dict, "deps", nothing))
-                gluedeps = read_deps(get(info::Dict, "gluedeps", nothing))
+                weakdeps = read_deps(get(info::Dict, "weakdeps", nothing))
                 entry.gluepkgs = get(Dict{String, String}, info::Dict, "gluepkgs")
             catch
                 # TODO: Should probably not unconditionally log something
@@ -179,7 +179,7 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
                 rethrow()
             end
             entry.other = info::Union{Dict,Nothing}
-            stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps, gluedeps))
+            stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps, weakdeps))
         end
         # by this point, all the fields of the `PackageEntry`s have been type casted
         # but we have *not* verified the _graph_ structure of the manifest
@@ -272,7 +272,7 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "repo-url", repo_source)
         entry!(new_entry, "repo-rev", entry.repo.rev)
         entry!(new_entry, "repo-subdir", entry.repo.subdir)
-        for (deptype, depname) in [(entry.deps, "deps"), (entry.gluedeps, "gluedeps")]
+        for (deptype, depname) in [(entry.deps, "deps"), (entry.weakdeps, "weakdeps")]
             if isempty(deptype)
                 delete!(new_entry, depname)
             else

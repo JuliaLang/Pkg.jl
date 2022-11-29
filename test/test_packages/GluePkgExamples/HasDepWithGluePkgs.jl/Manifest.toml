@@ -28,7 +28,7 @@ deps = ["Example"]
 path = "../HasGluePkgs.jl"
 uuid = "4d3288b3-3afc-4bb6-85f3-489fffe514c8"
 version = "0.1.0"
-gluedeps = ["OffsetArrays"]
+weakdeps = ["OffsetArrays"]
 
     [deps.HasGluePkgs.gluepkgs]
     GlueOffsetArrays = "OffsetArrays"

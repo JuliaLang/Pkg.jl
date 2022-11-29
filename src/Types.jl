@@ -239,7 +239,7 @@ Base.@kwdef mutable struct Project
     manifest::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
-    gluedeps::Dict{String,UUID} = Dict{String,UUID}()
+    weakdeps::Dict{String,UUID} = Dict{String,UUID}()
     gluepkgs::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
@@ -264,7 +264,7 @@ Base.@kwdef mutable struct PackageEntry
     repo::GitRepo = GitRepo()
     tree_hash::Union{Nothing,SHA1} = nothing
     deps::Dict{String,UUID} = Dict{String,UUID}()
-    gluedeps::Dict{String,UUID} = Dict{String,UUID}()
+    weakdeps::Dict{String,UUID} = Dict{String,UUID}()
     gluepkgs::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     uuid::Union{Nothing, UUID} = nothing
     other::Union{Dict,Nothing} = nothing
@@ -276,11 +276,11 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.repo == t2.repo &&
     t1.tree_hash == t2.tree_hash &&
     t1.deps == t2.deps &&
-    t1.gluedeps == t2.gluedeps &&
+    t1.weakdeps == t2.weakdeps &&
     t1.gluepkgs == t2.gluepkgs &&
     t1.uuid == t2.uuid
     # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.gluedeps,x.gluepkgs, x.uuid], init=h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps,x.gluepkgs, x.uuid], init=h)  # omits `other`
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing,VersionNumber} = nothing # only set to VERSION when resolving

@@ -56,10 +56,10 @@ struct PkgInfo
     deps::Dict{VersionRange, Dict{String, UUID}}
 
     # WeakCompat.toml
-    glue_compat::Dict{VersionRange, Dict{String, VersionSpec}}
+    weak_compat::Dict{VersionRange, Dict{String, VersionSpec}}
 
-    # GlueDeps.toml
-    glue_deps::Dict{VersionRange, Dict{String, UUID}}
+    # WeakDeps.toml
+    weak_deps::Dict{VersionRange, Dict{String, UUID}}
 end
 
 isyanked(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].yanked
@@ -133,19 +133,19 @@ function initialize_glue_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version
 
     sort!(versions)
 
-    glue_uncompressed_compat = uncompress(pkg.glue_compat, versions)
-    glue_uncompressed_deps   = uncompress(pkg.glue_deps,   versions)
+    glue_uncompressed_compat = uncompress(pkg.weak_compat, versions)
+    glue_uncompressed_deps   = uncompress(pkg.weak_deps,   versions)
 
     for v in versions
         vinfo = pkg.version_info[v]
-        glue_compat = Dict{UUID, VersionSpec}()
+        weak_compat = Dict{UUID, VersionSpec}()
         glue_uncompressed_deps_v = glue_uncompressed_deps[v]
         glue_uncompressed_compat_v = glue_uncompressed_compat[v]
         for (pkg, uuid) in glue_uncompressed_deps_v
             vspec = get(glue_uncompressed_compat_v, pkg, nothing)
-            glue_compat[uuid] = vspec === nothing ? VersionSpec() : vspec
+            weak_compat[uuid] = vspec === nothing ? VersionSpec() : vspec
         end
-        @init! vinfo.glue_uncompressed_compat = glue_compat
+        @init! vinfo.glue_uncompressed_compat = weak_compat
     end
     return pkg
 end
@@ -155,8 +155,8 @@ function compat_info(pkg::PkgInfo)
     return Dict(v => info.uncompressed_compat for (v, info) in pkg.version_info)
 end
 
-function glue_compat_info(pkg::PkgInfo)
-    if isempty(pkg.glue_deps)
+function weak_compat_info(pkg::PkgInfo)
+    if isempty(pkg.weak_deps)
         return nothing
     end
     initialize_glue_uncompressed!(pkg)
@@ -221,28 +221,28 @@ function init_package_info!(pkg::PkgEntry)
     deps[VersionRange()] = Dict("julia" => JULIA_UUID)
 
     # WeakCompat.toml
-    glue_compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) ?
-    parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) : Dict{String, Any}()
-    glue_compat_data_toml = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, glue_compat_data_toml)
-    glue_compat = Dict{VersionRange, Dict{String, VersionSpec}}()
-    for (v, data) in glue_compat_data_toml
+    weak_compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) ?
+        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) : Dict{String, Any}()
+    weak_compat_data_toml = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, weak_compat_data_toml)
+    weak_compat = Dict{VersionRange, Dict{String, VersionSpec}}()
+    for (v, data) in weak_compat_data_toml
         vr = VersionRange(v)
         d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep) in data)
-        glue_compat[vr] = d
+        weak_compat[vr] = d
     end
 
-    # GlueDeps.toml
-    glue_deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "GlueDeps.toml")) ?
-        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "GlueDeps.toml")) : Dict{String, Any}()
-    glue_deps_data_toml = convert(Dict{String, Dict{String, String}}, glue_deps_data_toml)
-    glue_deps = Dict{VersionRange, Dict{String, UUID}}()
-    for (v, data) in glue_deps_data_toml
+    # WeakDeps.toml
+    weak_deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) ?
+        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) : Dict{String, Any}()
+    weak_deps_data_toml = convert(Dict{String, Dict{String, String}}, weak_deps_data_toml)
+    weak_deps = Dict{VersionRange, Dict{String, UUID}}()
+    for (v, data) in weak_deps_data_toml
         vr = VersionRange(v)
         d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid) in data)
-        glue_deps[vr] = d
+        weak_deps[vr] = d
     end
 
-    @init! pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, glue_compat, glue_deps)
+    @init! pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps)
 
     return pkg.info
 end

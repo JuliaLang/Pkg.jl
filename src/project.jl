@@ -2,7 +2,7 @@
 # UTILS #
 #########
 listed_deps(project::Project) =
-    append!(collect(keys(project.deps)), collect(keys(project.extras)), collect(keys(project.gluedeps)))
+    append!(collect(keys(project.deps)), collect(keys(project.extras)), collect(keys(project.weakdeps)))
 
 ###########
 # READING #
@@ -80,7 +80,7 @@ function validate(project::Project; file=nothing)
     if length(dep_uuids) != length(unique(dep_uuids))
         pkgerror("Two different dependencies can not have the same uuid" * location_string)
     end
-    glue_dep_uuids = collect(values(project.gluedeps))
+    glue_dep_uuids = collect(values(project.weakdeps))
     if length(glue_dep_uuids) != length(unique(glue_dep_uuids))
         pkgerror("Two different glue dependencies can not have the same uuid" * location_string)
     end
@@ -105,14 +105,14 @@ function validate(project::Project; file=nothing)
             pkgerror("A dependency was named twice in target `$target`")
         end
         dep in listed || pkgerror("""
-            Dependency `$dep` in target `$target` not listed in `deps`, `gluedeps` or `extras` section
+            Dependency `$dep` in target `$target` not listed in `deps`, `weakdeps` or `extras` section
             """ * location_string)
     end
     # compat
     for (name, version) in project.compat
         name == "julia" && continue
         name in listed ||
-            pkgerror("Compat `$name` not listed in `deps`, `gluedeps` or `extras` section" * location_string)
+            pkgerror("Compat `$name` not listed in `deps`, `weakdeps` or `extras` section" * location_string)
     end
 end
 
@@ -124,7 +124,7 @@ function Project(raw::Dict; file=nothing)
     project.uuid     = read_project_uuid(get(raw, "uuid", nothing))
     project.version  = read_project_version(get(raw, "version", nothing))
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
-    project.gluedeps = read_project_deps(get(raw, "gluedeps", nothing), "gluedeps")
+    project.weakdeps = read_project_deps(get(raw, "weakdeps", nothing), "weakdeps")
     project.gluepkgs = get(Dict{String, String}, raw, "gluepkgs")
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
@@ -175,14 +175,14 @@ function destructure(project::Project)::Dict
     entry!("version",  project.version)
     entry!("manifest", project.manifest)
     entry!("deps",     project.deps)
-    entry!("gluedeps", project.gluedeps)
+    entry!("weakdeps", project.weakdeps)
     entry!("extras",   project.extras)
     entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
     entry!("targets",  project.targets)
     return raw
 end
 
-_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "gluedeps", "gluepkgs", "compat"]
+_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "weakdeps", "gluepkgs", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 

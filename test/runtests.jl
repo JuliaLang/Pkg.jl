@@ -66,7 +66,7 @@ Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger())
                 "api.jl",
                 "registry.jl",
                 "subdir.jl",
-                "gluedeps.jl",
+                "gluepkgs.jl",
                 "artifacts.jl",
                 "binaryplatforms.jl",
                 "platformengines.jl",
