@@ -239,6 +239,10 @@ Base.@kwdef mutable struct Project
     manifest::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
+    # deps that are also in weakdeps for backwards compat
+    # we do not store them in deps because we want to ignore them
+    # but for writing out the project file we need to remember them: 
+    _deps_weak::Dict{String,UUID} = Dict{String,UUID}()
     weakdeps::Dict{String,UUID} = Dict{String,UUID}()
     gluepkgs::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     extras::Dict{String,UUID} = Dict{String,UUID}()

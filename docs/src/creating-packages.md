@@ -263,6 +263,7 @@ SomePackage = "1.2"
 ```
 
 The current usage of this is almost solely limited to "glue packages" which is described in the next section.
+
 ## Conditional loading of code in packages (Glue packages)
 
 !!! note
@@ -297,7 +298,7 @@ Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 # name of glue package to the left
 # glue dependencies required to load the glue pkg to the right
 # use a list for multiple glue dependencies
-GlueContour = "Contour" 
+ContourGlue = "Contour" 
 
 [compat]
 Contour = "0.6.2"
@@ -314,9 +315,9 @@ end
 end # module
 ```
 
-`glue/GlueContour.jl` (can also be in `glue/GlueContour/GlueContour.jl`):
+`glue/ContourGlue.jl` (can also be in `glue/ContourGlue/ContourGlue.jl`):
 ```julia
-module GlueContour # Should be same name as the file (just like a normal package)
+module ContourGlue # Should be same name as the file (just like a normal package)
 
 using Plotting, Contour
 
@@ -327,12 +328,12 @@ end
 end # module
 ```
 
-A user that depends on `Plotting` will not pay the cost of the "glue code" inside the `GlueContour` module.
+A user that depends on `Plotting` will not pay the cost of the "glue code" inside the `ContourGlue` module.
 It is only when the `Contour` package actually gets loaded that the `GlueCountour` glue package is loaded
 and provides the new functionality.
 
-If one considers `GlueContour` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
-type piracy since `GlueContour` does not "own" neigher the method `Plotting.plot` nor the type `Contour.ContourCollection`.
+If one considers `ContourGlue` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
+type piracy since `ContourGlue` does not "own" neigher the method `Plotting.plot` nor the type `Contour.ContourCollection`.
 However, for glue packages, it is ok to assume that the glue package owns the methdos in its parent package.
 In fact, this type of "type piracies" is one of the most standard use cases for glue packages.
 
@@ -343,16 +344,13 @@ A glue package will only be loaded if the glue dependencies are loaded from the 
     know about them, the glue packages will not load. This is because the manifest lacks some information that tells Julia
     when it should load these packages. So make sure you use a manifest generated at least the Julia version you are using.
 
-!!! compat
-    In order to be compatible with earlier versions of Julia, some extra steps have to be taken.
-    These are: Duplicate the packages under `[weakdeps]` into `[extras]`. This is an unfortunate
-    duplication but without doing this the project verifier under older Julia versions will complain (error).
+### Backwards compatibility
 
-### Backwards compatibility with Requires.jl
+This section discusses various methods for using glue packages on Julia versions that support them,
+while simultaneously providing similar functionality on older Julia versions.
+#### Requires.jl
 
-Since glue packages and Requires.jl are solving the same problem,
-it is useful to know how to use Requires.jl on older Julia versions while seamlessly
-transitioning into using glue packages on newer Julia versions that support it.
+This section is relevant if you are currently using Requries.jl but want to transition to using glue packages (while still having Requires be used on Julia versions that do not support glue packages).
 This is done by making the following changes (using the example above):
 
 - Add the following to the package file. This makes it so that Requires.jl loads and inserts the
@@ -362,11 +360,24 @@ This is done by making the following changes (using the example above):
   if !isdefined(Base, :get_gluepkg)
   using Requires
   function __init__()
-      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../glue/GlueContour.jl)
+      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../glue/ContourGlue.jl)
   end
   end
   ```
+  or if you have other things in your `__init__()` function:
+  ```julia
+  if !isdefined(Base, :get_gluepkg)
+  using Requires
+  end
 
+  function __init__()
+      # Other init functionality here
+
+      @static if !isdefined(Base, :get_gluepkg)
+          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../glue/ContourGlue.jl)
+      end
+  end
+  ```
 - Do the following change in the glue packages for loading the glue dependency:
  ```julia
  isdefined(Base, :get_gluepkg) ? (using Contour) : (using ..Contour)
@@ -374,6 +385,25 @@ This is done by making the following changes (using the example above):
 
 The package should now work with Requires.jl on Julia versions before glue packages were introduced
 and with glue packages afterward.
+
+####  Transition from normal dependency to glue dependency
+
+This section is relevant if you have a normal dependency that you want to transition be a glue packages (while still having the dependency be a normal dependency on Julia versions that do not support glue packages).
+This is done by making the following changes (using the example above):
+
+- Make sure that the package is **both** in the `[deps]` and `[weakdeps]` section. Newer Julia versions will ignore dependencis in `[deps]` that are also in `[weakdeps]`.
+- Add the following to your main package file (typically at the bottom):
+  ```julia
+  if !isdefined(Base, :get_gluepkg)
+    include("../glue/ContourGlue.jl")
+  end
+  ```
+
+#### Using a glue dependency while supporting older Julia version
+
+If you want to use use a glue dependency with compatibility constraints while supporting earlier Julia
+versions you have to duplicate the packages under `[weakdeps]` into `[extras]`. This is an unfortunate
+duplication but without doing this the project verifier under older Julia versions will complain (error).
 
 ## Package naming guidelines
 

@@ -129,6 +129,10 @@ function Project(raw::Dict; file=nothing)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
+
+    # Handle deps in both [deps] and [weakdeps]
+    project._deps_weak = Dict(intersect(project.deps, project.weakdeps))
+    filter!(p->!haskey(project._deps_weak, p.first), project.deps)
     validate(project; file)
     return project
 end
@@ -174,6 +178,7 @@ function destructure(project::Project)::Dict
     entry!("uuid",     project.uuid)
     entry!("version",  project.version)
     entry!("manifest", project.manifest)
+    merge!(project.deps, project._deps_weak)
     entry!("deps",     project.deps)
     entry!("weakdeps", project.weakdeps)
     entry!("extras",   project.extras)

@@ -161,7 +161,9 @@ function fixup_glue!(env, pkgs)
                 entry.weakdeps = p.weakdeps
                 entry.gluepkgs = p.gluepkgs
                 for (name, _) in p.weakdeps
-                    delete!(entry.deps, name)
+                    if !haskey(p.deps, name)
+                        delete!(entry.deps, name)
+                    end
                 end
             end
         end
