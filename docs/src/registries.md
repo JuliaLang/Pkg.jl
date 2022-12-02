@@ -93,6 +93,35 @@ pkg> registry up
 Registries automatically update once per session when a package operation is performed so it
 rarely has to be done manually.
 
+### Registry flavors
+
+The default Pkg Server (`pkg.julialang.org`) offers two different "flavors" of registry:
+
+- `conservative`: suitable for most users; all packages and artifacts in this registry flavor are available from the Pkg Server, with no need to download from other sources
+- `eager`: this registry offers the latest versions of packages, even if the Pkg and Storage Servers have not finished processing them; thus, some packages and artifacts may not be available from the Pkg Server, and thus may need to be downloaded from other sources (such as GitHub)
+
+The default registry flavor is `conservative`. We recommend that most users stick to the `conservative` flavor unless they know that they need to use the `eager` flavor.
+
+To select the `eager` flavor:
+
+```julia
+ENV["JULIA_PKG_SERVER_REGISTRY_PREFERENCE"] = "eager"
+
+import Pkg
+
+Pkg.Registry.update()
+```
+
+To select the `conservative` flavor:
+
+```julia
+ENV["JULIA_PKG_SERVER_REGISTRY_PREFERENCE"] = "eager"
+
+import Pkg
+
+Pkg.Registry.update()
+```
+
 ### Creating and maintaining registries
 
 Pkg only provides client facilities for registries, rather than functionality to create
