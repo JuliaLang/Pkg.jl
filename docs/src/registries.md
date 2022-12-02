@@ -118,7 +118,7 @@ Pkg.Registry.update()
 To select the `conservative` flavor:
 
 ```julia
-ENV["JULIA_PKG_SERVER_REGISTRY_PREFERENCE"] = "eager"
+ENV["JULIA_PKG_SERVER_REGISTRY_PREFERENCE"] = "conservative"
 
 import Pkg
 
