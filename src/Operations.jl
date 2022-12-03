@@ -150,8 +150,8 @@ end
 
 # This has to be done after the packages have been downloaded
 # since we need access to the Projet file to read the information
-# about glue packages
-function fixup_glue!(env, pkgs)
+# about extensions
+function fixup_ext!(env, pkgs)
     for pkg in pkgs
         v = joinpath(source_path(env.project_file, pkg), "Project.toml")
         if haskey(env.manifest, pkg.uuid)
@@ -159,7 +159,7 @@ function fixup_glue!(env, pkgs)
             if isfile(v)
                 p = Types.read_project(v)
                 entry.weakdeps = p.weakdeps
-                entry.gluepkgs = p.gluepkgs
+                entry.exts = p.exts
                 for (name, _) in p.weakdeps
                     if !haskey(p.deps, name)
                         delete!(entry.deps, name)
@@ -221,7 +221,7 @@ end
 
 function collect_project(pkg::PackageSpec, path::String)
     deps = PackageSpec[]
-    glues = Set{UUID}()
+    weakdeps = Set{UUID}()
     project_file = projectfile_path(path; strict=true)
     if project_file === nothing
         pkgerror("could not find project file for package $(err_rep(pkg)) at `$path`")
@@ -241,7 +241,7 @@ function collect_project(pkg::PackageSpec, path::String)
     for (name, uuid) in project.weakdeps
         vspec = get_compat(project, name)
         push!(deps, PackageSpec(name, uuid, vspec))
-        push!(glues, uuid)
+        push!(weakdeps, uuid)
     end
     if project.version !== nothing
         pkg.version = project.version
@@ -249,7 +249,7 @@ function collect_project(pkg::PackageSpec, path::String)
         # @warn("project file for $(pkg.name) is missing a `version` entry")
         pkg.version = VersionNumber(0)
     end
-    return deps, glues
+    return deps, weakdeps
 end
 
 is_tracking_path(pkg) = pkg.path !== nothing
@@ -284,12 +284,12 @@ end
 
 function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     deps_map = Dict{UUID,Vector{PackageSpec}}()
-    glue_map = Dict{UUID,Set{UUID}}()
+    weak_map = Dict{UUID,Set{UUID}}()
     if env.pkg !== nothing
         pkg = env.pkg
-        deps, glues = collect_project(pkg, dirname(env.project_file))
+        deps, weakdeps = collect_project(pkg, dirname(env.project_file))
         deps_map[pkg.uuid] = deps
-        glue_map[pkg.uuid] = glues
+        weak_map[pkg.uuid] = weakdeps
         names[pkg.uuid] = pkg.name
     end
     for pkg in pkgs
@@ -297,9 +297,9 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
         end
-        deps, glues = collect_project(pkg, path)
+        deps, weakdeps = collect_project(pkg, path)
         deps_map[pkg.uuid] = deps
-        glue_map[pkg.uuid] = glues
+        weak_map[pkg.uuid] = weakdeps
     end
 
     fixed = Dict{UUID,Resolve.Fixed}()
@@ -316,7 +316,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
             fix_pkg = pkgs[idx]
         end
-        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q, glue_map[uuid])
+        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q, weak_map[uuid])
     end
     return fixed
 end
@@ -481,11 +481,11 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                 end
 
                 if !isempty(proj.weakdeps)
-                    glue_all_compat_u_vr = get_or_make!(weak_compat_u, v)
+                    weak_all_compat_u_vr = get_or_make!(weak_compat_u, v)
                     for (_, other_uuid) in proj.weakdeps
                         push!(uuids, other_uuid)
                         all_compat_u_vr[other_uuid] = VersionSpec()
-                        push!(glue_all_compat_u_vr, other_uuid)
+                        push!(weak_all_compat_u_vr, other_uuid)
                     end
                 end
             else
@@ -1326,7 +1326,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixup_glue!(ctx.env, pkgs)
+    fixup_ext!(ctx.env, pkgs)
     
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
@@ -1349,7 +1349,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixup_glue!(ctx.env, pkgs)
+    fixup_ext!(ctx.env, pkgs)
     download_artifacts(ctx.env; platform=platform, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1477,7 +1477,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixup_glue!(ctx.env, pkgs)
+    fixup_ext!(ctx.env, pkgs)
     download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io, hidden_upgrades_info = true)
@@ -1519,7 +1519,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new = download_source(ctx)
-    fixup_glue!(ctx.env, pkgs)
+    fixup_ext!(ctx.env, pkgs)
     download_artifacts(ctx.env; julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1561,7 +1561,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
 
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
         new = download_source(ctx)
-        fixup_glue!(ctx.env, pkgs)
+        fixup_ext!(ctx.env, pkgs)
         download_artifacts(ctx.env, io=ctx.io)
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -2096,33 +2096,33 @@ function is_package_downloaded(project_file::String, pkg::PackageSpec; platform=
     return true
 end
 
-function status_glue_info(pkg::PackageSpec, env::EnvCache)
+function status_ext_info(pkg::PackageSpec, env::EnvCache)
     manifest = env.manifest
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
     weakdepses = manifest_info.weakdeps
-    gluepkgs = manifest_info.gluepkgs
-    if !isempty(weakdepses) && !isempty(gluepkgs)
-        v = GlueInfo[]
-        for (gluepkg, gluedeps) in gluepkgs
-            gluedeps isa String && (gluedeps = String[gluedeps])
-            gluepkg_loaded = (Base.get_gluepkg(Base.PkgId(pkg.uuid, pkg.name), Symbol(gluepkg)) !== nothing)
+    exts = manifest_info.exts
+    if !isempty(weakdepses) && !isempty(exts)
+        v = ExtInfo[]
+        for (ext, extdeps) in exts
+            extdeps isa String && (extdeps = String[extdeps])
+            ext_loaded = (Base.get_extension(Base.PkgId(pkg.uuid, pkg.name), Symbol(ext)) !== nothing)
             # Check if deps are loaded
-            gluedeps_info= Tuple{String, Bool}[]
-            for gluedep in gluedeps
-                uuid = weakdepses[gluedep]
-                loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, gluedep))
-                push!(gluedeps_info, (gluedep, loaded))
+            extdeps_info= Tuple{String, Bool}[]
+            for extdep in extdeps
+                uuid = weakdepses[extdep]
+                loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, extdep))
+                push!(extdeps_info, (extdep, loaded))
             end
-            push!(v, GlueInfo((gluepkg, gluepkg_loaded), gluedeps_info))
+            push!(v, ExtInfo((ext, ext_loaded), extdeps_info))
         end
         return v
     end
     return nothing
 end
 
-struct GlueInfo
-    gluepkg::Tuple{String, Bool} # name, loaded
+struct ExtInfo
+    ext::Tuple{String, Bool} # name, loaded
     weakdeps::Vector{Tuple{String, Bool}} # name, loaded
 end
 struct PackageStatusData
@@ -2134,11 +2134,11 @@ struct PackageStatusData
     heldback::Bool
     compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
     changed::Bool
-    glueinfo::Union{Nothing, Vector{GlueInfo}}
+    extinfo::Union{Nothing, Vector{ExtInfo}}
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, glue::Bool, io::IO,
+                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, ext::Bool, io::IO,
                       mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
@@ -2182,7 +2182,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         latest_version = true
         # Outdated info
         cinfo = nothing
-        glue_info = nothing
+        ext_info = nothing
         if !isnothing(new) && !is_stdlib(new.uuid)
             cinfo = status_compat_info(new, env, registries)
             if cinfo !== nothing
@@ -2195,15 +2195,15 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         end
 
         if !isnothing(new) && !is_stdlib(new.uuid)
-            glue_info = status_glue_info(new, env)
+            ext_info = status_ext_info(new, env)
         end
 
-        if glue && glue_info == nothing
+        if ext && ext_info == nothing
             continue
         end
 
 
-        # TODO: Show glue deps for project as well
+        # TODO: Show extension deps for project as well?
 
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
 
@@ -2221,7 +2221,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         no_visible_packages_heldback &= (!changed || !pkg_heldback)
         no_packages_heldback &= !pkg_heldback
 
-        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, glue_info))
+        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, ext_info))
     end
 
     for pkg in package_statuses
@@ -2267,21 +2267,21 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             end
         end
 
-        if glue && !diff && pkg.glueinfo !== nothing
+        if ext && !diff && pkg.extinfo !== nothing
             println(io)
-            for (i, glue) in enumerate(pkg.glueinfo)
-                sym = i == length(pkg.glueinfo) ? '└' : '├'
-                function print_glue_entry(io, (name, installed))
+            for (i, ext) in enumerate(pkg.extinfo)
+                sym = i == length(pkg.extinfo) ? '└' : '├'
+                function print_ext_entry(io, (name, installed))
                     color = installed ? :light_green : :light_black
                     printstyled(io, name, ;color)
                 end
                 print(io, "              ", sym, "─ ")
-                print_glue_entry(io, glue.gluepkg)
+                print_ext_entry(io, ext.ext)
 
                 print(io, " [")
-                join(io,sprint.(print_glue_entry, glue.weakdeps; context=io), ", ")
+                join(io,sprint.(print_ext_entry, ext.weakdeps; context=io), ", ")
                 print(io, "]")
-                if i != length(pkg.glueinfo)
+                if i != length(pkg.extinfo)
                     println(io)
                 end
             end
@@ -2341,7 +2341,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, outdated::Bool=false, glue::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
+                io::IO, outdated::Bool=false, ext::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2368,10 +2368,10 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, glue, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, ext, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, glue, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, ext, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
         tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""

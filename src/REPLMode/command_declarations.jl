@@ -376,7 +376,7 @@ PSA[:name => "status",
         PSA[:name => "diff", :short_name => "d", :api => :diff => true],
         PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
         PSA[:name => "compat", :short_name => "c", :api => :compat => true],
-        PSA[:name => "glue", :short_name => "g", :api => :glue => true],
+        PSA[:name => "extensions", :short_name => "e", :api => :Ext => true],
     ],
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
@@ -384,8 +384,8 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
     [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
-    [st|status] [-d|--diff] [-g|--glue] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-g|--glue] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [-g|--extensions] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [-g|--extensions] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
 Show the status of the current environment. Packages marked with `⌃` have new
@@ -394,7 +394,7 @@ new versions available, but cannot be installed due to compatibility
 constraints. To see why use `pkg> status --outdated` which shows any packages
 that are not at their latest version and if any packages are holding them back.
 
-Use `pkg> status --glue` to show dependencies with glue packages and what glue dependencies
+Use `pkg> status --extensions` to show dependencies with extensions and what extension dependencies
 of those that are currently loaded.
 
 In `--project` mode (default), the status of the project file is summarized. In `--manifest`

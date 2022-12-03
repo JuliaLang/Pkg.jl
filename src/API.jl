@@ -1096,7 +1096,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
 
-    gluepkgs = Dict{Base.PkgId, String}() # gluepkg -> parent
+    exts = Dict{Base.PkgId, String}() # ext -> parent
     # make a flat map of each dep and its deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
     pkg_specs = PackageSpec[]
@@ -1105,28 +1105,28 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         Base.in_sysimage(pkg) && continue
         deps = [Base.PkgId(last(x), first(x)) for x in last(dep).deps]
         depsmap[pkg] = filter!(!Base.in_sysimage, deps)
-        # add any glue packages
+        # add any extensions
         weakdeps = last(dep).weakdeps
-        for (gluepkg_name, gluedep_names) in last(dep).gluepkgs
-            gluepkg_deps = Base.PkgId[]
-            push!(gluepkg_deps, pkg) # depends on parent package
-            all_gluedeps_available = true
-            gluedep_names = gluedep_names isa String ? String[gluedep_names] : gluedep_names
-            for gluedep_name in gluedep_names
-                gluedep_uuid = weakdeps[gluedep_name]
-                if gluedep_uuid in keys(ctx.env.manifest.deps)
-                    push!(gluepkg_deps, Base.PkgId(gluedep_uuid, gluedep_name))
+        for (ext_name, extdep_names) in last(dep).exts
+            ext_deps = Base.PkgId[]
+            push!(ext_deps, pkg) # depends on parent package
+            all_extdeps_available = true
+            extdep_names = extdep_names isa String ? String[extdep_names] : extdep_names
+            for extdep_name in extdep_names
+                extdep_uuid = weakdeps[extdep_name]
+                if extdep_uuid in keys(ctx.env.manifest.deps)
+                    push!(ext_deps, Base.PkgId(extdep_uuid, extdep_name))
                 else
-                    all_gluedeps_available = false
+                    all_extdeps_available = false
                     break
                 end
             end
-            all_gluedeps_available || continue
-            gluepkg_uuid = Base.uuid5(pkg.uuid, gluepkg_name)
-            gluepkg = Base.PkgId(gluepkg_uuid, gluepkg_name)
-            push!(pkg_specs, PackageSpec(uuid = gluepkg_uuid, name = gluepkg_name)) # create this here as the name cannot be looked up easily later via the uuid
-            depsmap[gluepkg] = filter!(!Base.in_sysimage, gluepkg_deps)
-            gluepkgs[gluepkg] = pkg.name
+            all_extdeps_available || continue
+            ext_uuid = Base.uuid5(pkg.uuid, ext_name)
+            ext = Base.PkgId(ext_uuid, ext_name)
+            push!(pkg_specs, PackageSpec(uuid = ext_uuid, name = ext_name)) # create this here as the name cannot be looked up easily later via the uuid
+            depsmap[ext] = filter!(!Base.in_sysimage, ext_deps)
+            exts[ext] = pkg.name
         end
     end
 
@@ -1268,7 +1268,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         final_loop || print(iostr, sprint(io -> show_progress(io, bar; termwidth = displaysize(ctx.io)[2]); context=io), "\n")
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
-                            _name = haskey(gluepkgs, dep) ? string(gluepkgs[dep], " → ", dep.name) : dep.name
+                            _name = haskey(exts, dep) ? string(exts[dep], " → ", dep.name) : dep.name
                             name = dep in direct_deps ? _name : string(color_string(_name, :light_black))
                             if dep in precomperr_deps
                                 print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
@@ -1343,7 +1343,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
-                    _name = haskey(gluepkgs, pkg) ? string(gluepkgs[pkg], " → ", pkg.name) : pkg.name
+                    _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
                     name = is_direct_dep ? _name : string(color_string(_name, :light_black))
                     !fancyprint && lock(print_lock) do
                         isempty(pkg_queue) && printpkgstyle(io, :Precompiling, target)
@@ -1646,14 +1646,14 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, glue::Bool=false, io::IO=stdout_f(), kwargs...)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, ext::Bool=false, io::IO=stdout_f(), kwargs...)
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
-        glue && pkgerror("Compat status has no `glue` mode")
+        ext && pkgerror("Compat status has no `ext` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, glue)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, ext)
     end
     return nothing
 end

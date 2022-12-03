@@ -80,9 +80,9 @@ function validate(project::Project; file=nothing)
     if length(dep_uuids) != length(unique(dep_uuids))
         pkgerror("Two different dependencies can not have the same uuid" * location_string)
     end
-    glue_dep_uuids = collect(values(project.weakdeps))
-    if length(glue_dep_uuids) != length(unique(glue_dep_uuids))
-        pkgerror("Two different glue dependencies can not have the same uuid" * location_string)
+    weak_dep_uuids = collect(values(project.weakdeps))
+    if length(weak_dep_uuids) != length(unique(weak_dep_uuids))
+        pkgerror("Two different weak dependencies can not have the same uuid" * location_string)
     end
     # extras
     extra_uuids = collect(values(project.extras))
@@ -125,7 +125,7 @@ function Project(raw::Dict; file=nothing)
     project.version  = read_project_version(get(raw, "version", nothing))
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
     project.weakdeps = read_project_deps(get(raw, "weakdeps", nothing), "weakdeps")
-    project.gluepkgs = get(Dict{String, String}, raw, "gluepkgs")
+    project.exts     = get(Dict{String, String}, raw, "extensions")
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
@@ -187,7 +187,7 @@ function destructure(project::Project)::Dict
     return raw
 end
 
-_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "weakdeps", "gluepkgs", "compat"]
+_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "weakdeps", "extensions", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 

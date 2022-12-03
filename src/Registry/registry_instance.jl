@@ -36,7 +36,7 @@ custom_isfile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, 
     git_tree_sha1::Base.SHA1
     yanked::Bool
     @lazy uncompressed_compat::Union{Dict{UUID, VersionSpec}}
-    @lazy glue_uncompressed_compat::Union{Dict{UUID, VersionSpec}}
+    @lazy weak_uncompressed_compat::Union{Dict{UUID, VersionSpec}}
 end
 VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = VersionInfo(git_tree_sha1, yanked, uninit, uninit)
 
@@ -126,26 +126,26 @@ function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info
     return pkg
 end
 
-function initialize_glue_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
+function initialize_weak_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
     # Only valid to call this with existing versions of the package
     # Remove all versions we have already uncompressed
-    versions = filter!(v -> !isinit(pkg.version_info[v], :glue_uncompressed_compat), collect(versions))
+    versions = filter!(v -> !isinit(pkg.version_info[v], :weak_uncompressed_compat), collect(versions))
 
     sort!(versions)
 
-    glue_uncompressed_compat = uncompress(pkg.weak_compat, versions)
-    glue_uncompressed_deps   = uncompress(pkg.weak_deps,   versions)
+    weak_uncompressed_compat = uncompress(pkg.weak_compat, versions)
+    weak_uncompressed_deps   = uncompress(pkg.weak_deps,   versions)
 
     for v in versions
         vinfo = pkg.version_info[v]
         weak_compat = Dict{UUID, VersionSpec}()
-        glue_uncompressed_deps_v = glue_uncompressed_deps[v]
-        glue_uncompressed_compat_v = glue_uncompressed_compat[v]
-        for (pkg, uuid) in glue_uncompressed_deps_v
-            vspec = get(glue_uncompressed_compat_v, pkg, nothing)
+        weak_uncompressed_deps_v = weak_uncompressed_deps[v]
+        weak_uncompressed_compat_v = weak_uncompressed_compat[v]
+        for (pkg, uuid) in weak_uncompressed_deps_v
+            vspec = get(weak_uncompressed_compat_v, pkg, nothing)
             weak_compat[uuid] = vspec === nothing ? VersionSpec() : vspec
         end
-        @init! vinfo.glue_uncompressed_compat = weak_compat
+        @init! vinfo.weak_uncompressed_compat = weak_compat
     end
     return pkg
 end
@@ -159,8 +159,8 @@ function weak_compat_info(pkg::PkgInfo)
     if isempty(pkg.weak_deps)
         return nothing
     end
-    initialize_glue_uncompressed!(pkg)
-    return Dict(v => info.glue_uncompressed_compat for (v, info) in pkg.version_info)
+    initialize_weak_uncompressed!(pkg)
+    return Dict(v => info.weak_uncompressed_compat for (v, info) in pkg.version_info)
 end
 
 @lazy struct PkgEntry

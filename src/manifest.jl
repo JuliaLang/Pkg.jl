@@ -86,15 +86,15 @@ struct Stage1
     weakdeps::Union{Vector{String}, Dict{String,UUID}}
 end
 
-normalize_deps(name, uuid, deps, manifest; isglue=false) = deps
-function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,Vector{Stage1}}; isglue=false)
+normalize_deps(name, uuid, deps, manifest; isext=false) = deps
+function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,Vector{Stage1}}; isext=false)
     if length(deps) != length(unique(deps))
         pkgerror("Duplicate entry in `$name=$uuid`'s `deps` field.")
     end
     final = Dict{String,UUID}()
     for dep in deps
         infos = get(manifest, dep, nothing)
-        if !isglue
+        if !isext
             if infos === nothing
                 pkgerror("`$name=$uuid` depends on `$dep`, ",
                         "but no such entry exists in the manifest.")
@@ -114,7 +114,7 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
         info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
     end
     for (name, infos) in stage1, info in infos
-        info.entry.weakdeps = normalize_deps(name, info.uuid, info.weakdeps, stage1; isglue=true)
+        info.entry.weakdeps = normalize_deps(name, info.uuid, info.weakdeps, stage1; isext=true)
     end
     # invariant: all dependencies are now normalized to Dict{String,UUID}
     deps = Dict{UUID, PackageEntry}()
@@ -123,10 +123,10 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
     end
     # now just verify the graph structure
     for (entry_uuid, entry) in deps
-        for (deptype, isglue) in [(entry.deps, false), (entry.weakdeps, true)]
+        for (deptype, isext) in [(entry.deps, false), (entry.weakdeps, true)]
             for (name, uuid) in deptype
                 dep_entry = get(deps, uuid, nothing)
-                if !isglue
+                if !isext
                     if dep_entry === nothing
                         pkgerror("`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
                                 "but no such entry exists in the manifest.")
@@ -172,7 +172,7 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
                 entry.uuid        = uuid
                 deps = read_deps(get(info::Dict, "deps", nothing))
                 weakdeps = read_deps(get(info::Dict, "weakdeps", nothing))
-                entry.gluepkgs = get(Dict{String, String}, info::Dict, "gluepkgs")
+                entry.exts = get(Dict{String, String}, info::Dict, "extensions")
             catch
                 # TODO: Should probably not unconditionally log something
                 @debug "Could not parse manifest entry for `$name`" f_or_io
@@ -288,8 +288,8 @@ function destructure(manifest::Manifest)::Dict
         end
 
         # TODO: Write this inline
-        if !isempty(entry.gluepkgs)
-            entry!(new_entry, "gluepkgs", entry.gluepkgs)
+        if !isempty(entry.exts)
+            entry!(new_entry, "extensions", entry.exts)
         end
         if manifest.manifest_format.major == 1
             push!(get!(raw, entry.name, Dict{String,Any}[]), new_entry)

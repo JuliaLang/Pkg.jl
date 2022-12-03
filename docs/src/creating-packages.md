@@ -262,25 +262,25 @@ SomePackage = "b3785f31-9d33-4cdf-bc73-f646780f1739"
 SomePackage = "1.2"
 ```
 
-The current usage of this is almost solely limited to "glue packages" which is described in the next section.
+The current usage of this is almost solely limited to "extensions" which is described in the next section.
 
-## Conditional loading of code in packages (Glue packages)
+## Conditional loading of code in packages (Extensions)
 
 !!! note
     This is a somewhat advanced usage of Pkg which can be skipped for people new to Julia and Julia packages.
 
 It is sometimes desirable to be able to extend some functionality of a package without having to
 unconditionally take on the cost (in terms of e.g. load time) of adding a full dependency on that package.
-A *glue package* is something resembling a package that gets automatically loaded when *some other set of packages* are
+A package *extension* is a module in a file (similar to a package) that is automatically loaded when *some other set of packages* are
 loaded into the Julia session. This is very similar to functionality that the external package
-Requires.jl used to provide, but which is now available directly through Julia.
+Requires.jl provides, but which is now available directly through Julia.
 
-A useful application of glue packages could be for a plotting package that should be able to plot
+A useful application of extensions could be for a plotting package that should be able to plot
 objects from a wide variety of different Julia packages.
 Adding all those different Julia packages as dependencies
 could be expensive since they would end up getting loaded even if they were never used.
 Instead, the code required to plot objects for specific packages can be put into separate files
-(glue packages) and these are loaded only when the packages that defines the type we want to plot
+(extensions) and these are loaded only when the packages that defines the type we want to plot
 are loaded.
 
 Below is an example of how the code can be structured for a use case outlined above:
@@ -294,11 +294,11 @@ uuid = "..."
 [weakdeps]
 Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 
-[gluepkgs] 
-# name of glue package to the left
-# glue dependencies required to load the glue pkg to the right
-# use a list for multiple glue dependencies
-ContourGlue = "Contour" 
+[extensions]
+# name of extension to the left
+# extension dependencies required to load the extension to the right
+# use a list for multiple extension dependencies
+ContourExt = "Contour" 
 
 [compat]
 Contour = "0.6.2"
@@ -315,9 +315,9 @@ end
 end # module
 ```
 
-`glue/ContourGlue.jl` (can also be in `glue/ContourGlue/ContourGlue.jl`):
+`ext/ContourExt.jl` (can also be in `ext/ContourExt/ContourExt.jl`):
 ```julia
-module ContourGlue # Should be same name as the file (just like a normal package)
+module ContourExt # Should be same name as the file (just like a normal package)
 
 using Plotting, Contour
 
@@ -328,80 +328,85 @@ end
 end # module
 ```
 
-A user that depends on `Plotting` will not pay the cost of the "glue code" inside the `ContourGlue` module.
-It is only when the `Contour` package actually gets loaded that the `GlueCountour` glue package is loaded
+A user that depends on `Plotting` will not pay the cost of the "extension" inside the `ContourExt` module.
+It is only when the `Contour` package actually gets loaded that the `ContourExt` extension is loaded
 and provides the new functionality.
 
-If one considers `ContourGlue` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
-type piracy since `ContourGlue` does not "own" neigher the method `Plotting.plot` nor the type `Contour.ContourCollection`.
-However, for glue packages, it is ok to assume that the glue package owns the methdos in its parent package.
-In fact, this type of "type piracies" is one of the most standard use cases for glue packages.
+If one considers `ContourExt` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
+type piracy since `ContourExt` does not "own" neigher the method `Plotting.plot` nor the type `Contour.ContourCollection`.
+However, for extensions, it is ok to assume that the extension owns the methods in its parent package.
+In fact, this type of "type piracies" is one of the most standard use cases for extensions.
 
-A glue package will only be loaded if the glue dependencies are loaded from the same environment or environments higher in the environment stack than the package itself.
+An extension will only be loaded if the extension dependencies are loaded from the same environment or environments higher in the environment stack than the package itself.
+
+!!! compat
+    Often you will put the extension dependencies into the `test` target so they are loaded when running e.g. `Pkg.test()`. On earlier Julia versions
+    this requires you to also put the package in the `[extras]` section. This is unfortunate but the project verifier on older Julia versions will
+    complain if this is not done.
 
 !!! note
-    If you use a manifest generated by a Julia version that does not know about glue packages with a Julia version that does
-    know about them, the glue packages will not load. This is because the manifest lacks some information that tells Julia
+    If you use a manifest generated by a Julia version that does not know about extensions with a Julia version that does
+    know about them, the extensions will not load. This is because the manifest lacks some information that tells Julia
     when it should load these packages. So make sure you use a manifest generated at least the Julia version you are using.
 
 ### Backwards compatibility
 
-This section discusses various methods for using glue packages on Julia versions that support them,
+This section discusses various methods for using extensions on Julia versions that support them,
 while simultaneously providing similar functionality on older Julia versions.
 #### Requires.jl
 
-This section is relevant if you are currently using Requries.jl but want to transition to using glue packages (while still having Requires be used on Julia versions that do not support glue packages).
+This section is relevant if you are currently using Requries.jl but want to transition to using extensions (while still having Requires be used on Julia versions that do not support extensions).
 This is done by making the following changes (using the example above):
 
 - Add the following to the package file. This makes it so that Requires.jl loads and inserts the
-  callback only when glue packages are not supported
+  callback only when extensions are not supported
   ```julia
-  # This symbol is only defined on Julia versions that support glue packages
-  if !isdefined(Base, :get_gluepkg)
+  # This symbol is only defined on Julia versions that support extensions
+  if !isdefined(Base, :get_extension)
   using Requires
   function __init__()
-      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../glue/ContourGlue.jl)
+      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl)
   end
   end
   ```
   or if you have other things in your `__init__()` function:
   ```julia
-  if !isdefined(Base, :get_gluepkg)
+  if !isdefined(Base, :get_extension)
   using Requires
   end
 
   function __init__()
       # Other init functionality here
 
-      @static if !isdefined(Base, :get_gluepkg)
-          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../glue/ContourGlue.jl)
+      @static if !isdefined(Base, :get_extension)
+          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl)
       end
   end
   ```
-- Do the following change in the glue packages for loading the glue dependency:
+- Do the following change in the extensions for loading the extension dependency:
  ```julia
- isdefined(Base, :get_gluepkg) ? (using Contour) : (using ..Contour)
+ isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
  ```
 
-The package should now work with Requires.jl on Julia versions before glue packages were introduced
-and with glue packages afterward.
+The package should now work with Requires.jl on Julia versions before extensions were introduced
+and with extensions afterward.
 
-####  Transition from normal dependency to glue dependency
+####  Transition from normal dependency to extension
 
-This section is relevant if you have a normal dependency that you want to transition be a glue packages (while still having the dependency be a normal dependency on Julia versions that do not support glue packages).
+This section is relevant if you have a normal dependency that you want to transition be an extension (while still having the dependency be a normal dependency on Julia versions that do not support extensions).
 This is done by making the following changes (using the example above):
 
 - Make sure that the package is **both** in the `[deps]` and `[weakdeps]` section. Newer Julia versions will ignore dependencis in `[deps]` that are also in `[weakdeps]`.
 - Add the following to your main package file (typically at the bottom):
   ```julia
-  if !isdefined(Base, :get_gluepkg)
-    include("../glue/ContourGlue.jl")
+  if !isdefined(Base, :get_extension)
+    include("../ext/ContourExt.jl")
   end
   ```
 
-#### Using a glue dependency while supporting older Julia version
+#### Using an extension while supporting older Julia version
 
-If you want to use use a glue dependency with compatibility constraints while supporting earlier Julia
+If you want to use use an extension with compatibility constraints while supporting earlier Julia
 versions you have to duplicate the packages under `[weakdeps]` into `[extras]`. This is an unfortunate
 duplication but without doing this the project verifier under older Julia versions will complain (error).
 
