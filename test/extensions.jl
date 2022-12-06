@@ -12,7 +12,7 @@ using Test
         Pkg.develop(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasDepWithExtensions.jl"))
         Pkg.test("HasDepWithExtensions", julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
         io = IOBuffer()
-        Pkg.status(; ext=true, mode=Pkg.PKGMODE_MANIFEST, io)
+        Pkg.status(; extensions=true, mode=Pkg.PKGMODE_MANIFEST, io)
          # TODO: Test output when ext deps are loaded etc.
         str = String(take!(io))
         @test contains(str, "└─ OffsetArraysExt [OffsetArrays]" )

@@ -1646,14 +1646,14 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, ext::Bool=false, io::IO=stdout_f(), kwargs...)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
-        ext && pkgerror("Compat status has no `ext` mode")
+        extensions && pkgerror("Compat status has no `extensions` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, ext)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions)
     end
     return nothing
 end

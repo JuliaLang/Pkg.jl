@@ -1327,7 +1327,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
     fixup_ext!(ctx.env, pkgs)
-    
+
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
     download_artifacts(ctx.env, platform=platform, julia_version=ctx.julia_version, io=ctx.io)
@@ -2138,7 +2138,7 @@ struct PackageStatusData
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, ext::Bool, io::IO,
+                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, extensions::Bool, io::IO,
                       mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
@@ -2198,7 +2198,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             ext_info = status_ext_info(new, env)
         end
 
-        if ext && ext_info == nothing
+        if extensions && ext_info === nothing
             continue
         end
 
@@ -2267,7 +2267,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             end
         end
 
-        if ext && !diff && pkg.extinfo !== nothing
+        if extensions && !diff && pkg.extinfo !== nothing
             println(io)
             for (i, ext) in enumerate(pkg.extinfo)
                 sym = i == length(pkg.extinfo) ? '└' : '├'
@@ -2341,7 +2341,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, outdated::Bool=false, ext::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
+                io::IO, outdated::Bool=false, extensions::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2368,10 +2368,10 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, ext, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, ext, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
         tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""
