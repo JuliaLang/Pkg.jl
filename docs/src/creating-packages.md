@@ -251,7 +251,7 @@ This is an important topic so there is a separate chapter about it: [Compatibili
     This is a somewhat advanced usage of Pkg which can be skipped for people new to Julia and Julia packages.
 
 A weak dependency is a dependency that will not automatically install when the package is installed but
-you can still control what versions of that package is allowed to install by setting compatibility on it.
+you can still control what versions of that package are allowed to be installed by setting compatibility on it.
 These are listed in the project file under the `[weakdeps]` section:
 
 ```toml
@@ -355,7 +355,7 @@ This section discusses various methods for using extensions on Julia versions th
 while simultaneously providing similar functionality on older Julia versions.
 #### Requires.jl
 
-This section is relevant if you are currently using Requries.jl but want to transition to using extensions (while still having Requires be used on Julia versions that do not support extensions).
+This section is relevant if you are currently using Requires.jl but want to transition to using extensions (while still having Requires be used on Julia versions that do not support extensions).
 This is done by making the following changes (using the example above):
 
 - Add the following to the package file. This makes it so that Requires.jl loads and inserts the
@@ -365,7 +365,7 @@ This is done by making the following changes (using the example above):
   if !isdefined(Base, :get_extension)
   using Requires
   function __init__()
-      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl)
+      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl")
   end
   end
   ```

@@ -149,7 +149,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
 end
 
 # This has to be done after the packages have been downloaded
-# since we need access to the Projet file to read the information
+# since we need access to the Project file to read the information
 # about extensions
 function fixup_ext!(env, pkgs)
     for pkg in pkgs

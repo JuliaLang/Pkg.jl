@@ -421,6 +421,7 @@ const resolve = API.resolve
 """
     Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout)
 
+
 Print out the status of the project/manifest.
 
 Packages marked with `⌃` have new versions that can be installed, e.g. via [`Pkg.up`](@ref).
