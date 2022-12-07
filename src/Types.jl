@@ -239,6 +239,12 @@ Base.@kwdef mutable struct Project
     manifest::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
+    # deps that are also in weakdeps for backwards compat
+    # we do not store them in deps because we want to ignore them
+    # but for writing out the project file we need to remember them: 
+    _deps_weak::Dict{String,UUID} = Dict{String,UUID}()
+    weakdeps::Dict{String,UUID} = Dict{String,UUID}()
+    exts::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
@@ -262,6 +268,8 @@ Base.@kwdef mutable struct PackageEntry
     repo::GitRepo = GitRepo()
     tree_hash::Union{Nothing,SHA1} = nothing
     deps::Dict{String,UUID} = Dict{String,UUID}()
+    weakdeps::Dict{String,UUID} = Dict{String,UUID}()
+    exts::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     uuid::Union{Nothing, UUID} = nothing
     other::Union{Dict,Nothing} = nothing
 end
@@ -272,9 +280,11 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.repo == t2.repo &&
     t1.tree_hash == t2.tree_hash &&
     t1.deps == t2.deps &&
+    t1.weakdeps == t2.weakdeps &&
+    t1.exts == t2.exts &&
     t1.uuid == t2.uuid
     # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.uuid], init=h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init=h)  # omits `other`
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing,VersionNumber} = nothing # only set to VERSION when resolving

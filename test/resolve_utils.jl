@@ -81,7 +81,7 @@ function graph_from_data(deps_data)
             end
         end
     end
-    return Graph(all_compat, uuid_to_name, Requires(), fixed, VERBOSE; compat_weak=all_compat_w)
+    return Graph(all_compat, all_compat_w, uuid_to_name, Requires(), fixed, VERBOSE)
 end
 function reqs_from_data(reqs_data, graph::Graph)
     reqs = Dict{UUID,VersionSpec}()

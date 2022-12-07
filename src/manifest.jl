@@ -83,19 +83,22 @@ struct Stage1
     uuid::UUID
     entry::PackageEntry
     deps::Union{Vector{String}, Dict{String,UUID}}
+    weakdeps::Union{Vector{String}, Dict{String,UUID}}
 end
 
-normalize_deps(name, uuid, deps, manifest) = deps
-function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,Vector{Stage1}})
+normalize_deps(name, uuid, deps, manifest; isext=false) = deps
+function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,Vector{Stage1}}; isext=false)
     if length(deps) != length(unique(deps))
         pkgerror("Duplicate entry in `$name=$uuid`'s `deps` field.")
     end
     final = Dict{String,UUID}()
     for dep in deps
         infos = get(manifest, dep, nothing)
-        if infos === nothing
-            pkgerror("`$name=$uuid` depends on `$dep`, ",
-                     "but no such entry exists in the manifest.")
+        if !isext
+            if infos === nothing
+                pkgerror("`$name=$uuid` depends on `$dep`, ",
+                        "but no such entry exists in the manifest.")
+            end
         end
         # should have used dict format instead of vector format
         length(infos) == 1 || pkgerror("Invalid manifest format. ",
@@ -110,21 +113,30 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
     for (name, infos) in stage1, info in infos
         info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
     end
+    for (name, infos) in stage1, info in infos
+        info.entry.weakdeps = normalize_deps(name, info.uuid, info.weakdeps, stage1; isext=true)
+    end
     # invariant: all dependencies are now normalized to Dict{String,UUID}
     deps = Dict{UUID, PackageEntry}()
     for (name, infos) in stage1, info in infos
         deps[info.uuid] = info.entry
     end
     # now just verify the graph structure
-    for (entry_uuid, entry) in deps, (name, uuid) in entry.deps
-        dep_entry = get(deps, uuid, nothing)
-        if dep_entry === nothing
-            pkgerror("`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
-                     "but no such entry exists in the manifest.")
-        end
-        if dep_entry.name != name
-            pkgerror("`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
-                     "but entry with UUID `$uuid` has name `$(dep_entry.name)`.")
+    for (entry_uuid, entry) in deps
+        for (deptype, isext) in [(entry.deps, false), (entry.weakdeps, true)]
+            for (name, uuid) in deptype
+                dep_entry = get(deps, uuid, nothing)
+                if !isext
+                    if dep_entry === nothing
+                        pkgerror("`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
+                                "but no such entry exists in the manifest.")
+                    end
+                    if dep_entry.name != name
+                        pkgerror("`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
+                                "but entry with UUID `$uuid` has name `$(dep_entry.name)`.")
+                    end
+                end
+            end
         end
     end
     return Manifest(; julia_version, manifest_format, deps, other)
@@ -147,6 +159,7 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
             entry.name = name
             uuid = nothing
             deps = nothing
+            weakdeps = nothing
             try
                 entry.pinned      = read_pinned(get(info, "pinned", nothing))
                 uuid              = read_field("uuid",          nothing, info, safe_uuid)::UUID
@@ -158,13 +171,15 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
                 entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
                 entry.uuid        = uuid
                 deps = read_deps(get(info::Dict, "deps", nothing))
+                weakdeps = read_deps(get(info::Dict, "weakdeps", nothing))
+                entry.exts = get(Dict{String, String}, info::Dict, "extensions")
             catch
                 # TODO: Should probably not unconditionally log something
                 @debug "Could not parse manifest entry for `$name`" f_or_io
                 rethrow()
             end
             entry.other = info::Union{Dict,Nothing}
-            stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps))
+            stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps, weakdeps))
         end
         # by this point, all the fields of the `PackageEntry`s have been type casted
         # but we have *not* verified the _graph_ structure of the manifest
@@ -257,17 +272,24 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "repo-url", repo_source)
         entry!(new_entry, "repo-rev", entry.repo.rev)
         entry!(new_entry, "repo-subdir", entry.repo.subdir)
-        if isempty(entry.deps)
-            delete!(new_entry, "deps")
-        else
-            if all(dep -> unique_name[first(dep)], entry.deps)
-                new_entry["deps"] = sort(collect(keys(entry.deps)))
+        for (deptype, depname) in [(entry.deps, "deps"), (entry.weakdeps, "weakdeps")]
+            if isempty(deptype)
+                delete!(new_entry, depname)
             else
-                new_entry["deps"] = Dict{String,String}()
-                for (name, uuid) in entry.deps
-                    new_entry["deps"][name] = string(uuid)
+                if all(dep -> haskey(unique_name, first(dep)), deptype) && all(dep -> unique_name[first(dep)], deptype)
+                    new_entry[depname] = sort(collect(keys(deptype)))
+                else
+                    new_entry[depname] = Dict{String,String}()
+                    for (name, uuid) in deptype
+                        new_entry[depname][name] = string(uuid)
+                    end
                 end
             end
+        end
+
+        # TODO: Write this inline
+        if !isempty(entry.exts)
+            entry!(new_entry, "extensions", entry.exts)
         end
         if manifest.manifest_format.major == 1
             push!(get!(raw, entry.name, Dict{String,Any}[]), new_entry)
