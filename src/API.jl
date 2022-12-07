@@ -1321,8 +1321,11 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     end
                     try
                         ret = Logging.with_logger(Logging.NullLogger()) do
-                            # capture stderr, send stdout to devnull, don't skip loaded modules
-                            Base.compilecache(pkg, sourcepath, iob, devnull, false)
+                            # TODO: Explore allowing parallel LLVM image generation. Needs careful load balancing
+                            withenv("JULIA_IMAGE_THREADS" => "1") do
+                                # capture stderr, send stdout to devnull, don't skip loaded modules
+                                Base.compilecache(pkg, sourcepath, iob, devnull, false)
+                            end
                         end
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
