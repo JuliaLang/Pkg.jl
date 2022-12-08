@@ -333,7 +333,7 @@ It is only when the `Contour` package actually gets loaded that the `ContourExt`
 and provides the new functionality.
 
 If one considers `ContourExt` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
-type piracy since `ContourExt` does not "own" neigher the method `Plotting.plot` nor the type `Contour.ContourCollection`.
+type piracy since `ContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
 However, for extensions, it is ok to assume that the extension owns the methods in its parent package.
 In fact, this type of "type piracies" is one of the most standard use cases for extensions.
 
