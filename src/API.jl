@@ -162,12 +162,12 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
                       url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
-            pkg = PackageSpec(; name=name, uuid=uuid, version=version, url=url, rev=rev, path=path, subdir=subdir)
+            pkg = PackageSpec(; name, uuid, version, url, rev, path, subdir)
             if $f === status || $f === rm || $f === up
                 kwargs = merge((;kwargs...), (:mode => mode,))
             end
             # Handle $f() case
-            if unique([name,uuid,version,url,rev,path,subdir]) == [nothing]
+            if all(isnothing, [name,uuid,version,url,rev,path,subdir])
                 $f(PackageSpec[]; kwargs...)
             else
                 $f(pkg; kwargs...)
@@ -301,8 +301,10 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
 
     Operations.rm(ctx, pkgs; mode)
+
     return
 end
+
 
 function append_all_pkgs!(pkgs, ctx, mode)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
@@ -1095,15 +1097,41 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
 
-    man = ctx.env.manifest
-    deps_pair_or_nothing = Iterators.map(man) do dep
+    exts = Dict{Base.PkgId, String}() # ext -> parent
+    # make a flat map of each dep and its deps
+    depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
+    pkg_specs = PackageSpec[]
+    for dep in ctx.env.manifest
         pkg = Base.PkgId(first(dep), last(dep).name)
-        Base.in_sysimage(pkg) && return nothing
+        Base.in_sysimage(pkg) && continue
         deps = [Base.PkgId(last(x), first(x)) for x in last(dep).deps]
-        return pkg => filter!(!Base.in_sysimage, deps)
+        depsmap[pkg] = filter!(!Base.in_sysimage, deps)
+        # add any extensions
+        weakdeps = last(dep).weakdeps
+        for (ext_name, extdep_names) in last(dep).exts
+            ext_deps = Base.PkgId[]
+            push!(ext_deps, pkg) # depends on parent package
+            all_extdeps_available = true
+            extdep_names = extdep_names isa String ? String[extdep_names] : extdep_names
+            for extdep_name in extdep_names
+                extdep_uuid = weakdeps[extdep_name]
+                if extdep_uuid in keys(ctx.env.manifest.deps)
+                    push!(ext_deps, Base.PkgId(extdep_uuid, extdep_name))
+                else
+                    all_extdeps_available = false
+                    break
+                end
+            end
+            all_extdeps_available || continue
+            ext_uuid = Base.uuid5(pkg.uuid, ext_name)
+            ext = Base.PkgId(ext_uuid, ext_name)
+            push!(pkg_specs, PackageSpec(uuid = ext_uuid, name = ext_name)) # create this here as the name cannot be looked up easily later via the uuid
+            depsmap[ext] = filter!(!Base.in_sysimage, ext_deps)
+            exts[ext] = pkg.name
+        end
     end
-    depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}(Iterators.filter(!isnothing, deps_pair_or_nothing)) #flat map of each dep and its deps
 
+    # if the active environment is a package, add that
     ctx_env_pkg = ctx.env.pkg
     if ctx_env_pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", "$(ctx_env_pkg.name).jl") )
         depsmap[Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name)] = [
@@ -1113,21 +1141,25 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         push!(direct_deps, Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name))
     end
 
+    # return early if no deps
     isempty(depsmap) && return
 
+    # initialize signalling
     started = Dict{Base.PkgId,Bool}()
     was_processed = Dict{Base.PkgId,Base.Event}()
     was_recompiled = Dict{Base.PkgId,Bool}()
-    pkg_specs = PackageSpec[]
     for pkgid in keys(depsmap)
         started[pkgid] = false
         was_processed[pkgid] = Base.Event()
         was_recompiled[pkgid] = false
         push!(pkg_specs, get_or_make_pkgspec(pkg_specs, ctx, pkgid.uuid))
     end
+
+    # remove packages that are suspended because they errored before
+    # note that when `Pkg.precompile` is manually called, all suspended packages are unsuspended
     precomp_prune_suspended!(pkg_specs)
 
-    # guarding against circular deps
+    # find and guard against circular deps
     circular_deps = Base.PkgId[]
     function in_deps(_pkgs, deps, dmap)
         isempty(deps) && return false
@@ -1144,8 +1176,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         @warn """Circular dependency detected. Precompilation will be skipped for:\n  $(join(string.(circular_deps), "\n  "))"""
     end
 
+    # if a list of packages is given, restrict to dependencies of given packages
     if !isempty(pkgs)
-        # if a list of packages is given, restrict to dependencies of given packages
         function collect_all_deps(depsmap, dep, alldeps=Base.PkgId[])
             append!(alldeps, depsmap[dep])
             for _dep in depsmap[dep]
@@ -1163,6 +1195,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         filter!(d->in(first(d), keep), depsmap)
         isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs))")
     end
+    target = string(isempty(pkgs) ? "project" : join(pkgs, ", "), "...")
 
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
@@ -1200,7 +1233,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         end
     end
 
-    t_print = @async begin # fancy print loop
+    ## fancy print loop
+    t_print = @async begin
         try
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
@@ -1235,7 +1269,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         final_loop || print(iostr, sprint(io -> show_progress(io, bar; termwidth = displaysize(ctx.io)[2]); context=io), "\n")
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
-                            name = dep in direct_deps ? dep.name : string(color_string(dep.name, :light_black))
+                            _name = haskey(exts, dep) ? string(exts[dep], " → ", dep.name) : dep.name
+                            name = dep in direct_deps ? _name : string(color_string(_name, :light_black))
                             if dep in precomperr_deps
                                 print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
                             elseif haskey(failed_deps, dep)
@@ -1275,7 +1310,8 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     end
     tasks = Task[]
     Base.LOADING_CACHE[] = Base.LoadingCache()
-    for (pkg, deps) in depsmap # precompilation loop
+    ## precompilation loop
+    for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         if sourcepath === nothing
@@ -1308,9 +1344,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
-                    name = is_direct_dep ? pkg.name : string(color_string(pkg.name, :light_black))
+                    _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
+                    name = is_direct_dep ? _name : string(color_string(_name, :light_black))
                     !fancyprint && lock(print_lock) do
-                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, "environment...")
+                        isempty(pkg_queue) && printpkgstyle(io, :Precompiling, target)
                     end
                     push!(pkg_queue, pkg)
                     started[pkg] = true
@@ -1610,13 +1647,14 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, io::IO=stdout_f(), kwargs...)
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
+        extensions && pkgerror("Compat status has no `extensions` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions)
     end
     return nothing
 end

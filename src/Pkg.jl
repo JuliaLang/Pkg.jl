@@ -419,7 +419,8 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout)
+
 
 Print out the status of the project/manifest.
 
@@ -449,6 +450,9 @@ If `mode` is `PKGMODE_PROJECT`, print out status only about the packages
 that are in the project (explicitly added). If `mode` is `PKGMODE_MANIFEST`,
 print status also about those in the manifest (recursive dependencies). If there are
 any packages listed as arguments, the output will be limited to those packages.
+
+Setting `ext=true` will show dependencies with extensions and what extension dependencies
+of those that are currently loaded.
 
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
@@ -627,12 +631,12 @@ on all the registries in the vector.
 
 Below is a comparison between the REPL mode and the functional API::
 
-| `REPL`               | `API`                                           |
-|:---------------------|:------------------------------------------------|
-| `Registry`           | `RegistrySpec("Registry")`                      |
-| `Registry=a67d...`   | `RegistrySpec(name="Registry", uuid="a67d...")` |
-| `local/path`         | `RegistrySpec(path="local/path")`               |
-| `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`        |
+| `REPL`               | `API`                                             |
+|:---------------------|:--------------------------------------------------|
+| `MyRegistry`         | `RegistrySpec("MyRegistry")`                      |
+| `MyRegistry=a67d...` | `RegistrySpec(name="MyRegistry", uuid="a67d...")` |
+| `local/path`         | `RegistrySpec(path="local/path")`                 |
+| `www.myregistry.com` | `RegistrySpec(url="www.myregistry.com")`          |
 """
 const RegistrySpec = Registry.RegistrySpec
 
@@ -735,9 +739,9 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context; warn_loaded = true, already_instantiated = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{String}=String[]; warn_loaded = true, already_instantiated = false)
     if Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
-        Pkg.precompile(ctx; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
 

@@ -1,5 +1,32 @@
 import ..isdir_nothrow, ..Registry.RegistrySpec, ..isurl
 
+struct PackageIdentifier
+    val::String
+end
+
+struct VersionToken
+    version::String
+end
+
+struct Rev
+    rev::String
+end
+
+struct Subdir
+    dir::String
+end
+
+const PackageToken = Union{PackageIdentifier,
+                           VersionToken,
+                           Rev,
+                           Subdir}
+
+packagetoken(word::String)::PackageToken =
+    first(word) == '@' ? VersionToken(word[2:end]) :
+    first(word) == '#' ? Rev(word[2:end]) :
+    first(word) == ':' ? Subdir(word[2:end]) :
+    PackageIdentifier(word)
+
 ###############
 # PackageSpec #
 ###############
@@ -17,25 +44,10 @@ function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector
             push!(words, word)
         end
     end
-    args = PackageToken[PackageToken(pkgword) for pkgword in words]
+    args = PackageToken[packagetoken(pkgword) for pkgword in words]
 
     return parse_package_args(args; add_or_dev=add_or_dev)
 end
-
-struct VersionToken
-    version::String
-end
-
-struct Rev
-    rev::String
-end
-
-struct Subdir
-    dir::String
-end
-
-const PackageIdentifier = String
-const PackageToken = Union{PackageIdentifier, VersionToken, Rev, Subdir}
 
     # Match a git repository URL. This includes uses of `@` and `:` but
     # requires that it has `.git` at the end.
@@ -77,12 +89,6 @@ function package_lex(qwords::Vector{QString})::Vector{String}
     end
     return words
 end
-
-PackageToken(word::String)::PackageToken =
-    first(word) == '@' ? VersionToken(word[2:end]) :
-    first(word) == '#' ? Rev(word[2:end]) :
-    first(word) == ':' ? Subdir(word[2:end]) :
-    String(word)
 
 function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
     # check for and apply PackageSpec modifier (e.g. `#foo` or `@v1.0.2`)
@@ -131,7 +137,8 @@ let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(
 end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
-function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
+function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop=false)::PackageSpec
+    word = pkg_id.val
     if add_or_develop
         if isurl(word)
             return PackageSpec(; url=word)

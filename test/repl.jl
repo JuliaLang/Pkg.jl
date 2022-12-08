@@ -571,8 +571,9 @@ temp_pkg_dir() do project_path
 end
 
 @testset "parse package url win" begin
-    @test typeof(Pkg.REPLMode.parse_package_identifier("https://github.com/abc/ABC.jl";
-                                                       add_or_develop=true)) == Pkg.Types.PackageSpec
+    pkg_id = Pkg.REPLMode.PackageIdentifier("https://github.com/abc/ABC.jl")
+    pkg_spec = Pkg.REPLMode.parse_package_identifier(pkg_id; add_or_develop=true)
+    @test typeof(pkg_spec) == Pkg.Types.PackageSpec
 end
 
 @testset "parse git url (issue #1935) " begin
