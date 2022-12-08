@@ -238,7 +238,7 @@ function collect_project(pkg::PackageSpec, path::String)
     for (name, uuid) in project.deps
         path, repo = get_path_repo(project, name)
         vspec = get_compat(project, name)
-        push!(deps_map[pkg.uuid], PackageSpec(name=name, uuid=uuid, version=vspec, path=path, repo=repo))
+        push!(deps, PackageSpec(name=name, uuid=uuid, version=vspec, path=path, repo=repo))
     end
     for (name, uuid) in project.weakdeps
         vspec = get_compat(project, name)
