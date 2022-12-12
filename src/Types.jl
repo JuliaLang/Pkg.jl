@@ -241,7 +241,7 @@ Base.@kwdef mutable struct Project
     deps::Dict{String,UUID} = Dict{String,UUID}()
     # deps that are also in weakdeps for backwards compat
     # we do not store them in deps because we want to ignore them
-    # but for writing out the project file we need to remember them: 
+    # but for writing out the project file we need to remember them:
     _deps_weak::Dict{String,UUID} = Dict{String,UUID}()
     weakdeps::Dict{String,UUID} = Dict{String,UUID}()
     exts::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
@@ -407,9 +407,9 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
-const STDLIB = Ref{Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}}()
+const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
-    stdlib = Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}()
+    stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
