@@ -1,17 +1,19 @@
 using Base: UUID
 
+const DictStdLibs = Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}
+
 # Julia standard libraries with duplicate entries removed so as to store only the
 # first release in a set of releases that all contain the same set of stdlibs.
 #
 # This needs to be populated via HistoricalStdlibVersions.jl by consumers
 # (e.g. BinaryBuilder) that want to use the "resolve things as if it were a
 # different Julia version than what is currently running" feature.
-const STDLIBS_BY_VERSION = Pair{VersionNumber, Dict{UUID}}[]
+const STDLIBS_BY_VERSION = Pair{VersionNumber, DictStdLibs}[]
 
 # This is a list of stdlibs that must _always_ be treated as stdlibs,
 # because they cannot be resolved in the registry; they have only ever existed within
 # the Julia stdlib source tree, and because of that, trying to resolve them will fail.
-const UNREGISTERED_STDLIBS = Dict{UUID,Tuple{String,Union{VersionNumber,Nothing}}}(
+const UNREGISTERED_STDLIBS = DictStdLibs(
     UUID("2a0f44e3-6c83-55bd-87e4-b1978d98bd5f") => ("Base64", nothing),
     UUID("8bf52ea8-c179-5cab-976a-9e18b702a9bc") => ("CRC32c", nothing),
     UUID("ade2ca70-3891-5945-98fb-dc099432e06a") => ("Dates", nothing),
