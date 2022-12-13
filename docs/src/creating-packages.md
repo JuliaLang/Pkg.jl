@@ -353,6 +353,7 @@ An extension will only be loaded if the extension dependencies are loaded from t
 
 This section discusses various methods for using extensions on Julia versions that support them,
 while simultaneously providing similar functionality on older Julia versions.
+
 #### Requires.jl
 
 This section is relevant if you are currently using Requires.jl but want to transition to using extensions (while still having Requires be used on Julia versions that do not support extensions).
@@ -384,9 +385,9 @@ This is done by making the following changes (using the example above):
   end
   ```
 - Do the following change in the extensions for loading the extension dependency:
- ```julia
- isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
- ```
+  ```julia
+  isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
+  ```
 
 The package should now work with Requires.jl on Julia versions before extensions were introduced
 and with extensions afterward.
