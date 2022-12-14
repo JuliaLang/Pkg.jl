@@ -313,7 +313,7 @@ const free = API.free
 
 """
     Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.develop(pkgs::Union{Packagespec, Vector{Packagespec}}; io::IO=stderr)
+    Pkg.develop(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
 
 Make a package available for development by tracking it by path.
 If `pkg` is given with only a name or by a URL, the package will be downloaded
