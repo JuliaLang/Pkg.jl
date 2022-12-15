@@ -1032,7 +1032,16 @@ end
 function _is_stale(paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
         staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
-        staledeps === true ? continue : return false
+        if staledeps !== true
+            try
+                # update timestamp of precompilation file so that it is the first to be tried by code loading
+                touch(path_to_try)
+            catch ex
+                # file might be read-only and then we fail to update timestamp, which is fine
+                ex isa Base.IOError || rethrow()
+            end
+            return false
+        end
     end
     return true
 end
@@ -1343,13 +1352,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         Base.release(parallel_limiter)
                     end
                 else
-                    if !is_stale
-                        n_already_precomp += 1
-                        try
-                            touch(path_to_try) # update timestamp of precompilation file
-                        catch # file might be read-only and then we fail to update timestamp, which is fine
-                        end
-                    end
+                    is_stale || (n_already_precomp += 1)
                     suspended && push!(skipped_deps, pkg)
                 end
                 n_done += 1
