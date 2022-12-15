@@ -14,7 +14,8 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
+import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
 
 #########
 # Utils #
@@ -1573,10 +1574,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
     end
 end
 
-function gen_test_code(source_path::String;
-        coverage=false,
-        julia_args::Cmd=``,
-        test_args::Cmd=``)
+function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
     test_file = testfile(source_path)
     code = """
         $(Base.load_path_setup_code(false))
@@ -1584,6 +1582,22 @@ function gen_test_code(source_path::String;
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
         """
+    return gen_subprocess_cmd(code; coverage, julia_args)
+end
+
+function gen_test_precompile_code(; coverage, julia_args::Cmd, test_args::Cmd)
+    # Note that we cannot load the dev-ed Pkg here during Pkg testing
+    # so the `Pkg.precompile` that is run here is the one in the sysimage
+    code = """
+        Pkg = Base.require(Base.PkgId(Base.UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f"), "Pkg"))
+        $(Base.load_path_setup_code(false))
+        append!(empty!(ARGS), $(repr(test_args.exec)))
+        Pkg.precompile(warn_loaded = false)
+        """
+    return gen_subprocess_cmd(code; coverage, julia_args)
+end
+
+function gen_subprocess_cmd(code::String; coverage, julia_args)
     coverage_arg = if coverage isa Bool
         coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
@@ -1874,28 +1888,24 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
-            Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
-            printpkgstyle(ctx.io, :Testing, "Running tests...")
-            flush(ctx.io)
-            cmd = gen_test_code(source_path; coverage=coverage, julia_args=julia_args, test_args=test_args)
-            p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
-            interrupted = false
-            try
-                wait(p)
-            catch e
-                if e isa InterruptException
-                    interrupted = true
-                    print("\n")
-                    printpkgstyle(ctx.io, :Testing, "Tests interrupted. Exiting the test process\n", color = Base.error_color())
-                    # Give some time for the child interrupt handler to print a stacktrace and exit,
-                    # then kill the process if still running
-                    if timedwait(() -> !process_running(p), 4) == :timed_out
-                        kill(p, Base.SIGKILL)
+
+            if should_autoprecompile()
+                # Precompile in a child process with the test julia args to ensure native caches match test setup
+                cmd = gen_test_precompile_code(; coverage, julia_args, test_args)
+                p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Precompilation of test environment interrupted. Exiting the test precompilation process")
+                if !success(p)
+                    if interrupted
+                        return
+                    else
+                        printpkgstyle(ctx.io, :Testing, "Precompilation of test environment failed. Continuing to tests", color = Base.warn_color())
                     end
-                else
-                    rethrow()
                 end
             end
+
+            printpkgstyle(ctx.io, :Testing, "Running tests...")
+            flush(ctx.io)
+            cmd = gen_test_code(source_path; coverage, julia_args, test_args)
+            p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
             elseif !interrupted
@@ -1945,7 +1955,28 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     end
 end
 
-
+# Handles the interrupting of a subprocess gracefully to avoid orphaning
+function subprocess_handler(cmd::Cmd, ctx, sandbox_ctx, error_msg::String)
+    p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
+    interrupted = false
+    try
+        wait(p)
+    catch e
+        if e isa InterruptException
+            interrupted = true
+            print("\n")
+            printpkgstyle(ctx.io, :Testing, "$error_msg\n", color = Base.error_color())
+            # Give some time for the child interrupt handler to print a stacktrace and exit,
+            # then kill the process if still running
+            if timedwait(() -> !process_running(p), 4) == :timed_out
+                kill(p, Base.SIGKILL)
+            end
+        else
+            rethrow()
+        end
+    end
+    return p, interrupted
+end
 
 # Display
 
