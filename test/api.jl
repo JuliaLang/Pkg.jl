@@ -134,9 +134,7 @@ end
         @info "Auto precompilation enabled"
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
         Pkg.develop(Pkg.PackageSpec(path="packages/NoVersion")) # a package with no version number
-        withenv("CI" => "false") do
-            Pkg.build(io=iob) # should trigger auto-precomp when not on CI
-        end
+        Pkg.build(io=iob) # should trigger auto-precomp
         @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
         @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
@@ -155,9 +153,7 @@ end
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
         Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep"))
-        withenv("CI" => "false") do
-            Pkg.build(io=iob) # should trigger auto-precomp and soft-error when not on CI
-        end
+        Pkg.build(io=iob) # should trigger auto-precomp and soft-error
         @test occursin("Precompiling", String(take!(iob)))
         broken_packages = Pkg.API.pkgs_precompile_suspended
         @test length(broken_packages) == 1
