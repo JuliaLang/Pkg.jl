@@ -41,6 +41,7 @@ stdout_f() = something(DEFAULT_IO[], stdout)
 const PREV_ENV_PATH = Ref{String}("")
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
+should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
 
 include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
 
@@ -740,7 +741,7 @@ end
 ##################
 
 function _auto_precompile(ctx::Types.Context, pkgs::Vector{String}=String[]; warn_loaded = true, already_instantiated = false)
-    if Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
+    if should_autoprecompile()
         Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
