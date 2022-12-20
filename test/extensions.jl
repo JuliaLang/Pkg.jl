@@ -44,7 +44,7 @@ using Test
 
     isolate(loaded_depot=true) do
         Pkg.activate(; temp=true)
-        Pkg.develop(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasExtensions.jl"))
+        Pkg.develop(path=he_root)
         @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "OffsetArrays", version = "0.9.0")
     end
 

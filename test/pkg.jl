@@ -232,9 +232,12 @@ temp_pkg_dir() do project_path
     end
 
     @testset "testing" begin
-        pkgdir = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
-        recursive_rm_cov_files(pkgdir) # clean out cov files from previous test runs
         Pkg.add(TEST_PKG.name)
+
+        pkgdir = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
+        @test !isnothing(pkgdir)
+        recursive_rm_cov_files(pkgdir) # clean out cov files from previous test runs
+
         @test !any(endswith(".cov"), readdir(pkgdir)) # should be no cov files to start with
         Pkg.test(TEST_PKG.name; coverage=true)
         @test any(endswith(".cov"), readdir(pkgdir))
