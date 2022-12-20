@@ -17,7 +17,7 @@ using Test
 
         Pkg.test("HasExtensions", coverage=true, julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
         @test any(endswith(".cov"), readdir(joinpath(he_root, "src")))
-        @test !any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
+        @test any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
     end
     isolate(loaded_depot=true) do
         # clean out any .cov files from previous test runs
