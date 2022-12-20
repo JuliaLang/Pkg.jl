@@ -311,4 +311,12 @@ function show_output_if_command_errors(cmd::Cmd)
     return nothing
 end
 
+function recursive_rm_cov_files(rootdir::String)
+    for (root, dir, files) in walkdir(rootdir)
+        for file in files
+            endswith(file, ".cov") && rm(joinpath(root, dir, file))
+        end
+    end
+end
+
 end
