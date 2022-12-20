@@ -46,7 +46,7 @@ jobs:
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
@@ -65,7 +65,7 @@ jobs:
       - uses: julia-actions/julia-processcoverage@v1
         env:
             JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
-      - uses: codecov/codecov-action@v1
+      - uses: codecov/codecov-action@v3
         with:
           file: lcov.info
   docs:
