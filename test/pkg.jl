@@ -234,7 +234,7 @@ temp_pkg_dir() do project_path
     @testset "testing" begin
         Pkg.add(TEST_PKG.name)
 
-        pkgdir = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
+        pkgdir = dirname(Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name)))
         @test !isnothing(pkgdir)
         recursive_rm_cov_files(pkgdir) # clean out cov files from previous test runs
 
