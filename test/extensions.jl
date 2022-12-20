@@ -2,9 +2,12 @@ using  .Utils
 using Test
 
 @testset "weak deps" begin
+    he_root = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasExtensions.jl")
+    hdwe_root = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasDepWithExtensions.jl")
     isolate(loaded_depot=true) do
-        he_root = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasExtensions.jl")
-        recursive_rm_cov_files(he_root) # clean out any .cov files from previous test runs
+        # clean out any .cov files from previous test runs
+        recursive_rm_cov_files(he_root)
+        recursive_rm_cov_files(hdwe_root)
 
         Pkg.activate(; temp=true)
         Pkg.develop(path=he_root)
@@ -17,8 +20,9 @@ using Test
         @test !any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
     end
     isolate(loaded_depot=true) do
-        hdwe_root = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasDepWithExtensions.jl")
-        recursive_rm_cov_files(hdwe_root) # clean out any .cov files from previous test runs
+        # clean out any .cov files from previous test runs
+        recursive_rm_cov_files(he_root)
+        recursive_rm_cov_files(hdwe_root)
 
         Pkg.activate(; temp=true)
         Pkg.develop(path=hdwe_root)
@@ -29,11 +33,13 @@ using Test
         str = String(take!(io))
         @test contains(str, "└─ OffsetArraysExt [OffsetArrays]" )
         @test !any(endswith(".cov"), readdir(joinpath(hdwe_root, "src")))
-        @test !any(endswith(".cov"), readdir(joinpath(hdwe_root, "ext")))
+        @test !any(endswith(".cov"), readdir(joinpath(he_root, "src")))
+        @test !any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
 
         Pkg.test("HasDepWithExtensions", coverage=true, julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
         @test any(endswith(".cov"), readdir(joinpath(hdwe_root, "src")))
-        @test any(endswith(".cov"), readdir(joinpath(hdwe_root, "ext")))
+        @test any(endswith(".cov"), readdir(joinpath(he_root, "src")))
+        @test any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
     end
 
     isolate(loaded_depot=true) do
