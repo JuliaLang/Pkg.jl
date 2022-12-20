@@ -11,7 +11,7 @@ using UUIDs
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-       list_tarball_files
+       list_tarball_files, recursive_rm_cov_files
 
 const CACHE_DIRECTORY = mktempdir(; cleanup = true)
 
