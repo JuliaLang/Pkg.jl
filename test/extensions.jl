@@ -6,6 +6,7 @@ using Test
         Pkg.activate(; temp=true)
         Pkg.develop(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasExtensions.jl"))
         Pkg.test("HasExtensions", julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
+        Pkg.test("HasExtensions", coverage=true, julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
     end
     isolate(loaded_depot=true) do
         Pkg.activate(; temp=true)
@@ -16,6 +17,7 @@ using Test
          # TODO: Test output when ext deps are loaded etc.
         str = String(take!(io))
         @test contains(str, "└─ OffsetArraysExt [OffsetArrays]" )
+        Pkg.test("HasDepWithExtensions", coverage=true, julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
     end
 
     isolate(loaded_depot=true) do
