@@ -38,8 +38,11 @@ using Test
 
         Pkg.test("HasDepWithExtensions", coverage=true, julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
         @test any(endswith(".cov"), readdir(joinpath(hdwe_root, "src")))
-        @test any(endswith(".cov"), readdir(joinpath(he_root, "src")))
-        @test any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
+
+        # No coverage files should be in HasExtensions even though it's used because coverage
+        # was only requested by Pkg.test for the HasDepWithExtensions package dir
+        @test !any(endswith(".cov"), readdir(joinpath(he_root, "src")))
+        @test !any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
     end
 
     isolate(loaded_depot=true) do
