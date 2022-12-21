@@ -1582,10 +1582,10 @@ function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
         """
-    return gen_subprocess_cmd(code; coverage, julia_args)
+    return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
 
-function gen_test_precompile_code(; coverage, julia_args::Cmd, test_args::Cmd)
+function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
     # Note that we cannot load the dev-ed Pkg here during Pkg testing
     # so the `Pkg.precompile` that is run here is the one in the sysimage
     code = """
@@ -1594,10 +1594,10 @@ function gen_test_precompile_code(; coverage, julia_args::Cmd, test_args::Cmd)
         append!(empty!(ARGS), $(repr(test_args.exec)))
         Pkg.precompile(warn_loaded = false)
         """
-    return gen_subprocess_cmd(code; coverage, julia_args)
+    return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
 
-function gen_subprocess_cmd(code::String; coverage, julia_args)
+function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_args)
     coverage_arg = if coverage isa Bool
         coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
@@ -1854,7 +1854,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 
     # See if we can find the test files for all packages
     missing_runtests = String[]
-    source_paths     = String[]
+    source_paths     = String[] # source_path is the package root (not /src)
     for pkg in pkgs
         sourcepath = project_rel_path(ctx.env, source_path(ctx.env.project_file, pkg, ctx.julia_version)) # TODO
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
@@ -1891,7 +1891,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 
             if should_autoprecompile()
                 # Precompile in a child process with the test julia args to ensure native caches match test setup
-                cmd = gen_test_precompile_code(; coverage, julia_args, test_args)
+                cmd = gen_test_precompile_code(source_path; coverage, julia_args, test_args)
                 p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Precompilation of test environment interrupted. Exiting the test precompilation process")
                 if !success(p)
                     if interrupted
