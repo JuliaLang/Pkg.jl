@@ -397,7 +397,7 @@ and with extensions afterward.
 This section is relevant if you have a normal dependency that you want to transition be an extension (while still having the dependency be a normal dependency on Julia versions that do not support extensions).
 This is done by making the following changes (using the example above):
 
-- Make sure that the package is **both** in the `[deps]` and `[weakdeps]` section. Newer Julia versions will ignore dependencis in `[deps]` that are also in `[weakdeps]`.
+- Make sure that the package is **both** in the `[deps]` and `[weakdeps]` section. Newer Julia versions will ignore dependencies in `[deps]` that are also in `[weakdeps]`.
 - Add the following to your main package file (typically at the bottom):
   ```julia
   if !isdefined(Base, :get_extension)
