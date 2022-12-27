@@ -65,8 +65,8 @@ jobs:
       - uses: actions/checkout@v1.0.0
       - uses: julia-actions/setup-julia@latest
         with:
-          # version: '1.6'
-          version: 'nightly'
+          version: '1.6'
+          # version: 'nightly'
       - name: Generate docs
         run: |
           julia --color=yes -e 'using UUIDs; write("Project.toml", replace(read("Project.toml", String), r"uuid = .*?\n" =>"uuid = \"$(uuid4())\"\n"))'
