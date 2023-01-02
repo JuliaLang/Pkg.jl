@@ -62,6 +62,7 @@ read_project_compat(::Nothing, project::Project) = Dict{String,Compat}()
 function read_project_compat(raw::Dict{String,Any}, project::Project)
     compat = Dict{String,Compat}()
     for (name, version) in raw
+        version = version::String
         try
             compat[name] = Compat(semver_spec(version), version)
         catch err
