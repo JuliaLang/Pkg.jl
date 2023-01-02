@@ -2089,6 +2089,12 @@ end
         @test arg1 == "Foo"
         @test arg2 == "Bar"
         @test isempty(opts)
+
+        api, arg1, arg2, opts = first(Pkg.pkg"precompile Foo, Bar")
+        @test api == Pkg.precompile
+        @test arg1 == "Foo"
+        @test arg2 == "Bar"
+        @test isempty(opts)
     end
 end
 
