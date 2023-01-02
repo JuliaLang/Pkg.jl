@@ -390,7 +390,7 @@ function verify_compressed_registry_toml(path::String)
             return false
         end
     end
-    compressed_file = joinpath(dirname(path), convert(String, d["path"])::String)
+    compressed_file = joinpath(dirname(path), d["path"]::String)
     if !isfile(compressed_file)
         @warn "Expected the compressed registry for $(repr(path)) to exist at $(repr(compressed_file))"
         return false

@@ -97,9 +97,9 @@ mutable struct PackageSpec
     path::Union{Nothing,String}
     pinned::Bool
     # used for input only
-    url
-    rev
-    subdir
+    url::Union{Nothing, String}
+    rev::Union{Nothing, String}
+    subdir::Union{Nothing, String}
 
 end
 function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
