@@ -167,7 +167,7 @@ Base.@kwdef mutable struct Statement
 end
 
 function lex(cmd::String)::Vector{QString}
-    replace_comma = (nothing!=match(r"^(add|rm|remove|status)+\s", cmd))
+    replace_comma = (nothing!=match(r"^(add|rm|remove|status|precompile)+\s", cmd))
     in_doublequote = false
     in_singlequote = false
     qstrings = QString[]
