@@ -129,7 +129,7 @@ The following table describes the command line arguments to `--preserve` (in ord
 | `direct`     | Preserve the state of all existing direct dependencies                             |
 | `semver`     | Preserve semver-compatible versions of direct dependencies                         |
 | `none`       | Do not attempt to preserve any version information                                 |
-| **`tiered`** | Use the tier which will preserve the most version information                      |
+| **`tiered`** | Use the tier that will preserve the most version information                       |
 |              | while allowing the operation to succeed (this is the default)                      |
 
 After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
