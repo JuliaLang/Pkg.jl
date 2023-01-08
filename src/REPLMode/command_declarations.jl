@@ -123,13 +123,14 @@ If the package is not located at the top of the git repository, a subdirectory c
 The `--preserve` command line option allows you to key into a specific tier in the resolve algorithm.
 The following table describes the command line arguments to `--preserve` (in order of strictness).
 
-| Argument | Description                                                                         |
-|:---------|:------------------------------------------------------------------------------------|
-| `all`    | Preserve the state of all existing dependencies (including recursive dependencies)  |
-| `direct` | Preserve the state of all existing direct dependencies                              |
-| `semver` | Preserve semver-compatible versions of direct dependencies                          |
-| `none`   | Do not attempt to preserve any version information                                  |
-| `tiered` | Use the tier which will preserve the most version information (this is the default) |
+| Argument     | Description                                                                        |
+|:-------------|:-----------------------------------------------------------------------------------|
+| `all`        | Preserve the state of all existing dependencies (including recursive dependencies) |
+| `direct`     | Preserve the state of all existing direct dependencies                             |
+| `semver`     | Preserve semver-compatible versions of direct dependencies                         |
+| `none`       | Do not attempt to preserve any version information                                 |
+| **`tiered`** | Use the tier which will preserve the most version information                      |
+|              | while allowing the operation to succeed (this is the default)                      |
 
 After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
 
