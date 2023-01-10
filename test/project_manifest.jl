@@ -9,6 +9,11 @@ temp_pkg_dir() do project_path
         mktempdir() do dir
             path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "monorepo"))
             cp(path, joinpath(dir, "monorepo"))
+            cd(joinpath(dir, "monorepo")) do
+                with_current_env() do
+                    Pkg.develop(path="packages/B")
+                end
+            end
             # test subpackage instantiates/tests
             # the order of operations here is important
             # when we instantiate and dev a dependency to the C subpackage
@@ -27,7 +32,6 @@ temp_pkg_dir() do project_path
             cd(joinpath(dir, "monorepo")) do
                 with_current_env() do
                     Pkg.develop(path="packages/C")
-                    Pkg.develop(path="packages/B")
                     Pkg.add("Test")
                     Pkg.test()
                 end
