@@ -534,7 +534,6 @@ function promptf()
     return "$(prefix)pkg> "
 end
 
-
 # Set up the repl Pkg REPLMode
 function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     pkg_mode = LineEdit.Prompt(promptf;
