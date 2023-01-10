@@ -532,12 +532,8 @@ function promptf()
     if OFFLINE_MODE[]
         prefix = "$(prefix)[offline] "
     end
-    prompt = "$(prefix)pkg> "
-    max_prompt_length = 50
-    if length(prompt) > max_prompt_length
-        prompt = "..." * prompt[end-max_prompt_length+3:end]
-    end
-    return prompt
+
+    return "$(prefix)pkg> "
 end
 
 
