@@ -597,6 +597,10 @@ end
         @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
     end
 
+    ith_temp_env("this_is_a_test_for_truncating") do
+        @test Pkg.REPLMode.promptf() == "(this_is_a_test_for_t...) pkg> "
+    end
+
     env_name = "Test2"
     with_temp_env(env_name) do env_path
         projfile_path = joinpath(env_path, "Project.toml")

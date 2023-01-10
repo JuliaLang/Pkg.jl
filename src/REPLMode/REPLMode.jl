@@ -518,6 +518,10 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
+                # Truncate project_name if it is longer than 20 characters
+                if length(project_name) > 20
+                    project_name = project_name[1:20] * "..."
+                end
                 prefix = "($(project_name)) "
                 prev_prefix = prefix
                 prev_project_timestamp = mtime(project_file)
@@ -528,8 +532,14 @@ function promptf()
     if OFFLINE_MODE[]
         prefix = "$(prefix)[offline] "
     end
-    return "$(prefix)pkg> "
+    prompt = "$(prefix)pkg> "
+    max_prompt_length = 50
+    if length(prompt) > max_prompt_length
+        prompt = "..." * prompt[end-max_prompt_length+3:end]
+    end
+    return prompt
 end
+
 
 # Set up the repl Pkg REPLMode
 function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
