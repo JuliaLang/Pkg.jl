@@ -18,11 +18,11 @@ temp_pkg_dir() do project_path
             # the order of operations here is important
             # when we instantiate and dev a dependency to the C subpackage
             # the changes are being written to the monorepo/Manifest.toml
-            # but are not "sticky" in that if we ran a resolve a the monorepo/
+            # but are not "sticky" in that if we ran a resolve at the monorepo/
             # level, the C & D packages would be pruned since there's no direct
             # dependency at the monorepo project level yet, so we first build up
             # C's dependencies, then at the monorepo level, we need to dev C *first*
-            # to make those Manifest changes "stick" before devving B or adding Test
+            # to make those Manifest changes "stick" before adding Test.
             cd(joinpath(dir, "monorepo", "packages", "C")) do
                 with_current_env() do
                     Pkg.develop(path="../D") # add unregistered local dependency
