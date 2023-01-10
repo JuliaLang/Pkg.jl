@@ -259,7 +259,7 @@ is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
-    source = project_rel_path(env, source_path(env.project_file, pkg))
+    source = project_rel_path(env, source_path(env.manifest_file, pkg))
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_all_deps(source_env)
     for pkg in filter(is_tracking_path, pkgs)
@@ -267,9 +267,9 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
             continue
         end
         # normalize path
-        pkg.path = Types.relative_project_path(env.project_file,
+        pkg.path = Types.relative_project_path(env.manifest_file,
                    project_rel_path(source_env,
-                   source_path(source_env.project_file, pkg)))
+                   source_path(source_env.manifest_file, pkg)))
         push!(developed, pkg)
         collect_developed!(env, pkg, developed)
     end
@@ -294,7 +294,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         names[pkg.uuid] = pkg.name
     end
     for pkg in pkgs
-        path = project_rel_path(env, source_path(env.project_file, pkg))
+        path = project_rel_path(env, source_path(env.manifest_file, pkg))
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
         end
@@ -709,7 +709,7 @@ function download_artifacts(env::EnvCache;
     pkg_roots = String[]
     for (uuid, pkg) in env.manifest
         pkg = manifest_info(env.manifest, uuid)
-        pkg_root = source_path(env.project_file, pkg, julia_version)
+        pkg_root = source_path(env.manifest_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_roots, pkg_root)
     end
     push!(pkg_roots, dirname(env.project_file))
@@ -756,7 +756,7 @@ function download_source(ctx::Context; readonly=true)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{PackageEntry, Set{String}, String}}[]
     for pkg in values(ctx.env.manifest)
         tracking_registered_version(pkg, ctx.julia_version) || continue
-        path = source_path(ctx.env.project_file, pkg, ctx.julia_version)
+        path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
         ispath(path) && continue
         urls = find_urls(ctx.registries, pkg.uuid)
@@ -883,9 +883,11 @@ end
 ################################
 # Manifest update and pruning #
 ################################
-project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.project_file), path))
+project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.manifest_file), path))
 
 function prune_manifest(env::EnvCache)
+    # if project uses another manifest, don't prune
+    dirname(env.project_file) != dirname(env.manifest_file) && return env.manifest
     keep = collect(values(env.project.deps))
     env.manifest = prune_manifest(env.manifest, keep)
 end
@@ -1671,7 +1673,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                  force_latest_compatible_version::Bool=false,
                  allow_earlier_backwards_compatible_versions::Bool=true,
                  allow_reresolve::Bool=true)
-    active_manifest = manifestfile_path(dirname(ctx.env.project_file))
+    active_manifest = manifestfile_path(dirname(ctx.env.manifest_file))
     sandbox_project = projectfile_path(sandbox_path)
 
     mktempdir() do tmp
@@ -1856,7 +1858,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     missing_runtests = String[]
     source_paths     = String[] # source_path is the package root (not /src)
     for pkg in pkgs
-        sourcepath = project_rel_path(ctx.env, source_path(ctx.env.project_file, pkg, ctx.julia_version)) # TODO
+        sourcepath = project_rel_path(ctx.env, source_path(ctx.env.manifest_file, pkg, ctx.julia_version)) # TODO
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
         push!(source_paths, sourcepath)
     end
