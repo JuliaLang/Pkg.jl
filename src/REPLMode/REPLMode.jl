@@ -531,7 +531,6 @@ function promptf()
     if OFFLINE_MODE[]
         prefix = "$(prefix)[offline] "
     end
-
     return "$(prefix)pkg> "
 end
 
