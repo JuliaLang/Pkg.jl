@@ -597,7 +597,7 @@ end
         @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
     end
 
-    ith_temp_env("this_is_a_test_for_truncating") do
+    with_temp_env("this_is_a_test_for_truncating") do
         @test Pkg.REPLMode.promptf() == "(this_is_a_test_for_t...) pkg> "
     end
 
