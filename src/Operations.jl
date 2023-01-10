@@ -128,6 +128,12 @@ end
 function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
     manifest = env.manifest
     empty!(manifest)
+    # if we're updating env.pkg that refers to another manifest, we want to change
+    # pkg.path, if present, to be relative to the manifest instead of an abspath
+    if env.project.manifest !== nothing && env.pkg.path !== nothing
+        env.pkg.path = Types.relative_project_path(env.manifest_file,
+                        project_rel_path(env, source_path(env.manifest_file, env.pkg)))
+    end
     if env.pkg !== nothing
         pkgs = push!(copy(pkgs), env.pkg::PackageSpec)
     end
