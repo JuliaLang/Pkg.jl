@@ -518,7 +518,6 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
-                # Truncate project_name if it is longer than 20 characters
                 if length(project_name) > 20
                     project_name = project_name[1:20] * "..."
                 end
