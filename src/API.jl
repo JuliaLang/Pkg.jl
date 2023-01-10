@@ -73,7 +73,7 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
         is_tracking_registry = Operations.is_tracking_registry(pkg),
         git_revision         = pkg.repo.rev,
         git_source           = git_source,
-        source               = Operations.project_rel_path(env, Operations.source_path(env.project_file, pkg)),
+        source               = Operations.project_rel_path(env, Operations.source_path(env.manifest_file, pkg)),
         dependencies         = copy(entry.deps), #TODO is copy needed?
     )
     return info
@@ -1607,7 +1607,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     for pkg in pkgs
         repo_source = pkg.repo.source
         repo_source !== nothing || continue
-        sourcepath = Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
+        sourcepath = Operations.source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
@@ -1694,7 +1694,7 @@ function _activate_dep(dep_name::AbstractString)
     if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
         if entry.path !== nothing
-            return joinpath(dirname(ctx.env.project_file), entry.path::String)
+            return joinpath(dirname(ctx.env.manifest_file), entry.path::String)
         end
     end
 end

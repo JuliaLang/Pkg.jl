@@ -1,0 +1,5 @@
+name = "A"
+uuid = "0829fd7c-1e7e-4927-9afa-b8c61d5e0e42"
+version = "0.0.0"
+
+[deps]

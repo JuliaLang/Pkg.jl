@@ -1,0 +1,7 @@
+name = "C"
+uuid = "4ee78ca3-4e78-462f-a078-747ed543fa86"
+version = "0.0.0"
+manifest = "../../Manifest.toml"
+
+[deps]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
