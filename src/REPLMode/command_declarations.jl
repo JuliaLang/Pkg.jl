@@ -384,8 +384,8 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
     [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
-    [st|status] [-d|--diff] [-g|--extensions] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-g|--extensions] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [-e|--extensions] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [-e|--extensions] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
 Show the status of the current environment. Packages marked with `⌃` have new
