@@ -414,8 +414,8 @@ function load_stdlib()
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
-        uuid = get(project, "uuid", nothing)
-        v_str = get(project, "version", nothing)
+        uuid = get(project, "uuid", nothing)::Union{String, Nothing}
+        v_str = get(project, "version", nothing)::Union{String, Nothing}
         version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
         stdlib[UUID(uuid)] = (name, version)
