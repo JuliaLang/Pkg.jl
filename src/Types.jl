@@ -587,9 +587,9 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             resolve_projectfile!(ctx.env, pkg, dev_path)
             error_if_in_sysimage(pkg)
             if is_local_path
-                pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+                pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             else
-                pkg.path = shared ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+                pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             end
             return false
         end
@@ -648,7 +648,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         resolve_projectfile!(ctx.env, pkg, dev_path)
     end
     error_if_in_sysimage(pkg)
-    pkg.path = shared ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+    pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
     if pkg.repo.subdir !== nothing
         pkg.path = joinpath(pkg.path, pkg.repo.subdir)
     end
@@ -726,8 +726,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
-            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.project_file, pkg.repo.source)
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
+            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.manifest_file, pkg.repo.source)
+            repo_source = normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source))
         else
             pkgerror("Path `$(pkg.repo.source)` does not exist.")
         end
