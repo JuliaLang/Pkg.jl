@@ -197,7 +197,6 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             end
         else
             mktempdir() do tmp
-                let url = url
                 if reg.path !== nothing && reg.linked == true # symlink to local source
                     registry = Registry.RegistryInstance(reg.path)
                     regpath = joinpath(regdir, registry.name)
@@ -262,7 +261,6 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     mv(tmp, regpath, force=true)
                     printpkgstyle(io, :Added, "registry `$(registry.name)` to `$(Base.contractuser(regpath))`")
                 end
-                end # let
             end
         end
     end
