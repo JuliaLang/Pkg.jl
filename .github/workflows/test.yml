@@ -36,7 +36,7 @@ jobs:
           - "pkg.julialang.org"
         julia-version:
           # - '1.6'
-          - 'nightly'
+          - '1.9-nightly'
         exclude:
           - os: macOS-latest
             julia-arch: x86
@@ -76,7 +76,7 @@ jobs:
       - uses: julia-actions/setup-julia@latest
         with:
           # version: '1.6'
-          version: 'nightly'
+          version: '1.9-nightly'
       - name: Generate docs
         run: |
           julia --color=yes .ci/test_and_change_uuid.jl
