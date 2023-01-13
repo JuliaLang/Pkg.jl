@@ -414,8 +414,8 @@ function load_stdlib()
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
-        uuid = get(project, "uuid", nothing)
-        v_str = get(project, "version", nothing)
+        uuid = get(project, "uuid", nothing)::Union{String, Nothing}
+        v_str = get(project, "version", nothing)::Union{String, Nothing}
         version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
         stdlib[UUID(uuid)] = (name, version)
@@ -1028,8 +1028,9 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
             info = Pkg.Registry.registry_info(pkg)
-            info.repo === nothing && continue
-            push!(repo_infos, (reg.name, info.repo, uuid))
+            repo = info.repo
+            repo === nothing && continue
+            push!(repo_infos, (reg.name, repo, uuid))
         end
     end
     unique!(repo_infos)
