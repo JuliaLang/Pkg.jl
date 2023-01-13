@@ -211,7 +211,7 @@ function read_manifest(f_or_io::Union{String, IO})
     catch e
         if e isa TOML.ParserError
             pkgerror("Could not parse manifest: ", sprint(showerror, e))
-        end 
+        end
         rethrow()
     end
     if Base.is_v1_format_manifest(raw)
