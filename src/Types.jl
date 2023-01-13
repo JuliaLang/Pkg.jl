@@ -1028,8 +1028,9 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
             info = Pkg.Registry.registry_info(pkg)
-            info.repo === nothing && continue
-            push!(repo_infos, (reg.name, info.repo, uuid))
+            repo = info.repo
+            repo === nothing && continue
+            push!(repo_infos, (reg.name, repo, uuid))
         end
     end
     unique!(repo_infos)
