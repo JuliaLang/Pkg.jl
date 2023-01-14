@@ -518,8 +518,8 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
-                if textwidth(project_name) > 20
-                    project_name = first(project_name, 17) * "..."
+                if textwidth(project_name) > 30
+                    project_name = first(project_name, 27) * "..."
                 end
                 prefix = "($(project_name)) "
                 prev_prefix = prefix
