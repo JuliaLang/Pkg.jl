@@ -597,8 +597,8 @@ end
         @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
     end
 
-    with_temp_env("this_is_a_test_for_truncating") do
-        @test Pkg.REPLMode.promptf() == "(this_is_a_test_fo...) pkg> "
+    with_temp_env("this_is_a_test_for_truncating_long_folder_names_in_the_prompt") do
+        @test Pkg.REPLMode.promptf() == "(this_is_a_test_for_truncati...) pkg> "
     end
 
     env_name = "Test2"
