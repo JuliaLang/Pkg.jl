@@ -1032,19 +1032,48 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
 end
 
-function _is_stale(paths::Vector{String}, sourcepath::String)
+
+function _is_stale!(stale_cache::Dict, paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
         staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
-        if staledeps !== true
-            try
-                # update timestamp of precompilation file so that it is the first to be tried by code loading
-                touch(path_to_try)
-            catch ex
-                # file might be read-only and then we fail to update timestamp, which is fine
-                ex isa Base.IOError || rethrow()
-            end
-            return false
+        if staledeps === true
+            continue
         end
+        staledeps, ocachefile = staledeps::Tuple{Vector{Any}, Union{Nothing, String}}
+        # finish checking staledeps module graph
+        for i in 1:length(staledeps)
+            dep = staledeps[i]
+            dep isa Module && continue
+            modpath, modkey, modbuild_id = dep::Tuple{String, Base.PkgId, UInt128}
+            modpaths = Base.find_all_in_cache_path(modkey)
+            modfound = false
+            for modpath_to_try in modpaths::Vector{String}
+                modstaledeps = get!(() -> Base.stale_cachefile(modkey, modbuild_id, modpath, modpath_to_try), 
+                                    stale_cache, (modkey, modbuild_id, modpath, modpath_to_try))
+                if modstaledeps === true
+                    continue
+                end
+                modstaledeps, modocachepath = modstaledeps::Tuple{Vector{Any}, Union{Nothing, String}}
+                staledeps[i] = (modpath, modkey, modpath_to_try, modstaledeps, modocachepath)
+                modfound = true
+                break
+            end
+            if !modfound
+                staledeps = true
+                break
+            end
+        end
+        if staledeps === true
+            continue
+        end
+        try
+            # update timestamp of precompilation file so that it is the first to be tried by code loading
+            touch(path_to_try)
+        catch ex
+            # file might be read-only and then we fail to update timestamp, which is fine
+            ex isa Base.IOError || rethrow()
+        end
+        return false
     end
     return true
 end
@@ -1095,7 +1124,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         Base.PkgId(uuid, name)
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
-
+    stale_cache = Dict{Tuple{Base.PkgId, UInt128, String, String}, Union{Tuple{Vector{Any}, String}, Bool}}()
     exts = Dict{Base.PkgId, String}() # ext -> parent
     # make a flat map of each dep and its deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
@@ -1339,7 +1368,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                 # skip stale checking and force compilation if any dep was recompiled in this session
                 any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
                 is_stale = true
-                if !circular && (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale(paths, sourcepath))))
+                if !circular && (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale!(stale_cache, paths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
                     iob = IOBuffer()
