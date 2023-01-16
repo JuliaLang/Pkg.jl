@@ -103,8 +103,10 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
             end
         end
         # should have used dict format instead of vector format
-        length(infos) == 1 || pkgerror("Invalid manifest format. ",
-                                       "`$name=$uuid`'s dependency on `$dep` is ambiguous.")
+        if isnothing(infos) || length(infos) != 1
+            pkgerror("Invalid manifest format. ",
+                    "`$name=$uuid`'s dependency on `$dep` is ambiguous.")
+        end
         final[dep] = infos[1].uuid
     end
     return final
