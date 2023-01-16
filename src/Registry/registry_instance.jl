@@ -35,8 +35,8 @@ custom_isfile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, 
 @lazy mutable struct VersionInfo
     git_tree_sha1::Base.SHA1
     yanked::Bool
-    @lazy uncompressed_compat::Union{Dict{UUID, VersionSpec}}
-    @lazy weak_uncompressed_compat::Union{Dict{UUID, VersionSpec}}
+    @lazy uncompressed_compat::Dict{UUID, VersionSpec}
+    @lazy weak_uncompressed_compat::Dict{UUID, VersionSpec}
 end
 VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = VersionInfo(git_tree_sha1, yanked, uninit, uninit)
 
@@ -346,7 +346,7 @@ function RegistryInstance(path::AbstractString)
         pkgs,
         tree_info,
         in_memory_registry,
-        Dict{String, UUID}(),
+        Dict{String, Vector{UUID}}(),
     )
     if tree_info !== nothing
         REGISTRY_CACHE[path] = (tree_info, compressed_file !== nothing, reg)

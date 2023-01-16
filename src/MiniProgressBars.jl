@@ -7,7 +7,7 @@ using Printf
 Base.@kwdef mutable struct MiniProgressBar
     max::Int = 1.0
     header::String = ""
-    color::Symbol = :nothing
+    color::Union{Int,Symbol} = :nothing
     width::Int = 40
     current::Int = 0.0
     prev::Int = 0.0

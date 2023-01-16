@@ -995,7 +995,7 @@ function gen_build_code(build_file::String; inherit_project::Bool = false)
         $(Base.julia_cmd()) -O0 --color=no --history-file=no
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
-        $(inherit_project ? `--project=$(Base.active_project())` : ``)
+        $(inherit_project ? `--project=$(Base.active_project())::String` : ``)
         --eval $code
         ```
 end
@@ -1992,8 +1992,9 @@ function stat_rep(x::PackageSpec; name=true)
     name = name ? "$(x.name)" : ""
     version = x.version == VersionSpec() ? "" : "v$(x.version)"
     rev = ""
-    if x.repo.rev !== nothing
-        rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
+    repo_rev = x.repo.rev
+    if repo_rev !== nothing
+        rev = occursin(r"\b([a-f0-9]{40})\b", repo_rev) ? repo_rev[1:7] : repo_rev
     end
     subdir_str = x.repo.subdir === nothing ? "" : ":$(x.repo.subdir)"
     repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
@@ -2450,7 +2451,7 @@ end
 function print_compat(ctx::Context, pkgs_in::Vector{PackageSpec} = PackageSpec[]; io = nothing)
     io = something(io, ctx.io)
     printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
-    names = [pkg.name for pkg in pkgs_in]
+    names = [pkg.name::String for pkg in pkgs_in]
     pkgs = isempty(pkgs_in) ? ctx.env.project.deps : filter(pkg -> in(first(pkg), names), ctx.env.project.deps)
     add_julia = isempty(pkgs_in) || any(p->p.name == "julia", pkgs_in)
     longest_dep_len = isempty(pkgs) ? length("julia") : max(reduce(max, map(length, collect(keys(pkgs)))), length("julia"))

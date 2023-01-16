@@ -1235,7 +1235,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
     printloop_should_exit::Bool = !fancyprint # exit print loop immediately if not fancy printing
     interrupted_or_done = Base.Event()
 
-    function color_string(cstr::String, col::Symbol)
+    function color_string(cstr::String, col::Union{Int,Symbol})
         enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
         disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
         return string(enable_ansi, cstr, disable_ansi)
@@ -1585,7 +1585,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                 # TODO, query what package to put in Project when in interactive mode?
                 pkgerror("cannot instantiate a manifest without project file when the manifest has multiple packages with the same name ($(pkg.name))")
             end
-            deps[pkg.name] = string(uuid)
+            deps[pkg.name::String] = string(uuid)
         end
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
         return instantiate(Context(); manifest=manifest, update_registry=update_registry, allow_autoprecomp=allow_autoprecomp, verbose=verbose, platform=platform, kwargs...)
@@ -1702,7 +1702,7 @@ function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
         end
     end
     if !isnothing(Base.active_project())
-        PREV_ENV_PATH[] = Base.active_project()
+        PREV_ENV_PATH[] = Base.active_project()::String
     end
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
@@ -1722,8 +1722,9 @@ function _activate_dep(dep_name::AbstractString)
     uuid = get(ctx.env.project.deps, dep_name, nothing)
     if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
-        if entry.path !== nothing
-            return joinpath(dirname(ctx.env.manifest_file), entry.path::String)
+        entry_path = entry.path
+        if entry_path !== nothing
+            return joinpath(dirname(ctx.env.manifest_file), entry_path::String)
         end
     end
 end
@@ -1760,7 +1761,7 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
         end
     end
     if !isnothing(Base.active_project())
-        PREV_ENV_PATH[] = Base.active_project()
+        PREV_ENV_PATH[] = Base.active_project()::String
     end
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
     p = Base.active_project()
@@ -2037,7 +2038,8 @@ function handle_package_input!(pkg::PackageSpec)
                          subdir = pkg.subdir)
     pkg.path = nothing
     pkg.tree_hash = nothing
-    pkg.version = pkg.version === nothing ? VersionSpec() : VersionSpec(pkg.version)
+    version = pkg.version
+    pkg.version = version === nothing ? VersionSpec() : VersionSpec(version)
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
