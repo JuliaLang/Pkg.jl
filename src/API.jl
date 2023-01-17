@@ -256,7 +256,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Operations.update_registries(ctx; force=false)
+    Operations.update_registries(ctx; force=false, update_cooldown=Day(1))
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
