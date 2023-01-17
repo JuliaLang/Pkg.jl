@@ -1421,7 +1421,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         end
                     else
                         # otherwise capture any stderr output as warnings
-                        out = String(take!(iob))
+                        out = strip(String(take!(iob)))
                         if !isempty(out)
                             stderr_outputs[pkg] = out
                         end
@@ -1495,9 +1495,10 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                 plural2 = length(stderr_outputs) == 1 ? "" : "s"
                 print(iostr, "\n  ", color_string("$(length(stderr_outputs))", Base.warn_color()), " dependenc$(plural1) had warnings during precompilation:")
                 for (pkgid, err) in stderr_outputs
-                    err = join(split(err, "\n"), color_string("\n│  ", Base.warn_color()), color_string("\n└  ", Base.warn_color()))
+                    err = join(split(err, "\n"), color_string("\n│  ", Base.warn_color()))
                     print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err)
                 end
+                print(iostr, color_string("\n└  ", Base.warn_color()))
             end
         end
         let str=str
