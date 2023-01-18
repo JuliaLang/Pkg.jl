@@ -742,7 +742,8 @@ end
 
 function _auto_precompile(ctx::Types.Context, pkgs::Vector{String}=String[]; warn_loaded = true, already_instantiated = false)
     if should_autoprecompile()
-        Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        Pkg.precompile(ctx, PackageSpec[PackageSpec(;name = p.name) for p in pkgs]; internal_call=true,
+            warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
 
