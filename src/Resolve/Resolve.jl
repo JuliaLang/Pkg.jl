@@ -64,18 +64,18 @@ include("maxsum.jl")
 
 "Resolve package dependencies."
 function resolve(graph::Graph)
-    sol = _resolve(graph::Graph, nothing, nothing)
+    sol = _resolve(graph::Graph, Int[], Int[], true)
 
     # return the solution as a Dict mapping UUID => VersionNumber
     return compute_output_dict(sol, graph)
 end
 
-function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previous_sol::Union{Vector{Int},Nothing})
+function _resolve(graph::Graph, lower_bound::Vector{Int}, previous_sol::Vector{Int}, first_call::Bool)
     np = graph.np
     spp = graph.spp
     gconstr = graph.gconstr
 
-    if lower_bound ≢ nothing
+    if !first_call
         for p0 = 1:np
             v0 = lower_bound[p0]
             @assert v0 ≠ spp[p0]
@@ -97,7 +97,7 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previou
 
     log_event_global!(graph, "maxsum solver failed")
 
-    @assert previous_sol ≡ nothing
+    @assert first_call
 
     # the problem is unsat, force-trigger a failure
     # in order to produce a log - this will contain
@@ -114,7 +114,7 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previou
         return sol
     else
         enforce_optimality!(sol, graph)
-        if lower_bound ≢ nothing
+        if !first_call
             @assert all(sol .≥ lower_bound)
             @assert all((sol .≥ previous_sol) .| (previous_sol .== spp))
         end
@@ -128,7 +128,7 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previou
                 new_lower_bound[lb_mask] = lower_bound[lb_mask]
                 @assert all(new_lower_bound .≥ lower_bound)
             end
-            return _resolve(graph, new_lower_bound, sol)
+            return _resolve(graph, new_lower_bound, sol, false)
         else
             log_event_global!(graph, "the solver found a feasible configuration and can't improve it")
             return sol
