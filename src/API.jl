@@ -138,15 +138,15 @@ function require_not_empty(pkgs, f::Symbol)
 end
 
 # Provide some convenience calls
-for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why)
+for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :precompile)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; io::IO=$(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
-            Registry.download_default_registries(io)
+            $(f != :precompile) && Registry.download_default_registries(io)
             ctx = Context()
             # Save initial environment for undo/redo functionality
-            if !saved_initial_snapshot[]
+            if $(f != :precompile) && !saved_initial_snapshot[]
                 add_snapshot_to_undo(ctx.env)
                 saved_initial_snapshot[] = true
             end
@@ -1048,7 +1048,7 @@ function _is_stale!(stale_cache::Dict, paths::Vector{String}, sourcepath::String
             modpaths = Base.find_all_in_cache_path(modkey)
             modfound = false
             for modpath_to_try in modpaths::Vector{String}
-                modstaledeps = get!(() -> Base.stale_cachefile(modkey, modbuild_id, modpath, modpath_to_try), 
+                modstaledeps = get!(() -> Base.stale_cachefile(modkey, modbuild_id, modpath, modpath_to_try),
                                     stale_cache, (modkey, modbuild_id, modpath, modpath_to_try))
                 if modstaledeps === true
                     continue
@@ -1097,11 +1097,7 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
     end
 end
 
-precompile(pkgs...; kwargs...) = precompile(Context(), [pkgs...]; kwargs...)
-precompile(pkg::String; kwargs...) = precompile(Context(), pkg; kwargs...)
-precompile(ctx::Context, pkg::String; kwargs...) = precompile(ctx, [pkg]; kwargs...)
-precompile(pkgs::Vector{String}=String[]; kwargs...) = precompile(Context(), pkgs; kwargs...)
-function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::Bool=false,
+function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
     Context!(ctx; kwargs...)
     already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
@@ -1206,6 +1202,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
 
     # if a list of packages is given, restrict to dependencies of given packages
     if !isempty(pkgs)
+        pkgs_names = [p.name for p in pkgs]
         function collect_all_deps(depsmap, dep, alldeps=Base.PkgId[])
             append!(alldeps, depsmap[dep])
             for _dep in depsmap[dep]
@@ -1215,15 +1212,17 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
         end
         keep = Base.PkgId[]
         for dep in depsmap
-            if first(dep).name in pkgs
+            if first(dep).name in pkgs_names
                 push!(keep, first(dep))
                 append!(keep, collect_all_deps(depsmap, first(dep)))
             end
         end
         filter!(d->in(first(d), keep), depsmap)
-        isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs))")
+        isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs_names))")
+        target = join(pkgs_names, ", ")
+    else
+        target = "project..."
     end
-    target = string(isempty(pkgs) ? "project" : join(pkgs, ", "), "...")
 
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
