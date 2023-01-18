@@ -1048,7 +1048,7 @@ function _is_stale!(stale_cache::Dict, paths::Vector{String}, sourcepath::String
             modpaths = Base.find_all_in_cache_path(modkey)
             modfound = false
             for modpath_to_try in modpaths::Vector{String}
-                modstaledeps = get!(() -> Base.stale_cachefile(modkey, modbuild_id, modpath, modpath_to_try), 
+                modstaledeps = get!(() -> Base.stale_cachefile(modkey, modbuild_id, modpath, modpath_to_try),
                                     stale_cache, (modkey, modbuild_id, modpath, modpath_to_try))
                 if modstaledeps === true
                     continue
@@ -1336,6 +1336,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
             fancyprint && print(io, ansi_enablecursor)
         end
     end
+    stderr_outputs = Dict{Base.PkgId,String}()
     tasks = Task[]
     Base.LOADING_CACHE[] = Base.LoadingCache()
     ## precompilation loop
@@ -1418,6 +1419,12 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         else
                             rethrow(err)
                         end
+                    else
+                        # otherwise capture any stderr output as warnings
+                        out = strip(String(take!(iob)))
+                        if !isempty(out)
+                            stderr_outputs[pkg] = out
+                        end
                     finally
                         Base.release(parallel_limiter)
                     end
@@ -1482,6 +1489,16 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                 plural2 = length(failed_deps) == 1 ? "" : "s"
                 print(iostr, "\n  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural1) errored. ")
                 print(iostr, "To see a full report either run `import Pkg; Pkg.precompile()` or load the package$(plural2)")
+            end
+            if !isempty(stderr_outputs)
+                plural1 = length(stderr_outputs) == 1 ? "y" : "ies"
+                plural2 = length(stderr_outputs) == 1 ? "" : "s"
+                print(iostr, "\n  ", color_string("$(length(stderr_outputs))", Base.warn_color()), " dependenc$(plural1) had warnings during precompilation:")
+                for (pkgid, err) in stderr_outputs
+                    err = join(split(err, "\n"), color_string("\n│  ", Base.warn_color()))
+                    print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err)
+                end
+                print(iostr, color_string("\n└  ", Base.warn_color()))
             end
         end
         let str=str
