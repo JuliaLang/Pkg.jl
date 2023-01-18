@@ -1515,9 +1515,13 @@ function save_precompile_state()
     path = Operations.pkg_scratchpath()
     for (prefix, store) in (("suspend_cache_", pkgs_precompile_suspended), ("pending_cache_", pkgs_precompile_pending))
         fpath = joinpath(path, string(prefix, hash(string(Base.active_project(), Base.VERSION))))
-        mkpath(path); Base.Filesystem.rm(fpath, force=true)
-        open(fpath, "w") do io
-            serialize(io, store)
+        if isempty(store)
+            Base.rm(fpath, force=true)
+        else
+            mkpath(path); Base.rm(fpath, force=true)
+            open(fpath, "w") do io
+                serialize(io, store)
+            end
         end
     end
     return nothing
