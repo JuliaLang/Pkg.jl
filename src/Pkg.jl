@@ -3,7 +3,7 @@
 module Pkg
 
 if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
-    @eval Base.Experimental.@max_methods 2
+    @eval Base.Experimental.@max_methods 1
 end
 
 import Random
