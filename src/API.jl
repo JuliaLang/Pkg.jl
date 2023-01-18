@@ -869,10 +869,18 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
                 uuid_dir = joinpath(scratchdir, uuid)
                 !isdir(uuid_dir) && continue
                 for space in readdir(uuid_dir)
-                    space_dir = joinpath(uuid_dir, space)
-                    !isdir(space_dir) && continue
-                    if !(space_dir in spaces_to_keep)
-                        push!(depot_orphaned_scratchspaces, space_dir)
+                    space_dir_or_file = joinpath(uuid_dir, space)
+                    if isdir(space_dir_or_file)
+                        if !(space_dir_or_file in spaces_to_keep)
+                            push!(depot_orphaned_scratchspaces, space_dir_or_file)
+                        end
+                    elseif uuid == Operations.PkgUUID && isfile(space_dir_or_file)
+                        # special cleanup for the precompile cache files that Pkg saves
+                        if any(prefix->startswith(basename(space_dir_or_file), prefix), ("suspend_cache_", "pending_cache_"))
+                            if mtime(space_dir_or_file) < (time() - (24*60*60))
+                                push!(depot_orphaned_scratchspaces, space_dir_or_file)
+                            end
+                        end
                     end
                 end
             end
@@ -928,7 +936,16 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
     # Delete paths for unreachable package versions and artifacts, and computing size saved
     function delete_path(path)
-        path_size = recursive_dir_size(path)
+        path_size = if isfile(path)
+            try
+                lstat(path).size
+            catch ex
+                @error("Failed to calculate size of $path", exception=ex)
+                0
+            end
+        else
+            recursive_dir_size(path)
+        end
         try
             Base.Filesystem.prepare_for_deletion(path)
             Base.rm(path; recursive=true, force=true)
