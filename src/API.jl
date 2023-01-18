@@ -1538,6 +1538,7 @@ function recall_precompile_state()
                     empty!(store)
                 end
             end
+            Base.rm(fpath, force=true)
         else
             empty!(store)
         end
