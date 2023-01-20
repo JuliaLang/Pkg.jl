@@ -246,6 +246,7 @@ function get_metadata_headers(url::AbstractString)
         any(hdr == k for (k, v) in headers) && continue
         push!(headers, hdr => val)
     end
+    push!(headers, "JULIA_PKG_SERVER_REGISTRY_PREFERENCE" => get(ENV, "JULIA_PKG_SERVER_REGISTRY_PREFERENCE", "eager"))
     return headers
 end
 
