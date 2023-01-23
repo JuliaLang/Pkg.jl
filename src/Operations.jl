@@ -1101,7 +1101,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         fancyprint && show_progress(ctx.io, bar)
 
         let log_file=log_file
-            sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override; preferences=build_project_preferences) do
+            sandbox(ctx, pkg, source_path, builddir(source_path), build_project_override; preferences=build_project_preferences, allow_reresolve=false) do
                 flush(ctx.io)
                 ok = open(log_file, "w") do log
                     std = verbose ? ctx.io : log
