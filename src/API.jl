@@ -1430,7 +1430,7 @@ function precompile(ctx::Context, pkgs::Vector{String}=String[]; internal_call::
                         if err isa ErrorException || (err isa ArgumentError && startswith(err.msg, "Invalid header in cache file"))
                             failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", String(take!(iob))) : ""
                             !fancyprint && lock(print_lock) do
-                                println(io, " "^9, color_string("  ✗ ", Base.error_color()), name)
+                                println(io, timing ? " "^9 : "", color_string("  ✗ ", Base.error_color()), name)
                             end
                             queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             precomp_suspend!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
