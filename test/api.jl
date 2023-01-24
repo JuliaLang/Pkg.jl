@@ -192,7 +192,7 @@ end
         # https://github.com/JuliaLang/Pkg.jl/pull/2142
         Pkg.build(; verbose=true)
 
-        @testset "timing mode" do
+        @testset "timing mode" begin
             iob = IOBuffer()
             Pkg.develop(Pkg.PackageSpec(path="packages/Dep6"))
             Pkg.precompile(io=iob, timing=true)
