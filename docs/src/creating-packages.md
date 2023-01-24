@@ -269,21 +269,23 @@ The current usage of this is almost solely limited to "extensions" which is desc
 !!! note
     This is a somewhat advanced usage of Pkg which can be skipped for people new to Julia and Julia packages.
 
-It is sometimes desirable to be able to extend some functionality of a package without having to
-unconditionally take on the cost (in terms of e.g. load time) of adding a full dependency on that package.
+Sometimes one wants to make two or more packages work well together, but may be reluctant (perhaps due to increased load times) to make one an unconditional dependency of the other.
 A package *extension* is a module in a file (similar to a package) that is automatically loaded when *some other set of packages* are
 loaded into the Julia session. This is very similar to functionality that the external package
-Requires.jl provides, but which is now available directly through Julia.
+[Requires.jl](https://github.com/JuliaPackaging/Requires.jl) provides, but which is now available directly through Julia,
+and provides added benefits such as being able to precompile the extension.
 
 A useful application of extensions could be for a plotting package that should be able to plot
 objects from a wide variety of different Julia packages.
-Adding all those different Julia packages as dependencies
+Adding all those different Julia packages as dependencies of the plotting package
 could be expensive since they would end up getting loaded even if they were never used.
 Instead, the code required to plot objects for specific packages can be put into separate files
-(extensions) and these are loaded only when the packages that defines the type we want to plot
+(extensions) and these are loaded only when the packages that define the type(s) we want to plot
 are loaded.
 
-Below is an example of how the code can be structured for a use case outlined above:
+Below is an example of how the code can be structured for a use case in which a
+`Plotting` package wants to be able to display objects defined in the external package `Contour`.
+The file and folder structure shown below is found in the `Plotting` package.
 
  `Project.toml`:
  ```toml
@@ -298,7 +300,7 @@ Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 # name of extension to the left
 # extension dependencies required to load the extension to the right
 # use a list for multiple extension dependencies
-ContourExt = "Contour" 
+ContourExt = "Contour"
 
 [compat]
 Contour = "0.6.2"
@@ -328,14 +330,14 @@ end
 end # module
 ```
 
-A user that depends on `Plotting` will not pay the cost of the "extension" inside the `ContourExt` module.
+A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `ContourExt` module.
 It is only when the `Contour` package actually gets loaded that the `ContourExt` extension is loaded
 and provides the new functionality.
 
 If one considers `ContourExt` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
-type piracy since `ContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
+[type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy) since `ContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
 However, for extensions, it is ok to assume that the extension owns the methods in its parent package.
-In fact, this type of "type piracies" is one of the most standard use cases for extensions.
+In fact, this form of type piracy is one of the most standard use cases for extensions.
 
 An extension will only be loaded if the extension dependencies are loaded from the same environment or environments higher in the environment stack than the package itself.
 
@@ -384,13 +386,13 @@ This is done by making the following changes (using the example above):
       end
   end
   ```
-- Do the following change in the extensions for loading the extension dependency:
-  ```julia
-  isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
-  ```
+- Make the following change in the conditionally-loaded code:
+ ```julia
+ isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
+ ```
 
 The package should now work with Requires.jl on Julia versions before extensions were introduced
-and with extensions afterward.
+and with extensions on more recent Julia versions.
 
 ####  Transition from normal dependency to extension
 
@@ -405,11 +407,13 @@ This is done by making the following changes (using the example above):
   end
   ```
 
-#### Using an extension while supporting older Julia version
+Note that changing behavior from automatic to conditional may be a breaking change, and may require a major version bump.
+
+#### Using an extension while supporting older Julia versions
 
 If you want to use an extension with compatibility constraints while supporting earlier Julia
 versions you have to duplicate the packages under `[weakdeps]` into `[extras]`. This is an unfortunate
-duplication but without doing this the project verifier under older Julia versions will complain (error).
+duplication, but without doing this the project verifier under older Julia versions will throw an error.
 
 ## Package naming guidelines
 
