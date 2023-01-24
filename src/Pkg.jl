@@ -165,8 +165,8 @@ Set `timing=true` to show the duration of the precompilation of each dependency.
 !!! compat "Julia 1.8"
     Specifying packages to precompile requires at least Julia 1.8.
 
-!!! compat "Julia 1.10"
-    Timing mode requires Julia 1.10.
+!!! compat "Julia 1.9"
+    Timing mode requires Julia 1.9.
 
 # Examples
 ```julia
