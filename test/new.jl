@@ -1974,12 +1974,12 @@ end
             @test !pkg.is_pinned
         end
 
-        Pkg.pin(all_pkgs = true, all_pkgmode = PKGMODE_MANIFEST)
+        Pkg.pin(all_pkgs = true, all_pkgmode = Pkg.PKGMODE_MANIFEST)
         @test length(Pkg.dependencies()) > 1
         for pkg in Pkg.dependencies()
             @test pkg.is_pinned
         end
-        Pkg.free(all_pkgs = true, all_pkgmode = PKGMODE_MANIFEST)
+        Pkg.free(all_pkgs = true, all_pkgmode = Pkg.PKGMODE_MANIFEST)
         @test length(Pkg.dependencies()) > 1
         for pkg in Pkg.dependencies()
             @test !pkg.is_pinned
@@ -2006,7 +2006,7 @@ end
         api, args, opts = first(Pkg.pkg"pin --all -m")
         @test api == Pkg.pin
         @test isempty(args)
-        @test opts == Dict(:all_pkgs => true, :all_pkgmode => PKGMODE_MANIFEST)
+        @test opts == Dict(:all_pkgs => true, :all_pkgmode => Pkg.PKGMODE_MANIFEST)
 
         api, args, opts = first(Pkg.pkg"free --all")
         @test api == Pkg.free
@@ -2016,7 +2016,7 @@ end
         api, args, opts = first(Pkg.pkg"free --all -m")
         @test api == Pkg.free
         @test isempty(args)
-        @test opts == Dict(:all_pkgs => true, :all_pkgmode => PKGMODE_MANIFEST)
+        @test opts == Dict(:all_pkgs => true, :all_pkgmode => Pkg.PKGMODE_MANIFEST)
 
         api, args, opts = first(Pkg.pkg"rm --all")
         @test api == Pkg.rm
