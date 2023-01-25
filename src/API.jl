@@ -351,11 +351,11 @@ function resolve(ctx::Context; skip_writing_project::Bool=false, kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, all_pkgmode::PackageMode=PKGMODE_PROJECT, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+        append_all_pkgs!(pkgs, ctx, all_pkgmode)
     else
         require_not_empty(pkgs, :pin)
     end
@@ -386,11 +386,11 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, all_pkgmode::PackageMode=PKGMODE_PROJECT, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+        append_all_pkgs!(pkgs, ctx, all_pkgmode)
     else
         require_not_empty(pkgs, :free)
     end

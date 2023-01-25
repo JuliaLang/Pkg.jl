@@ -1962,12 +1962,29 @@ end
     # pin all, free all, rm all packages
     isolate(loaded_depot=true) do
         Pkg.add("Example")
+
         Pkg.pin(all_pkgs = true)
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.name == "Example"
+            @test pkg.is_pinned
+        end
         Pkg.free(all_pkgs = true)
         Pkg.dependencies(exuuid) do pkg
             @test pkg.name == "Example"
             @test !pkg.is_pinned
         end
+
+        Pkg.pin(all_pkgs = true, all_pkgmode = PKGMODE_MANIFEST)
+        @test length(Pkg.dependencies()) > 1
+        for pkg in Pkg.dependencies()
+            @test pkg.is_pinned
+        end
+        Pkg.free(all_pkgs = true, all_pkgmode = PKGMODE_MANIFEST)
+        @test length(Pkg.dependencies()) > 1
+        for pkg in Pkg.dependencies()
+            @test !pkg.is_pinned
+        end
+
         Pkg.add("Profile")
         Pkg.pin("Example")
         Pkg.free(all_pkgs = true) # test that this doesn't error because Profile is already free
@@ -1986,10 +2003,20 @@ end
         @test isempty(args)
         @test opts == Dict(:all_pkgs => true)
 
+        api, args, opts = first(Pkg.pkg"pin --all -m")
+        @test api == Pkg.pin
+        @test isempty(args)
+        @test opts == Dict(:all_pkgs => true, :all_pkgmode => PKGMODE_MANIFEST)
+
         api, args, opts = first(Pkg.pkg"free --all")
         @test api == Pkg.free
         @test isempty(args)
         @test opts == Dict(:all_pkgs => true)
+
+        api, args, opts = first(Pkg.pkg"free --all -m")
+        @test api == Pkg.free
+        @test isempty(args)
+        @test opts == Dict(:all_pkgs => true, :all_pkgmode => PKGMODE_MANIFEST)
 
         api, args, opts = first(Pkg.pkg"rm --all")
         @test api == Pkg.rm

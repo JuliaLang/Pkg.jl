@@ -191,16 +191,17 @@ PSA[:name => "free",
     :arg_count => 0 => Inf,
     :option_spec => [
         PSA[:name => "all", :api => :all_pkgs => true],
+        PSA[:name => "manifest", :short_name => "m", :api => :all_pkgmode => PKGMODE_MANIFEST],
     ],
     :arg_parser => parse_package,
     :completions => complete_installed_packages,
     :description => "undoes a `pin`, `develop`, or stops tracking a repo",
     :help => md"""
     free pkg[=uuid] ...
-    free [--all]
+    free [--all] [-m|--manifest]
 
 Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
-makes the package no longer being checked out.
+makes the package no longer being checked out. `--all` frees all project packages, `--all -m` frees all manifest packages.
 """,
 ],
 PSA[:name => "why",
@@ -223,16 +224,18 @@ PSA[:name => "pin",
     :arg_count => 0 => Inf,
     :option_spec => [
         PSA[:name => "all", :api => :all_pkgs => true],
+        PSA[:name => "manifest", :short_name => "m", :api => :all_pkgmode => PKGMODE_MANIFEST],
     ],
     :arg_parser => parse_package,
     :completions => complete_installed_packages,
     :description => "pins the version of packages",
     :help => md"""
     pin pkg[=uuid] ...
-    pin [--all]
+    pin [--all] [-m|--manifest]
 
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
 A pinned package has the symbol `⚲` next to its version in the status list.
+`--all` pins all project packages, `--all -m` pins all manifest packages.
 
 **Examples**
 ```
@@ -240,6 +243,7 @@ pkg> pin Example
 pkg> pin Example@0.5.0
 pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
 pkg> pin --all
+pkg> pin --all -m
 ```
 """,
 ],
