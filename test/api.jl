@@ -145,6 +145,11 @@ end
         Pkg.precompile(["Dep4", "NoVersion"], io=iob)
         @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
 
+        Pkg.precompile(Pkg.PackageSpec(name="Dep4"))
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+        Pkg.precompile([Pkg.PackageSpec(name="Dep4"), Pkg.PackageSpec(name="NoVersion")])
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
         @info "Auto precompilation disabled"
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))

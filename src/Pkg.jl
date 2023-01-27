@@ -750,7 +750,7 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{String}=String[]; warn_loaded = true, already_instantiated = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageSpec[]; warn_loaded = true, already_instantiated = false)
     if should_autoprecompile()
         Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
