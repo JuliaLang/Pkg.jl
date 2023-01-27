@@ -15,7 +15,7 @@ if Base.find_package("HistoricalStdlibVersions") === nothing
     @debug "Installing HistoricalStdlibVersions for Pkg tests"
     iob = IOBuffer()
     try
-        Pkg.add(iob, "HistoricalStdlibVersions") # Needed for custom julia version resolve tests
+        Pkg.add("HistoricalStdlibVersions", io=iob) # Needed for custom julia version resolve tests
     catch
         println(String(take!(iob)))
         rethrow()
