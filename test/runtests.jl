@@ -12,8 +12,14 @@ import Pkg
 
 # Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
 if Base.find_package("HistoricalStdlibVersions") === nothing
-    @info "Installing HistoricalStdlibVersions for Pkg tests"
-    Pkg.add("HistoricalStdlibVersions") # Needed for custom julia version resolve tests
+    @debug "Installing HistoricalStdlibVersions for Pkg tests"
+    iob = IOBuffer()
+    try
+        Pkg.add(iob, "HistoricalStdlibVersions") # Needed for custom julia version resolve tests
+    catch
+        println(String(take!(iob)))
+        rethrow()
+    end
 end
 
 import HistoricalStdlibVersions
