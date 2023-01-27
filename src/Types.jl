@@ -874,7 +874,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     repo_source = pkg.repo.source
     if !isurl(pkg.repo.source)
         if isdir(pkg.repo.source)
-            if !isdir(joinpath(pkg.repo.source, ".git"))
+            git_info_path   =   (path -> !isfile(path) ? path : joinpath(dirname(path), (last∘split∘readline)(path)))(joinpath(pkg.repo.source, ".git"))
+            if !isdir(git_info_path)
                 msg = "Did not find a git repository at `$(pkg.repo.source)`"
                 if isfile(joinpath(pkg.repo.source, "Project.toml")) || isfile(joinpath(pkg.repo.source, "JuliaProject.toml"))
                     msg *= ", perhaps you meant `Pkg.develop`?"
