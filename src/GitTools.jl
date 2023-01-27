@@ -109,7 +109,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
     try
         if use_cli_git()
-            run(`git clone --quiet $url $source_path`)
+            run(pipeline(`git clone --quiet $url $source_path`; stdout=devnull))
             return LibGit2.GitRepo(source_path)
         else
             mkpath(source_path)
@@ -161,7 +161,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
         if use_cli_git()
             let remoteurl=remoteurl
                 cd(LibGit2.path(repo)) do
-                    run(`git fetch -q $remoteurl $(only(refspecs))`)
+                    run(pipeline(`git fetch -q $remoteurl $(only(refspecs))`; stdout=devnull))
                 end
             end
         else
