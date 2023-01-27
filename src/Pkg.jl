@@ -143,11 +143,14 @@ See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 const add = API.add
 
 """
-    Pkg.precompile(; strict::Bool=false)
-    Pkg.precompile(pkg; strict::Bool=false)
-    Pkg.precompile(pkgs; strict::Bool=false)
+    Pkg.precompile(; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false)
 
 Precompile all or specific dependencies of the project in parallel.
+
+Set `timing=true` to show the duration of the precompilation of each dependency.
+
 !!! note
     Errors will only throw when precompiling the top-level dependencies, given that
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
@@ -161,6 +164,9 @@ Precompile all or specific dependencies of the project in parallel.
 
 !!! compat "Julia 1.8"
     Specifying packages to precompile requires at least Julia 1.8.
+
+!!! compat "Julia 1.9"
+    Timing mode requires at least Julia 1.9.
 
 # Examples
 ```julia

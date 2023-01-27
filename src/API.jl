@@ -1098,7 +1098,7 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
 end
 
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
-                    strict::Bool=false, warn_loaded = true, already_instantiated = false, kwargs...)
+                    strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
     already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1111,7 +1111,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(default_num_tasks)))
     parallel_limiter = Base.Semaphore(num_tasks)
     io = ctx.io
-    fancyprint = can_fancyprint(io)
+    fancyprint = can_fancyprint(io) && !timing
 
     recall_precompile_state() # recall suspended and force-queued packages
     !internal_call && precomp_unsuspend!() # when manually called, unsuspend all packages that were suspended due to precomp errors
@@ -1385,23 +1385,24 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         return
                     end
                     try
-                        ret = Logging.with_logger(Logging.NullLogger()) do
+                        t = @elapsed ret = Logging.with_logger(Logging.NullLogger()) do
                             # TODO: Explore allowing parallel LLVM image generation. Needs careful load balancing
                             withenv("JULIA_IMAGE_THREADS" => "1") do
                                 # capture stderr, send stdout to devnull, don't skip loaded modules
                                 Base.compilecache(pkg, sourcepath, iob, devnull, false)
                             end
                         end
+                        t_str = timing ? string(lpad(round(t * 1e3, digits = 1), 9), " ms") : ""
                         if ret isa Base.PrecompilableError
                             push!(precomperr_deps, pkg)
                             precomp_queue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             !fancyprint && lock(print_lock) do
-                                println(io, string(color_string("  ? ", Base.warn_color()), name))
+                                println(io, t_str, color_string("  ? ", Base.warn_color()), name)
                             end
                         else
                             queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             !fancyprint && lock(print_lock) do
-                                println(io, string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name))
+                                println(io, t_str, color_string("  ✓ ", loaded ? Base.warn_color() : :green), name)
                             end
                             was_recompiled[pkg] = true
                         end
@@ -1410,7 +1411,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         if err isa ErrorException || (err isa ArgumentError && startswith(err.msg, "Invalid header in cache file"))
                             failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", String(take!(iob))) : ""
                             !fancyprint && lock(print_lock) do
-                                println(io, string(color_string("  ✗ ", Base.error_color()), name))
+                                println(io, timing ? " "^9 : "", color_string("  ✗ ", Base.error_color()), name)
                             end
                             queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             precomp_suspend!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
@@ -1446,7 +1447,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
     notify(first_started) # in cases of no-op or !fancyprint
     save_precompile_state() # save lists to scratch space
-    wait(t_print)
+    fancyprint && wait(t_print)
     !all(istaskdone, tasks) && return # if some not finished, must have errored or been interrupted
     seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
     ndeps = count(values(was_recompiled))

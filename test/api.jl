@@ -109,6 +109,7 @@ end
             Pkg.generate("Dep3")
             Pkg.generate("Dep4")
             Pkg.generate("Dep5")
+            Pkg.generate("Dep6")
             Pkg.generate("NoVersion")
             open(joinpath("NoVersion","Project.toml"), "w") do io
                 write(io, "name = \"NoVersion\"\nuuid = \"$(UUIDs.uuid4())\"")
@@ -195,6 +196,18 @@ end
 
         # https://github.com/JuliaLang/Pkg.jl/pull/2142
         Pkg.build(; verbose=true)
+
+        @testset "timing mode" begin
+            iob = IOBuffer()
+            Pkg.develop(Pkg.PackageSpec(path="packages/Dep6"))
+            Pkg.precompile(io=iob, timing=true)
+            str = String(take!(iob))
+            @test occursin("Precompiling", str)
+            @test occursin(" ms", str)
+            @test occursin("Dep6", str)
+            Pkg.precompile(io=iob)
+            @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
+        end
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
     end end
