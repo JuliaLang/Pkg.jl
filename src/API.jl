@@ -327,7 +327,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             skip_writing_project::Bool=false,
             kwargs...)
     Context!(ctx; kwargs...)
-    if Operations.is_fully_pinned(ctx)
+    if !isempty(ctx.env.manifest.deps) && Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
         return
     end
