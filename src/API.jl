@@ -329,6 +329,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     Context!(ctx; kwargs...)
     if Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
+        return
     end
     if update_registry
         Registry.download_default_registries(ctx.io)
