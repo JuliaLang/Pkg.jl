@@ -3,7 +3,7 @@ module Artifacts
 using Artifacts, Base.BinaryPlatforms, SHA
 using ..MiniProgressBars, ..PlatformEngines
 
-import ..get_bool_env, ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
+import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
        ..stderr_f, ..printpkgstyle
 
 import Base: get, SHA1
@@ -340,7 +340,7 @@ function download_artifact(
             # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
             # and Pkg.jl#2317 so we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
             # error and move the artifact to the expected location and return true
-            ignore_hash = get_bool_env("JULIA_PKG_IGNORE_HASHES")
+            ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
             if ignore_hash
                 msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
                 @error(msg)

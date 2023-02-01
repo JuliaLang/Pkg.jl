@@ -45,7 +45,7 @@ stdout_f() = something(DEFAULT_IO[], stdout)
 const PREV_ENV_PATH = Ref{String}("")
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
-should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
+should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
 include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
 
@@ -682,7 +682,7 @@ function __init__()
         end
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
-    OFFLINE_MODE[] = get_bool_env("JULIA_PKG_OFFLINE")
+    OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
     return nothing
 end
 
