@@ -1053,39 +1053,29 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
 end
 
+# should sync with the types of arguments of `Base.stale_cachefile`
+const StaleCacheKey = Tuple{Base.PkgId, UInt128, String, String}
 
-function _is_stale!(stale_cache::Dict, paths::Vector{String}, sourcepath::String)
+function _is_stale!(stale_cache::Dict{StaleCacheKey,Bool}, paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
         staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
         if staledeps === true
             continue
         end
-        staledeps, ocachefile = staledeps::Tuple{Vector{Any}, Union{Nothing, String}}
+        staledeps, _ = staledeps::Tuple{Vector{Any}, Union{Nothing, String}}
         # finish checking staledeps module graph
         for i in 1:length(staledeps)
             dep = staledeps[i]
             dep isa Module && continue
             modpath, modkey, modbuild_id = dep::Tuple{String, Base.PkgId, UInt128}
             modpaths = Base.find_all_in_cache_path(modkey)
-            modfound = false
             for modpath_to_try in modpaths::Vector{String}
-                modstaledeps = get!(() -> Base.stale_cachefile(modkey, modbuild_id, modpath, modpath_to_try),
-                                    stale_cache, (modkey, modbuild_id, modpath, modpath_to_try))
-                if modstaledeps === true
-                    continue
-                end
-                modstaledeps, modocachepath = modstaledeps::Tuple{Vector{Any}, Union{Nothing, String}}
-                staledeps[i] = (modpath, modkey, modpath_to_try, modstaledeps, modocachepath)
-                modfound = true
-                break
+                stale_cache_key = (modkey, modbuild_id, modpath, modpath_to_try)::StaleCacheKey
+                is_stale = get!(() -> Base.stale_cachefile(stale_cache_key...) === true,
+                                stale_cache, stale_cache_key)
+                is_stale && continue
+                @goto check_next_path
             end
-            if !modfound
-                staledeps = true
-                break
-            end
-        end
-        if staledeps === true
-            continue
         end
         try
             # update timestamp of precompilation file so that it is the first to be tried by code loading
@@ -1095,6 +1085,7 @@ function _is_stale!(stale_cache::Dict, paths::Vector{String}, sourcepath::String
             ex isa Base.IOError || rethrow()
         end
         return false
+        @label check_next_path
     end
     return true
 end
@@ -1141,7 +1132,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         Base.PkgId(uuid, name)
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
-    stale_cache = Dict{Tuple{Base.PkgId, UInt128, String, String}, Union{Tuple{Vector{Any}, String}, Bool}}()
+    stale_cache = Dict{StaleCacheKey, Bool}()
     exts = Dict{Base.PkgId, String}() # ext -> parent
     # make a flat map of each dep and its deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
