@@ -327,6 +327,10 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             skip_writing_project::Bool=false,
             kwargs...)
     Context!(ctx; kwargs...)
+    if Operations.is_fully_pinned(ctx)
+        printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
+        return
+    end
     if update_registry
         Registry.download_default_registries(ctx.io)
         Operations.update_registries(ctx; force=true)
@@ -355,7 +359,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
     else
         require_not_empty(pkgs, :pin)
     end
@@ -390,7 +394,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
     else
         require_not_empty(pkgs, :free)
     end

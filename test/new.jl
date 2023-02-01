@@ -1961,16 +1961,26 @@ end
 @testset "all" begin
     # pin all, free all, rm all packages
     isolate(loaded_depot=true) do
-        Pkg.add("Example")
+        Pkg.add(["Example", "JSON"])
+
         Pkg.pin(all_pkgs = true)
+        @test length(Pkg.dependencies()) > 1
+        for (uuid, pkg) in Pkg.dependencies()
+            @test pkg.is_pinned
+        end
+
+        iob = IOBuffer()
+        Pkg.update(io = iob)
+        @test endswith(strip(String(take!(iob))), "All dependencies are pinned - nothing to update.")
+
         Pkg.free(all_pkgs = true)
-        Pkg.dependencies(exuuid) do pkg
-            @test pkg.name == "Example"
+        @test length(Pkg.dependencies()) > 1
+        for (uuid, pkg) in Pkg.dependencies()
             @test !pkg.is_pinned
         end
-        Pkg.add("Profile")
+
         Pkg.pin("Example")
-        Pkg.free(all_pkgs = true) # test that this doesn't error because Profile is already free
+        Pkg.free(all_pkgs = true) # test that this doesn't error because JSON is already free
         Pkg.rm(all_pkgs = true)
         @test !haskey(Pkg.dependencies(), exuuid)
 
