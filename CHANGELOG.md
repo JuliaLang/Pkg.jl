@@ -10,6 +10,8 @@ Pkg v1.9 Release Notes
   a pidfile lock ([#2793]).
 - The Pkg REPL now understands Github URLs to branches and commits so you can e.g. do `pkg> add https://github.com/Org/Package.jl/tree/branch`
   or `pkg> add https://github.com/Org/Package.jl/commit/bb9eb77e6dc`.
+- Timing of the precompilation of dependencies can now be reported via `Pkg.precompile(timing=true)` ([#3334])
+- Bug fix on `pin/free --all` which now correctly applies to all dependencies, not just direct dependencies ([#3346]).
 
 Pkg v1.8 Release Notes
 ======================

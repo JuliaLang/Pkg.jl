@@ -2,6 +2,10 @@
 
 module Pkg
 
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
+    @eval Base.Experimental.@max_methods 1
+end
+
 import Random
 import REPL
 import TOML
@@ -139,11 +143,14 @@ See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 const add = API.add
 
 """
-    Pkg.precompile(; strict::Bool=false)
-    Pkg.precompile(pkg; strict::Bool=false)
-    Pkg.precompile(pkgs; strict::Bool=false)
+    Pkg.precompile(; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false)
 
 Precompile all or specific dependencies of the project in parallel.
+
+Set `timing=true` to show the duration of the precompilation of each dependency.
+
 !!! note
     Errors will only throw when precompiling the top-level dependencies, given that
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
@@ -157,6 +164,9 @@ Precompile all or specific dependencies of the project in parallel.
 
 !!! compat "Julia 1.8"
     Specifying packages to precompile requires at least Julia 1.8.
+
+!!! compat "Julia 1.9"
+    Timing mode requires at least Julia 1.9.
 
 # Examples
 ```julia
@@ -282,32 +292,42 @@ redirecting to the `build.log` file.
 const build = API.build
 
 """
-    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
+    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
-git revision. A pinned package is never updated.
+git revision. A pinned package is never updated. To pin all dependencies set `all_pkgs=true`.
+
+!!! compat "Julia 1.7"
+    The `all_pkgs` kwarg was introduced in julia 1.7.
 
 # Examples
 ```julia
 Pkg.pin("Example")
 Pkg.pin(name="Example", version="0.3.1")
+Pkg.pin(all_pkgs = true)
 ```
 """
 const pin = API.pin
 
 """
-    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
+    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
 
 If `pkg` is pinned, remove the pin.
-If `pkg` is tracking a path,
-e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
+If `pkg` is tracking a path, e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
+To free all dependencies set `all_pkgs=true`.
+
+!!! compat "Julia 1.7"
+    The `all_pkgs` kwarg was introduced in julia 1.7.
 
 # Examples
 ```julia
 Pkg.free("Package")
+Pkg.free(all_pkgs = true)
 ```
+
+
 """
 const free = API.free
 
@@ -740,7 +760,7 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{String}=String[]; warn_loaded = true, already_instantiated = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageSpec[]; warn_loaded = true, already_instantiated = false)
     if should_autoprecompile()
         Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end

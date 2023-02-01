@@ -140,7 +140,8 @@ isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
-    f = []
+    f = Pair{String, Any}[]
+    
     pkg.name !== nothing && push!(f, "name" => pkg.name)
     pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
     pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
@@ -151,7 +152,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     pkg.pinned && push!(f, "pinned" => pkg.pinned)
     push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
     if pkg.repo.source !== nothing
-        push!(f, "repo/source" => string("\"", pkg.repo.source, "\""))
+        push!(f, "repo/source" => string("\"", pkg.repo.source::String, "\""))
     end
     if pkg.repo.rev !== nothing
         push!(f, "repo/rev" => pkg.repo.rev)
@@ -161,7 +162,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
-        print(io, "  ", field, " = ", value, "\n")
+        print(io, "  ", field, " = ", string(value)::String, "\n")
     end
     print(io, ")")
 end
