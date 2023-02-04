@@ -1071,11 +1071,14 @@ function _is_stale!(stale_cache::Dict{StaleCacheKey,Bool}, paths::Vector{String}
             modpaths = Base.find_all_in_cache_path(modkey)
             for modpath_to_try in modpaths::Vector{String}
                 stale_cache_key = (modkey, modbuild_id, modpath, modpath_to_try)::StaleCacheKey
-                is_stale = get!(() -> Base.stale_cachefile(stale_cache_key...) === true,
-                                stale_cache, stale_cache_key)
-                is_stale && continue
-                @goto check_next_path
+                if get!(() -> Base.stale_cachefile(stale_cache_key...) === true,
+                        stale_cache, stale_cache_key)
+                    continue
+                end
+                @goto check_next_dep
             end
+            @goto check_next_path
+            @label check_next_dep
         end
         try
             # update timestamp of precompilation file so that it is the first to be tried by code loading
