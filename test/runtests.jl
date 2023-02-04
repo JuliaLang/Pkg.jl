@@ -38,7 +38,7 @@ if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
 end
 
 ### Disable logging output if true (default)
-hide_logs = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
+hide_logs = Base.get_bool_env("JULIA_PKG_TEST_QUIET", true)
 
 logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
 ### Send all Pkg output to a file called Pkg.log
