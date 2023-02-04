@@ -265,6 +265,17 @@ end
         Pkg.activate("CircularDep3")
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
     end end
+    @testset "Issue 3359: Recurring precompile" begin
+        isolate() do; cd_tempdir() do tmp
+            cp(joinpath(@__DIR__, "test_packages", "RecurringPrecompile"), joinpath(tmp, "RecurringPrecompile"))
+            Pkg.activate("RecurringPrecompile")
+            iob = IOBuffer()
+            Pkg.precompile(io=iob)
+            @test occursin("Precompiling", String(take!(iob)))
+            Pkg.precompile(io=iob) # should be a no-op
+            @test !occursin("Precompiling", String(take!(iob)))
+        end end
+    end
 end
 
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin
