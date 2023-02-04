@@ -118,6 +118,14 @@ end
             open(joinpath("BrokenDep","src","BrokenDep.jl"), "w") do io
                 write(io, "module BrokenDep\nerror()\nend")
             end
+            Pkg.generate("TrailingTaskDep")
+            open(joinpath("TrailingTaskDep","src","TrailingTaskDep.jl"), "w") do io
+                write(io, """
+                module TrailingTaskDep
+                println(stderr, "waiting for IO to finish") # pretend to be a warning
+                sleep(2)
+                end""")
+            end
         end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
 
@@ -210,6 +218,15 @@ end
         end
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
+
+        @testset "waiting for trailing tasks" begin
+            Pkg.activate("packages/TrailingTaskDep")
+            iob = IOBuffer()
+            Pkg.precompile(io=iob)
+            str = String(take!(iob))
+            @test occursin("Precompiling", str)
+            @test occursin("Waiting for background task, IO, or timer to finish.", str)
+        end
     end end
     # ignoring circular deps, to avoid deadlock
     isolate() do; cd_tempdir() do tmp
