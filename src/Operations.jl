@@ -475,24 +475,28 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
             if (julia_version != VERSION && is_unregistered_stdlib(uuid)) || uuid_is_stdlib
                 path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
                 proj_file = projectfile_path(path; strict=true)
-                @assert proj_file !== nothing
-                proj = read_package(proj_file)
 
-                v = something(proj.version, VERSION)
+                # If we are trying to resolve for an older version of Julia
+                # and we've removed this UUID from stdlib, `proj_file` can be `nothing`.
+                if proj_file !== nothing
+                    proj = read_package(proj_file)
 
-                # TODO look at compat section for stdlibs?
-                all_compat_u_vr = get_or_make!(all_compat_u, v)
-                for (_, other_uuid) in proj.deps
-                    push!(uuids, other_uuid)
-                    all_compat_u_vr[other_uuid] = VersionSpec()
-                end
+                    v = something(proj.version, VERSION)
 
-                if !isempty(proj.weakdeps)
-                    weak_all_compat_u_vr = get_or_make!(weak_compat_u, v)
-                    for (_, other_uuid) in proj.weakdeps
+                    # TODO look at compat section for stdlibs?
+                    all_compat_u_vr = get_or_make!(all_compat_u, v)
+                    for (_, other_uuid) in proj.deps
                         push!(uuids, other_uuid)
                         all_compat_u_vr[other_uuid] = VersionSpec()
-                        push!(weak_all_compat_u_vr, other_uuid)
+                    end
+
+                    if !isempty(proj.weakdeps)
+                        weak_all_compat_u_vr = get_or_make!(weak_compat_u, v)
+                        for (_, other_uuid) in proj.weakdeps
+                            push!(uuids, other_uuid)
+                            all_compat_u_vr[other_uuid] = VersionSpec()
+                            push!(weak_all_compat_u_vr, other_uuid)
+                        end
                     end
                 end
             else
