@@ -347,7 +347,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
     end
-    names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in stdlibs())
+    names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in Types.get_last_stdlibs(julia_version))
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
     # But we only want to use information for those packages that we don't know about
@@ -385,7 +385,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     # Unless using the unbounded or historical resolver, always allow stdlibs to update. Helps if the previous resolve
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
-    reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
+    reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid, julia_version) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
     graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
