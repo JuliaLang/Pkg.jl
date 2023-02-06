@@ -194,7 +194,7 @@ const rm = API.rm
     Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
 Show the reason why this package is in the manifest.
-The output is a the different way to reach the package
+The output is all the different ways to reach the package
 through the dependency graph starting from the dependencies.
 
 !!! compat "Julia 1.9"
