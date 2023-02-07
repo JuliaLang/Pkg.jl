@@ -56,7 +56,7 @@ function get_server_dir(
     end
     isempty(Base.DEPOT_PATH) && return
     invalid_filename_chars = [':', '/', '<', '>', '"', '/', '\\', '|', '?', '*']
-    dir = join(replace(c -> c in invalid_filename_chars ? '_' : c, collect(String(m[1]))))
+    dir = join(replace(c -> c in invalid_filename_chars ? '_' : c, collect(String(something(m[1])))))
     return joinpath(depots1(), "servers", dir)
 end
 
@@ -218,6 +218,9 @@ const CI_VARIABLES = [
 function get_metadata_headers(url::AbstractString)
     headers = Pair{String,String}[]
     server = pkg_server()
+    if server === nothing
+        error("expected Pkg to be using a package server")
+    end
     server_dir = get_server_dir(url, server)
     server_dir === nothing && return headers
     push!(headers, "Julia-Pkg-Protocol" => "1.0")
@@ -240,7 +243,7 @@ function get_metadata_headers(url::AbstractString)
         m === nothing && continue
         val = strip(val)
         isempty(val) && continue
-        words = split(m.captures[1], '_', keepempty=false)
+        words = split(something(m.captures[1]), '_', keepempty=false)
         isempty(words) && continue
         hdr = "Julia-" * join(map(titlecase, words), '-')
         any(hdr == k for (k, v) in headers) && continue

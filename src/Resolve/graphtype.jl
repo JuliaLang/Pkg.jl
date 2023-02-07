@@ -593,7 +593,7 @@ function range_compressed_versionspec(pool, subset=pool)
     contiguous_subsets = VersionRange[]
 
     range_start = first(subset)
-    pool_ii = findfirst(isequal(range_start), pool) + 1  # skip-forward til we have started
+    pool_ii = findfirst(isequal(range_start), pool)::Int + 1  # skip-forward til we have started
     for s in @view subset[2:end]
         if s != pool[pool_ii]
             range_end = pool[pool_ii-1]  # previous element was last in this range

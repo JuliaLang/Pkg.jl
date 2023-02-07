@@ -52,7 +52,7 @@ function normalize_url(url::AbstractString)
     m = match(GIT_REGEX, url)
     m === nothing && return url
 
-    host = m[:hostname]
+    host = something(m[:hostname])
     path = "$(m[:path]).git"
 
     proto = get(GIT_PROTOCOLS, lowercase(host), nothing)
