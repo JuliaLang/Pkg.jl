@@ -960,6 +960,7 @@ end
     @test info.is_pinned
     @test !info.is_tracking_path
     @test info.is_tracking_repo
+    Pkg.rm("Example")
 end
 
 end # module
