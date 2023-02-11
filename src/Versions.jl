@@ -8,19 +8,20 @@ export VersionBound, VersionRange, VersionSpec, semver_spec, isjoinable
 # VersionBound #
 ################
 struct VersionBound
-    t::NTuple{3,UInt32}
+    t::NTuple{4,UInt32}
     n::Int
     function VersionBound(tin::NTuple{n,Integer}) where n
-        n <= 3 || throw(ArgumentError("VersionBound: you can only specify major, minor and patch versions"))
-        n == 0 && return new((0,           0,      0), n)
-        n == 1 && return new((tin[1],      0,      0), n)
-        n == 2 && return new((tin[1], tin[2],      0), n)
-        n == 3 && return new((tin[1], tin[2], tin[3]), n)
+        n <= 4 || throw(ArgumentError("VersionBound: you can only specify major, minor, patch versions, and a build number"))
+        n == 0 && return new((0,           0,      0,      0), n)
+        n == 1 && return new((tin[1],      0,      0,      0), n)
+        n == 2 && return new((tin[1], tin[2],      0,      0), n)
+        n == 3 && return new((tin[1], tin[2], tin[3],      0), n)
+        n == 4 && return new((tin[1], tin[2], tin[3], tin[4]), n)
         error("invalid $n")
     end
 end
 VersionBound(t::Integer...) = VersionBound(t)
-VersionBound(v::VersionNumber) = VersionBound(v.major, v.minor, v.patch)
+VersionBound(v::VersionNumber) = VersionBound(v.major, v.minor, v.patch, v.build)
 
 Base.getindex(b::VersionBound, i::Int) = b.t[i]
 
@@ -28,14 +29,16 @@ function ≲(v::VersionNumber, b::VersionBound)
     b.n == 0 && return true
     b.n == 1 && return v.major <= b[1]
     b.n == 2 && return (v.major, v.minor) <= (b[1], b[2])
-    return (v.major, v.minor, v.patch) <= (b[1], b[2], b[3])
+    b.n == 3 && return (v.major, v.minor, v.patch) <= (b[1], b[2], b[3])
+    return (v.major, v.minor, v.patch, v.build) <= (b[1], b[2], b[3], b[4])
 end
 
 function ≲(b::VersionBound, v::VersionNumber)
     b.n == 0 && return true
     b.n == 1 && return v.major >= b[1]
     b.n == 2 && return (v.major, v.minor) >= (b[1], b[2])
-    return (v.major, v.minor, v.patch) >= (b[1], b[2], b[3])
+    b.n == 3 && return (v.major, v.minor, v.patch) >= (b[1], b[2], b[3])
+    return (v.major, v.minor, v.patch, v.build) >= (b[1], b[2], b[3], b[4])
 end
 
 function isless_ll(a::VersionBound, b::VersionBound)
@@ -93,24 +96,30 @@ function VersionBound(s::AbstractString)
     s = strip(s)
     s == "*" && return VersionBound()
     first(s) == 'v' && (s = SubString(s, 2))
-    l = lastindex(s)
+    li = lastindex(s)
 
     p = findnext('.', s, 1)
-    b = p === nothing ? l : (p-1)
+    b = p === nothing ? li : (p-1)
     i = parse(Int64, SubString(s, 1, b))
     p === nothing && return VersionBound(i)
 
     a = p+1
     p = findnext('.', s, a)
-    b = p === nothing ? l : (p-1)
+    b = p === nothing ? li : (p-1)
     j = parse(Int64, SubString(s, a, b))
     p === nothing && return VersionBound(i, j)
 
     a = p+1
     p = findnext('.', s, a)
-    b = p === nothing ? l : (p-1)
+    b = p === nothing ? li : (p-1)
     k = parse(Int64, SubString(s, a, b))
     p === nothing && return VersionBound(i, j, k)
+
+    a = p+1
+    p = findnext('+', s, a)
+    b = p === nothing ? li : (p-1)
+    l = parse(Int64, SubString(s, a, b))
+    p === nothing && return VersionBound(i, j, k, l)
 
     error("invalid VersionBound string $(repr(s))")
 end

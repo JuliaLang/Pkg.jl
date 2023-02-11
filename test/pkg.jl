@@ -63,6 +63,13 @@ import Pkg.Types: semver_spec, VersionSpec
     @test  v"0.0.99"  in semver_spec("0.0")
     @test !(v"0.1.0"  in semver_spec("0.0"))
 
+    @testset "with build numbers" begin
+        @test v"1.2.3+0"   in semver_spec("1.2.3")
+        @test v"1.2.3+1"   in semver_spec("1.2.3")
+        @test v"1.2.3+0"   in semver_spec("1.2.3+0")
+        @test !(v"1.2.3+0" in semver_spec("1.2.3+1"))
+    end
+
     @test semver_spec("<1.2.3") == VersionSpec("0.0.0 - 1.2.2")
     @test semver_spec("<1.2") == VersionSpec("0.0.0 - 1.1")
     @test semver_spec("<1") == VersionSpec("0.0.0 - 0")
