@@ -21,7 +21,12 @@ struct VersionBound
     end
 end
 VersionBound(t::Integer...) = VersionBound(t)
-VersionBound(v::VersionNumber) = VersionBound(v.major, v.minor, v.patch, v.build)
+function VersionBound(v::VersionNumber)
+    isempty(v.build) && return VersionBound(v.major, v.minor, v.patch)
+    length(v.build) > 1 && @debug "Pkg does not recognize build numbers beyond the first number. These will be ignored" v
+    !(v.build[1] isa Integer) && @debug "Pkg does not recognize string build fields. This will be ignored" v
+    return VersionBound(v.major, v.minor, v.patch, v.build[1]) # do not use only, intentionally ignore all but first
+end
 
 Base.getindex(b::VersionBound, i::Int) = b.t[i]
 
