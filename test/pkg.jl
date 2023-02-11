@@ -163,23 +163,23 @@ end
     # test missing paths on union! and isjoinable
     # there's no == for VersionBound or VersionRange
     unified_vr = union!([VersionRange("1.5-2.8"), VersionRange("2.5-3")])[1]
-    @test unified_vr.lower.t == (UInt32(1), UInt32(5), UInt32(0))
-    @test unified_vr.upper.t == (UInt32(3), UInt32(0), UInt32(0))
+    @test unified_vr.lower.t == (UInt32(1), UInt32(5), UInt32(0), UInt32(0))
+    @test unified_vr.upper.t == (UInt32(3), UInt32(0), UInt32(0), UInt32(0))
     unified_vr = union!([VersionRange("2.5-3"), VersionRange("1.5-2.8")])[1]
-    @test unified_vr.lower.t == (UInt32(1), UInt32(5), UInt32(0))
-    @test unified_vr.upper.t == (UInt32(3), UInt32(0), UInt32(0))
+    @test unified_vr.lower.t == (UInt32(1), UInt32(5), UInt32(0), UInt32(0))
+    @test unified_vr.upper.t == (UInt32(3), UInt32(0), UInt32(0), UInt32(0))
     unified_vr = union!([VersionRange("1.5-2.2"), VersionRange("2.5-3")])[1]
-    @test unified_vr.lower.t == (UInt32(1), UInt32(5), UInt32(0))
-    @test unified_vr.upper.t == (UInt32(2), UInt32(2), UInt32(0))
+    @test unified_vr.lower.t == (UInt32(1), UInt32(5), UInt32(0), UInt32(0))
+    @test unified_vr.upper.t == (UInt32(2), UInt32(2), UInt32(0), UInt32(0))
     unified_vr = union!([VersionRange("1.5-2.2"), VersionRange("2.5-3")])[2]
-    @test unified_vr.lower.t == (UInt32(2), UInt32(5), UInt32(0))
-    @test unified_vr.upper.t == (UInt32(3), UInt32(0), UInt32(0))
+    @test unified_vr.lower.t == (UInt32(2), UInt32(5), UInt32(0), UInt32(0))
+    @test unified_vr.upper.t == (UInt32(3), UInt32(0), UInt32(0), UInt32(0))
     unified_vb = Types.VersionBound(union!([v"1.5", v"1.6"])[1])
-    @test unified_vb.t == (UInt32(1), UInt32(5), UInt32(0))
+    @test unified_vb.t == (UInt32(1), UInt32(5), UInt32(0), UInt32(0))
     unified_vb = Types.VersionBound(union!([v"1.5", v"1.6"])[2])
-    @test unified_vb.t == (UInt32(1), UInt32(6), UInt32(0))
+    @test unified_vb.t == (UInt32(1), UInt32(6), UInt32(0), UInt32(0))
     unified_vb = Types.VersionBound(union!([v"1.5", v"1.5"])[1])
-    @test unified_vb.t == (UInt32(1), UInt32(5), UInt32(0))
+    @test unified_vb.t == (UInt32(1), UInt32(5), UInt32(0), UInt32(0))
 end
 
 temp_pkg_dir() do project_path
