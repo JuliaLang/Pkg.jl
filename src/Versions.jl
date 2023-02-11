@@ -11,7 +11,7 @@ struct VersionBound
     t::NTuple{4,UInt32}
     n::Int
     function VersionBound(tin::NTuple{n,Integer}) where n
-        n <= 4 || throw(ArgumentError("VersionBound: you can only specify major, minor, patch versions, and a build number"))
+        n <= 4 || throw(ArgumentError("VersionBound: you can only specify major, minor, patch versions, and a single positive-integer-valued build number"))
         n == 0 && return new((0,           0,      0,      0), n)
         n == 1 && return new((tin[1],      0,      0,      0), n)
         n == 2 && return new((tin[1], tin[2],      0,      0), n)
