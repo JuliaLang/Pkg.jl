@@ -415,9 +415,12 @@ This is done by making the following changes (using the example above):
 
 #### Using an extension while supporting older Julia versions
 
-If you want to use an extension with compatibility constraints while supporting earlier Julia
-versions you have to duplicate the packages under `[weakdeps]` into `[extras]`. This is an unfortunate
-duplication, but without doing this the project verifier under older Julia versions will throw an error.
+In the case where one wants to use an extension (without worrying about the
+feature of the extension begin available on older Julia versions) while still
+supporting older Julia versions the packages under `[weakdeps]` should be
+duplicated into `[extras]`. This is an unfortunate duplication, but without
+doing this the project verifier under older Julia versions will throw an error
+if it finds packages under `[compat]` that is not listed in `[extras]`.
 
 ## Package naming guidelines
 
