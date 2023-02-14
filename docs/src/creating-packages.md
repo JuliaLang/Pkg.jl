@@ -407,8 +407,6 @@ This is done by making the following changes (using the example above):
   end
   ```
 
-Note that changing behavior from automatic to conditional may be a breaking change, and may require a major version bump.
-
 #### Using an extension while supporting older Julia versions
 
 If you want to use an extension with compatibility constraints while supporting earlier Julia
