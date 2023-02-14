@@ -306,7 +306,7 @@ Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 # name of extension to the left
 # extension dependencies required to load the extension to the right
 # use a list for multiple extension dependencies
-ContourExt = "Contour"
+PlottingContourExt = "Contour"
 
 [compat]
 Contour = "0.6.2"
@@ -323,9 +323,9 @@ end
 end # module
 ```
 
-`ext/ContourExt.jl` (can also be in `ext/ContourExt/ContourExt.jl`):
+`ext/PlottingContourExt.jl` (can also be in `ext/PlottingContourExt/PlottingContourExt.jl`):
 ```julia
-module ContourExt # Should be same name as the file (just like a normal package)
+module PlottingContourExt # Should be same name as the file (just like a normal package)
 
 using Plotting, Contour
 
@@ -336,12 +336,15 @@ end
 end # module
 ```
 
-A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `ContourExt` module.
-It is only when the `Contour` package actually gets loaded that the `ContourExt` extension is loaded
+The name of the extension (here `PlottingContourExt`) is not very important but using something similar to the suggest here is likely a good
+idea.
+
+A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `PlottingContourExt` module.
+It is only when the `Contour` package actually gets loaded that the `PlottingContourExt` extension is loaded
 and provides the new functionality.
 
-If one considers `ContourExt` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
-[type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy) since `ContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
+If one considers `PlottingContourExt` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
+[type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy) since `PlottingContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
 However, for extensions, it is ok to assume that the extension owns the methods in its parent package.
 In fact, this form of type piracy is one of the most standard use cases for extensions.
 
@@ -374,7 +377,7 @@ This is done by making the following changes (using the example above):
   if !isdefined(Base, :get_extension)
   using Requires
   function __init__()
-      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl")
+      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
   end
   end
   ```
@@ -388,7 +391,7 @@ This is done by making the following changes (using the example above):
       # Other init functionality here
 
       @static if !isdefined(Base, :get_extension)
-          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl")
+          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
       end
   end
   ```
@@ -409,7 +412,7 @@ This is done by making the following changes (using the example above):
 - Add the following to your main package file (typically at the bottom):
   ```julia
   if !isdefined(Base, :get_extension)
-    include("../ext/ContourExt.jl")
+    include("../ext/PlottingContourExt.jl")
   end
   ```
 
