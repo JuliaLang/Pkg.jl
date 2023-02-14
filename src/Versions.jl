@@ -39,7 +39,14 @@ function ≲(v::VersionNumber, b::VersionBound)
     b.n == 1 && return v.major <= b[1]
     b.n == 2 && return (v.major, v.minor) <= (b[1], b[2])
     b.n == 3 && return (v.major, v.minor, v.patch) <= (b[1], b[2], b[3])
-    return (v.major, v.minor, v.patch, v.build) <= (b[1], b[2], b[3], b[4])
+
+    build = get(v.build, 1, 0) # intentionally ignore more than the first build number
+    if !isa(build, Integer)
+        @debug "Ignoring build string" b v
+        return (v.major, v.minor, v.patch) <= (b[1], b[2], b[3])
+    else
+        return (v.major, v.minor, v.patch, build) <= (b[1], b[2], b[3], b[4])
+    end
 end
 
 function ≲(b::VersionBound, v::VersionNumber)
@@ -47,7 +54,14 @@ function ≲(b::VersionBound, v::VersionNumber)
     b.n == 1 && return v.major >= b[1]
     b.n == 2 && return (v.major, v.minor) >= (b[1], b[2])
     b.n == 3 && return (v.major, v.minor, v.patch) >= (b[1], b[2], b[3])
-    return (v.major, v.minor, v.patch, v.build) >= (b[1], b[2], b[3], b[4])
+
+    build = get(v.build, 1, 0) # intentionally ignore more than the first build number
+    if !isa(build, Integer)
+        @debug "Ignoring build string" b v
+        return (v.major, v.minor, v.patch) >= (b[1], b[2], b[3])
+    else
+        return (v.major, v.minor, v.patch, build) >= (b[1], b[2], b[3], b[4])
+    end
 end
 
 function isless_ll(a::VersionBound, b::VersionBound)
@@ -119,15 +133,15 @@ function VersionBound(s::AbstractString)
     p === nothing && return VersionBound(i, j)
 
     a = p+1
-    p = findnext('.', s, a)
+    p = findnext('+', s, a)
     b = p === nothing ? li : (p-1)
     k = parse(Int64, SubString(s, a, b))
     p === nothing && return VersionBound(i, j, k)
 
     a = p+1
-    p = findnext('+', s, a)
+    p = findnext('+', s, a) # TODO: not sure what this should search for
     b = p === nothing ? li : (p-1)
-    l = parse(Int64, SubString(s, a, b))
+    l = parse(Int64, SubString(s, a, li))
     p === nothing && return VersionBound(i, j, k, l)
 
     error("invalid VersionBound string $(repr(s))")
@@ -180,15 +194,19 @@ function Base.print(io::IO, r::VersionRange)
         print(io, '*')
     elseif m == 0
         print(io, "0-")
-        join(io, r.upper.t, '.')
+        join(io, r.upper.t[1:min(m,3)], '.')
+        n == 4 && print(io, "+", r.upper.t[4])
     elseif n == 0
-        join(io, r.lower.t, '.')
+        join(io, r.lower.t[1:min(m,3)], '.')
+        m == 4 && print(io, "+", r.lower.t[4])
         print(io, "-*")
     else
-        join(io, r.lower.t[1:m], '.')
+        join(io, r.lower.t[1:min(m,3)], '.')
+        m == 4 && print(io, "+", r.lower.t[4])
         if r.lower != r.upper
             print(io, '-')
-            join(io, r.upper.t[1:n], '.')
+            join(io, r.upper.t[1:min(n,3)], '.')
+            n == 4 && print(io, "+", r.upper.t[4])
         end
     end
 end
@@ -329,18 +347,21 @@ function semver_spec(s::String; throw = true)
 end
 
 function semver_interval(m::RegexMatch)
-    @assert length(m.captures) == 4
+    @assert length(m.captures) == 5
     n_significant = count(x -> x !== nothing, m.captures) - 1
-    typ, _major, _minor, _patch = m.captures
+    typ, _major, _minor, _patch, _build = m.captures
     major =                           parse(Int, _major)
     minor = (n_significant < 2) ? 0 : parse(Int, _minor)
     patch = (n_significant < 3) ? 0 : parse(Int, _patch)
+    build = (n_significant < 4) ? 0 : parse(Int, _build)
     if n_significant == 3 && major == 0 && minor == 0 && patch == 0
         error("invalid version: \"0.0.0\"")
+    elseif n_significant == 4 && major == 0 && minor == 0 && patch == 0 && build == 0
+        error("invalid version: \"0.0.0+0\"")
     end
     # Default type is :caret
     vertyp = (typ == "" || typ == "^") ? :caret : :tilde
-    v0 = VersionBound((major, minor, patch))
+    v0 = VersionBound((major, minor, patch, build))
     if vertyp === :caret
         if major != 0
             return VersionRange(v0, VersionBound((v0[1],)))
@@ -351,12 +372,14 @@ function semver_interval(m::RegexMatch)
                 return VersionRange(v0, VersionBound((0,)))
             elseif n_significant == 2
                 return VersionRange(v0, VersionBound((0, 0,)))
-            else
+            elseif n_significant == 3
                 return VersionRange(v0, VersionBound((0, 0, v0[3])))
+            else
+                return VersionRange(v0, VersionBound((0, 0, v0[3], v0[4])))
             end
         end
     else
-        if n_significant == 3 || n_significant == 2
+        if n_significant >= 2
             return VersionRange(v0, VersionBound((v0[1], v0[2],)))
         else
             return VersionRange(v0, VersionBound((v0[1],)))
@@ -366,26 +389,33 @@ end
 
 const _inf = VersionBound("*")
 function inequality_interval(m::RegexMatch)
-    @assert length(m.captures) == 4
-    typ, _major, _minor, _patch = m.captures
+    @assert length(m.captures) == 5
+    typ, _major, _minor, _patch, _build = m.captures
     n_significant = count(x -> x !== nothing, m.captures) - 1
     major =                           parse(Int, _major)
     minor = (n_significant < 2) ? 0 : parse(Int, _minor)
     patch = (n_significant < 3) ? 0 : parse(Int, _patch)
+    build = (n_significant < 4) ? 0 : parse(Int, _build)
     if n_significant == 3 && major == 0 && minor == 0 && patch == 0
         error("invalid version: 0.0.0")
+    elseif n_significant == 4 && major == 0 && minor == 0 && patch == 0 && build == 0
+        error("invalid version: 0.0.0+0")
     end
-    v = VersionBound(major, minor, patch)
+    v = VersionBound(major, minor, patch, build)
     if occursin(r"^<\s*$", typ)
-        nil = VersionBound(0, 0, 0)
-        if v[3] == 0
-            if v[2] == 0
-                v1 = VersionBound(v[1]-1)
+        nil = VersionBound(0, 0, 0, 0)
+        if v[4] == 0
+            if v[3] == 0
+                if v[2] == 0
+                    v1 = VersionBound(v[1]-1)
+                else
+                    v1 = VersionBound(v[1], v[2]-1)
+                end
             else
-                v1 = VersionBound(v[1], v[2]-1)
+                v1 = VersionBound(v[1], v[2], v[3]-1)
             end
         else
-            v1 = VersionBound(v[1], v[2], v[3]-1)
+            v1 = VersionBound(v[1], v[2], v[3], v[4]-1)
         end
         return VersionRange(nil, v1)
     elseif occursin(r"^=\s*$", typ)
@@ -398,32 +428,42 @@ function inequality_interval(m::RegexMatch)
 end
 
 function hyphen_interval(m::RegexMatch)
-    @assert length(m.captures) == 6
-    _lower_major, _lower_minor, _lower_patch, _upper_major, _upper_minor, _upper_patch = m.captures
+    @assert length(m.captures) == 8
+    _lower_major, _lower_minor, _lower_patch, _lower_build, _upper_major, _upper_minor, _upper_patch, _upper_build = m.captures
     if isnothing(_lower_minor)
         lower_bound = VersionBound(parse(Int, _lower_major))
     elseif isnothing(_lower_patch)
         lower_bound = VersionBound(parse(Int, _lower_major),
                                    parse(Int, _lower_minor))
-    else
+    elseif isnothing(_lower_build)
         lower_bound = VersionBound(parse(Int, _lower_major),
                                    parse(Int, _lower_minor),
                                    parse(Int, _lower_patch))
+    else
+        lower_bound = VersionBound(parse(Int, _lower_major),
+                                   parse(Int, _lower_minor),
+                                   parse(Int, _lower_patch),
+                                   parse(Int, _lower_build))
     end
     if isnothing(_upper_minor)
         upper_bound = VersionBound(parse(Int, _upper_major))
     elseif isnothing(_upper_patch)
         upper_bound = VersionBound(parse(Int, _upper_major),
                                    parse(Int, _upper_minor))
-    else
+    elseif isnothing(_upper_build)
         upper_bound = VersionBound(parse(Int, _upper_major),
                                    parse(Int, _upper_minor),
                                    parse(Int, _upper_patch))
+    else
+        upper_bound = VersionBound(parse(Int, _upper_major),
+                                   parse(Int, _upper_minor),
+                                   parse(Int, _upper_patch),
+                                   parse(Int, _upper_build))
     end
     return VersionRange(lower_bound, upper_bound)
 end
 
-const version = "v?([0-9]+?)(?:\\.([0-9]+?))?(?:\\.([0-9]+?))?"
+const version = "v?([0-9]+?)(?:\\.([0-9]+?))?(?:\\.([0-9]+?))?(?:\\+([0-9]+?))?"
 const ver_regs =
 Pair{Regex,Any}[
                 Regex("^([~^]?)?$version\$") => semver_interval, # 0.5 ^0.4 ~0.3.2
