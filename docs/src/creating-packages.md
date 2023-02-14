@@ -250,6 +250,9 @@ This is an important topic so there is a separate chapter about it: [Compatibili
 !!! note
     This is a somewhat advanced usage of Pkg which can be skipped for people new to Julia and Julia packages.
 
+!!! compat
+    The described feature requires Julia 1.9+.
+
 A weak dependency is a dependency that will not automatically install when the package is installed but
 you can still control what versions of that package are allowed to be installed by setting compatibility on it.
 These are listed in the project file under the `[weakdeps]` section:
@@ -268,6 +271,9 @@ The current usage of this is almost solely limited to "extensions" which is desc
 
 !!! note
     This is a somewhat advanced usage of Pkg which can be skipped for people new to Julia and Julia packages.
+
+!!! compat
+    The described feature requires Julia 1.9+.
 
 Sometimes one wants to make two or more packages work well together, but may be reluctant (perhaps due to increased load times) to make one an unconditional dependency of the other.
 A package *extension* is a module in a file (similar to a package) that is automatically loaded when *some other set of packages* are
