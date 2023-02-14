@@ -1355,7 +1355,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                                 anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                                 waiting = if dep in taskwaiting
-                                    color_string(" Waiting for background task, IO, or timer to finish. Interrupt to inspect", Base.warn_color())
+                                    color_string(" Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
                                 else
                                     ""
                                 end
