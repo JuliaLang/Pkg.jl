@@ -1285,7 +1285,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 stderr_outputs[pkg] = get(stderr_outputs, pkg, "") * str * "\n"
                 if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
                     !fancyprint && lock(print_lock) do
-                        println(io, pkg.name, color_string(" Waiting for background task, IO, or timer to finish.", Base.warn_color()))
+                        println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
                     end
                     push!(taskwaiting, pkg)
                 end
