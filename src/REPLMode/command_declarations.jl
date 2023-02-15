@@ -215,6 +215,9 @@ PSA[:name => "why",
 
 Show the reason why packages are in the manifest, printed as a path through the
 dependency graph starting at the direct dependencies.
+
+!!! compat "Julia 1.9"
+    The `why` function is added in Julia 1.9
 """,
 ],
 PSA[:name => "pin",
