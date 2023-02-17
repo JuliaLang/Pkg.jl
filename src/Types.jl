@@ -29,7 +29,8 @@ export UUID, SHA1, VersionRange, VersionSpec,
     read_project, read_package, read_manifest,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
-    PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
+    PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED,
+    PRESERVE_TIERED_INSTALLED, PRESERVE_NONE,
     projectfile_path, manifestfile_path
 
 # Load in data about historical stdlibs
@@ -73,7 +74,7 @@ Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 # PackageSpec #
 ###############
 @enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
-@enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
+@enum(PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_TIERED_INSTALLED, PRESERVE_NONE)
 @enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
@@ -141,7 +142,7 @@ isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
     f = Pair{String, Any}[]
-    
+
     pkg.name !== nothing && push!(f, "name" => pkg.name)
     pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
     pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
