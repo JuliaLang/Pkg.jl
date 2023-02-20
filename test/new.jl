@@ -685,7 +685,7 @@ end
 
     # helper for installing a specific JLL build, then moving the registry to a position where a new build exists
     function add_specific_jll_build()
-        cd(only(dirname(Pkg.Types.Context().registries.path))) do
+        cd(dirname(only(Pkg.Types.Context().registries).path)) do
             run(`git checkout ae8ec3b695efb04ddec4371b97477779b6c62549`) # where ImageMagick_jl 6.9.11+3 exists
             Pkg.add(name="ImageMagick_jll", version="6.9.11")
             @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
@@ -762,7 +762,7 @@ end
         @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
     end
     # reset registry state
-    cd(only(dirname(Pkg.Types.Context().registries.path))) do
+    cd(dirname(only(Pkg.Types.Context().registries).path)) do
         run(`git checkout master`)
     end
 end
