@@ -683,19 +683,13 @@ end
 
     # Preserve syntax
 
-    # helper for installing a specific JLL build, then moving the registry to a position where a new build exists
     imjll_uuid = UUID("c73af94c-d91f-53ed-93a7-00f77d67a9d7")
-    function add_specific_jll_build()
-        cd(dirname(only(Pkg.Types.Context().registries).path)) do
-            Pkg.add(name="ImageMagick_jll", version=v"6.9.11+3")
-            @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
-        end
-    end
 
     # These tests mostly check the REPL side correctness.
     # - Normal add should not change the existing version.
     isolate(loaded_depot=true) do
-        add_specific_jll_build()
+        Pkg.add(name="ImageMagick_jll", version=v"6.9.11+3")
+        @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
@@ -706,7 +700,7 @@ end
     end
     # - `tiered` is the default option.
     isolate(loaded_depot=true) do
-        add_specific_jll_build()
+        Pkg.add(name="ImageMagick_jll", version=v"6.9.11+3")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
@@ -717,7 +711,7 @@ end
     end
     # - `all` should succeed in the same way.
     isolate(loaded_depot=true) do
-        add_specific_jll_build()
+        Pkg.add(name="ImageMagick_jll", version=v"6.9.11+3")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
@@ -728,7 +722,7 @@ end
     end
     # - `direct` should also succeed in the same way.
     isolate(loaded_depot=true) do
-        add_specific_jll_build()
+        Pkg.add(name="ImageMagick_jll", version=v"6.9.11+3")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
@@ -739,7 +733,6 @@ end
     end
     # - `semver` should update `Example` to the highest semver compatible version.
     isolate(loaded_depot=true) do
-        add_specific_jll_build()
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
@@ -749,7 +742,6 @@ end
     end
     #- `none` should update `Example` to the highest compatible version.
     isolate(loaded_depot=true) do
-        add_specific_jll_build()
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
