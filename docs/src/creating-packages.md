@@ -14,18 +14,16 @@ To generate the bare minimum files for a new package, use `pkg> generate`.
 (@v1.8) pkg> generate HelloWorld
 ```
 
-This creates a new project `HelloWorld` with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
+This creates a new project `HelloWorld` in a subdirectory by the same name, with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
 
 ```julia-repl
-julia> cd("HelloWorld")
-
-shell> tree .
-.
+shell> tree HelloWorld/
+HelloWorld/
 ├── Project.toml
 └── src
     └── HelloWorld.jl
 
-1 directory, 2 files
+2 directories, 2 files
 ```
 
 The `Project.toml` file contains the name of the package, its unique UUID, its version, the authors and potential dependencies:
@@ -49,15 +47,21 @@ greet() = print("Hello World!")
 end # module
 ```
 
-We can now activate the project and load the package:
+We can now activate the project by using the path to the directory where it is installed, and load the package:
 
 ```julia-repl
-pkg> activate .
+pkg> activate ./HelloWorld
 
 julia> import HelloWorld
 
 julia> HelloWorld.greet()
 Hello World!
+```
+
+For the rest of the tutorial we enter inside the directory of the project, for convenience:
+
+```julia-repl
+julia> cd("HelloWorld")
 ```
 
 ## Adding dependencies to the project
@@ -109,22 +113,28 @@ The build step is executed the first time a package is installed or when explici
 A package is built by executing the file `deps/build.jl`.
 
 ```julia-repl
-julia> print(read("deps/build.jl", String))
-println("I am being built...")
+julia> mkpath("deps");
+
+julia> write("deps/build.jl",
+             """
+             println("I am being built...")
+             """);
 
 (HelloWorld) pkg> build
   Building HelloWorld → `deps/build.log`
  Resolving package versions...
 
-julia> print(read("deps/build.log", String))
+julia> print(readchomp("deps/build.log"))
 I am being built...
 ```
 
 If the build step fails, the output of the build step is printed to the console
 
 ```julia-repl
-julia> print(read("deps/build.jl", String))
-error("Ooops")
+julia> write("deps/build.jl",
+             """
+             error("Ooops")
+             """);
 
 (HelloWorld) pkg> build
     Building HelloWorld → `~/HelloWorld/deps/build.log`
@@ -151,8 +161,12 @@ in expression starting at /home/kc/HelloWorld/deps/build.jl:1
 When a package is tested the file `test/runtests.jl` is executed:
 
 ```julia-repl
-julia> print(read("test/runtests.jl", String))
-println("Testing...")
+julia> mkpath("test");
+
+julia> write("test/runtests.jl",
+             """
+             println("Testing...")
+             """);
 
 (HelloWorld) pkg> test
    Testing HelloWorld
@@ -225,9 +239,13 @@ does. Let's add the `Test` standard library as a test dependency:
 We can now use `Test` in the test script and we can see that it gets installed when testing:
 
 ```julia-repl
-julia> print(read("test/runtests.jl", String))
-using Test
-@test 1 == 1
+julia> write("test/runtests.jl",
+             """
+             using Test
+             @test 1 == 1
+             """);
+
+(test) pkg> activate .
 
 (HelloWorld) pkg> test
    Testing HelloWorld
