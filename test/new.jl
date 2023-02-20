@@ -684,15 +684,13 @@ end
     # Preserve syntax
 
     # helper for installing a specific JLL build, then moving the registry to a position where a new build exists
+    imjll_uuid = UUID("c73af94c-d91f-53ed-93a7-00f77d67a9d7")
     function add_specific_jll_build()
         cd(dirname(only(Pkg.Types.Context().registries).path)) do
-            run(`git checkout ae8ec3b695efb04ddec4371b97477779b6c62549`) # where ImageMagick_jl 6.9.11+3 exists
-            Pkg.add(name="ImageMagick_jll", version="6.9.11")
+            Pkg.add(name="ImageMagick_jll", version=v"6.9.11+3")
             @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
-            run(`git checkout 3dd229c080a140cf67146ceb3ed6dba8add22ddf`) # where ImageMagick_jl 6.9.11+4 exists
         end
     end
-    imjll_uuid = "c73af94c-d91f-53ed-93a7-00f77d67a9d7"
 
     # These tests mostly check the REPL side correctness.
     # - Normal add should not change the existing version.
@@ -748,7 +746,6 @@ end
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_SEMVER)
         @test Pkg.dependencies()[exuuid].version == v"0.3.3"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
-        @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
     end
     #- `none` should update `Example` to the highest compatible version.
     isolate(loaded_depot=true) do
@@ -759,12 +756,9 @@ end
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_NONE)
         @test Pkg.dependencies()[exuuid].version == v"0.5.3"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
-        @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+3"
     end
-    # reset registry state
-    cd(dirname(only(Pkg.Types.Context().registries).path)) do
-        run(`git checkout master`)
-    end
+    Pkg.add(name="ImageMagick_jll", version=v"6.9.11+4")
+    @test Pkg.dependencies()[imjll_uuid].version == v"6.9.11+4"
 end
 
 #
