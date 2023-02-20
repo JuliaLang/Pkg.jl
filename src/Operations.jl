@@ -402,7 +402,8 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     vers_fix = copy(vers)
     for (uuid, vers) in vers
         old_v = get(jll_fix, uuid, nothing)
-        if old_v !== nothing
+        # We only fixup a JLL if the old major/minor/patch matches the new major/minor/patch
+        if old_v !== nothing && Base.thispatch(old_v) == Base.thispatch(vers_fix[uuid])
             vers_fix[uuid] = old_v
         end
     end
