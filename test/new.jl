@@ -681,9 +681,7 @@ end
             @test pkg.version == v"0.3.0"
         end
     end end
-
     # Preserve syntax
-
     # These tests mostly check the REPL side correctness.
     # - Normal add should not change the existing version.
     isolate(loaded_depot=true) do
