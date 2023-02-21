@@ -225,7 +225,7 @@ end
             Pkg.precompile(io=iob)
             str = String(take!(iob))
             @test occursin("Precompiling", str)
-            @test occursin("Waiting for background task, IO, or timer to finish.", str)
+            @test occursin("Waiting for background task / IO / timer.", str)
         end
     end end
     # ignoring circular deps, to avoid deadlock
