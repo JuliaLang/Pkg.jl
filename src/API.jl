@@ -2109,7 +2109,12 @@ function handle_package_input!(pkg::PackageSpec)
                          subdir = pkg.subdir)
     pkg.path = nothing
     pkg.tree_hash = nothing
-    pkg.version = pkg.version === nothing ? VersionSpec() : VersionSpec(pkg.version)
+    if pkg.version === nothing
+        pkg.version = VersionSpec()
+    end
+    if !(pkg.version isa VersionNumber)
+        pkg.version = VersionSpec(pkg.version)
+    end
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
