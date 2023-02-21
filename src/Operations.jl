@@ -347,7 +347,16 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
     end
+
+    jll_fix = Dict{UUID, VersionNumber}()
+    for pkg in pkgs
+        if !is_stdlib(pkg.uuid) && endswith(pkg.name, "_jll") && pkg.version isa VersionNumber
+            jll_fix[pkg.uuid] = pkg.version
+        end
+    end
+
     names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in Types.get_last_stdlibs(julia_version))
+
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
     # But we only want to use information for those packages that we don't know about
@@ -389,6 +398,17 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
+
+    # Fixup jlls that got their build numbers stripped
+    vers_fix = copy(vers)
+    for (uuid, vers) in vers
+        old_v = get(jll_fix, uuid, nothing)
+        # We only fixup a JLL if the old major/minor/patch matches the new major/minor/patch
+        if old_v !== nothing && Base.thispatch(old_v) == Base.thispatch(vers_fix[uuid])
+            vers_fix[uuid] = old_v
+        end
+    end
+    vers = vers_fix
 
     # update vector of package versions
     for (uuid, ver) in vers

@@ -194,7 +194,7 @@ const rm = API.rm
     Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
 Show the reason why this package is in the manifest.
-The output is a the different way to reach the package
+The output is all the different ways to reach the package
 through the dependency graph starting from the dependencies.
 
 !!! compat "Julia 1.9"
@@ -570,7 +570,9 @@ This includes:
   * The `name` of the package.
   * The package's unique `uuid`.
   * A `version` (for example when adding a package). When upgrading, can also be an instance of
-    the enum [`UpgradeLevel`](@ref).
+    the enum [`UpgradeLevel`](@ref). If the version is given as a `String`` this means that unspecified versions
+    are "free", for example `version="0.5"` allows any version `0.5.x` to be installed. If given as a `VersionNumber`,
+    the exact version is used, for example `version=v"0.5.3"`.
   * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
   * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
   * A `subdir` which can be used when adding a package that is not in the root of a repository.
@@ -593,6 +595,7 @@ Below is a comparison between the REPL mode and the functional API:
 |:---------------------|:------------------------------------------------------|
 | `Package`            | `PackageSpec("Package")`                              |
 | `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
+| -                    | `PackageSpec(name="Package", version=v"0.2.1")`       |
 | `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
 | `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |

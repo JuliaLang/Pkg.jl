@@ -1285,7 +1285,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 stderr_outputs[pkg] = get(stderr_outputs, pkg, "") * str * "\n"
                 if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
                     !fancyprint && lock(print_lock) do
-                        println(io, pkg.name, color_string(" Waiting for background task, IO, or timer to finish.", Base.warn_color()))
+                        println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
                     end
                     push!(taskwaiting, pkg)
                 end
@@ -1355,7 +1355,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                                 anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                                 waiting = if dep in taskwaiting
-                                    color_string(" Waiting for background task, IO, or timer to finish. Use ctrl-c to interrupt and inspect warnings", Base.warn_color())
+                                    color_string(" Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
                                 else
                                     ""
                                 end
@@ -2109,7 +2109,12 @@ function handle_package_input!(pkg::PackageSpec)
                          subdir = pkg.subdir)
     pkg.path = nothing
     pkg.tree_hash = nothing
-    pkg.version = pkg.version === nothing ? VersionSpec() : VersionSpec(pkg.version)
+    if pkg.version === nothing
+        pkg.version = VersionSpec()
+    end
+    if !(pkg.version isa VersionNumber)
+        pkg.version = VersionSpec(pkg.version)
+    end
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
