@@ -396,7 +396,7 @@ This is done by making the following changes (using the example above):
   using Requires
   end
   
-  if !isdefined(Base, :get_extension)
+  @static if !isdefined(Base, :get_extension)
   function __init__()
       @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
   end
