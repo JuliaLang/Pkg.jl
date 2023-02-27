@@ -118,6 +118,14 @@ end
             open(joinpath("BrokenDep","src","BrokenDep.jl"), "w") do io
                 write(io, "module BrokenDep\nerror()\nend")
             end
+            Pkg.generate("TrailingTaskDep")
+            open(joinpath("TrailingTaskDep","src","TrailingTaskDep.jl"), "w") do io
+                write(io, """
+                module TrailingTaskDep
+                println(stderr, "waiting for IO to finish") # pretend to be a warning
+                sleep(2)
+                end""")
+            end
         end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
 
@@ -210,6 +218,15 @@ end
         end
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
+
+        @testset "waiting for trailing tasks" begin
+            Pkg.activate("packages/TrailingTaskDep")
+            iob = IOBuffer()
+            Pkg.precompile(io=iob)
+            str = String(take!(iob))
+            @test occursin("Precompiling", str)
+            @test occursin("Waiting for background task / IO / timer.", str)
+        end
     end end
     # ignoring circular deps, to avoid deadlock
     isolate() do; cd_tempdir() do tmp
@@ -248,6 +265,17 @@ end
         Pkg.activate("CircularDep3")
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
     end end
+    @testset "Issue 3359: Recurring precompile" begin
+        isolate() do; cd_tempdir() do tmp
+            cp(joinpath(@__DIR__, "test_packages", "RecurringPrecompile"), joinpath(tmp, "RecurringPrecompile"))
+            Pkg.activate("RecurringPrecompile")
+            iob = IOBuffer()
+            Pkg.precompile(io=iob)
+            @test occursin("Precompiling", String(take!(iob)))
+            Pkg.precompile(io=iob) # should be a no-op
+            @test !occursin("Precompiling", String(take!(iob)))
+        end end
+    end
 end
 
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin

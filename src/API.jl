@@ -327,6 +327,10 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
             skip_writing_project::Bool=false,
             kwargs...)
     Context!(ctx; kwargs...)
+    if Operations.is_fully_pinned(ctx)
+        printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
+        return
+    end
     if update_registry
         Registry.download_default_registries(ctx.io)
         Operations.update_registries(ctx; force=true)
@@ -355,7 +359,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
     else
         require_not_empty(pkgs, :pin)
     end
@@ -390,7 +394,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_PROJECT)
+        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
     else
         require_not_empty(pkgs, :free)
     end
@@ -1049,39 +1053,32 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
 end
 
+# should sync with the types of arguments of `Base.stale_cachefile`
+const StaleCacheKey = Tuple{Base.PkgId, UInt128, String, String}
 
-function _is_stale!(stale_cache::Dict, paths::Vector{String}, sourcepath::String)
+function _is_stale!(stale_cache::Dict{StaleCacheKey,Bool}, paths::Vector{String}, sourcepath::String)
     for path_to_try in paths
         staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
         if staledeps === true
             continue
         end
-        staledeps, ocachefile = staledeps::Tuple{Vector{Any}, Union{Nothing, String}}
+        staledeps, _ = staledeps::Tuple{Vector{Any}, Union{Nothing, String}}
         # finish checking staledeps module graph
         for i in 1:length(staledeps)
             dep = staledeps[i]
             dep isa Module && continue
             modpath, modkey, modbuild_id = dep::Tuple{String, Base.PkgId, UInt128}
             modpaths = Base.find_all_in_cache_path(modkey)
-            modfound = false
             for modpath_to_try in modpaths::Vector{String}
-                modstaledeps = get!(() -> Base.stale_cachefile(modkey, modbuild_id, modpath, modpath_to_try),
-                                    stale_cache, (modkey, modbuild_id, modpath, modpath_to_try))
-                if modstaledeps === true
+                stale_cache_key = (modkey, modbuild_id, modpath, modpath_to_try)::StaleCacheKey
+                if get!(() -> Base.stale_cachefile(stale_cache_key...) === true,
+                        stale_cache, stale_cache_key)
                     continue
                 end
-                modstaledeps, modocachepath = modstaledeps::Tuple{Vector{Any}, Union{Nothing, String}}
-                staledeps[i] = (modpath, modkey, modpath_to_try, modstaledeps, modocachepath)
-                modfound = true
-                break
+                @goto check_next_dep
             end
-            if !modfound
-                staledeps = true
-                break
-            end
-        end
-        if staledeps === true
-            continue
+            @goto check_next_path
+            @label check_next_dep
         end
         try
             # update timestamp of precompilation file so that it is the first to be tried by code loading
@@ -1091,6 +1088,7 @@ function _is_stale!(stale_cache::Dict, paths::Vector{String}, sourcepath::String
             ex isa Base.IOError || rethrow()
         end
         return false
+        @label check_next_path
     end
     return true
 end
@@ -1137,7 +1135,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         Base.PkgId(uuid, name)
         for (name, uuid) in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(uuid, name))
     ]
-    stale_cache = Dict{Tuple{Base.PkgId, UInt128, String, String}, Union{Tuple{Vector{Any}, String}, Bool}}()
+    stale_cache = Dict{StaleCacheKey, Bool}()
     exts = Dict{Base.PkgId, String}() # ext -> parent
     # make a flat map of each dep and its deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
@@ -1264,16 +1262,41 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     n_done::Int = 0
     n_already_precomp::Int = 0
     n_loaded::Int = 0
+    interrupted = false
 
-    function handle_interrupt(err)
+    function handle_interrupt(err, in_printloop = false)
         notify(interrupted_or_done)
-        sleep(0.2) # yield for a period to let the print loop cease first
+        in_printloop || wait(t_print) # wait to let the print loop cease first
         if err isa InterruptException
             lock(print_lock) do
                 println(io, " Interrupted: Exiting precompilation...")
             end
-        else
-            @error "Pkg.precompile error" exception=(err, catch_backtrace())
+            interrupted = true
+        end
+    end
+
+    stderr_outputs = Dict{Base.PkgId,String}()
+    taskwaiting = Set{Base.PkgId}()
+
+    function monitor_stderr(pkg, iob)
+        try
+            while isopen(iob)
+                str = readline(iob)
+                stderr_outputs[pkg] = get(stderr_outputs, pkg, "") * str * "\n"
+                if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
+                    !fancyprint && lock(print_lock) do
+                        println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
+                    end
+                    push!(taskwaiting, pkg)
+                end
+                if !fancyprint && in(pkg, taskwaiting)
+                    lock(print_lock) do
+                        println(io, str)
+                    end
+                end
+            end
+        catch err
+            err isa InterruptException || rethrow()
         end
     end
 
@@ -1331,7 +1354,12 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                                 # If not offset, on larger terminal fonts it looks odd that they all sync-up
                                 anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                                print(iostr, "  $anim_char_colored $name\n")
+                                waiting = if dep in taskwaiting
+                                    color_string(" Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
+                                else
+                                    ""
+                                end
+                                print(iostr, "  $anim_char_colored $name$waiting\n")
                             else
                                 print(iostr, "    $name\n")
                             end
@@ -1347,12 +1375,11 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 wait(t)
             end
         catch err
-            handle_interrupt(err)
+            handle_interrupt(err, true)
         finally
             fancyprint && print(io, ansi_enablecursor)
         end
     end
-    stderr_outputs = Dict{Base.PkgId,String}()
     tasks = Task[]
     Base.LOADING_CACHE[] = Base.LoadingCache()
     ## precompilation loop
@@ -1388,7 +1415,11 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 if !circular && (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale!(stale_cache, paths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
-                    iob = IOBuffer()
+
+                    # stderr monitoring
+                    iob = Base.BufferStream()
+                    t_monitor = @async monitor_stderr(pkg, iob)
+
                     _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
                     name = is_direct_dep ? _name : string(color_string(_name, :light_black))
                     !fancyprint && lock(print_lock) do
@@ -1426,21 +1457,18 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         end
                         loaded && (n_loaded += 1)
                     catch err
+                        close(iob)
+                        wait(t_monitor)
                         if err isa ErrorException || (err isa ArgumentError && startswith(err.msg, "Invalid header in cache file"))
-                            failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", String(take!(iob))) : ""
+                            failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", get(stderr_outputs, pkg, "")) : ""
+                            delete!(stderr_outputs, pkg) # so it's not shown as warnings, given error report
                             !fancyprint && lock(print_lock) do
                                 println(io, timing ? " "^9 : "", color_string("  ✗ ", Base.error_color()), name)
                             end
                             queued && precomp_dequeue!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                             precomp_suspend!(get_or_make_pkgspec(pkg_specs, ctx, pkg.uuid))
                         else
-                            rethrow(err)
-                        end
-                    else
-                        # otherwise capture any stderr output as warnings
-                        out = strip(String(take!(iob)))
-                        if !isempty(out)
-                            stderr_outputs[pkg] = out
+                            rethrow()
                         end
                     finally
                         Base.release(parallel_limiter)
@@ -1472,50 +1500,54 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     notify(first_started) # in cases of no-op or !fancyprint
     save_precompile_state() # save lists to scratch space
     fancyprint && wait(t_print)
-    !all(istaskdone, tasks) && return # if some not finished, must have errored or been interrupted
+    quick_exit = !all(istaskdone, tasks) || interrupted # if some not finished internal error is likely
     seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
     ndeps = count(values(was_recompiled))
-    if ndeps > 0 || !isempty(failed_deps)
-        plural = ndeps == 1 ? "y" : "ies"
+    if ndeps > 0 || !isempty(failed_deps) || (quick_exit && !isempty(stderr_outputs))
         str = sprint() do iostr
-            print(iostr, "  $(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
-            if n_already_precomp > 0 || !isempty(circular_deps) || !isempty(skipped_deps)
-                n_already_precomp > 0 && (print(iostr, ". $n_already_precomp already precompiled"))
-                !isempty(circular_deps) && (print(iostr, ". $(length(circular_deps)) skipped due to circular dependency"))
-                !isempty(skipped_deps) && (print(iostr, ". $(length(skipped_deps)) skipped during auto due to previous errors"))
-                print(iostr, ".")
+            if !quick_exit
+                plural = ndeps == 1 ? "y" : "ies"
+                print(iostr, "  $(ndeps) dependenc$(plural) successfully precompiled in $(seconds_elapsed) seconds")
+                if n_already_precomp > 0 || !isempty(circular_deps) || !isempty(skipped_deps)
+                    n_already_precomp > 0 && (print(iostr, ". $n_already_precomp already precompiled"))
+                    !isempty(circular_deps) && (print(iostr, ". $(length(circular_deps)) skipped due to circular dependency"))
+                    !isempty(skipped_deps) && (print(iostr, ". $(length(skipped_deps)) skipped during auto due to previous errors"))
+                    print(iostr, ".")
+                end
+                if n_loaded > 0
+                    plural1 = n_loaded == 1 ? "y" : "ies"
+                    plural2 = n_loaded == 1 ? "a different version is" : "different versions are"
+                    plural3 = n_loaded == 1 ? "" : "s"
+                    print(iostr, "\n  ",
+                        color_string(string(n_loaded), Base.warn_color()),
+                        " dependenc$(plural1) precompiled but $(plural2) currently loaded. Restart julia to access the new version$(plural3)"
+                    )
+                end
+                if !isempty(precomperr_deps)
+                    pluralpc = length(precomperr_deps) == 1 ? "y" : "ies"
+                    print(iostr, "\n  ",
+                        color_string(string(length(precomperr_deps)), Base.warn_color()),
+                        " dependenc$(pluralpc) failed but may be precompilable after restarting julia"
+                    )
+                end
+                if internal_call && !isempty(failed_deps)
+                    plural1 = length(failed_deps) == 1 ? "y" : "ies"
+                    plural2 = length(failed_deps) == 1 ? "" : "s"
+                    print(iostr, "\n  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural1) errored. ")
+                    print(iostr, "To see a full report either run `import Pkg; Pkg.precompile()` or load the package$(plural2)")
+                end
             end
-            if n_loaded > 0
-                plural1 = n_loaded == 1 ? "y" : "ies"
-                plural2 = n_loaded == 1 ? "a different version is" : "different versions are"
-                plural3 = n_loaded == 1 ? "" : "s"
-                print(iostr, "\n  ",
-                    color_string(string(n_loaded), Base.warn_color()),
-                    " dependenc$(plural1) precompiled but $(plural2) currently loaded. Restart julia to access the new version$(plural3)"
-                )
-            end
-            if !isempty(precomperr_deps)
-                pluralpc = length(precomperr_deps) == 1 ? "y" : "ies"
-                print(iostr, "\n  ",
-                    color_string(string(length(precomperr_deps)), Base.warn_color()),
-                    " dependenc$(pluralpc) failed but may be precompilable after restarting julia"
-                )
-            end
-            if internal_call && !isempty(failed_deps)
-                plural1 = length(failed_deps) == 1 ? "y" : "ies"
-                plural2 = length(failed_deps) == 1 ? "" : "s"
-                print(iostr, "\n  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural1) errored. ")
-                print(iostr, "To see a full report either run `import Pkg; Pkg.precompile()` or load the package$(plural2)")
-            end
+            # show any stderr output, even if Pkg.precompile has been interrupted (quick_exit=true), given user may be
+            # interrupting a hanging precompile job with stderr output. julia#48371
+            filter!(kv -> !isempty(strip(last(kv))), stderr_outputs) # remove empty output
             if !isempty(stderr_outputs)
                 plural1 = length(stderr_outputs) == 1 ? "y" : "ies"
                 plural2 = length(stderr_outputs) == 1 ? "" : "s"
                 print(iostr, "\n  ", color_string("$(length(stderr_outputs))", Base.warn_color()), " dependenc$(plural1) had warnings during precompilation:")
                 for (pkgid, err) in stderr_outputs
-                    err = join(split(err, "\n"), color_string("\n│  ", Base.warn_color()))
-                    print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err)
+                    err = join(split(strip(err), "\n"), color_string("\n│  ", Base.warn_color()))
+                    print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err, color_string("\n└  ", Base.warn_color()))
                 end
-                print(iostr, color_string("\n└  ", Base.warn_color()))
             end
         end
         let str=str
@@ -1523,6 +1555,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 println(io, str)
             end
         end
+        quick_exit && return
         if !internal_call
             err_str = ""
             n_direct_errs = 0
@@ -2076,7 +2109,12 @@ function handle_package_input!(pkg::PackageSpec)
                          subdir = pkg.subdir)
     pkg.path = nothing
     pkg.tree_hash = nothing
-    pkg.version = pkg.version === nothing ? VersionSpec() : VersionSpec(pkg.version)
+    if pkg.version === nothing
+        pkg.version = VersionSpec()
+    end
+    if !(pkg.version isa VersionNumber)
+        pkg.version = VersionSpec(pkg.version)
+    end
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 

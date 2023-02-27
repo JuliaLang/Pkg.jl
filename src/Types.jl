@@ -360,7 +360,8 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     dir = abspath(project_dir)
     manifest_file = project.manifest
     manifest_file = manifest_file !== nothing ?
-        abspath(manifest_file) : manifestfile_path(dir)::String
+        (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
+        manifestfile_path(dir)::String
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
 
@@ -412,6 +413,9 @@ const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
+        # DelimitedFiles is an upgradable stdlib
+        # TODO: Store this information of upgradable stdlibs somewhere else
+        name == "DelimitedFiles" && continue
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)

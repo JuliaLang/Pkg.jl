@@ -14,7 +14,7 @@ using Dates
 export @pkg_str
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
-export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
+export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
@@ -45,7 +45,7 @@ stdout_f() = something(DEFAULT_IO[], stdout)
 const PREV_ENV_PATH = Ref{String}("")
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
-should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
+should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
 include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
 
@@ -194,7 +194,7 @@ const rm = API.rm
     Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
 Show the reason why this package is in the manifest.
-The output is a the different way to reach the package
+The output is all the different ways to reach the package
 through the dependency graph starting from the dependencies.
 
 !!! compat "Julia 1.9"
@@ -292,32 +292,42 @@ redirecting to the `build.log` file.
 const build = API.build
 
 """
-    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
+    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
-git revision. A pinned package is never updated.
+git revision. A pinned package is never updated. To pin all dependencies set `all_pkgs=true`.
+
+!!! compat "Julia 1.7"
+    The `all_pkgs` kwarg was introduced in julia 1.7.
 
 # Examples
 ```julia
 Pkg.pin("Example")
 Pkg.pin(name="Example", version="0.3.1")
+Pkg.pin(all_pkgs = true)
 ```
 """
 const pin = API.pin
 
 """
-    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
+    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
 
 If `pkg` is pinned, remove the pin.
-If `pkg` is tracking a path,
-e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
+If `pkg` is tracking a path, e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
+To free all dependencies set `all_pkgs=true`.
+
+!!! compat "Julia 1.7"
+    The `all_pkgs` kwarg was introduced in julia 1.7.
 
 # Examples
 ```julia
 Pkg.free("Package")
+Pkg.free(all_pkgs = true)
 ```
+
+
 """
 const free = API.free
 
@@ -560,7 +570,9 @@ This includes:
   * The `name` of the package.
   * The package's unique `uuid`.
   * A `version` (for example when adding a package). When upgrading, can also be an instance of
-    the enum [`UpgradeLevel`](@ref).
+    the enum [`UpgradeLevel`](@ref). If the version is given as a `String`` this means that unspecified versions
+    are "free", for example `version="0.5"` allows any version `0.5.x` to be installed. If given as a `VersionNumber`,
+    the exact version is used, for example `version=v"0.5.3"`.
   * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
   * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
   * A `subdir` which can be used when adding a package that is not in the root of a repository.
@@ -583,6 +595,7 @@ Below is a comparison between the REPL mode and the functional API:
 |:---------------------|:------------------------------------------------------|
 | `Package`            | `PackageSpec("Package")`                              |
 | `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
+| -                    | `PackageSpec(name="Package", version=v"0.2.1")`       |
 | `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
 | `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
@@ -682,7 +695,7 @@ function __init__()
         end
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
-    OFFLINE_MODE[] = get_bool_env("JULIA_PKG_OFFLINE")
+    OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
     return nothing
 end
 

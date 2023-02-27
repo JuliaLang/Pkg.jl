@@ -200,7 +200,7 @@ PSA[:name => "free",
     free [--all]
 
 Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
-makes the package no longer being checked out.
+makes the package no longer being checked out. Specifying `--all` will free all dependencies (direct and indirect).
 """,
 ],
 PSA[:name => "why",
@@ -215,6 +215,9 @@ PSA[:name => "why",
 
 Show the reason why packages are in the manifest, printed as a path through the
 dependency graph starting at the direct dependencies.
+
+!!! compat "Julia 1.9"
+    The `why` function is added in Julia 1.9
 """,
 ],
 PSA[:name => "pin",
@@ -232,7 +235,7 @@ PSA[:name => "pin",
     pin [--all]
 
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-A pinned package has the symbol `⚲` next to its version in the status list.
+A pinned package has the symbol `⚲` next to its version in the status list.. Specifying `--all` will pin all dependencies (direct and indirect).
 
 **Examples**
 ```

@@ -3,7 +3,7 @@ module Artifacts
 using Artifacts, Base.BinaryPlatforms, SHA
 using ..MiniProgressBars, ..PlatformEngines
 
-import ..get_bool_env, ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
+import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
        ..stderr_f, ..printpkgstyle
 
 import Base: get, SHA1
@@ -314,7 +314,7 @@ function download_artifact(
         msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
         msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
         # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
-        # and Pkg.jl#2317 so we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
+        # and Pkg.jl#2317, we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
         # error and move the artifact to the expected location and return true
         ignore_hash = get_bool_env("JULIA_PKG_IGNORE_HASHES")
         if ignore_hash
