@@ -117,9 +117,7 @@ end
         @test artifact_exists(hash)
 
         # Test that the artifact verifies
-        if !Sys.iswindows()
-            @test verify_artifact(hash)
-        end
+        @test verify_artifact(hash)
     end
 
     @testset "File permissions" begin
@@ -190,9 +188,7 @@ end
                 @test !artifact_exists(arty_hash)
 
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
-                if !Sys.iswindows()
-                    @test verify_artifact(arty_hash)
-                end
+                @test verify_artifact(arty_hash)
 
                 # Make sure doing it twice "just works"
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
@@ -274,22 +270,20 @@ end
     @test_logs (:error, r"malformed, must be array or dict!") artifact_meta("broken_artifact", joinpath(badifact_dir, "not_a_table.toml"))
 
     # Next, test incorrect download errors
-    if !Sys.iswindows()
-        for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
-            with_artifacts_directory(dir) do
-                @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
-                if !ignore_hash
-                    @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                else
-                    @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
-                        path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                        @test endswith(path, "0000000000000000000000000000000000000000")
-                        @test isdir(path)
+    for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
+        with_artifacts_directory(dir) do
+            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
+            if !ignore_hash
+                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+            else
+                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
+                    path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                    @test endswith(path, "0000000000000000000000000000000000000000")
+                    @test isdir(path)
                     end
                 end
             end
-        end end end
-    end
+    end end end
 
     mktempdir() do dir
         with_artifacts_directory(dir) do

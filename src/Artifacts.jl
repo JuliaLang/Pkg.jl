@@ -287,71 +287,46 @@ function download_artifact(
         return true
     end
 
-    if Sys.iswindows()
-        # The destination directory we're hoping to fill:
-        dest_dir = artifact_path(tree_hash; honor_overrides=false)
-        mkpath(dest_dir)
-
-        # On Windows, we have some issues around stat() and chmod() that make properly
-        # determining the git tree hash problematic; for this reason, we use the "unsafe"
-        # artifact unpacking method, which does not properly verify unpacked git tree
-        # hash.  This will be fixed in a future Julia release which will properly interrogate
-        # the filesystem ACLs for executable permissions, which git tree hashes care about.
-        try
-            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
-                                   verbose=verbose, quiet_download=quiet_download, io=io)
-        catch err
-            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
-            # Clean that destination directory out if something went wrong
-            rm(dest_dir; force=true, recursive=true)
-
-            if isa(err, InterruptException)
-                rethrow(err)
-            end
-            return err
+    # We download by using `create_artifact()`.  We do this because the download may
+    # be corrupted or even malicious; we don't want to clobber someone else's artifact
+    # by trusting the tree hash that has been given to us; we will instead download it
+    # to a temporary directory, calculate the true tree hash, then move it to the proper
+    # location only after knowing what it is, and if something goes wrong in the process,
+    # everything should be cleaned up.  Luckily, that is precisely what our
+    # `create_artifact()` wrapper does, so we use that here.
+    calc_hash = try
+        create_artifact() do dir
+            download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose,
+                quiet_download=quiet_download, io=io)
         end
-    else
-        # We download by using `create_artifact()`.  We do this because the download may
-        # be corrupted or even malicious; we don't want to clobber someone else's artifact
-        # by trusting the tree hash that has been given to us; we will instead download it
-        # to a temporary directory, calculate the true tree hash, then move it to the proper
-        # location only after knowing what it is, and if something goes wrong in the process,
-        # everything should be cleaned up.  Luckily, that is precisely what our
-        # `create_artifact()` wrapper does, so we use that here.
-        calc_hash = try
-            create_artifact() do dir
-                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose,
-                    quiet_download=quiet_download, io=io)
-            end
-        catch err
-            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
-            if isa(err, InterruptException)
-                rethrow(err)
-            end
-            # If something went wrong during download, return the error
-            return err
+    catch err
+        @debug "download_artifact error" tree_hash tarball_url tarball_hash err
+        if isa(err, InterruptException)
+            rethrow(err)
         end
+        # If something went wrong during download, return the error
+        return err
+    end
 
-        # Did we get what we expected?  If not, freak out.
-        if calc_hash.bytes != tree_hash.bytes
-            msg  = "Tree Hash Mismatch!\n"
-            msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
-            msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
-            # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
-            # and Pkg.jl#2317 so we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
-            # error and move the artifact to the expected location and return true
-            ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
-            if ignore_hash
-                msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
-                @error(msg)
-                # Move it to the location we expected
-                src = artifact_path(calc_hash; honor_overrides=false)
-                dst = artifact_path(tree_hash; honor_overrides=false)
-                mv(src, dst; force=true)
-                return true
-            end
-            return ErrorException(msg)
+    # Did we get what we expected?  If not, freak out.
+    if calc_hash.bytes != tree_hash.bytes
+        msg  = "Tree Hash Mismatch!\n"
+        msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
+        msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+        # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
+        # and Pkg.jl#2317, we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
+        # error and move the artifact to the expected location and return true
+        ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+        if ignore_hash
+            msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
+            @error(msg)
+            # Move it to the location we expected
+            src = artifact_path(calc_hash; honor_overrides=false)
+            dst = artifact_path(tree_hash; honor_overrides=false)
+            mv(src, dst; force=true)
+            return true
         end
+        return ErrorException(msg)
     end
 
     return true
