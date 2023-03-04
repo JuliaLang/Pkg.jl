@@ -417,9 +417,9 @@ This is done by making the following changes (using the example above):
   end
   ```
 - Make the following change in the conditionally-loaded code:
- ```julia
- isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
- ```
+  ```julia
+  isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
+  ```
 
 The package should now work with Requires.jl on Julia versions before extensions were introduced
 and with extensions on more recent Julia versions.
