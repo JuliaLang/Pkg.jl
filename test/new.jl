@@ -166,7 +166,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         foo_uuid = UUID("02250abe-2050-11e9-017e-b301a2b5bcc4")
         path = copy_test_package(tempdir, "BasicSandbox")
-        # we set realonly here to simulate the premissions in the `$DEPOT/packages` directory
+        # we set readonly here to simulate the permissions in the `$DEPOT/packages` directory
         Pkg.Types.set_readonly(path)
         Pkg.develop(path=path)
         inside_test_sandbox("BasicSandbox") do
@@ -244,7 +244,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         basic_test_target = UUID("50adb811-5a1f-4be4-8146-2725c7f5d900")
         path = copy_test_package(tempdir, "BasicTestTarget")
-        # we set realonly here to simulate the premissions in the `$DEPOT/packages` directory
+        # we set readonly here to simulate the permissions in the `$DEPOT/packages` directory
         Pkg.Types.set_readonly(path)
         Pkg.develop(path=path)
         inside_test_sandbox("BasicTestTarget") do
@@ -2473,7 +2473,7 @@ end
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
-        # Now we add a commit upstream, if we fetch uneccesarily, we should be able to see it in our clone.
+        # Now we add a commit upstream, if we fetch unnecessarily, we should be able to see it in our clone.
         write(joinpath(path, "Foo.txt"), "Hello\n")
         new_commit = nothing
         LibGit2.with(LibGit2.GitRepo(path)) do repo
