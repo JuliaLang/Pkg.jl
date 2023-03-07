@@ -198,11 +198,10 @@ function init_package_info!(pkg::PkgEntry)
     compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) : Dict{String, Any}()
     compat = Dict{VersionRange, Dict{String, VersionSpec}}()
-    for (v, _data) in compat_data_toml
-        # The Compat.toml file might have string or vector values
-        data = convert(Dict{String, Union{String, Vector{String}}}, _data::Dict)
+    for (v, data) in compat_data_toml
+        data = data::Dict{String, Any}
         vr = VersionRange(v)
-        d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep) in data)
+        d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep::Union{String, Vector{String}}) in data)
         compat[vr] = d
     end
 
@@ -210,11 +209,10 @@ function init_package_info!(pkg::PkgEntry)
     deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) : Dict{String, Any}()
     deps = Dict{VersionRange, Dict{String, UUID}}()
-    for (v, _data) in deps_data_toml
-        # But the Deps.toml only have strings as values
-        data = convert(Dict{String, String}, _data::Dict)
+    for (v, data) in deps_data_toml
+        data = data::Dict{String, Any}
         vr = VersionRange(v)
-        d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid) in data)
+        d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
         deps[vr] = d
     end
     # All packages depend on julia
@@ -223,22 +221,22 @@ function init_package_info!(pkg::PkgEntry)
     # WeakCompat.toml
     weak_compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) : Dict{String, Any}()
-    weak_compat_data_toml = convert(Dict{String, Dict{String, Union{String, Vector{String}}}}, weak_compat_data_toml)
     weak_compat = Dict{VersionRange, Dict{String, VersionSpec}}()
     for (v, data) in weak_compat_data_toml
+        data = data::Dict{String, Any}
         vr = VersionRange(v)
-        d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep) in data)
+        d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep::Union{String, Vector{String}}) in data)
         weak_compat[vr] = d
     end
 
     # WeakDeps.toml
     weak_deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) : Dict{String, Any}()
-    weak_deps_data_toml = convert(Dict{String, Dict{String, String}}, weak_deps_data_toml)
     weak_deps = Dict{VersionRange, Dict{String, UUID}}()
     for (v, data) in weak_deps_data_toml
+        data = data::Dict{String, Any}
         vr = VersionRange(v)
-        d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid) in data)
+        d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
         weak_deps[vr] = d
     end
 
