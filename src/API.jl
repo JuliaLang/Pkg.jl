@@ -1071,7 +1071,7 @@ function _is_stale!(stale_cache::Dict{StaleCacheKey,Bool}, paths::Vector{String}
             modpaths = Base.find_all_in_cache_path(modkey)
             for modpath_to_try in modpaths::Vector{String}
                 stale_cache_key = (modkey, modbuild_id, modpath, modpath_to_try)::StaleCacheKey
-                if get!(() -> Base.stale_cachefile(stale_cache_key...) === true,
+                if get!(() -> Base.stale_cachefile(stale_cache_key..., ignore_loaded=true) === true,
                         stale_cache, stale_cache_key)
                     continue
                 end
