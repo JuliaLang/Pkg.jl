@@ -1575,7 +1575,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_pin!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx.env, pkgs)
 
-    # TODO: maybe this needs to allow PRESERVE_ALL_INSTALLED
+    # TODO: change pin to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
@@ -1619,7 +1619,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
         pkgs = load_direct_deps(ctx.env, pkgs)
         check_registered(ctx.registries, pkgs)
 
-        # TODO: maybe this needs to allow PRESERVE_ALL_INSTALLED
+        # TODO: change free to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
