@@ -110,6 +110,8 @@ end
             Pkg.generate("Dep4")
             Pkg.generate("Dep5")
             Pkg.generate("Dep6")
+            Pkg.generate("Dep7")
+            Pkg.generate("Dep8")
             Pkg.generate("NoVersion")
             open(joinpath("NoVersion","Project.toml"), "w") do io
                 write(io, "name = \"NoVersion\"\nuuid = \"$(UUIDs.uuid4())\"")
@@ -207,6 +209,22 @@ end
             @test occursin("Dep6", str)
             Pkg.precompile(io=iob)
             @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
+        end
+
+        @testset "instantiate" begin
+            iob = IOBuffer()
+            Pkg.activate("packages/Dep7")
+            Pkg.resolve()
+            @test isfile("packages/Dep7/Project.toml")
+            @test isfile("packages/Dep7/Manifest.toml")
+            Pkg.instantiate(io=iob) # with a Project.toml and Manifest.toml
+            @test occursin("Precompiling", String(take!(iob)))
+
+            Pkg.activate("packages/Dep8")
+            @test isfile("packages/Dep8/Project.toml")
+            @test !isfile("packages/Dep8/Manifest.toml")
+            Pkg.instantiate(io=iob) # with only a Project.toml
+            @test occursin("Precompiling", String(take!(iob)))
         end
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0

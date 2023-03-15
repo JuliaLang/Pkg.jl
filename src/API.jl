@@ -1650,6 +1650,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
         up(ctx; update_registry = update_registry && allow_registry_update)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
