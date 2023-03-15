@@ -222,13 +222,13 @@ end
         @testset "instantiate" begin
             iob = IOBuffer()
             Pkg.activate("packages/Dep7")
+            Pkg.resolve()
             @test isfile("packages/Dep7/Project.toml")
             @test isfile("packages/Dep7/Manifest.toml")
             Pkg.instantiate(io=iob) # with a Project.toml and Manifest.toml
             @test occursin("Precompiling", String(take!(iob)))
 
             Pkg.activate("packages/Dep8")
-            rm("packages/Dep8/Manifest.toml")
             @test isfile("packages/Dep8/Project.toml")
             @test !isfile("packages/Dep8/Manifest.toml")
             Pkg.instantiate(io=iob) # with only a Project.toml
