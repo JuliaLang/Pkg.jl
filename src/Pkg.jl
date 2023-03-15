@@ -15,7 +15,7 @@ export @pkg_str
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
 export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
-export PreserveLevel, PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
+export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
 depots() = Base.DEPOT_PATH
@@ -66,7 +66,7 @@ include("REPLMode/REPLMode.jl")
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
-import .Types: PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
+import .Types: PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 
 # Import artifacts API
 using .Artifacts, .PlatformEngines
@@ -105,8 +105,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, installed=false)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, installed=false)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -117,18 +117,34 @@ a package, also inside that package.
 The `preserve` keyword argument allows you to key into a specific tier in the resolve algorithm.
 The following table describes the argument values for `preserve` (in order of strictness):
 
-| Value             | Description                                                                         |
-|:------------------|:------------------------------------------------------------------------------------|
-| `PRESERVE_ALL`    | Preserve the state of all existing dependencies (including recursive dependencies)  |
-| `PRESERVE_DIRECT` | Preserve the state of all existing direct dependencies                              |
-| `PRESERVE_SEMVER` | Preserve semver-compatible versions of direct dependencies                          |
-| `PRESERVE_NONE`   | Do not attempt to preserve any version information                                  |
-| `PRESERVE_TIERED` | Use the tier which will preserve the most version information (this is the default) |
+| Value                       | Description                                                                          |
+|:----------------------------|:-------------------------------------------------------------------------------------|
+| `PRESERVE_ALL_INSTALLED`    | Like `PRESERVE_ALL` and only add those already installed                             |
+| `PRESERVE_ALL`              | Preserve the state of all existing dependencies (including recursive dependencies)   |
+| `PRESERVE_DIRECT`           | Preserve the state of all existing direct dependencies                               |
+| `PRESERVE_SEMVER`           | Preserve semver-compatible versions of direct dependencies                           |
+| `PRESERVE_NONE`             | Do not attempt to preserve any version information                                   |
+| `PRESERVE_TIERED_INSTALLED` | Like `PRESERVE_TIERED` except `PRESERVE_ALL_INSTALLED` is tried first                |
+| `PRESERVE_TIERED`           | Use the tier which will preserve the most version information (this is the default)  |
+
+!!! note
+    To change the default strategy to `PRESERVE_TIERED_INSTALLED` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED`
+    to true.
+
+After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
+
+With the `PRESERVE_ALL_INSTALLED` strategy the newly added packages will likely already be precompiled, but if not this
+may be because either the combination of package versions resolved in this environment has not been resolved and
+precompiled before, or the precompile cache has been deleted by the LRU cache storage
+(see JULIA_MAX_NUM_PRECOMPILE_FILES).
+
+!!! compat "Julia 1.9"
+    The `PRESERVE_TIERED_INSTALLED` and `PRESERVE_ALL_INSTALLED` strategies requires at least Julia 1.9.
 
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
-Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and preserve existing dependencies
+Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
 Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master") # From url to remote gitrepo
@@ -333,8 +349,8 @@ const free = API.free
 
 
 """
-    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.develop(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
+    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false)
+    Pkg.develop(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false)
 
 Make a package available for development by tracking it by path.
 If `pkg` is given with only a name or by a URL, the package will be downloaded
@@ -342,6 +358,9 @@ to the location specified by the environment variable `JULIA_PKG_DEVDIR`, with
 `joinpath(DEPOT_PATH[1],"dev")` being the default.
 
 If `pkg` is given as a local path, the package at that path will be tracked.
+
+The preserve strategies offered by `Pkg.add` are also available via the `preserve` kwarg.
+See [`Pkg.add`](@ref) for more information.
 
 # Examples
 ```julia
