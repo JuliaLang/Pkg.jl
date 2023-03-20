@@ -388,7 +388,7 @@ Base.@kwdef mutable struct Context
     io::IO = stderr_f()
     use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
-    num_concurrent_downloads::Int = 8
+    num_concurrent_downloads::Int = get(ENV, "JULIA_PKG_CONCURRENT_DOWNLOADS", 8)
 
     # Registris
     registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()
