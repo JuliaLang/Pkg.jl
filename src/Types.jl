@@ -383,7 +383,9 @@ include("project.jl")
 include("manifest.jl")
 
 function num_concurrent_downloads()
-    num = parse(Int, get(ENV, "JULIA_PKG_CONCURRENT_DOWNLOADS", "8"))
+    val = get(ENV, "JULIA_PKG_CONCURRENT_DOWNLOADS", "8")
+    num = tryparse(Int, val)
+    isnothing(num) && error("Environment variable `JULIA_PKG_CONCURRENT_DOWNLOADS` expects an integer, instead found $(val)")
     if num < 1
         error("Number of concurrent downloads must be greater than 0")
     end
