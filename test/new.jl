@@ -8,6 +8,7 @@ import Pkg.Artifacts: artifact_meta, artifact_path
 import Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using  ..Utils
 import ..HistoricalStdlibVersions
+using Logging
 
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
 exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
@@ -683,6 +684,10 @@ end
     end end
     # Preserve syntax
     # These tests mostly check the REPL side correctness.
+
+    # make sure the default behavior is invoked
+    withenv("JULIA_PKG_PRESERVE_TIERED_INSTALLED" => false) do
+
     # - Normal add should not change the existing version.
     isolate(loaded_depot=true) do
         Pkg.add(name="libpng_jll", version=v"1.6.37+4")
@@ -695,8 +700,43 @@ end
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
     end
+    # - `tiered_installed`.
+    isolate(loaded_depot=false) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
+        Pkg.add(name="Example", version="0.3.0")
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
+
+        @test_logs(
+            (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED"),
+            (:debug, "tiered_resolve: trying PRESERVE_ALL"),
+            min_level=Logging.Debug,
+            Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_TIERED_INSTALLED)
+        )
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
+
+        Pkg.activate(temp=true)
+        @test_logs(
+            (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED"),
+            min_level=Logging.Debug,
+            Pkg.add("Example"; preserve=Pkg.PRESERVE_TIERED_INSTALLED) # should only add v0.3.0 as it was installed earlier
+        )
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+
+        withenv("JULIA_PKG_PRESERVE_TIERED_INSTALLED" => true) do
+            Pkg.activate(temp=true)
+            @test_logs (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED") min_level=Logging.Debug Pkg.add(name="Example")
+            @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        end
+
+        Pkg.activate(temp=true)
+        @test_logs (:debug, "tiered_resolve: trying PRESERVE_ALL") min_level=Logging.Debug Pkg.add(name="Example") # default 'add' should serve a newer version
+        @test Pkg.dependencies()[exuuid].version > v"0.3.0"
+    end
     # - `tiered` is the default option.
-    isolate(loaded_depot=true) do
+    isolate(loaded_depot=false) do
         Pkg.add(name="libpng_jll", version=v"1.6.37+4")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
@@ -706,13 +746,27 @@ end
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
     end
-    # - `all` should succeed in the same way.
-    isolate(loaded_depot=true) do
+    # - `installed`.
+    isolate(loaded_depot=false) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
+        Pkg.add(name="Example", version="0.3.0")
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
+        @test_throws Pkg.Resolve.ResolverError Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_ALL_INSTALLED) # no installed version
+    end
+    # - `all` should succeed in the same way as `tiered`.
+    isolate(loaded_depot=false) do
         Pkg.add(name="libpng_jll", version=v"1.6.37+4")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_ALL)
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
+
+        Pkg.rm("JSON")
+        Pkg.add(Pkg.PackageSpec(;name="JSON"); preserve=Pkg.PRESERVE_ALL_INSTALLED)
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
@@ -754,6 +808,7 @@ end
         Pkg.add(name="libpng_jll", version=v"1.6.37+5")
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+5"
     end
+    end # withenv
 end
 
 #

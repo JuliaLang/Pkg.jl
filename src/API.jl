@@ -180,7 +180,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
+                 preserve::PreserveLevel=Operations.default_preserve(), platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
 
@@ -223,7 +223,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     return
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
+function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
              platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
@@ -256,7 +256,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Operations.update_registries(ctx; force=false)
+    Operations.update_registries(ctx; force=false, update_cooldown=Day(1))
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
@@ -1071,7 +1071,7 @@ function _is_stale!(stale_cache::Dict{StaleCacheKey,Bool}, paths::Vector{String}
             modpaths = Base.find_all_in_cache_path(modkey)
             for modpath_to_try in modpaths::Vector{String}
                 stale_cache_key = (modkey, modbuild_id, modpath, modpath_to_try)::StaleCacheKey
-                if get!(() -> Base.stale_cachefile(stale_cache_key...) === true,
+                if get!(() -> Base.stale_cachefile(stale_cache_key..., ignore_loaded=true) === true,
                         stale_cache, stale_cache_key)
                     continue
                 end
@@ -1650,6 +1650,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
         up(ctx; update_registry = update_registry && allow_registry_update)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
