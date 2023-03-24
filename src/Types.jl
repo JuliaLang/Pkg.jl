@@ -921,9 +921,6 @@ registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpe
 function registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
-    # collect all names and uuids since we're looking anyway
-    names = [pkg.name::String for pkg in pkgs if has_name(pkg)]
-    uuids = [pkg.uuid::UUID for pkg in pkgs if has_uuid(pkg)]
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
