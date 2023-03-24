@@ -382,13 +382,22 @@ end
 include("project.jl")
 include("manifest.jl")
 
+function num_concurrent_downloads()
+    val = get(ENV, "JULIA_PKG_CONCURRENT_DOWNLOADS", "8")
+    num = tryparse(Int, val)
+    isnothing(num) && error("Environment variable `JULIA_PKG_CONCURRENT_DOWNLOADS` expects an integer, instead found $(val)")
+    if num < 1
+        error("Number of concurrent downloads must be greater than 0")
+    end
+    return num
+end
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
     io::IO = stderr_f()
     use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
-    num_concurrent_downloads::Int = 8
+    num_concurrent_downloads::Int = num_concurrent_downloads()
 
     # Registris
     registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()

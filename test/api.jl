@@ -327,4 +327,14 @@ end
     end
 end
 
+@testset "set number of concurrent requests" begin
+    @test Pkg.Types.num_concurrent_downloads() == 8
+    withenv("JULIA_PKG_CONCURRENT_DOWNLOADS"=>"5") do
+        @test Pkg.Types.num_concurrent_downloads() == 5
+    end
+    withenv("JULIA_PKG_CONCURRENT_DOWNLOADS"=>"0") do
+        @test_throws ErrorException Pkg.Types.num_concurrent_downloads()
+    end
+end
+
 end # module APITests
