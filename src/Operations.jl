@@ -132,7 +132,8 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
     end
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
-                             tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid)
+                             tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid,
+                             subdir = pkg.subdir)
         if is_stdlib(pkg.uuid, julia_version)
             # Only set stdlib versions for versioned (external) stdlibs
             entry.version = stdlib_version(pkg.uuid, julia_version)
@@ -575,7 +576,8 @@ function install_git(
     name::String,
     hash::SHA1,
     urls::Set{String},
-    version_path::String
+    version_path::String,
+    subdir::String="",
 )::Nothing
     repo = nothing
     tree = nothing
@@ -605,7 +607,9 @@ function install_git(
         tree isa LibGit2.GitTree ||
             error("$name: git object $(string(hash)) should be a tree, not $(typeof(tree))")
         mkpath(version_path)
-        GitTools.checkout_tree_to_path(repo, tree, version_path)
+        downloadto_path = (isempty(subdir) ? version_path : mktempdir())
+        Pkg.GitTools.checkout_tree_to_path(repo, tree, downloadto_path)
+        !isempty(subdir) && run(`cp -R $(joinpath(downloadto_path, subdir)) $(version_path)`)
         return
     finally
         repo !== nothing && LibGit2.close(repo)
@@ -811,7 +815,7 @@ function download_source(ctx::Context; readonly=true)
     ##################################################
     for (pkg, urls, path) in missed_packages
         uuid = pkg.uuid
-        install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
+        install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path, pkg.subdir)
         readonly && set_readonly(path)
         vstr = if pkg.version !== nothing
             "v$(pkg.version)"

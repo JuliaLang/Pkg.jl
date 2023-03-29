@@ -110,7 +110,7 @@ function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
                        pinned::Bool = false,
                        url = nothing,
                        rev = nothing,
-                       subdir = nothing)
+                       subdir = "")
     uuid = uuid === nothing ? nothing : UUID(uuid)
     return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
 end
@@ -256,6 +256,7 @@ Base.@kwdef mutable struct PackageEntry
     deps::Dict{String,UUID} = Dict{String,UUID}()
     uuid::Union{Nothing, UUID} = nothing
     other::Union{Dict,Nothing} = nothing
+    subdir::String = ""
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.version == t2.version &&
