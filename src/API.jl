@@ -1227,9 +1227,15 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
         keep = Base.PkgId[]
         for dep in depsmap
-            if first(dep).name in pkgs_names
-                push!(keep, first(dep))
-                append!(keep, collect_all_deps(depsmap, first(dep)))
+            dep_pkgid = first(dep)
+            if dep_pkgid.name in pkgs_names
+                push!(keep, dep_pkgid)
+                append!(keep, collect_all_deps(depsmap, dep_pkgid))
+            end
+        end
+        for ext in keys(exts)
+            if issubset(collect_all_deps(depsmap, ext), keep) # if all extension deps are kept
+                push!(keep, ext)
             end
         end
         filter!(d->in(first(d), keep), depsmap)
