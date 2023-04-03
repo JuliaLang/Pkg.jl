@@ -1113,7 +1113,8 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
 end
 
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
-                    strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false, kwargs...)
+                    strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
+                    _from_loading::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1387,7 +1388,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
     end
     tasks = Task[]
-    Base.LOADING_CACHE[] = Base.LoadingCache()
+    if !_from_loading
+        Base.LOADING_CACHE[] = Base.LoadingCache()
+    end
     ## precompilation loop
     for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
