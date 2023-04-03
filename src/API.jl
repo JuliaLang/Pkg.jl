@@ -1284,7 +1284,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
             fancyprint && lock(print_lock) do
-                printpkgstyle(io, :Precompiling, "environment...")
+                printpkgstyle(io, :Precompiling, target)
                 print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
