@@ -714,11 +714,7 @@ function __init__()
         end
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
-    if isinteractive()
-        # TODO find a better way than only doing this in interactive mode to avoid create_expr_cache using
-        # Pkg.precompile, which would cause nested Pkg.precompile calls
-        Base.PKG_PRECOMPILE_HOOK[] = precompile
-    end
+    Base.PKG_PRECOMPILE_HOOK[] = precompile # allows Base to use Pkg.precompile during loading
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
     return nothing
 end
