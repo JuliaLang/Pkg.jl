@@ -1182,7 +1182,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
 
     # return early if no deps
-    isempty(depsmap) && return
+    if isempty(depsmap)
+        if isempty(pkgs)
+            return
+        else
+            pkgerror("No direct dependencies outside of the sysimage found matching $(repr([p.name for p in pkgs]))")
+        end
+    end
 
     # initialize signalling
     started = Dict{Base.PkgId,Bool}()
@@ -1240,7 +1246,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             end
         end
         filter!(d->in(first(d), keep), depsmap)
-        isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs_names))")
+        isempty(depsmap) && pkgerror("No direct dependencies outside of the sysimage found matching $(repr(pkgs_names))")
         target = join(pkgs_names, ", ")
     else
         target = "project..."
