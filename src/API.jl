@@ -1185,6 +1185,11 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     if isempty(depsmap)
         if isempty(pkgs)
             return
+        elseif _from_loading
+            # if called from loading precompilation it may be a package from another environment stack so
+            # don't error and allow serial precompilation to try
+            # TODO: actually handle packages from other envs in the stack
+            return
         else
             pkgerror("No direct dependencies outside of the sysimage found matching $(repr([p.name for p in pkgs]))")
         end
@@ -1246,7 +1251,16 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             end
         end
         filter!(d->in(first(d), keep), depsmap)
-        isempty(depsmap) && pkgerror("No direct dependencies outside of the sysimage found matching $(repr(pkgs_names))")
+        if isempty(depsmap)
+            if _from_loading
+                # if called from loading precompilation it may be a package from another environment stack so
+                # don't error and allow serial precompilation to try
+                # TODO: actually handle packages from other envs in the stack
+                return
+            else
+                pkgerror("No direct dependencies outside of the sysimage found matching $(repr(pkgs_names))")
+            end
+        end
         target = join(pkgs_names, ", ")
     else
         target = "project..."
