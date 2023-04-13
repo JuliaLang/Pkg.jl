@@ -223,7 +223,8 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
 
     # Spit it out onto disk
     let artifact_dict = artifact_dict
-        temp_artifacts_toml = tempname(dirname(artifacts_toml))
+        parent_dir = dirname(artifacts_toml)
+        temp_artifacts_toml = isempty(parent_dir) ? tempname(pwd()) : tempname(parent_dir)
         open(temp_artifacts_toml, "w") do io
             TOML.print(io, artifact_dict, sorted=true)
         end

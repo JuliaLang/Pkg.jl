@@ -264,6 +264,26 @@ end
         meta = artifact_meta("foo_txt", artifacts_toml; platform=win32)
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
         @test meta["download"][2]["sha256"] == "a"^64
+
+        rm(artifacts_toml)
+
+        # test relative Artifacts.toml paths (https://github.com/simeonschaub/ArtifactUtils.jl/issues/19)
+        cd(path) do
+            hash3 = create_artifact() do path
+                open(joinpath(path, "foo.txt"), "w") do io
+                    print(io, "bla bla")
+                end
+            end
+
+            # Bind this artifact to something
+            artifacts_toml = "Artifacts.toml" # no parent dir specified
+            @test artifact_hash("foo_txt", artifacts_toml) == nothing
+            bind_artifact!(artifacts_toml, "foo_txt", hash3)
+
+            # Test that this binding worked
+            @test artifact_hash("foo_txt", artifacts_toml) == hash3
+            @test ensure_artifact_installed("foo_txt", artifacts_toml) == artifact_path(hash3)
+        end
     end
 
     # Let's test some known-bad Artifacts.toml files

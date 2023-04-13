@@ -1181,7 +1181,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
 
     # return early if no deps
-    isempty(depsmap) && return
+    if isempty(depsmap)
+        if isempty(pkgs)
+            return
+        else
+            pkgerror("No direct dependencies outside of the sysimage found matching $(repr([p.name for p in pkgs]))")
+        end
+    end
 
     # initialize signalling
     started = Dict{Base.PkgId,Bool}()
@@ -1227,13 +1233,19 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
         keep = Base.PkgId[]
         for dep in depsmap
-            if first(dep).name in pkgs_names
-                push!(keep, first(dep))
-                append!(keep, collect_all_deps(depsmap, first(dep)))
+            dep_pkgid = first(dep)
+            if dep_pkgid.name in pkgs_names
+                push!(keep, dep_pkgid)
+                append!(keep, collect_all_deps(depsmap, dep_pkgid))
+            end
+        end
+        for ext in keys(exts)
+            if issubset(collect_all_deps(depsmap, ext), keep) # if all extension deps are kept
+                push!(keep, ext)
             end
         end
         filter!(d->in(first(d), keep), depsmap)
-        isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs_names))")
+        isempty(depsmap) && pkgerror("No direct dependencies outside of the sysimage found matching $(repr(pkgs_names))")
         target = join(pkgs_names, ", ")
     else
         target = "project..."
@@ -1284,7 +1296,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
             fancyprint && lock(print_lock) do
-                printpkgstyle(io, :Precompiling, "environment...")
+                printpkgstyle(io, :Precompiling, target)
                 print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
