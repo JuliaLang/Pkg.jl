@@ -107,7 +107,7 @@ Different environments can have different totally different packages and version
 The active environment is the environment that will be modified by Pkg commands such as `add`, `rm` and `update`.
 
 Let's set up a new environment so we may experiment.
-To set the active environment, use `activate`:
+To set the active environment, use `activate` (or the shorter `act` command) :
 
 ```julia-repl
 (@v1.8) pkg> activate tutorial

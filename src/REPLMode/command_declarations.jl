@@ -289,6 +289,7 @@ packages have changed causing the current Manifest to be out of sync.
 """,
 ],
 PSA[:name => "activate",
+    :short_name => "act",
     :api => API.activate,
     :arg_count => 0 => 1,
     :arg_parser => parse_activate,
@@ -299,9 +300,9 @@ PSA[:name => "activate",
     :completions => complete_activate,
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
-    activate
-    activate [--shared] path
-    activate --temp
+    [act|activate]
+    [act|activate] [--shared] path
+    [act|activate] --temp
 
 Activate the environment at the given `path`, or the home project environment if no `path` is specified.
 The active environment is the environment that is modified by executing package commands.
