@@ -29,7 +29,8 @@ export UUID, SHA1, VersionRange, VersionSpec,
     read_project, read_package, read_manifest,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
-    PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
+    PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED,
+    PRESERVE_TIERED_INSTALLED, PRESERVE_NONE,
     projectfile_path, manifestfile_path
 
 # Load in data about historical stdlibs
@@ -73,7 +74,7 @@ Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 # PackageSpec #
 ###############
 @enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
-@enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
+@enum(PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_TIERED_INSTALLED, PRESERVE_NONE)
 @enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
@@ -141,7 +142,7 @@ isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
     f = Pair{String, Any}[]
-    
+
     pkg.name !== nothing && push!(f, "name" => pkg.name)
     pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
     pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
@@ -381,13 +382,22 @@ end
 include("project.jl")
 include("manifest.jl")
 
+function num_concurrent_downloads()
+    val = get(ENV, "JULIA_PKG_CONCURRENT_DOWNLOADS", "8")
+    num = tryparse(Int, val)
+    isnothing(num) && error("Environment variable `JULIA_PKG_CONCURRENT_DOWNLOADS` expects an integer, instead found $(val)")
+    if num < 1
+        error("Number of concurrent downloads must be greater than 0")
+    end
+    return num
+end
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
     io::IO = stderr_f()
     use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
-    num_concurrent_downloads::Int = 8
+    num_concurrent_downloads::Int = num_concurrent_downloads()
 
     # Registris
     registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()
@@ -413,6 +423,9 @@ const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
+        # DelimitedFiles is an upgradable stdlib
+        # TODO: Store this information of upgradable stdlibs somewhere else
+        name == "DelimitedFiles" && continue
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
@@ -908,9 +921,6 @@ registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpe
 function registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
-    # collect all names and uuids since we're looking anyway
-    names = [pkg.name::String for pkg in pkgs if has_name(pkg)]
-    uuids = [pkg.uuid::UUID for pkg in pkgs if has_uuid(pkg)]
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)

@@ -153,38 +153,4 @@ const platform = @inferred Platform platform_key_abi()
     end
 end
 
-@testset "select_platform" begin
-    platforms = Dict(
-        # Typical binning test
-        Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"3")) => "linux4",
-        Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"4")) => "linux7",
-        Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"5")) => "linux8",
-
-        # Ambiguity test
-        Linux(:aarch64, compiler_abi=CompilerABI(libgfortran_version=v"3")) => "linux4",
-        Linux(:aarch64, compiler_abi=CompilerABI(libgfortran_version=v"3", libstdcxx_version=v"3.4.18")) => "linux5",
-
-        MacOS(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"3")) => "mac4",
-        Windows(:x86_64, compiler_abi=CompilerABI(cxxstring_abi=:cxx11)) => "win",
-    )
-
-    @test select_platform(platforms, Linux(:x86_64)) == "linux8"
-    @test select_platform(platforms, Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"4"))) == "linux7"
-
-    # Ambiguity test
-    @test select_platform(platforms, Linux(:aarch64)) == "linux5"
-    @test select_platform(platforms, Linux(:aarch64; compiler_abi=CompilerABI(libgfortran_version=v"3"))) == "linux5"
-    @test select_platform(platforms, Linux(:aarch64; compiler_abi=CompilerABI(libgfortran_version=v"4"))) == nothing
-
-    @test select_platform(platforms, MacOS(:x86_64)) == "mac4"
-    @test select_platform(platforms, MacOS(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"4"))) == nothing
-
-    @test select_platform(platforms, Windows(:x86_64, compiler_abi=CompilerABI(cxxstring_abi=:cxx11))) == "win"
-    @test select_platform(platforms, Windows(:x86_64, compiler_abi=CompilerABI(cxxstring_abi=:cxx03))) == nothing
-
-    # Poor little guy
-    @test select_platform(platforms, FreeBSD(:x86_64)) == nothing
-end
-
-
 end # module

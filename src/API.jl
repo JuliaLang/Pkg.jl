@@ -180,7 +180,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform(), kwargs...)
+                 preserve::PreserveLevel=Operations.default_preserve(), platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
 
@@ -223,7 +223,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     return
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PRESERVE_TIERED,
+function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
              platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
@@ -256,7 +256,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=PR
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Operations.update_registries(ctx; force=false)
+    Operations.update_registries(ctx; force=false, update_cooldown=Day(1))
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
@@ -1071,7 +1071,7 @@ function _is_stale!(stale_cache::Dict{StaleCacheKey,Bool}, paths::Vector{String}
             modpaths = Base.find_all_in_cache_path(modkey)
             for modpath_to_try in modpaths::Vector{String}
                 stale_cache_key = (modkey, modbuild_id, modpath, modpath_to_try)::StaleCacheKey
-                if get!(() -> Base.stale_cachefile(stale_cache_key...) === true,
+                if get!(() -> Base.stale_cachefile(stale_cache_key..., ignore_loaded=true) === true,
                         stale_cache, stale_cache_key)
                     continue
                 end
@@ -1113,7 +1113,8 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
 end
 
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
-                    strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false, kwargs...)
+                    strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
+                    _from_loading::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
     time_start = time_ns()
@@ -1181,7 +1182,18 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
 
     # return early if no deps
-    isempty(depsmap) && return
+    if isempty(depsmap)
+        if isempty(pkgs)
+            return
+        elseif _from_loading
+            # if called from loading precompilation it may be a package from another environment stack so
+            # don't error and allow serial precompilation to try
+            # TODO: actually handle packages from other envs in the stack
+            return
+        else
+            pkgerror("No direct dependencies outside of the sysimage found matching $(repr([p.name for p in pkgs]))")
+        end
+    end
 
     # initialize signalling
     started = Dict{Base.PkgId,Bool}()
@@ -1227,13 +1239,28 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
         keep = Base.PkgId[]
         for dep in depsmap
-            if first(dep).name in pkgs_names
-                push!(keep, first(dep))
-                append!(keep, collect_all_deps(depsmap, first(dep)))
+            dep_pkgid = first(dep)
+            if dep_pkgid.name in pkgs_names
+                push!(keep, dep_pkgid)
+                append!(keep, collect_all_deps(depsmap, dep_pkgid))
+            end
+        end
+        for ext in keys(exts)
+            if issubset(collect_all_deps(depsmap, ext), keep) # if all extension deps are kept
+                push!(keep, ext)
             end
         end
         filter!(d->in(first(d), keep), depsmap)
-        isempty(depsmap) && pkgerror("No direct dependencies found matching $(repr(pkgs_names))")
+        if isempty(depsmap)
+            if _from_loading
+                # if called from loading precompilation it may be a package from another environment stack so
+                # don't error and allow serial precompilation to try
+                # TODO: actually handle packages from other envs in the stack
+                return
+            else
+                pkgerror("No direct dependencies outside of the sysimage found matching $(repr(pkgs_names))")
+            end
+        end
         target = join(pkgs_names, ", ")
     else
         target = "project..."
@@ -1285,7 +1312,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 stderr_outputs[pkg] = get(stderr_outputs, pkg, "") * str * "\n"
                 if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
                     !fancyprint && lock(print_lock) do
-                        println(io, pkg.name, color_string(" Waiting for background task, IO, or timer to finish.", Base.warn_color()))
+                        println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
                     end
                     push!(taskwaiting, pkg)
                 end
@@ -1306,7 +1333,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             wait(first_started)
             (isempty(pkg_queue) || interrupted_or_done.set) && return
             fancyprint && lock(print_lock) do
-                printpkgstyle(io, :Precompiling, "environment...")
+                printpkgstyle(io, :Precompiling, target)
                 print(io, ansi_disablecursor)
             end
             t = Timer(0; interval=1/10)
@@ -1355,7 +1382,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                                 anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                                 waiting = if dep in taskwaiting
-                                    color_string(" Waiting for background task, IO, or timer to finish. Use ctrl-c to interrupt and inspect warnings", Base.warn_color())
+                                    color_string(" Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
                                 else
                                     ""
                                 end
@@ -1381,7 +1408,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
     end
     tasks = Task[]
-    Base.LOADING_CACHE[] = Base.LoadingCache()
+    if !_from_loading
+        Base.LOADING_CACHE[] = Base.LoadingCache()
+    end
     ## precompilation loop
     for (pkg, deps) in depsmap
         paths = Base.find_all_in_cache_path(pkg)
@@ -1435,11 +1464,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     end
                     try
                         t = @elapsed ret = Logging.with_logger(Logging.NullLogger()) do
-                            # TODO: Explore allowing parallel LLVM image generation. Needs careful load balancing
-                            withenv("JULIA_IMAGE_THREADS" => "1") do
-                                # capture stderr, send stdout to devnull, don't skip loaded modules
-                                Base.compilecache(pkg, sourcepath, iob, devnull, false)
-                            end
+                            # capture stderr, send stdout to devnull, don't skip loaded modules
+                            Base.compilecache(pkg, sourcepath, iob, devnull, false)
                         end
                         t_str = timing ? string(lpad(round(t * 1e3, digits = 1), 9), " ms") : ""
                         if ret isa Base.PrecompilableError
@@ -1666,6 +1692,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
         up(ctx; update_registry = update_registry && allow_registry_update)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
@@ -2109,7 +2136,12 @@ function handle_package_input!(pkg::PackageSpec)
                          subdir = pkg.subdir)
     pkg.path = nothing
     pkg.tree_hash = nothing
-    pkg.version = pkg.version === nothing ? VersionSpec() : VersionSpec(pkg.version)
+    if pkg.version === nothing
+        pkg.version = VersionSpec()
+    end
+    if !(pkg.version isa VersionNumber)
+        pkg.version = VersionSpec(pkg.version)
+    end
     pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 

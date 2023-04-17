@@ -117,9 +117,7 @@ end
         @test artifact_exists(hash)
 
         # Test that the artifact verifies
-        if !Sys.iswindows()
-            @test verify_artifact(hash)
-        end
+        @test verify_artifact(hash)
     end
 
     @testset "File permissions" begin
@@ -190,9 +188,7 @@ end
                 @test !artifact_exists(arty_hash)
 
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
-                if !Sys.iswindows()
-                    @test verify_artifact(arty_hash)
-                end
+                @test verify_artifact(arty_hash)
 
                 # Make sure doing it twice "just works"
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
@@ -264,6 +260,26 @@ end
         meta = artifact_meta("foo_txt", artifacts_toml; platform=win32)
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
         @test meta["download"][2]["sha256"] == "a"^64
+
+        rm(artifacts_toml)
+
+        # test relative Artifacts.toml paths (https://github.com/simeonschaub/ArtifactUtils.jl/issues/19)
+        cd(path) do
+            hash3 = create_artifact() do path
+                open(joinpath(path, "foo.txt"), "w") do io
+                    print(io, "bla bla")
+                end
+            end
+
+            # Bind this artifact to something
+            artifacts_toml = "Artifacts.toml" # no parent dir specified
+            @test artifact_hash("foo_txt", artifacts_toml) == nothing
+            bind_artifact!(artifacts_toml, "foo_txt", hash3)
+
+            # Test that this binding worked
+            @test artifact_hash("foo_txt", artifacts_toml) == hash3
+            @test ensure_artifact_installed("foo_txt", artifacts_toml) == artifact_path(hash3)
+        end
     end
 
     # Let's test some known-bad Artifacts.toml files
@@ -274,22 +290,20 @@ end
     @test_logs (:error, r"malformed, must be array or dict!") artifact_meta("broken_artifact", joinpath(badifact_dir, "not_a_table.toml"))
 
     # Next, test incorrect download errors
-    if !Sys.iswindows()
-        for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
-            with_artifacts_directory(dir) do
-                @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
-                if !ignore_hash
-                    @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                else
-                    @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
-                        path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                        @test endswith(path, "0000000000000000000000000000000000000000")
-                        @test isdir(path)
+    for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
+        with_artifacts_directory(dir) do
+            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
+            if !ignore_hash
+                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+            else
+                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
+                    path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                    @test endswith(path, "0000000000000000000000000000000000000000")
+                    @test isdir(path)
                     end
                 end
             end
-        end end end
-    end
+    end end end
 
     mktempdir() do dir
         with_artifacts_directory(dir) do

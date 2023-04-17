@@ -232,10 +232,12 @@ end
 # # Option Maps
 #
 function do_preserve(x::String)
-    x == "all"    && return Types.PRESERVE_ALL
-    x == "direct" && return Types.PRESERVE_DIRECT
-    x == "semver" && return Types.PRESERVE_SEMVER
-    x == "none"   && return Types.PRESERVE_NONE
-    x == "tiered" && return Types.PRESERVE_TIERED
+    x == "installed"        && return Types.PRESERVE_ALL_INSTALLED
+    x == "all"              && return Types.PRESERVE_ALL
+    x == "direct"           && return Types.PRESERVE_DIRECT
+    x == "semver"           && return Types.PRESERVE_SEMVER
+    x == "none"             && return Types.PRESERVE_NONE
+    x == "tiered_installed" && return Types.PRESERVE_TIERED_INSTALLED
+    x == "tiered"           && return Types.PRESERVE_TIERED
     pkgerror("`$x` is not a valid argument for `--preserve`.")
 end

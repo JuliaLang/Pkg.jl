@@ -8,6 +8,7 @@ import Pkg.Artifacts: artifact_meta, artifact_path
 import Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using  ..Utils
 import ..HistoricalStdlibVersions
+using Logging
 
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
 exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
@@ -18,6 +19,7 @@ test_stdlib_uuid = UUID("8dfed614-e22c-5e08-85e1-65c5234f0b40")
 unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
 unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
+pngjll_uuid = UUID("b53b4c65-9356-5827-b1ea-8c7a1a84506f")
 
 # Disable auto-gc for these tests
 Pkg._auto_gc_enabled[] = false
@@ -165,7 +167,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         foo_uuid = UUID("02250abe-2050-11e9-017e-b301a2b5bcc4")
         path = copy_test_package(tempdir, "BasicSandbox")
-        # we set realonly here to simulate the premissions in the `$DEPOT/packages` directory
+        # we set readonly here to simulate the permissions in the `$DEPOT/packages` directory
         Pkg.Types.set_readonly(path)
         Pkg.develop(path=path)
         inside_test_sandbox("BasicSandbox") do
@@ -243,7 +245,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         basic_test_target = UUID("50adb811-5a1f-4be4-8146-2725c7f5d900")
         path = copy_test_package(tempdir, "BasicTestTarget")
-        # we set realonly here to simulate the premissions in the `$DEPOT/packages` directory
+        # we set readonly here to simulate the permissions in the `$DEPOT/packages` directory
         Pkg.Types.set_readonly(path)
         Pkg.develop(path=path)
         inside_test_sandbox("BasicTestTarget") do
@@ -682,54 +684,131 @@ end
     end end
     # Preserve syntax
     # These tests mostly check the REPL side correctness.
+
+    # make sure the default behavior is invoked
+    withenv("JULIA_PKG_PRESERVE_TIERED_INSTALLED" => false) do
+
     # - Normal add should not change the existing version.
     isolate(loaded_depot=true) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(name="JSON", version="0.18.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
     end
-    # - `tiered` is the default option.
-    isolate(loaded_depot=true) do
+    # - `tiered_installed`.
+    isolate(loaded_depot=false) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
+
+        @test_logs(
+            (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED"),
+            (:debug, "tiered_resolve: trying PRESERVE_ALL"),
+            min_level=Logging.Debug,
+            Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_TIERED_INSTALLED)
+        )
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
+
+        Pkg.activate(temp=true)
+        @test_logs(
+            (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED"),
+            min_level=Logging.Debug,
+            Pkg.add("Example"; preserve=Pkg.PRESERVE_TIERED_INSTALLED) # should only add v0.3.0 as it was installed earlier
+        )
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+
+        withenv("JULIA_PKG_PRESERVE_TIERED_INSTALLED" => true) do
+            Pkg.activate(temp=true)
+            @test_logs (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED") min_level=Logging.Debug Pkg.add(name="Example")
+            @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        end
+
+        Pkg.activate(temp=true)
+        @test_logs (:debug, "tiered_resolve: trying PRESERVE_ALL") min_level=Logging.Debug Pkg.add(name="Example") # default 'add' should serve a newer version
+        @test Pkg.dependencies()[exuuid].version > v"0.3.0"
+    end
+    # - `tiered` is the default option.
+    isolate(loaded_depot=false) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
+        Pkg.add(name="Example", version="0.3.0")
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_TIERED)
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
     end
-    # - `all` should succeed in the same way.
-    isolate(loaded_depot=true) do
+    # - `installed`.
+    isolate(loaded_depot=false) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
+        @test_throws Pkg.Resolve.ResolverError Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_ALL_INSTALLED) # no installed version
+    end
+    # - `all` should succeed in the same way as `tiered`.
+    isolate(loaded_depot=false) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
+        Pkg.add(name="Example", version="0.3.0")
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_ALL)
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
+
+        Pkg.rm("JSON")
+        Pkg.add(Pkg.PackageSpec(;name="JSON"); preserve=Pkg.PRESERVE_ALL_INSTALLED)
+        @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
     end
     # - `direct` should also succeed in the same way.
     isolate(loaded_depot=true) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_DIRECT)
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
     end
-    # - `semver` should update `Example` to the highest semver compatible version.
+    # - `semver` should update `Example` and the jll to the highest semver compatible version.
     isolate(loaded_depot=true) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_SEMVER)
         @test Pkg.dependencies()[exuuid].version == v"0.3.3"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version > v"1.6.37+4"
     end
-    #- `none` should update `Example` to the highest compatible version.
+    #- `none` should update `Example` and the jll to the highest compatible version.
     isolate(loaded_depot=true) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+4")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_NONE)
         @test Pkg.dependencies()[exuuid].version == v"0.5.3"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
+        @test Pkg.dependencies()[pngjll_uuid].version > v"1.6.37+4"
     end
+    isolate(loaded_depot=true) do
+        Pkg.add(name="libpng_jll", version=v"1.6.37+5")
+        @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+5"
+    end
+    end # withenv
 end
 
 #
@@ -2449,7 +2528,7 @@ end
             end
         end
         @test haskey(Pkg.project().dependencies, "EmptyPackage")
-        # Now we add a commit upstream, if we fetch uneccesarily, we should be able to see it in our clone.
+        # Now we add a commit upstream, if we fetch unnecessarily, we should be able to see it in our clone.
         write(joinpath(path, "Foo.txt"), "Hello\n")
         new_commit = nothing
         LibGit2.with(LibGit2.GitRepo(path)) do repo
@@ -2897,7 +2976,7 @@ using Pkg.Types: is_stdlib
     @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
 
-#=
+
 @testset "Pkg.add() with julia_version" begin
     append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
 
@@ -3002,7 +3081,7 @@ end
 
     empty!(Pkg.Types.STDLIBS_BY_VERSION)
 end
-=#
+
 
 @testset "Issue #2931" begin
     isolate(loaded_depot=false) do

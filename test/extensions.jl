@@ -62,4 +62,20 @@ using Test
         Pkg.test("HasDepWithExtensions", julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
         @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "OffsetArrays", version = "0.9.0")
     end
+    isolate(loaded_depot=false) do
+        withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
+            depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot)
+            Pkg.activate(; temp=true)
+            Pkg.Registry.add(Pkg.RegistrySpec(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry")))
+            Pkg.Registry.add("General")
+            Pkg.add("HasDepWithExtensions")
+        end
+        iob = IOBuffer()
+        Pkg.precompile("HasDepWithExtensions", io=iob)
+        out = String(take!(iob))
+        @test occursin("Precompiling", out)
+        @test occursin("OffsetArraysExt", out)
+        @test occursin("HasExtensions", out)
+        @test occursin("HasDepWithExtensions", out)
+    end
 end

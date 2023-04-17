@@ -110,6 +110,8 @@ end
             Pkg.generate("Dep4")
             Pkg.generate("Dep5")
             Pkg.generate("Dep6")
+            Pkg.generate("Dep7")
+            Pkg.generate("Dep8")
             Pkg.generate("NoVersion")
             open(joinpath("NoVersion","Project.toml"), "w") do io
                 write(io, "name = \"NoVersion\"\nuuid = \"$(UUIDs.uuid4())\"")
@@ -217,6 +219,22 @@ end
             @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
         end
 
+        @testset "instantiate" begin
+            iob = IOBuffer()
+            Pkg.activate("packages/Dep7")
+            Pkg.resolve()
+            @test isfile("packages/Dep7/Project.toml")
+            @test isfile("packages/Dep7/Manifest.toml")
+            Pkg.instantiate(io=iob) # with a Project.toml and Manifest.toml
+            @test occursin("Precompiling", String(take!(iob)))
+
+            Pkg.activate("packages/Dep8")
+            @test isfile("packages/Dep8/Project.toml")
+            @test !isfile("packages/Dep8/Manifest.toml")
+            Pkg.instantiate(io=iob) # with only a Project.toml
+            @test occursin("Precompiling", String(take!(iob)))
+        end
+
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
 
         @testset "waiting for trailing tasks" begin
@@ -225,7 +243,7 @@ end
             Pkg.precompile(io=iob)
             str = String(take!(iob))
             @test occursin("Precompiling", str)
-            @test occursin("Waiting for background task, IO, or timer to finish.", str)
+            @test occursin("Waiting for background task / IO / timer.", str)
         end
     end end
     # ignoring circular deps, to avoid deadlock
@@ -264,6 +282,15 @@ end
         Pkg.activate(".")
         Pkg.activate("CircularDep3")
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+
+        Pkg.activate(temp=true)
+        Pkg.precompile() # precompile an empty env should be a no-op
+        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
+
+        Pkg.add("Random")
+        @test_throws Pkg.Types.PkgError Pkg.precompile("Random") # Random is a dep but in the sysimage
+        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist")
+        Pkg.precompile() # should be a no-op
     end end
     @testset "Issue 3359: Recurring precompile" begin
         isolate() do; cd_tempdir() do tmp
@@ -306,6 +333,16 @@ end
             @test x isa Pkg.PackageSpec
             @test x.uuid === nothing
         end
+    end
+end
+
+@testset "set number of concurrent requests" begin
+    @test Pkg.Types.num_concurrent_downloads() == 8
+    withenv("JULIA_PKG_CONCURRENT_DOWNLOADS"=>"5") do
+        @test Pkg.Types.num_concurrent_downloads() == 5
+    end
+    withenv("JULIA_PKG_CONCURRENT_DOWNLOADS"=>"0") do
+        @test_throws ErrorException Pkg.Types.num_concurrent_downloads()
     end
 end
 

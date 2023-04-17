@@ -654,4 +654,22 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
     end
 end
 
+# Verify the git-tree-sha1 hash of a compressed archive.
+function verify_archive_tree_hash(tar_gz::AbstractString, expected_hash::Base.SHA1)
+    # This can fail because unlike sha256 verification of the downloaded
+    # tarball, tree hash verification requires that the file can i) be
+    # decompressed and ii) is a proper archive.
+    calc_hash = try
+        Base.SHA1(open(Tar.tree_hash, `$(exe7z()) x $tar_gz -so`))
+    catch err
+        @warn "unable to decompress and read archive" exception=err
+        return false
+    end
+    if calc_hash != expected_hash
+        @warn "tarball content does not match expected git-tree-sha1"
+        return false
+    end
+    return true
+end
+
 end # module PlatformEngines
