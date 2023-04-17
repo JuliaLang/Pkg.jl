@@ -296,7 +296,7 @@ const build = API.build
     Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
-git revision. A pinned package is neverautomatically updated: if `pkg` is tracking a path, or a repository,
+git revision. A pinned package is never automatically updated: if `pkg` is tracking a path, or a repository,
 those remain tracked.
 
 !!! compat "Julia 1.7"
