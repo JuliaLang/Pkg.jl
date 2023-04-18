@@ -95,7 +95,9 @@ function pkg_precompile()
                     Pkg.status()
                 end
                 Pkg.precompile()    
-                Base.rm(tmp; recursive=true)
+                try Base.rm(tmp; recursive=true)
+                catch
+                end
 
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init), REPL.LineEditREPL})
