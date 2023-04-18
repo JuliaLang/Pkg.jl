@@ -79,27 +79,32 @@ function pkg_precompile()
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
     Downloads.DOWNLOADER[] = Downloads.Downloader(; grace=1.0)
-    # @precompile_setup begin
-        tmp = _run_precompilation_script_setup()
-        # @precompile_all_calls begin
-            withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do 
-                Pkg.add("TestPkg")
-                Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
-                Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
-                Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
-                Pkg.update(; update_registry=false)
-                Pkg.status()
-            end
-            Pkg.precompile()    
-            Base.rm(tmp; recursive=true)
+    withenv("JULIA_PKG_SERVER" => nothing) do
+        # @precompile_setup begin
+            tmp = _run_precompilation_script_setup()
+            # @precompile_all_calls begin
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do 
+                    @show DEPOT_PATH
+                    @show LOAD_PATH
+                    
+                    Pkg.add("TestPkg")
+                    Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
+                    Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
+                    Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
+                    Pkg.update(; update_registry=false)
+                    Pkg.status()
+                end
+                Pkg.precompile()    
+                Base.rm(tmp; recursive=true)
 
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init), REPL.LineEditREPL})
-            Base.precompile(Tuple{typeof(Pkg.API.status)})
-            Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project}) 
-            Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch}) 
+                Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
+                Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init), REPL.LineEditREPL})
+                Base.precompile(Tuple{typeof(Pkg.API.status)})
+                Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project}) 
+                Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch}) 
+            # end
         # end
-    # end
+    end
 end
 
 pkg_precompile()
