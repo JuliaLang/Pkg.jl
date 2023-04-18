@@ -9,8 +9,6 @@ function _run_precompilation_script_setup()
     empty!(DEPOT_PATH)
     pushfirst!(DEPOT_PATH, tmp)
     pushfirst!(LOAD_PATH, "@")
-    #touch("Project.toml")
-
     write("Project.toml", 
         """
         name = "Hello"
