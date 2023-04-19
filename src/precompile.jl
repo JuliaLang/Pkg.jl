@@ -78,6 +78,8 @@ end
 function pkg_precompile()
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
+    redirect_stderr(devnull) do
+    redirect_stdout(devnull) do
     Downloads.DOWNLOADER[] = Downloads.Downloader(; grace=1.0)
     withenv("JULIA_PKG_SERVER" => nothing) do
         # @precompile_setup begin
@@ -106,6 +108,8 @@ function pkg_precompile()
                 Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch}) 
             # end
         # end
+        end
+        end
     end
 end
 
