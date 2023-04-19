@@ -789,6 +789,8 @@ function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageS
     end
 end
 
+using REPLPrecompiler
 include("precompile.jl")
+
 
 end # module

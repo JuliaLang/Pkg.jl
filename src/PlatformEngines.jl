@@ -282,7 +282,8 @@ function download(
         (total, now) -> nothing
     end
     try
-        Downloads.download(url, dest; headers, progress)
+        @show url
+        @time Downloads.download(url, dest; headers, progress)
     finally
         do_fancy && end_progress(io, bar)
     end

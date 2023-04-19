@@ -2,6 +2,9 @@ using LibGit2: LibGit2
 using Tar: Tar
 using Downloads
 
+# SnoopPrecompile is useful but not available in Base
+using SnoopPrecompile
+
 let
 function _run_precompilation_script_setup()
     tmp = mktempdir()
@@ -73,34 +76,16 @@ function _run_precompilation_script_setup()
     return tmp
 end
 
-# SnoopPrecompile is useful but not available in Base
-# using SnoopPrecompile
 function pkg_precompile()
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
     redirect_stderr(devnull) do
     redirect_stdout(devnull) do
     Downloads.DOWNLOADER[] = Downloads.Downloader(; grace=1.0)
-    withenv("JULIA_PKG_SERVER" => nothing) do
-        # @precompile_setup begin
-            tmp = _run_precompilation_script_setup()
-            # @precompile_all_calls begin
-                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do 
-                    @show DEPOT_PATH
-                    @show LOAD_PATH
-                    
-                    Pkg.add("TestPkg")
-                    Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
-                    Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
-                    Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
-                    Pkg.update(; update_registry=false)
-                    Pkg.status()
-                end
-                Pkg.precompile()    
-                try Base.rm(tmp; recursive=true)
-                catch
-                end
+    #redirect_stderr(devnull) do
+    #redirect_stdout(devnull) do
 
+<<<<<<< Updated upstream
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init), REPL.LineEditREPL})
                 Base.precompile(Tuple{typeof(Pkg.API.status)})
@@ -110,8 +95,58 @@ function pkg_precompile()
         # end
         end
         end
+=======
+    withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_PRECOMPILE_AUTO" => 0) do
+        redirect_stderr(devnull) do
+        redirect_stdout(devnull) do 
+        @precompile_setup begin
+            tmp = _run_precompilation_script_setup()
+            @precompile_all_calls begin
+                @show DEPOT_PATH
+                @show LOAD_PATH
+                
+                Pkg.add("TestPkg")
+                Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
+                Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
+                Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
+                Pkg.update(; update_registry=false)
+                Pkg.status()
+                Pkg.precompile()    
+            end
+            try Base.rm(tmp; recursive=true)
+            catch
+            end
+
+            Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
+            Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init), REPL.LineEditREPL})
+            Base.precompile(Tuple{typeof(Pkg.API.status)})
+            Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project}) 
+            Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch}) 
+        end
+    end
+    end
+>>>>>>> Stashed changes
     end
 end
 
 pkg_precompile()
+
+
+CTRL_C = '\x03'
+
+if ccall(:jl_generating_output, Cint, ()) == 1
+
+    statements = REPLPrecompiler.run_script(
+        """
+        print(1+1)
+        using Pkg
+        ] st
+        $CTRL_C
+
+        """;
+        debug_output=stdout
+    )
+    
+    REPLPrecompiler.evaluate_statements(@__MODULE__, statements)
+end
 end
