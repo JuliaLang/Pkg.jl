@@ -1,6 +1,7 @@
 using LibGit2: LibGit2
 using Tar: Tar
 using Downloads
+using REPL
 
 let
 function _run_precompilation_script_setup()
@@ -9,14 +10,14 @@ function _run_precompilation_script_setup()
     empty!(DEPOT_PATH)
     pushfirst!(DEPOT_PATH, tmp)
     pushfirst!(LOAD_PATH, "@")
-    write("Project.toml", 
+    write("Project.toml",
         """
         name = "Hello"
         uuid = "33cfe95a-1eb2-52ea-b672-e2afdf69b78f"
         """
-    ) 
+    )
     mkdir("src")
-    write("src/Hello.jl", 
+    write("src/Hello.jl",
         """
         module Hello
         end
@@ -85,10 +86,10 @@ function pkg_precompile()
         # @precompile_setup begin
             tmp = _run_precompilation_script_setup()
             # @precompile_all_calls begin
-                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do 
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
                     @show DEPOT_PATH
                     @show LOAD_PATH
-                    
+
                     Pkg.add("TestPkg")
                     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
                     Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
@@ -96,7 +97,7 @@ function pkg_precompile()
                     Pkg.update(; update_registry=false)
                     Pkg.status()
                 end
-                Pkg.precompile()    
+                Pkg.precompile()
                 try Base.rm(tmp; recursive=true)
                 catch
                 end
@@ -104,8 +105,12 @@ function pkg_precompile()
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init), REPL.LineEditREPL})
                 Base.precompile(Tuple{typeof(Pkg.API.status)})
-                Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project}) 
-                Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch}) 
+                Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project})
+                Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch})
+
+                Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), Pkg.REPLMode.PkgCompletionProvider, REPL.LineEdit.PromptState})
+                Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_argument), Pkg.REPLMode.CommandSpec, Array{String, 1}, String, Int64, Int64})
+                Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_add_dev), Base.Dict{Symbol, Any}, String, Int64, Int64})
             # end
         # end
         end
