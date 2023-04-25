@@ -370,7 +370,7 @@ In fact, this form of type piracy is one of the most standard use cases for exte
     An extension will only be loaded if the extension dependencies are loaded from the same environment or environments 
     higher in the environment stack than the package itself. This means that you can load a package having an extension
     from your main/default environment, load another package required for the dependency from your active project, and
-    get the functionality from the extension. The other way round does not work, i.e., if load a package having
+    get the functionality from the extension. The other way round does not work, i.e., if you load a package having
     an extension from a project environment and then load the package required for the extension from you main/default
     environment, the extension will not be loaded. This is different from the behavior of Requires.jl. Thus, package
     extensions are not full replacements of the behavior of Requires.jl.
