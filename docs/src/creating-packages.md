@@ -372,8 +372,10 @@ In fact, this form of type piracy is one of the most standard use cases for exte
     from your main/default environment, load another package required for the dependency from your active project, and
     get the functionality from the extension. The other way round does not work, i.e., if you load a package having
     an extension from a project environment and then load the package required for the extension from you main/default
-    environment, the extension will not be loaded. This is different from the behavior of Requires.jl. Thus, package
-    extensions are not full replacements of the behavior of Requires.jl.
+    environment, the extension will not be loaded. This is different from the behavior of Requires.jl where the 
+    conditional code is evaluated no matter from what environment the "extension dependency" is loaded
+
+
 
 !!! compat
     Often you will put the extension dependencies into the `test` target so they are loaded when running e.g. `Pkg.test()`. On earlier Julia versions
