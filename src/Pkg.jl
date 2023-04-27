@@ -724,7 +724,7 @@ end
 ################
 
 function installed()
-    @warn "Pkg.installed() is deprecated"
+    @warn "Pkg.installed() is deprecated. Use Pkg.dependencies() instead."
     deps = dependencies()
     installs = Dict{String, VersionNumber}()
     for (uuid, dep) in deps
