@@ -517,25 +517,29 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     timestamp = now()
 
     ## Atomically write usage file using process id locking
-    FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
-        usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
-        else
-            Dict{String, Any}()
-        end
+    try
+        FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
+            usage = if isfile(usage_file)
+                TOML.parsefile(usage_file)
+            else
+                Dict{String, Any}()
+            end
 
-        # record new usage
-        usage[source_file] = [Dict("time" => timestamp)]
+            # record new usage
+            usage[source_file] = [Dict("time" => timestamp)]
 
-        # keep only latest usage info
-        for k in keys(usage)
-            times = map(d -> Dates.DateTime(d["time"]), usage[k])
-            usage[k] = [Dict("time" => maximum(times))]
-        end
+            # keep only latest usage info
+            for k in keys(usage)
+                times = map(d -> Dates.DateTime(d["time"]), usage[k])
+                usage[k] = [Dict("time" => maximum(times))]
+            end
 
-        open(usage_file, "w") do io
-            TOML.print(io, usage, sorted=true)
+            open(usage_file, "w") do io
+                TOML.print(io, usage, sorted=true)
+            end
         end
+    catch err
+        @error "Failed to update usage file $(repr(usage_filepath))" err
     end
     return
 end
