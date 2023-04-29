@@ -346,7 +346,12 @@ function download_verify(
 
     # Download the file, optionally continuing
     f = retry(delays = fill(1.0, 3)) do
-        download(url, dest; verbose=verbose || !quiet_download)
+        try
+            download(url, dest; verbose=verbose || !quiet_download)
+        catch err
+            @debug "download and verify failed" url dest err
+            rethrow()
+        end
     end
     f()
     if hash !== nothing && !verify(dest, hash; verbose=verbose)
