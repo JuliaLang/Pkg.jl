@@ -1261,7 +1261,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     printloop_should_exit::Bool = !fancyprint # exit print loop immediately if not fancy printing
     interrupted_or_done = Base.Event()
 
-    function color_string(cstr::String, col::Symbol)
+    function color_string(cstr::String, col::Union{Int64, Symbol})
         enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
         disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
         return string(enable_ansi, cstr, disable_ansi)
