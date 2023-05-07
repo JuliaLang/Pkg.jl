@@ -314,7 +314,7 @@ const build = API.build
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
 git revision. A pinned package is never automatically updated: if `pkg` is tracking a path,
 or a repository, those remain tracked in a frozen state). For example, if one wishes to update
-a pinned package in the current manifest, one must explicitly call `Pkg.pin` again.
+a pinned package in the current manifest, one must unpin, update then pin the package again.
 
 !!! compat "Julia 1.7"
     The `all_pkgs` kwarg was introduced in julia 1.7.
