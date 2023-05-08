@@ -1137,7 +1137,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     ]
     stale_cache = Dict{StaleCacheKey, Bool}()
     exts = Dict{Base.PkgId, String}() # ext -> parent
-    # make a flat map of each dep and its deps
+    # make a flat map of each dep and its direct deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
     pkg_specs = PackageSpec[]
     for dep in ctx.env.manifest
@@ -1147,6 +1147,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         depsmap[pkg] = filter!(!Base.in_sysimage, deps)
         # add any extensions
         weakdeps = last(dep).weakdeps
+        pkg_exts = Dict{Base.PkgId, Vector{Base.PkgId}}()
         for (ext_name, extdep_names) in last(dep).exts
             ext_deps = Base.PkgId[]
             push!(ext_deps, pkg) # depends on parent package
@@ -1165,8 +1166,26 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             ext_uuid = Base.uuid5(pkg.uuid, ext_name)
             ext = Base.PkgId(ext_uuid, ext_name)
             push!(pkg_specs, PackageSpec(uuid = ext_uuid, name = ext_name)) # create this here as the name cannot be looked up easily later via the uuid
-            depsmap[ext] = filter!(!Base.in_sysimage, ext_deps)
+            filter!(!Base.in_sysimage, ext_deps)
+            depsmap[ext] = ext_deps
             exts[ext] = pkg.name
+            pkg_exts[ext] = ext_deps
+        end
+        if !isempty(pkg_exts)
+            # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
+            # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
+            for (_pkg, deps) in depsmap # for each manifest dep
+                if !in(_pkg, keys(exts)) # if not an extension
+                    all_ext_deps = Base.PkgId[]
+                    for (ext, ext_deps) in pkg_exts # for each extension of this package
+                        if any(in(ext_deps), deps) # if any of the outer package deps are extension deps
+                            push!(deps, ext) # add the extension to deps
+                            append!(all_ext_deps, ext_deps) # collect all extension deps for later filtering
+                        end
+                    end
+                    filter!(!in(all_ext_deps), deps) # remove the extension deps once all extensions have been added because they could share deps
+                end
+            end
         end
     end
 
