@@ -1660,6 +1660,20 @@ function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd
     return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
 
+if VERSION >= 1.9.0 # has threadpools
+function get_threads_spec()
+    if Threads.nthreads(:interactive) > 0
+        "$(Threads.nthreads(:default)),$(Threads.nthreads(:interactive))"
+    else
+        "$(Threads.nthreads(:default))"
+    end
+end
+else # no threadpools
+function get_threads_spec()
+    "$(Threads.nthreads())"
+end
+end
+
 function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_args)
     coverage_arg = if coverage isa Bool
         coverage ? string("@", source_path) : "none"
@@ -1679,7 +1693,7 @@ function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_a
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
-        --threads=$(Threads.nthreads())
+        --threads=$(get_threads_spec())
         $(julia_args)
         --eval $(code)
     ```
