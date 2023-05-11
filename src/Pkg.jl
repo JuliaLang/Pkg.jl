@@ -47,8 +47,6 @@ const PREV_ENV_PATH = Ref{String}("")
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
-include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
-
 include("utils.jl")
 include("MiniProgressBars.jl")
 include("GitTools.jl")
