@@ -1660,7 +1660,7 @@ function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd
     return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
 
-if VERSION >= 1.9.0 # has threadpools
+@static if VERSION >= v"1.9.0" # has threadpools
 function get_threads_spec()
     if Threads.nthreads(:interactive) > 0
         "$(Threads.nthreads(:default)),$(Threads.nthreads(:interactive))"
