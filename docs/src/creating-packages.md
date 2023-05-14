@@ -354,8 +354,7 @@ end
 end # module
 ```
 
-The name of the extension (here `PlottingContourExt`) is not very important but using something similar to the suggest here is likely a good
-idea.
+Extensions can have any arbitrary name (here `PlottingContourExt`), but using something similar to this example is likely a good idea.
 
 A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `PlottingContourExt` module.
 It is only when the `Contour` package actually gets loaded that the `PlottingContourExt` extension is loaded
