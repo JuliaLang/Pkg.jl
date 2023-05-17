@@ -589,7 +589,7 @@ This includes:
   * The `name` of the package.
   * The package's unique `uuid`.
   * A `version` (for example when adding a package). When upgrading, can also be an instance of
-    the enum [`UpgradeLevel`](@ref). If the version is given as a `String`` this means that unspecified versions
+    the enum [`UpgradeLevel`](@ref). If the version is given as a `String` this means that unspecified versions
     are "free", for example `version="0.5"` allows any version `0.5.x` to be installed. If given as a `VersionNumber`,
     the exact version is used, for example `version=v"0.5.3"`.
   * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
