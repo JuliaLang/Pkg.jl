@@ -354,8 +354,8 @@ end
 end # module
 ```
 
-The name of the extension (here `PlottingContourExt`) is not very important but using something similar to the suggest here is likely a good
-idea.
+Extensions can have any arbitrary name (here `PlottingContourExt`), but using something similar to the format of
+this example that makes the extended functionality and dependency of the extension clear is likely a good idea.
 
 A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `PlottingContourExt` module.
 It is only when the `Contour` package actually gets loaded that the `PlottingContourExt` extension is loaded
@@ -365,8 +365,6 @@ If one considers `PlottingContourExt` as a completely separate package, it could
 [type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy) since `PlottingContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
 However, for extensions, it is ok to assume that the extension owns the methods in its parent package.
 In fact, this form of type piracy is one of the most standard use cases for extensions.
-
-An extension will only be loaded if the extension dependencies are loaded from the same environment or environments higher in the environment stack than the package itself.
 
 !!! compat
     Often you will put the extension dependencies into the `test` target so they are loaded when running e.g. `Pkg.test()`. On earlier Julia versions
