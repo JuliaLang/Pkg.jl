@@ -1138,7 +1138,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     ]
     stale_cache = Dict{StaleCacheKey, Bool}()
     exts = Dict{Base.PkgId, String}() # ext -> parent
-    # make a flat map of each dep and its deps
+    # make a flat map of each dep and its direct deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
     pkg_specs = PackageSpec[]
     for dep in ctx.env.manifest
@@ -1148,6 +1148,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         depsmap[pkg] = filter!(!Base.in_sysimage, deps)
         # add any extensions
         weakdeps = last(dep).weakdeps
+        pkg_exts = Dict{Base.PkgId, Vector{Base.PkgId}}()
         for (ext_name, extdep_names) in last(dep).exts
             ext_deps = Base.PkgId[]
             push!(ext_deps, pkg) # depends on parent package
@@ -1166,8 +1167,20 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             ext_uuid = Base.uuid5(pkg.uuid, ext_name)
             ext = Base.PkgId(ext_uuid, ext_name)
             push!(pkg_specs, PackageSpec(uuid = ext_uuid, name = ext_name)) # create this here as the name cannot be looked up easily later via the uuid
-            depsmap[ext] = filter!(!Base.in_sysimage, ext_deps)
+            filter!(!Base.in_sysimage, ext_deps)
+            depsmap[ext] = ext_deps
             exts[ext] = pkg.name
+            pkg_exts[ext] = ext_deps
+        end
+        if !isempty(pkg_exts)
+            # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
+            # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
+            for (_pkg, deps) in depsmap # for each manifest dep
+                if !in(_pkg, keys(exts)) && pkg in deps # if not an extension and depends on pkg
+                    append!(deps, keys(pkg_exts)) # add the package extensions to deps
+                    filter!(!isequal(pkg), deps) # remove the pkg from deps
+                end
+            end
         end
     end
 
