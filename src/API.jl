@@ -1175,15 +1175,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
             # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
             for (_pkg, deps) in depsmap # for each manifest dep
-                if !in(_pkg, keys(exts)) # if not an extension
-                    all_ext_deps = Base.PkgId[]
-                    for (ext, ext_deps) in pkg_exts # for each extension of this package
-                        if any(in(ext_deps), deps) # if any of the outer package deps are extension deps
-                            push!(deps, ext) # add the extension to deps
-                            append!(all_ext_deps, ext_deps) # collect all extension deps for later filtering
-                        end
-                    end
-                    filter!(!in(all_ext_deps), deps) # remove the extension deps once all extensions have been added because they could share deps
+                if !in(_pkg, keys(exts)) && pkg in deps # if not an extension and depends on pkg
+                    append!(deps, keys(pkg_exts)) # add the package extensions to deps
+                    filter!(!isequal(pkg), deps) # remove the pkg from deps
                 end
             end
         end
