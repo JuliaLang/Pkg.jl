@@ -131,8 +131,8 @@ The following table describes the command line arguments to `--preserve` (in ord
 | `semver`           | Preserve semver-compatible versions of direct dependencies                         |
 | `none`             | Do not attempt to preserve any version information                                 |
 | `tiered_installed` | Like `tiered` except first try to add only installed versions                      |
-| **`tiered`**       | Use the tier that will preserve the most version information                       |
-|                    | while allowing the operation to succeed (this is the default)                      |
+| **`tiered`**       | Use the tier that will preserve the most version information while                 |
+|                    | allowing version resolution to succeed (this is the default)                       |
 
 Note: To make the default strategy `tiered_installed` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED` to
 true.
