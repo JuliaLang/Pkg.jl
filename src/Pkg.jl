@@ -117,15 +117,16 @@ a package, also inside that package.
 The `preserve` keyword argument allows you to key into a specific tier in the resolve algorithm.
 The following table describes the argument values for `preserve` (in order of strictness):
 
-| Value                       | Description                                                                          |
-|:----------------------------|:-------------------------------------------------------------------------------------|
-| `PRESERVE_ALL_INSTALLED`    | Like `PRESERVE_ALL` and only add those already installed                             |
-| `PRESERVE_ALL`              | Preserve the state of all existing dependencies (including recursive dependencies)   |
-| `PRESERVE_DIRECT`           | Preserve the state of all existing direct dependencies                               |
-| `PRESERVE_SEMVER`           | Preserve semver-compatible versions of direct dependencies                           |
-| `PRESERVE_NONE`             | Do not attempt to preserve any version information                                   |
-| `PRESERVE_TIERED_INSTALLED` | Like `PRESERVE_TIERED` except `PRESERVE_ALL_INSTALLED` is tried first                |
-| `PRESERVE_TIERED`           | Use the tier which will preserve the most version information (this is the default)  |
+| Value                       | Description                                                                        |
+|:----------------------------|:-----------------------------------------------------------------------------------|
+| `PRESERVE_ALL_INSTALLED`    | Like `PRESERVE_ALL` and only add those already installed                           |
+| `PRESERVE_ALL`              | Preserve the state of all existing dependencies (including recursive dependencies) |
+| `PRESERVE_DIRECT`           | Preserve the state of all existing direct dependencies                             |
+| `PRESERVE_SEMVER`           | Preserve semver-compatible versions of direct dependencies                         |
+| `PRESERVE_NONE`             | Do not attempt to preserve any version information                                 |
+| `PRESERVE_TIERED_INSTALLED` | Like `PRESERVE_TIERED` except `PRESERVE_ALL_INSTALLED` is tried first              |
+| `PRESERVE_TIERED`           | Use the tier that will preserve the most version information while                 |
+|                             | allowing version resolution to succeed (this is the default)                       |
 
 !!! note
     To change the default strategy to `PRESERVE_TIERED_INSTALLED` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED`
@@ -313,7 +314,7 @@ const build = API.build
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
 git revision. A pinned package is never automatically updated: if `pkg` is tracking a path,
-or a repository, those remain tracked but will not update. 
+or a repository, those remain tracked but will not update.
 To get updates from the origin path or remote repository the package must first be freed.
 
 !!! compat "Julia 1.7"
