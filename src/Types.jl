@@ -29,7 +29,8 @@ export UUID, SHA1, VersionRange, VersionSpec,
     read_project, read_package, read_manifest,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
-    PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
+    PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED,
+    PRESERVE_TIERED_INSTALLED, PRESERVE_NONE,
     projectfile_path, manifestfile_path
 
 # Load in data about historical stdlibs
@@ -73,7 +74,7 @@ Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 # PackageSpec #
 ###############
 @enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
-@enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
+@enum(PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_TIERED_INSTALLED, PRESERVE_NONE)
 @enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
@@ -140,7 +141,8 @@ isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
-    f = []
+    f = Pair{String, Any}[]
+
     pkg.name !== nothing && push!(f, "name" => pkg.name)
     pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
     pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
@@ -151,7 +153,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     pkg.pinned && push!(f, "pinned" => pkg.pinned)
     push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
     if pkg.repo.source !== nothing
-        push!(f, "repo/source" => string("\"", pkg.repo.source, "\""))
+        push!(f, "repo/source" => string("\"", pkg.repo.source::String, "\""))
     end
     if pkg.repo.rev !== nothing
         push!(f, "repo/rev" => pkg.repo.rev)
@@ -161,7 +163,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
-        print(io, "  ", field, " = ", value, "\n")
+        print(io, "  ", field, " = ", string(value)::String, "\n")
     end
     print(io, ")")
 end
@@ -359,7 +361,8 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     dir = abspath(project_dir)
     manifest_file = project.manifest
     manifest_file = manifest_file !== nothing ?
-        abspath(manifest_file) : manifestfile_path(dir)::String
+        (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
+        manifestfile_path(dir)::String
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
 
@@ -379,13 +382,22 @@ end
 include("project.jl")
 include("manifest.jl")
 
+function num_concurrent_downloads()
+    val = get(ENV, "JULIA_PKG_CONCURRENT_DOWNLOADS", "8")
+    num = tryparse(Int, val)
+    isnothing(num) && error("Environment variable `JULIA_PKG_CONCURRENT_DOWNLOADS` expects an integer, instead found $(val)")
+    if num < 1
+        error("Number of concurrent downloads must be greater than 0")
+    end
+    return num
+end
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
     io::IO = stderr_f()
     use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
-    num_concurrent_downloads::Int = 8
+    num_concurrent_downloads::Int = num_concurrent_downloads()
 
     # Registris
     registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()
@@ -411,11 +423,14 @@ const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
+        # DelimitedFiles is an upgradable stdlib
+        # TODO: Store this information of upgradable stdlibs somewhere else
+        name == "DelimitedFiles" && continue
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
-        uuid = get(project, "uuid", nothing)
-        v_str = get(project, "version", nothing)
+        uuid = get(project, "uuid", nothing)::Union{String, Nothing}
+        v_str = get(project, "version", nothing)::Union{String, Nothing}
         version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
         stdlib[UUID(uuid)] = (name, version)
@@ -587,9 +602,9 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             resolve_projectfile!(ctx.env, pkg, dev_path)
             error_if_in_sysimage(pkg)
             if is_local_path
-                pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+                pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             else
-                pkg.path = shared ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+                pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             end
             return false
         end
@@ -648,7 +663,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         resolve_projectfile!(ctx.env, pkg, dev_path)
     end
     error_if_in_sysimage(pkg)
-    pkg.path = shared ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+    pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
     if pkg.repo.subdir !== nothing
         pkg.path = joinpath(pkg.path, pkg.repo.subdir)
     end
@@ -726,8 +741,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
-            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.project_file, pkg.repo.source)
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
+            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.manifest_file, pkg.repo.source)
+            repo_source = normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source))
         else
             pkgerror("Path `$(pkg.repo.source)` does not exist.")
         end
@@ -906,9 +921,6 @@ registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpe
 function registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
-    # collect all names and uuids since we're looking anyway
-    names = [pkg.name::String for pkg in pkgs if has_name(pkg)]
-    uuids = [pkg.uuid::UUID for pkg in pkgs if has_uuid(pkg)]
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
@@ -1028,8 +1040,9 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
             info = Pkg.Registry.registry_info(pkg)
-            info.repo === nothing && continue
-            push!(repo_infos, (reg.name, info.repo, uuid))
+            repo = info.repo
+            repo === nothing && continue
+            push!(repo_infos, (reg.name, repo, uuid))
         end
     end
     unique!(repo_infos)

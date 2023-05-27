@@ -12,8 +12,14 @@ import Pkg
 
 # Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
 if Base.find_package("HistoricalStdlibVersions") === nothing
-    @info "Installing HistoricalStdlibVersions for Pkg tests"
-    Pkg.add("HistoricalStdlibVersions") # Needed for custom julia version resolve tests
+    @debug "Installing HistoricalStdlibVersions for Pkg tests"
+    iob = IOBuffer()
+    try
+        Pkg.add("HistoricalStdlibVersions", io=iob) # Needed for custom julia version resolve tests
+    catch
+        println(String(take!(iob)))
+        rethrow()
+    end
 end
 
 import HistoricalStdlibVersions
@@ -32,7 +38,7 @@ if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
 end
 
 ### Disable logging output if true (default)
-hide_logs = Pkg.get_bool_env("JULIA_PKG_TEST_QUIET", default="true")
+hide_logs = Base.get_bool_env("JULIA_PKG_TEST_QUIET", true)
 
 logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
 ### Send all Pkg output to a file called Pkg.log
@@ -75,6 +81,7 @@ Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger())
                 "misc.jl",
                 "force_latest_compatible_version.jl",
                 "manifests.jl",
+                "project_manifest.jl"
                 ]
                 @info "==== Testing `test/$f`"
                 flush(Pkg.DEFAULT_IO[])

@@ -14,18 +14,16 @@ To generate the bare minimum files for a new package, use `pkg> generate`.
 (@v1.8) pkg> generate HelloWorld
 ```
 
-This creates a new project `HelloWorld` with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
+This creates a new project `HelloWorld` in a subdirectory by the same name, with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
 
 ```julia-repl
-julia> cd("HelloWorld")
-
-shell> tree .
-.
+shell> tree HelloWorld/
+HelloWorld/
 ├── Project.toml
 └── src
     └── HelloWorld.jl
 
-1 directory, 2 files
+2 directories, 2 files
 ```
 
 The `Project.toml` file contains the name of the package, its unique UUID, its version, the authors and potential dependencies:
@@ -49,15 +47,21 @@ greet() = print("Hello World!")
 end # module
 ```
 
-We can now activate the project and load the package:
+We can now activate the project by using the path to the directory where it is installed, and load the package:
 
 ```julia-repl
-pkg> activate .
+pkg> activate ./HelloWorld
 
 julia> import HelloWorld
 
 julia> HelloWorld.greet()
 Hello World!
+```
+
+For the rest of the tutorial we enter inside the directory of the project, for convenience:
+
+```julia-repl
+julia> cd("HelloWorld")
 ```
 
 ## Adding dependencies to the project
@@ -109,22 +113,28 @@ The build step is executed the first time a package is installed or when explici
 A package is built by executing the file `deps/build.jl`.
 
 ```julia-repl
-julia> print(read("deps/build.jl", String))
-println("I am being built...")
+julia> mkpath("deps");
+
+julia> write("deps/build.jl",
+             """
+             println("I am being built...")
+             """);
 
 (HelloWorld) pkg> build
   Building HelloWorld → `deps/build.log`
  Resolving package versions...
 
-julia> print(read("deps/build.log", String))
+julia> print(readchomp("deps/build.log"))
 I am being built...
 ```
 
 If the build step fails, the output of the build step is printed to the console
 
 ```julia-repl
-julia> print(read("deps/build.jl", String))
-error("Ooops")
+julia> write("deps/build.jl",
+             """
+             error("Ooops")
+             """);
 
 (HelloWorld) pkg> build
     Building HelloWorld → `~/HelloWorld/deps/build.log`
@@ -151,8 +161,12 @@ in expression starting at /home/kc/HelloWorld/deps/build.jl:1
 When a package is tested the file `test/runtests.jl` is executed:
 
 ```julia-repl
-julia> print(read("test/runtests.jl", String))
-println("Testing...")
+julia> mkpath("test");
+
+julia> write("test/runtests.jl",
+             """
+             println("Testing...")
+             """);
 
 (HelloWorld) pkg> test
    Testing HelloWorld
@@ -225,9 +239,13 @@ does. Let's add the `Test` standard library as a test dependency:
 We can now use `Test` in the test script and we can see that it gets installed when testing:
 
 ```julia-repl
-julia> print(read("test/runtests.jl", String))
-using Test
-@test 1 == 1
+julia> write("test/runtests.jl",
+             """
+             using Test
+             @test 1 == 1
+             """);
+
+(test) pkg> activate .
 
 (HelloWorld) pkg> test
    Testing HelloWorld
@@ -250,6 +268,9 @@ This is an important topic so there is a separate chapter about it: [Compatibili
 !!! note
     This is a somewhat advanced usage of Pkg which can be skipped for people new to Julia and Julia packages.
 
+!!! compat
+    The described feature requires Julia 1.9+.
+
 A weak dependency is a dependency that will not automatically install when the package is installed but
 you can still control what versions of that package are allowed to be installed by setting compatibility on it.
 These are listed in the project file under the `[weakdeps]` section:
@@ -269,21 +290,26 @@ The current usage of this is almost solely limited to "extensions" which is desc
 !!! note
     This is a somewhat advanced usage of Pkg which can be skipped for people new to Julia and Julia packages.
 
-It is sometimes desirable to be able to extend some functionality of a package without having to
-unconditionally take on the cost (in terms of e.g. load time) of adding a full dependency on that package.
+!!! compat
+    The described feature requires Julia 1.9+.
+
+Sometimes one wants to make two or more packages work well together, but may be reluctant (perhaps due to increased load times) to make one an unconditional dependency of the other.
 A package *extension* is a module in a file (similar to a package) that is automatically loaded when *some other set of packages* are
 loaded into the Julia session. This is very similar to functionality that the external package
-Requires.jl provides, but which is now available directly through Julia.
+[Requires.jl](https://github.com/JuliaPackaging/Requires.jl) provides, but which is now available directly through Julia,
+and provides added benefits such as being able to precompile the extension.
 
 A useful application of extensions could be for a plotting package that should be able to plot
 objects from a wide variety of different Julia packages.
-Adding all those different Julia packages as dependencies
+Adding all those different Julia packages as dependencies of the plotting package
 could be expensive since they would end up getting loaded even if they were never used.
 Instead, the code required to plot objects for specific packages can be put into separate files
-(extensions) and these are loaded only when the packages that defines the type we want to plot
+(extensions) and these are loaded only when the packages that define the type(s) we want to plot
 are loaded.
 
-Below is an example of how the code can be structured for a use case outlined above:
+Below is an example of how the code can be structured for a use case in which a
+`Plotting` package wants to be able to display objects defined in the external package `Contour`.
+The file and folder structure shown below is found in the `Plotting` package.
 
  `Project.toml`:
  ```toml
@@ -298,7 +324,7 @@ Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 # name of extension to the left
 # extension dependencies required to load the extension to the right
 # use a list for multiple extension dependencies
-ContourExt = "Contour" 
+PlottingContourExt = "Contour"
 
 [compat]
 Contour = "0.6.2"
@@ -315,9 +341,9 @@ end
 end # module
 ```
 
-`ext/ContourExt.jl` (can also be in `ext/ContourExt/ContourExt.jl`):
+`ext/PlottingContourExt.jl` (can also be in `ext/PlottingContourExt/PlottingContourExt.jl`):
 ```julia
-module ContourExt # Should be same name as the file (just like a normal package)
+module PlottingContourExt # Should be same name as the file (just like a normal package)
 
 using Plotting, Contour
 
@@ -328,16 +354,17 @@ end
 end # module
 ```
 
-A user that depends on `Plotting` will not pay the cost of the "extension" inside the `ContourExt` module.
-It is only when the `Contour` package actually gets loaded that the `ContourExt` extension is loaded
+Extensions can have any arbitrary name (here `PlottingContourExt`), but using something similar to the format of
+this example that makes the extended functionality and dependency of the extension clear is likely a good idea.
+
+A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `PlottingContourExt` module.
+It is only when the `Contour` package actually gets loaded that the `PlottingContourExt` extension is loaded
 and provides the new functionality.
 
-If one considers `ContourExt` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
-type piracy since `ContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
+If one considers `PlottingContourExt` as a completely separate package, it could be argued that defining `Plotting.plot(c::Contour.ContourCollection)` is
+[type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy) since `PlottingContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
 However, for extensions, it is ok to assume that the extension owns the methods in its parent package.
-In fact, this type of "type piracies" is one of the most standard use cases for extensions.
-
-An extension will only be loaded if the extension dependencies are loaded from the same environment or environments higher in the environment stack than the package itself.
+In fact, this form of type piracy is one of the most standard use cases for extensions.
 
 !!! compat
     Often you will put the extension dependencies into the `test` target so they are loaded when running e.g. `Pkg.test()`. On earlier Julia versions
@@ -365,8 +392,11 @@ This is done by making the following changes (using the example above):
   # This symbol is only defined on Julia versions that support extensions
   if !isdefined(Base, :get_extension)
   using Requires
+  end
+  
+  @static if !isdefined(Base, :get_extension)
   function __init__()
-      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl")
+      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
   end
   end
   ```
@@ -380,17 +410,17 @@ This is done by making the following changes (using the example above):
       # Other init functionality here
 
       @static if !isdefined(Base, :get_extension)
-          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl")
+          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
       end
   end
   ```
-- Do the following change in the extensions for loading the extension dependency:
+- Make the following change in the conditionally-loaded code:
   ```julia
   isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
   ```
 
 The package should now work with Requires.jl on Julia versions before extensions were introduced
-and with extensions afterward.
+and with extensions on more recent Julia versions.
 
 ####  Transition from normal dependency to extension
 
@@ -401,15 +431,18 @@ This is done by making the following changes (using the example above):
 - Add the following to your main package file (typically at the bottom):
   ```julia
   if !isdefined(Base, :get_extension)
-    include("../ext/ContourExt.jl")
+    include("../ext/PlottingContourExt.jl")
   end
   ```
 
-#### Using an extension while supporting older Julia version
+#### Using an extension while supporting older Julia versions
 
-If you want to use an extension with compatibility constraints while supporting earlier Julia
-versions you have to duplicate the packages under `[weakdeps]` into `[extras]`. This is an unfortunate
-duplication but without doing this the project verifier under older Julia versions will complain (error).
+In the case where one wants to use an extension (without worrying about the
+feature of the extension begin available on older Julia versions) while still
+supporting older Julia versions the packages under `[weakdeps]` should be
+duplicated into `[extras]`. This is an unfortunate duplication, but without
+doing this the project verifier under older Julia versions will throw an error
+if it finds packages under `[compat]` that is not listed in `[extras]`.
 
 ## Package naming guidelines
 

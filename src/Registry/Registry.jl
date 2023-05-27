@@ -2,9 +2,9 @@ module Registry
 
 import ..Pkg
 using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-             GitTools, get_bool_env
-using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z
-using UUIDs, LibGit2, TOML
+             GitTools
+using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z, verify_archive_tree_hash
+using UUIDs, LibGit2, TOML, Dates
 import FileWatching
 
 include("registry_instance.jl")
@@ -144,7 +144,7 @@ function registry_use_pkg_server()
 end
 
 registry_read_from_tarball() =
-    registry_use_pkg_server() && !get_bool_env("JULIA_PKG_UNPACK_REGISTRY")
+    registry_use_pkg_server() && !Base.get_bool_env("JULIA_PKG_UNPACK_REGISTRY", false)
 
 function check_registry_state(reg)
     reg_currently_uses_pkg_server = reg.tree_info !== nothing
@@ -184,13 +184,16 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             catch err
                 Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
             end
+            _hash = pkg_server_url_hash(url)
+            if !verify_archive_tree_hash(tmp, _hash)
+                Pkg.Types.pkgerror("unable to verify download from $url")
+            end
             if reg.name === nothing
                 # Need to look up the registry name here
                 reg_unc = uncompress_registry(tmp)
                 reg.name = TOML.parse(reg_unc["Registry.toml"])["name"]::String
             end
             mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force=true)
-            _hash = pkg_server_url_hash(url)
             reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ".tar.gz")
             open(joinpath(regdir, reg.name * ".toml"), "w") do io
                 TOML.print(io, reg_info)
@@ -333,6 +336,21 @@ function find_installed_registries(io::IO,
     return output
 end
 
+function get_registry_update_log()
+    pkg_scratch_space = joinpath(DEPOT_PATH[1], "scratchspaces", "44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
+    pkg_reg_updated_file = joinpath(pkg_scratch_space, "registry_updates.toml")
+    updated_registry_d = isfile(pkg_reg_updated_file) ? TOML.parsefile(pkg_reg_updated_file) : Dict{String, Any}()
+    return updated_registry_d
+end
+
+function save_registry_update_log(d::Dict)
+    pkg_scratch_space = joinpath(DEPOT_PATH[1], "scratchspaces", "44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
+    mkpath(pkg_scratch_space)
+    pkg_reg_updated_file = joinpath(pkg_scratch_space, "registry_updates.toml")
+    open(pkg_reg_updated_file, "w") do io
+        TOML.print(io, d)
+    end
+end
 
 """
     Pkg.Registry.update()
@@ -351,7 +369,8 @@ Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true, depots = [depots1()])
+function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true, depots = [depots1()], update_cooldown = Second(1))
+    registry_update_log = get_registry_update_log()
     for depot in depots
         depot_regs = isempty(regs) ? reachable_registries(; depots=depot) : regs
         regdir = joinpath(depot, "registries")
@@ -361,6 +380,14 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
         errors = Tuple{String, String}[]
         registry_urls = pkg_server_registry_urls()
         for reg in unique(r -> r.uuid, find_installed_registries(io, depot_regs; depots=[depot]); seen=Set{UUID}())
+            prev_update = get(registry_update_log, string(reg.uuid), nothing)::Union{Nothing, DateTime}
+            if prev_update !== nothing
+                diff = now() - prev_update            
+                if diff < update_cooldown
+                    @debug "Skipping updating registry $(reg.name) since it is on cooldown: $(Dates.canonicalize(Millisecond(update_cooldown) - diff)) left"
+                    continue
+                end
+            end
             let reg=reg, errors=errors
                 regpath = pathrepr(reg.path)
                 let regpath=regpath
@@ -383,22 +410,28 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                         push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
                                         @goto done_tarball_read
                                     end
+                                    hash = pkg_server_url_hash(url)
+                                    if !verify_archive_tree_hash(tmp, hash)
+                                        push!(errors, (reg.path, "failed to verify download from $(url)"))
+                                        @goto done_tarball_read
+                                    end
                                     # If we have an uncompressed Pkg server registry, remove it and get the compressed version
                                     if isdir(reg.path)
                                         Base.rm(reg.path; recursive=true, force=true)
                                     end
                                     registry_path = dirname(reg.path)
                                     mv(tmp, joinpath(registry_path, reg.name * ".tar.gz"); force=true)
-                                    hash = pkg_server_url_hash(url)
                                     reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ".tar.gz")
                                     open(joinpath(registry_path, reg.name * ".toml"), "w") do io
                                         TOML.print(io, reg_info)
                                     end
+                                    registry_update_log[string(reg.uuid)] = now()
                                     @label done_tarball_read
                                 else
                                     mktempdir() do tmp
                                         try
                                             download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
+                                            registry_update_log[string(reg.uuid)] = now()
                                         catch err
                                             push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
                                             @goto done_tarball_unpack
@@ -462,6 +495,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                     @goto done_git
                                 end
                             end
+                            registry_update_log[string(reg.uuid)] = now()
                             @label done_git
                         end
                     end
@@ -477,6 +511,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
         end
         end # mkpidlock
     end
+    save_registry_update_log(registry_update_log)
     return
 end
 

@@ -123,16 +123,26 @@ If the package is not located at the top of the git repository, a subdirectory c
 The `--preserve` command line option allows you to key into a specific tier in the resolve algorithm.
 The following table describes the command line arguments to `--preserve` (in order of strictness).
 
-| Argument     | Description                                                                        |
-|:-------------|:-----------------------------------------------------------------------------------|
-| `all`        | Preserve the state of all existing dependencies (including recursive dependencies) |
-| `direct`     | Preserve the state of all existing direct dependencies                             |
-| `semver`     | Preserve semver-compatible versions of direct dependencies                         |
-| `none`       | Do not attempt to preserve any version information                                 |
-| **`tiered`** | Use the tier that will preserve the most version information                       |
-|              | while allowing the operation to succeed (this is the default)                      |
+| Argument           | Description                                                                        |
+|:-------------------|:-----------------------------------------------------------------------------------|
+| `installed`        | Like `all` except also only add versions that are already installed                |
+| `all`              | Preserve the state of all existing dependencies (including recursive dependencies) |
+| `direct`           | Preserve the state of all existing direct dependencies                             |
+| `semver`           | Preserve semver-compatible versions of direct dependencies                         |
+| `none`             | Do not attempt to preserve any version information                                 |
+| `tiered_installed` | Like `tiered` except first try to add only installed versions                      |
+| **`tiered`**       | Use the tier that will preserve the most version information                       |
+|                    | while allowing the operation to succeed (this is the default)                      |
+
+Note: To make the default strategy `tiered_installed` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED` to
+true.
 
 After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
+
+With the `installed` strategy the newly added packages will likely already be precompiled, but if not this may be
+because either the combination of package versions resolved in this environment has not been resolved and
+precompiled before, or the precompile cache has been deleted by the LRU cache storage
+(see JULIA_MAX_NUM_PRECOMPILE_FILES).
 
 **Examples**
 ```
@@ -177,6 +187,9 @@ is not supported for paths, only registered packages.
 
 This operation is undone by `free`.
 
+The preserve strategies offered by `add` are also available via the `preserve` argument.
+See `add` for more information.
+
 **Examples**
 ```jl
 pkg> develop Example
@@ -201,7 +214,7 @@ PSA[:name => "free",
     free [--all]
 
 Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
-makes the package no longer being checked out.
+makes the package no longer being checked out. Specifying `--all` will free all dependencies (direct and indirect).
 """,
 ],
 PSA[:name => "why",
@@ -216,6 +229,9 @@ PSA[:name => "why",
 
 Show the reason why packages are in the manifest, printed as a path through the
 dependency graph starting at the direct dependencies.
+
+!!! compat "Julia 1.9"
+    The `why` function is added in Julia 1.9
 """,
 ],
 PSA[:name => "pin",
@@ -233,7 +249,7 @@ PSA[:name => "pin",
     pin [--all]
 
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-A pinned package has the symbol `⚲` next to its version in the status list.
+A pinned package has the symbol `⚲` next to its version in the status list.. Specifying `--all` will pin all dependencies (direct and indirect).
 
 **Examples**
 ```
@@ -385,8 +401,8 @@ PSA[:name => "status",
     [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
     [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
     [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
-    [st|status] [-d|--diff] [-g|--extensions] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-g|--extensions] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [-e|--extensions] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [-e|--extensions] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
 Show the status of the current environment. Packages marked with `⌃` have new

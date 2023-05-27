@@ -526,6 +526,8 @@ update packages. Fortunately, the pkg client/server feature improves the experie
 1. If set, the pkg client would first try to download data from the pkg server,
 2. if that fails, then it falls back to downloading from the original sources (e.g., GitHub).
 
+By default, the client makes upto `8` concurrent requests to the server. This can set by the environment variable `JULIA_PKG_CONCURRENT_DOWNLOADS`.
+
 Since Julia 1.5, `https://pkg.julialang.org` provided by the JuliaLang organization is used as the default
 pkg server. In most cases, this should be transparent, but users can still set/unset a pkg server
 upstream via the environment variable `JULIA_PKG_SERVER`.
