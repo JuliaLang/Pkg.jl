@@ -142,7 +142,7 @@ After the installation of new packages the project will be precompiled. For more
 With the `installed` strategy the newly added packages will likely already be precompiled, but if not this may be
 because either the combination of package versions resolved in this environment has not been resolved and
 precompiled before, or the precompile cache has been deleted by the LRU cache storage
-(see JULIA_MAX_NUM_PRECOMPILE_FILES).
+(see `JULIA_MAX_NUM_PRECOMPILE_FILES`).
 
 **Examples**
 ```
