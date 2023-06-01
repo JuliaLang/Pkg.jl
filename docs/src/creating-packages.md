@@ -396,7 +396,7 @@ This is done by making the following changes (using the example above):
   
   @static if !isdefined(Base, :get_extension)
   function __init__()
-      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
+      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include(joinpath("..", "ext", "PlottingContourExt.jl"))
   end
   end
   ```
@@ -410,7 +410,7 @@ This is done by making the following changes (using the example above):
       # Other init functionality here
 
       @static if !isdefined(Base, :get_extension)
-          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
+          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include(joinpath("..", "ext", "PlottingContourExt.jl"))
       end
   end
   ```
@@ -431,7 +431,7 @@ This is done by making the following changes (using the example above):
 - Add the following to your main package file (typically at the bottom):
   ```julia
   if !isdefined(Base, :get_extension)
-    include("../ext/PlottingContourExt.jl")
+    include(joinpath("..", "ext", "PlottingContourExt.jl"))
   end
   ```
 
