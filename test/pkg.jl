@@ -429,6 +429,26 @@ temp_pkg_dir() do project_path
         @test any(istaskfailed, tasks) == false
     end
 
+    @testset "parsing malformed usage file" begin
+        temp_pkg_dir() do project_path
+            # first populate the usage files
+            Pkg.activate(temp = true)
+            Pkg.add("Random")
+
+            man_usage_file = joinpath(Pkg.logdir(), "manifest_usage.toml")
+            man_usage = TOML.parsefile(man_usage_file)
+            last_entry = man_usage[last(collect(keys(man_usage)))][1]
+            @test haskey(last_entry, "time")
+            empty!(last_entry) # remove the "time" entry
+            @test haskey(last_entry, "time") == false
+            open(io -> TOML.print(io, man_usage), man_usage_file, "w")
+
+            # and now these should not error when they update the manifest usage file
+            Pkg.activate(temp = true)
+            Pkg.add("Random")
+        end
+    end
+
     @testset "adding nonexisting packages" begin
         nonexisting_pkg = randstring(14)
         @test_throws PkgError Pkg.add(nonexisting_pkg)

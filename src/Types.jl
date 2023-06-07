@@ -520,7 +520,15 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
 
         # keep only latest usage info
         for k in keys(usage)
-            times = map(d -> Dates.DateTime(d["time"]), usage[k])
+            times = map(usage[k]) do d
+                if haskey(d, "time")
+                    Dates.DateTime(d["time"])
+                else
+                    # if there's no time entry because of a write failure be conservative and mark it as being used now
+                    @debug "Usage file `$usage_filepath` has a missing `time` entry for `$k`. Marking as used `now()`"
+                    Dates.now()
+                end
+            end
             usage[k] = [Dict("time" => maximum(times))]
         end
 
