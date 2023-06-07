@@ -90,6 +90,9 @@ pkg> registry up
   Updating git-repo `https://github.com/JuliaRegistries/General`
 ```
 
+Registries automatically update once per session when a package operation is performed so it
+rarely has to be done manually.
+
 ## Registry format
 
 In a registry, each package gets its own directory; in that directory
@@ -125,9 +128,6 @@ The interpretation of these ranges is given by the comment after each line below
 "0.8.6-0"  # [0.8.6, 1.0.0)
 "0.7-*"    # [0.7.0, ∞)
 ```
-
-Registries automatically update once per session when a package operation is performed so it
-rarely has to be done manually.
 
 ### Registry flavors
 
