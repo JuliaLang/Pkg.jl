@@ -116,11 +116,7 @@ DependencyC = "0.7-0"
 ```
 
 Dependencies that are unchanged across a range of versions are grouped
-together in these blocks. So for this package, versions `[0.8.0, 0.8.3]` (where the same conventions described in [Compatibility](@ref) are used)
-depend on versions `[0.4.0, 0.6.0)` of `DependencyA` and version `[0.3.0, 0.6.0)` of `DependencyB`.
-Meanwhile, it is also true that versions `[0.8.2, 0.8.5]` require specific versions of `DependencyC` (so that all three are required for versions `0.8.2` and `0.8.3`).
-
-The interpretation of these ranges is given by the comment after each line below:
+together in these blocks. The interpretation of these ranges is given by the comment after each line below:
 
 ```toml
 "0.7-0.8"  # [0.7.0, 0.9.0)
@@ -128,6 +124,9 @@ The interpretation of these ranges is given by the comment after each line below
 "0.8.6-0"  # [0.8.6, 1.0.0)
 "0.7-*"    # [0.7.0, ∞)
 ```
+
+So for this package, versions `[0.8.0, 0.8.3]` depend on versions `[0.4.0, 0.6.0)` of `DependencyA` and version `[0.3.0, 0.6.0)` of `DependencyB`.
+Meanwhile, it is also true that versions `[0.8.2, 0.8.5]` require specific versions of `DependencyC` (so that all three are required for versions `0.8.2` and `0.8.3`).
 
 ### Registry flavors
 
