@@ -1,9 +1,9 @@
 module FooBuild
 
 using Test
-import Foo
+import BasicSandbox
 
 @test 2 == 2
-Foo.greet()
+BasicSandbox.greet()
 
 end

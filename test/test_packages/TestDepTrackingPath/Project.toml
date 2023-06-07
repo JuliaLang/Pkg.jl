@@ -1,0 +1,4 @@
+name = "TestDepTrackingPath"
+uuid = "5f31aab8-7e14-4638-b1c2-0fd150d0896d"
+authors = ["David Varela <00.varela.david@gmail.com>"]
+version = "0.1.0"

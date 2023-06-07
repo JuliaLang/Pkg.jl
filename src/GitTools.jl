@@ -3,53 +3,14 @@
 module GitTools
 
 using ..Pkg
+using ..MiniProgressBars
+import ..can_fancyprint, ..printpkgstyle, ..stdout_f
 using SHA
 import Base: SHA1
 import LibGit2
 using Printf
-export set_readonly
 
-Base.@kwdef mutable struct MiniProgressBar
-    max::Float64 = 1.0
-    header::String = ""
-    color::Symbol = :white
-    width::Int = 40
-    current::Float64 = 0.0
-    prev::Float64 = 0.0
-    has_shown::Bool = false
-    time_shown::Float64 = 0.0
-end
-
-const NONINTERACTIVE_TIME_GRANULARITY = Ref(2.0)
-const PROGRESS_BAR_PERCENTAGE_GRANULARITY = Ref(0.1)
-
-function showprogress(io::IO, p::MiniProgressBar)
-    perc = p.current / p.max * 100
-    prev_perc = p.prev / p.max * 100
-    # Bail early if we are not updating the progress bar,
-    # Saves printing to the terminal
-    if p.has_shown && !((perc - prev_perc) > PROGRESS_BAR_PERCENTAGE_GRANULARITY[])
-        return
-    end
-    if !isinteractive()
-        t = time()
-        if p.has_shown && (t - p.time_shown) < NONINTERACTIVE_TIME_GRANULARITY[]
-            return
-        end
-        p.time_shown = t
-    end
-    p.prev = p.current
-    p.has_shown = true
-    n_filled = ceil(Int, p.width * perc / 100)
-    n_left = p.width - n_filled
-    print(io, "    ")
-    printstyled(io, p.header, color=p.color, bold=true)
-    print(io, " [")
-    print(io, "="^n_filled, ">")
-    print(io, " "^n_left, "]  ", )
-    @printf io "%2.1f %%" perc
-    print(io, "\r")
-end
+use_cli_git() = Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
@@ -64,7 +25,7 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
         bar.max = progress.total_objects
         bar.current = progress.received_objects
     end
-    showprogress(stdout, bar)
+    show_progress(stdout_f(), bar)
     return Cint(0)
 end
 
@@ -86,6 +47,8 @@ function setprotocol!(;
 end
 
 function normalize_url(url::AbstractString)
+    # LibGit2 is fussy about trailing slash. Make sure there is none.
+    url = rstrip(url, '/')
     m = match(GIT_REGEX, url)
     m === nothing && return url
 
@@ -104,56 +67,106 @@ function normalize_url(url::AbstractString)
     end
 end
 
-ensure_clone(ctx, target_path, url; kwargs...) =
-    ispath(target_path) ? LibGit2.GitRepo(target_path) : GitTools.clone(ctx, url, target_path; kwargs...)
+function ensure_clone(io::IO, target_path, url; kwargs...)
+    if ispath(target_path)
+        return LibGit2.GitRepo(target_path)
+    else
+        return GitTools.clone(io, url, target_path; kwargs...)
+    end
+end
 
-function clone(ctx, url, source_path; header=nothing, kwargs...)
+function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, path::String)
+    GC.@preserve path begin
+        opts = LibGit2.CheckoutOptions(
+            checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
+            target_directory = Base.unsafe_convert(Cstring, path)
+        )
+        LibGit2.checkout_tree(repo, tree, options=opts)
+    end
+end
+
+function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
+    url = String(url)::String
+    source_path = String(source_path)::String
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
-    Pkg.Types.printpkgstyle(ctx, :Cloning, header == nothing ? "git-repo `$url`" : header)
-    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    callbacks = LibGit2.Callbacks(
-        :transfer_progress => (
-            @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
-            transfer_payload,
+    printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
+    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    fancyprint = can_fancyprint(io)
+    callbacks = if fancyprint
+        LibGit2.Callbacks(
+            :transfer_progress => (
+                @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
+                bar,
+            )
         )
-    )
-    print(stdout, "\e[?25l") # disable cursor
+    else
+        LibGit2.Callbacks()
+    end
+    fancyprint && start_progress(io, bar)
+    if credentials === nothing
+        credentials = LibGit2.CachedCredentials()
+    end
     try
-        return LibGit2.clone(url, source_path; callbacks=callbacks, kwargs...)
+        if use_cli_git()
+            run(pipeline(`git clone --quiet $url $source_path`; stdout=devnull))
+            return LibGit2.GitRepo(source_path)
+        else
+            mkpath(source_path)
+            return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+        end
     catch err
         rm(source_path; force=true, recursive=true)
-        err isa LibGit2.GitError || rethrow()
-        if (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
+        err isa LibGit2.GitError || err isa InterruptException || rethrow()
+        if err isa InterruptException
+            Pkg.Types.pkgerror("git clone of `$url` interrupted")
+        elseif (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
            (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
-            Pkg.Types.pkgerror("Git repository not found at '$(url)'")
+            Pkg.Types.pkgerror("git repository not found at `$(url)`")
         else
             Pkg.Types.pkgerror("failed to clone from $(url), error: $err")
         end
     finally
-        print(stdout, "\033[2K") # clear line
-        print(stdout, "\e[?25h") # put back cursor
+        Base.shred!(credentials)
+        fancyprint && end_progress(io, bar)
     end
 end
 
-function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kwargs...)
+function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, refspecs=[""], kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
         end
     end
+    fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
-    Pkg.Types.printpkgstyle(ctx, :Updating, header == nothing ? "git-repo `$remoteurl`" : header)
-    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    callbacks = LibGit2.Callbacks(
-        :transfer_progress => (
-            @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
-            transfer_payload,
+    printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
+    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    fancyprint = can_fancyprint(io)
+    callbacks = if fancyprint
+        LibGit2.Callbacks(
+            :transfer_progress => (
+                @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
+                bar,
+            )
         )
-    )
-    print(stdout, "\e[?25l") # disable cursor
+    else
+        LibGit2.Callbacks()
+    end
+    fancyprint && start_progress(io, bar)
+    if credentials === nothing
+        credentials = LibGit2.CachedCredentials()
+    end
     try
-        return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, kwargs...)
+        if use_cli_git()
+            let remoteurl=remoteurl
+                cd(LibGit2.path(repo)) do
+                    run(pipeline(`git fetch -q $remoteurl $(only(refspecs))`; stdout=devnull))
+                end
+            end
+        else
+            return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
+        end
     catch err
         err isa LibGit2.GitError || rethrow()
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
@@ -162,8 +175,8 @@ function fetch(ctx, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, kw
             Pkg.Types.pkgerror("failed to fetch from $(remoteurl), error: $err")
         end
     finally
-        print(stdout, "\033[2K") # clear line
-        print(stdout, "\e[?25h") # put back cursor
+        Base.shred!(credentials)
+        fancyprint && end_progress(io, bar)
     end
 end
 
@@ -174,12 +187,21 @@ Base.string(mode::GitMode) = string(UInt32(mode); base=8)
 Base.print(io::IO, mode::GitMode) = print(io, string(mode))
 
 function gitmode(path::AbstractString)
+    # Windows doesn't deal with executable permissions in quite the same way,
+    # `stat()` gives a different answer than we actually want, so we use
+    # `isexecutable()` which uses `uv_fs_access()` internally.  On other
+    # platforms however, we just want to check via `stat()`.
+    function isexec(p)
+        @static if Sys.iswindows()
+            return Sys.isexecutable(p)
+        end
+        return !iszero(filemode(p) & 0o100)
+    end
     if islink(path)
         return mode_symlink
     elseif isdir(path)
         return mode_dir
-    # We cannot use `Sys.isexecutable()` because on Windows, that simply calls `isfile()`
-    elseif filemode(path) & 0o010 == 0o010
+    elseif isexec(path)
         return mode_executable
     else
         return mode_normal
@@ -187,11 +209,11 @@ function gitmode(path::AbstractString)
 end
 
 """
-    blob_hash(path::AbstractString)
+    blob_hash(HashType::Type, path::AbstractString)
 
 Calculate the git blob hash of a given path.
 """
-function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
+function blob_hash(::Type{HashType}, path::AbstractString) where HashType
     ctx = HashType()
     if islink(path)
         datalen = length(readlink(path))
@@ -226,45 +248,72 @@ function blob_hash(path::AbstractString, HashType = SHA.SHA1_CTX)
     # Finish it off and return the digest!
     return SHA.digest!(ctx)
 end
+blob_hash(path::AbstractString) = blob_hash(SHA1_CTX, path)
 
 """
-    tree_hash(root::AbstractString)
+    contains_files(root::AbstractString)
 
-Calculate the git tree hash of a given path.  Note that attempting to take the
-tree hash of an empty directory will throw an error.
+Helper function to determine whether a directory contains files; e.g. it is a
+direct parent of a file or it contains some other directory that itself is a
+direct parent of a file. This is used to exclude directories from tree hashing.
 """
-function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
+function contains_files(path::AbstractString)
+    st = lstat(path)
+    ispath(st) || throw(ArgumentError("non-existent path: $(repr(path))"))
+    isdir(st) || return true
+    for p in readdir(path)
+        contains_files(joinpath(path, p)) && return true
+    end
+    return false
+end
+
+
+"""
+    tree_hash(HashType::Type, root::AbstractString)
+
+Calculate the git tree hash of a given path.
+"""
+function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,Nothing} = nothing, indent::Int=0) where HashType
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
-    for f in readdir(root)
+    for f in sort(readdir(root; join=true); by = f -> gitmode(f) == mode_dir ? f*"/" : f)
         # Skip `.git` directories
-        if f == ".git"
+        if basename(f) == ".git"
             continue
         end
 
-        filepath = abspath(root, f)
+        filepath = abspath(f)
         mode = gitmode(filepath)
         if mode == mode_dir
-            try
-                hash = tree_hash(filepath)
-            catch e
-                if isa(e, ArgumentError)
-                    continue
-                end
-                rethrow(e)
+            # If this directory contains no files, then skip it
+            contains_files(filepath) || continue
+
+            # Otherwise, hash it up!
+            child_stream = nothing
+            if debug_out !== nothing
+                child_stream = IOBuffer()
+            end
+            hash = tree_hash(HashType, filepath; debug_out=child_stream, indent=indent+1)
+            if debug_out !== nothing
+                indent_str = "| "^indent
+                println(debug_out, "$(indent_str)+ [D] $(basename(filepath)) - $(bytes2hex(hash))")
+                print(debug_out, String(take!(child_stream)))
+                println(debug_out, indent_str)
             end
         else
-            hash = blob_hash(filepath)
+            hash = blob_hash(HashType, filepath)
+            if debug_out !== nothing
+                indent_str = "| "^indent
+                mode_str = mode == mode_normal ? "F" : "X"
+                println(debug_out, "$(indent_str)[$(mode_str)] $(basename(filepath)) - $(bytes2hex(hash))")
+            end
         end
-        push!(entries, (f, hash, gitmode(filepath)))
+        push!(entries, (basename(filepath), hash, mode))
     end
 
-    # Sort entries by name (with trailing slashes for directories)
-    sort!(entries, by = ((name, hash, mode),) -> mode == mode_dir ? name*"/" : name)
-
-    if isempty(entries)
-        ArgumentError("Invalid to calculate tree hash of empty directory")
+    content_size = 0
+    for (n, h, m) in entries
+        content_size += ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + sizeof(h)
     end
-    content_size = sum(((n, h, m),) -> ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + 20, entries)
 
     # Return the hash of these entries
     ctx = HashType()
@@ -275,19 +324,24 @@ function tree_hash(root::AbstractString, HashType = SHA.SHA1_CTX)
     end
     return SHA.digest!(ctx)
 end
+tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing) = tree_hash(SHA.SHA1_CTX, root; debug_out)
 
-function set_readonly(path)
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            filepath = joinpath(root, file)
-            fmode = filemode(filepath)
-            try
-                chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
-            catch
-            end
-        end
+function check_valid_HEAD(repo)
+    try LibGit2.head(repo)
+    catch err
+        Pkg.Types.pkgerror("invalid git HEAD ($(err.msg))")
     end
-    return nothing
+end
+
+function git_file_stream(repo::LibGit2.GitRepo, spec::String; fakeit::Bool=false)::IO
+    blob = try LibGit2.GitBlob(repo, spec)
+    catch err
+        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
+        fakeit && return devnull
+    end
+    iob = IOBuffer(LibGit2.content(blob))
+    close(blob)
+    return iob
 end
 
 end # module

@@ -1,0 +1,14 @@
+name = "BasicTestTarget"
+uuid = "50adb811-5a1f-4be4-8146-2725c7f5d900"
+authors = ["David Varela <00.varela.david@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
+
+[extras]
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Markdown", "Test"]

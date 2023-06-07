@@ -1,15 +1,17 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 module REPLTests
+import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg
 using Pkg.Types: manifest_info, EnvCache, Context
 import Pkg.Types.PkgError
 using UUIDs
 using Test
+using TOML
 import LibGit2
 
-include("utils.jl")
+using ..Utils
 
 @testset "help" begin
     pkg"?"
@@ -21,42 +23,31 @@ include("utils.jl")
     @test_throws PkgError pkg"helpadd"
 end
 
-@testset "generate args" begin
-    @test_throws PkgError pkg"generate"
-end
-
 temp_pkg_dir() do project_path
     with_pkg_env(project_path; change_dir=true) do;
         pkg"generate HelloWorld"
         LibGit2.close((LibGit2.init(".")))
         cd("HelloWorld")
-        with_current_env() do
-            pkg"st"
-            @eval using HelloWorld
-            Base.invokelatest(HelloWorld.greet)
-            @test isfile("Project.toml")
-            Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithBuildSpecificTestDeps"))")
-            Pkg.test("PackageWithBuildSpecificTestDeps")
-        end
 
         @test_throws PkgError pkg"dev Example#blergh"
 
         @test_throws PkgError pkg"generate 2019Julia"
         pkg"generate Foo"
-        pkg"dev Foo"
+        pkg"dev ./Foo"
         mv(joinpath("Foo", "src", "Foo.jl"), joinpath("Foo", "src", "Foo2.jl"))
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
+        ###
         mv(joinpath("Foo", "src", "Foo2.jl"), joinpath("Foo", "src", "Foo.jl"))
         write(joinpath("Foo", "Project.toml"), """
             name = "Foo"
         """
         )
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
         write(joinpath("Foo", "Project.toml"), """
             uuid = "b7b78b08-812d-11e8-33cd-11188e330cbe"
         """
         )
-        @test_throws PkgError pkg"dev Foo"
+        @test_throws PkgError pkg"dev ./Foo"
     end
 end
 
@@ -73,23 +64,26 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"add Example,Random"
     pkg"rm Example,Random"
     pkg"add Example#master"
+    pkg"rm Example"
+    pkg"add https://github.com/JuliaLang/Example.jl#master"
+
+    ## TODO: figure out how to test these in CI
+    # pkg"rm Example"
+    # pkg"add git@github.com:JuliaLang/Example.jl.git"
+    # pkg"rm Example"
+    # pkg"add \"git@github.com:JuliaLang/Example.jl.git\"#master"
+    # pkg"rm Example"
 
     # Test upgrade --fixed doesn't change the tracking (https://github.com/JuliaLang/Pkg.jl/issues/434)
-    entry = Pkg.Types.manifest_info(Context(), TEST_PKG.uuid)
+    entry = Pkg.Types.manifest_info(EnvCache().manifest, TEST_PKG.uuid)
     @test entry.repo.rev == "master"
     pkg"up --fixed"
-    entry = Pkg.Types.manifest_info(Context(), TEST_PKG.uuid)
+    entry = Pkg.Types.manifest_info(EnvCache().manifest, TEST_PKG.uuid)
     @test entry.repo.rev == "master"
 
     pkg"test Example"
     @test isinstalled(TEST_PKG)
     @test Pkg.dependencies()[TEST_PKG.uuid].version > v
-    pkg = "UnregisteredWithoutProject"
-    p = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg"))
-    Pkg.REPLMode.pkgstr("add $p; precompile")
-    @eval import $(Symbol(pkg))
-    @test first([info for (uuid, info) in Pkg.dependencies() if info.name == pkg]).version == v"0.0"
-    Pkg.test("UnregisteredWithoutProject")
 
     pkg2 = "UnregisteredWithProject"
     pkg2_uuid = UUID("58262bb0-2073-11e8-3727-4fe182c12249")
@@ -171,19 +165,12 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 withenv("JULIA_PKG_DEVDIR" => tmp) do
                     # Test an unregistered package
                     p1_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithProject")
-                    p2_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithoutProject")
                     p1_new_path = joinpath(tmp, "UnregisteredWithProject")
-                    p2_new_path = joinpath(tmp, "UnregisteredWithoutProject")
                     cp(p1_path, p1_new_path)
-                    cp(p2_path, p2_new_path)
                     Pkg.REPLMode.pkgstr("develop $(p1_new_path)")
-                    Pkg.REPLMode.pkgstr("develop $(p2_new_path)")
                     Pkg.REPLMode.pkgstr("build; precompile")
-                    @test Base.find_package("UnregisteredWithProject") == joinpath(p1_new_path, "src", "UnregisteredWithProject.jl")
-                    @test Base.find_package("UnregisteredWithoutProject") == joinpath(p2_new_path, "src", "UnregisteredWithoutProject.jl")
+                    @test realpath(Base.find_package("UnregisteredWithProject")) == realpath(joinpath(p1_new_path, "src", "UnregisteredWithProject.jl"))
                     @test Pkg.dependencies()[UUID("58262bb0-2073-11e8-3727-4fe182c12249")].version == v"0.1.0"
-                    @test Pkg.dependencies()[Pkg.Types.Context().env.project.deps["UnregisteredWithoutProject"]].version == v"0.0.0"
-                    Pkg.test("UnregisteredWithoutProject")
                     Pkg.test("UnregisteredWithProject")
                 end
             finally
@@ -201,7 +188,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
                 with_current_env() do
                     uuid1 = Pkg.generate("SubModule1")["SubModule1"]
                     uuid2 = Pkg.generate("SubModule2")["SubModule2"]
-                    pkg"develop SubModule1"
+                    pkg"develop ./SubModule1"
                     mkdir("tests")
                     cd("tests")
                     pkg"develop ../SubModule2"
@@ -237,7 +224,7 @@ temp_pkg_dir() do project_path
         @test_throws Pkg.Types.PkgError pkg"activate --shared ./Foo"
         @test_throws Pkg.Types.PkgError pkg"activate --shared Foo/Bar"
         @test_throws Pkg.Types.PkgError pkg"activate --shared ../Bar"
-        # check that those didn't change te enviroment
+        # check that those didn't change the environment
         @test Base.active_project() == joinpath(path, "Project.toml")
         mkdir("Foo")
         cd(mkdir("modules")) do
@@ -277,26 +264,10 @@ temp_pkg_dir() do project_path
         @test Base.ACTIVE_PROJECT[] === nothing
         # expansion of ~
         if !Sys.iswindows()
-            pkg"activate ~/Foo"
-            @test Base.active_project() == joinpath(homedir(), "Foo", "Project.toml")
+            pkg"activate ~/Foo_lzTkPF6N"
+            @test Base.active_project() == joinpath(homedir(), "Foo_lzTkPF6N", "Project.toml")
         end
     end
-end
-
-# test relative dev paths (#490)
-cd_tempdir() do tmp
-    uuid1 = Pkg.generate("HelloWorld")["HelloWorld"]
-    cd("HelloWorld")
-    uuid2 = Pkg.generate("SubModule")["SubModule"]
-    cd(mkdir("tests"))
-    pkg"activate ."
-    pkg"develop .." # HelloWorld
-    pkg"develop ../SubModule"
-    @test Pkg.dependencies()[uuid1].version == v"0.1.0"
-    @test Pkg.dependencies()[uuid2].version == v"0.1.0"
-    manifest = Pkg.Types.Context().env.manifest
-    @test manifest[uuid1].path == ".."
-    @test manifest[uuid2].path == joinpath("..", "SubModule")
 end
 
 # path should not be relative when devdir() happens to be in project
@@ -307,40 +278,13 @@ temp_pkg_dir() do depot
         pkg"activate ."
         withenv("JULIA_PKG_DEVDIR" => joinpath(pwd(), "dev")) do
             pkg"dev Example"
-            @test manifest_info(Context(), uuid).path == joinpath(pwd(), "dev", "Example")
+            @test manifest_info(EnvCache().manifest, uuid).path == joinpath(pwd(), "dev", "Example")
             pkg"dev --shared Example"
-            @test manifest_info(Context(), uuid).path == joinpath(pwd(), "dev", "Example")
+            @test manifest_info(EnvCache().manifest, uuid).path == joinpath(pwd(), "dev", "Example")
             pkg"dev --local Example"
-            @test manifest_info(Context(), uuid).path == joinpath("dev", "Example")
+            @test manifest_info(EnvCache().manifest, uuid).path == joinpath("dev", "Example")
         end
     end
-end
-
-# test relative dev paths (#490) without existing Project.toml
-temp_pkg_dir() do depot; cd_tempdir() do tmp
-    pkg"activate NonExistent"
-    uuid= nothing
-    withenv("USER" => "Test User") do
-        uuid = Pkg.generate("Foo")["Foo"]
-    end
-    # this dev should not error even if NonExistent/Project.toml file is non-existent
-    @test !isdir("NonExistent")
-    pkg"dev Foo"
-    manifest = Pkg.Types.Context().env.manifest
-    @test manifest[uuid].path == joinpath("..", "Foo")
-end end
-
-@testset "develop with `--shared` and `--local" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmp
-        uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
-        pkg"activate ."
-        pkg"develop Example" # test default
-        @test manifest_info(Context(), uuid).path == joinpath(Pkg.devdir(), "Example")
-        pkg"develop --shared Example"
-        @test manifest_info(Context(), uuid).path == joinpath(Pkg.devdir(), "Example")
-        pkg"develop --local Example"
-        @test manifest_info(Context(), uuid).path == joinpath("dev", "Example")
-    end end
 end
 
 test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))
@@ -351,6 +295,23 @@ end
 
 # Autocompletions
 temp_pkg_dir() do project_path; cd(project_path) do
+    @testset "tab completion while offline" begin
+        # No registry and no network connection
+        Pkg.offline()
+        pkg"activate ."
+        c, r = test_complete("add Exam")
+        @test isempty(c)
+        Pkg.offline(false)
+        # Existing registry but no network connection
+        pkg"registry add General" # instantiate the `General` registry to complete remote package names
+        Pkg.offline(true)
+        c, r = test_complete("add Exam")
+        @test "Example" in c
+        Pkg.offline(false)
+    end
+end end
+
+temp_pkg_dir() do project_path; cd(project_path) do
     @testset "tab completion" begin
         pkg"registry add General" # instantiate the `General` registry to complete remote package names
         pkg"activate ."
@@ -358,14 +319,15 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "Example" in c
         c, r = test_complete("rm Exam")
         @test isempty(c)
-        Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "RequireDependency"))")
 
-        c, r = test_complete("rm RequireDep")
-        @test "RequireDependency" in c
-        c, r = test_complete("rm -p RequireDep")
-        @test "RequireDependency" in c
-        c, r = test_complete("rm --project RequireDep")
-        @test "RequireDependency" in c
+        Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithDependency"))")
+
+        c, r = test_complete("rm PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm -p PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm --project PackageWithDep")
+        @test "PackageWithDependency" in c
         c, r = test_complete("rm Exam")
         @test isempty(c)
         c, r = test_complete("rm -p Exam")
@@ -373,17 +335,19 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("rm --project Exam")
         @test isempty(c)
 
-        c, r = test_complete("rm -m RequireDep")
-        @test "RequireDependency" in c
-        c, r = test_complete("rm --manifest RequireDep")
-        @test "RequireDependency" in c
+        c, r = test_complete("rm -m PackageWithDep")
+        @test "PackageWithDependency" in c
+        c, r = test_complete("rm --manifest PackageWithDep")
+        @test "PackageWithDependency" in c
         c, r = test_complete("rm -m Exam")
         @test "Example" in c
         c, r = test_complete("rm --manifest Exam")
         @test "Example" in c
+        c, r = test_complete("why PackageWithDep")
+        @test "PackageWithDependency" in c
 
-        c, r = test_complete("rm RequireDep")
-        @test "RequireDependency" in c
+        c, r = test_complete("rm PackageWithDep")
+        @test "PackageWithDependency" in c
         c, r = test_complete("rm Exam")
         @test isempty(c)
         c, r = test_complete("rm -m Exam")
@@ -400,11 +364,11 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test apply_completion("rm E") == "rm Example"
         @test apply_completion("add Exampl") == "add Example"
 
-        c, r = test_complete("preview r")
-        @test "remove" in c
-        c, r = test_complete("help r")
-        @test "remove" in c
-        @test !("rm" in c)
+        # help mode
+        @test apply_completion("?ad") == "?add"
+        @test apply_completion("?act") == "?activate"
+        @test apply_completion("? ad") == "? add"
+        @test apply_completion("? act") == "? activate"
 
         # stdlibs
         c, r = test_complete("add Stat")
@@ -422,7 +386,6 @@ temp_pkg_dir() do project_path; cd(project_path) do
         mkpath("testdir/foo/bar")
         c, r = test_complete("add ")
         @test Sys.iswindows() ? ("testdir\\\\" in c) : ("testdir/" in c)
-        @test "Example" in c
         @test apply_completion("add tes") == (Sys.iswindows() ? "add testdir\\\\" : "add testdir/")
         @test apply_completion("add ./tes") == (Sys.iswindows() ? "add ./testdir\\\\" : "add ./testdir/")
         c, r = test_complete("dev ./")
@@ -437,12 +400,48 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("add RE")
         @test !("README.md" in c)
 
+        # Expand homedir and
+        if !Sys.iswindows()
+            dirname = "JuliaPkgTest744a757c-d313-11e9-1cac-118368d5977a"
+            tildepath = "~/$dirname"
+            try
+                mkdir(expanduser(tildepath))
+                c, r = test_complete("dev ~/JuliaPkgTest744a75")
+                @test joinpath(homedir(), dirname, "") in c
+            finally
+                rm(expanduser(tildepath); force = true)
+            end
+            c, r = test_complete("dev ~")
+            @test joinpath(homedir(), "") in c
+
+            # nested directories
+            nested_dirs = "foo/bar/baz"
+            tildepath = "~/$nested_dirs"
+            try
+                mkpath(expanduser(tildepath))
+                c, r = test_complete("dev ~/foo/bar/b")
+                @test joinpath(homedir(), nested_dirs, "") in c
+            finally
+                rm(expanduser(tildepath); force = true)
+            end
+        end
+
         # activate
         pkg"activate --shared FooBar"
         pkg"add Example"
         pkg"activate ."
         c, r = test_complete("activate --shared ")
         @test "FooBar" in c
+
+        # invalid options
+        c, r = test_complete("rm -rf ")
+        @test isempty(c)
+
+        # parse errors should not throw
+        _ = test_complete("add \"Foo")
+        # invalid option should not throw
+        _ = test_complete("add -z Foo")
+        _ = test_complete("add --dontexist Foo")
     end # testset
 end end
 
@@ -453,10 +452,10 @@ temp_pkg_dir() do project_path; cd(project_path) do
         with_current_env() do
             # the command below also tests multiline input
             pkg"""
-                dev RecursiveDep2
-                dev RecursiveDep
-                dev SubModule
-                dev SubModule2
+                dev ./RecursiveDep2
+                dev ./RecursiveDep
+                dev ./SubModule
+                dev ./SubModule2
                 add Random
                 add Example
                 add JSON
@@ -571,55 +570,35 @@ temp_pkg_dir() do project_path
     end
 end
 
-@testset "unit test `parse_package_identifier`" begin; cd(mktempdir()) do
-    name = "FooBar"
-    uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
-    url = "https://github.com/JuliaLang/Example.jl"
-    path = "./Foobar"; mkdir("Foobar")
-    # valid input
-    pkg = Pkg.REPLMode.parse_package_identifier(name)
-    @test pkg.name == name
-    pkg = Pkg.REPLMode.parse_package_identifier(uuid)
-    @test pkg.uuid == UUID(uuid)
-    pkg = Pkg.REPLMode.parse_package_identifier("$name=$uuid")
-    @test (pkg.name == name) && (pkg.uuid == UUID(uuid))
-    pkg = Pkg.REPLMode.parse_package_identifier(url; add_or_develop=true)
-    @test pkg.repo.url == url
-    pkg = Pkg.REPLMode.parse_package_identifier(path; add_or_develop=true)
-    @test pkg.repo.url == path
-    # expansion of ~
-    if !Sys.iswindows()
-        tildepath = "~/Foobaz"
-        try
-            mkdir(expanduser(tildepath))
-            pkg = Pkg.REPLMode.parse_package_identifier(tildepath; add_or_develop=true)
-            @test pkg.repo.url == expanduser(tildepath)
-        finally
-            rm(expanduser(tildepath); force = true)
-        end
-    end
-    # errors
-    @test_throws PkgError Pkg.REPLMode.parse_package_identifier(url)
-    @test_throws PkgError Pkg.REPLMode.parse_package_identifier(path)
-end end
-
 @testset "parse package url win" begin
-    @test typeof(Pkg.REPLMode.parse_package_identifier("https://github.com/abc/ABC.jl";
-                                                       add_or_develop=true)) == Pkg.Types.PackageSpec
+    pkg_id = Pkg.REPLMode.PackageIdentifier("https://github.com/abc/ABC.jl")
+    pkg_spec = Pkg.REPLMode.parse_package_identifier(pkg_id; add_or_develop=true)
+    @test typeof(pkg_spec) == Pkg.Types.PackageSpec
+end
+
+@testset "parse git url (issue #1935) " begin
+    urls = ["https://github.com/abc/ABC.jl.git", "https://abc.github.io/ABC.jl"]
+    for url in urls
+        @test Pkg.REPLMode.package_lex([Pkg.REPLMode.QString((url), false)]) == [url]
+    end
 end
 
 @testset "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
         sleep(1.1)
-        project = Pkg.TOML.parsefile(projfile_path)
+        project = TOML.parsefile(projfile_path)
         project["name"] = newname
         open(projfile_path, "w") do io
-            Pkg.TOML.print(io, project)
+            TOML.print(io, project)
         end
     end
 
     with_temp_env("SomeEnv") do
         @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+    end
+
+    with_temp_env("this_is_a_test_for_truncating_long_folder_names_in_the_prompt") do
+        @test Pkg.REPLMode.promptf() == "(this_is_a_test_for_truncati...) pkg> "
     end
 
     env_name = "Test2"
@@ -644,169 +623,6 @@ end
     end
 end
 
-@testset "Argument order" begin
-    with_temp_env() do
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up #foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add @0.0.1")
-    end
-end
-
-@testset "`do_generate!` error paths" begin
-    with_temp_env() do
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate Example Example2")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate")
-    end
-end
-
-@testset "`parse_option` unit tests" begin
-    opt = Pkg.REPLMode.parse_option("-x")
-    @test opt.val == "x"
-    @test opt.argument === nothing
-    opt = Pkg.REPLMode.parse_option("--hello")
-    @test opt.val == "hello"
-    @test opt.argument === nothing
-    opt = Pkg.REPLMode.parse_option("--env=some")
-    @test opt.val == "env"
-    @test opt.argument == "some"
-end
-
-@testset "`parse` integration tests" begin
-    QString = Pkg.REPLMode.QString
-    @test isempty(Pkg.REPLMode.parse(""))
-
-    statement = Pkg.REPLMode.parse("up")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_UP
-    @test isempty(statement.options)
-    @test isempty(statement.arguments)
-    @test statement.preview == false
-
-    statement = Pkg.REPLMode.parse("dev Example")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.options)
-    @test statement.arguments == [QString("Example", false)]
-    @test statement.preview == false
-
-    statement = Pkg.REPLMode.parse("dev Example#foo #bar")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.options)
-    @test statement.arguments == [QString("Example#foo", false),
-                                  QString("#bar", false)]
-    @test statement.preview == false
-
-    statement = Pkg.REPLMode.parse("dev Example#foo Example@v0.0.1")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test isempty(statement.options)
-    @test statement.arguments == [QString("Example#foo", false),
-                                  QString("Example@v0.0.1", false)]
-    @test statement.preview == false
-
-    statement = Pkg.REPLMode.parse("add --first --second arg1")[1]
-    @test statement.spec.kind == Pkg.REPLMode.CMD_ADD
-    @test statement.options == map(Pkg.REPLMode.parse_option, ["--first", "--second"])
-    @test statement.arguments == [QString("arg1", false)]
-    @test statement.preview == false
-
-    statements = Pkg.REPLMode.parse("preview add --first -o arg1; pin -x -a arg0 Example")
-    @test statements[1].spec.kind == Pkg.REPLMode.CMD_ADD
-    @test statements[1].preview == true
-    @test statements[1].options == map(Pkg.REPLMode.parse_option, ["--first", "-o"])
-    @test statements[1].arguments == [QString("arg1", false)]
-    @test statements[2].spec.kind == Pkg.REPLMode.CMD_PIN
-    @test statements[2].preview == false
-    @test statements[2].options == map(Pkg.REPLMode.parse_option, ["-x", "-a"])
-    @test statements[2].arguments == [QString("arg0", false), QString("Example", false)]
-
-    statements = Pkg.REPLMode.parse("up; pin --first; dev")
-    @test statements[1].spec.kind == Pkg.REPLMode.CMD_UP
-    @test statements[1].preview == false
-    @test isempty(statements[1].options)
-    @test isempty(statements[1].arguments)
-    @test statements[2].spec.kind == Pkg.REPLMode.CMD_PIN
-    @test statements[2].preview == false
-    @test statements[2].options == map(Pkg.REPLMode.parse_option, ["--first"])
-    @test isempty(statements[2].arguments)
-    @test statements[3].spec.kind == Pkg.REPLMode.CMD_DEVELOP
-    @test statements[3].preview == false
-    @test isempty(statements[3].options)
-    @test isempty(statements[3].arguments)
-end
-
-@testset "argument count errors" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("activate one two")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("activate one two three")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("precompile Example")
-    end
-    end
-    end
-end
-
-@testset "invalid options" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("rm --minor Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("pin --project Example")
-    end
-    end
-    end
-end
-
-@testset "Argument order" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add FooBar Example#foobar#foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up Example#foobar@0.0.0")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("pin Example@0.0.0@0.0.1")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up #foobar")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("add @0.0.1")
-    end
-    end
-    end
-end
-
-@testset "conflicting options" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up --major --minor")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("rm --project --manifest")
-    end
-    end
-    end
-end
-
-@testset "gc" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("gc --project")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("gc --minor")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("gc Example")
-        Pkg.REPLMode.pkgstr("gc")
-    end
-    end
-    end
-end
-
-@testset "precompile" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("precompile --project")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("precompile Example")
-        Pkg.REPLMode.pkgstr("precompile")
-        Pkg.precompile()
-    end
-    end
-    end
-end
-
-@testset "generate" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate --major Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate --foobar Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("generate Example1 Example2")
-        Pkg.REPLMode.pkgstr("generate Example")
-    end
-    end
-    end
-end
-
 @testset "test" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         Pkg.add("Example")
@@ -816,58 +632,6 @@ end
     end
     end
     end
-end
-
-@testset "build" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("build --project")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("build --minor")
-    end
-    end
-    end
-end
-
-@testset "free" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("free --project")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("free --major")
-    end
-    end
-    end
-end
-
-@testset "tests for api opts" begin
-    specs = Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[
-        [:name => "project", :short_name => "p", :api => :mode => Pkg.Types.PKGMODE_PROJECT],
-        [:name => "manifest", :short_name => "m", :api => :mode => Pkg.Types.PKGMODE_MANIFEST],
-        [:name => "major", :api => :level => Pkg.Types.UPLEVEL_MAJOR],
-        [:name => "minor", :api => :level => Pkg.Types.UPLEVEL_MINOR],
-        [:name => "patch", :api => :level => Pkg.Types.UPLEVEL_PATCH],
-        [:name => "fixed", :api => :level => Pkg.Types.UPLEVEL_FIXED],
-        [:name => "rawnum", :takes_arg => true, :api => :num => identity],
-        [:name => "plus", :takes_arg => true, :api => :num => x->parse(Int,x)+1],
-    ])
-
-    api_opts = Pkg.REPLMode.APIOptions([
-        Pkg.REPLMode.Option("manifest"),
-        Pkg.REPLMode.Option("patch"),
-        Pkg.REPLMode.Option("rawnum", "5"),
-    ], specs)
-
-    @test get(api_opts,:foo,nothing) === nothing
-    @test get(api_opts,:mode,nothing) == Pkg.Types.PKGMODE_MANIFEST
-    @test get(api_opts,:level,nothing) == Pkg.Types.UPLEVEL_PATCH
-    @test get(api_opts,:num,nothing) == "5"
-
-    api_opts = Pkg.REPLMode.APIOptions([
-        Pkg.REPLMode.Option("project"),
-        Pkg.REPLMode.Option("patch"),
-        Pkg.REPLMode.Option("plus", "5"),
-    ], specs)
-
-    @test get(api_opts,:mode,nothing) == Pkg.Types.PKGMODE_PROJECT
-    @test get(api_opts,:level,nothing) == Pkg.Types.UPLEVEL_PATCH
-    @test get(api_opts,:num,nothing) == 6
 end
 
 @testset "activate" begin
@@ -893,6 +657,8 @@ end
         status 7876af07-990d-54b4-ab0e-23690620f79a
         status Example Random
         status -m Example
+        status --outdated
+        status --compat
         """
         # --diff option
         @test_logs (:warn, r"diff option only available") pkg"status --diff"
@@ -900,6 +666,9 @@ end
         git_init_and_commit(project_path)
         @test_logs () pkg"status --diff"
         @test_logs () pkg"status -d"
+
+        # comma-separated packages get parsed
+        pkg"status Example, Random"
     end
 end
 
@@ -912,45 +681,45 @@ end
     end end end
 end
 
-@testset "preview" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        pkg"add Example"
-        pkg"preview rm Example"
-        @test isinstalled(TEST_PKG)
-        pkg"rm Example"
-        pkg"preview add Example"
-        @test !isinstalled(TEST_PKG)
-    end end end
+@testset "REPL API `up`" begin
+    # errors
+    temp_pkg_dir() do project_path; with_temp_env() do;
+        @test_throws PkgError Pkg.REPLMode.pkgstr("up --major --minor")
+    end end
 end
 
-@testset "`lex` unit tests" begin
-    qwords = Pkg.REPLMode.lex("\"Don't\" forget to '\"test\"'")
-    @test  qwords[1].isquoted
-    @test  qwords[1].raw == "Don't"
-    @test !qwords[2].isquoted
-    @test  qwords[2].raw == "forget"
-    @test !qwords[3].isquoted
-    @test  qwords[3].raw == "to"
-    @test  qwords[4].isquoted
-    @test  qwords[4].raw == "\"test\""
-    @test_throws PkgError Pkg.REPLMode.lex("Don't")
-    @test_throws PkgError Pkg.REPLMode.lex("Unterminated \"quot")
+@testset "Inference" begin
+    @inferred Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[])
+    @inferred Pkg.REPLMode.CommandSpecs(Pkg.REPLMode.CommandDeclaration[])
+    @inferred Pkg.REPLMode.CompoundSpecs(Pair{String,Vector{Pkg.REPLMode.CommandDeclaration}}[])
 end
 
-@testset "argument kinds" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
-        @test_throws PkgError pkg"pin Example#foo"
-        @test_throws PkgError pkg"test Example#foo"
-        @test_throws PkgError pkg"test Example@v0.0.1"
-    end end end
+# To be used to reply to a prompt
+function withreply(f, ans)
+    p = Pipe()
+    try
+        redirect_stdin(p) do
+            @async println(p, ans)
+            f()
+        end
+    finally
+        close(p)
+    end
 end
 
-@testset "smoke test `instantiate --verbose`" begin
-    temp_pkg_dir() do project_path
-        Pkg.activate(project_path)
-        Pkg.instantiate(verbose=true)
-        pkg"instantiate --verbose"
-        pkg"instantiate -v"
+@testset "REPL missing package install hook" begin
+    isolate(loaded_depot=true) do
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+
+        # don't offer to install the dummy "julia" entry that's in General
+        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
+
+        withreply("n") do
+            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+        end
+        withreply("y") do
+            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+        end
     end
 end
 
