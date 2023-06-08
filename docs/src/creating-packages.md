@@ -107,6 +107,92 @@ julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
 
+## Defining a public API
+
+If you want your package to be useful to other packages and you want folks to be able to
+easily update to newer version of your package when they come out, it is important to
+document what behavior will stay consistent across updates.
+
+Unless you note otherwise, the public API of your package is defined as all the behavior you
+describe about [exported symbols](https://docs.julialang.org/en/v1/manual/modules/#Export-lists).
+When you change the behavior of something that was previously exported so that the new
+version no longer conforms to the specifications provided in the old version, you should
+adjust your package version number according to [Julia's variant on SymVer](#Version-specifier-format).
+If you would like to include a symbol in your public API without fully exporting it into the
+global namespace of folks who call `using YourPackage`, you can export that symbol with
+`export scoped=true that_symbol`.
+
+Let's say we would like our `greet` function to be part of the public API, but not the
+`greet_alien` function. We could the write the following and release it as version `1.0.0`.
+
+```julia
+module HelloWorld
+
+export greet
+
+import Random
+import JSON
+
+"Writes a friendly message."
+greet() = print("Hello World!")
+
+"Greet an alien by a randomly generated name."
+greet_alien() = print("Hello ", Random.randstring(8))
+
+end # module
+```
+
+Then, if we change `greet` to
+
+```julia
+"Writes a friendly message that is exactly three words long."
+greet() = print("Hello Lovely World!")
+```
+
+We would release the new version as `1.1.0`. This is not breaking
+because the new implementation conforms to the old documentation, but
+it does add a new feature, that the message must be three words long.
+
+Later, we may wish to change `greet_alien` to
+
+```julia
+"Greet an alien by a the name of \"Zork\"."
+greet_alien() = print("Hello Zork")
+```
+
+And also export it by changing
+
+```julia
+export greet
+```
+
+to
+
+```julia
+export greet, greet_alien
+```
+
+We should release this new version as `1.2.0` because it adds a new feature
+`greet_alien` to the public API. Even though `greet_alien` was documented before
+and the new version does not conform to the old documentation, this is not breaking
+because the old documentation was not attached to a symbol that was exported
+at the time so that documentation does not apply across released versions.
+
+However, if we now wish to change `greet` to
+
+```julia
+"Writes a friendly message that is exactly four words long."
+greet() = print("Hello very lovely world")
+```
+
+we would need to release the new version as `2.0.0`. In version `1.1.0`, we specified that
+the greeting would be three words long, and because `greet` was exported, that description
+also applies to all future versions until the next breaking release. Because this new
+version does not conform to the old specification, it must be tagged as a breaking change.
+
+Please note that version numbers are free and unlimited. It is okay to use lots of them
+(e.g. version `6.62.8`).
+
 ## Adding a build step to the package
 
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
