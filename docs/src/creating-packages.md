@@ -120,7 +120,7 @@ version no longer conforms to the specifications provided in the old version, yo
 adjust your package version number according to [Julia's variant on SymVer](#Version-specifier-format).
 If you would like to include a symbol in your public API without fully exporting it into the
 global namespace of folks who call `using YourPackage`, you can export that symbol with
-`export scoped=true that_symbol`. Symbols exported with `scoped=true` are equally public
+`export scoped=true that_symbol`. Symbols exported with `scoped=true` are just as public
 as those exported without it, but when folks call `using YourPackage`, they will still have
 to qualify access to those symbols with `YourPackage.that_symbol`.
 
