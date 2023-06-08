@@ -23,7 +23,7 @@ The format of the version specifier is described in detail below.
 
 ## Version specifier format
 
-Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver).
+Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver), with an exception for leading zeros.
 As an example, a version specifier given as e.g. `1.2.3` is therefore assumed to be compatible with the versions `[1.2.3 - 2.0.0)` where `)` is a non-inclusive upper bound.
 More specifically, a version specifier is either given as a **caret specifier**, e.g. `^1.2.3`  or as a **tilde specifier**, e.g. `~1.2.3`.
 Caret specifiers are the default and hence `1.2.3 == ^1.2.3`. The difference between a caret and tilde is described in the next section.
