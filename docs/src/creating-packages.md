@@ -117,7 +117,7 @@ Unless you note otherwise, the public API of your package is defined as all the 
 describe about [exported symbols](https://docs.julialang.org/en/v1/manual/modules/#Export-lists).
 When you change the behavior of something that was previously exported so that the new
 version no longer conforms to the specifications provided in the old version, you should
-adjust your package version number according to [Julia's variant on SymVer](#Version-specifier-format).
+adjust your package version number according to [Julia's variant on SemVer](#Version-specifier-format).
 If you would like to include a symbol in your public API without fully exporting it into the
 global namespace of folks who call `using YourPackage`, you can export that symbol with
 `export scoped=true that_symbol`. Symbols exported with `scoped=true` are just as public
