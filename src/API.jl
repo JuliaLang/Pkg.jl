@@ -10,6 +10,9 @@ import LibGit2
 import Logging
 using Serialization
 using REPL.TerminalMenus
+import FileWatching
+
+import Base: StaleCacheKey
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
@@ -1053,46 +1056,6 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
 end
 
-# should sync with the types of arguments of `Base.stale_cachefile`
-const StaleCacheKey = Tuple{Base.PkgId, UInt128, String, String}
-
-function _is_stale!(stale_cache::Dict{StaleCacheKey,Bool}, paths::Vector{String}, sourcepath::String)
-    for path_to_try in paths
-        staledeps = Base.stale_cachefile(sourcepath, path_to_try, ignore_loaded = true)
-        if staledeps === true
-            continue
-        end
-        staledeps, _ = staledeps::Tuple{Vector{Any}, Union{Nothing, String}}
-        # finish checking staledeps module graph
-        for i in 1:length(staledeps)
-            dep = staledeps[i]
-            dep isa Module && continue
-            modpath, modkey, modbuild_id = dep::Tuple{String, Base.PkgId, UInt128}
-            modpaths = Base.find_all_in_cache_path(modkey)
-            for modpath_to_try in modpaths::Vector{String}
-                stale_cache_key = (modkey, modbuild_id, modpath, modpath_to_try)::StaleCacheKey
-                if get!(() -> Base.stale_cachefile(stale_cache_key..., ignore_loaded=true) === true,
-                        stale_cache, stale_cache_key)
-                    continue
-                end
-                @goto check_next_dep
-            end
-            @goto check_next_path
-            @label check_next_dep
-        end
-        try
-            # update timestamp of precompilation file so that it is the first to be tried by code loading
-            touch(path_to_try)
-        catch ex
-            # file might be read-only and then we fail to update timestamp, which is fine
-            ex isa Base.IOError || rethrow()
-        end
-        return false
-        @label check_next_path
-    end
-    return true
-end
-
 function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
     i = findfirst(ps -> ps.uuid == uuid, pkgspecs)
     if !isnothing(i)
@@ -1317,6 +1280,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     stderr_outputs = Dict{Base.PkgId,String}()
     taskwaiting = Set{Base.PkgId}()
+    pkgspidlocked = Dict{Base.PkgId,String}()
 
     function monitor_stderr(pkg, iob)
         try
@@ -1394,7 +1358,10 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                                 # If not offset, on larger terminal fonts it looks odd that they all sync-up
                                 anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                                waiting = if dep in taskwaiting
+                                waiting = if haskey(pkgspidlocked, dep)
+                                    who_has_lock = pkgspidlocked[dep]
+                                    color_string(" Being precompiled by another $(who_has_lock)", Base.info_color())
+                                elseif dep in taskwaiting
                                     color_string(" Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
                                 else
                                     ""
@@ -1426,7 +1393,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
     ## precompilation loop
     for (pkg, deps) in depsmap
-        paths = Base.find_all_in_cache_path(pkg)
+        cachepaths = Base.find_all_in_cache_path(pkg)
         sourcepath = Base.locate_package(pkg)
         if sourcepath === nothing
             failed_deps[pkg] = "Error: Missing source file for $(pkg)"
@@ -1454,7 +1421,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 # skip stale checking and force compilation if any dep was recompiled in this session
                 any_dep_recompiled = any(map(dep->was_recompiled[dep], deps))
                 is_stale = true
-                if !circular && (queued || any_dep_recompiled || (!suspended && (is_stale = _is_stale!(stale_cache, paths, sourcepath))))
+                if !circular && (queued || any_dep_recompiled || (!suspended && (is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, stale_cache, cachepaths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
 
@@ -1476,9 +1443,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         return
                     end
                     try
-                        t = @elapsed ret = Logging.with_logger(Logging.NullLogger()) do
-                            # capture stderr, send stdout to devnull, don't skip loaded modules
-                            Base.compilecache(pkg, sourcepath, iob, devnull, false)
+                        # allows processes to wait if another process is precompiling a given package to
+                        # a functionally identical package cache (except for preferences, which may differ)
+                        t = @elapsed ret = maybe_cachefile_lock(pkg, pkgspidlocked) do
+                            Logging.with_logger(Logging.NullLogger()) do
+                                # capture stderr, send stdout to devnull, don't skip loaded modules
+                                Base.compilecache(pkg, sourcepath, iob, devnull, false)
+                            end
                         end
                         t_str = timing ? string(lpad(round(t * 1e3, digits = 1), 9), " ms") : ""
                         if ret isa Base.PrecompilableError
@@ -1613,6 +1584,30 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
     end
     nothing
+end
+
+function maybe_cachefile_lock(f, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
+    pidfile = Base.compilecache_pidfile_path(pkg)
+    cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age=300) # match stale_age in loading.jl
+    if cachefile === false
+        pid, hostname, age = FileWatching.Pidfile.parse_pidfile(pidfile)
+        pkgspidlocked[pkg] = if isempty(hostname) || hostname == gethostname()
+            "process (pid: $pid)"
+        else
+            "machine (hostname: $hostname, pid: $pid)"
+        end
+        # wait until the lock is available
+        FileWatching.mkpidlock(pidfile; stale_age=300) do # match stale_age in loading.jl
+            # double-check in case the other process crashed or the lock expired
+            if Base.isprecompiled(pkg; ignore_loaded=true) # don't use caches for this as the env state will have changed
+                return nothing # returning nothing indicates a process waited for another
+            else
+                delete!(pkgspidlocked, pkg)
+                return f() # precompile
+            end
+        end
+    end
+    return cachefile
 end
 
 const pkgs_precompile_suspended = PackageSpec[] # packages that shouldn't be retried during autoprecomp
