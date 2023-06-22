@@ -717,7 +717,7 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 # Despite the fact that we inherit the project, since the in-memory manifest
                 # has not been updated yet, if we try to load any dependencies, it may fail.
                 # Therefore, this project inheritance is really only for Preferences, not dependencies.
-                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) --startup-file=no $(triplet(platform))`)
+                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) -t1 --startup-file=no $(triplet(platform))`)
                 meta_toml = String(read(select_cmd))
                 res = TOML.tryparse(meta_toml)
                 if res isa TOML.ParserError
@@ -1241,7 +1241,8 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
             println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
         end
         return PackageSpec(; uuid=pkg.uuid, name=pkg.name, pinned=true,
-                           version=entry.version, tree_hash=entry.tree_hash)
+                           version=entry.version, tree_hash=entry.tree_hash,
+                           path=entry.path, repo=entry.repo)
     end
     if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
         return pkg # overwrite everything, nothing to copy over
@@ -1659,18 +1660,12 @@ function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd
     return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
 
-@static if VERSION >= v"1.9.0" # has threadpools
 function get_threads_spec()
     if Threads.nthreads(:interactive) > 0
         "$(Threads.nthreads(:default)),$(Threads.nthreads(:interactive))"
     else
         "$(Threads.nthreads(:default))"
     end
-end
-else # no threadpools
-function get_threads_spec()
-    "$(Threads.nthreads())"
-end
 end
 
 function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_args)

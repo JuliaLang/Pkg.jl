@@ -18,7 +18,7 @@ import LibGit2
 
 using ..Utils
 
-const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"), url = "https://github.com/JuliaLang/Example.jl")
 const PackageSpec = Pkg.Types.PackageSpec
 
 import Pkg.Types: semver_spec, VersionSpec
@@ -429,6 +429,26 @@ temp_pkg_dir() do project_path
         @test any(istaskfailed, tasks) == false
     end
 
+    @testset "parsing malformed usage file" begin
+        temp_pkg_dir() do project_path
+            # first populate the usage files
+            Pkg.activate(temp = true)
+            Pkg.add("Random")
+
+            man_usage_file = joinpath(Pkg.logdir(), "manifest_usage.toml")
+            man_usage = TOML.parsefile(man_usage_file)
+            last_entry = man_usage[last(collect(keys(man_usage)))][1]
+            @test haskey(last_entry, "time")
+            empty!(last_entry) # remove the "time" entry
+            @test haskey(last_entry, "time") == false
+            open(io -> TOML.print(io, man_usage), man_usage_file, "w")
+
+            # and now these should not error when they update the manifest usage file
+            Pkg.activate(temp = true)
+            Pkg.add("Random")
+        end
+    end
+
     @testset "adding nonexisting packages" begin
         nonexisting_pkg = randstring(14)
         @test_throws PkgError Pkg.add(nonexisting_pkg)
@@ -550,7 +570,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
     cd(tmp) do; @testset "instantiating updated repo" begin
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo1)
-        LibGit2.close(LibGit2.clone("https://github.com/JuliaLang/Example.jl", "Example.jl"))
+        LibGit2.close(LibGit2.clone(TEST_PKG.url, "Example.jl"))
         mkdir("machine1")
         cd("machine1")
         Pkg.activate(".")
@@ -937,6 +957,79 @@ end
 @testset "Issue #3069" begin
     p = PackageSpec(; path="test_packages/Example")
     @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
+end
+
+@testset "Issue #3147" begin
+    prev_project = Base.active_project()
+
+    @testset "Pkg.add" begin
+        Pkg.activate(temp = true)
+        mktempdir() do tmp_dir
+            LibGit2.close(LibGit2.clone(TEST_PKG.url, tmp_dir))
+            Pkg.develop(path=tmp_dir)
+            Pkg.pin("Example")
+            Pkg.add("Example")
+            info = Pkg.dependencies()[TEST_PKG.uuid]
+            @test info.is_pinned
+            @test info.is_tracking_path
+            @test !info.is_tracking_repo
+            @test info.version > v"0.5.3"
+        end
+        Pkg.rm("Example")
+
+        Pkg.add(url=TEST_PKG.url, rev="29aa1b4")
+        Pkg.pin("Example")
+        Pkg.add("Example")
+        info = Pkg.dependencies()[TEST_PKG.uuid]
+        @test info.is_pinned
+        @test !info.is_tracking_path
+        @test info.is_tracking_repo
+        @test info.version == v"0.5.3"
+        Pkg.rm("Example")
+    end
+
+    @testset "Pkg.update" begin
+        Pkg.activate(temp = true)
+        mktempdir() do tmp_dir
+            ver = v"0.5.3"
+            repo = LibGit2.clone(TEST_PKG.url, tmp_dir)
+            tag = LibGit2.GitObject(repo, "v$ver")
+            hash = string(LibGit2.target(tag))
+            LibGit2.checkout!(repo, hash)
+            LibGit2.close(repo)
+            Pkg.develop(path=tmp_dir)
+            Pkg.pin("Example")
+            Pkg.update("Example")  # pkg should remain pinned
+            info = Pkg.dependencies()[TEST_PKG.uuid]
+            @test info.is_pinned
+            @test info.is_tracking_path
+            @test !info.is_tracking_repo
+            @test info.version == ver
+
+            # modify the pkg version manually, to mimic developing this pkg
+            dev_ver = VersionNumber(ver.major, ver.minor, ver.patch + 1)
+            fn = joinpath(tmp_dir, "Project.toml")
+            toml = TOML.parse(read(fn, String))
+            toml["version"] = string(dev_ver)
+            open(io -> TOML.print(io, toml), fn, "w")
+            Pkg.update("Example")  # noop since Pkg.is_fully_pinned(...) is true
+            info = Pkg.dependencies()[TEST_PKG.uuid]
+            @test info.is_pinned
+            @test info.is_tracking_path
+            @test !info.is_tracking_repo
+            @test info.version == ver
+
+            Pkg.pin("Example")  # pinning a 2ⁿᵈ time updates versions in the manifest
+            info = Pkg.dependencies()[TEST_PKG.uuid]
+            @test info.is_pinned
+            @test info.is_tracking_path
+            @test !info.is_tracking_repo
+            @test info.version == dev_ver
+      end
+      Pkg.rm("Example")
+    end
+
+    Pkg.activate(prev_project)
 end
 
 end # module
