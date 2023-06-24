@@ -1807,7 +1807,15 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                 err isa Resolve.ResolverError || rethrow()
                 allow_reresolve || rethrow()
                 @debug err
-                @warn "Could not use exact versions of packages in manifest, re-resolving"
+                msg = string(
+                    "Could not use exact versions of packages in manifest, re-resolving. ",
+                    "Note: if you do not check your manifest file into source control, ",
+                    "then you can probably ignore this message. ",
+                    "However, if you do check your manifest file into source control, ",
+                    "then you probably want to pass the `allow_reresolve = false` kwarg ",
+                    "when calling the `Pkg.test` function.",
+                )
+                @warn msg
                 temp_ctx.env.manifest.deps = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest.deps if isfixed(entry))
                 Pkg.resolve(temp_ctx; io=devnull, skip_writing_project=true)
                 @debug "Using _clean_ dep graph"
