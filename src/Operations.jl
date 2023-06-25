@@ -242,13 +242,10 @@ function collect_project(pkg::PackageSpec, path::String)
         pkgerror("could not find project file for package $(err_rep(pkg)) at `$path`")
     end
     project = read_package(project_file)
-    #=
-    # TODO, this should either error or be quiet
     julia_compat = get_compat(project, "julia")
-    if julia_compat !== nothing && !(VERSION in julia_compat)
-        println(io, "julia version requirement for package $(err_rep(pkg)) not satisfied")
+    if Base.get_bool_env("JULIA_PKG_CHECK_JULIA_COMPAT", true) && !isnothing(julia_compat) && !(VERSION in julia_compat)
+        pkgerror("julia version requirement for package $(err_rep(pkg)) not satisfied; you can override and ignore this check by setting `ENV[\"JULIA_PKG_CHECK_JULIA_COMPAT\"]=0`")
     end
-    =#
     for (name, uuid) in project.deps
         vspec = get_compat(project, name)
         push!(deps, PackageSpec(name, uuid, vspec))
