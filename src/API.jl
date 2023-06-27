@@ -430,7 +430,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
-        ctx.env.pkg === nothing && pkgerror("trying to test unnamed project") #TODO Allow this?
+        ctx.env.pkg === nothing && pkgerror("Project.toml must have project name and UUID") #TODO Allow this?
         push!(pkgs, ctx.env.pkg)
     else
         project_resolve!(ctx.env, pkgs)
