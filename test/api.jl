@@ -128,6 +128,13 @@ end
                 sleep(2)
                 end""")
             end
+            Pkg.generate("SlowPrecompile")
+            open(joinpath("SlowPrecompile","src","SlowPrecompile.jl"), "w") do io
+                write(io, """
+                module SlowPrecompile
+                sleep(10)
+                end""")
+            end
         end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
 
@@ -245,6 +252,28 @@ end
             @test occursin("Precompiling", str)
             @test occursin("Waiting for background task / IO / timer.", str)
         end
+
+        @testset "pidlocked precompile" begin
+            proj = joinpath(pwd(), "packages", "SlowPrecompile")
+            cmd = setenv(`$(Base.julia_cmd()) --color=no --startup-file=no --project="$(pkgdir(Pkg))" -e "
+                using Pkg
+                Pkg.activate(\"$(escape_string(proj))\")
+                Pkg.precompile()
+            "`,
+                    "JULIA_PKG_PRECOMPILE_AUTO" => "0")
+            iob1 = IOBuffer()
+            iob2 = IOBuffer()
+            Base.Experimental.@sync begin
+                @async run(pipeline(cmd, stderr=iob1, stdout=devnull))
+                @async run(pipeline(cmd, stderr=iob2, stdout=devnull))
+            end
+            s1 = String(take!(iob1))
+            s2 = String(take!(iob2))
+            @test occursin("Precompiling", s1)
+            @test occursin("Precompiling", s2)
+            @test any(contains("Being precompiled by another process (pid: "), (s1, s2))
+        end
+
     end end
     # ignoring circular deps, to avoid deadlock
     isolate() do; cd_tempdir() do tmp
