@@ -257,7 +257,7 @@ end
             proj = joinpath(pwd(), "packages", "SlowPrecompile")
             cmd = setenv(`$(Base.julia_cmd()) --color=no --startup-file=no --project="$(pkgdir(Pkg))" -e "
                 using Pkg
-                Pkg.activate(\"$(proj)\")
+                Pkg.activate(\"$(escape_string(proj))\")
                 Pkg.precompile()
             "`,
                     "JULIA_PKG_PRECOMPILE_AUTO" => "0")
