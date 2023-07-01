@@ -1445,7 +1445,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     try
                         # allows processes to wait if another process is precompiling a given package to
                         # a functionally identical package cache (except for preferences, which may differ)
-                        t = @elapsed ret = maybe_cachefile_lock(pkg, pkgspidlocked) do
+                        t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked) do
                             Logging.with_logger(Logging.NullLogger()) do
                                 # capture stderr, send stdout to devnull, don't skip loaded modules
                                 Base.compilecache(pkg, sourcepath, iob, devnull, false)
@@ -1586,7 +1586,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     nothing
 end
 
-function maybe_cachefile_lock(f, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
+function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
     pidfile = Base.compilecache_pidfile_path(pkg)
     cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age=300) # match stale_age in loading.jl
     if cachefile === false
@@ -1595,6 +1595,9 @@ function maybe_cachefile_lock(f, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId
             "process (pid: $pid)"
         else
             "machine (hostname: $hostname, pid: $pid)"
+        end
+        !fancyprint && lock(print_lock) do
+            println(io, pkg.name, color_string(" Being precompiled by another $(pkgspidlocked[pkg])", Base.info_color()))
         end
         # wait until the lock is available
         FileWatching.mkpidlock(pidfile; stale_age=300) do # match stale_age in loading.jl
