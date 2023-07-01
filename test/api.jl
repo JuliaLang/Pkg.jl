@@ -254,7 +254,7 @@ end
         end
 
         @testset "pidlocked precompile" begin
-            proj = joinpath(@__DIR__, "packages", "SlowPrecompile")
+            proj = joinpath(pwd(), "packages", "SlowPrecompile")
             cmd = setenv(`$(Base.julia_cmd()) --color=no --startup-file=no --project="$(pkgdir(Pkg))" -e "
                 using Pkg
                 Pkg.activate(\"$(proj)\")
