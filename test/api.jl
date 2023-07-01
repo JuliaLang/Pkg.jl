@@ -132,7 +132,7 @@ end
             open(joinpath("SlowPrecompile","src","SlowPrecompile.jl"), "w") do io
                 write(io, """
                 module SlowPrecompile
-                sleep(10)
+                sleep(20)
                 end""")
             end
         end
