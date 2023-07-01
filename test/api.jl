@@ -269,7 +269,9 @@ end
             end
             s1 = String(take!(iob1))
             s2 = String(take!(iob2))
-            @test occursin("Being precompiled by another", s1) || occursin("Being precompiled by another", s2)
+            @test occursin("Precompiling", s1)
+            @test occursin("Precompiling", s2)
+            @test any(contains("Being precompiled by another process (pid: "), (s1, s2))
         end
 
     end end
