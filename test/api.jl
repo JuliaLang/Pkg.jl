@@ -263,9 +263,16 @@ end
                     "JULIA_PKG_PRECOMPILE_AUTO" => "0")
             iob1 = IOBuffer()
             iob2 = IOBuffer()
-            Base.Experimental.@sync begin
-                @async run(pipeline(cmd, stderr=iob1, stdout=devnull))
-                @async run(pipeline(cmd, stderr=iob2, stdout=devnull))
+            try
+                Base.Experimental.@sync begin
+                    @async run(pipeline(cmd, stderr=iob1, stdout=iob1))
+                    @async run(pipeline(cmd, stderr=iob2, stdout=iob2))
+                end
+            catch
+                println("pidlocked precompile tests failed:")
+                println("process 1:\n", String(take!(iob1)))
+                println("process 2:\n", String(take!(iob2)))
+                rethrow()
             end
             s1 = String(take!(iob1))
             s2 = String(take!(iob2))
