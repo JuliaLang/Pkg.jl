@@ -188,7 +188,13 @@ test-specific dependencies, are available, see below.
 There are two ways of adding test-specific dependencies (dependencies that are not dependencies of the package but will still be available to
 load when the package is tested).
 
-#### `target` based test specific dependencies
+!!! note
+    The exact interaction between `Project.toml`, `test/Project.toml` and their corresponding
+    `Manifest.toml`s are not fully worked out and may be subject to change in future versions.
+    The old method of adding test-specific dependencies, which relies on `targets`, will
+    therefore be supported throughout all Julia 1.X releases.
+
+#### `targets`-based test-specific dependencies
 
 Using this method of adding test-specific dependencies, the packages are added under an `[extras]` section and to a test target,
 e.g. to add `Markdown` and `Test` as test dependencies, add the following:
@@ -204,20 +210,14 @@ test = ["Markdown", "Test"]
 
 to the `Project.toml` file. There are no other "targets" than `test`.
 
-#### `test/Project.toml` file test specific dependencies
+#### `test/Project.toml` file test-specific dependencies
 
-!!! note
-    The exact interaction between `Project.toml`, `test/Project.toml` and their corresponding
-    `Manifest.toml`s are not fully worked out and may be subject to change in future versions.
-    The old method of adding test-specific dependencies, described in the next section, will
-    therefore be supported throughout all Julia 1.X releases.
-
- is given by `test/Project.toml`. Thus, when running
+In this new method, the test dependencies are given by `test/Project.toml`. Thus, when running
 tests, this will be the active project, and only dependencies to the `test/Project.toml` project
 can be used. Note that Pkg will add the tested package itself implicitly.
 
 !!! note
-    If no `test/Project.toml` exists Pkg will use the `target` based test specific dependencies.
+    If no `test/Project.toml` exists Pkg will use the `target`-based test-specific dependencies.
 
 To add a test-specific dependency, i.e. a dependency that is available only when testing,
 it is thus enough to add this dependency to the `test/Project.toml` project. This can be
