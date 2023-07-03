@@ -191,10 +191,10 @@ load when the package is tested).
 !!! note
     The exact interaction between `Project.toml`, `test/Project.toml` and their corresponding
     `Manifest.toml`s are not fully worked out and may be subject to change in future versions.
-    The old method of adding test-specific dependencies, which relies on `targets`, will
+    The old method of adding test-specific dependencies, which relies on `target`, will
     therefore be supported throughout all Julia 1.X releases.
 
-#### `targets`-based test-specific dependencies
+#### `target`-based test-specific dependencies
 
 Using this method of adding test-specific dependencies, the packages are added under an `[extras]` section and to a test target,
 e.g. to add `Markdown` and `Test` as test dependencies, add the following:
