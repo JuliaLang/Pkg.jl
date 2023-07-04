@@ -2704,6 +2704,11 @@ end
                     @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
                     Pkg.rm(TEST_PKG.name)
                 end
+                @testset "libgit2 failures" begin
+                    doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
+                    @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
+                    @test_throws Pkg.Types.PkgError Pkg.Registry.add(Pkg.RegistrySpec(url=doesnotexist))
+                end
                 @testset "tarball downloads" begin
                     Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
                     @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
