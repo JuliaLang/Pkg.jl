@@ -22,7 +22,8 @@ using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
+    PkgError, pkgerror, PkgPrecompileError,
+    has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
@@ -68,6 +69,16 @@ struct PkgError <: Exception
 end
 pkgerror(msg::String...) = throw(PkgError(join(msg)))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
+
+#################
+# Pkg Precompile Error #
+#################
+struct PkgPrecompileError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, err::PkgPrecompileError) = print(io, err.msg)
+# This needs a show method to make `julia> err` show nicely
+Base.show(io::IO, err::PkgPrecompileError) = print(io, "PkgPrecompileError: ", err.msg)
 
 
 ###############
