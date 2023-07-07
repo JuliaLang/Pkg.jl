@@ -62,6 +62,7 @@ read_project_compat(::Nothing, project::Project) = Dict{String,Compat}()
 function read_project_compat(raw::Dict{String,Any}, project::Project)
     compat = Dict{String,Compat}()
     for (name, version) in raw
+        version = version::String
         try
             compat[name] = Compat(semver_spec(version), version)
         catch err
@@ -187,7 +188,7 @@ function destructure(project::Project)::Dict
     return raw
 end
 
-_project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "weakdeps", "extensions", "compat"]
+const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "deps", "weakdeps", "extensions", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 

@@ -4,13 +4,13 @@ module GitTools
 
 using ..Pkg
 using ..MiniProgressBars
-import ..get_bool_env, ..can_fancyprint, ..printpkgstyle, ..stdout_f
+import ..can_fancyprint, ..printpkgstyle, ..stdout_f
 using SHA
 import Base: SHA1
 import LibGit2
 using Printf
 
-use_cli_git() = get_bool_env("JULIA_PKG_USE_CLI_GIT")
+use_cli_git() = Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
@@ -86,11 +86,12 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
 end
 
 function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
+    url = String(url)::String
+    source_path = String(source_path)::String
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
         LibGit2.Callbacks(
@@ -108,7 +109,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
     try
         if use_cli_git()
-            run(`git clone --quiet $url $source_path`)
+            run(pipeline(`git clone --quiet $url $source_path`; stdout=devnull))
             return LibGit2.GitRepo(source_path)
         else
             mkpath(source_path)
@@ -160,7 +161,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
         if use_cli_git()
             let remoteurl=remoteurl
                 cd(LibGit2.path(repo)) do
-                    run(`git fetch -q $remoteurl $(only(refspecs))`)
+                    run(pipeline(`git fetch -q $remoteurl $(only(refspecs))`; stdout=devnull))
                 end
             end
         else

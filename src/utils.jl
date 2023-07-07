@@ -46,6 +46,11 @@ function set_readonly(path)
             # outside of the root, links to non-file/non-directories, etc...)
             islink(filepath) && continue
             fmode = filemode(filepath)
+            @static if Sys.iswindows()
+                if Sys.isexecutable(filepath)
+                    fmode |= 0o111
+                end
+            end
             try
                 chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
             catch
@@ -90,9 +95,6 @@ function casesensitive_isdir(dir::String)
     lastdir = splitpath(dir)[end]
     isdir_nothrow(dir) && lastdir in readdir(joinpath(dir, ".."))
 end
-
-get_bool_env(name::String; default::String="false") =
-    lowercase(get(ENV, name, default)) in ("t", "true", "y", "yes", "1")
 
 ## ordering of UUIDs ##
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947

@@ -14,11 +14,20 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
+import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
 
 #########
 # Utils #
 #########
+
+function default_preserve()
+    if Base.get_bool_env("JULIA_PKG_PRESERVE_TIERED_INSTALLED", false)
+        PRESERVE_TIERED_INSTALLED
+    else
+        PRESERVE_TIERED
+    end
+end
 
 function find_installed(name::String, uuid::UUID, sha1::SHA1)
     slug_default = Base.version_slug(uuid, sha1)
@@ -37,9 +46,9 @@ end
 tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version=VERSION) =
     !is_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
 
-function source_path(project_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
+function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     return is_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
-        pkg.path        !== nothing ? joinpath(dirname(project_file), pkg.path) :
+        pkg.path        !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
         pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         nothing
@@ -51,7 +60,7 @@ function load_version(version, fixed, preserve::PreserveLevel)
         return VersionSpec() # some stdlibs dont have a version
     elseif fixed
         return version # dont change state if a package is fixed
-    elseif preserve == PRESERVE_ALL || preserve == PRESERVE_DIRECT
+    elseif preserve == PRESERVE_ALL || preserve == PRESERVE_ALL_INSTALLED || preserve == PRESERVE_DIRECT
         return something(version, VersionSpec())
     elseif preserve == PRESERVE_SEMVER && version != VersionSpec()
         return Types.semver_spec("$(version.major).$(version.minor).$(version.patch)")
@@ -121,12 +130,18 @@ function is_instantiated(env::EnvCache; platform = HostPlatform())::Bool
         check_artifacts_downloaded(dirname(env.project_file); platform) || return false
     end
     # Make sure all paths/artifacts exist
-    return all(pkg -> is_package_downloaded(env.project_file, pkg; platform), pkgs)
+    return all(pkg -> is_package_downloaded(env.manifest_file, pkg; platform), pkgs)
 end
 
 function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
     manifest = env.manifest
     empty!(manifest)
+    # if we're updating env.pkg that refers to another manifest, we want to change
+    # pkg.path, if present, to be relative to the manifest instead of an abspath
+    if env.project.manifest !== nothing && env.pkg.path !== nothing
+        env.pkg.path = Types.relative_project_path(env.manifest_file,
+                        project_rel_path(env, source_path(env.manifest_file, env.pkg)))
+    end
     if env.pkg !== nothing
         pkgs = push!(copy(pkgs), env.pkg::PackageSpec)
     end
@@ -153,7 +168,7 @@ end
 # about extensions
 function fixup_ext!(env, pkgs)
     for pkg in pkgs
-        v = joinpath(source_path(env.project_file, pkg), "Project.toml")
+        v = joinpath(source_path(env.manifest_file, pkg), "Project.toml")
         if haskey(env.manifest, pkg.uuid)
             entry = env.manifest[pkg.uuid]
             if isfile(v)
@@ -258,7 +273,7 @@ is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
-    source = project_rel_path(env, source_path(env.project_file, pkg))
+    source = project_rel_path(env, source_path(env.manifest_file, pkg))
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_all_deps(source_env)
     for pkg in filter(is_tracking_path, pkgs)
@@ -266,9 +281,9 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
             continue
         end
         # normalize path
-        pkg.path = Types.relative_project_path(env.project_file,
+        pkg.path = Types.relative_project_path(env.manifest_file,
                    project_rel_path(source_env,
-                   source_path(source_env.project_file, pkg)))
+                   source_path(source_env.manifest_file, pkg)))
         push!(developed, pkg)
         collect_developed!(env, pkg, developed)
     end
@@ -293,7 +308,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         names[pkg.uuid] = pkg.name
     end
     for pkg in pkgs
-        path = project_rel_path(env, source_path(env.project_file, pkg))
+        path = project_rel_path(env, source_path(env.manifest_file, pkg))
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
         end
@@ -330,7 +345,9 @@ dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
 # all versioned packages should have a `tree_hash`
-function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
+function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
+                           installed_only::Bool)
+    installed_only = installed_only || OFFLINE_MODE[]
     # compatibility
     if julia_version !== nothing
         # only set the manifest julia_version if ctx.julia_version is not nothing
@@ -340,6 +357,14 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
     end
+
+    jll_fix = Dict{UUID, VersionNumber}()
+    for pkg in pkgs
+        if !is_stdlib(pkg.uuid) && endswith(pkg.name, "_jll") && pkg.version isa VersionNumber
+            jll_fix[pkg.uuid] = pkg.version
+        end
+    end
+
     names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in stdlibs())
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
@@ -379,9 +404,20 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
-    graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version)
+    graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
+
+    # Fixup jlls that got their build numbers stripped
+    vers_fix = copy(vers)
+    for (uuid, vers) in vers
+        old_v = get(jll_fix, uuid, nothing)
+        # We only fixup a JLL if the old major/minor/patch matches the new major/minor/patch
+        if old_v !== nothing && Base.thispatch(old_v) == Base.thispatch(vers_fix[uuid])
+            vers_fix[uuid] = old_v
+        end
+    end
+    vers = vers_fix
 
     # update vector of package versions
     for (uuid, ver) in vers
@@ -425,7 +461,8 @@ get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID,String},
-                    reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version)
+                    reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version,
+                    installed_only::Bool)
     uuids = Set{UUID}()
     union!(uuids, keys(reqs))
     union!(uuids, keys(fixed))
@@ -499,9 +536,9 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                             # Filter yanked and if we are in offline mode also downloaded packages
                             # TODO, pull this into a function
                             Registry.isyanked(info, v) && continue
-                            if Pkg.OFFLINE_MODE[]
+                            if installed_only
                                 pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
-                                is_package_downloaded(env.project_file, pkg_spec) || continue
+                                is_package_downloaded(env.manifest_file, pkg_spec) || continue
                             end
 
                             # Skip package version that are not the same as external packages in sysimage
@@ -680,7 +717,7 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 # Despite the fact that we inherit the project, since the in-memory manifest
                 # has not been updated yet, if we try to load any dependencies, it may fail.
                 # Therefore, this project inheritance is really only for Preferences, not dependencies.
-                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) --startup-file=no $(triplet(platform))`)
+                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) -t1 --startup-file=no $(triplet(platform))`)
                 meta_toml = String(read(select_cmd))
                 res = TOML.tryparse(meta_toml)
                 if res isa TOML.ParserError
@@ -708,7 +745,7 @@ function download_artifacts(env::EnvCache;
     pkg_roots = String[]
     for (uuid, pkg) in env.manifest
         pkg = manifest_info(env.manifest, uuid)
-        pkg_root = source_path(env.project_file, pkg, julia_version)
+        pkg_root = source_path(env.manifest_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_roots, pkg_root)
     end
     push!(pkg_roots, dirname(env.project_file))
@@ -755,7 +792,7 @@ function download_source(ctx::Context; readonly=true)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{PackageEntry, Set{String}, String}}[]
     for pkg in values(ctx.env.manifest)
         tracking_registered_version(pkg, ctx.julia_version) || continue
-        path = source_path(ctx.env.project_file, pkg, ctx.julia_version)
+        path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
         ispath(path) && continue
         urls = find_urls(ctx.registries, pkg.uuid)
@@ -882,9 +919,11 @@ end
 ################################
 # Manifest update and pruning #
 ################################
-project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.project_file), path))
+project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.manifest_file), path))
 
 function prune_manifest(env::EnvCache)
+    # if project uses another manifest, don't prune
+    dirname(env.project_file) != dirname(env.manifest_file) && return env.manifest
     keep = collect(values(env.project.deps))
     env.manifest = prune_manifest(env.manifest, keep)
 end
@@ -1202,7 +1241,8 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
             println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
         end
         return PackageSpec(; uuid=pkg.uuid, name=pkg.name, pinned=true,
-                           version=entry.version, tree_hash=entry.tree_hash)
+                           version=entry.version, tree_hash=entry.tree_hash,
+                           path=entry.path, repo=entry.repo)
     end
     if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
         return pkg # overwrite everything, nothing to copy over
@@ -1274,46 +1314,64 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
-function tiered_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version)
+function tiered_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
+                        try_all_installed::Bool)
+    if try_all_installed
+        try # do not modify existing subgraph and only add installed versions of the new packages
+            @debug "tiered_resolve: trying PRESERVE_ALL_INSTALLED"
+            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version)
+        catch err
+            err isa Resolve.ResolverError || rethrow()
+        end
+    end
     try # do not modify existing subgraph
+        @debug "tiered_resolve: trying PRESERVE_ALL"
         return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try # do not modify existing direct deps
+        @debug "tiered_resolve: trying PRESERVE_DIRECT"
         return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try
+        @debug "tiered_resolve: trying PRESERVE_SEMVER"
         return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
+    @debug "tiered_resolve: trying PRESERVE_NONE"
     return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
 end
 
 function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
-    if preserve == PRESERVE_ALL
+    if preserve == PRESERVE_ALL || preserve == PRESERVE_ALL_INSTALLED
         pkgs = load_all_deps(env, pkgs; preserve)
     else
         pkgs = load_direct_deps(env, pkgs; preserve)
     end
     check_registered(registries, pkgs)
 
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
     return pkgs, deps_map
 end
 
-function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance},
+                    pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     printpkgstyle(io, :Resolving, "package versions...")
-    return preserve == PRESERVE_TIERED ?
-        tiered_resolve(env, registries, pkgs, julia_version) :
+    if preserve == PRESERVE_TIERED_INSTALLED
+        tiered_resolve(env, registries, pkgs, julia_version, true)
+    elseif preserve == PRESERVE_TIERED
+        tiered_resolve(env, registries, pkgs, julia_version, false)
+    else
         targeted_resolve(env, registries, pkgs, preserve, julia_version)
+    end
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
-             preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform())
+             preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform())
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -1339,7 +1397,7 @@ end
 
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
-                 preserve::PreserveLevel=PRESERVE_TIERED, platform::AbstractPlatform=HostPlatform())
+                 preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform())
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
@@ -1451,7 +1509,7 @@ end
 function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     pkgs = load_manifest_deps_up(env, pkgs; preserve=preserve)
     check_registered(registries, pkgs)
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
     return pkgs, deps_map
 end
 
@@ -1473,7 +1531,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     else
         pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
         check_registered(ctx.registries, pkgs)
-        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version)
+        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
@@ -1512,11 +1570,15 @@ function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg:
     end
 end
 
+is_fully_pinned(ctx::Context) = !isempty(ctx.env.manifest.deps) && all(kv -> last(kv).pinned, ctx.env.manifest.deps)
+
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
     foreach(pkg -> update_package_pin!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx.env, pkgs)
 
+    # TODO: change pin to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
+
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new = download_source(ctx)
     fixup_ext!(ctx.env, pkgs)
@@ -1557,6 +1619,8 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
     if any(pkg -> pkg.version == VersionSpec(), pkgs)
         pkgs = load_direct_deps(ctx.env, pkgs)
         check_registered(ctx.registries, pkgs)
+
+        # TODO: change free to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
@@ -1573,10 +1637,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
     end
 end
 
-function gen_test_code(source_path::String;
-        coverage=false,
-        julia_args::Cmd=``,
-        test_args::Cmd=``)
+function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
     test_file = testfile(source_path)
     code = """
         $(Base.load_path_setup_code(false))
@@ -1584,6 +1645,30 @@ function gen_test_code(source_path::String;
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
         """
+    return gen_subprocess_cmd(code, source_path; coverage, julia_args)
+end
+
+function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
+    # Note that we cannot load the dev-ed Pkg here during Pkg testing
+    # so the `Pkg.precompile` that is run here is the one in the sysimage
+    code = """
+        Pkg = Base.require(Base.PkgId(Base.UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f"), "Pkg"))
+        $(Base.load_path_setup_code(false))
+        append!(empty!(ARGS), $(repr(test_args.exec)))
+        Pkg.precompile(warn_loaded = false)
+        """
+    return gen_subprocess_cmd(code, source_path; coverage, julia_args)
+end
+
+function get_threads_spec()
+    if Threads.nthreads(:interactive) > 0
+        "$(Threads.nthreads(:default)),$(Threads.nthreads(:interactive))"
+    else
+        "$(Threads.nthreads(:default))"
+    end
+end
+
+function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_args)
     coverage_arg = if coverage isa Bool
         coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
@@ -1597,11 +1682,12 @@ function gen_test_code(source_path::String;
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes
+        --warn-overwrite=yes
         --depwarn=$(Base.JLOptions().depwarn == 2 ? "error" : "yes")
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
-        --threads=$(Threads.nthreads())
+        --threads=$(get_threads_spec())
         $(julia_args)
         --eval $(code)
     ```
@@ -1839,9 +1925,9 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 
     # See if we can find the test files for all packages
     missing_runtests = String[]
-    source_paths     = String[]
+    source_paths     = String[] # source_path is the package root (not /src)
     for pkg in pkgs
-        sourcepath = project_rel_path(ctx.env, source_path(ctx.env.project_file, pkg, ctx.julia_version)) # TODO
+        sourcepath = project_rel_path(ctx.env, source_path(ctx.env.manifest_file, pkg, ctx.julia_version)) # TODO
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
         push!(source_paths, sourcepath)
     end
@@ -1873,28 +1959,24 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
-            Pkg._auto_precompile(sandbox_ctx, warn_loaded = false)
-            printpkgstyle(ctx.io, :Testing, "Running tests...")
-            flush(ctx.io)
-            cmd = gen_test_code(source_path; coverage=coverage, julia_args=julia_args, test_args=test_args)
-            p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
-            interrupted = false
-            try
-                wait(p)
-            catch e
-                if e isa InterruptException
-                    interrupted = true
-                    print("\n")
-                    printpkgstyle(ctx.io, :Testing, "Tests interrupted. Exiting the test process\n", color = Base.error_color())
-                    # Give some time for the child interrupt handler to print a stacktrace and exit,
-                    # then kill the process if still running
-                    if timedwait(() -> !process_running(p), 4) == :timed_out
-                        kill(p, Base.SIGKILL)
+
+            if should_autoprecompile()
+                # Precompile in a child process with the test julia args to ensure native caches match test setup
+                cmd = gen_test_precompile_code(source_path; coverage, julia_args, test_args)
+                p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Precompilation of test environment interrupted. Exiting the test precompilation process")
+                if !success(p)
+                    if interrupted
+                        return
+                    else
+                        printpkgstyle(ctx.io, :Testing, "Precompilation of test environment failed. Continuing to tests", color = Base.warn_color())
                     end
-                else
-                    rethrow()
                 end
             end
+
+            printpkgstyle(ctx.io, :Testing, "Running tests...")
+            flush(ctx.io)
+            cmd = gen_test_code(source_path; coverage, julia_args, test_args)
+            p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
             elseif !interrupted
@@ -1944,7 +2026,28 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     end
 end
 
-
+# Handles the interrupting of a subprocess gracefully to avoid orphaning
+function subprocess_handler(cmd::Cmd, ctx, sandbox_ctx, error_msg::String)
+    p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
+    interrupted = false
+    try
+        wait(p)
+    catch e
+        if e isa InterruptException
+            interrupted = true
+            print("\n")
+            printpkgstyle(ctx.io, :Testing, "$error_msg\n", color = Base.error_color())
+            # Give some time for the child interrupt handler to print a stacktrace and exit,
+            # then kill the process if still running
+            if timedwait(() -> !process_running(p), 4) == :timed_out
+                kill(p, Base.SIGKILL)
+            end
+        else
+            rethrow()
+        end
+    end
+    return p, interrupted
+end
 
 # Display
 
@@ -2086,8 +2189,8 @@ function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifes
     return Tuple{T,S,S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T,S,S} for uuid in all_uuids]
 end
 
-function is_package_downloaded(project_file::String, pkg::PackageSpec; platform=HostPlatform())
-    sourcepath = source_path(project_file, pkg)
+function is_package_downloaded(manifest_file::String, pkg::PackageSpec; platform=HostPlatform())
+    sourcepath = source_path(manifest_file, pkg)
     identifier = pkg.name !== nothing ? pkg.name : pkg.uuid
     (sourcepath === nothing) && pkgerror("Could not locate the source code for the $(identifier) package. Are you trying to use a manifest generated by a different version of Julia?")
     isdir(sourcepath) || return false
@@ -2204,7 +2307,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
         # TODO: Show extension deps for project as well?
 
-        pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
+        pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.manifest_file, new)
 
         new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
         pkg_upgradable = new_ver_avail && isempty(cinfo[1])

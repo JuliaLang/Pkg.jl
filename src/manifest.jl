@@ -12,9 +12,11 @@ function read_field(name::String, default, info, map)
     return map(x)
 end
 
-read_pinned(::Nothing) = false
-read_pinned(pinned::Bool) = pinned
-read_pinned(::Any) = pkgerror("Expected field `pinned` to be a Boolean.")
+function read_pinned(pinned)
+    pinned === nothing && return false
+    pinned isa Bool && return pinned
+    pkgerror("Expected field `pinned` to be a Boolean.")
+end
 
 function safe_SHA1(sha::String)
     try sha = SHA1(sha)
@@ -101,8 +103,10 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
             end
         end
         # should have used dict format instead of vector format
-        length(infos) == 1 || pkgerror("Invalid manifest format. ",
-                                       "`$name=$uuid`'s dependency on `$dep` is ambiguous.")
+        if isnothing(infos) || length(infos) != 1
+            pkgerror("Invalid manifest format. ",
+                    "`$name=$uuid`'s dependency on `$dep` is ambiguous.")
+        end
         final[dep] = infos[1].uuid
     end
     return final
@@ -142,8 +146,8 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
     return Manifest(; julia_version, manifest_format, deps, other)
 end
 
-function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
-    julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]) : nothing
+function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
+    julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]::String) : nothing
     manifest_format = VersionNumber(raw["manifest_format"]::String)
     if !in(manifest_format.major, 1:2)
         if f_or_io isa IO
@@ -154,32 +158,37 @@ function Manifest(raw::Dict, f_or_io::Union{String, IO})::Manifest
     end
     stage1 = Dict{String,Vector{Stage1}}()
     if haskey(raw, "deps") # deps field doesn't exist if there are no deps
-        for (name, infos) in raw["deps"], info in infos
-            entry = PackageEntry()
-            entry.name = name
-            uuid = nothing
-            deps = nothing
-            weakdeps = nothing
-            try
-                entry.pinned      = read_pinned(get(info, "pinned", nothing))
-                uuid              = read_field("uuid",          nothing, info, safe_uuid)::UUID
-                entry.version     = read_field("version",       nothing, info, safe_version)
-                entry.path        = read_field("path",          nothing, info, safe_path)
-                entry.repo.source = read_field("repo-url",      nothing, info, identity)
-                entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
-                entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
-                entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
-                entry.uuid        = uuid
-                deps = read_deps(get(info::Dict, "deps", nothing))
-                weakdeps = read_deps(get(info::Dict, "weakdeps", nothing))
-                entry.exts = get(Dict{String, String}, info::Dict, "extensions")
-            catch
-                # TODO: Should probably not unconditionally log something
-                @debug "Could not parse manifest entry for `$name`" f_or_io
-                rethrow()
+        deps_raw = raw["deps"]::Dict{String, Any}
+        for (name::String, infos) in deps_raw
+            infos = infos::Vector{Any}
+            for info in infos
+                info = info::Dict{String, Any}
+                entry = PackageEntry()
+                entry.name = name
+                uuid = nothing
+                deps = nothing
+                weakdeps = nothing
+                try
+                    entry.pinned      = read_pinned(get(info, "pinned", nothing))
+                    uuid              = read_field("uuid",          nothing, info, safe_uuid)::UUID
+                    entry.version     = read_field("version",       nothing, info, safe_version)
+                    entry.path        = read_field("path",          nothing, info, safe_path)
+                    entry.repo.source = read_field("repo-url",      nothing, info, identity)
+                    entry.repo.rev    = read_field("repo-rev",      nothing, info, identity)
+                    entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
+                    entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
+                    entry.uuid        = uuid
+                    deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
+                    weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
+                    entry.exts = get(Dict{String, String}, info, "extensions")
+                catch
+                    # TODO: Should probably not unconditionally log something
+                    # @debug "Could not parse manifest entry for `$name`" f_or_io
+                    rethrow()
+                end
+                entry.other = info
+                stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps, weakdeps))
             end
-            entry.other = info::Union{Dict,Nothing}
-            stage1[name] = push!(get(stage1, name, Stage1[]), Stage1(uuid, entry, deps, weakdeps))
         end
         # by this point, all the fields of the `PackageEntry`s have been type casted
         # but we have *not* verified the _graph_ structure of the manifest

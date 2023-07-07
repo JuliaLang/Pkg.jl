@@ -2,6 +2,10 @@
 
 module Pkg
 
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
+    @eval Base.Experimental.@max_methods 1
+end
+
 import Random
 import REPL
 import TOML
@@ -10,8 +14,8 @@ using Dates
 export @pkg_str
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
-export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
-export PreserveLevel, PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
+export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
+export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
 depots() = Base.DEPOT_PATH
@@ -41,8 +45,7 @@ stdout_f() = something(DEFAULT_IO[], stdout)
 const PREV_ENV_PATH = Ref{String}("")
 
 can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
-
-include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
+should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
 include("utils.jl")
 include("MiniProgressBars.jl")
@@ -61,7 +64,7 @@ include("REPLMode/REPLMode.jl")
 import .REPLMode: @pkg_str
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
-import .Types: PRESERVE_TIERED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
+import .Types: PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 
 # Import artifacts API
 using .Artifacts, .PlatformEngines
@@ -100,8 +103,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, installed=false)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, installed=false)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -112,18 +115,35 @@ a package, also inside that package.
 The `preserve` keyword argument allows you to key into a specific tier in the resolve algorithm.
 The following table describes the argument values for `preserve` (in order of strictness):
 
-| Value             | Description                                                                         |
-|:------------------|:------------------------------------------------------------------------------------|
-| `PRESERVE_ALL`    | Preserve the state of all existing dependencies (including recursive dependencies)  |
-| `PRESERVE_DIRECT` | Preserve the state of all existing direct dependencies                              |
-| `PRESERVE_SEMVER` | Preserve semver-compatible versions of direct dependencies                          |
-| `PRESERVE_NONE`   | Do not attempt to preserve any version information                                  |
-| `PRESERVE_TIERED` | Use the tier which will preserve the most version information (this is the default) |
+| Value                       | Description                                                                        |
+|:----------------------------|:-----------------------------------------------------------------------------------|
+| `PRESERVE_ALL_INSTALLED`    | Like `PRESERVE_ALL` and only add those already installed                           |
+| `PRESERVE_ALL`              | Preserve the state of all existing dependencies (including recursive dependencies) |
+| `PRESERVE_DIRECT`           | Preserve the state of all existing direct dependencies                             |
+| `PRESERVE_SEMVER`           | Preserve semver-compatible versions of direct dependencies                         |
+| `PRESERVE_NONE`             | Do not attempt to preserve any version information                                 |
+| `PRESERVE_TIERED_INSTALLED` | Like `PRESERVE_TIERED` except `PRESERVE_ALL_INSTALLED` is tried first              |
+| `PRESERVE_TIERED`           | Use the tier that will preserve the most version information while                 |
+|                             | allowing version resolution to succeed (this is the default)                       |
+
+!!! note
+    To change the default strategy to `PRESERVE_TIERED_INSTALLED` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED`
+    to true.
+
+After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
+
+With the `PRESERVE_ALL_INSTALLED` strategy the newly added packages will likely already be precompiled, but if not this
+may be because either the combination of package versions resolved in this environment has not been resolved and
+precompiled before, or the precompile cache has been deleted by the LRU cache storage
+(see `JULIA_MAX_NUM_PRECOMPILE_FILES`).
+
+!!! compat "Julia 1.9"
+    The `PRESERVE_TIERED_INSTALLED` and `PRESERVE_ALL_INSTALLED` strategies requires at least Julia 1.9.
 
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
-Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and preserve existing dependencies
+Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
 Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master") # From url to remote gitrepo
@@ -138,11 +158,14 @@ See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 const add = API.add
 
 """
-    Pkg.precompile(; strict::Bool=false)
-    Pkg.precompile(pkg; strict::Bool=false)
-    Pkg.precompile(pkgs; strict::Bool=false)
+    Pkg.precompile(; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false)
 
 Precompile all or specific dependencies of the project in parallel.
+
+Set `timing=true` to show the duration of the precompilation of each dependency.
+
 !!! note
     Errors will only throw when precompiling the top-level dependencies, given that
     not all manifest dependencies may be loaded by the top-level dependencies on the given system.
@@ -156,6 +179,9 @@ Precompile all or specific dependencies of the project in parallel.
 
 !!! compat "Julia 1.8"
     Specifying packages to precompile requires at least Julia 1.8.
+
+!!! compat "Julia 1.9"
+    Timing mode requires at least Julia 1.9.
 
 # Examples
 ```julia
@@ -183,7 +209,7 @@ const rm = API.rm
     Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
 Show the reason why this package is in the manifest.
-The output is a the different way to reach the package
+The output is all the different ways to reach the package
 through the dependency graph starting from the dependencies.
 
 !!! compat "Julia 1.9"
@@ -281,39 +307,51 @@ redirecting to the `build.log` file.
 const build = API.build
 
 """
-    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
+    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
-git revision. A pinned package is never updated.
+git revision. A pinned package is never automatically updated: if `pkg` is tracking a path,
+or a repository, those remain tracked but will not update.
+To get updates from the origin path or remote repository the package must first be freed.
+
+!!! compat "Julia 1.7"
+    The `all_pkgs` kwarg was introduced in julia 1.7.
 
 # Examples
 ```julia
 Pkg.pin("Example")
 Pkg.pin(name="Example", version="0.3.1")
+Pkg.pin(all_pkgs = true)
 ```
 """
 const pin = API.pin
 
 """
-    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr)
+    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
 
 If `pkg` is pinned, remove the pin.
-If `pkg` is tracking a path,
-e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
+If `pkg` is tracking a path, e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
+To free all dependencies set `all_pkgs=true`.
+
+!!! compat "Julia 1.7"
+    The `all_pkgs` kwarg was introduced in julia 1.7.
 
 # Examples
 ```julia
 Pkg.free("Package")
+Pkg.free(all_pkgs = true)
 ```
+
+
 """
 const free = API.free
 
 
 """
-    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr)
-    Pkg.develop(pkgs::Union{Packagespec, Vector{Packagespec}}; io::IO=stderr)
+    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false)
+    Pkg.develop(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false)
 
 Make a package available for development by tracking it by path.
 If `pkg` is given with only a name or by a URL, the package will be downloaded
@@ -321,6 +359,9 @@ to the location specified by the environment variable `JULIA_PKG_DEVDIR`, with
 `joinpath(DEPOT_PATH[1],"dev")` being the default.
 
 If `pkg` is given as a local path, the package at that path will be tracked.
+
+The preserve strategies offered by `Pkg.add` are also available via the `preserve` kwarg.
+See [`Pkg.add`](@ref) for more information.
 
 # Examples
 ```julia
@@ -549,7 +590,9 @@ This includes:
   * The `name` of the package.
   * The package's unique `uuid`.
   * A `version` (for example when adding a package). When upgrading, can also be an instance of
-    the enum [`UpgradeLevel`](@ref).
+    the enum [`UpgradeLevel`](@ref). If the version is given as a `String` this means that unspecified versions
+    are "free", for example `version="0.5"` allows any version `0.5.x` to be installed. If given as a `VersionNumber`,
+    the exact version is used, for example `version=v"0.5.3"`.
   * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.
   * A local `path`. This is equivalent to using the `url` argument but can be more descriptive.
   * A `subdir` which can be used when adding a package that is not in the root of a repository.
@@ -572,6 +615,7 @@ Below is a comparison between the REPL mode and the functional API:
 |:---------------------|:------------------------------------------------------|
 | `Package`            | `PackageSpec("Package")`                              |
 | `Package@0.2`        | `PackageSpec(name="Package", version="0.2")`          |
+| -                    | `PackageSpec(name="Package", version=v"0.2.1")`       |
 | `Package=a67d...`    | `PackageSpec(name="Package", uuid="a67d...")`         |
 | `Package#master`     | `PackageSpec(name="Package", rev="master")`           |
 | `local/path#feature` | `PackageSpec(path="local/path"; rev="feature")`       |
@@ -671,7 +715,8 @@ function __init__()
         end
     end
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
-    OFFLINE_MODE[] = get_bool_env("JULIA_PKG_OFFLINE")
+    Base.PKG_PRECOMPILE_HOOK[] = precompile # allows Base to use Pkg.precompile during loading
+    OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
     return nothing
 end
 
@@ -739,8 +784,8 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{String}=String[]; warn_loaded = true, already_instantiated = false)
-    if Base.JLOptions().use_compiled_modules == 1 && get_bool_env("JULIA_PKG_PRECOMPILE_AUTO"; default="true")
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageSpec[]; warn_loaded = true, already_instantiated = false)
+    if should_autoprecompile()
         Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end

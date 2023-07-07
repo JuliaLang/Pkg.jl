@@ -1223,7 +1223,7 @@ function build_eq_classes1!(graph::Graph, p0::Int)
     # find unique behaviors
     repr_vecs = unique(cvecs)
 
-    # number of equivaent classes
+    # number of equivalent classes
     neq = length(repr_vecs)
 
     neq == spp[p0] && return # nothing to do here

@@ -18,6 +18,12 @@ The format of the version specifier is described in detail below.
 !!! info
     Use the command `compat` to edit the compat entries in the Pkg REPL, or manually edit the project file.
 
+!!! info
+    The rules below apply to the `Project.toml` file; for registries, see [Registry Compat.toml](@ref).
+
+!!! info
+    Note that registration into Julia's General Registry requires each dependency to have a `[compat`] entry with an upper bound.
+
 ## Version specifier format
 
 Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver).
