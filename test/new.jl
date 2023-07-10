@@ -2687,9 +2687,9 @@ end
 # # Other
 #
 # Note: these tests should be run on clean depots
-@testset "downloads" begin
-    for v in (nothing, "true")
-        withenv("JULIA_PKG_USE_CLI_GIT" => v) do
+for v in (nothing, "true")
+    withenv("JULIA_PKG_USE_CLI_GIT" => v) do
+        @testset "downloads" begin
             isolate() do
                 @testset "libgit2 downloads" begin
                     @testset "via name" begin
@@ -2700,7 +2700,7 @@ end
                         Pkg.rm(TEST_PKG.name)
                     end
                     @testset "via url" begin
-                        Pkg.add(url=TEST_PKG.url; use_git_for_all_downloads=true)
+                        Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
                         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
                         Pkg.rm(TEST_PKG.name)
                     end
