@@ -2689,7 +2689,7 @@ end
 # Note: these tests should be run on clean depots
 for v in (nothing, "true")
     withenv("JULIA_PKG_USE_CLI_GIT" => v) do
-        @testset "downloads" begin
+        @testset "downloads with JULIA_PKG_USE_CLI_GIT = $v" begin
             isolate() do
                 @testset "libgit2 downloads" begin
                     @testset "via name" begin
