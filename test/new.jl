@@ -2690,19 +2690,20 @@ end
 @testset "downloads" begin
     for v in (nothing, "true")
         withenv("JULIA_PKG_USE_CLI_GIT" => v) do
-            # libgit2 downloads
-            isolate() do
-                Pkg.add("Example"; use_git_for_all_downloads=true)
-                @test haskey(Pkg.dependencies(), exuuid)
-                @eval import $(Symbol(TEST_PKG.name))
-                @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
-                Pkg.rm(TEST_PKG.name)
-            end
             isolate() do
                 @testset "libgit2 downloads" begin
-                    Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
-                    @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                    Pkg.rm(TEST_PKG.name)
+                    @testset "via name" begin
+                        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                        @eval import $(Symbol(TEST_PKG.name))
+                        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
+                        Pkg.rm(TEST_PKG.name)
+                    end
+                    @testset "via url" begin
+                        Pkg.add(url=TEST_PKG.url; use_git_for_all_downloads=true)
+                        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                        Pkg.rm(TEST_PKG.name)
+                    end
                 end
                 @testset "libgit2 failures" begin
                     doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
