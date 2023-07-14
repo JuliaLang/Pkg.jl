@@ -2699,16 +2699,22 @@ for v in (nothing, "true")
                         @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
                         Pkg.rm(TEST_PKG.name)
                     end
-                    @testset "via url" begin
-                        Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
-                        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                        Pkg.rm(TEST_PKG.name)
+                    if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) && Base.iswindows()) == false
+                        # TODO: fix. on GH windows runners cli git will prompt for credentials here
+                        @testset "via url" begin
+                            Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
+                            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                            Pkg.rm(TEST_PKG.name)
+                        end
                     end
                 end
-                @testset "libgit2 failures" begin
-                    doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
-                    @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
-                    @test_throws Pkg.Types.PkgError Pkg.Registry.add(Pkg.RegistrySpec(url=doesnotexist))
+                if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) && Base.iswindows()) == false
+                    # TODO: fix. on GH windows runners cli git will prompt for credentials here
+                    @testset "libgit2 failures" begin
+                        doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
+                        @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
+                        @test_throws Pkg.Types.PkgError Pkg.Registry.add(Pkg.RegistrySpec(url=doesnotexist))
+                    end
                 end
                 @testset "tarball downloads" begin
                     Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
