@@ -2708,7 +2708,7 @@ for v in (nothing, "true")
                         end
                     end
                 end
-                if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) && Sys.iswindows()) == false
+                if !Sys.iswindows()
                     # TODO: fix. on GH windows runners cli git will prompt for credentials here
                     @testset "libgit2 failures" begin
                         doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
