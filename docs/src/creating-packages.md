@@ -299,6 +299,11 @@ loaded into the Julia session. This is very similar to functionality that the ex
 [Requires.jl](https://github.com/JuliaPackaging/Requires.jl) provides, but which is now available directly through Julia,
 and provides added benefits such as being able to precompile the extension.
 
+!!! warning
+    The recommended way to use extensions is to implement new methods for _existing functions_.
+    This can include zero-method functions defined in the main package by `function f end`.
+    On the other hand, if you create _new objects_ like functions or types in the extension, it is possible to access them (see below) but it is not considered good practice.
+
 A useful application of extensions could be for a plotting package that should be able to plot
 objects from a wide variety of different Julia packages.
 Adding all those different Julia packages as dependencies of the plotting package
@@ -365,6 +370,14 @@ If one considers `PlottingContourExt` as a completely separate package, it could
 [type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy) since `PlottingContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
 However, for extensions, it is ok to assume that the extension owns the methods in its parent package.
 In fact, this form of type piracy is one of the most standard use cases for extensions.
+
+Conversely, although it is possible, defining new functions or types in the extension is not recommended.
+If your use case requires it, you can call `Base.get_extension(Plotting, :PlottingContourExt)` to retrieve the extension module.
+From there, any name such as `MyFancyContourPlot` can be retrieved with the standard module prefixing syntax.
+If you use it often in a third party package, you may want to shorten it as follows:
+```julia
+const MyFancyContourPlot = Base.get_extension(Plotting, :PlottingContourExt).MyFancyContourPlot
+```
 
 !!! compat
     Often you will put the extension dependencies into the `test` target so they are loaded when running e.g. `Pkg.test()`. On earlier Julia versions
