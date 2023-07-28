@@ -422,7 +422,7 @@ the output to the difference as compared to the last git commit.
 The `--compat` option alone shows project compat entries.
 
 !!! compat "Julia 1.8"
-    The `⌃` and `⌅` indicators were added in Julia 1.8
+    The `⌃` and `⌅` indicators were added in Julia 1.8.
     The `--outdated` and `--compat` options require at least Julia 1.8.
 """,
 ],
