@@ -340,7 +340,7 @@ end
                 @test true
             else
                 # helpful for debugging why on CI
-                withenv(“JULIA_DEBUG” => loading) do
+                withenv(“JULIA_DEBUG” => “loading”) do
                     Pkg.precompile(io=iob)
                     println(String(take!(iob))
                     @test false
