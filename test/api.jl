@@ -336,7 +336,17 @@ end
             Pkg.precompile(io=iob)
             @test occursin("Precompiling", String(take!(iob)))
             Pkg.precompile(io=iob) # should be a no-op
-            @test !occursin("Precompiling", String(take!(iob)))
+            if !occursin("Precompiling", String(take!(iob)))
+                @test true
+            else
+                # helpful for debugging why on CI
+                println("Repeated precompilation detected. Running again with loading debugging on")
+                withenv("JULIA_DEBUG" => "loading") do
+                    Pkg.precompile(io=iob)
+                    println(String(take!(iob)))
+                    @test false
+                end
+            end
         end end
     end
 end
