@@ -343,7 +343,7 @@ end
                 println(“Repeated precompilation detected. Running again with loading debugging on”)
                 withenv(“JULIA_DEBUG” => “loading”) do
                     Pkg.precompile(io=iob)
-                    println(String(take!(iob))
+                    println(String(take!(iob)))
                     @test false
                 end
             end
