@@ -1348,31 +1348,38 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         end
                         bar.current = n_done - n_already_precomp
                         bar.max = n_total - n_already_precomp
-                        final_loop || print(iostr, sprint(io -> show_progress(io, bar; termwidth = displaysize(ctx.io)[2]); context=io), "\n")
+                        # when sizing to the terminal width subtract a little to give some tolerance to resizing the
+                        # window between print cycles
+                        termwidth = displaysize(io)[2] - 4
+                        if !final_loop
+                            str = sprint(io -> show_progress(io, bar; termwidth, carriagereturn=false); context=io)
+                            print(iostr, Base._truncate_at_width_or_chars(true, str, termwidth), "\n")
+                        end
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
                             _name = haskey(exts, dep) ? string(exts[dep], " → ", dep.name) : dep.name
                             name = dep in direct_deps ? _name : string(color_string(_name, :light_black))
-                            if dep in precomperr_deps
-                                print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
+                            line = if dep in precomperr_deps
+                                string(color_string("  ? ", Base.warn_color()), name)
                             elseif haskey(failed_deps, dep)
-                                print(iostr, color_string("  ✗ ", Base.error_color()), name, "\n")
+                                string(color_string("  ✗ ", Base.error_color()), name)
                             elseif was_recompiled[dep]
                                 !loaded && interrupted_or_done.set && continue
-                                print(iostr, color_string("  ✓ ", loaded ? Base.warn_color() : :green), name, "\n")
                                 loaded || @async begin # keep successful deps visible for short period
                                     sleep(1);
                                     filter!(!isequal(dep), pkg_queue)
                                 end
+                                string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name)
                             elseif started[dep]
                                 # Offset each spinner animation using the first character in the package name as the seed.
                                 # If not offset, on larger terminal fonts it looks odd that they all sync-up
                                 anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                                print(iostr, "  $anim_char_colored $name\n")
+                                string("  ", anim_char_colored, " ", name)
                             else
-                                print(iostr, "    $name\n")
+                                string("    ", name)
                             end
+                            println(iostr, Base._truncate_at_width_or_chars(true, line, termwidth))
                         end
                     end
                     last_length = length(pkg_queue_show)
