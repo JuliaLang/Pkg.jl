@@ -85,7 +85,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
                     try
                         Base.rm(target_depot; force=true, recursive=true)
                     catch err
-                        @show err
+                        println("warning: isolate failed to clean up depot.\n  $err")
                     end
                 end
             end
