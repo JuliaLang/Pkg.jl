@@ -1119,7 +1119,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             extdep_names = extdep_names isa String ? String[extdep_names] : extdep_names
             for extdep_name in extdep_names
                 extdep_uuid = weakdeps[extdep_name]
-                if extdep_uuid in keys(ctx.env.manifest.deps)
+                if extdep_uuid in keys(ctx.env.manifest.deps) || Base.in_sysimage(Base.PkgId(extdep_uuid, extdep_name))
                     push!(ext_deps, Base.PkgId(extdep_uuid, extdep_name))
                 else
                     all_extdeps_available = false
