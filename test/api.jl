@@ -392,4 +392,13 @@ end
     end
 end
 
+@testset "julia compat" begin
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarFuture"))
+        @test_throws "not satisfied; you can override and ignore this check by setting `ENV[\"JULIA_PKG_CHECK_JULIA_COMPAT\"]=0`" Pkg.add(path=path)
+        ENV["JULIA_PKG_CHECK_JULIA_COMPAT"]=0
+        Pkg.add(path=path)
+    end
+end
+
 end # module APITests
