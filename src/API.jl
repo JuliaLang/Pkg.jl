@@ -1449,8 +1449,10 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         # a functionally identical package cache (except for preferences, which may differ)
                         t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked) do
                             Logging.with_logger(Logging.NullLogger()) do
-                                # capture stderr, send stdout to devnull, don't skip loaded modules
-                                Base.compilecache(pkg, sourcepath, iob, devnull, false)
+                                # For Pkg.precompile capture stderr, send stdout to devnull.
+                                # For code load precompilation capture both.
+                                # In both cases don't skip loaded modules.
+                                Base.compilecache(pkg, sourcepath, iob, _from_loading ? iob : devnull, false)
                             end
                         end
                         t_str = timing ? string(lpad(round(t * 1e3, digits = 1), 9), " ms") : ""
