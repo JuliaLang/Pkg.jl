@@ -539,8 +539,7 @@ The logic for what path is activated is as follows:
     activate the environment at the tracked path.
   * Otherwise, `s` is interpreted as a non-existing path, which is then activated.
 
-If no argument is given to `activate`, then use `LOAD_PATH` to determine the
-project to activate.
+If no argument is given to `activate`, then use the first project found in `LOAD_PATH`.
 
 # Examples
 ```
