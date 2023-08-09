@@ -1535,12 +1535,6 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         " dependenc$(pluralpc) failed but may be precompilable after restarting julia"
                     )
                 end
-                if internal_call && !isempty(failed_deps)
-                    plural1 = length(failed_deps) == 1 ? "y" : "ies"
-                    plural2 = length(failed_deps) == 1 ? "" : "s"
-                    print(iostr, "\n  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural1) errored. ")
-                    print(iostr, "To see a full report either run `import Pkg; Pkg.precompile()` or load the package$(plural2)")
-                end
             end
             # show any stderr output, even if Pkg.precompile has been interrupted (quick_exit=true), given user may be
             # interrupting a hanging precompile job with stderr output. julia#48371
@@ -1561,20 +1555,32 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             end
         end
         quick_exit && return
-        if !internal_call
-            err_str = ""
-            n_direct_errs = 0
-            for (dep, err) in failed_deps
-                if strict || (dep in direct_deps)
-                    err_str = string(err_str, "\n$dep\n\n$err", (n_direct_errs > 0 ? "\n" : ""))
-                    n_direct_errs += 1
-                end
+        err_str = ""
+        n_direct_errs = 0
+        for (dep, err) in failed_deps
+            if strict || (dep in direct_deps)
+                err_str = string(err_str, "\n$dep\n\n$err", (n_direct_errs > 0 ? "\n" : ""))
+                n_direct_errs += 1
             end
-            if err_str != ""
-                println(io, "")
-                pluralde = n_direct_errs == 1 ? "y" : "ies"
-                direct = strict ? "" : "direct "
-                pkgerror("The following $n_direct_errs $(direct)dependenc$(pluralde) failed to precompile:\n$(err_str[1:end-1])")
+        end
+        if err_str != ""
+            pluralde = n_direct_errs == 1 ? "y" : "ies"
+            direct = strict ? "" : "direct "
+            err_msg = "The following $n_direct_errs $(direct)dependenc$(pluralde) failed to precompile:\n$(err_str[1:end-1])"
+            if internal_call # aka. auto-precompilation
+                if isinteractive() && !get(ENV, "CI", false)
+                    plural1 = length(failed_deps) == 1 ? "y" : "ies"
+                    println(io, "  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural1) errored.")
+                    println(io, "  For a report of the errors see `julia> err`")
+                    setglobal!(Base.MainInclude, :err, PkgPrecompileError(err_msg))
+                else
+                    # auto-precompilation shouldn't throw but if the user can't easily access the
+                    # error messages, just show them
+                    print(io, "\n", err_msg)
+                end
+            else
+                println(io)
+                pkgerror(err_msg)
             end
         end
     end
