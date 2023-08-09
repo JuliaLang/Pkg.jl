@@ -21,9 +21,12 @@ The format of the version specifier is described in detail below.
 !!! info
     The rules below apply to the `Project.toml` file; for registries, see [Registry Compat.toml](@ref).
 
+!!! info
+    Note that registration into Julia's General Registry requires each dependency to have a `[compat`] entry with an upper bound.
+
 ## Version specifier format
 
-Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver).
+Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver), with an exception for leading zeros.
 As an example, a version specifier given as e.g. `1.2.3` is therefore assumed to be compatible with the versions `[1.2.3 - 2.0.0)` where `)` is a non-inclusive upper bound.
 More specifically, a version specifier is either given as a **caret specifier**, e.g. `^1.2.3`  or as a **tilde specifier**, e.g. `~1.2.3`.
 Caret specifiers are the default and hence `1.2.3 == ^1.2.3`. The difference between a caret and tilde is described in the next section.

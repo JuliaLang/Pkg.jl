@@ -46,9 +46,9 @@ end
 tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version=VERSION) =
     !is_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
 
-function source_path(project_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
+function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     return is_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
-        pkg.path        !== nothing ? joinpath(dirname(project_file), pkg.path) :
+        pkg.path        !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
         pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         nothing
@@ -130,7 +130,7 @@ function is_instantiated(env::EnvCache; platform = HostPlatform())::Bool
         check_artifacts_downloaded(dirname(env.project_file); platform) || return false
     end
     # Make sure all paths/artifacts exist
-    return all(pkg -> is_package_downloaded(env.project_file, pkg; platform), pkgs)
+    return all(pkg -> is_package_downloaded(env.manifest_file, pkg; platform), pkgs)
 end
 
 function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
@@ -168,7 +168,7 @@ end
 # about extensions
 function fixup_ext!(env, pkgs)
     for pkg in pkgs
-        v = joinpath(source_path(env.project_file, pkg), "Project.toml")
+        v = joinpath(source_path(env.manifest_file, pkg), "Project.toml")
         if haskey(env.manifest, pkg.uuid)
             entry = env.manifest[pkg.uuid]
             if isfile(v)
@@ -535,7 +535,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                             Registry.isyanked(info, v) && continue
                             if installed_only
                                 pkg_spec = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=v, tree_hash=Registry.treehash(info, v))
-                                is_package_downloaded(env.project_file, pkg_spec) || continue
+                                is_package_downloaded(env.manifest_file, pkg_spec) || continue
                             end
 
                             # Skip package version that are not the same as external packages in sysimage
@@ -1740,7 +1740,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                  force_latest_compatible_version::Bool=false,
                  allow_earlier_backwards_compatible_versions::Bool=true,
                  allow_reresolve::Bool=true)
-    active_manifest = manifestfile_path(dirname(ctx.env.manifest_file))
     sandbox_project = projectfile_path(sandbox_path)
 
     mktempdir() do tmp
@@ -1762,15 +1761,15 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         # - copy over fixed subgraphs from test subgraph
         # really only need to copy over "special" nodes
         sandbox_env = Types.EnvCache(projectfile_path(sandbox_path))
-        sandbox_manifest = abspath!(sandbox_env, sandbox_env.manifest)
-        for (name, uuid) in sandbox_env.project.deps
-            entry = get(sandbox_manifest, uuid, nothing)
-            if entry !== nothing && isfixed(entry)
-                subgraph = prune_manifest(sandbox_manifest, [uuid])
-                for (uuid, entry) in subgraph
-                    if haskey(working_manifest, uuid)
-                        pkgerror("can not merge projects")
-                    end
+        abspath!(sandbox_env, sandbox_env.manifest)
+        for (uuid, entry) in sandbox_env.manifest.deps
+            entry_working = get(working_manifest, uuid, nothing)
+            if entry_working === nothing
+                working_manifest[uuid] = entry
+            else # Check for collision between the sandbox manifest and the "parent" manifest
+                if entry_working != entry && (ctx.env.pkg !== nothing && ctx.env.pkg.uuid != uuid)
+                    @warn "Entry in manifest at \"$sandbox_path\" for package \"$(entry_working.name)\" differs from that in \"$(ctx.env.manifest_file)\""
+                else
                     working_manifest[uuid] = entry
                 end
             end
@@ -2187,8 +2186,8 @@ function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifes
     return Tuple{T,S,S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T,S,S} for uuid in all_uuids]
 end
 
-function is_package_downloaded(project_file::String, pkg::PackageSpec; platform=HostPlatform())
-    sourcepath = source_path(project_file, pkg)
+function is_package_downloaded(manifest_file::String, pkg::PackageSpec; platform=HostPlatform())
+    sourcepath = source_path(manifest_file, pkg)
     identifier = pkg.name !== nothing ? pkg.name : pkg.uuid
     (sourcepath === nothing) && pkgerror("Could not locate the source code for the $(identifier) package. Are you trying to use a manifest generated by a different version of Julia?")
     isdir(sourcepath) || return false
@@ -2305,7 +2304,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
         # TODO: Show extension deps for project as well?
 
-        pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.project_file, new)
+        pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.manifest_file, new)
 
         new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
         pkg_upgradable = new_ver_avail && isempty(cinfo[1])

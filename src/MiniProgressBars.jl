@@ -26,7 +26,7 @@ function start_progress(io::IO, _::MiniProgressBar)
     print(io, ansi_disablecursor)
 end
 
-function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing)
+function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagereturn=true)
     if p.max == 0
         perc = 0.0
         prev_perc = 0.0
@@ -52,7 +52,7 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing)
     else
         string(p.current, "/",  p.max)
     end
-    termwidth = something(termwidth, displaysize(io)[2])
+    termwidth = @something termwidth displaysize(io)[2]
     max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
     n_filled = ceil(Int, max_progress_width * perc / 100)
     n_left = max_progress_width - n_filled
@@ -63,7 +63,7 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing)
         print(io, "="^n_filled, ">")
         print(io, " "^n_left, "]  ", )
         print(io, progress_text)
-        print(io, "\r")
+        carriagereturn && print(io, "\r")
     end
     # Print everything in one call
     print(io, to_print)
