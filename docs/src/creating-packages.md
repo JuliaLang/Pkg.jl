@@ -418,7 +418,8 @@ This is done by making the following changes (using the example above):
   ```julia
   isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
   ```
-- Add `Requires` to `[weakdeps]` in your `Project.toml` file, so that it is only installed on Julia versions that do not support extensions.
+- Add `Requires` to `[weakdeps]` in your `Project.toml` file, so that it is listed in both `[deps]` and `[weakdeps]`.
+  Julia 1.9+ knows to not install it as a regular dependency, whereas earlier versions will consider it a dependency.
 
 The package should now work with Requires.jl on Julia versions before extensions were introduced
 and with extensions on more recent Julia versions.
