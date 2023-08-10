@@ -114,15 +114,17 @@ easily update to newer version of your package when they come out, it is importa
 document what behavior will stay consistent across updates.
 
 Unless you note otherwise, the public API of your package is defined as all the behavior you
-describe about [exported symbols](https://docs.julialang.org/en/v1/manual/modules/#Export-lists).
-When you change the behavior of something that was previously exported so that the new
+describe about public symbols. A public symbol is a symbol that is exported from your
+package with the `export` keyword or marked as public with the `public` keyword. When you
+change the behavior of something that was previously public so that the new
 version no longer conforms to the specifications provided in the old version, you should
 adjust your package version number according to [Julia's variant on SemVer](#Version-specifier-format).
-If you would like to include a symbol in your public API without fully exporting it into the
-global namespace of folks who call `using YourPackage`, you can export that symbol with
-`export scoped=true that_symbol`. Symbols exported with `scoped=true` are just as public
-as those exported without it, but when folks call `using YourPackage`, they will still have
-to qualify access to those symbols with `YourPackage.that_symbol`.
+If you would like to include a symbol in your public API without exporting it into the
+global namespace of folks who call `using YourPackage`, you should mark that symbol as
+public with `public that_symbol`. Symbols marked as public with the `public` keyword are
+just as public as those marked as public with the `export` keyword, but when folks call
+`using YourPackage`, they will still have to qualify access to those symbols with
+`YourPackage.that_symbol`.
 
 Let's say we would like our `greet` function to be part of the public API, but not the
 `greet_alien` function. We could the write the following and release it as version `1.0.0`.
@@ -481,7 +483,7 @@ This is done by making the following changes (using the example above):
   if !isdefined(Base, :get_extension)
   using Requires
   end
-  
+
   @static if !isdefined(Base, :get_extension)
   function __init__()
       @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
