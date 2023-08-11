@@ -1578,7 +1578,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 if isinteractive() && !get(ENV, "CI", false)
                     plural1 = length(failed_deps) == 1 ? "y" : "ies"
                     println(io, "  ", color_string("$(length(failed_deps))", Base.error_color()), " dependenc$(plural1) errored.")
-                    println(io, "  For a report of the errors see `julia> err`")
+                    println(io, "  For a report of the errors see `julia> err`. To retry use `pkg> precompile`")
                     setglobal!(Base.MainInclude, :err, PkgPrecompileError(err_msg))
                 else
                     # auto-precompilation shouldn't throw but if the user can't easily access the
