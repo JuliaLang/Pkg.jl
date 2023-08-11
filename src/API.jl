@@ -1273,30 +1273,41 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
     end
 
-    stderr_outputs = Dict{Base.PkgId,String}()
+    std_outputs = Dict{Base.PkgId,String}()
     taskwaiting = Set{Base.PkgId}()
     pkgspidlocked = Dict{Base.PkgId,String}()
 
-    function monitor_stderr(pkg, iob)
-        try
-            while isopen(iob)
-                str = readline(iob)
-                stderr_outputs[pkg] = get(stderr_outputs, pkg, "") * str * "\n"
-                if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
-                    !fancyprint && lock(print_lock) do
-                        println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
+    function monitor_stderr_stdout(pkg, _stderr, _stdout)
+        @sync begin
+            @async try
+                while isopen(_stderr)
+                    str = readline(_stderr)
+                    std_outputs[pkg] = string(get(std_outputs, pkg, ""), str, "\n")
+                    if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
+                        !fancyprint && lock(print_lock) do
+                            println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
+                        end
+                        push!(taskwaiting, pkg)
                     end
-                    push!(taskwaiting, pkg)
-                end
-                if !fancyprint && in(pkg, taskwaiting)
-                    lock(print_lock) do
-                        println(io, str)
+                    if !fancyprint && in(pkg, taskwaiting)
+                        lock(print_lock) do
+                            println(io, str)
+                        end
                     end
                 end
+            catch err
+                err isa InterruptException || rethrow()
             end
-        catch err
-            err isa InterruptException || rethrow()
+            @async try
+                while isopen(_stdout)
+                    str = readline(_stdout)
+                    std_outputs[pkg] = string(get(std_outputs, pkg, ""), str, "\n")
+                end
+            catch err
+                err isa InterruptException || rethrow()
+            end
         end
+        return nothing
     end
 
     ## fancy print loop
@@ -1428,8 +1439,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     is_direct_dep = pkg in direct_deps
 
                     # stderr monitoring
-                    iob = Base.BufferStream()
-                    t_monitor = @async monitor_stderr(pkg, iob)
+                    stderr_pipe = Base.Pipe()
+                    stdout_pipe = Base.Pipe()
+                    t_monitor = @async monitor_stderr_stdout(pkg, stderr_pipe, stdout_pipe)
 
                     _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
                     name = is_direct_dep ? _name : string(color_string(_name, :light_black))
@@ -1449,10 +1461,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         # a functionally identical package cache (except for preferences, which may differ)
                         t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked) do
                             Logging.with_logger(Logging.NullLogger()) do
-                                # For Pkg.precompile capture stderr, send stdout to devnull.
-                                # For code load precompilation capture both.
-                                # In both cases don't skip loaded modules.
-                                Base.compilecache(pkg, sourcepath, iob, _from_loading ? iob : devnull, false)
+                                # The false here means we ignore loaded modules, so precompile for a fresh session
+                                Base.compilecache(pkg, sourcepath, stderr_pipe, stdout_pipe, false)
                             end
                         end
                         t_str = timing ? string(lpad(round(t * 1e3, digits = 1), 9), " ms") : ""
@@ -1471,11 +1481,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         end
                         loaded && (n_loaded += 1)
                     catch err
-                        close(iob)
+                        # close pipes to end the std output monitor
+                        close(stderr_pipe)
+                        close(stdout_pipe)
                         wait(t_monitor)
                         if err isa ErrorException || (err isa ArgumentError && startswith(err.msg, "Invalid header in cache file"))
-                            failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", get(stderr_outputs, pkg, "")) : ""
-                            delete!(stderr_outputs, pkg) # so it's not shown as warnings, given error report
+                            failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", strip(get(std_outputs, pkg, ""))) : ""
+                            delete!(std_outputs, pkg) # so it's not shown as warnings, given error report
                             !fancyprint && lock(print_lock) do
                                 println(io, timing ? " "^9 : "", color_string("  ✗ ", Base.error_color()), name)
                             end
@@ -1517,7 +1529,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     quick_exit = !all(istaskdone, tasks) || interrupted # if some not finished internal error is likely
     seconds_elapsed = round(Int, (time_ns() - time_start) / 1e9)
     ndeps = count(values(was_recompiled))
-    if ndeps > 0 || !isempty(failed_deps) || (quick_exit && !isempty(stderr_outputs))
+    if ndeps > 0 || !isempty(failed_deps) || (quick_exit && !isempty(std_outputs))
         str = sprint() do iostr
             if !quick_exit
                 plural = ndeps == 1 ? "y" : "ies"
@@ -1547,12 +1559,12 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             end
             # show any stderr output, even if Pkg.precompile has been interrupted (quick_exit=true), given user may be
             # interrupting a hanging precompile job with stderr output. julia#48371
-            filter!(kv -> !isempty(strip(last(kv))), stderr_outputs) # remove empty output
-            if !isempty(stderr_outputs)
-                plural1 = length(stderr_outputs) == 1 ? "y" : "ies"
-                plural2 = length(stderr_outputs) == 1 ? "" : "s"
-                print(iostr, "\n  ", color_string("$(length(stderr_outputs))", Base.warn_color()), " dependenc$(plural1) had output during precompilation:")
-                for (pkgid, err) in stderr_outputs
+            filter!(kv -> !isempty(strip(last(kv))), std_outputs) # remove empty output
+            if !isempty(std_outputs)
+                plural1 = length(std_outputs) == 1 ? "y" : "ies"
+                plural2 = length(std_outputs) == 1 ? "" : "s"
+                print(iostr, "\n  ", color_string("$(length(std_outputs))", Base.warn_color()), " dependenc$(plural1) had output during precompilation:")
+                for (pkgid, err) in std_outputs
                     err = join(split(strip(err), "\n"), color_string("\n│  ", Base.warn_color()))
                     print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err, color_string("\n└  ", Base.warn_color()))
                 end
