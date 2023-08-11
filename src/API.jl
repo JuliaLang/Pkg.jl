@@ -1549,7 +1549,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             if !isempty(stderr_outputs)
                 plural1 = length(stderr_outputs) == 1 ? "y" : "ies"
                 plural2 = length(stderr_outputs) == 1 ? "" : "s"
-                print(iostr, "\n  ", color_string("$(length(stderr_outputs))", Base.warn_color()), " dependenc$(plural1) had warnings during precompilation:")
+                print(iostr, "\n  ", color_string("$(length(stderr_outputs))", Base.warn_color()), " dependenc$(plural1) had output during precompilation:")
                 for (pkgid, err) in stderr_outputs
                     err = join(split(strip(err), "\n"), color_string("\n│  ", Base.warn_color()))
                     print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err, color_string("\n└  ", Base.warn_color()))
