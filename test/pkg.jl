@@ -140,6 +140,7 @@ import Pkg.Types: semver_spec, VersionSpec
     @test !(v"0.3" in semver_spec("0.1 - 0.2"))
     @test v"0.2.99" in semver_spec("0.1 - 0.2")
     @test v"0.3" in semver_spec("0.1 - 0")
+    @test semver_spec(string(VersionSpec("1-2"))) == VersionSpec("1-2")
 
     @test_throws ErrorException semver_spec("^^0.2.3")
     @test_throws ErrorException semver_spec("^^0.2.3.4")
@@ -152,7 +153,7 @@ end
 
 # TODO: Should rewrite these tests not to rely on internals like field names
 @testset "union, isjoinable" begin
-    @test sprint(print, VersionRange("0-0.3.2")) == "0-0.3.2"
+    @test sprint(print, VersionRange("0-0.3.2")) == "0 - 0.3.2"
     # test missing paths on union! and isjoinable
     # there's no == for VersionBound or VersionRange
     unified_vr = union!([VersionRange("1.5-2.8"), VersionRange("2.5-3")])[1]
