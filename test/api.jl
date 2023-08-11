@@ -396,8 +396,8 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         pathf = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarFuture"))
         pathp = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarPast"))
-        @test_throws "not satisfied; you can override and ignore this check by setting `ENV[\"JULIA_PKG_JULIA_COMPAT_IGNORE\"]=1`" Pkg.add(path=pathf)
-        @test_throws "not satisfied; you can override and ignore this check by setting `ENV[\"JULIA_PKG_JULIA_COMPAT_IGNORE\"]=1`" Pkg.add(path=pathp)
+        @test_throws "not satisfied; you can override and ignore this check by setting `ENV[\"JULIA_PKG_JULIA_COMPAT_IGNORE\"]`" Pkg.add(path=pathf)
+        @test_throws "not satisfied; you can override and ignore this check by setting `ENV[\"JULIA_PKG_JULIA_COMPAT_IGNORE\"]`" Pkg.add(path=pathp)
         ENV["JULIA_PKG_JULIA_COMPAT_IGNORE"]=1
         Pkg.add(path=pathf)
         Pkg.add(path=pathp)
