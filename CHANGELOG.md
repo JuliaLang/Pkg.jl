@@ -1,3 +1,10 @@
+Pkg v1.11 Release Notes
+=======================
+
+- Pkg now obeys `compat` bounds for `julia` and raises an error if the version of the running Julia binary is incompatible with the bounds in `Project.toml`.
+  The old behavior of disregarging Julia `compat` bounds can be restored by setting the `JULIA_PKG_JULIA_COMPAT_IGNORE` environmental variable.
+  Pkg has always obeyed this compat when working with Registry packages. This change is affects mostly local packages.
+
 Pkg v1.9 Release Notes
 =======================
 
