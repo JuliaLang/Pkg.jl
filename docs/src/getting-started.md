@@ -20,7 +20,7 @@ Upon entering the Pkg REPL, you should see a similar prompt:
 (v1.1) pkg>
 ```
 
-To add a package to the currently active environment (in this case `(v1.1)`, but more on environments later), use `add`:
+To add a package to the currently active environment (in this case `v1.1`, but more on environments later), use `add`:
 
 ```
 (v1.1) pkg> add Example
