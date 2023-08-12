@@ -6,8 +6,8 @@ and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (he
 UUIDs etc.
 
 !!! note
-    The `Project.toml` and `Manifest.toml` files are not only used by the package manager,
-    they are also used by Julia's code loading, and determines e.g. what `using Example`
+    The `Project.toml` and `Manifest.toml` files are not only used by the package manager;
+    they are also used by Julia's code loading, and determine e.g. what `using Example`
     should do. For more details see the section about
     [Code Loading](https://docs.julialang.org/en/v1/manual/code-loading/)
     in the Julia manual.
@@ -15,9 +15,19 @@ UUIDs etc.
 
 ## `Project.toml`
 
-The project file describes the project on a high level, for example the package/project
+The project file describes the project on a high level, for example, the package/project
 dependencies and compatibility constraints are listed in the project file. The file entries
 are described below.
+
+
+### The `authors` field
+
+For a package, the optional `authors` field is a list of strings describing the
+package authors, in the form `NAME <EMAIL>`. For example:
+```toml
+authors = ["Some One <someone@email.com>",
+           "Foo Bar <foo@bar.com>"]
+```
 
 
 ### The `name` field
@@ -26,8 +36,9 @@ The name of the package/project is determined by the `name` field, for example:
 ```toml
 name = "Example"
 ```
-The name can contain word characters `[a-zA-Z0-9_]`, but can not start with a number. For
-packages it is recommended to follow the
+The name must be a valid [identifier](https://docs.julialang.org/en/v1/base/base/#Base.isidentifier)
+(a sequence of Unicode characters that does not start with a number and is neither `true` nor `false`).
+For packages, it is recommended to follow the
 [package naming guidelines](@ref Package-naming-guidelines). The `name` field is mandatory
 for packages.
 
@@ -41,11 +52,14 @@ uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 ```
 The `uuid` field is mandatory for packages.
 
+!!! note
+    It is recommended that `UUIDs.uuid4()` is used to generate random UUIDs.
+
 
 ### The `version` field
 
 `version` is a string with the version number for the package/project. It should consist of
-three numbers, major version, minor version and patch number, separated with a `.`, for example:
+three numbers, major version, minor version, and patch number, separated with a `.`, for example:
 ```toml
 version = "1.2.5"
 ```
@@ -55,9 +69,12 @@ should follow SemVer. The basic rules are:
   be incremented.
 * After 1.0.0 only make breaking changes when incrementing the major version.
 * After 1.0.0 no new public API should be added without incrementing the minor version.
-  This includes, in particular, new types, functions, methods and method overloads, from
+  This includes, in particular, new types, functions, methods, and method overloads, from
   `Base` or other packages.
 See also the section on [Compatibility](@ref).
+
+Note that Pkg.jl deviates from the SemVer specification when it comes to versions pre-1.0.0. See
+the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 
 
 ### The `[deps]` section
@@ -71,7 +88,7 @@ Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ```
 
-Typically it is not needed to manually add entries to the `[deps]` section, this is instead
+Typically it is not needed to manually add entries to the `[deps]` section; this is instead
 handled by Pkg operations such as `add`.
 
 
@@ -102,10 +119,10 @@ julia = "1.1"
 ## `Manifest.toml`
 
 The manifest file is an absolute record of the state of the packages in the environment.
-It includes exact information about (direct and indirect) dependencies of the project, and
-given a `Project.toml` + `Manifest.toml` pair it is possible to instantiate the exact same
-package environment, which is very useful for reproducibility,
-see [`Pkg.instantiate`](@ref).
+It includes exact information about (direct and indirect) dependencies of the project.
+Given a `Project.toml` + `Manifest.toml` pair, it is possible to instantiate the exact same
+package environment, which is very useful for reproducibility.
+For the details, see [`Pkg.instantiate`](@ref).
 
 !!! note
     The `Manifest.toml` file is generated and maintained by Pkg and, in general, this file
@@ -114,8 +131,20 @@ see [`Pkg.instantiate`](@ref).
 
 ### `Manifest.toml` entries
 
+There are three top-level entries in the manifest which could look like this:
+
+```toml
+julia_version = "1.8.2"
+manifest_format = "2.0"
+project_hash = "4d9d5b552a1236d3c1171abf88d59da3aaac328a"
+```
+
+This shows the Julia version the manifest was created on, the "format" of the manifest
+and a hash of the project file, so that it is possible to see when the manifest is stale
+compared to the project file.
+
 Each dependency has its own section in the manifest file, and its content varies depending
-on how the dependency was added to the environment, see the examples below. Every
+on how the dependency was added to the environment. Every
 dependency section includes a combination of the following entries:
 
 * `uuid`: the [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier)
@@ -139,7 +168,7 @@ or with a specific version `pkg> add Example@1.2`, the resulting `Manifest.toml`
 like:
 
 ```toml
-[[Example]]
+[[deps.Example]]
 deps = ["DependencyA", "DependencyB"]
 git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
 uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
@@ -147,7 +176,7 @@ version = "1.2.3"
 ```
 
 Note, in particular, that no `repo-url` is present, since that information is included in
-the registry where this package were found.
+the registry where this package was found.
 
 #### Added package by branch
 
@@ -156,7 +185,7 @@ The resulting dependency section when adding a package specified by a branch, e.
 looks like:
 
 ```toml
-[[Example]]
+[[deps.Example]]
 deps = ["DependencyA", "DependencyB"]
 git-tree-sha1 = "54c7a512469a38312a058ec9f429e1db1f074474"
 repo-rev = "master"
@@ -174,7 +203,7 @@ The resulting dependency section when adding a package specified by a commit, e.
 `pkg> add Example#cf6ba6cc0be0bb5f56840188563579d67048be34`, looks like:
 
 ```toml
-[[Example]]
+[[deps.Example]]
 deps = ["DependencyA", "DependencyB"]
 git-tree-sha1 = "54c7a512469a38312a058ec9f429e1db1f074474"
 repo-rev = "cf6ba6cc0be0bb5f56840188563579d67048be34"
@@ -192,7 +221,7 @@ e.g. `pkg> develop Example` or `pkg> develop /path/to/local/folder/Example`,
 looks like:
 
 ```toml
-[[Example]]
+[[deps.Example]]
 deps = ["DependencyA", "DependencyB"]
 path = "/home/user/.julia/dev/Example/"
 uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
@@ -204,11 +233,11 @@ source tree is directly reflected.
 
 #### Pinned package
 
-Pinned packages are also recorded in the manifest file, the resulting
-dependency section for e.g. `pkg> add Example; pin Example` looks like:
+Pinned packages are also recorded in the manifest file; the resulting
+dependency section e.g. `pkg> add Example; pin Example` looks like:
 
 ```toml
-[[Example]]
+[[deps.Example]]
 deps = ["DependencyA", "DependencyB"]
 git-tree-sha1 = "54c7a512469a38312a058ec9f429e1db1f074474"
 pinned = true
@@ -218,7 +247,7 @@ version = "1.2.4"
 
 The only difference is the addition of the `pinned = true` entry.
 
-#### Multiple package with the same name
+#### Multiple packages with the same name
 
 Julia differentiates packages based on UUID, which means that the name alone is not enough
 to identify a package. It is possible to have multiple packages in the same environment
@@ -234,21 +263,21 @@ B = "edca9bc6-334e-11e9-3554-9595dbb4349c"
 
 If `A` now depends on `B = "f41f7b98-334e-11e9-1257-49272045fb24"`, i.e. *another* package
 named `B` there will be two different `B` packages in the `Manifest.toml` file. In this
-case the full `Manifest.toml` file, with `git-tree-sha1` and `version` fields removed for
-clarity, looks like:
+case, the full `Manifest.toml` file, with `git-tree-sha1` and `version` fields removed for
+clarity, looks like this:
 
 ```toml
-[[A]]
+[[deps.A]]
 uuid = "ead4f63c-334e-11e9-00e6-e7f0a5f21b60"
 
-    [A.deps]
+    [deps.A.deps]
     B = "f41f7b98-334e-11e9-1257-49272045fb24"
 
-[[B]]
+[[deps.B]]
 uuid = "f41f7b98-334e-11e9-1257-49272045fb24"
-[[B]]
+[[deps.B]]
 uuid = "edca9bc6-334e-11e9-3554-9595dbb4349c"
 ```
 
 There is now an array of the two `B` packages, and the `[deps]` section for `A` has been
-expanded in order to be explicit about which `B` package `A` depends on.
+expanded to be explicit about which `B` package `A` depends on.
