@@ -30,8 +30,8 @@ identify the package in projects that depend on it.
 to be reused by other Julia projects. For example a web application or a
 command-line utility, or simulation/analytics code accompanying a scientific paper.
 An application may have a UUID but does not need one.
-An application may also provide global configuration options for packages it
-depends on. Packages, on the other hand, may not provide global configuration
+An application may also set and change the global configurations of packages it
+depends on. Packages, on the other hand, may not change the global state of their dependencies
 since that could conflict with the configuration of the main application.
 
 !!! note
