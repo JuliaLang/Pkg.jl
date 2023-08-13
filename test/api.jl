@@ -38,7 +38,7 @@ using ..Utils
         cd(mkdir("tests"))
         Pkg.activate("Foo") # activate developed Foo from another directory
         @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
-        Pkg.activate() # activate home project
+        Pkg.activate() # activate LOAD_PATH project
         @test Base.ACTIVE_PROJECT[] === nothing
     end end
 end

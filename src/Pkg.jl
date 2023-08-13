@@ -541,9 +541,7 @@ The logic for what path is activated is as follows:
     activate the environment at the tracked path.
   * Otherwise, `s` is interpreted as a non-existing path, which is then activated.
 
-If no argument is given to `activate`, then activate the home project.
-The home project is specified by either the `--project` command line option to
-the julia executable, or the `JULIA_PROJECT` environment variable.
+If no argument is given to `activate`, then use the first project found in `LOAD_PATH`.
 
 # Examples
 ```

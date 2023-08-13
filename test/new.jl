@@ -53,7 +53,7 @@ Pkg._auto_gc_enabled[] = false
             source053 = pkg.source
             source053_time = mtime(pkg.source)
         end
-        # - The home project was automatically created.
+        # - The active project was automatically created.
         @test haskey(Pkg.project().dependencies, "Example")
         @test length(Pkg.project().dependencies) == 1
         # Now we install the same package at a different version:
