@@ -260,7 +260,7 @@ temp_pkg_dir() do project_path
         pkg"activate --shared Foo" # activate existing shared Foo
         @test Base.active_project() == joinpath(tmpdir, "Project.toml")
         pop!(Base.DEPOT_PATH)
-        pkg"activate" # activate home project
+        pkg"activate" # activate LOAD_PATH project
         @test Base.ACTIVE_PROJECT[] === nothing
         # expansion of ~
         if !Sys.iswindows()
