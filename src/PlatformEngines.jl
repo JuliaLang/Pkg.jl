@@ -54,7 +54,10 @@ function get_server_dir(
         @warn "malformed Pkg server value" server
         return
     end
-    joinpath(depots1(), "servers", String(m.captures[1]))
+    isempty(Base.DEPOT_PATH) && return
+    invalid_filename_chars = [':', '/', '<', '>', '"', '/', '\\', '|', '?', '*']
+    dir = join(replace(c -> c in invalid_filename_chars ? '_' : c, collect(String(m[1]))))
+    return joinpath(depots1(), "servers", dir)
 end
 
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex},Any}[]
@@ -232,6 +235,17 @@ function get_metadata_headers(url::AbstractString)
     end
     push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
     push!(headers, "Julia-Interactive" => string(isinteractive()))
+    for (key, val) in ENV
+        m = match(r"^JULIA_PKG_SERVER_([A-Z0-9_]+)$"i, key)
+        m === nothing && continue
+        val = strip(val)
+        isempty(val) && continue
+        words = split(m.captures[1], '_', keepempty=false)
+        isempty(words) && continue
+        hdr = "Julia-" * join(map(titlecase, words), '-')
+        any(hdr == k for (k, v) in headers) && continue
+        push!(headers, hdr => val)
+    end
     return headers
 end
 
@@ -257,10 +271,12 @@ function download(
     progress = if do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
         start_progress(io, bar)
-        (total, now) -> begin
-            bar.max = total
-            bar.current = now
-            show_progress(io, bar)
+        let bar=bar
+            (total, now) -> begin
+                bar.max = total
+                bar.current = now
+                show_progress(io, bar)
+            end
         end
     else
         (total, now) -> nothing
@@ -329,7 +345,15 @@ function download_verify(
     mkpath(dirname(dest))
 
     # Download the file, optionally continuing
-    download(url, dest; verbose=verbose || !quiet_download)
+    f = retry(delays = fill(1.0, 3)) do
+        try
+            download(url, dest; verbose=verbose || !quiet_download)
+        catch err
+            @debug "download and verify failed" url dest err
+            rethrow()
+        end
+    end
+    f()
     if hash !== nothing && !verify(dest, hash; verbose=verbose)
         # If the file already existed, it's possible the initially downloaded chunk
         # was bad.  If verification fails after downloading, auto-delete the file
@@ -343,12 +367,12 @@ function download_verify(
             # Download and verify from scratch
             download(url, dest; verbose=verbose || !quiet_download)
             if hash !== nothing && !verify(dest, hash; verbose=verbose)
-                error("Verification failed")
+                error("Verification failed. Download does not match expected hash")
             end
         else
             # If it didn't verify properly and we didn't resume, something is
             # very wrong and we must complain mightily.
-            error("Verification failed")
+            error("Verification failed. Download does not match expected hash")
         end
     end
 
@@ -378,10 +402,10 @@ end
 
 Compress `src_dir` into a tarball located at `tarball_path`.
 """
-function package(src_dir::AbstractString, tarball_path::AbstractString)
+function package(src_dir::AbstractString, tarball_path::AbstractString; io=stderr_f())
     rm(tarball_path, force=true)
     cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
-    open(pipeline(cmd, stdout=devnull), write=true) do io
+    open(pipeline(cmd, stdout=devnull, stderr=io), write=true) do io
         Tar.create(src_dir, io)
     end
 end
@@ -633,6 +657,24 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
     else
         return true
     end
+end
+
+# Verify the git-tree-sha1 hash of a compressed archive.
+function verify_archive_tree_hash(tar_gz::AbstractString, expected_hash::Base.SHA1)
+    # This can fail because unlike sha256 verification of the downloaded
+    # tarball, tree hash verification requires that the file can i) be
+    # decompressed and ii) is a proper archive.
+    calc_hash = try
+        Base.SHA1(open(Tar.tree_hash, `$(exe7z()) x $tar_gz -so`))
+    catch err
+        @warn "unable to decompress and read archive" exception=err
+        return false
+    end
+    if calc_hash != expected_hash
+        @warn "tarball content does not match expected git-tree-sha1"
+        return false
+    end
+    return true
 end
 
 end # module PlatformEngines

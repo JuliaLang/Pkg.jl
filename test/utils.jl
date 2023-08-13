@@ -3,6 +3,7 @@
 module Utils
 
 import ..Pkg
+import Pkg: stdout_f, stderr_f
 using Tar
 using TOML
 using UUIDs
@@ -10,34 +11,41 @@ using UUIDs
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-       list_tarball_files
+       list_tarball_files, recursive_rm_cov_files
 
-const LOADED_DEPOT = joinpath(@__DIR__, "loaded_depot")
+const CACHE_DIRECTORY = mktempdir(; cleanup = true)
 
-const REGISTRY_DEPOT = joinpath(@__DIR__, "registry_depot")
+const LOADED_DEPOT = joinpath(CACHE_DIRECTORY, "loaded_depot")
+
+const REGISTRY_DEPOT = joinpath(CACHE_DIRECTORY, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 
-function init_reg()
-    url, _ = Pkg.Registry.pkg_server_registry_url(GENERAL_UUID, nothing)
+function check_init_reg()
+    isfile(joinpath(REGISTRY_DIR, "Registry.toml")) && return
     mkpath(REGISTRY_DIR)
     if Pkg.Registry.registry_use_pkg_server()
+        url = Pkg.Registry.pkg_server_registry_urls()[GENERAL_UUID]
         @info "Downloading General registry from $url"
-        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr)
+        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr_f())
         tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")
         hash = Pkg.Registry.pkg_server_url_hash(url)
         write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
     else
         Base.shred!(LibGit2.CachedCredentials()) do creds
-            LibGit2.with(Pkg.GitTools.clone(
-                stderr,
-                "https://github.com/JuliaRegistries/General.git",
-                REGISTRY_DIR,
-                credentials = creds)) do repo
+            f = retry(delays = fill(5.0, 3), check=(s,e)->isa(e, Pkg.Types.PkgError)) do
+                LibGit2.with(Pkg.GitTools.clone(
+                    stderr_f(),
+                    "https://github.com/JuliaRegistries/General.git",
+                    REGISTRY_DIR,
+                    credentials = creds)) do repo
+                end
             end
+            f() # retry returns a function that should be called
         end
     end
+    isfile(joinpath(REGISTRY_DIR, "Registry.toml")) || error("Registry did not install properly")
 end
 
 function isolate(fn::Function; loaded_depot=false, linked_reg=true)
@@ -51,9 +59,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
         # Clone/download the registry only once
-        if !isdir(REGISTRY_DIR)
-            init_reg()
-        end
+        check_init_reg()
 
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
@@ -79,7 +85,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
                     try
                         Base.rm(target_depot; force=true, recursive=true)
                     catch err
-                        @show err
+                        println("warning: isolate failed to clean up depot.\n  $err")
                     end
                 end
             end
@@ -103,9 +109,10 @@ function isolate_and_pin_registry(fn::Function; registry_url::String, registry_c
     isolate(loaded_depot = false, linked_reg = true) do
         this_gen_reg_path = joinpath(last(Base.DEPOT_PATH), "registries", "General")
         rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
-        run(`git clone $(registry_url) $(this_gen_reg_path)`)
+        cmd = `git clone $(registry_url) $(this_gen_reg_path)`
+        run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
         cd(this_gen_reg_path) do
-            run(`git checkout $(registry_commit)`)
+            run(pipeline(`git checkout $(registry_commit)`, stdout = stdout_f(), stderr = stderr_f()))
         end
         fn()
     end
@@ -122,9 +129,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
     try
         # Clone/download the registry only once
-        if !isdir(REGISTRY_DIR)
-            init_reg()
-        end
+        check_init_reg()
 
         empty!(LOAD_PATH)
         empty!(DEPOT_PATH)
@@ -148,7 +153,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
                     rm && Base.rm(depot_dir; force=true, recursive=true)
                 catch err
                     # Avoid raising an exception here as it will mask the original exception
-                    println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+                    println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
                 end
             end
         end
@@ -174,7 +179,7 @@ function cd_tempdir(f; rm=true)
         rm && Base.rm(tmp; force = true, recursive = true)
     catch err
         # Avoid raising an exception here as it will mask the original exception
-        println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+        println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
     end
 end
 
@@ -211,7 +216,7 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
             rm && Base.rm(env_path; force = true, recursive = true)
         catch err
             # Avoid raising an exception here as it will mask the original exception
-            println(Base.stderr, "Exception in finally: $(sprint(showerror, err))")
+            println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
         end
     end
 end
@@ -271,14 +276,19 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
 end
 
 function add_this_pkg(; platform=Base.BinaryPlatforms.HostPlatform())
-    pkg_dir = dirname(@__DIR__)
-    pkg_uuid = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
-    spec = Pkg.PackageSpec(
-        name="Pkg",
-        uuid=UUID(pkg_uuid),
-        path=pkg_dir,
-    )
-    Pkg.develop(spec; platform)
+    try
+        Pkg.respect_sysimage_versions(false)
+        pkg_dir = dirname(@__DIR__)
+        pkg_uuid = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
+        spec = Pkg.PackageSpec(
+            name="Pkg",
+            uuid=UUID(pkg_uuid),
+            path=pkg_dir,
+        )
+        Pkg.develop(spec; platform)
+    finally
+        Pkg.respect_sysimage_versions(true)
+    end
 end
 
 function list_tarball_files(tarball_path::AbstractString)
@@ -287,6 +297,26 @@ function list_tarball_files(tarball_path::AbstractString)
         push!(names, hdr.path)
     end
     return names
+end
+
+function show_output_if_command_errors(cmd::Cmd)
+    out = IOBuffer()
+    proc = run(pipeline(cmd; stdout=out); wait = false)
+    wait(proc)
+    if !success(proc)
+        seekstart(out)
+        println(read(out, String))
+        Base.pipeline_error(proc)
+    end
+    return nothing
+end
+
+function recursive_rm_cov_files(rootdir::String)
+    for (root, _, files) in walkdir(rootdir)
+        for file in files
+            endswith(file, ".cov") && rm(joinpath(root, file))
+        end
+    end
 end
 
 end

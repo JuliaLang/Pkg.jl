@@ -6,7 +6,7 @@ function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=fa
     println(io, " ", text)
 end
 
-function linewrap(str::String; io = stdout, padding = 0, width = Base.displaysize(io)[2])
+function linewrap(str::String; io = stdout_f(), padding = 0, width = Base.displaysize(io)[2])
     text_chunks = split(str, ' ')
     lines = String[""]
     for chunk in text_chunks
@@ -46,6 +46,11 @@ function set_readonly(path)
             # outside of the root, links to non-file/non-directories, etc...)
             islink(filepath) && continue
             fmode = filemode(filepath)
+            @static if Sys.iswindows()
+                if Sys.isexecutable(filepath)
+                    fmode |= 0o111
+                end
+            end
             try
                 chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
             catch
@@ -58,6 +63,7 @@ set_readonly(::Nothing) = nothing
 
 # try to call realpath on as much as possible
 function safe_realpath(path)
+    isempty(path) && return path
     if ispath(path)
         try
             return realpath(path)

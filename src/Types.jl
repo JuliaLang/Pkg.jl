@@ -12,23 +12,26 @@ using REPL.TerminalMenus
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
+import FileWatching
 
 import Base: SHA1
 using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml, find_registered!,
+    PkgError, pkgerror, PkgPrecompileError,
+    has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
     read_project, read_package, read_manifest,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
-    PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE,
+    PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED,
+    PRESERVE_TIERED_INSTALLED, PRESERVE_NONE,
     projectfile_path, manifestfile_path
 
 # Load in data about historical stdlibs
@@ -67,12 +70,22 @@ end
 pkgerror(msg::String...) = throw(PkgError(join(msg)))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 
+#################
+# Pkg Precompile Error #
+#################
+struct PkgPrecompileError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, err::PkgPrecompileError) = print(io, err.msg)
+# This needs a show method to make `julia> err` show nicely
+Base.show(io::IO, err::PkgPrecompileError) = print(io, "PkgPrecompileError: ", err.msg)
+
 
 ###############
 # PackageSpec #
 ###############
 @enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
-@enum(PreserveLevel, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_NONE)
+@enum(PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_TIERED_INSTALLED, PRESERVE_NONE)
 @enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
 const VersionTypes = Union{VersionNumber,VersionSpec,UpgradeLevel}
@@ -96,9 +109,9 @@ mutable struct PackageSpec
     path::Union{Nothing,String}
     pinned::Bool
     # used for input only
-    url
-    rev
-    subdir
+    url::Union{Nothing, String}
+    rev::Union{Nothing, String}
+    subdir::Union{Nothing, String}
 
 end
 function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
@@ -139,7 +152,8 @@ isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
     vstr = repr(pkg.version)
-    f = []
+    f = Pair{String, Any}[]
+
     pkg.name !== nothing && push!(f, "name" => pkg.name)
     pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
     pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
@@ -150,7 +164,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     pkg.pinned && push!(f, "pinned" => pkg.pinned)
     push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
     if pkg.repo.source !== nothing
-        push!(f, "repo/source" => string("\"", pkg.repo.source, "\""))
+        push!(f, "repo/source" => string("\"", pkg.repo.source::String, "\""))
     end
     if pkg.repo.rev !== nothing
         push!(f, "repo/rev" => pkg.repo.rev)
@@ -160,7 +174,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
-        print(io, "  ", field, " = ", value, "\n")
+        print(io, "  ", field, " = ", string(value)::String, "\n")
     end
     print(io, ")")
 end
@@ -178,17 +192,24 @@ function projectfile_path(env_path::String; strict=false)
 end
 
 function manifestfile_path(env_path::String; strict=false)
-    for name in Base.manifest_names
+    man_names = @static Base.manifest_names isa Tuple ? Base.manifest_names : Base.manifest_names()
+    for name in man_names
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
     if strict
         return nothing
     else
-        project = basename(projectfile_path(env_path)::String)
-        idx = findfirst(x -> x == project, Base.project_names)
-        @assert idx !== nothing
-        return joinpath(env_path, Base.manifest_names[idx])
+        n_names = length(man_names)
+        if n_names == 1
+            return joinpath(env_path, only(man_name))
+        else
+            project = basename(projectfile_path(env_path)::String)
+            idx = findfirst(x -> x == project, Base.project_names)
+            @assert idx !== nothing
+            idx = idx + (n_names - length(Base.project_names)) # ignore custom name if present
+            return joinpath(env_path, man_names[idx])
+        end
     end
 end
 
@@ -219,6 +240,8 @@ Base.@kwdef mutable struct Compat
     val::VersionSpec
     str::String
 end
+Base.:(==)(t1::Compat, t2::Compat) = t1.val == t2.val
+Base.hash(t::Compat, h::UInt) = hash(t.val, h)
 
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
@@ -229,13 +252,26 @@ Base.@kwdef mutable struct Project
     manifest::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
+    # deps that are also in weakdeps for backwards compat
+    # we do not store them in deps because we want to ignore them
+    # but for writing out the project file we need to remember them:
+    _deps_weak::Dict{String,UUID} = Dict{String,UUID}()
+    weakdeps::Dict{String,UUID} = Dict{String,UUID}()
+    exts::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
-Base.hash(x::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
+Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
+# only hash the deps and compat fields as they are the only fields that affect a resolve
+function project_resolve_hash(t::Project)
+    iob = IOBuffer()
+    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(t.deps); by=first))
+    foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
+    return bytes2hex(sha1(seekstart(iob)))
+end
 
 Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
@@ -245,6 +281,8 @@ Base.@kwdef mutable struct PackageEntry
     repo::GitRepo = GitRepo()
     tree_hash::Union{Nothing,SHA1} = nothing
     deps::Dict{String,UUID} = Dict{String,UUID}()
+    weakdeps::Dict{String,UUID} = Dict{String,UUID}()
+    exts::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     uuid::Union{Nothing, UUID} = nothing
     other::Union{Dict,Nothing} = nothing
 end
@@ -255,9 +293,11 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.repo == t2.repo &&
     t1.tree_hash == t2.tree_hash &&
     t1.deps == t2.deps &&
+    t1.weakdeps == t2.weakdeps &&
+    t1.exts == t2.exts &&
     t1.uuid == t2.uuid
     # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.uuid], init=h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init=h)  # omits `other`
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing,VersionNumber} = nothing # only set to VERSION when resolving
@@ -332,7 +372,8 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     dir = abspath(project_dir)
     manifest_file = project.manifest
     manifest_file = manifest_file !== nothing ?
-        abspath(manifest_file) : manifestfile_path(dir)::String
+        (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
+        manifestfile_path(dir)::String
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
 
@@ -352,13 +393,22 @@ end
 include("project.jl")
 include("manifest.jl")
 
+function num_concurrent_downloads()
+    val = get(ENV, "JULIA_PKG_CONCURRENT_DOWNLOADS", "8")
+    num = tryparse(Int, val)
+    isnothing(num) && error("Environment variable `JULIA_PKG_CONCURRENT_DOWNLOADS` expects an integer, instead found $(val)")
+    if num < 1
+        error("Number of concurrent downloads must be greater than 0")
+    end
+    return num
+end
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
     io::IO = stderr_f()
     use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
-    num_concurrent_downloads::Int = 8
+    num_concurrent_downloads::Int = num_concurrent_downloads()
 
     # Registris
     registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()
@@ -380,16 +430,21 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
-const STDLIB = Ref{Dict{UUID,String}}()
+const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
-    stdlib = Dict{UUID,String}()
+    stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
+        # DelimitedFiles is an upgradable stdlib
+        # TODO: Store this information of upgradable stdlibs somewhere else
+        name == "DelimitedFiles" && continue
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
-        uuid = get(project, "uuid", nothing)
+        uuid = get(project, "uuid", nothing)::Union{String, Nothing}
+        v_str = get(project, "version", nothing)::Union{String, Nothing}
+        version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
-        stdlib[UUID(uuid)] = name
+        stdlib[UUID(uuid)] = (name, version)
     end
     return stdlib
 end
@@ -405,8 +460,14 @@ is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 # Find the entry in `STDLIBS_BY_VERSION`
 # that corresponds to the requested version, and use that.
 # If we can't find one, defaults to `UNREGISTERED_STDLIBS`
-function get_last_stdlibs(julia_version::VersionNumber)
+function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_current_version = false)
+    if !use_historical_for_current_version && julia_version == VERSION
+        return stdlibs()
+    end
     last_stdlibs = UNREGISTERED_STDLIBS
+    if isempty(STDLIBS_BY_VERSION)
+        pkgerror("If you want to set `julia_version`, you must first populate the `STDLIBS_BY_VERSION` global constant")
+    end
     for (version, stdlibs) in STDLIBS_BY_VERSION
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
             break
@@ -466,9 +527,8 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     usage_file = joinpath(logdir(), usage_filepath)
     timestamp = now()
 
-    ## Atomically write usage file
-    while true
-        # read existing usage file
+    ## Atomically write usage file using process id locking
+    FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
         usage = if isfile(usage_file)
             TOML.parsefile(usage_file)
         else
@@ -480,34 +540,23 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
 
         # keep only latest usage info
         for k in keys(usage)
-            times = map(d -> Dates.DateTime(d["time"]), usage[k])
+            times = map(usage[k]) do d
+                if haskey(d, "time")
+                    Dates.DateTime(d["time"])
+                else
+                    # if there's no time entry because of a write failure be conservative and mark it as being used now
+                    @debug "Usage file `$usage_filepath` has a missing `time` entry for `$k`. Marking as used `now()`"
+                    Dates.now()
+                end
+            end
             usage[k] = [Dict("time" => maximum(times))]
         end
 
-        # Write to a temp file in the same directory as the destination
-        temp_usage_file = tempname(logdir())
-        open(temp_usage_file, "w") do io
+        open(usage_file, "w") do io
             TOML.print(io, usage, sorted=true)
         end
-
-        # Move the temp file into place, replacing the original
-        mv(temp_usage_file, usage_file, force = true)
-
-        # Check that the new file has what we want in it
-        new_usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
-        else
-            Dict{String, Any}()
-        end
-        if haskey(new_usage, source_file)
-            for e in new_usage[source_file]
-                if Dates.DateTime(e["time"]) >= timestamp
-                    return
-                end
-            end
-        end
-        # If not, try again
     end
+    return
 end
 
 function read_package(path::String)
@@ -540,6 +589,18 @@ function devpath(env::EnvCache, name::AbstractString, shared::Bool)
     return joinpath(dev_dir, name)
 end
 
+function error_if_in_sysimage(pkg::PackageSpec)
+    RESPECT_SYSIMAGE_VERSIONS[] || return false
+    if pkg.uuid === nothing
+        @error "Expected package $(pkg.name) to have a set UUID, please file a bug report."
+        return false
+    end
+    pkgid = Base.PkgId(pkg.uuid, pkg.name)
+    if Base.in_sysimage(pkgid)
+        pkgerror("Tried to develop or add by URL package $(pkgid) which is already in the sysimage, use `Pkg.respect_sysimage_versions(false)` to disable this check.")
+    end
+end
+
 function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     # First, check if we can compute the path easily (which requires a given local path or name)
     is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
@@ -558,10 +619,11 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         end
         if isdir(dev_path)
             resolve_projectfile!(ctx.env, pkg, dev_path)
+            error_if_in_sysimage(pkg)
             if is_local_path
-                pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+                pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             else
-                pkg.path = shared ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+                pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             end
             return false
         end
@@ -619,7 +681,8 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     if !has_uuid(pkg)
         resolve_projectfile!(ctx.env, pkg, dev_path)
     end
-    pkg.path = shared ? dev_path : relative_project_path(ctx.env.project_file, dev_path)
+    error_if_in_sysimage(pkg)
+    pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
     if pkg.repo.subdir !== nothing
         pkg.path = joinpath(pkg.path, pkg.repo.subdir)
     end
@@ -648,7 +711,7 @@ function set_repo_source_from_registry!(ctx, pkg)
         Pkg.Operations.update_registries(ctx; force=false)
         registry_resolve!(ctx.registries, pkg)
     end
-    ensure_resolved(ctx.env.manifest, [pkg]; registry=true)
+    ensure_resolved(ctx, ctx.env.manifest, [pkg]; registry=true)
     # We might have been given a name / uuid combo that does not have an entry in the registry
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
@@ -697,15 +760,17 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
-            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.project_file, pkg.repo.source)
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), pkg.repo.source))
+            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.manifest_file, pkg.repo.source)
+            repo_source = normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source))
         else
             pkgerror("Path `$(pkg.repo.source)` does not exist.")
         end
     end
 
     let repo_source = repo_source
-        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source), repo_source; isbare=true)) do repo
+        # The type-assertions below are necessary presumably due to julia#36454
+        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::Union{Nothing,String}), repo_source::Union{Nothing,String}; isbare=true)) do repo
+            repo_source_typed = repo_source::Union{Nothing,String}
             GitTools.check_valid_HEAD(repo)
 
             # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
@@ -717,7 +782,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             fetched = false
             if obj_branch === nothing
                 fetched = true
-                GitTools.fetch(ctx.io, repo, repo_source; refspecs=refspecs)
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
                 obj_branch = get_object_or_branch(repo, pkg.repo.rev)
                 if obj_branch === nothing
                     pkgerror("Did not find rev $(pkg.repo.rev) in repository")
@@ -729,7 +794,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             innerentry = manifest_info(ctx.env.manifest, pkg.uuid)
             ispinned = innerentry !== nothing && innerentry.pinned
             if isbranch && !fetched && !ispinned
-                GitTools.fetch(ctx.io, repo, repo_source; refspecs=refspecs)
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
                 gitobject, isbranch = get_object_or_branch(repo, pkg.repo.rev)
             end
 
@@ -747,13 +812,15 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
             if has_uuid(pkg)
+                error_if_in_sysimage(pkg)
                 version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
                 isdir(version_path) && return false
             end
 
             temp_path = mktempdir()
             GitTools.checkout_tree_to_path(repo, tree_hash_object, temp_path)
-            package = resolve_projectfile!(ctx.env, pkg, temp_path)
+            resolve_projectfile!(ctx.env, pkg, temp_path)
+            error_if_in_sysimage(pkg)
 
             # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
             # check to see if the package exists at its canonical path.
@@ -780,8 +847,8 @@ end
 
 function resolve_projectfile!(env::EnvCache, pkg, project_path)
     project_file = projectfile_path(project_path; strict=true)
-    project_file === nothing && pkgerror(string("could not find project file in package at `",
-                                                pkg.repo.source !== nothing ? pkg.repo.source : (pkg.path)), "` maybe `subdir` needs to be specified")
+    project_file === nothing && pkgerror(string("could not find project file (Project.toml or JuliaProject.toml) in package at `",
+                    something(pkg.repo.source, pkg.path, project_path), "` maybe `subdir` needs to be specified"))
     project_data = read_package(project_file)
     if pkg.uuid === nothing || pkg.uuid == project_data.uuid
         pkg.uuid = project_data.uuid
@@ -873,9 +940,6 @@ registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpe
 function registry_resolve!(registries::Vector{Registry.RegistryInstance}, pkgs::AbstractVector{PackageSpec})
     # if there are no half-specified packages, return early
     any(pkg -> has_name(pkg) ⊻ has_uuid(pkg), pkgs) || return
-    # collect all names and uuids since we're looking anyway
-    names = [pkg.name::String for pkg in pkgs if has_name(pkg)]
-    uuids = [pkg.uuid::UUID for pkg in pkgs if has_uuid(pkg)]
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
@@ -892,24 +956,25 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, name) in stdlibs()
+            for (uuid, (name, version)) in stdlibs()
                 name == pkg.name && (pkg.uuid = uuid)
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name = get(stdlibs(), pkg.uuid, nothing)
+            name, version = get(stdlibs(), pkg.uuid, (nothing, nothing))
             nothing !== name && (pkg.name = name)
         end
     end
 end
 
 # Ensure that all packages are fully resolved
-function ensure_resolved(manifest::Manifest,
+function ensure_resolved(ctx::Context, manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
         registry::Bool=false,)::Nothing
     unresolved_uuids = Dict{String,Vector{UUID}}()
     for pkg in pkgs
         has_uuid(pkg) && continue
+        !has_name(pkg) && pkgerror("Package $pkg has neither name nor uuid")
         uuids = [uuid for (uuid, entry) in manifest if entry.name == pkg.name]
         sort!(uuids, by=uuid -> uuid.value)
         unresolved_uuids[pkg.name] = uuids
@@ -920,21 +985,29 @@ function ensure_resolved(manifest::Manifest,
         push!(unresolved_names, pkg.uuid)
     end
     isempty(unresolved_uuids) && isempty(unresolved_names) && return
-    msg = sprint() do io
+    msg = sprint(context = ctx.io) do io
         if !isempty(unresolved_uuids)
-            println(io, "The following package names could not be resolved:")
+            print(io, "The following package names could not be resolved:")
             for (name, uuids) in sort!(collect(unresolved_uuids), by=lowercase ∘ first)
-                print(io, " * $name (")
+                print(io, "\n * $name (")
                 if length(uuids) == 0
                     what = ["project", "manifest"]
                     registry && push!(what, "registry")
                     print(io, "not found in ")
                     join(io, what, ", ", " or ")
+                    print(io, ")")
+                    all_names = available_names(ctx; manifest, include_registries = registry)
+                    all_names_ranked, any_score_gt_zero = fuzzysort(name, all_names)
+                    if any_score_gt_zero
+                        println(io)
+                        prefix = "   Suggestions:"
+                        printstyled(io, prefix, color = Base.info_color())
+                        REPL.printmatches(io, name, all_names_ranked; cols = REPL._displaysize(ctx.io)[2] - length(prefix))
+                    end
                 else
                     join(io, uuids, ", ", " or ")
-                    print(io, " in manifest but not in project")
+                    print(io, " in manifest but not in project)")
                 end
-                println(io, ")")
             end
         end
         if !isempty(unresolved_names)
@@ -945,6 +1018,27 @@ function ensure_resolved(manifest::Manifest,
         end
     end
     pkgerror(msg)
+end
+
+# copied from REPL to efficiently expose if any score is >0
+function fuzzysort(search::String, candidates::Vector{String})
+    scores = map(cand -> (REPL.fuzzyscore(search, cand), -Float64(REPL.levenshtein(search, cand))), candidates)
+    candidates[sortperm(scores)] |> reverse, any(s -> s[1] > 0, scores)
+end
+
+function available_names(ctx::Context = Context(); manifest::Manifest = ctx.env.manifest, include_registries::Bool = true)
+    all_names = String[]
+    for (_, pkgentry) in manifest
+        push!(all_names, pkgentry.name)
+    end
+    if include_registries
+        for reg in ctx.registries
+            for (_, pkgentry) in reg.pkgs
+                push!(all_names, pkgentry.name)
+            end
+        end
+    end
+    return unique(all_names)
 end
 
 function registered_uuids(registries::Vector{Registry.RegistryInstance}, name::String)
@@ -965,8 +1059,9 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
             info = Pkg.Registry.registry_info(pkg)
-            info.repo === nothing && continue
-            push!(repo_infos, (reg.name, info.repo, uuid))
+            repo = info.repo
+            repo === nothing && continue
+            push!(repo_infos, (reg.name, repo, uuid))
         end
     end
     unique!(repo_infos)

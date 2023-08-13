@@ -4,13 +4,13 @@ module GitTools
 
 using ..Pkg
 using ..MiniProgressBars
-import ..can_fancyprint, ..printpkgstyle
+import ..can_fancyprint, ..printpkgstyle, ..stdout_f
 using SHA
 import Base: SHA1
 import LibGit2
 using Printf
 
-use_cli_git() = get(ENV, "JULIA_PKG_USE_CLI_GIT", "") == "true"
+use_cli_git() = Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
@@ -25,7 +25,7 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
         bar.max = progress.total_objects
         bar.current = progress.received_objects
     end
-    show_progress(stdout, bar)
+    show_progress(stdout_f(), bar)
     return Cint(0)
 end
 
@@ -86,11 +86,12 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
 end
 
 function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
+    url = String(url)::String
+    source_path = String(source_path)::String
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    transfer_payload = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
         LibGit2.Callbacks(
@@ -108,7 +109,12 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
     try
         if use_cli_git()
-            run(`git clone --quiet $url $source_path`)
+            cmd = `git clone --quiet $url $source_path`
+            try
+                run(pipeline(cmd; stdout=devnull))
+            catch err
+                Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
+            end
             return LibGit2.GitRepo(source_path)
         else
             mkpath(source_path)
@@ -158,8 +164,15 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     end
     try
         if use_cli_git()
-            cd(LibGit2.path(repo)) do
-                run(`git fetch -q $remoteurl $(only(refspecs))`)
+            let remoteurl=remoteurl
+                cd(LibGit2.path(repo)) do
+                    cmd = `git fetch -q $remoteurl $(only(refspecs))`
+                    try
+                        run(pipeline(cmd; stdout=devnull))
+                    catch err
+                        Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
+                    end
+                end
             end
         else
             return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
@@ -184,7 +197,7 @@ Base.string(mode::GitMode) = string(UInt32(mode); base=8)
 Base.print(io::IO, mode::GitMode) = print(io, string(mode))
 
 function gitmode(path::AbstractString)
-    # Windows doens't deal with executable permissions in quite the same way,
+    # Windows doesn't deal with executable permissions in quite the same way,
     # `stat()` gives a different answer than we actually want, so we use
     # `isexecutable()` which uses `uv_fs_access()` internally.  On other
     # platforms however, we just want to check via `stat()`.
@@ -272,7 +285,7 @@ Calculate the git tree hash of a given path.
 """
 function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,Nothing} = nothing, indent::Int=0) where HashType
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
-    for f in sort(readdir(root; join=true); by = f -> isdir(f) ? f*"/" : f)
+    for f in sort(readdir(root; join=true); by = f -> gitmode(f) == mode_dir ? f*"/" : f)
         # Skip `.git` directories
         if basename(f) == ".git"
             continue

@@ -5,6 +5,7 @@ import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, Test, REPL
 import Pkg.Types.PkgError, Pkg.Resolve.ResolverError
+using Pkg: stdout_f, stderr_f
 using UUIDs
 
 using ..Utils
@@ -108,6 +109,9 @@ end
             Pkg.generate("Dep3")
             Pkg.generate("Dep4")
             Pkg.generate("Dep5")
+            Pkg.generate("Dep6")
+            Pkg.generate("Dep7")
+            Pkg.generate("Dep8")
             Pkg.generate("NoVersion")
             open(joinpath("NoVersion","Project.toml"), "w") do io
                 write(io, "name = \"NoVersion\"\nuuid = \"$(UUIDs.uuid4())\"")
@@ -115,6 +119,21 @@ end
             Pkg.generate("BrokenDep")
             open(joinpath("BrokenDep","src","BrokenDep.jl"), "w") do io
                 write(io, "module BrokenDep\nerror()\nend")
+            end
+            Pkg.generate("TrailingTaskDep")
+            open(joinpath("TrailingTaskDep","src","TrailingTaskDep.jl"), "w") do io
+                write(io, """
+                module TrailingTaskDep
+                println(stderr, "waiting for IO to finish") # pretend to be a warning
+                sleep(2)
+                end""")
+            end
+            Pkg.generate("SlowPrecompile")
+            open(joinpath("SlowPrecompile","src","SlowPrecompile.jl"), "w") do io
+                write(io, """
+                module SlowPrecompile
+                sleep(10)
+                end""")
             end
         end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep1"))
@@ -130,15 +149,26 @@ end
 
         iob = IOBuffer()
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
-        println("Auto precompilation enabled")
+        @info "Auto precompilation enabled"
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep4"))
         Pkg.develop(Pkg.PackageSpec(path="packages/NoVersion")) # a package with no version number
         Pkg.build(io=iob) # should trigger auto-precomp
         @test occursin("Precompiling", String(take!(iob)))
         Pkg.precompile(io=iob)
         @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
+
+        Pkg.precompile("Dep4", io=iob)
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+        Pkg.precompile(["Dep4", "NoVersion"], io=iob)
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+
+        Pkg.precompile(Pkg.PackageSpec(name="Dep4"))
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+        Pkg.precompile([Pkg.PackageSpec(name="Dep4"), Pkg.PackageSpec(name="NoVersion")])
+        @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
+
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
-        println("Auto precompilation disabled")
+        @info "Auto precompilation disabled"
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
         Pkg.precompile(io=iob)
         @test occursin("Precompiling", String(take!(iob)))
@@ -184,7 +214,73 @@ end
         # https://github.com/JuliaLang/Pkg.jl/pull/2142
         Pkg.build(; verbose=true)
 
+        @testset "timing mode" begin
+            iob = IOBuffer()
+            Pkg.develop(Pkg.PackageSpec(path="packages/Dep6"))
+            Pkg.precompile(io=iob, timing=true)
+            str = String(take!(iob))
+            @test occursin("Precompiling", str)
+            @test occursin(" ms", str)
+            @test occursin("Dep6", str)
+            Pkg.precompile(io=iob)
+            @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
+        end
+
+        @testset "instantiate" begin
+            iob = IOBuffer()
+            Pkg.activate("packages/Dep7")
+            Pkg.resolve()
+            @test isfile("packages/Dep7/Project.toml")
+            @test isfile("packages/Dep7/Manifest.toml")
+            Pkg.instantiate(io=iob) # with a Project.toml and Manifest.toml
+            @test occursin("Precompiling", String(take!(iob)))
+
+            Pkg.activate("packages/Dep8")
+            @test isfile("packages/Dep8/Project.toml")
+            @test !isfile("packages/Dep8/Manifest.toml")
+            Pkg.instantiate(io=iob) # with only a Project.toml
+            @test occursin("Precompiling", String(take!(iob)))
+        end
+
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
+
+        @testset "waiting for trailing tasks" begin
+            Pkg.activate("packages/TrailingTaskDep")
+            iob = IOBuffer()
+            Pkg.precompile(io=iob)
+            str = String(take!(iob))
+            @test occursin("Precompiling", str)
+            @test occursin("Waiting for background task / IO / timer.", str)
+        end
+
+        @testset "pidlocked precompile" begin
+            proj = joinpath(pwd(), "packages", "SlowPrecompile")
+            cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no --project="$(pkgdir(Pkg))" -e "
+                using Pkg
+                Pkg.activate(\"$(escape_string(proj))\")
+                Pkg.precompile()
+            "`,
+                    "JULIA_PKG_PRECOMPILE_AUTO" => "0")
+            iob1 = IOBuffer()
+            iob2 = IOBuffer()
+            try
+                Base.Experimental.@sync begin
+                    @async run(pipeline(cmd, stderr=iob1, stdout=iob1))
+                    @async run(pipeline(cmd, stderr=iob2, stdout=iob2))
+                end
+            catch
+                println("pidlocked precompile tests failed:")
+                println("process 1:\n", String(take!(iob1)))
+                println("process 2:\n", String(take!(iob2)))
+                rethrow()
+            end
+            s1 = String(take!(iob1))
+            s2 = String(take!(iob2))
+            @test occursin("Precompiling", s1)
+            @test occursin("Precompiling", s2)
+            @test any(contains("Being precompiled by another process (pid: "), (s1, s2))
+        end
+
     end end
     # ignoring circular deps, to avoid deadlock
     isolate() do; cd_tempdir() do tmp
@@ -207,8 +303,52 @@ end
 
         Pkg.activate(".")
         Pkg.resolve()
-        Pkg.precompile()
+
+        ## Tests when circularity is in dependencies
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+
+        ## Tests when circularity goes through the active project
+        Pkg.activate("CircularDep1")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+        Pkg.activate(".")
+        Pkg.activate("CircularDep2")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+        Pkg.activate(".")
+        Pkg.activate("CircularDep3")
+        @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+
+        Pkg.activate(temp=true)
+        Pkg.precompile() # precompile an empty env should be a no-op
+        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
+
+        Pkg.add("Random")
+        @test_throws Pkg.Types.PkgError Pkg.precompile("Random") # Random is a dep but in the sysimage
+        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist")
+        Pkg.precompile() # should be a no-op
     end end
+    @testset "Issue 3359: Recurring precompile" begin
+        isolate() do; cd_tempdir() do tmp
+            cp(joinpath(@__DIR__, "test_packages", "RecurringPrecompile"), joinpath(tmp, "RecurringPrecompile"))
+            Pkg.activate("RecurringPrecompile")
+            iob = IOBuffer()
+            Pkg.precompile(io=iob)
+            @test occursin("Precompiling", String(take!(iob)))
+            Pkg.precompile(io=iob) # should be a no-op
+            if !occursin("Precompiling", String(take!(iob)))
+                @test true
+            else
+                # helpful for debugging why on CI
+                println("Repeated precompilation detected. Running again with loading debugging on")
+                withenv("JULIA_DEBUG" => "loading") do
+                    Pkg.precompile(io=iob)
+                    println(String(take!(iob)))
+                    @test false
+                end
+            end
+        end end
+    end
 end
 
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin
@@ -229,7 +369,7 @@ end
             @test x.uuid == Base.UUID(0)
         end
     end
-    
+
     @testset begin
         xs = [
             Pkg.PackageSpec(),
@@ -239,6 +379,16 @@ end
             @test x isa Pkg.PackageSpec
             @test x.uuid === nothing
         end
+    end
+end
+
+@testset "set number of concurrent requests" begin
+    @test Pkg.Types.num_concurrent_downloads() == 8
+    withenv("JULIA_PKG_CONCURRENT_DOWNLOADS"=>"5") do
+        @test Pkg.Types.num_concurrent_downloads() == 5
+    end
+    withenv("JULIA_PKG_CONCURRENT_DOWNLOADS"=>"0") do
+        @test_throws ErrorException Pkg.Types.num_concurrent_downloads()
     end
 end
 

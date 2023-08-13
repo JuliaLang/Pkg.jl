@@ -54,6 +54,8 @@ PSA[:name => "instantiate",
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+
+After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
 ],
 PSA[:name => "remove",
@@ -121,16 +123,26 @@ If the package is not located at the top of the git repository, a subdirectory c
 The `--preserve` command line option allows you to key into a specific tier in the resolve algorithm.
 The following table describes the command line arguments to `--preserve` (in order of strictness).
 
-| Argument | Description                                                                         |
-|:---------|:------------------------------------------------------------------------------------|
-| `all`    | Preserve the state of all existing dependencies (including recursive dependencies)  |
-| `direct` | Preserve the state of all existing direct dependencies                              |
-| `semver` | Preserve semver-compatible versions of direct dependencies                          |
-| `none`   | Do not attempt to preserve any version information                                  |
-| `tiered` | Use the tier which will preserve the most version information (this is the default) |
+| Argument           | Description                                                                        |
+|:-------------------|:-----------------------------------------------------------------------------------|
+| `installed`        | Like `all` except also only add versions that are already installed                |
+| `all`              | Preserve the state of all existing dependencies (including recursive dependencies) |
+| `direct`           | Preserve the state of all existing direct dependencies                             |
+| `semver`           | Preserve semver-compatible versions of direct dependencies                         |
+| `none`             | Do not attempt to preserve any version information                                 |
+| `tiered_installed` | Like `tiered` except first try to add only installed versions                      |
+| **`tiered`**       | Use the tier that will preserve the most version information while                 |
+|                    | allowing version resolution to succeed (this is the default)                       |
 
-!!! compat "Julia 1.5"
-    Subdirectory specification requires at least Julia 1.5.
+Note: To make the default strategy `tiered_installed` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED` to
+true.
+
+After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
+
+With the `installed` strategy the newly added packages will likely already be precompiled, but if not this may be
+because either the combination of package versions resolved in this environment has not been resolved and
+precompiled before, or the precompile cache has been deleted by the LRU cache storage
+(see `JULIA_MAX_NUM_PRECOMPILE_FILES`).
 
 **Examples**
 ```
@@ -141,6 +153,8 @@ pkg> add Example#master
 pkg> add Example#c37b675
 pkg> add https://github.com/JuliaLang/Example.jl#master
 pkg> add git@github.com:JuliaLang/Example.jl.git
+pkg> add "git@github.com:JuliaLang/Example.jl.git"#master
+pkg> add https://github.com/Company/MonoRepo:juliapkgs/Package.jl
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
 """,
@@ -173,6 +187,9 @@ is not supported for paths, only registered packages.
 
 This operation is undone by `free`.
 
+The preserve strategies offered by `add` are also available via the `preserve` argument.
+See `add` for more information.
+
 **Examples**
 ```jl
 pkg> develop Example
@@ -197,7 +214,24 @@ PSA[:name => "free",
     free [--all]
 
 Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
-makes the package no longer being checked out.
+makes the package no longer being checked out. Specifying `--all` will free all dependencies (direct and indirect).
+""",
+],
+PSA[:name => "why",
+    :api => API.why,
+    :should_splat => false,
+    :arg_count => 1 => 1,
+    :arg_parser => parse_package,
+    :completions => complete_all_installed_packages,
+    :description => "shows why a package is in the manifest",
+    :help => md"""
+    why pkg[=uuid] ...
+
+Show the reason why packages are in the manifest, printed as a path through the
+dependency graph starting at the direct dependencies.
+
+!!! compat "Julia 1.9"
+    The `why` function is added in Julia 1.9
 """,
 ],
 PSA[:name => "pin",
@@ -215,7 +249,7 @@ PSA[:name => "pin",
     pin [--all]
 
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-A pinned package has the symbol `⚲` next to its version in the status list.
+A pinned package has the symbol `⚲` next to its version in the status list.. Specifying `--all` will pin all dependencies (direct and indirect).
 
 **Examples**
 ```
@@ -292,6 +326,7 @@ PSA[:name => "update",
         PSA[:name => "minor", :api => :level => UPLEVEL_MINOR],
         PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
         PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
+        PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
     :completions => complete_installed_packages,
     :description => "update packages in manifest",
@@ -300,6 +335,7 @@ PSA[:name => "update",
     [up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
     opts: --major | --minor | --patch | --fixed
+          --preserve=<all/direct/none>
 
 Update `pkg` within the constraints of the indicated version
 specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
@@ -309,6 +345,8 @@ in `--manifest` mode they match any manifest package. Bound level options force
 the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
+
+After any package updates the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
 ],
 PSA[:name => "generate",
@@ -324,11 +362,14 @@ Create a minimal project called `pkgname` in the current folder. For more featur
 ],
 PSA[:name => "precompile",
     :api => API.precompile,
+    :arg_count => 0 => Inf,
+    :completions => complete_installed_packages,
     :description => "precompile all the project dependencies",
     :help => md"""
     precompile
+    precompile pkgs...
 
-Precompile all the dependencies of the project in parallel.
+Precompile all or specified dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
 
 Errors will only throw when precompiling the top-level dependencies, given that
@@ -350,27 +391,54 @@ PSA[:name => "status",
         PSA[:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
         PSA[:name => "diff", :short_name => "d", :api => :diff => true],
+        PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
+        PSA[:name => "compat", :short_name => "c", :api => :compat => true],
+        PSA[:name => "extensions", :short_name => "e", :api => :extensions => true],
     ],
     :completions => complete_installed_packages,
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    [st|status] [-d|--diff] [pkgs...]
-    [st|status] [-d|--diff] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [-e|--extensions] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [-e|--extensions] [-m|--manifest] [pkgs...]
+    [st|status] [-c|--compat] [pkgs...]
 
-Show the status of the current environment. In `--project` mode (default), the
-status of the project file is summarized. In `--manifest` mode the output also
-includes the recursive dependencies of added packages given in the manifest.
+Show the status of the current environment. Packages marked with `⌃` have new
+versions that may be installed, e.g. via `pkg> up`. Those marked with `⌅` have
+new versions available, but cannot be installed due to compatibility
+constraints. To see why use `pkg> status --outdated` which shows any packages
+that are not at their latest version and if any packages are holding them back.
+
+Use `pkg> status --extensions` to show dependencies with extensions and what extension dependencies
+of those that are currently loaded.
+
+In `--project` mode (default), the status of the project file is summarized. In `--manifest`
+mode the output also includes the recursive dependencies of added packages given in the manifest.
 If there are any packages listed as arguments the output will be limited to those packages.
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
+The `--compat` option alone shows project compat entries.
 
-!!! compat "Julia 1.1"
-    `pkg> status` with package arguments requires at least Julia 1.1.
+!!! compat "Julia 1.8"
+    The `⌃` and `⌅` indicators were added in Julia 1.8.
+    The `--outdated` and `--compat` options require at least Julia 1.8.
+""",
+],
+PSA[:name => "compat",
+    :api => API.compat,
+    :arg_count => 0 => 2,
+    :completions => complete_installed_packages_and_compat,
+    :description => "edit compat entries in the current Project and re-resolve",
+    :help => md"""
+    compat [pkg] [compat_string]
 
-!!! compat "Julia 1.3"
-    The `--diff` option requires Julia 1.3. In earlier versions `--diff`
-    is the default for environments in git repositories.
+Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments.
+When directly editing use tab to complete the package name and any existing compat entry.
+Specifying a package with a blank compat entry will remove the entry.
+After changing compat entries a `resolve` will be attempted to check whether the current
+environment is compliant with the new compat rules.
 """,
 ],
 PSA[:name => "gc",
@@ -422,12 +490,6 @@ Add package registries `reg...` to the user depot. Without arguments
 it adds known registries, i.e. the General registry and registries
 served by the configured package server.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
-!!! compat "Julia 1.5"
-    `registry add` without arguments requires at least Julia 1.5.
-
 **Examples**
 ```
 pkg> registry add General
@@ -447,9 +509,6 @@ PSA[:name => "remove",
     registry [rm|remove] reg...
 
 Remove package registries `reg...`.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 **Examples**
 ```
@@ -471,9 +530,6 @@ PSA[:name => "update",
 Update package registries `reg...`. If no registries are specified
 all registries will be updated.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 **Examples**
 ```
 pkg> registry up
@@ -489,9 +545,6 @@ PSA[:name => "status",
     registry [st|status]
 
 Display information about installed registries.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 **Examples**
 ```

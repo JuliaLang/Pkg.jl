@@ -18,7 +18,6 @@ end
 
 # setup for doctesting
 DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Base.BinaryPlatforms); recursive=true)
-DocMeta.setdocmeta!(Pkg.LazilyInitializedFields, :DocTestSetup, :(using Pkg.LazilyInitializedFields))
 
 # Run doctests first and disable them in makedocs
 Documenter.doctest(joinpath(@__DIR__, "src"), [Pkg])
@@ -38,7 +37,6 @@ makedocs(
         "compatibility.md",
         "registries.md",
         "artifacts.md",
-        # "faq.md",
         "glossary.md",
         "toml-files.md",
         "repl.md",

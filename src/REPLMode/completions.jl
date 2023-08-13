@@ -34,7 +34,7 @@ function complete_local_dir(s, i1, i2)
 end
 
 function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
-    cmp = REPL.REPLCompletions.complete_path(s, i2)
+    cmp = REPL.REPLCompletions.complete_path(s, i2, shell_escape=true)
     cmp2 = cmp[2]
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
     completions = filter!(x -> isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x), completions)
@@ -106,6 +106,27 @@ function complete_installed_packages(options, partial)
         unique!([entry.name for (uuid, entry) in env.manifest])
 end
 
+function complete_all_installed_packages(options, partial)
+    env = try EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    return unique!([entry.name for (uuid, entry) in env.manifest])
+end
+
+function complete_installed_packages_and_compat(options, partial)
+    env = try EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    return map(vcat(collect(keys(env.project.deps)), "julia")) do d
+        compat_str = Operations.get_compat_str(env.project, d)
+        isnothing(compat_str) ? d : string(d, " ", compat_str)
+    end
+end
+
 function complete_add_dev(options, partial, i1, i2)
     comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)
@@ -113,7 +134,7 @@ function complete_add_dev(options, partial, i1, i2)
     end
     comps = vcat(comps, sort(complete_remote_package(partial)))
     if !isempty(partial)
-        append!(comps, filter!(startswith(partial), collect(values(Types.stdlibs()))))
+        append!(comps, filter!(startswith(partial), first.(values(Types.stdlibs()))))
     end
     return comps, idx, !isempty(comps)
 end
@@ -152,7 +173,7 @@ function complete_argument(spec::CommandSpec, options::Vector{String},
     # finish parsing opts
     local opts
     try
-        opts = APIOptions(map(parse_option, options), spec.option_specs)
+        opts = api_options(map(parse_option, options), spec.option_specs)
     catch e
         e isa PkgError && return String[]
         rethrow()
@@ -207,8 +228,14 @@ end
 function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
     pre = full[1:index]
     isempty(pre) && return default_commands(), 0:-1, false # empty input -> complete commands
-    last   = split(pre, ' ', keepempty=true)[end]
-    offset = isempty(last) ? index+1 : last.offset+1
+    offset_adjust = 0
+    if length(pre) >= 2 && pre[1] == '?' && pre[2] != ' '
+        # supports completion on things like `pkg> ?act` with no space
+        pre = string(pre[1], " ", pre[2:end])
+        offset_adjust = -1
+    end
+    last = split(pre, ' ', keepempty=true)[end]
+    offset = isempty(last) ? index+1+offset_adjust : last.offset+1+offset_adjust
     final  = isempty(last) # is the cursor still attached to the final token?
     return _completions(pre, final, offset, index)
 end

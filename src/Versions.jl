@@ -86,7 +86,7 @@ function isjoinable(up::VersionBound, lo::VersionBound)
     return true
 end
 
-Base.hash(r::VersionBound, h::UInt) = hash(hash(r.t, h), r.n)
+Base.hash(r::VersionBound, h::UInt) = hash(r.t, hash(r.n, h))
 
 # Hot code
 function VersionBound(s::AbstractString)
@@ -286,7 +286,7 @@ Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
 # Semver notation #
 ###################
 
-function semver_spec(s::String)
+function semver_spec(s::String; throw = true)
     ranges = VersionRange[]
     for ver in strip.(split(strip(s), ','))
         range = nothing
@@ -298,7 +298,13 @@ function semver_spec(s::String)
                 break
             end
         end
-        found_match || error("invalid version specifier: $s")
+        if !found_match
+            if throw
+                error("invalid version specifier: \"$s\"")
+            else
+                return nothing
+            end
+        end
         push!(ranges, range)
     end
     return VersionSpec(ranges)
