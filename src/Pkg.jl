@@ -282,22 +282,15 @@ Pkg.test("foo"; julia_args=["--inline"])
 
 To pass some command line arguments to be used in the tests themselves, pass the arguments to the
 `test_args` keyword argument. These could be used to control the code being tested, or to control the
-tests in some way. For example, if the tests define a macro
-
+tests in some way. For example, the tests could have optional additional tests:
 ```
-macro long(code)
-    if "--long" in ARGS
-        :( $code )
-    end
+if "extended" in ARGS
+    @test some_function()
 end
 ```
-
-Then some tests that take a long time to run could be marked with the macro like `@long @test foo == bar`
-and they would only be run if the argument `--long` was passed either to Julia on the command line (or by
-modifying `ARGS`), or by passing it using `test_args`, e.g.
-
+which could be enabled by testing with
 ```
-Pkg.test("foo"; test_args=["--long"])
+Pkg.test("foo"; test_args=["extended"])
 ```
 """
 const test = API.test
