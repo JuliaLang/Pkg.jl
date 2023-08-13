@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-using Documenter, DocumenterLaTeX
+using Documenter
 using Pkg
 
 include("generate.jl")
@@ -13,11 +13,11 @@ const formats = Any[
     ),
 ]
 if "pdf" in ARGS
-    push!(formats, LaTeX(platform = "docker"))
+    push!(formats, Documenter.LaTeX(platform = "docker"))
 end
 
 # setup for doctesting
-DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Pkg.BinaryPlatforms); recursive=true)
+DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Base.BinaryPlatforms); recursive=true)
 
 # Run doctests first and disable them in makedocs
 Documenter.doctest(joinpath(@__DIR__, "src"), [Pkg])
@@ -37,7 +37,6 @@ makedocs(
         "compatibility.md",
         "registries.md",
         "artifacts.md",
-        # "faq.md",
         "glossary.md",
         "toml-files.md",
         "repl.md",

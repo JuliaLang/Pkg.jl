@@ -7,8 +7,8 @@ Compatibility for a dependency is entered in the `Project.toml` file as for exam
 
 ```toml
 [compat]
-julia = "1.0"
-Example = "0.4.3"
+julia = "1.6"
+Example = "0.5"
 ```
 
 After a compatibility entry is put into the project file, `up` can be used to apply it.
@@ -16,11 +16,17 @@ After a compatibility entry is put into the project file, `up` can be used to ap
 The format of the version specifier is described in detail below.
 
 !!! info
-    There is currently no way to give compatibility from the Pkg REPL mode so for now, one has to manually edit the project file.
+    Use the command `compat` to edit the compat entries in the Pkg REPL, or manually edit the project file.
+
+!!! info
+    The rules below apply to the `Project.toml` file; for registries, see [Registry Compat.toml](@ref).
+
+!!! info
+    Note that registration into Julia's General Registry requires each dependency to have a `[compat`] entry with an upper bound.
 
 ## Version specifier format
 
-Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver).
+Similar to other package managers, the Julia package manager respects [semantic versioning](https://semver.org/) (semver), with an exception for leading zeros.
 As an example, a version specifier given as e.g. `1.2.3` is therefore assumed to be compatible with the versions `[1.2.3 - 2.0.0)` where `)` is a non-inclusive upper bound.
 More specifically, a version specifier is either given as a **caret specifier**, e.g. `^1.2.3`  or as a **tilde specifier**, e.g. `~1.2.3`.
 Caret specifiers are the default and hence `1.2.3 == ^1.2.3`. The difference between a caret and tilde is described in the next section.
@@ -29,7 +35,7 @@ The union of multiple version specifiers can be formed by comma separating indiv
 [compat]
 Example = "1.2, 2"
 ```
-will result in `[1.2.0, 3.0.0)`.  Note leading zeros are treated differently, e.g. `Example = "0.2, 1"` would only result in `[0.2.0-0.3.0, 1.0.0-2.0.0]`. See the next section for more information on versions with leading zeros.
+will result in `[1.2.0, 3.0.0)`.  Note leading zeros are treated differently, e.g. `Example = "0.2, 1"` would only result in `[0.2.0 - 0.3.0) ∪ [1.0.0 - 2.0.0)`. See the next section for more information on versions with leading zeros.
 
 ### [Behavior of versions with leading zeros (0.0.x and 0.x.y)](@id compat-pre-1.0)
 
@@ -61,7 +67,7 @@ remains backward compatible with 0.2.0.  See also [The `version` field](@ref).
 
 ### Caret specifiers
 
-A caret specifier allows upgrade that would be compatible according to semver.
+A caret (`^`) specifier allows upgrade that would be compatible according to semver. This is the default behavior if no specifier is used.
 An updated dependency is considered compatible if the new version does not modify the left-most non zero digit in the version specifier.
 
 Some examples are shown below.
@@ -100,11 +106,12 @@ For all versions with a major version of 0 the tilde and caret specifiers are eq
 
 ### Equality specifier
 
-Equality can be used to specify an exact version:
+Equality can be used to specify exact versions:
 
 ```toml
 [compat]
-PkgA = "= 1.2.3"  # [1.2.3, 1.2.3]
+PkgA = "=1.2.3"           # [1.2.3, 1.2.3]
+PkgA = "=0.10.1, =0.10.3" # 0.10.1 or 0.10.3
 ```
 
 ### Inequality specifiers
@@ -120,13 +127,6 @@ PkgD = "< 1.2.3"  # [0.0.0, 1.2.3) = [0.0.0, 1.2.2]
 
 ### Hyphen specifiers
 
-!!! compat "Julia 1.4"
-    Hyphen specifiers requires at least Julia 1.4, so it is recomended to also add
-    ```toml
-    [compat]
-    julia = "1.4"
-    ```
-    to the project file when using them.
 Hyphen syntax can also be used to specify version ranges. Make sure that you have a space on both sides of the hyphen.
 
 ```toml
@@ -162,3 +162,40 @@ PkgA = "0.2 - 4"       # 0.2.0 - 4.*.* = [0.2.0, 5.0.0)
 PkgA = "0.2 - 0.5"     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
 PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```
+
+
+## Fixing conflicts
+
+Version conflicts were introduced previously with an [example](@ref conflicts)
+of a conflict arising in a package `D` used by two other packages, `B` and `C`.
+Our analysis of the error message revealed that `B` is using an outdated
+version of `D`.
+To fix it, the first thing to try is to `pkg> dev B` so that
+you can modify `B` and its compatibility requirements.
+If you open its `Project.toml` file in an editor, you would probably notice something like
+
+```toml
+[compat]
+D = "0.1"
+```
+
+Usually the first step is to modify this to something like
+```toml
+[compat]
+D = "0.1, 0.2"
+```
+
+This indicates that `B` is compatible with both versions 0.1 and version 0.2; if you `pkg> up`
+this would fix the package error.
+However, there is one major concern you need to address first: perhaps there was an incompatible change
+in `v0.2` of `D` that breaks `B`.
+Before proceeding further, you should update all packages and then run `B`'s tests, scanning the
+output of `pkg> test B` to be sure that `v0.2` of `D` is in fact being used.
+(It is possible that an additional dependency of `D` pins it to `v0.1`, and you wouldn't want to be misled into thinking that you had tested `B` on the newer version.)
+If the new version was used and the tests still pass,
+you can assume that `B` didn't need any further updating to accommodate `v0.2` of `D`;
+you can safely submit this change as a pull request to `B` so that a new release is made.
+If instead an error is thrown, it indicates that `B` requires more extensive updates to be
+compatible with the latest version of `D`; those updates will need to be completed before
+it becomes possible to use both `A` and `B` simultaneously.
+You can, though, continue to use them independently of one another.

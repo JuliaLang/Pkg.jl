@@ -8,13 +8,16 @@ end
 
 # Some parameters to drive the decimation process
 mutable struct MaxSumParams
-    dec_interval # number of iterations between decimations
-    dec_fraction # fraction of nodes to decimate at every decimation
-                 # step
+    dec_interval::Int # number of iterations between decimations
+    dec_fraction::Float64 # fraction of nodes to decimate at every decimation
+                          # step
 
     function MaxSumParams()
-        accuracy = parse(Int, get(ENV, "JULIA_PKGRESOLVE_ACCURACY", "1"))
-        accuracy > 0 || error("JULIA_PKGRESOLVE_ACCURACY must be > 0")
+        accuracy = parse(Int, get(ENV, "JULIA_PKG_RESOLVE_ACCURACY",
+                                  # Allow for `JULIA_PKGRESOLVE_ACCURACY` for backward
+                                  # compatibility with Julia v1.7-
+                                  get(ENV, "JULIA_PKGRESOLVE_ACCURACY", "1")))
+        accuracy > 0 || error("JULIA_PKG_RESOLVE_ACCURACY must be > 0")
         dec_interval = accuracy * 5
         dec_fraction = 0.05 / accuracy
         return new(dec_interval, dec_fraction)
@@ -148,6 +151,10 @@ function update!(p0::Int, graph::Graph, msgs::Messages)
     ignored = graph.ignored
     spp = graph.spp
     np = graph.np
+    cavfld = graph.cavfld
+    newmsg = graph.newmsg
+    diff = graph.diff
+
     msg = msgs.msg
     fld = msgs.fld
 
@@ -161,7 +168,6 @@ function update!(p0::Int, graph::Graph, msgs::Messages)
 
     # iterate over all neighbors of p0
     for j0 in 1:length(gadj0)
-
         p1 = gadj0[j0]
         ignored[p1] && continue
         j1 = adjdict0[p1]
@@ -171,38 +177,44 @@ function update!(p0::Int, graph::Graph, msgs::Messages)
         msg1 = msg[p1]
 
         # compute the output cavity field p0->p1
-        cavfld = fld0 - msg0[j0]
+        resize!(cavfld, length(fld0))
+        cavfld .= fld0 .- msg0[j0]
 
         # keep the old input cavity message p0->p1
         oldmsg = msg1[j1]
 
         # init the new message to minus infinity
-        newmsg = [FieldValue(-1) for v1 = 1:spp1]
+        resize!(newmsg, spp1)
+        fill!(newmsg, FieldValue(-1))
 
         # compute the new message by passing cavfld
         # through the constraint encoded in the bitmask
         # (equivalent to:
         #    newmsg = [maximum(cavfld[bm1[:,v1]]) for v1 = 1:spp1]
         # )
-        for v1 = 1:spp1, v0 = 1:spp0
+        # This is hot code for the resolver
+        @inbounds for v1 = 1:spp1, v0 = 1:spp0
             bm1[v0, v1] || continue
             newmsg[v1] = max(newmsg[v1], cavfld[v0])
         end
         m = maximum(newmsg)
-        validmax(m) || throw(UnsatError(p0)) # No state available without violating some
-                                             # hard constraint
+        validmax(m) || return Unsat(p0) # No state available without violating some
+                                        # hard constraint
 
         # normalize the new message
-        newmsg .-= m
+        @inbounds for i in 1:length(newmsg)
+            newmsg[i] -= m
+        end
 
-        diff = newmsg - oldmsg
-        maxdiff = max(maxdiff, maximum(abs.(diff)))
+        resize!(diff, spp1)
+        diff .= newmsg .- oldmsg
+        maxdiff = max(maxdiff, maximum(abs, diff))
 
         # update the field of p1
         fld[p1] .+= diff
 
         # put the newly computed message in place
-        msg1[j1] = newmsg
+        copy!(msg1[j1], newmsg)
     end
     return maxdiff
 end
@@ -235,6 +247,9 @@ function iterate!(graph::Graph, msgs::Messages, perm::NodePerm)
     for p0 in perm
         graph.ignored[p0] && continue
         maxdiff0 = update!(p0, graph, msgs)
+        if maxdiff0 isa Unsat
+            return maxdiff0
+        end
         maxdiff = max(maxdiff, maxdiff0)
     end
     return maxdiff
@@ -294,7 +309,6 @@ function clean_forbidden!(graph::Graph, msgs::Messages)
     ignored = graph.ignored
     fld = msgs.fld
     affected = Tuple{Int,Int}[]
-    removed = 0
 
     for p0 = 1:np
         ignored[p0] && continue
@@ -303,7 +317,6 @@ function clean_forbidden!(graph::Graph, msgs::Messages)
         for v0 in findall(gconstr0)
             validmax(fld0[v0]) && continue
             push!(affected, (p0,v0))
-            removed += 1
         end
     end
     return affected
@@ -346,6 +359,10 @@ function try_simplify_graph_soft!(graph, sources)
     return true
 end
 
+struct Unsat
+    p0::Int
+end
+
 function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::NodePerm, params::MaxSumParams)
     is_best_sofar = update_solution!(strace, graph)
 
@@ -359,13 +376,10 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
     # If failure happens during this process, we bail (return false)
     it = 0
     for it = 1:params.dec_interval
-        local maxdiff::FieldValue
-        try
-            maxdiff = iterate!(graph, msgs, perm)
-        catch err
-            err isa UnsatError || rethrow()
+        maxdiff = iterate!(graph, msgs, perm)
+        if maxdiff isa Unsat
             if is_best_sofar
-                p0 = err.p0
+                p0 = maxdiff.p0
                 s0 = findlast(graph.gconstr[p0])
                 strace.staged = (p0, s0)
             end

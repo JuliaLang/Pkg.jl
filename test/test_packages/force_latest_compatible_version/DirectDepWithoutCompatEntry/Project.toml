@@ -1,0 +1,19 @@
+name = "DirectDepWithoutCompatEntry"
+uuid = "abc047b9-6ad4-4533-a374-d50ae908e3e9"
+authors = ["Dilum Aluthge <dilum@aluthge.com>"]
+version = "0.1.0"
+
+[deps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+MLJModelInterface = "e80e1ace-859a-464e-9ed9-23947d8ae3ea"
+
+[compat]
+MLJModelInterface = "=0.1.0"
+ScientificTypes = "0.6"
+
+[extras]
+ScientificTypes = "321657f4-b219-11e9-178b-2701a2544e81"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["ScientificTypes", "Test"]

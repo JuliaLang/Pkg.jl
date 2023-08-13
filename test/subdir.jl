@@ -4,6 +4,7 @@ import ..Pkg # ensure we are using the correct Pkg
 using Pkg, UUIDs, Test
 using Pkg.REPLMode: pkgstr
 using Pkg.Types: PackageSpec
+using Pkg: stdout_f, stderr_f
 
 using ..Utils
 
@@ -43,9 +44,10 @@ function setup_packages_repository(dir)
         """)
 
     git = gitcmd(dir)
-    run(`$git init -q`)
-    run(`$git add .`)
-    run(`$git commit -qm 'Create repository.'`)
+    run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
+    fix_default_branch(; dir)
     package_tree_hash = readchomp(`$git rev-parse HEAD:julia`)
     dep_tree_hash = readchomp(`$git rev-parse HEAD:dependencies/Dep`)
     return package_tree_hash, dep_tree_hash
@@ -103,9 +105,45 @@ function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
         """)
 
     git = gitcmd(dir)
-    run(`$git init -q`)
-    run(`$git add .`)
-    run(`$git commit -qm 'Create repository.'`)
+    run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
+    run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
+    fix_default_branch(; dir)
+end
+
+# Some of our tests assume that the default branch name is `master`.
+# However, if the user has `init.defaultBranch` set in their global Git config, `git init`
+# might create repositories with a default branch name that is not equal to `master`.
+#
+# Therefore, after we make the first commit to a new repository, we check and see what the
+# branch name is. If the branch name is `master`, we do nothing. If the branch name is not
+# `master`, then we run the following commands:
+# 1. `git branch -f master`
+# 2. `git checkout master`
+# 3. `git branch -D $(old_branch_name)`
+#
+# Note: this requires Git 1.2.0+ or Git 2.0.0+
+#
+# Note: we cannot use `git init -b`, because that requires Git 2.28.0+, and we want to
+# support older versions of Git. Therefore, we instead use `git branch -f` and `git branch -D`,
+# which only require Git 1.2.0+ or Git 2.0.0+.
+function fix_default_branch(; dir::String, new_branch_name::String = "master")
+    old_branch_name = _current_branch_name(; dir)
+    git = gitcmd(dir)
+    if old_branch_name != new_branch_name
+        # Note: the `branch -f` flag is supported in Git 1.2.0+ and Git 2.0.0+
+        # Note: the `branch -D` flag is supported in Git 1.2.0+ and Git 2.0.0+
+        run(`$(git) branch -f $(new_branch_name)`)
+        run(`$(git) checkout $(new_branch_name)`)
+        run(`$(git) branch -D $(old_branch_name)`)
+    end
+    # A sanity check to make sure that the branch rename worked successfully.
+    @test _current_branch_name(; dir) == new_branch_name
+    return nothing
+end
+function _current_branch_name(; dir::String)
+    git = gitcmd(dir)
+    return strip(read(`$(git) rev-parse --abbrev-ref HEAD`, String))
 end
 
 @testset "subdir" begin
@@ -185,6 +223,18 @@ end
         @test isinstalled("Dep")
         pkg"rm Dep"
 
+        # Add from path, REPL subdir syntax.
+        pkgstr("add $(packages_dir):julia")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("add $(packages_dir):dependencies/Dep")
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
         # Add from path at branch.
         Pkg.add(Pkg.PackageSpec(path=packages_dir, subdir="julia", rev="master"))
         @test isinstalled("Package")
@@ -193,6 +243,18 @@ end
         pkg"rm Package"
 
         Pkg.add(Pkg.PackageSpec(path=packages_dir, subdir="dependencies/Dep", rev="master"))
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
+        # Add from path at branch, REPL subdir syntax
+        pkgstr("add $(packages_dir):julia#master")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("add $(packages_dir):dependencies/Dep#master")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
@@ -209,6 +271,18 @@ end
         @test isinstalled("Dep")
         pkg"rm Dep"
 
+        # Develop from path, REPL subdir syntax.
+        pkgstr("develop $(packages_dir):julia")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("develop $(packages_dir):dependencies/Dep")
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
         # Add from url.
         Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="julia"))
         @test isinstalled("Package")
@@ -217,6 +291,18 @@ end
         pkg"rm Package"
 
         Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep"))
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
+        # Add from url, REPL subdir syntax.
+        pkgstr("add $(packages_dir_url):julia")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("add $(packages_dir_url):dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
@@ -234,6 +320,18 @@ end
         @test isinstalled("Dep")
         pkg"rm Dep"
 
+        # Add from url at branch, REPL subdir syntax.
+        pkgstr("add $(packages_dir_url):julia#master")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("add $(packages_dir_url):dependencies/Dep#master")
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
         # Develop from url.
         Pkg.develop(Pkg.PackageSpec(url=packages_dir_url, subdir="julia"))
         @test isinstalled("Package")
@@ -242,6 +340,18 @@ end
         pkg"rm Package"
 
         Pkg.develop(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep"))
+        @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"rm Dep"
+
+        # Develop from url, REPL subdir syntax.
+        pkgstr("develop $(packages_dir_url):julia")
+        @test isinstalled("Package")
+        @test !isinstalled("Dep")
+        @test isinstalled(dep)
+        pkg"rm Package"
+
+        pkgstr("develop $(packages_dir_url):dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"

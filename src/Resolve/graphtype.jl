@@ -44,7 +44,7 @@ mutable struct ResolveLog
     pool::Dict{UUID,ResolveLogEntry}
 
     # journal: record all messages in order (shared between all entries)
-    journal::Vector{Tuple{UUID,String}}
+    journal::ResolveJournal
 
     # exact: keeps track of whether the resolve process is still exact, or
     #        heuristics have been employed
@@ -60,7 +60,7 @@ mutable struct ResolveLog
         journal = ResolveJournal()
         init = ResolveLogEntry(journal, UUID0, "")
         globals = ResolveLogEntry(journal, UUID0, "Global events:")
-        return new(init, globals, Dict(), journal, true, verbose, uuid_to_name)
+        return new(init, globals, Dict{UUID,ResolveLogEntry}(), journal, true, verbose, uuid_to_name)
     end
 end
 
@@ -113,19 +113,19 @@ mutable struct GraphData
     rlog::ResolveLog
 
     function GraphData(
-            versions::Dict{UUID,Set{VersionNumber}},
+            compat::Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}},
             uuid_to_name::Dict{UUID,String},
             verbose::Bool = false
         )
         # generate pkgs
-        pkgs = sort!(collect(keys(versions)))
+        pkgs = sort!(collect(keys(compat)))
         np = length(pkgs)
 
         # generate pdict
         pdict = Dict{UUID,Int}(pkgs[p0] => p0 for p0 = 1:np)
 
         # generate spp and pvers
-        pvers = [sort!(collect(versions[pkgs[p0]])) for p0 = 1:np]
+        pvers = [sort!(collect(keys(compat[pkgs[p0]]))) for p0 = 1:np]
         spp = length.(pvers) .+ 1
 
         # generate vdict
@@ -229,75 +229,60 @@ mutable struct Graph
     # number of packages (all Vectors above have this length)
     np::Int
 
+    # some workspace vectors
+    newmsg::Vector{FieldValue}
+    diff::Vector{FieldValue}
+    cavfld::Vector{FieldValue}
+
     function Graph(
-            versions::Dict{UUID,Set{VersionNumber}},
-            deps::Dict{UUID,Dict{VersionNumber,Dict{String,UUID}}},
-            compat::Dict{UUID,Dict{VersionNumber,Dict{String,VersionSpec}}},
+            compat::Dict{UUID,Dict{VersionNumber,Dict{UUID,VersionSpec}}},
+            compat_weak::Dict{UUID,Dict{VersionNumber,Set{UUID}}},
             uuid_to_name::Dict{UUID,String},
             reqs::Requires,
             fixed::Dict{UUID,Fixed},
-            verbose::Bool = false
+            verbose::Bool = false,
+            julia_version::Union{VersionNumber,Nothing} = VERSION
         )
-        # make sure all versions of all packages know about julia uuid
-        for (uuid,vnmap) in deps, vn in versions[uuid]
-            get!(Dict, vnmap, vn)["julia"] = uuid_julia
-        end
 
         # Tell the resolver about julia itself
-        fixed[uuid_julia] = Fixed(VERSION)
         uuid_to_name[uuid_julia] = "julia"
-        versions[uuid_julia] = Set([VERSION])
-        deps[uuid_julia] = Dict(VERSION => Dict())
-        compat[uuid_julia] = Dict(VERSION => Dict())
+        if julia_version !== nothing
+            fixed[uuid_julia] = Fixed(julia_version)
+            compat[uuid_julia] = Dict(julia_version => Dict{VersionNumber,Dict{UUID,VersionSpec}}())
+        else
+            compat[uuid_julia] = Dict{VersionNumber,Dict{UUID,VersionSpec}}()
+        end
 
-        extra_uuids = union(keys(reqs), keys(fixed), map(fx->keys(fx.requires), values(fixed))...)
-        extra_uuids ⊆ keys(versions) || error("unknown UUID found in reqs/fixed") # TODO?
-
-        # Type assert below due to https://github.com/JuliaLang/julia/issues/25918
-        data = GraphData(versions, uuid_to_name, verbose)::GraphData
+        data = GraphData(compat, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
-
-        local extended_deps
-        let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
-            # Type assert below to help inference
-            extended_deps = [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]::Vector{Vector{Dict{Int,BitVector}}}
+        extended_deps = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
+            [Vector{Dict{Int,BitVector}}(undef, spp[p0]-1) for p0 = 1:np]
         end
         for p0 = 1:np, v0 = 1:(spp[p0]-1)
-            n2u = Dict{String,UUID}()
             vn = pvers[p0][v0]
-            vnmap = get(Dict, deps[pkgs[p0]], vn)
-            for (name, uuid) in vnmap
-                # check conflicts ??
-                n2u[name] = uuid
-            end
             req = Dict{Int,VersionSpec}()
-            uuid = pkgs[p0]
-            vnmap = get(Dict, compat[pkgs[p0]], vn)
-            for (name,vs) in vnmap
-                haskey(n2u, name) || error("Unknown package $name found in the compatibility requirements of $(pkgID(pkgs[p0], uuid_to_name))")
-                uuid = n2u[name]
-                p1 = pdict[uuid]
+            uuid0 = pkgs[p0]
+            vnmap = get(Dict{String,VersionSpec}, compat[uuid0], vn)
+            for (uuid1, vs) in vnmap
+                p1 = pdict[uuid1]
                 p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
                 # check conflicts instead of intersecting?
                 # (intersecting is used by fixed packages though...)
                 req_p1 = get!(VersionSpec, req, p1)
                 req[p1] = req_p1 ∩ vs
             end
-            # The remaining dependencies do not have compatibility constraints
-            for uuid in values(n2u)
-                p1 = pdict[uuid]
-                p1 == p0 && continue
-                get!(VersionSpec, req, p1)
-            end
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
             req_msk = Dict{Int,BitVector}()
+            maybe_weak = haskey(compat_weak, uuid0) && haskey(compat_weak[uuid0], vn)
             for (p1, vs) in req
                 pv = pvers[p1]
-                req_msk_p1 = BitArray(undef, spp[p1] - 1)
+                req_msk_p1 = BitVector(undef, spp[p1])
                 @inbounds for i in 1:spp[p1] - 1
                     req_msk_p1[i] = pv[i] ∈ vs
                 end
+                weak = maybe_weak && (pkgs[p1] ∈ compat_weak[uuid0][vn])
+                req_msk_p1[end] = weak
                 req_msk[p1] = req_msk_p1
             end
             extended_deps[p0][v0] = req_msk
@@ -305,9 +290,8 @@ mutable struct Graph
 
         gadj = [Int[] for p0 = 1:np]
         gmsk = [BitMatrix[] for p0 = 1:np]
-        local gconstr
-        let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
-            gconstr = [trues(spp[p0]) for p0 = 1:np]
+        gconstr = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
+            [trues(spp[p0]) for p0 = 1:np]
         end
         adjdict = [Dict{Int,Int}() for p0 = 1:np]
 
@@ -338,13 +322,11 @@ mutable struct Graph
                 bmt = gmsk[p1][j1]
             end
 
-            for v1 = 1:(spp[p1]-1)
+            for v1 = 1:spp[p1]
                 rmsk1[v1] && continue
                 bm[v1, v0] = false
                 bmt[v0, v1] = false
             end
-            bm[end,v0] = false
-            bmt[v0,end] = false
         end
 
         req_inds = Set{Int}()
@@ -353,7 +335,8 @@ mutable struct Graph
         ignored = falses(np)
         solve_stack = Tuple{Vector{BitVector},BitVector}[]
 
-        graph = new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np)
+        graph = new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np,
+                    FieldValue[], FieldValue[], FieldValue[])
 
         _add_fixed!(graph, fixed)
         _add_reqs!(graph, reqs, :explicit_requirement)
@@ -392,7 +375,7 @@ function add_reqs!(graph::Graph, reqs::Requires)
     return graph
 end
 
-function _add_reqs!(graph::Graph, reqs::Requires, reason)
+function _add_reqs!(graph::Graph, reqs::Requires, reason; weak_reqs::Set{UUID} = Set{UUID}())
     gconstr = graph.gconstr
     spp = graph.spp
     req_inds = graph.req_inds
@@ -407,7 +390,8 @@ function _add_reqs!(graph::Graph, reqs::Requires, reason)
             rvn = pvers[rp0][rv0]
             rvn ∈ rvs || (new_constr[rv0] = false)
         end
-        new_constr[end] = false
+        weak = rp ∈ weak_reqs
+        new_constr[end] = weak
         old_constr = copy(gconstr[rp0])
         gconstr[rp0] .&= new_constr
         reason ≡ :explicit_requirement && push!(req_inds, rp0)
@@ -440,15 +424,22 @@ function _add_fixed!(graph::Graph, fixed::Dict{UUID,Fixed})
         gconstr[fp0] .&= new_constr
         push!(fix_inds, fp0)
         bkitem = log_event_fixed!(graph, fp, fx)
-        _add_reqs!(graph, fx.requires, (fp, bkitem))
+        _add_reqs!(graph, fx.requires, (fp, bkitem); weak_reqs=fx.weak)
     end
     return graph
 end
 
-Types.pkgID(p::UUID, rlog::ResolveLog) = pkgID(p, rlog.uuid_to_name)
-Types.pkgID(p::UUID, data::GraphData) = pkgID(p, data.uuid_to_name)
-Types.pkgID(p0::Int, data::GraphData) = pkgID(data.pkgs[p0], data)
-Types.pkgID(p, graph::Graph) = pkgID(p, graph.data)
+pkgID(p::UUID, rlog::ResolveLog) = pkgID(p, rlog.uuid_to_name)
+pkgID(p::UUID, data::GraphData) = pkgID(p, data.uuid_to_name)
+pkgID(p0::Int, data::GraphData) = pkgID(data.pkgs[p0], data)
+pkgID(p, graph::Graph) = pkgID(p, graph.data)
+
+## user-friendly representation of package IDs ##
+function pkgID(p::UUID, uuid_to_name::Dict{UUID,String})
+    name = get(uuid_to_name, p, "(unknown)")
+    uuid_short = string(p)[1:8]
+    return "$name [$uuid_short]"
+end
 
 function check_consistency(graph::Graph)
     np = graph.np
@@ -472,8 +463,8 @@ function check_consistency(graph::Graph)
     # TODO: check ignored and solve_stack
 
     @assert np ≥ 0
-    for x in [spp, gadj, gmsk, gconstr, adjdict, ignored, rlog.pool, pkgs, pdict, pvers, vdict]
-        @assert length(x) == np
+    for x in Any[spp, gadj, gmsk, gconstr, adjdict, ignored, rlog.pool, pkgs, pdict, pvers, vdict]
+        @assert length(x)::Int == np
     end
     for p0 = 1:np
         @assert pdict[pkgs[p0]] == p0
@@ -504,7 +495,8 @@ function check_consistency(graph::Graph)
             @assert size(gmsk0[j0]) == (spp1,spp0)
             j1 = adjdict0[p1]
             gmsk1 = gmsk[p1]
-            @assert gmsk1[j1] == permutedims(gmsk0[j0])
+            # This assert is a bit too expensive
+            # @assert gmsk1[j1] == permutedims(gmsk0[j0])
         end
     end
     for (p,p0) in pdict
@@ -570,6 +562,54 @@ function wipe_snapshots!(graph::Graph)
     return graph
 end
 
+# system colors excluding whites/greys/blacks and error-red
+const CONFLICT_COLORS = [1:6; 10:14];
+pkgID_color(pkgID) = CONFLICT_COLORS[mod1(hash(pkgID), end)]
+
+logstr(pkgID) = logstr(pkgID, pkgID)
+function logstr(pkgID, args...)
+    # workout the string with the color codes, check stderr to decide if color is enabled
+    return sprint(args; context=stderr::IO) do io, iargs
+        printstyled(io, iargs...; color=pkgID_color(pkgID))
+    end
+end
+
+"""
+    range_compressed_versionspec(pool, subset=pool)
+
+ - `pool`: all versions that exist (a superset of `subset`)
+ - `subset`: the subset of those versions that we want to include in the spec.
+
+Finds a minimal collection of ranges as a `VersionSpec`, that permits everything in the
+`subset`, but does not permit anything else from the `pool`.
+"""
+function range_compressed_versionspec(pool, subset=pool)
+    length(subset) == 1 && return VersionSpec(only(subset))
+    # PREM-OPT: we keep re-sorting these, probably not required.
+    sort!(pool)
+    sort!(subset)
+    @assert subset ⊆ pool
+
+    contiguous_subsets = VersionRange[]
+
+    range_start = first(subset)
+    pool_ii = findfirst(isequal(range_start), pool) + 1  # skip-forward til we have started
+    for s in @view subset[2:end]
+        if s != pool[pool_ii]
+            range_end = pool[pool_ii-1]  # previous element was last in this range
+            push!(contiguous_subsets, VersionRange(range_start, range_end))
+            range_start = s  # start a new range
+            while (s != pool[pool_ii])  # advance til time to start
+                pool_ii += 1
+            end
+        end
+        pool_ii += 1
+    end
+    push!(contiguous_subsets, VersionRange(range_start, last(subset)))
+
+    return VersionSpec(contiguous_subsets)
+end
+
 function init_log!(data::GraphData)
     np = data.np
     pkgs = data.pkgs
@@ -580,11 +620,21 @@ function init_log!(data::GraphData)
         id = pkgID(p0, data)
         versions = pvers[p0]
         if isempty(versions)
-            msg = "$id has no known versions!" # This shouldn't happen?
+            msg = "$(logstr(id)) has no known versions!" # This shouldn't happen?
         else
-            msg = "possible versions are: $(VersionSpec(VersionRange.(versions))) or uninstalled"
+            vspec = range_compressed_versionspec(versions)
+            vers = logstr(id, vspec)
+            uuid = data.pkgs[p0]
+            name = data.uuid_to_name[uuid]
+            pkgid = Base.PkgId(uuid, name)
+            msg = "possible versions are: $vers or uninstalled"
+            if Base.in_sysimage(pkgid)
+                msg *= " (package in sysimage!)"
+            end
         end
-        first_entry = get!(rlog.pool, p) do; ResolveLogEntry(rlog.journal, p, "$id log:") end
+        first_entry = get!(rlog.pool, p) do
+            ResolveLogEntry(rlog.journal, p, "$(logstr(id)) log:")
+        end
 
         if p ≠ uuid_julia
             push!(first_entry, (nothing, msg))
@@ -597,10 +647,22 @@ end
 function log_event_fixed!(graph::Graph, fp::UUID, fx::Fixed)
     rlog = graph.data.rlog
     id = pkgID(fp, rlog)
-    msg = "$id is fixed to version $(fx.version)"
+    msg = "$(logstr(id)) is fixed to version $(logstr(id, fx.version))"
     entry = rlog.pool[fp]
     push!(entry, (nothing, msg))
     return entry
+end
+
+function _vs_string(p0::Int, vmask::BitVector, id::String, pvers::Vector{Vector{VersionNumber}})
+    if any(vmask[1:(end-1)])
+        vspec = range_compressed_versionspec(pvers[p0], pvers[p0][vmask[1:(end-1)]])
+        vns = logstr(id, vspec)
+        vmask[end] && (vns *= " or uninstalled")
+    else
+        @assert vmask[end]
+        vns = "uninstalled"
+    end
+    return vns
 end
 
 function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
@@ -609,7 +671,7 @@ function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
     pdict = graph.data.pdict
     pvers = graph.data.pvers
     id = pkgID(rp, rlog)
-    msg = "restricted to versions $rvs by "
+    msg = "restricted to versions $(logstr(id, rvs)) by "
     if reason isa Symbol
         @assert reason === :explicit_requirement
         other_entry = nothing
@@ -620,14 +682,13 @@ function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
             msg *= "julia compatibility requirements"
             other_entry = nothing # don't propagate the log
         else
-            other_id = pkgID(other_p, rlog)
-            msg *= "$other_id"
+            msg *= logstr(pkgID(other_p, rlog))
         end
     end
     rp0 = pdict[rp]
-    @assert !gconstr[rp0][end]
+    @assert !gconstr[rp0][end] || reason ≢ :explicit_requirement
     if any(gconstr[rp0])
-        msg *= ", leaving only versions $(VersionSpec(VersionRange.(pvers[rp0][gconstr[rp0][1:(end-1)]])))"
+        msg *= ", leaving only versions: $(_vs_string(rp0, gconstr[rp0], id, pvers))"
     else
         msg *= " — no versions left"
     end
@@ -648,36 +709,30 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
     pkgs = graph.data.pkgs
     pvers = graph.data.pvers
 
-    function vs_string(p0::Int, vmask::BitVector)
-        if any(vmask[1:(end-1)])
-            vns = string(VersionSpec(VersionRange.(pvers[p0][vmask[1:(end-1)]])))
-            vmask[end] && (vns *= " or uninstalled")
-        else
-            @assert vmask[end]
-            vns = "uninstalled"
-        end
-        return vns
-    end
-
     p = pkgs[p1]
     id = pkgID(p, rlog)
+
     other_p, other_entry = pkgs[p0], rlog.pool[pkgs[p0]]
     other_id = pkgID(other_p, rlog)
     if any(vmask)
-        msg = "restricted by "
-        if other_p == uuid_julia
-            msg *= "julia compatibility requirements "
-            other_entry = nothing # don't propagate the log
+        if all(vmask[1:(end-1)])    # Check if all versions are allowed (except uninstalled)
+            msg = ""
+            other_entry = nothing   # Don't propagate the log if all versions allowed
         else
-            other_id = pkgID(other_p, rlog)
-            msg *= "compatibility requirements with $other_id "
-        end
-        msg *= "to versions: $(vs_string(p1, vmask))"
-        if vmask ≠ gconstr[p1]
-            if any(gconstr[p1])
-                msg *= ", leaving only versions: $(vs_string(p1, gconstr[p1]))"
+            msg = "restricted by "
+            if other_p == uuid_julia
+                msg *= "julia compatibility requirements "
+                other_entry = nothing # don't propagate the log
             else
-                msg *= " — no versions left"
+                msg *= "compatibility requirements with $(logstr(other_id)) "
+            end
+            msg *= "to versions: $(_vs_string(p1, vmask, id, pvers))"
+            if vmask ≠ gconstr[p1]
+                if any(gconstr[p1])
+                    msg *= ", leaving only versions: $(_vs_string(p1, gconstr[p1], id, pvers))"
+                else
+                    msg *= " — no versions left"
+                end
             end
         end
     else
@@ -686,8 +741,7 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
             msg *= "julia"
             other_entry = nothing # don't propagate the log
         else
-            other_id = pkgID(other_p, rlog)
-            msg *= "$other_id "
+            msg *= logstr(other_id)
         end
     end
     entry = rlog.pool[p]
@@ -706,7 +760,8 @@ function log_event_pruned!(graph::Graph, p0::Int, s0::Int)
     if s0 == spp[p0]
         msg = "determined to be unneeded during graph pruning"
     else
-        msg = "fixed during graph pruning to its only remaining available version, $(pvers[p0][s0])"
+        ver = logstr(id, pvers[p0][s0])
+        msg = "fixed during graph pruning to its only remaining available version, $ver"
     end
     entry = rlog.pool[p]
     push!(entry, (nothing, msg))
@@ -724,10 +779,11 @@ function log_event_greedysolved!(graph::Graph, p0::Int, s0::Int)
     if s0 == spp[p0]
         msg = "determined to be unneeded by the solver"
     else
+        ver = logstr(id, pvers[p0][s0])
         if s0 == spp[p0] - 1
-            msg = "set by the solver to its maximum version: $(pvers[p0][s0])"
+            msg = "set by the solver to its maximum version: $ver"
         else
-            msg = "set by the solver to the maximum version compatible with the constraints: $(pvers[p0][s0])"
+            msg = "set by the solver to the maximum version compatible with the constraints: $ver"
         end
     end
     entry = rlog.pool[p]
@@ -748,10 +804,12 @@ function log_event_maxsumsolved!(graph::Graph, p0::Int, s0::Int, why::Symbol)
         msg = "determined to be unneeded by the solver"
     else
         @assert why === :constr
+        ver = logstr(id, pvers[p0][s0])
         if s0 == spp[p0] - 1
-            msg = "set by the solver to its maximum version: $(pvers[p0][s0])"
+            msg = "set by the solver to its maximum version: $ver"
         else
-            msg = "set by the solver to version: $(pvers[p0][s0]) (version $(pvers[p0][s0+1]) would violate its constraints)"
+            xver = logstr(id, pvers[p0][s0+1])
+            msg = "set by the solver to version: $ver (version $xver would violate its constraints)"
         end
     end
     entry = rlog.pool[p]
@@ -769,10 +827,12 @@ function log_event_maxsumsolved!(graph::Graph, p0::Int, s0::Int, p1::Int)
     id = pkgID(p, rlog)
     other_id = pkgID(pkgs[p1], rlog)
     @assert s0 ≠ spp[p0]
+    ver = logstr(id, pvers[p0][s0])
     if s0 == spp[p0] - 1
-        msg = "set by the solver to its maximum version: $(pvers[p0][s0]) (installation is required by $other_id)"
+        msg = "set by the solver to its maximum version: $ver (installation is required by $other_id)"
     else
-        msg = "set by the solver version: $(pvers[p0][s0]) (version $(pvers[p0][s0+1]) would violate a dependency relation with $other_id)"
+        xver = logstr(id, pvers[p0][s0+1])
+        msg = "set by the solver version: $ver (version $xver would violate a dependency relation with $other_id)"
     end
     other_entry = rlog.pool[pkgs[p1]]
     entry = rlog.pool[p]
@@ -787,18 +847,20 @@ function log_event_eq_classes!(graph::Graph, p0::Int)
     pkgs = graph.data.pkgs
     pvers = graph.data.pvers
 
-    if any(gconstr[p0][1:(end-1)])
-        vns = string(VersionSpec(VersionRange.(pvers[p0][gconstr[p0][1:(end-1)]])))
-        gconstr[p0][end] && (vns *= " or uninstalled")
-    elseif gconstr[p0][end]
-        vns = "uninstalled"
-    else
-        vns = "no version"
-    end
-
     p = pkgs[p0]
     id = pkgID(p, rlog)
-    msg = "versions reduced by equivalence to: $vns"
+    msg = "versions reduced by equivalence to: "
+
+    if any(gconstr[p0][1:(end-1)])
+        vspec = range_compressed_versionspec(pvers[p0], pvers[p0][gconstr[p0][1:(end-1)]])
+        msg *= logstr(id, vspec)
+        gconstr[p0][end] && (msg *= " or uninstalled")
+    elseif gconstr[p0][end]
+        msg *= "uninstalled"
+    else
+        msg *= "no version"
+    end
+
     entry = rlog.pool[p]
     push!(entry, (nothing, msg))
     return entry
@@ -810,7 +872,8 @@ function log_event_maxsumtrace!(graph::Graph, p0::Int, s0::Int)
     p = graph.data.pkgs[p0]
     id = pkgID(p, rlog)
     if s0 < graph.spp[p0]
-        msg = "fixed by the MaxSum heuristic to version $(graph.data.pvers[p0][s0])"
+        ver = logstr(id, graph.data.pvers[p0][s0])
+        msg = "fixed by the MaxSum heuristic to version $ver"
     else
         msg = "determined to be unneeded by the MaxSum heuristic"
     end
@@ -824,9 +887,9 @@ get_resolve_log(graph::Graph) = deepcopy(graph.data.rlog)
 
 const _logindent = " "
 
-showlog(graph::Graph, args...; kw...) = showlog(stdout, graph, args...; kw...)
+showlog(graph::Graph, args...; kw...) = showlog(stdout_f(), graph, args...; kw...)
 showlog(io::IO, graph::Graph, args...; kw...) = showlog(io, graph.data.rlog, args...; kw...)
-showlog(rlog::ResolveLog, args...; kw...) = showlog(stdout, rlog, args...; kw...)
+showlog(rlog::ResolveLog, args...; kw...) = showlog(stdout_f(), rlog, args...; kw...)
 
 """
 Show the full resolution log. The `view` keyword controls how the events are displayed/grouped:
@@ -843,7 +906,7 @@ function showlog(io::IO, rlog::ResolveLog; view::Symbol = :plain)
     seen = IdDict()
     recursive = (view === :tree)
     _show(io, rlog, rlog.globals, _logindent, seen, false)
-    initentries = [event[1] for event in rlog.init.events]
+    initentries = Union{ResolveLogEntry,Nothing}[event[1]::Union{ResolveLogEntry,Nothing} for event in rlog.init.events]
     for entry in sort!(initentries, by=(entry->pkgID(entry.pkg, rlog)))
         seen[entry] = true
         _show(io, rlog, entry, _logindent, seen, recursive)
@@ -852,8 +915,8 @@ end
 
 function showlogjournal(io::IO, rlog::ResolveLog)
     journal = rlog.journal
-    id(p) = p == UUID0 ? "[global event]" : pkgID(p, rlog)
-    padding = maximum(length(id(p)) for (p,_) in journal)
+    id(p) = p == UUID0 ? "[global event]" : logstr(pkgID(p, rlog))
+    padding = maximum(length(id(p)) for (p,_) in journal; init=0)
     for (p,msg) in journal
         println(io, ' ', rpad(id(p), padding), ": ", msg)
     end
@@ -868,7 +931,7 @@ function showlog(io::IO, rlog::ResolveLog, p::UUID; view::Symbol = :tree)
     view ∈ [:plain, :tree] || throw(ArgumentError("the view argument should be `:plain` or `:tree`"))
     entry = rlog.pool[p]
     if view === :tree
-        _show(io, rlog, entry, _logindent, IdDict(entry=>true), true)
+        _show(io, rlog, entry, _logindent, IdDict{Any,Any}(entry=>true), true)
     else
         entries = ResolveLogEntry[entry]
         function getentries(entry)
@@ -927,9 +990,9 @@ function check_constraints(graph::Graph)
     for p0 = 1:np
         any(gconstr[p0]) && continue
         if exact
-            err_msg = "Unsatisfiable requirements detected for package $(id(p0)):\n"
+            err_msg = "Unsatisfiable requirements detected for package $(logstr(id(p0))):\n"
         else
-            err_msg = "Resolve failed to satisfy requirements for package $(id(p0)):\n"
+            err_msg = "Resolve failed to satisfy requirements for package $(logstr(id(p0))):\n"
         end
         err_msg *= sprint(showlog, rlog, pkgs[p0])
         throw(ResolverError(chomp(err_msg)))
@@ -965,6 +1028,8 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
         Set{Int}(p0 for p0 = 1:np if !gconstr[p0][end]) :
         sources
 
+    seen = copy(staged)
+
     while !isempty(staged)
         staged_next = Set{Int}()
         for p0 in staged
@@ -994,18 +1059,21 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
                 if gconstr1 ≠ old_gconstr1
                     push!(staged_next, p1)
                     log_events && log_event_implicit_req!(graph, p1, added_constr1, p0)
+                elseif p1 ∉ seen
+                    push!(staged_next, p1)
                 end
                 if !any(gconstr1)
                     if exact
-                        err_msg = "Unsatisfiable requirements detected for package $(id(p1)):\n"
+                        err_msg = "Unsatisfiable requirements detected for package $(logstr(id(p1))):\n"
                     else
-                        err_msg = "Resolve failed to satisfy requirements for package $(id(p1)):\n"
+                        err_msg = "Resolve failed to satisfy requirements for package $(logstr(id(p1))):\n"
                     end
                     err_msg *= sprint(showlog, rlog, pkgs[p1])
                     throw(ResolverError(chomp(err_msg)))
                 end
             end
         end
+        union!(seen, staged_next)
         staged = staged_next
     end
     return graph
@@ -1155,7 +1223,7 @@ function build_eq_classes1!(graph::Graph, p0::Int)
     # find unique behaviors
     repr_vecs = unique(cvecs)
 
-    # number of equivaent classes
+    # number of equivalent classes
     neq = length(repr_vecs)
 
     neq == spp[p0] && return # nothing to do here
@@ -1248,7 +1316,7 @@ function build_eq_classes_soft1!(graph::Graph, p0::Int)
     # find unique behaviors
     repr_vecs = unique(cvecs)
 
-    # number of equivaent classes
+    # number of equivalent classes
     neq = length(repr_vecs)
 
     neq == eff_spp0 && return # nothing to do here
@@ -1256,7 +1324,7 @@ function build_eq_classes_soft1!(graph::Graph, p0::Int)
     # group versions into sets that behave identically
     # each set is represented by its highest-valued member
     repr_vers = sort!(Int[findlast(isequal(repr_vecs[w0]), cvecs) for w0 = 1:neq])
-    @assert all(repr_vers .> 0)
+    @assert all(>(0), repr_vers)
     @assert repr_vers[end] == eff_spp0
 
     # convert the version numbers into the original numbering
@@ -1307,7 +1375,7 @@ function prune_graph!(graph::Graph)
 
     # We will remove all packages that only have one allowed state
     # (includes fixed packages and forbidden packages)
-    pkg_mask = BitArray(count(gconstr[p0]) ≠ 1 for p0 = 1:np)
+    pkg_mask = BitVector(count(gconstr[p0]) ≠ 1 for p0 = 1:np)
     new_np = count(pkg_mask)
 
     # a map that translates the new index ∈ 1:new_np into its
@@ -1356,7 +1424,7 @@ function prune_graph!(graph::Graph)
     # versions that aren't allowed (but not the "uninstalled" state)
     function keep_vers(new_p0)
         p0 = old_idx[new_p0]
-        return BitArray((v0 == spp[p0]) | gconstr[p0][v0] for v0 = 1:spp[p0])
+        return BitVector((v0 == spp[p0]) | gconstr[p0][v0] for v0 = 1:spp[p0])
     end
     vers_mask = [keep_vers(new_p0) for new_p0 = 1:new_np]
 
@@ -1371,7 +1439,12 @@ function prune_graph!(graph::Graph)
         return pvers0[vmsk0[1:(end-1)]]
     end
     new_pvers = [compute_pvers(new_p0) for new_p0 = 1:new_np]
-    new_vdict = [Dict(vn => v0 for (v0,vn) in enumerate(new_pvers[new_p0])) for new_p0 = 1:new_np]
+
+    # explicitly writing out the following loop since the generator equivalent caused type inference failure
+    new_vdict = Vector{Dict{VersionNumber, Int}}(undef, length(new_pvers))
+    for new_p0 in eachindex(new_vdict)
+        new_vdict[new_p0] = Dict(vn => v0 for (v0,vn) in enumerate(new_pvers[new_p0]))
+    end
 
     # The new constraints are all going to be `true`, except possibly
     # for the "uninstalled" state, which we copy over from the old
@@ -1400,8 +1473,8 @@ function prune_graph!(graph::Graph)
         new_j0 > length(new_gadj[new_p0]) || continue
         push!(new_gadj[new_p0], new_p1)
         push!(new_gadj[new_p1], new_p0)
-        new_j0 = length(new_gadj[new_p0])
-        new_j1 = length(new_gadj[new_p1])
+        @assert new_j0 == length(new_gadj[new_p0])
+        @assert new_j1 == length(new_gadj[new_p1])
 
         new_adjdict[new_p1][new_p0] = new_j0
         new_adjdict[new_p0][new_p1] = new_j1

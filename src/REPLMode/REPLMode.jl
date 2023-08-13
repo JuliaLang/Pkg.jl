@@ -6,12 +6,14 @@ using Markdown, UUIDs, Dates
 
 import REPL
 import REPL: LineEdit, REPLCompletions
+import REPL: TerminalMenus
 
-import ..casesensitive_isdir
-using ..Types, ..Operations, ..API, ..Registry, .. Resolve
+import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
+using ..Types, ..Operations, ..API, ..Registry, ..Resolve
+import ..stdout_f, ..stderr_f
 
-const SPECS = Ref{Union{Nothing,Dict}}(nothing)
 const TEST_MODE = Ref{Bool}(false)
+const PRINTED_REPL_WARNING = Ref{Bool}(false)
 
 #########################
 # Specification Structs #
@@ -30,7 +32,7 @@ end
 
 # TODO assert names matching lex regex
 # assert now so that you don't fail at user time
-# see function `REPLMode.APIOptions`
+# see function `REPLMode.api_options`
 function OptionSpec(;name::String,
                     short_name::Union{Nothing,String}=nothing,
                     takes_arg::Bool=false,
@@ -39,15 +41,15 @@ function OptionSpec(;name::String,
     return OptionSpec(name, short_name, api, takes_arg)
 end
 
-function OptionSpecs(decs::Vector{OptionDeclaration})::Dict{String, OptionSpec}
-    specs = Dict()
+function OptionSpecs(decs::Vector{OptionDeclaration})
+    specs = Dict{String, OptionSpec}()
     for x in decs
         opt_spec = OptionSpec(;x...)
-        @assert get(specs, opt_spec.name, nothing) === nothing # don't overwrite
+        @assert !haskey(specs, opt_spec.name) # don't overwrite
         specs[opt_spec.name] = opt_spec
         if opt_spec.short_name !== nothing
-            @assert get(specs, opt_spec.short_name, nothing) === nothing # don't overwrite
-            specs[opt_spec.short_name] = opt_spec
+            @assert !haskey(specs, opt_spec.short_name::String) # don't overwrite
+            specs[opt_spec.short_name::String] = opt_spec
         end
     end
     return specs
@@ -89,30 +91,30 @@ function CommandSpec(;name::Union{Nothing,String}           = nothing,
                      arg_count::Pair                        = (0=>0),
                      arg_parser::Function                   = default_parser,
                      )::CommandSpec
-    @assert name !== nothing "Supply a canonical name"
-    @assert description !== nothing "Supply a description"
-    @assert api !== nothing "Supply API dispatch function for `$(name)`"
+    name === nothing        && error("Supply a canonical name")
+    description === nothing && error("Supply a description")
+    api === nothing         && error("Supply API dispatch function for `$(name)`")
     # TODO assert isapplicable completions dict, string
     return CommandSpec(name, short_name, api, should_splat, ArgSpec(arg_count, arg_parser),
                        OptionSpecs(option_spec), completions, description, help)
 end
 
-function CommandSpecs(declarations::Vector{CommandDeclaration})::Dict{String,CommandSpec}
-    specs = Dict()
+function CommandSpecs(declarations::Vector{CommandDeclaration})
+    specs = Dict{String,CommandSpec}()
     for dec in declarations
         spec = CommandSpec(;dec...)
         @assert !haskey(specs, spec.canonical_name) "duplicate spec entry"
         specs[spec.canonical_name] = spec
         if spec.short_name !== nothing
-            @assert !haskey(specs, spec.short_name) "duplicate spec entry"
-            specs[spec.short_name] = spec
+            @assert !haskey(specs, spec.short_name::String) "duplicate spec entry"
+            specs[spec.short_name::String] = spec
         end
     end
     return specs
 end
 
-function CompoundSpecs(compound_declarations)::Dict{String,Dict{String,CommandSpec}}
-    compound_specs = Dict()
+function CompoundSpecs(compound_declarations)
+    compound_specs = Dict{String,Dict{String,CommandSpec}}()
     for (name, command_declarations) in compound_declarations
         specs = CommandSpecs(command_declarations)
         @assert !haskey(compound_specs, name) "duplicate super spec entry"
@@ -146,10 +148,10 @@ wrap_option(option::String)  = length(option) == 1 ? "-$option" : "--$option"
 is_opt(word::AbstractString) = first(word) == '-' && word != "-"
 
 function parse_option(word::AbstractString)::Option
-    m = match(r"^(?: -([a-z]) | --([a-z]{2,})(?:\s*=\s*(\S*))? )$"ix, word)
+    m = match(r"^(?: -([a-z]) | --((?:[a-z]{1,}-?)*)(?:\s*=\s*(\S*))? )$"ix, word)
     m === nothing && pkgerror("malformed option: ", repr(word))
-    option_name = m.captures[1] !== nothing ? m.captures[1] : m.captures[2]
-    option_arg  = m.captures[3] === nothing ? nothing : String(m.captures[3])
+    option_name = m.captures[1] !== nothing ? something(m.captures[1]) : something(m.captures[2])
+    option_arg  = m.captures[3] === nothing ? nothing : String(something(m.captures[3]))
     return Option(option_name, option_arg)
 end
 
@@ -165,7 +167,7 @@ Base.@kwdef mutable struct Statement
 end
 
 function lex(cmd::String)::Vector{QString}
-    replace_comma = (nothing!=match(r"^(add|rm|remove)+\s", cmd))
+    replace_comma = (nothing!=match(r"^(add|rm|remove|status|precompile)+\s", cmd))
     in_doublequote = false
     in_singlequote = false
     qstrings = QString[]
@@ -236,7 +238,7 @@ end
 
 function core_parse(words::Vector{QString}; only_cmd=false)
     statement = Statement()
-    word = nothing
+    word::Union{Nothing,QString} = nothing
     function next_word!()
         isempty(words) && return false
         word = popfirst!(words)
@@ -252,14 +254,14 @@ function core_parse(words::Vector{QString}; only_cmd=false)
         word = QString("?", false)
     end
     # determine command
-    super = get(SPECS[], word.raw, nothing)
+    super = get(SPECS, word.raw, nothing)
     if super !== nothing # explicit
         statement.super = word.raw
         next_word!() || return statement, word.raw
         command = get(super, word.raw, nothing)
         command !== nothing || return statement, word.raw
     else # try implicit package
-        super = SPECS[]["package"]
+        super = SPECS["package"]
         command = get(super, word.raw, nothing)
         command !== nothing || return statement, word.raw
     end
@@ -282,8 +284,8 @@ end
 
 parse(input::String) =
     map(Base.Iterators.filter(!isempty, tokenize(input))) do words
-        statement, _ = core_parse(words)
-        statement.spec === nothing && pkgerror("Could not determine command")
+        statement, input_word = core_parse(words)
+        statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. Type ? for help with available commands")
         statement.options = map(parse_option, statement.options)
         statement
     end
@@ -291,20 +293,23 @@ parse(input::String) =
 #------------#
 # APIOptions #
 #------------#
+
+# Do NOT introduce a constructor for APIOptions
+# as long as it's an alias for Dict
 const APIOptions = Dict{Symbol, Any}
-function APIOptions(options::Vector{Option},
-                    specs::Dict{String, OptionSpec},
-                    )::APIOptions
-    api_options = Dict{Symbol, Any}()
+function api_options(options::Vector{Option},
+                     specs::Dict{String, OptionSpec})
+    api_opts = APIOptions()
     enforce_option(options, specs)
     for option in options
         spec = specs[option.val]
-        api_options[spec.api.first] = spec.takes_arg ?
+        api_opts[spec.api.first] = spec.takes_arg ?
             spec.api.second(option.argument) :
             spec.api.second
     end
-    return api_options
+    return api_opts
 end
+
 Context!(ctx::APIOptions)::Context = Types.Context!(collect(ctx))
 
 #---------#
@@ -359,11 +364,11 @@ This step is distinct from `parse` in that it relies on the command specificatio
 """
 function Command(statement::Statement)::Command
     # options
-    options = APIOptions(statement.options, statement.spec.option_specs)
+    options = api_options(statement.options, statement.spec.option_specs)
     # arguments
     arg_spec = statement.spec.argument_spec
     arguments = arg_spec.parser(statement.arguments, options)
-    if !(arg_spec.count.first <= length(arguments) <= arg_spec.count.second)
+    if !((arg_spec.count.first <= length(arguments) <= arg_spec.count.second)::Bool)
         pkgerror("Wrong number of arguments")
     end
     return Command(statement.spec, options, arguments)
@@ -373,6 +378,10 @@ end
 # Execution #
 #############
 function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
+    if !isinteractive() && !TEST_MODE[] && !PRINTED_REPL_WARNING[]
+        @warn "The Pkg REPL mode is intended for interactive use only, and should not be used from scripts. It is recommended to use the functional API instead."
+        PRINTED_REPL_WARNING[] = true
+    end
     try
         statements = parse(input)
         commands   = map(Command, statements)
@@ -393,7 +402,7 @@ end
 
 function do_cmd!(command::Command, repl)
     # REPL specific commands
-    command.spec === SPECS[]["package"]["help"] && return Base.invokelatest(do_help!, command, repl)
+    command.spec === SPECS["package"]["help"] && return Base.invokelatest(do_help!, command, repl)
     # API commands
     if command.spec.should_splat
         TEST_MODE[] && return command.spec.api, command.arguments..., command.options
@@ -423,7 +432,7 @@ function do_help!(command::Command, repl::REPL.AbstractREPL)
     cmd = parse_command(command.arguments)
     if cmd isa String
         # gather all helps for super spec `cmd`
-        all_specs = sort!(unique(values(SPECS[][cmd]));
+        all_specs = sort!(unique(values(SPECS[cmd]));
                           by=(spec->spec.canonical_name))
         for spec in all_specs
             isempty(help_md.content) || push!(help_md.content, md"---")
@@ -448,7 +457,7 @@ struct MiniREPL <: REPL.AbstractREPL
     t::REPL.Terminals.TTYTerminal
 end
 function MiniREPL()
-    MiniREPL(TextDisplay(stdout), REPL.Terminals.TTYTerminal(get(ENV, "TERM", Sys.iswindows() ? "" : "dumb"), stdin, stdout, stderr))
+    MiniREPL(TextDisplay(stdout_f()), REPL.Terminals.TTYTerminal(get(ENV, "TERM", Sys.iswindows() ? "" : "dumb"), stdin, stdout_f(), stderr_f()))
 end
 REPL.REPLDisplay(repl::MiniREPL) = repl.display
 
@@ -484,7 +493,7 @@ function projname(project_file::String)
     if project === nothing || project.name === nothing
         name = basename(dirname(project_file))
     else
-        name = project.name
+        name = project.name::String
     end
     for depot in Base.DEPOT_PATH
         envdir = joinpath(depot, "environments")
@@ -509,18 +518,24 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
-                prefix = string("(", project_name, ") ")
+                if textwidth(project_name) > 30
+                    project_name = first(project_name, 27) * "..."
+                end
+                prefix = "($(project_name)) "
                 prev_prefix = prefix
                 prev_project_timestamp = mtime(project_file)
                 prev_project_file = project_file
             end
         end
     end
-    return prefix * "pkg> "
+    if OFFLINE_MODE[]
+        prefix = "$(prefix)[offline] "
+    end
+    return "$(prefix)pkg> "
 end
 
 # Set up the repl Pkg REPLMode
-function create_mode(repl, main)
+function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     pkg_mode = LineEdit.Prompt(promptf;
         prompt_prefix = repl.options.hascolor ? Base.text_colors[:blue] : "",
         prompt_suffix = "",
@@ -556,14 +571,16 @@ function create_mode(repl, main)
 
     repl_keymap = Dict()
     if shell_mode !== nothing
-        repl_keymap[';'] = function (s,o...)
-            if isempty(s) || position(LineEdit.buffer(s)) == 0
-                buf = copy(LineEdit.buffer(s))
-                LineEdit.transition(s, shell_mode) do
-                    LineEdit.state(s, shell_mode).input_buffer = buf
+        let shell_mode=shell_mode
+            repl_keymap[';'] = function (s,o...)
+                if isempty(s) || position(LineEdit.buffer(s)) == 0
+                    buf = copy(LineEdit.buffer(s))
+                    LineEdit.transition(s, shell_mode) do
+                        LineEdit.state(s, shell_mode).input_buffer = buf
+                    end
+                else
+                    LineEdit.edit_insert(s, ';')
                 end
-            else
-                LineEdit.edit_insert(s, ';')
             end
         end
     end
@@ -576,7 +593,7 @@ function create_mode(repl, main)
     return pkg_mode
 end
 
-function repl_init(repl)
+function repl_init(repl::REPL.AbstractREPL)
     main_mode = repl.interface.modes[1]
     pkg_mode = create_mode(repl, main_mode)
     push!(repl.interface.modes, pkg_mode)
@@ -602,17 +619,17 @@ end
 include("completions.jl")
 include("argument_parsers.jl")
 include("command_declarations.jl")
-SPECS[] = CompoundSpecs(compound_declarations)
+const SPECS = CompoundSpecs(compound_declarations)
 
 ########
 # HELP #
 ########
 function canonical_names()
     # add "package" commands
-    xs = [(spec.canonical_name => spec) for spec in unique(values(SPECS[]["package"]))]
+    xs = [(spec.canonical_name => spec) for spec in unique(values(SPECS["package"]))]
     sort!(xs, by=first)
     # add other super commands, e.g. "registry"
-    for (super, specs) in SPECS[]
+    for (super, specs) in SPECS
         super != "package" || continue # skip "package"
         temp = [(join([super, spec.canonical_name], " ") => spec) for spec in unique(values(specs))]
         append!(xs, sort!(temp, by=first))
@@ -625,6 +642,8 @@ function gen_help()
 **Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
 backspace when the input line is empty or press Ctrl+C.
 
+Full documentation available at https://pkgdocs.julialang.org/
+
 **Synopsis**
 
     pkg> cmd [opts] [args]
@@ -635,12 +654,129 @@ Some commands have an alias, indicated below.
 **Commands**
 """
     for (command, spec) in canonical_names()
-        short_name = spec.short_name === nothing ? "" : ", `" * spec.short_name * '`'
+        short_name = spec.short_name === nothing ? "" : ", `" * spec.short_name::String * '`'
         push!(help.content, Markdown.parse("`$command`$short_name: $(spec.description)"))
     end
     return help
 end
 
 const help = gen_help()
+const REG_WARNED = Ref{Bool}(false)
+
+function try_prompt_pkg_add(pkgs::Vector{Symbol})
+    ctx = try
+        Context()
+    catch
+        # Context() will error if there isn't an active project.
+        # If we can't even do that, exit early.
+        return false
+    end
+    if isempty(ctx.registries)
+        if !REG_WARNED[]
+            printstyled(ctx.io, " │ "; color=:green)
+            printstyled(ctx.io, "Attempted to find missing packages in package registries but no registries are installed.\n")
+            printstyled(ctx.io, " └ "; color=:green)
+            printstyled(ctx.io, "Use package mode to install a registry. `pkg> registry add` will install the default registries.\n\n")
+            REG_WARNED[] = true
+        end
+        return false
+    end
+    available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
+    filter!(u -> all(!isequal(Operations.JULIA_UUID), u), available_uuids) # "julia" is in General but not installable
+    isempty(available_uuids) && return false
+    available_pkgs = pkgs[isempty.(available_uuids) .== false]
+    isempty(available_pkgs) && return false
+    resp = try
+        plural1 = length(pkgs) == 1 ? "" : "s"
+        plural2 = length(available_pkgs) == 1 ? "a package" : "packages"
+        plural3 = length(available_pkgs) == 1 ? "is" : "are"
+        plural4 = length(available_pkgs) == 1 ? "" : "s"
+        missing_pkg_list = length(pkgs) == 1 ? String(pkgs[1]) : "[$(join(pkgs, ", "))]"
+        available_pkg_list = length(available_pkgs) == 1 ? String(available_pkgs[1]) : "[$(join(available_pkgs, ", "))]"
+        msg1 = "Package$(plural1) $(missing_pkg_list) not found, but $(plural2) named $(available_pkg_list) $(plural3) available from a registry."
+        for line in linewrap(msg1, io = ctx.io, padding = length(" │ "))
+            printstyled(ctx.io, " │ "; color=:green)
+            println(ctx.io, line)
+        end
+        printstyled(ctx.io, " │ "; color=:green)
+        println(ctx.io, "Install package$(plural4)?")
+        msg2 = string("add ", join(available_pkgs, ' '))
+        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", REPLMode.promptf()))))
+            printstyled(ctx.io, " │   "; color=:green)
+            if i == 1
+                printstyled(ctx.io, REPLMode.promptf(); color=:blue)
+            else
+                print(ctx.io, " "^length(REPLMode.promptf()))
+            end
+            println(ctx.io, line)
+        end
+        printstyled(ctx.io, " └ "; color=:green)
+        Base.prompt(stdin, ctx.io, "(y/n/o)", default = "y")
+    catch err
+        if err isa InterruptException # if ^C is entered
+            println(ctx.io)
+            return false
+        end
+        rethrow()
+    end
+    if isnothing(resp) # if ^D is entered
+        println(ctx.io)
+        return false
+    end
+    resp = strip(resp)
+    lower_resp = lowercase(resp)
+    if lower_resp in ["y", "yes"]
+        API.add(string.(available_pkgs))
+    elseif lower_resp in ["o"]
+        editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
+        option_list = String[]
+        keybindings = Char[]
+        shown_envs = String[]
+        # We use digits 1-9 as keybindings in the env selection menu
+        # That's why we can display at most 9 items in the menu
+        for i in 1:min(length(editable_envs), 9)
+            env = editable_envs[i]
+            expanded_env = Base.load_path_expand(env)
+
+            isnothing(expanded_env) && continue
+
+            n = length(option_list) + 1
+            push!(option_list, "$(n): $(pathrepr(expanded_env)) ($(env))")
+            push!(keybindings, only("$n"))
+            push!(shown_envs, expanded_env)
+        end
+        menu = TerminalMenus.RadioMenu(option_list, keybindings=keybindings, pagesize=length(option_list))
+        default = something(
+            # select the first non-default env by default, if possible
+            findfirst(!=(Base.active_project()), shown_envs),
+            1
+        )
+        print(ctx.io, "\e[1A\e[1G\e[0J") # go up one line, to the start, and clear it
+        printstyled(ctx.io, " └ "; color=:green)
+        choice = try
+            TerminalMenus.request("Select environment:", menu, cursor=default)
+        catch err
+            if err isa InterruptException # if ^C is entered
+                println(ctx.io)
+                return false
+            end
+            rethrow()
+        end
+        choice == -1 && return false
+        API.activate(shown_envs[choice]) do
+            API.add(string.(available_pkgs))
+        end
+    elseif (lower_resp in ["n"])
+        return false
+    else
+        println(ctx.io, "Selection not recognized")
+        return false
+    end
+    if length(available_pkgs) < length(pkgs)
+        return false # declare that some pkgs couldn't be installed
+    else
+        return true
+    end
+end
 
 end #module

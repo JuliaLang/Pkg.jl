@@ -1,4 +1,31 @@
-import ..isdir_windows_workaround
+import ..isdir_nothrow, ..Registry.RegistrySpec, ..isurl
+
+struct PackageIdentifier
+    val::String
+end
+
+struct VersionToken
+    version::String
+end
+
+struct Rev
+    rev::String
+end
+
+struct Subdir
+    dir::String
+end
+
+const PackageToken = Union{PackageIdentifier,
+                           VersionToken,
+                           Rev,
+                           Subdir}
+
+packagetoken(word::String)::PackageToken =
+    first(word) == '@' ? VersionToken(word[2:end]) :
+    first(word) == '#' ? Rev(word[2:end]) :
+    first(word) == ':' ? Subdir(word[2:end]) :
+    PackageIdentifier(word)
 
 ###############
 # PackageSpec #
@@ -7,18 +34,51 @@ import ..isdir_windows_workaround
 Parser for PackageSpec objects.
 """
 function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
-    args::Vector{PackageToken} = map(PackageToken, package_lex(args))
+    words′ = package_lex(args)
+    words = String[]
+    for word in words′
+        if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", word)) !== nothing
+            push!(words, "https://github.com/$(m.captures[1])/$(m.captures[2])")
+            push!(words, "#$(m.captures[3])")
+        else
+            push!(words, word)
+        end
+    end
+    args = PackageToken[packagetoken(pkgword) for pkgword in words]
+
     return parse_package_args(args; add_or_dev=add_or_dev)
 end
 
-struct Rev
-    rev::String
-end
-const PackageIdentifier = String
-const PackageToken = Union{PackageIdentifier, VersionRange, Rev}
+    # Match a git repository URL. This includes uses of `@` and `:` but
+    # requires that it has `.git` at the end.
+let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git$)(/)?",
 
-const package_id_re =
-    r"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)(/)? | [^@\#\s]+\s*=\s*[^@\#\s]+ | \#\s*[^@\#\s]* | @\s*[^@\#\s]* | [^@\#\s]+"x
+    # Match a `NAME=UUID` package specifier.
+    name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
+
+    # Match a `#BRANCH` branch or tag specifier.
+    branch = raw"\#\s*[^@\#\s]*",
+
+    # Match an `@VERSION` version specifier.
+    version = raw"@\s*[^@\#\s]*",
+
+    # Match a `:SUBDIR` subdir specifier.
+    subdir = raw":[^@\#\s]+",
+
+    # Match any other way to specify a package. This includes package
+    # names, local paths, and URLs that don't match the `url` part. In
+    # order not to clash with the branch, version, and subdir
+    # specifiers, these cannot include `@` or `#`, and `:` is only
+    # allowed if followed by `/` or `\`. For URLs matching this part
+    # of the regex, that means that `@` (e.g. user names) and `:`
+    # (e.g. port) cannot be used but it doesn't have to end with
+    # `.git`.
+    other = raw"([^@\#\s:] | :(/|\\))+"
+
+    # Combine all of the above.
+    global const package_id_re = Regex(
+        "$url | $name_uuid | $branch | $version | $subdir | $other", "x")
+end
 
 function package_lex(qwords::Vector{QString})::Vector{String}
     words = String[]
@@ -30,20 +90,23 @@ function package_lex(qwords::Vector{QString})::Vector{String}
     return words
 end
 
-PackageToken(word::String)::PackageToken =
-    first(word) == '@' ? VersionRange(word[2:end]) :
-    first(word) == '#' ? Rev(word[2:end]) :
-    String(word)
-
 function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
     # check for and apply PackageSpec modifier (e.g. `#foo` or `@v1.0.2`)
     function apply_modifier!(pkg::PackageSpec, args::Vector{PackageToken})
         (isempty(args) || args[1] isa PackageIdentifier) && return
         modifier = popfirst!(args)
-        if modifier isa VersionRange
-            pkg.version = VersionSpec(modifier)
-        else # modifier isa Rev
-            pkg.repo.rev = modifier.rev
+        if modifier isa Subdir
+            pkg.subdir = modifier.dir
+            (isempty(args) || args[1] isa PackageIdentifier) && return
+            modifier = popfirst!(args)
+        end
+
+        if modifier isa VersionToken
+            pkg.version = modifier.version
+        elseif modifier isa Rev
+            pkg.rev = modifier.rev
+        else
+            pkgerror("Package name/uuid must precede subdir specifier `$args`.")
         end
     end
 
@@ -56,9 +119,11 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
             push!(pkgs, pkg)
         # Modifiers without a corresponding package identifier -- this is a user error
         else
-            arg isa VersionRange ?
+            arg isa VersionToken ?
                 pkgerror("Package name/uuid must precede version specifier `@$arg`.") :
-                pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.")
+            arg isa Rev ?
+                pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.") :
+                pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
         end
     end
     return pkgs
@@ -72,21 +137,30 @@ let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(
 end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
-function parse_package_identifier(word::AbstractString; add_or_develop=false)::PackageSpec
-    if add_or_develop && casesensitive_isdir(expanduser(word))
-        if !occursin(Base.Filesystem.path_separator_re, word)
-            @info "Resolving package identifier `$word` as a directory at `$(Base.contractuser(abspath(word)))`."
+function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop=false)::PackageSpec
+    word = pkg_id.val
+    if add_or_develop
+        if isurl(word)
+            return PackageSpec(; url=word)
+        elseif any(occursin.(['\\','/'], word)) || word == "." || word == ".."
+            if casesensitive_isdir(expanduser(word))
+                return PackageSpec(; path=normpath(expanduser(word)))
+            else
+                pkgerror("`$word` appears to be a local path, but directory does not exist")
+            end
         end
-        return PackageSpec(repo=Types.GitRepo(source=expanduser(word)))
-    elseif occursin(uuid_re, word)
-        return PackageSpec(uuid=UUID(word))
+        if occursin(name_re, word) && casesensitive_isdir(expanduser(word))
+            @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
+        end
+    end
+    if occursin(uuid_re, word)
+        return PackageSpec(;uuid=UUID(word))
     elseif occursin(name_re, word)
-        return PackageSpec(String(match(name_re, word).captures[1]))
+        m = match(name_re, word)
+        return PackageSpec(String(something(m.captures[1])))
     elseif occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
-        return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
-    elseif add_or_develop && isurl(word)
-        return PackageSpec(repo=Types.GitRepo(source=word))
+        return PackageSpec(String(something(m.captures[1])), UUID(something(m.captures[2])))
     else
         pkgerror("Unable to parse `$word` as a package.")
     end
@@ -106,7 +180,7 @@ end
 function parse_registry(word::AbstractString; add=false)::RegistrySpec
     word = expanduser(word)
     registry = RegistrySpec()
-    if add && isdir_windows_workaround(word) # TODO: Should be casesensitive_isdir
+    if add && isdir_nothrow(word) # TODO: Should be casesensitive_isdir
         if isdir(joinpath(word, ".git")) # add path as url and clone it from there
             registry.url = abspath(word)
         else # put the path
@@ -115,11 +189,12 @@ function parse_registry(word::AbstractString; add=false)::RegistrySpec
     elseif occursin(uuid_re, word)
         registry.uuid = UUID(word)
     elseif occursin(name_re, word)
-        registry.name = String(match(name_re, word).captures[1])
+        m = match(name_re, word)
+        registry.name = String(something(m.captures[1]))
     elseif occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
-        registry.name = String(m.captures[1])
-        registry.uuid = UUID(m.captures[2])
+        registry.name = String(something(m.captures[1]))
+        registry.uuid = UUID(something(m.captures[2]))
     elseif add
         # Guess it is a url then
         registry.url = String(word)
@@ -140,7 +215,10 @@ function parse_activate(args::Vector{QString}, options)
             return [x.raw]
         end
         x = x.raw
-        if first(x) == '@'
+        if x == "-"
+            options[:prev] = true
+            return []
+        elseif first(x) == '@'
             options[:shared] = true
             return [x[2:end]]
         else
@@ -154,10 +232,12 @@ end
 # # Option Maps
 #
 function do_preserve(x::String)
-    x == "all"    && return Types.PRESERVE_ALL
-    x == "direct" && return Types.PRESERVE_DIRECT
-    x == "semver" && return Types.PRESERVE_SEMVER
-    x == "none"   && return Types.PRESERVE_NONE
-    x == "tiered" && return Types.PRESERVE_TIERED
+    x == "installed"        && return Types.PRESERVE_ALL_INSTALLED
+    x == "all"              && return Types.PRESERVE_ALL
+    x == "direct"           && return Types.PRESERVE_DIRECT
+    x == "semver"           && return Types.PRESERVE_SEMVER
+    x == "none"             && return Types.PRESERVE_NONE
+    x == "tiered_installed" && return Types.PRESERVE_TIERED_INSTALLED
+    x == "tiered"           && return Types.PRESERVE_TIERED
     pkgerror("`$x` is not a valid argument for `--preserve`.")
 end
