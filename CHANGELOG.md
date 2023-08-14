@@ -5,6 +5,9 @@ Pkg v1.11 Release Notes
   The old behavior of disregarding Julia `compat` bounds can be restored by setting the `JULIA_PKG_JULIA_COMPAT_IGNORE` environmental variable.
   Pkg has always obeyed this compat when working with Registry packages. This change is affects mostly local packages.
 
+Pkg v1.10 Release Notes
+=======================
+
 Pkg v1.9 Release Notes
 =======================
 
