@@ -243,8 +243,8 @@ function collect_project(pkg::PackageSpec, path::String)
     end
     project = read_package(project_file)
     julia_compat = get_compat(project, "julia")
-    if !Base.get_bool_env("JULIA_PKG_JULIA_COMPAT_IGNORE", false) && !isnothing(julia_compat) && !(VERSION in julia_compat)
-        pkgerror("julia version requirement for package $(err_rep(pkg)) not satisfied; you can override and ignore this check by setting `ENV[\"JULIA_PKG_JULIA_COMPAT_IGNORE\"]`")
+    if !isnothing(julia_compat) && !(VERSION in julia_compat)
+        pkgerror("julia version requirement from Project.toml's compat section not satisfied for package $(err_rep(pkg)) at `$path`")
     end
     for (name, uuid) in project.deps
         vspec = get_compat(project, name)
