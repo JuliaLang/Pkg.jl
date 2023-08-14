@@ -1274,7 +1274,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
 
     stderr_outputs = Dict{Base.PkgId,String}()
-    taskwaiting = Set{Base.PkgId}()
+    taskwaiting = Dict{Base.PkgId,String}()
     pkgspidlocked = Dict{Base.PkgId,String}()
 
     function monitor_stderr(pkg, iob)
@@ -1282,13 +1282,14 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             while isopen(iob)
                 str = readline(iob)
                 stderr_outputs[pkg] = get(stderr_outputs, pkg, "") * str * "\n"
-                if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
+                if !haskey(taskwaiting, pkg) && occursin("waiting for IO to finish", str)
+                    pid_str = strip(split(str, "waiting")[1])
                     !fancyprint && lock(print_lock) do
-                        println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
+                        println(io, pkg.name, color_string(" $pid_str Waiting for background task / IO / timer.", Base.warn_color()))
                     end
-                    push!(taskwaiting, pkg)
+                    taskwaiting[pkg] = pid_str
                 end
-                if !fancyprint && in(pkg, taskwaiting)
+                if !fancyprint && haskey(taskwaiting, pkg)
                     lock(print_lock) do
                         println(io, str)
                     end
@@ -1362,8 +1363,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                                 waiting = if haskey(pkgspidlocked, dep)
                                     who_has_lock = pkgspidlocked[dep]
                                     color_string(" Being precompiled by another $(who_has_lock)", Base.info_color())
-                                elseif dep in taskwaiting
-                                    color_string(" Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
+                                elseif haskey(taskwaiting, dep)
+                                    pid_str = taskwaiting[dep]
+                                    color_string(" $pid_str Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
                                 else
                                     ""
                                 end
