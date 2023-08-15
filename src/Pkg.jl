@@ -284,13 +284,13 @@ To pass some command line arguments to be used in the tests themselves, pass the
 `test_args` keyword argument. These could be used to control the code being tested, or to control the
 tests in some way. For example, the tests could have optional additional tests:
 ```
-if "extended" in ARGS
+if "--extended" in ARGS
     @test some_function()
 end
 ```
 which could be enabled by testing with
 ```
-Pkg.test("foo"; test_args=["extended"])
+Pkg.test("foo"; test_args=["--extended"])
 ```
 """
 const test = API.test
