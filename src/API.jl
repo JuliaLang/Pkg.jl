@@ -1280,7 +1280,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     function monitor_stderr_stdout(pkg, _stderr, _stdout)
         @sync begin
             @async try
-                while isopen(_stderr)
+                while !eof(_stderr)
                     str = readline(_stderr)
                     std_outputs[pkg] = string(get(std_outputs, pkg, ""), str, "\n")
                     if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
@@ -1299,7 +1299,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 err isa InterruptException || rethrow()
             end
             @async try
-                while isopen(_stdout)
+                while !eof(_stdout)
                     str = readline(_stdout)
                     std_outputs[pkg] = string(get(std_outputs, pkg, ""), str, "\n")
                 end
@@ -1439,8 +1439,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     is_direct_dep = pkg in direct_deps
 
                     # stderr monitoring
-                    stderr_pipe = Base.Pipe()
-                    stdout_pipe = Base.Pipe()
+                    stderr_pipe = Base.link_pipe!(Pipe(); reader_supports_async=true, writer_supports_async=true)
+                    stdout_pipe = Base.link_pipe!(Pipe(); reader_supports_async=true, writer_supports_async=true)
                     t_monitor = @async monitor_stderr_stdout(pkg, stderr_pipe, stdout_pipe)
 
                     _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
@@ -1482,8 +1482,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         loaded && (n_loaded += 1)
                     catch err
                         # close pipes to end the std output monitor
-                        close(stderr_pipe)
-                        close(stdout_pipe)
+                        close(stderr_pipe.in)
+                        close(stdout_pipe.in)
                         wait(t_monitor)
                         if err isa ErrorException || (err isa ArgumentError && startswith(err.msg, "Invalid header in cache file"))
                             failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", strip(get(std_outputs, pkg, ""))) : ""
