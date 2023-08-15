@@ -1277,37 +1277,26 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     taskwaiting = Set{Base.PkgId}()
     pkgspidlocked = Dict{Base.PkgId,String}()
 
-    function monitor_stderr_stdout(pkg, _stderr, _stdout)
-        @sync begin
-            @async try
-                while !eof(_stderr)
-                    str = readline(_stderr)
-                    std_outputs[pkg] = string(get(std_outputs, pkg, ""), str, "\n")
-                    if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
-                        !fancyprint && lock(print_lock) do
-                            println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
-                        end
-                        push!(taskwaiting, pkg)
+    function monitor_std(pkg, pipe)
+        try
+            while !eof(pipe)
+                str = readline(pipe, keep=true)
+                std_outputs[pkg] = string(get(std_outputs, pkg, ""), str)
+                if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
+                    !fancyprint && lock(print_lock) do
+                        println(io, pkg.name, color_string(" Waiting for background task / IO / timer.", Base.warn_color()))
                     end
-                    if !fancyprint && in(pkg, taskwaiting)
-                        lock(print_lock) do
-                            println(io, str)
-                        end
+                    push!(taskwaiting, pkg)
+                end
+                if !fancyprint && in(pkg, taskwaiting)
+                    lock(print_lock) do
+                        print(io, str)
                     end
                 end
-            catch err
-                err isa InterruptException || rethrow()
             end
-            @async try
-                while !eof(_stdout)
-                    str = readline(_stdout)
-                    std_outputs[pkg] = string(get(std_outputs, pkg, ""), str, "\n")
-                end
-            catch err
-                err isa InterruptException || rethrow()
-            end
+        catch err
+            err isa InterruptException || rethrow()
         end
-        return nothing
     end
 
     ## fancy print loop
@@ -1439,9 +1428,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     is_direct_dep = pkg in direct_deps
 
                     # stderr monitoring
-                    stderr_pipe = Base.link_pipe!(Pipe(); reader_supports_async=true, writer_supports_async=true)
-                    stdout_pipe = Base.link_pipe!(Pipe(); reader_supports_async=true, writer_supports_async=true)
-                    t_monitor = @async monitor_stderr_stdout(pkg, stderr_pipe, stdout_pipe)
+                    std_pipe = Base.link_pipe!(Pipe(); reader_supports_async=true, writer_supports_async=true)
+                    t_monitor = @async monitor_std(pkg, std_pipe)
 
                     _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
                     name = is_direct_dep ? _name : string(color_string(_name, :light_black))
@@ -1462,7 +1450,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked) do
                             Logging.with_logger(Logging.NullLogger()) do
                                 # The false here means we ignore loaded modules, so precompile for a fresh session
-                                Base.compilecache(pkg, sourcepath, stderr_pipe, stdout_pipe, false)
+                                Base.compilecache(pkg, sourcepath, std_pipe, std_pipe, false)
                             end
                         end
                         t_str = timing ? string(lpad(round(t * 1e3, digits = 1), 9), " ms") : ""
@@ -1481,9 +1469,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         end
                         loaded && (n_loaded += 1)
                     catch err
-                        # close pipes to end the std output monitor
-                        close(stderr_pipe.in)
-                        close(stdout_pipe.in)
+                        close(std_pipe.in) # close pipe to end the std output monitor
                         wait(t_monitor)
                         if err isa ErrorException || (err isa ArgumentError && startswith(err.msg, "Invalid header in cache file"))
                             failed_deps[pkg] = (strict || is_direct_dep) ? string(sprint(showerror, err), "\n", strip(get(std_outputs, pkg, ""))) : ""
