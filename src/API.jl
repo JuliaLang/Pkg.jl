@@ -1483,6 +1483,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                             rethrow()
                         end
                     finally
+                        isopen(std_pipe.in) && close(std_pipe.in) # close pipe to end the std output monitor
+                        wait(t_monitor)
                         Base.release(parallel_limiter)
                     end
                 else
