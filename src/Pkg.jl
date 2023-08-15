@@ -273,7 +273,25 @@ test = ["Test"]
 The tests are executed in a new process with `check-bounds=yes` and by default `startup-file=no`.
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
 Inlining of functions during testing can be disabled (for better coverage accuracy)
-by starting julia with `--inline=no`.
+by starting julia with `--inline=no`. The tests can be run as if different command line arguments were
+passed to julia by passing the arguments instead to the `julia_args` keyword argument, e.g.
+
+```
+Pkg.test("foo"; julia_args=["--inline"])
+```
+
+To pass some command line arguments to be used in the tests themselves, pass the arguments to the
+`test_args` keyword argument. These could be used to control the code being tested, or to control the
+tests in some way. For example, the tests could have optional additional tests:
+```
+if "--extended" in ARGS
+    @test some_function()
+end
+```
+which could be enabled by testing with
+```
+Pkg.test("foo"; test_args=["--extended"])
+```
 """
 const test = API.test
 
