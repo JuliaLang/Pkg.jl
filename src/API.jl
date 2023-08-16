@@ -1149,12 +1149,15 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     # if the active environment is a package, add that
     ctx_env_pkg = ctx.env.pkg
-    if ctx_env_pkg !== nothing && isfile( joinpath( dirname(ctx.env.project_file), "src", "$(ctx_env_pkg.name).jl") )
-        depsmap[Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name)] = [
+    if ctx_env_pkg !== nothing && isfile(joinpath(dirname(ctx.env.project_file), "src", "$(ctx_env_pkg.name).jl"))
+        project_pkgid = Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name)
+        depsmap[project_pkgid] = [
             Base.PkgId(last(x), first(x))
             for x in ctx.env.project.deps if !Base.in_sysimage(Base.PkgId(last(x), first(x)))
         ]
         push!(direct_deps, Base.PkgId(ctx_env_pkg.uuid, ctx_env_pkg.name))
+    else
+        project_pkgid = nothing
     end
 
     # return early if no deps
@@ -1255,6 +1258,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
     ansi_cleartoend = "\e[0J"
+    ansi_cleartoendofline = "\e[0K"
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
     n_done::Int = 0
@@ -1279,11 +1283,24 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     std_outputs = Dict{Base.PkgId,String}()
     taskwaiting = Set{Base.PkgId}()
     pkgspidlocked = Dict{Base.PkgId,String}()
+    pkg_liveprinted = nothing
 
-    function monitor_std(pkg, pipe)
+    function monitor_std(pkg, pipe; single_requested_pkg=false)
         try
+            liveprinting = false
             while !eof(pipe)
                 str = readline(pipe, keep=true)
+                if single_requested_pkg && (liveprinting || !isempty(str))
+                    lock(print_lock) do
+                        if !liveprinting
+                            printpkgstyle(io, :Info, "Given $(pkg.name) was explicitly requested, output will be shown live $ansi_cleartoendofline",
+                                color = Base.info_color())
+                            liveprinting = true
+                            pkg_liveprinted = pkg
+                        end
+                        print(io, ansi_cleartoendofline, str)
+                    end
+                end
                 std_outputs[pkg] = string(get(std_outputs, pkg, ""), str)
                 if !in(pkg, taskwaiting) && occursin("waiting for IO to finish", str)
                     !fancyprint && lock(print_lock) do
@@ -1331,7 +1348,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     end
                     str_ = sprint() do iostr
                         if i > 1
-                            print(iostr, ansi_moveup(n_print_rows), ansi_movecol1, ansi_cleartoend)
+                            print(iostr, ansi_cleartoend)
                         end
                         bar.current = n_done - n_already_precomp
                         bar.max = n_total - n_already_precomp
@@ -1373,10 +1390,11 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     last_length = length(pkg_queue_show)
                     n_print_rows = count("\n", str_)
                     print(io, str_)
+                    printloop_should_exit = interrupted_or_done.set && final_loop
+                    final_loop = interrupted_or_done.set # ensures one more loop to tidy last task after finish
+                    i += 1
+                    printloop_should_exit || print(io, ansi_moveup(n_print_rows), ansi_movecol1)
                 end
-                printloop_should_exit = interrupted_or_done.set && final_loop
-                final_loop = interrupted_or_done.set # ensures one more loop to tidy last task after finish
-                i += 1
                 wait(t)
             end
         catch err
@@ -1404,6 +1422,14 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             continue
         end
 
+        single_requested_pkg = if length(pkgs) == 1
+            only(pkgs).name == pkg.name
+        elseif project_pkgid isa Base.PkgId
+            pkg == project_pkgid # if a package project is being precompiled, consider the package requested
+        else
+            false
+        end
+
         task = @async begin
             try
                 loaded = haskey(Base.loaded_modules, pkg)
@@ -1423,9 +1449,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
 
-                    # stderr monitoring
+                    # std monitoring
                     std_pipe = Base.link_pipe!(Pipe(); reader_supports_async=true, writer_supports_async=true)
-                    t_monitor = @async monitor_std(pkg, std_pipe)
+                    t_monitor = @async monitor_std(pkg, std_pipe; single_requested_pkg)
 
                     _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
                     name = is_direct_dep ? _name : string(color_string(_name, :light_black))
@@ -1549,7 +1575,11 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 plural2 = length(std_outputs) == 1 ? "" : "s"
                 print(iostr, "\n  ", color_string("$(length(std_outputs))", Base.warn_color()), " dependenc$(plural1) had output during precompilation:")
                 for (pkgid, err) in std_outputs
-                    err = join(split(strip(err), "\n"), color_string("\n│  ", Base.warn_color()))
+                    err = if pkgid == pkg_liveprinted
+                        "[Output was shown above]"
+                    else
+                        join(split(strip(err), "\n"), color_string("\n│  ", Base.warn_color()))
+                    end
                     print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err, color_string("\n└  ", Base.warn_color()))
                 end
             end
