@@ -52,6 +52,7 @@ temp_pkg_dir() do project_path
             m = Pkg.Types.read_manifest(joinpath(dir, "monorepo", "Manifest.toml"))
             # currently, we don't prune dependencies from the root manifest since when rm-ing a dep
             # in a subpackage, we don't also do a full resolve at the root level
+            # https://github.com/JuliaLang/Pkg.jl/issues/3590
             @test_broken !haskey(m, UUID("bf733257-898a-45a0-b2f2-c1c188bdd870")) # D subpackage, but no direct dependency
             pkgC = m[UUID("4ee78ca3-4e78-462f-a078-747ed543fa86")]
             @test !haskey(pkgC.deps, "D")
