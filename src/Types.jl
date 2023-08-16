@@ -116,10 +116,10 @@ function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
     uuid = uuid === nothing ? nothing : UUID(uuid)
     return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
 end
-PackageSpec(name::AbstractString) = PackageSpec(;name=name)
-PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
-PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
-PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
+PackageSpec(name::AbstractString) = PackageSpec(;name=name)::PackageSpec
+PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)::PackageSpec
+PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)::PackageSpec
+PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)::PackageSpec
 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
