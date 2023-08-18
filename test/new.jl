@@ -53,7 +53,7 @@ Pkg._auto_gc_enabled[] = false
             source053 = pkg.source
             source053_time = mtime(pkg.source)
         end
-        # - The home project was automatically created.
+        # - The active project was automatically created.
         @test haskey(Pkg.project().dependencies, "Example")
         @test length(Pkg.project().dependencies) == 1
         # Now we install the same package at a different version:
@@ -2687,22 +2687,34 @@ end
 # # Other
 #
 # Note: these tests should be run on clean depots
-@testset "downloads" begin
-    for v in (nothing, "true")
-        withenv("JULIA_PKG_USE_CLI_GIT" => v) do
-            # libgit2 downloads
-            isolate() do
-                Pkg.add("Example"; use_git_for_all_downloads=true)
-                @test haskey(Pkg.dependencies(), exuuid)
-                @eval import $(Symbol(TEST_PKG.name))
-                @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
-                Pkg.rm(TEST_PKG.name)
-            end
+for v in (nothing, "true")
+    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0) do
+        @testset "downloads with JULIA_PKG_USE_CLI_GIT = $v" begin
             isolate() do
                 @testset "libgit2 downloads" begin
-                    Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
-                    @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                    Pkg.rm(TEST_PKG.name)
+                    @testset "via name" begin
+                        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                        @eval import $(Symbol(TEST_PKG.name))
+                        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
+                        Pkg.rm(TEST_PKG.name)
+                    end
+                    if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) && Sys.iswindows()) == false
+                        # TODO: fix. on GH windows runners cli git will prompt for credentials here
+                        @testset "via url" begin
+                            Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
+                            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                            Pkg.rm(TEST_PKG.name)
+                        end
+                    end
+                end
+                if !Sys.iswindows()
+                    # TODO: fix. on GH windows runners cli git will prompt for credentials here
+                    @testset "libgit2 failures" begin
+                        doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
+                        @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
+                        @test_throws Pkg.Types.PkgError Pkg.Registry.add(Pkg.RegistrySpec(url=doesnotexist))
+                    end
                 end
                 @testset "tarball downloads" begin
                     Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
