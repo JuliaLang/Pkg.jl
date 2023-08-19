@@ -1155,7 +1155,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             extdep_names = extdep_names isa String ? String[extdep_names] : extdep_names
             for extdep_name in extdep_names
                 extdep_uuid = weakdeps[extdep_name]
-                if extdep_uuid in keys(ctx.env.manifest.deps)
+                if extdep_uuid in keys(ctx.env.manifest.deps) || Base.in_sysimage(Base.PkgId(extdep_uuid, extdep_name))
                     push!(ext_deps, Base.PkgId(extdep_uuid, extdep_name))
                 else
                     all_extdeps_available = false
@@ -1298,8 +1298,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 println(io, " Interrupted: Exiting precompilation...")
             end
             interrupted = true
+            return true
         else
-            @error "Pkg.precompile error" exception=(err, catch_backtrace())
+            return false
         end
     end
 
@@ -1373,7 +1374,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 wait(t)
             end
         catch err
-            handle_interrupt(err, true)
+            handle_interrupt(err, true) || rethrow()
         finally
             fancyprint && print(io, ansi_enablecursor)
         end
@@ -1482,7 +1483,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 n_done += 1
                 notify(was_processed[pkg])
             catch err_outer
-                handle_interrupt(err_outer)
+                handle_interrupt(err_outer) || rethrow()
                 notify(was_processed[pkg])
             finally
                 filter!(!istaskdone, tasks)
@@ -1495,7 +1496,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     try
         wait(interrupted_or_done)
     catch err
-        handle_interrupt(err)
+        handle_interrupt(err) || rethrow()
     finally
         Base.LOADING_CACHE[] = nothing
     end
@@ -1552,7 +1553,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             if !isempty(stderr_outputs)
                 plural1 = length(stderr_outputs) == 1 ? "y" : "ies"
                 plural2 = length(stderr_outputs) == 1 ? "" : "s"
-                print(iostr, "\n  ", color_string("$(length(stderr_outputs))", Base.warn_color()), " dependenc$(plural1) had warnings during precompilation:")
+                print(iostr, "\n  ", color_string("$(length(stderr_outputs))", Base.warn_color()), " dependenc$(plural1) had output during precompilation:")
                 for (pkgid, err) in stderr_outputs
                     err = join(split(err, "\n"), color_string("\n│  ", Base.warn_color()))
                     print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err, color_string("\n└  ", Base.warn_color()))
