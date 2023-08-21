@@ -635,6 +635,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             entry = manifest_info(ctx.env.manifest, uuid)
             if entry !== nothing
                 pkg.repo.source = entry.repo.source
+                pkg.repo.subdir = entry.repo.subdir
             end
         end
     end
@@ -738,8 +739,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         manifest_resolve!(ctx.env.manifest, [pkg]; force=true)
         if isresolved(pkg)
             entry = manifest_info(ctx.env.manifest, pkg.uuid)
-            if entry !== nothing && entry.repo.source !== nothing # reuse source in manifest
+            if entry !== nothing
                 pkg.repo.source = entry.repo.source
+                pkg.repo.subdir = entry.repo.subdir
             end
         end
         if pkg.repo.source === nothing

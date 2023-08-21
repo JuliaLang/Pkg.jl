@@ -192,6 +192,10 @@ end
         @test isinstalled("Package")
         @test !isinstalled("Dep")
         @test isinstalled(dep)
+
+        # Test that adding a second time doesn't error (#3391)
+        pkg"add Package#master"
+        @test isinstalled("Package")
         pkg"rm Package"
 
         pkg"add Dep#master"
@@ -204,6 +208,10 @@ end
         @test isinstalled("Package")
         @test !isinstalled("Dep")
         @test isinstalled(dep)
+
+        # Test developing twice (#3391)
+        pkg"develop Package"
+        @test isinstalled("Package")
         pkg"rm Package"
 
         pkg"develop Dep"
