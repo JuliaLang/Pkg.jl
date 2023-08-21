@@ -392,7 +392,7 @@ end
     end
 end
 
-@testset "julia compat" begin
+@testset "`[compat]` entries for `julia`" begin
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         pathf = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarFuture"))
         pathp = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarPast"))
