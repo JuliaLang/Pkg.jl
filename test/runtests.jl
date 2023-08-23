@@ -5,6 +5,7 @@ module PkgTestsOuter
 original_depot_path = copy(Base.DEPOT_PATH)
 original_load_path = copy(Base.LOAD_PATH)
 original_env = copy(ENV)
+original_project = Base.active_project()
 
 module PkgTestsInner
 
@@ -14,6 +15,7 @@ import Pkg
 if Base.find_package("HistoricalStdlibVersions") === nothing
     @debug "Installing HistoricalStdlibVersions for Pkg tests"
     iob = IOBuffer()
+    Pkg.activate(; temp = true)
     try
         Pkg.add("HistoricalStdlibVersions", io=iob) # Needed for custom julia version resolve tests
     catch
@@ -108,5 +110,7 @@ end
 for (k, v) in pairs(original_env)
     ENV[k] = v
 end
+
+Base.set_active_project(original_project)
 
 end # module
