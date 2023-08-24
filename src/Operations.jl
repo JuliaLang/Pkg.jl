@@ -922,10 +922,15 @@ end
 project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.manifest_file), path))
 
 function prune_manifest(env::EnvCache)
-    # if project uses another manifest, don't prune
-    dirname(env.project_file) != dirname(env.manifest_file) && return env.manifest
-    keep = collect(values(env.project.deps))
-    env.manifest = prune_manifest(env.manifest, keep)
+    # if project uses another manifest, only prune project entry in manifest
+    if dirname(env.project_file) != dirname(env.manifest_file)
+        proj_entry = env.manifest[env.project.uuid]
+        proj_entry.deps = env.project.deps
+    else
+        keep = collect(values(env.project.deps))
+        env.manifest = prune_manifest(env.manifest, keep)
+    end
+    return env.manifest
 end
 
 function prune_manifest(manifest::Manifest, keep::Vector{UUID})
