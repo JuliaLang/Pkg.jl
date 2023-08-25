@@ -392,4 +392,13 @@ end
     end
 end
 
+@testset "`[compat]` entries for `julia`" begin
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        pathf = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarFuture"))
+        pathp = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarPast"))
+        @test_throws "julia version requirement from Project.toml's compat section not satisfied for package" Pkg.add(path=pathf)
+        @test_throws "julia version requirement from Project.toml's compat section not satisfied for package" Pkg.add(path=pathp)
+    end end
+end
+
 end # module APITests
