@@ -1951,7 +1951,7 @@ function compat(ctx::Context; io = nothing)
     compat_str = Operations.get_compat_str(ctx.env.project, "julia")
     push!(opt_strs, Operations.compat_line(io, "julia", nothing, compat_str, longest_dep_len, indent = ""))
     push!(opt_pkgs, "julia")
-    for (dep, uuid) in ctx.env.project.deps
+    for (dep, uuid) in sort(collect(ctx.env.project.deps); by = x->x.first)
         compat_str = Operations.get_compat_str(ctx.env.project, dep)
         push!(opt_strs, Operations.compat_line(io, dep, uuid, compat_str, longest_dep_len, indent = ""))
         push!(opt_pkgs, dep)
