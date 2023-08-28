@@ -1651,13 +1651,15 @@ function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args
 end
 
 function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
-    # Note that we cannot load the dev-ed Pkg here during Pkg testing
-    # so the `Pkg.precompile` that is run here is the one in the sysimage
+    pkgdir = joinpath(@__DIR__, "..")
     code = """
-        Pkg = Base.require(Base.PkgId(Base.UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f"), "Pkg"))
-        $(Base.load_path_setup_code(false))
-        append!(empty!(ARGS), $(repr(test_args.exec)))
-        Pkg.precompile(warn_loaded = false)
+        pushfirst!(LOAD_PATH, $(repr(pkgdir)))
+        try using Pkg
+        catch
+            @warn "Pkg failed to load, skipping precompilation."
+        else
+            Pkg.precompile(warn_loaded = false)
+        end
         """
     return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
