@@ -1580,7 +1580,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     else
                         join(split(strip(err), "\n"), color_string("\n│  ", Base.warn_color()))
                     end
-                    print(iostr, color_string("\n┌ ", Base.warn_color()), pkgid, color_string("\n│  ", Base.warn_color()), err, color_string("\n└  ", Base.warn_color()))
+                    name = haskey(exts, pkgid) ? string(exts[pkgid], " → ", pkgid.name) : pkgid.name
+                    print(iostr, color_string("\n┌ ", Base.warn_color()), name, color_string("\n│  ", Base.warn_color()), err, color_string("\n└  ", Base.warn_color()))
                 end
             end
         end
