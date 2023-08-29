@@ -2,9 +2,9 @@ using LibGit2: LibGit2
 using Tar: Tar
 using Downloads
 using REPL
-# using SnoopPrecompile
+using PrecompileTools
 
-let
+
 function _run_precompilation_script_setup()
     tmp = mktempdir()
     cd(tmp)
@@ -77,15 +77,16 @@ end
 
 # SnoopPrecompile is useful but not available in Base
 function pkg_precompile()
+    @info "running..."
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
     DEFAULT_IO[] = UnstableIO(devnull)
     Downloads.DOWNLOADER[] = Downloads.Downloader(; grace=1.0)
 
     withenv("JULIA_PKG_SERVER" => nothing) do
-        # @precompile_setup begin
+        @setup_workload begin
             tmp = _run_precompilation_script_setup()
-            # @precompile_all_calls begin
+                @compile_workload begin
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
                     Pkg.add("TestPkg")
                     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
@@ -99,6 +100,7 @@ function pkg_precompile()
                 catch
                 end
 
+                @info "Compiling these...."
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init), REPL.LineEditREPL})
                 Base.precompile(Tuple{typeof(Pkg.API.status)})
@@ -108,10 +110,9 @@ function pkg_precompile()
                 Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), Pkg.REPLMode.PkgCompletionProvider, REPL.LineEdit.PromptState})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_argument), Pkg.REPLMode.CommandSpec, Array{String, 1}, String, Int64, Int64})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_add_dev), Base.Dict{Symbol, Any}, String, Int64, Int64})
-            # end
-        # end
+            end
+        end
     end
 end
 
 pkg_precompile()
-end
