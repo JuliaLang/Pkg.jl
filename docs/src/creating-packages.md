@@ -372,12 +372,12 @@ this example that makes the extended functionality and dependency of the extensi
 ### Behavior of extensions
 
 A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `PlottingContourExt` module.
-It is only when the `Contour` package actually gets loaded that the `PlottingContourExt` extension is loaded
+It is only when the `Contour` package actually gets loaded that the `PlottingContourExt` extension is loaded too
 and provides the new functionality.
 
-In our example, the new functionality is an additional _method_ for an existing _function_ from the parent package.
+In our example, the new functionality is an additional _method_, which we add to an existing _function_ from the parent package `Plotting`.
 Implementing such methods is among the most standard use cases of package extensions.
-Within the main package, the function to extend can even be defined with zero methods, as follows:
+Within the parent package, the function to extend can even be defined with zero methods, as follows:
 
 ```julia
 function plot end
@@ -388,14 +388,19 @@ function plot end
     [type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy) since `PlottingContourExt` _owns_ neither the function `Plotting.plot` nor the type `Contour.ContourCollection`.
     However, for extensions, it is ok to assume that the extension owns the functions in its parent package.
 
-In other situations, one may need to define new symbols in the extension (types, structs, functions, etc.) instead of reusing those from the parent.
-Such symbols are created in a separate module corresponding to the extension (`PlottingContourExt`), and not in the parent itself (`Plotting`).
-To retrieve this module and the symbols it contains for outside use, all it takes is a call to [`Base.get_extension`](@ref).
-Here is an example with a custom type defined in the extension:
+In other situations, one may need to define new symbols in the extension (types, structs, functions, etc.) instead of reusing those from the parent package.
+Such symbols are created in a separate module corresponding to the extension, namely `PlottingContourExt`, and thus not in `Plotting` itself.
+If extension symbols are needed in the parent package, one must call [`Base.get_extension`](@ref) to retrieve them.
+Here is an example showing how a custom type defined in `PlottingContourExt` can be accessed in `Plotting`:
 
 ```julia
-const ContourPlotType = Base.get_extension(Plotting, :PlottingContourExt).ContourPlotType
+ext = Base.get_extension(@__MODULE__, :PlottingContourExt)
+if !isnothing(ext)
+    ContourPlotType = ext.ContourPlotType
+end
 ```
+
+On the other hand, accessing extension symbols from a third-party package (i.e. not the parent) is not a recommended practice at the moment.
 
 ### Backwards compatibility
 
