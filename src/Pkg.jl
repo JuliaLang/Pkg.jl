@@ -557,7 +557,9 @@ The logic for what path is activated is as follows:
     activate the environment at the tracked path.
   * Otherwise, `s` is interpreted as a non-existing path, which is then activated.
 
-If no argument is given to `activate`, then use the first project found in `LOAD_PATH`.
+If no argument is given to `activate`, then use the first project found in `LOAD_PATH`
+(ignoring `"@"`). For the default value of `LOAD_PATH`, the result is to activate the
+`@v#.#` environment.
 
 # Examples
 ```
@@ -566,6 +568,8 @@ Pkg.activate("local/path")
 Pkg.activate("MyDependency")
 Pkg.activate(; temp=true)
 ```
+
+See also [`LOAD_PATH`](https://docs.julialang.org/en/v1/base/constants/#Base.LOAD_PATH).
 """
 const activate = API.activate
 

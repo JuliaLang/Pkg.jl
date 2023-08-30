@@ -191,7 +191,7 @@ load when the package is tested).
 #### `target` based test specific dependencies
 
 Using this method of adding test-specific dependencies, the packages are added under an `[extras]` section and to a test target,
-e.g. to add `Markdown` and `Test` as test dependencies, add the following:
+e.g. to add `Markdown` and `Test` as test dependencies, add the following to the `Project.toml` file:
 
 ```toml
 [extras]
@@ -202,19 +202,19 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Markdown", "Test"]
 ```
 
-to the `Project.toml` file. There are no other "targets" than `test`.
+Note that the only supported targets are `test` and `build`, the latter of which (not recommended) can be used
+for any `deps/build.jl` scripts.
 
-#### `test/Project.toml` file test specific dependencies
+#### Alternative approach: `test/Project.toml` file test specific dependencies
 
 !!! note
     The exact interaction between `Project.toml`, `test/Project.toml` and their corresponding
     `Manifest.toml`s are not fully worked out and may be subject to change in future versions.
-    The old method of adding test-specific dependencies, described in the next section, will
-    therefore be supported throughout all Julia 1.X releases.
+    The older method of adding test-specific dependencies, described in the previous section,
+    will therefore be supported throughout all Julia 1.X releases.
 
- is given by `test/Project.toml`. Thus, when running
-tests, this will be the active project, and only dependencies to the `test/Project.toml` project
-can be used. Note that Pkg will add the tested package itself implicitly.
+In Julia 1.2 and later test dependencies can be declared in `test/Project.toml`. When running
+tests, Pkg will automatically merge this and the package Projects to create the test environment.
 
 !!! note
     If no `test/Project.toml` exists Pkg will use the `target` based test specific dependencies.
@@ -393,7 +393,7 @@ This is done by making the following changes (using the example above):
   if !isdefined(Base, :get_extension)
   using Requires
   end
-  
+
   @static if !isdefined(Base, :get_extension)
   function __init__()
       @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")

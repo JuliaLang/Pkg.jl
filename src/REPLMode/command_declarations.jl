@@ -304,7 +304,10 @@ PSA[:name => "activate",
     activate [--shared] path
     activate --temp
 
-Activate the environment at the given `path`, or use the first project found in `LOAD_PATH` if no `path` is specified.
+Activate the environment at the given `path`, or use the first project found in
+`LOAD_PATH` (ignoring `"@"`) if no `path` is specified.
+In the latter case, for the default value of `LOAD_PATH`, the result is to activate the
+`@v#.#` environment.
 The active environment is the environment that is modified by executing package commands.
 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,

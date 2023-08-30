@@ -242,13 +242,10 @@ function collect_project(pkg::PackageSpec, path::String)
         pkgerror("could not find project file for package $(err_rep(pkg)) at `$path`")
     end
     project = read_package(project_file)
-    #=
-    # TODO, this should either error or be quiet
     julia_compat = get_compat(project, "julia")
-    if julia_compat !== nothing && !(VERSION in julia_compat)
-        println(io, "julia version requirement for package $(err_rep(pkg)) not satisfied")
+    if !isnothing(julia_compat) && !(VERSION in julia_compat)
+        pkgerror("julia version requirement from Project.toml's compat section not satisfied for package $(err_rep(pkg)) at `$path`")
     end
-    =#
     for (name, uuid) in project.deps
         vspec = get_compat(project, name)
         push!(deps, PackageSpec(name, uuid, vspec))
@@ -2410,7 +2407,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available. Those with $upgradable_indicator may be upgradable, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
             # only warn if showing project and outdated indirect deps are hidden
