@@ -2214,6 +2214,9 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
             # Check if deps are loaded
             extdeps_info= Tuple{String, Bool}[]
             for extdep in extdeps
+                haskey(weakdepses, extdep) ||
+                    pkgerror(if !isnothing(pkg.name) "$(pkg.name) has a" else "" end,
+                             "malformed Project.toml, the extension package $extdep is not listed in [weakdeps]")
                 uuid = weakdepses[extdep]
                 loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, extdep))
                 push!(extdeps_info, (extdep, loaded))
