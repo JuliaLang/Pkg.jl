@@ -6,7 +6,11 @@ import ..Pkg # ensure we are using the correct Pkg
 import ..Utils
 using Test
 
+import TOML
+
 get_exception_message(ex::Pkg.Resolve.ResolverError) = ex.msg
+
+get_exception_message(ex::Nothing) = "" # TODO: delete this line
 
 function get_exception_and_message(f::Function)
     ex = try
@@ -31,14 +35,63 @@ const message_2 = "Dependency does not have a [compat] entry"
 
     # "regular" = `/Project.toml` exists, `/test/Project.toml` does not exist,
     #             test dependencies are defined in `/Project.toml`
-    @testset for type in ["regular"]
+    # "testprojecttoml" = `Project.toml` exists, `/test/Project.toml` exists,
+    #             test dependencies are defined in `test/Project.toml`
+    @testset for type in ["regular", "testprojecttoml"]
         test_package_parent_dir = joinpath(
             @__DIR__,
             "test_packages",
             "force_latest_compatible_version",
             type,
         )
-        @test ispath(test_package_parent_dir)
+        @test isdir(test_package_parent_dir)
+
+        # TODO: delete this entire if-else block
+        if type == "testprojecttoml"
+            broken = true
+        else
+            broken = false
+        end
+
+        @testset "sanity checks for our test fixtures" begin
+            for test_package_name in readdir(test_package_parent_dir)
+                test_package_path = joinpath(test_package_parent_dir, test_package_name)
+
+                main_project_filename = joinpath(test_package_parent_dir, test_package_name, "Project.toml")
+                test_project_filename = joinpath(test_package_parent_dir, test_package_name, "test", "Project.toml")
+
+                @test isfile(main_project_filename)
+                main_project = TOML.parsefile(main_project_filename)
+                @test haskey(main_project, "deps")
+                @test haskey(main_project, "compat")
+                main_project_deps = main_project["deps"]
+                main_project_compat = main_project["compat"]
+                @test !isempty(main_project_deps)
+                @test !isempty(main_project_compat)
+
+                if type == "testprojecttoml"
+                    @test isfile(test_project_filename)
+                    test_project = TOML.parsefile(test_project_filename)
+
+                    @test haskey(test_project, "deps")
+                    @test haskey(test_project, "compat")
+                    test_project_deps = test_project["deps"]
+                    test_project_compat = test_project["compat"]
+                    @test !isempty(test_project_deps)
+                    @test !isempty(test_project_compat)
+                else # type == "regular"
+                    !isfile(test_project_filename)
+                    !ispath(test_project_filename)
+
+                    @test haskey(main_project, "extras")
+                    @test haskey(main_project, "targets")
+                    main_project_extras = main_project["extras"]
+                    main_project_targets = main_project["targets"]
+                    @test !isempty(main_project_extras)
+                    @test !isempty(main_project_targets)
+                end
+            end
+        end
 
         @testset "OldOnly1: `SomePkg = \"=0.1.0\"`" begin
             mktempdir() do tmp_dir
@@ -99,13 +152,15 @@ const message_2 = "Dependency does not have a [compat] entry"
                                 allow_earlier_backwards_compatible_versions = false,
                             ) == nothing
                         )
-                        @test_throws(
-                            exception_type_1,
-                            Pkg.test(;
-                                force_latest_compatible_version = true,
-                                allow_earlier_backwards_compatible_versions = false,
-                            ),
-                        )
+                        if !broken
+                            @test_throws(
+                                exception_type_1,
+                                Pkg.test(;
+                                    force_latest_compatible_version = true,
+                                    allow_earlier_backwards_compatible_versions = false,
+                                ),
+                            )
+                        end
                         let
                             f = function ()
                                 Pkg.test(;
@@ -114,8 +169,8 @@ const message_2 = "Dependency does not have a [compat] entry"
                                 )
                             end
                             ex, msg = get_exception_and_message(f)
-                            @test ex isa exception_type_1
-                            @test occursin(message_1, msg)
+                            @test ex isa exception_type_1 broken=broken
+                            @test occursin(message_1, msg) broken=broken
                         end
                     end
 
@@ -148,12 +203,14 @@ const message_2 = "Dependency does not have a [compat] entry"
                                 force_latest_compatible_version = false,
                             ) == nothing
                         )
-                        @test_throws(
-                            exception_type_1,
-                            Pkg.test(;
-                                force_latest_compatible_version = true,
-                            ),
-                        )
+                        if !broken
+                            @test_throws(
+                                exception_type_1,
+                                Pkg.test(;
+                                    force_latest_compatible_version = true,
+                                ),
+                            )
+                        end
                         let
                             f = function ()
                                 Pkg.test(;
@@ -161,8 +218,8 @@ const message_2 = "Dependency does not have a [compat] entry"
                                 )
                             end
                             ex, msg = get_exception_and_message(f)
-                            @test ex isa exception_type_1
-                            @test occursin(message_1, msg)
+                            @test ex isa exception_type_1 broken=broken
+                            @test occursin(message_1, msg) broken=broken
                         end
                     end
 
@@ -174,13 +231,15 @@ const message_2 = "Dependency does not have a [compat] entry"
                                     allow_earlier_backwards_compatible_versions,
                                 ) == nothing
                             )
-                            @test_throws(
-                                exception_type_1,
-                                Pkg.test(;
-                                    force_latest_compatible_version = true,
-                                    allow_earlier_backwards_compatible_versions,
-                                ),
-                            )
+                            if !broken
+                                @test_throws(
+                                    exception_type_1,
+                                    Pkg.test(;
+                                        force_latest_compatible_version = true,
+                                        allow_earlier_backwards_compatible_versions,
+                                    ),
+                                )
+                            end
                             let
                                 f = function ()
                                     Pkg.test(;
@@ -189,8 +248,8 @@ const message_2 = "Dependency does not have a [compat] entry"
                                     )
                                 end
                                 ex, msg = get_exception_and_message(f)
-                                @test ex isa exception_type_1
-                                @test occursin(message_1, msg)
+                                @test ex isa exception_type_1 broken=broken
+                                @test occursin(message_1, msg) broken=broken
                             end
                         end
                     end
@@ -209,12 +268,14 @@ const message_2 = "Dependency does not have a [compat] entry"
 
                     for force_latest_compatible_version in [false, true]
                         @testset "default value of `allow_earlier_backwards_compatible_versions`" begin
-                            @test_throws(
-                                exception_type_1,
-                                Pkg.test(;
-                                    force_latest_compatible_version,
-                                ),
-                            )
+                            if true # if !broken
+                                @test_throws(
+                                    exception_type_1,
+                                    Pkg.test(;
+                                        force_latest_compatible_version,
+                                    ),
+                                )
+                            end
                             let
                                 f = function ()
                                     Pkg.test(;
@@ -229,13 +290,15 @@ const message_2 = "Dependency does not have a [compat] entry"
 
                         @testset "provide a value for `allow_earlier_backwards_compatible_versions`" begin
                             for allow_earlier_backwards_compatible_versions in [false, true]
-                                @test_throws(
-                                    exception_type_1,
-                                    Pkg.test(;
-                                        force_latest_compatible_version,
-                                        allow_earlier_backwards_compatible_versions,
-                                    ),
-                                )
+                                if true # if !broken
+                                    @test_throws(
+                                        exception_type_1,
+                                        Pkg.test(;
+                                            force_latest_compatible_version,
+                                            allow_earlier_backwards_compatible_versions,
+                                        ),
+                                    )
+                                end
                                 let
                                     f = function ()
                                         Pkg.test(;
@@ -299,13 +362,15 @@ const message_2 = "Dependency does not have a [compat] entry"
                                     force_latest_compatible_version = true,
                                 ) == nothing
                             )
-                            @test_logs(
-                                (:warn, message_2),
-                                match_mode=:any,
-                                Pkg.test(;
-                                    force_latest_compatible_version = true,
-                                ),
-                            )
+                            if !broken
+                                @test_logs(
+                                    (:warn, message_2),
+                                    match_mode=:any,
+                                    Pkg.test(;
+                                        force_latest_compatible_version = true,
+                                    ),
+                                )
+                            end
                         end
 
                         @testset "provide a value for `allow_earlier_backwards_compatible_versions`" begin
@@ -316,14 +381,16 @@ const message_2 = "Dependency does not have a [compat] entry"
                                         allow_earlier_backwards_compatible_versions,
                                     ) == nothing
                                 )
-                                @test_logs(
-                                    (:warn, message_2),
-                                    match_mode=:any,
-                                    Pkg.test(;
-                                        force_latest_compatible_version = true,
-                                        allow_earlier_backwards_compatible_versions,
-                                    ),
-                                )
+                                if !broken
+                                    @test_logs(
+                                        (:warn, message_2),
+                                        match_mode=:any,
+                                        Pkg.test(;
+                                            force_latest_compatible_version = true,
+                                            allow_earlier_backwards_compatible_versions,
+                                        ),
+                                    )
+                                end
                             end
                         end
                     end
