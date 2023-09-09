@@ -22,20 +22,24 @@ const exception_type_1 = Pkg.Resolve.ResolverError
 const message_1 = "Unsatisfiable requirements detected for package"
 const message_2 = "Dependency does not have a [compat] entry"
 
-const test_package_parent_dir = joinpath(
-    @__DIR__,
-    "test_packages",
-    "force_latest_compatible_version",
-)
-
-@testset "check_force_latest_compatible_version" begin
+@testset "`force_latest_compatible_version` kwarg to `Pkg.test`" begin
     @testset "get_earliest_backwards_compatible_version" begin
         @test Pkg.Operations.get_earliest_backwards_compatible_version(v"1.2.3") == v"1.0.0"
         @test Pkg.Operations.get_earliest_backwards_compatible_version(v"0.2.3") == v"0.2.0"
         @test Pkg.Operations.get_earliest_backwards_compatible_version(v"0.0.3") == v"0.0.3"
     end
 
-    @testset "`force_latest_compatible_version` kwarg to `Pkg.test`" begin
+    # "regular" = `/Project.toml` exists, `/test/Project.toml` does not exist,
+    #             test dependencies are defined in `/Project.toml`
+    @testset for type in ["regular"]
+        test_package_parent_dir = joinpath(
+            @__DIR__,
+            "test_packages",
+            "force_latest_compatible_version",
+            type,
+        )
+        @test ispath(test_package_parent_dir)
+
         @testset "OldOnly1: `SomePkg = \"=0.1.0\"`" begin
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "OldOnly1")
