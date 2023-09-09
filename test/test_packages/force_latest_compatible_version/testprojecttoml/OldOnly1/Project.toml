@@ -1,0 +1,10 @@
+name = "OldOnly1"
+uuid = "abc047b9-6ad4-4533-a374-d50ae908e3e9"
+authors = ["Dilum Aluthge <dilum@aluthge.com>"]
+version = "0.1.0"
+
+[deps]
+MLJModelInterface = "e80e1ace-859a-464e-9ed9-23947d8ae3ea"
+
+[compat]
+MLJModelInterface = "=0.1.0"

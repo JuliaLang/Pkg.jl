@@ -1,0 +1,6 @@
+[deps]
+ScientificTypes = "321657f4-b219-11e9-178b-2701a2544e81"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+ScientificTypes = "0.6"
