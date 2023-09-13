@@ -1658,6 +1658,7 @@ function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd
         catch
             @warn "Pkg failed to load, skipping precompilation."
         else
+            Pkg.activate($(repr(Base.active_project())))
             Pkg.precompile(warn_loaded = false)
         end
         """
