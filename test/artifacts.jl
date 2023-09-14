@@ -256,7 +256,7 @@ end
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=linux64) == artifact_path(hash2)
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=win32) == artifact_path(hash)
 
-        BinaryPlatforms.set_compare_strategy!(linux64, "libstdcxx_version", compare_version_cap)
+        BinaryPlatforms.set_compare_strategy!(linux64, "libstdcxx_version", BinaryPlatforms.compare_version_cap)
         @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=linux64)
 
         # Next, check that we can get the download_info properly:
