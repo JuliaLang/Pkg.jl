@@ -807,7 +807,12 @@ function download_source(ctx::Context; readonly=true)
     max_name = maximum(widths; init=0)
 
     # Check what registries the current pkg server tracks
-    server_registry_info = Registry.pkg_server_registry_info()
+    # Disable if precompiling to not access internet
+    server_registry_info = if Base.JLOptions().incremental == 0
+        Registry.pkg_server_registry_info()
+    else
+        nothing
+    end
 
     @sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
