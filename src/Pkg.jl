@@ -53,8 +53,6 @@ const PREV_ENV_PATH = Ref{String}("")
 can_fancyprint(io::IO) = ((io isa Base.TTY) || (io isa UnstableIO && io.io isa Base.TTY)) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
-include("../ext/LazilyInitializedFields/LazilyInitializedFields.jl")
-
 include("utils.jl")
 include("MiniProgressBars.jl")
 include("GitTools.jl")
@@ -123,15 +121,16 @@ a package, also inside that package.
 The `preserve` keyword argument allows you to key into a specific tier in the resolve algorithm.
 The following table describes the argument values for `preserve` (in order of strictness):
 
-| Value                       | Description                                                                          |
-|:----------------------------|:-------------------------------------------------------------------------------------|
-| `PRESERVE_ALL_INSTALLED`    | Like `PRESERVE_ALL` and only add those already installed                             |
-| `PRESERVE_ALL`              | Preserve the state of all existing dependencies (including recursive dependencies)   |
-| `PRESERVE_DIRECT`           | Preserve the state of all existing direct dependencies                               |
-| `PRESERVE_SEMVER`           | Preserve semver-compatible versions of direct dependencies                           |
-| `PRESERVE_NONE`             | Do not attempt to preserve any version information                                   |
-| `PRESERVE_TIERED_INSTALLED` | Like `PRESERVE_TIERED` except `PRESERVE_ALL_INSTALLED` is tried first                |
-| `PRESERVE_TIERED`           | Use the tier which will preserve the most version information (this is the default)  |
+| Value                       | Description                                                                        |
+|:----------------------------|:-----------------------------------------------------------------------------------|
+| `PRESERVE_ALL_INSTALLED`    | Like `PRESERVE_ALL` and only add those already installed                           |
+| `PRESERVE_ALL`              | Preserve the state of all existing dependencies (including recursive dependencies) |
+| `PRESERVE_DIRECT`           | Preserve the state of all existing direct dependencies                             |
+| `PRESERVE_SEMVER`           | Preserve semver-compatible versions of direct dependencies                         |
+| `PRESERVE_NONE`             | Do not attempt to preserve any version information                                 |
+| `PRESERVE_TIERED_INSTALLED` | Like `PRESERVE_TIERED` except `PRESERVE_ALL_INSTALLED` is tried first              |
+| `PRESERVE_TIERED`           | Use the tier that will preserve the most version information while                 |
+|                             | allowing version resolution to succeed (this is the default)                       |
 
 !!! note
     To change the default strategy to `PRESERVE_TIERED_INSTALLED` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED`
@@ -142,7 +141,7 @@ After the installation of new packages the project will be precompiled. For more
 With the `PRESERVE_ALL_INSTALLED` strategy the newly added packages will likely already be precompiled, but if not this
 may be because either the combination of package versions resolved in this environment has not been resolved and
 precompiled before, or the precompile cache has been deleted by the LRU cache storage
-(see JULIA_MAX_NUM_PRECOMPILE_FILES).
+(see `JULIA_MAX_NUM_PRECOMPILE_FILES`).
 
 !!! compat "Julia 1.9"
     The `PRESERVE_TIERED_INSTALLED` and `PRESERVE_ALL_INSTALLED` strategies requires at least Julia 1.9.
@@ -280,7 +279,25 @@ test = ["Test"]
 The tests are executed in a new process with `check-bounds=yes` and by default `startup-file=no`.
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
 Inlining of functions during testing can be disabled (for better coverage accuracy)
-by starting julia with `--inline=no`.
+by starting julia with `--inline=no`. The tests can be run as if different command line arguments were
+passed to julia by passing the arguments instead to the `julia_args` keyword argument, e.g.
+
+```
+Pkg.test("foo"; julia_args=["--inline"])
+```
+
+To pass some command line arguments to be used in the tests themselves, pass the arguments to the
+`test_args` keyword argument. These could be used to control the code being tested, or to control the
+tests in some way. For example, the tests could have optional additional tests:
+```
+if "--extended" in ARGS
+    @test some_function()
+end
+```
+which could be enabled by testing with
+```
+Pkg.test("foo"; test_args=["--extended"])
+```
 """
 const test = API.test
 
@@ -318,7 +335,9 @@ const build = API.build
     Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
-git revision. A pinned package is never updated. To pin all dependencies set `all_pkgs=true`.
+git revision. A pinned package is never automatically updated: if `pkg` is tracking a path,
+or a repository, those remain tracked but will not update.
+To get updates from the origin path or remote repository the package must first be freed.
 
 !!! compat "Julia 1.7"
     The `all_pkgs` kwarg was introduced in julia 1.7.
@@ -544,9 +563,9 @@ The logic for what path is activated is as follows:
     activate the environment at the tracked path.
   * Otherwise, `s` is interpreted as a non-existing path, which is then activated.
 
-If no argument is given to `activate`, then activate the home project.
-The home project is specified by either the `--project` command line option to
-the julia executable, or the `JULIA_PROJECT` environment variable.
+If no argument is given to `activate`, then use the first project found in `LOAD_PATH`
+(ignoring `"@"`). For the default value of `LOAD_PATH`, the result is to activate the
+`@v#.#` environment.
 
 # Examples
 ```
@@ -555,6 +574,8 @@ Pkg.activate("local/path")
 Pkg.activate("MyDependency")
 Pkg.activate(; temp=true)
 ```
+
+See also [`LOAD_PATH`](https://docs.julialang.org/en/v1/base/constants/#Base.LOAD_PATH).
 """
 const activate = API.activate
 
@@ -595,7 +616,7 @@ This includes:
   * The `name` of the package.
   * The package's unique `uuid`.
   * A `version` (for example when adding a package). When upgrading, can also be an instance of
-    the enum [`UpgradeLevel`](@ref). If the version is given as a `String`` this means that unspecified versions
+    the enum [`UpgradeLevel`](@ref). If the version is given as a `String` this means that unspecified versions
     are "free", for example `version="0.5"` allows any version `0.5.x` to be installed. If given as a `VersionNumber`,
     the exact version is used, for example `version=v"0.5.3"`.
   * A `url` and an optional git `rev`ision. `rev` can be a branch name or a git commit SHA1.

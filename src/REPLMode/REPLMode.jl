@@ -746,7 +746,11 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             push!(shown_envs, expanded_env)
         end
         menu = TerminalMenus.RadioMenu(option_list, keybindings=keybindings, pagesize=length(option_list))
-        default = min(2, length(option_list))
+        default = something(
+            # select the first non-default env by default, if possible
+            findfirst(!=(Base.active_project()), shown_envs),
+            1
+        )
         print(ctx.io, "\e[1A\e[1G\e[0J") # go up one line, to the start, and clear it
         printstyled(ctx.io, " └ "; color=:green)
         choice = try

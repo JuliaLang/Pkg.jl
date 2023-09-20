@@ -373,6 +373,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         if (server = pkg_server()) !== nothing
             url = "$server/artifact/$hash"
             download_success = let url=url
+                @debug "Downloading artifact from Pkg server" name artifacts_toml platform url
                 with_show_download_info(io, name, quiet_download) do
                     download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download, io=io)
                 end
@@ -381,6 +382,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
             if download_success === true
                 return artifact_path(hash)
             else
+                @debug "Failed to download artifact from Pkg server" download_success
                 push!(errors, (url, download_success))
             end
         end
@@ -396,6 +398,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
             url = entry["url"]
             tarball_hash = entry["sha256"]
             download_success = let url=url
+                @debug "Downloading artifact" name artifacts_toml platform url
                 with_show_download_info(io, name, quiet_download) do
                     download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download, io=io)
                 end
@@ -404,6 +407,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
             if download_success === true
                 return artifact_path(hash)
             else
+                @debug "Failed to download artifact" download_success
                 push!(errors, (url, download_success))
             end
         end

@@ -1,0 +1,7 @@
+name = "FarFuture"
+uuid = "501ba3b0-7baa-46f4-8e2b-5f7988aeacaf"
+authors = ["The Jetsons"]
+version = "0.1.0"
+
+[compat]
+julia = "1.999.0"

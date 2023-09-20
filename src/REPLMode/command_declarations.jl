@@ -123,15 +123,16 @@ If the package is not located at the top of the git repository, a subdirectory c
 The `--preserve` command line option allows you to key into a specific tier in the resolve algorithm.
 The following table describes the command line arguments to `--preserve` (in order of strictness).
 
-| Argument           | Description                                                                          |
-|:-------------------|:-------------------------------------------------------------------------------------|
-| `installed`        | Like `all` except also only add versions that are already installed                  |
-| `all`              | Preserve the state of all existing dependencies (including recursive dependencies)   |
-| `direct`           | Preserve the state of all existing direct dependencies                               |
-| `semver`           | Preserve semver-compatible versions of direct dependencies                           |
-| `none`             | Do not attempt to preserve any version information                                   |
-| `tiered_installed` | Like `tiered` except first try to add only installed versions                        |
-| `tiered`           | Use the tier which will preserve the most version information (this is the default)  |
+| Argument           | Description                                                                        |
+|:-------------------|:-----------------------------------------------------------------------------------|
+| `installed`        | Like `all` except also only add versions that are already installed                |
+| `all`              | Preserve the state of all existing dependencies (including recursive dependencies) |
+| `direct`           | Preserve the state of all existing direct dependencies                             |
+| `semver`           | Preserve semver-compatible versions of direct dependencies                         |
+| `none`             | Do not attempt to preserve any version information                                 |
+| `tiered_installed` | Like `tiered` except first try to add only installed versions                      |
+| **`tiered`**       | Use the tier that will preserve the most version information while                 |
+|                    | allowing version resolution to succeed (this is the default)                       |
 
 Note: To make the default strategy `tiered_installed` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED` to
 true.
@@ -141,7 +142,7 @@ After the installation of new packages the project will be precompiled. For more
 With the `installed` strategy the newly added packages will likely already be precompiled, but if not this may be
 because either the combination of package versions resolved in this environment has not been resolved and
 precompiled before, or the precompile cache has been deleted by the LRU cache storage
-(see JULIA_MAX_NUM_PRECOMPILE_FILES).
+(see `JULIA_MAX_NUM_PRECOMPILE_FILES`).
 
 **Examples**
 ```
@@ -303,7 +304,10 @@ PSA[:name => "activate",
     activate [--shared] path
     activate --temp
 
-Activate the environment at the given `path`, or the home project environment if no `path` is specified.
+Activate the environment at the given `path`, or use the first project found in
+`LOAD_PATH` (ignoring `"@"`) if no `path` is specified.
+In the latter case, for the default value of `LOAD_PATH`, the result is to activate the
+`@v#.#` environment.
 The active environment is the environment that is modified by executing package commands.
 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
@@ -421,7 +425,7 @@ the output to the difference as compared to the last git commit.
 The `--compat` option alone shows project compat entries.
 
 !!! compat "Julia 1.8"
-    The `⌃` and `⌅` indicators were added in Julia 1.8
+    The `⌃` and `⌅` indicators were added in Julia 1.8.
     The `--outdated` and `--compat` options require at least Julia 1.8.
 """,
 ],

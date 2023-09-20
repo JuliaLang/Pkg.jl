@@ -107,6 +107,96 @@ julia> HelloWorld.greet_alien()
 Hello aT157rHV
 ```
 
+## Defining a public API
+
+If you want your package to be useful to other packages and you want folks to be able to
+easily update to newer version of your package when they come out, it is important to
+document what behavior will stay consistent across updates.
+
+Unless you note otherwise, the public API of your package is defined as all the behavior you
+describe about public symbols. A public symbol is a symbol that is exported from your
+package with the `export` keyword or marked as public with the `public` keyword. When you
+change the behavior of something that was previously public so that the new
+version no longer conforms to the specifications provided in the old version, you should
+adjust your package version number according to [Julia's variant on SemVer](#Version-specifier-format).
+If you would like to include a symbol in your public API without exporting it into the
+global namespace of folks who call `using YourPackage`, you should mark that symbol as
+public with `public that_symbol`. Symbols marked as public with the `public` keyword are
+just as public as those marked as public with the `export` keyword, but when folks call
+`using YourPackage`, they will still have to qualify access to those symbols with
+`YourPackage.that_symbol`.
+
+Let's say we would like our `greet` function to be part of the public API, but not the
+`greet_alien` function. We could the write the following and release it as version `1.0.0`.
+
+```julia
+module HelloWorld
+
+export greet
+
+import Random
+import JSON
+
+"Writes a friendly message."
+greet() = print("Hello World!")
+
+"Greet an alien by a randomly generated name."
+greet_alien() = print("Hello ", Random.randstring(8))
+
+end # module
+```
+
+Then, if we change `greet` to
+
+```julia
+"Writes a friendly message that is exactly three words long."
+greet() = print("Hello Lovely World!")
+```
+
+We would release the new version as `1.1.0`. This is not breaking
+because the new implementation conforms to the old documentation, but
+it does add a new feature, that the message must be three words long.
+
+Later, we may wish to change `greet_alien` to
+
+```julia
+"Greet an alien by a the name of \"Zork\"."
+greet_alien() = print("Hello Zork")
+```
+
+And also export it by changing
+
+```julia
+export greet
+```
+
+to
+
+```julia
+export greet, greet_alien
+```
+
+We should release this new version as `1.2.0` because it adds a new feature
+`greet_alien` to the public API. Even though `greet_alien` was documented before
+and the new version does not conform to the old documentation, this is not breaking
+because the old documentation was not attached to a symbol that was exported
+at the time so that documentation does not apply across released versions.
+
+However, if we now wish to change `greet` to
+
+```julia
+"Writes a friendly message that is exactly four words long."
+greet() = print("Hello very lovely world")
+```
+
+we would need to release the new version as `2.0.0`. In version `1.1.0`, we specified that
+the greeting would be three words long, and because `greet` was exported, that description
+also applies to all future versions until the next breaking release. Because this new
+version does not conform to the old specification, it must be tagged as a breaking change.
+
+Please note that version numbers are free and unlimited. It is okay to use lots of them
+(e.g. version `6.62.8`).
+
 ## Adding a build step to the package
 
 The build step is executed the first time a package is installed or when explicitly invoked with `build`.
@@ -191,7 +281,7 @@ load when the package is tested).
 #### `target` based test specific dependencies
 
 Using this method of adding test-specific dependencies, the packages are added under an `[extras]` section and to a test target,
-e.g. to add `Markdown` and `Test` as test dependencies, add the following:
+e.g. to add `Markdown` and `Test` as test dependencies, add the following to the `Project.toml` file:
 
 ```toml
 [extras]
@@ -202,19 +292,19 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Markdown", "Test"]
 ```
 
-to the `Project.toml` file. There are no other "targets" than `test`.
+Note that the only supported targets are `test` and `build`, the latter of which (not recommended) can be used
+for any `deps/build.jl` scripts.
 
-#### `test/Project.toml` file test specific dependencies
+#### Alternative approach: `test/Project.toml` file test specific dependencies
 
 !!! note
     The exact interaction between `Project.toml`, `test/Project.toml` and their corresponding
     `Manifest.toml`s are not fully worked out and may be subject to change in future versions.
-    The old method of adding test-specific dependencies, described in the next section, will
-    therefore be supported throughout all Julia 1.X releases.
+    The older method of adding test-specific dependencies, described in the previous section,
+    will therefore be supported throughout all Julia 1.X releases.
 
- is given by `test/Project.toml`. Thus, when running
-tests, this will be the active project, and only dependencies to the `test/Project.toml` project
-can be used. Note that Pkg will add the tested package itself implicitly.
+In Julia 1.2 and later test dependencies can be declared in `test/Project.toml`. When running
+tests, Pkg will automatically merge this and the package Projects to create the test environment.
 
 !!! note
     If no `test/Project.toml` exists Pkg will use the `target` based test specific dependencies.
@@ -354,8 +444,8 @@ end
 end # module
 ```
 
-The name of the extension (here `PlottingContourExt`) is not very important but using something similar to the suggest here is likely a good
-idea.
+Extensions can have any arbitrary name (here `PlottingContourExt`), but using something similar to the format of
+this example that makes the extended functionality and dependency of the extension clear is likely a good idea.
 
 A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `PlottingContourExt` module.
 It is only when the `Contour` package actually gets loaded that the `PlottingContourExt` extension is loaded
@@ -365,8 +455,6 @@ If one considers `PlottingContourExt` as a completely separate package, it could
 [type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy) since `PlottingContourExt` _owns_ neither the method `Plotting.plot` nor the type `Contour.ContourCollection`.
 However, for extensions, it is ok to assume that the extension owns the methods in its parent package.
 In fact, this form of type piracy is one of the most standard use cases for extensions.
-
-An extension will only be loaded if the extension dependencies are loaded from the same environment or environments higher in the environment stack than the package itself.
 
 !!! compat
     Often you will put the extension dependencies into the `test` target so they are loaded when running e.g. `Pkg.test()`. On earlier Julia versions
@@ -395,7 +483,7 @@ This is done by making the following changes (using the example above):
   if !isdefined(Base, :get_extension)
   using Requires
   end
-  
+
   @static if !isdefined(Base, :get_extension)
   function __init__()
       @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
@@ -420,6 +508,8 @@ This is done by making the following changes (using the example above):
   ```julia
   isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
   ```
+- Add `Requires` to `[weakdeps]` in your `Project.toml` file, so that it is listed in both `[deps]` and `[weakdeps]`.
+  Julia 1.9+ knows to not install it as a regular dependency, whereas earlier versions will consider it a dependency.
 
 The package should now work with Requires.jl on Julia versions before extensions were introduced
 and with extensions on more recent Julia versions.

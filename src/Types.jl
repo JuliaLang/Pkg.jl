@@ -22,7 +22,8 @@ using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
-    PkgError, pkgerror, has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
+    PkgError, pkgerror, PkgPrecompileError,
+    has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
@@ -68,6 +69,16 @@ struct PkgError <: Exception
 end
 pkgerror(msg::String...) = throw(PkgError(join(msg)))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
+
+#################
+# Pkg Precompile Error #
+#################
+struct PkgPrecompileError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, err::PkgPrecompileError) = print(io, err.msg)
+# This needs a show method to make `julia> err` show nicely
+Base.show(io::IO, err::PkgPrecompileError) = print(io, "PkgPrecompileError: ", err.msg)
 
 
 ###############
@@ -116,10 +127,10 @@ function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
     uuid = uuid === nothing ? nothing : UUID(uuid)
     return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
 end
-PackageSpec(name::AbstractString) = PackageSpec(;name=name)
-PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)
-PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)
-PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)
+PackageSpec(name::AbstractString) = PackageSpec(;name=name)::PackageSpec
+PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)::PackageSpec
+PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)::PackageSpec
+PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)::PackageSpec
 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
@@ -423,9 +434,9 @@ const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
-        # DelimitedFiles is an upgradable stdlib
+        # DelimitedFiles and Statistics are upgradable stdlibs
         # TODO: Store this information of upgradable stdlibs somewhere else
-        name == "DelimitedFiles" && continue
+        name in ("DelimitedFiles", "Statistics") && continue
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
@@ -529,7 +540,15 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
 
         # keep only latest usage info
         for k in keys(usage)
-            times = map(d -> Dates.DateTime(d["time"]), usage[k])
+            times = map(usage[k]) do d
+                if haskey(d, "time")
+                    Dates.DateTime(d["time"])
+                else
+                    # if there's no time entry because of a write failure be conservative and mark it as being used now
+                    @debug "Usage file `$usage_filepath` has a missing `time` entry for `$k`. Marking as used `now()`"
+                    Dates.now()
+                end
+            end
             usage[k] = [Dict("time" => maximum(times))]
         end
 
@@ -616,6 +635,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             entry = manifest_info(ctx.env.manifest, uuid)
             if entry !== nothing
                 pkg.repo.source = entry.repo.source
+                pkg.repo.subdir = entry.repo.subdir
             end
         end
     end
@@ -719,8 +739,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         manifest_resolve!(ctx.env.manifest, [pkg]; force=true)
         if isresolved(pkg)
             entry = manifest_info(ctx.env.manifest, pkg.uuid)
-            if entry !== nothing && entry.repo.source !== nothing # reuse source in manifest
+            if entry !== nothing
                 pkg.repo.source = entry.repo.source
+                pkg.repo.subdir = entry.repo.subdir
             end
         end
         if pkg.repo.source === nothing
