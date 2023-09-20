@@ -74,22 +74,15 @@ function _run_precompilation_script_setup()
     return tmp
 end
 
-# SnoopPrecompile is useful but not available in Base
-# using SnoopPrecompile
 function pkg_precompile()
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
-    redirect_stderr(devnull) do
-    redirect_stdout(devnull) do
+    DEFAULT_IO[] = UnstableIO(devnull)
     Downloads.DOWNLOADER[] = Downloads.Downloader(; grace=1.0)
-    withenv("JULIA_PKG_SERVER" => nothing) do
-        # @precompile_setup begin
-            tmp = _run_precompilation_script_setup()
-            # @precompile_all_calls begin
-                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
-                    @show DEPOT_PATH
-                    @show LOAD_PATH
 
+    withenv("JULIA_PKG_SERVER" => nothing) do
+            tmp = _run_precompilation_script_setup()
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
                     Pkg.add("TestPkg")
                     Pkg.develop(Pkg.PackageSpec(path="TestPkg.jl"))
                     Pkg.add(Pkg.PackageSpec(path="TestPkg.jl/"))
@@ -107,14 +100,11 @@ function pkg_precompile()
                 Base.precompile(Tuple{typeof(Pkg.API.status)})
                 Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project})
                 Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch})
-
                 Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), Pkg.REPLMode.PkgCompletionProvider, REPL.LineEdit.PromptState})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_argument), Pkg.REPLMode.CommandSpec, Array{String, 1}, String, Int64, Int64})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_add_dev), Base.Dict{Symbol, Any}, String, Int64, Int64})
             # end
         # end
-        end
-        end
     end
 end
 

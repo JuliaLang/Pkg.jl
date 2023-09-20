@@ -40,11 +40,17 @@ const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
-stderr_f() = something(DEFAULT_IO[], stderr)
-stdout_f() = something(DEFAULT_IO[], stdout)
+
+struct UnstableIO <: IO
+    io::IO
+end
+Base.write(io::UnstableIO, b::UInt8) = write(io.io, b)::Int
+Base.get(io::UnstableIO, val, default) = get(io.io, val, default)
+stderr_f() = something(DEFAULT_IO[], UnstableIO(stderr))
+stdout_f() = something(DEFAULT_IO[], UnstableIO(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
-can_fancyprint(io::IO) = (io isa Base.TTY) && (get(ENV, "CI", nothing) != "true")
+can_fancyprint(io::IO) = ((io isa Base.TTY) || (io isa UnstableIO && io.io isa Base.TTY)) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
 include("utils.jl")
@@ -723,6 +729,7 @@ If the manifest doesn't have the project hash recorded, `nothing` is returned.
 const is_manifest_current = API.is_manifest_current
 
 function __init__()
+    DEFAULT_IO[] = nothing
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
