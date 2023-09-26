@@ -46,6 +46,7 @@ struct UnstableIO <: IO
 end
 Base.write(io::UnstableIO, b::UInt8) = write(io.io, b)::Int
 Base.get(io::UnstableIO, val, default) = get(io.io, val, default)
+Base.print(io::UnstableIO, arg::Union{SubString{String}, String}) = print(io.io, arg)
 stderr_f() = something(DEFAULT_IO[], UnstableIO(stderr))
 stdout_f() = something(DEFAULT_IO[], UnstableIO(stdout))
 const PREV_ENV_PATH = Ref{String}("")
