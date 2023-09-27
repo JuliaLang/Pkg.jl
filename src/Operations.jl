@@ -2410,7 +2410,7 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available. Those with $upgradable_indicator may be upgradable, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
         if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
             # only warn if showing project and outdated indirect deps are hidden
