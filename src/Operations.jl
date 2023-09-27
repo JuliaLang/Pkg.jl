@@ -47,7 +47,7 @@ tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version
     !is_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
 
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
-    return is_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
+    return (is_stdlib(pkg.uuid, julia_version) || pkg.version == VersionSpec("*")) ? Types.stdlib_path(pkg.name) :
         pkg.path        !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
         pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
