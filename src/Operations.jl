@@ -49,7 +49,7 @@ tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
     pkg.path        !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
-    is_any_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
+    is_or_was_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
     nothing
 end
 
