@@ -430,13 +430,16 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
+const UPGRADABLE_STDLIBS = (
+    "DelimitedFiles", "Statistics", "Pkg",
+)
+
 const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
-        # DelimitedFiles and Statistics are upgradable stdlibs
         # TODO: Store this information of upgradable stdlibs somewhere else
-        name in ("DelimitedFiles", "Statistics") && continue
+        name in UPGRADABLE_STDLIBS && continue
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
