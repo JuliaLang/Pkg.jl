@@ -47,11 +47,10 @@ tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version
     !is_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
 
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
-    return is_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
-        pkg.path        !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
-        pkg.repo.source !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        nothing
+    pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
+    pkg.path        !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
+    is_or_was_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
+    nothing
 end
 
 #TODO rename
@@ -1066,12 +1065,9 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
                 error("could not find entry with uuid $uuid in manifest $(ctx.env.manifest_file)")
             end
             name = entry.name
-            if entry.tree_hash !== nothing
-                path = find_installed(name, uuid, entry.tree_hash)
-            elseif entry.path !== nothing
-                path = project_rel_path(ctx.env, entry.path)
-            else
-                pkgerror("Could not find either `git-tree-sha1` or `path` for package $name")
+            path = source_path(ctx.env.manifest_file, entry)
+            if path === nothing
+                pkgerror("Failed to find path for package $name")
             end
             version = something(entry.version, v"0.0")
         end
