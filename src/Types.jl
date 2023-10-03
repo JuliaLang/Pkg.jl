@@ -23,7 +23,7 @@ using SHA
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror, PkgPrecompileError,
-    has_name, has_uuid, is_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
+    has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
@@ -430,13 +430,12 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
+const FORMER_STDLIBS = ["DelimitedFiles", "Statistics"]
+const FORMER_STDLIBS_UUIDS = Set{UUID}()
 const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
-        # DelimitedFiles and Statistics are upgradable stdlibs
-        # TODO: Store this information of upgradable stdlibs somewhere else
-        name in ("DelimitedFiles", "Statistics") && continue
         projfile = projectfile_path(stdlib_path(name); strict=true)
         nothing === projfile && continue
         project = parse_toml(projfile)
@@ -444,6 +443,10 @@ function load_stdlib()
         v_str = get(project, "version", nothing)::Union{String, Nothing}
         version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
+        if name in FORMER_STDLIBS
+            push!(FORMER_STDLIBS_UUIDS, UUID(uuid))
+            continue
+        end
         stdlib[UUID(uuid)] = (name, version)
     end
     return stdlib
@@ -456,6 +459,11 @@ function stdlibs()
     return STDLIB[]
 end
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
+# Includes former stdlibs
+function is_or_was_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
+    return is_stdlib(uuid, julia_version) || uuid in FORMER_STDLIBS_UUIDS
+end
+
 
 # Find the entry in `STDLIBS_BY_VERSION`
 # that corresponds to the requested version, and use that.
