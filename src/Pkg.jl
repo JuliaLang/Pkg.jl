@@ -311,6 +311,9 @@ finding artifacts and packages that are thereafter not used by any other project
 marking them as "orphaned".  This method will only remove orphaned objects (package
 versions, artifacts, and scratch spaces) that have been continually un-used for a period
 of `collect_delay`; which defaults to seven days.
+
+To disable automatic garbage collection, you can set the environment variable 
+`JULIA_PKG_DISABLE_AUTO_GC` to `"true"`.
 """
 const gc = API.gc
 
@@ -745,6 +748,7 @@ function __init__()
     push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
     Base.PKG_PRECOMPILE_HOOK[] = precompile # allows Base to use Pkg.precompile during loading
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
+    _auto_gc_enabled[] = !Base.get_bool_env("JULIA_PKG_DISABLE_AUTO_GC", false)
     return nothing
 end
 
