@@ -313,7 +313,7 @@ versions, artifacts, and scratch spaces) that have been continually un-used for 
 of `collect_delay`; which defaults to seven days.
 
 To disable automatic garbage collection, you can set the environment variable 
-`JULIA_PKG_DISABLE_AUTO_GC` to `"true"`.
+`JULIA_PKG_DISABLE_AUTO_GC` to `"true"` before starting Julia.
 """
 const gc = API.gc
 
