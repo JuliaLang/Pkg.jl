@@ -1818,13 +1818,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             end
 
             reset_all_compat!(temp_ctx.env.project)
-
-            # Absolutify stdlibs paths
-            for (uuid, entry) in temp_ctx.env.manifest
-                if is_stdlib(uuid)
-                    entry.path = Types.stdlib_path(entry.name)
-                end
-            end
             write_env(temp_ctx.env, update_undo = false)
 
             # Run sandboxed code
