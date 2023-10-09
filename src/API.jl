@@ -1118,6 +1118,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         # add any extensions
         weakdeps = last(dep).weakdeps
         pkg_exts = Dict{Base.PkgId, Vector{Base.PkgId}}()
+        prev_ext = nothing
         for (ext_name, extdep_names) in last(dep).exts
             ext_deps = Base.PkgId[]
             push!(ext_deps, pkg) # depends on parent package
@@ -1133,8 +1134,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 end
             end
             all_extdeps_available || continue
+            if prev_ext isa Base.PkgId
+                # also make the exts depend on eachother sequentially to avoid race
+                push!(ext_deps, prev_ext)
+            end
             ext_uuid = Base.uuid5(pkg.uuid, ext_name)
             ext = Base.PkgId(ext_uuid, ext_name)
+            prev_ext = ext
             push!(pkg_specs, PackageSpec(uuid = ext_uuid, name = ext_name)) # create this here as the name cannot be looked up easily later via the uuid
             filter!(!Base.in_sysimage, ext_deps)
             depsmap[ext] = ext_deps
