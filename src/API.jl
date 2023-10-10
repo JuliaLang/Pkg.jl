@@ -1110,6 +1110,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     # make a flat map of each dep and its direct deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
     pkg_specs = PackageSpec[]
+    pkg_exts_map = Dict{Base.PkgId, Vector{Base.PkgId}}()
     for dep in ctx.env.manifest
         pkg = Base.PkgId(first(dep), last(dep).name)
         Base.in_sysimage(pkg) && continue
@@ -1118,6 +1119,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         # add any extensions
         weakdeps = last(dep).weakdeps
         pkg_exts = Dict{Base.PkgId, Vector{Base.PkgId}}()
+        prev_ext = nothing
         for (ext_name, extdep_names) in last(dep).exts
             ext_deps = Base.PkgId[]
             push!(ext_deps, pkg) # depends on parent package
@@ -1133,8 +1135,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 end
             end
             all_extdeps_available || continue
+            if prev_ext isa Base.PkgId
+                # also make the exts depend on eachother sequentially to avoid race
+                push!(ext_deps, prev_ext)
+            end
             ext_uuid = Base.uuid5(pkg.uuid, ext_name)
             ext = Base.PkgId(ext_uuid, ext_name)
+            prev_ext = ext
             push!(pkg_specs, PackageSpec(uuid = ext_uuid, name = ext_name)) # create this here as the name cannot be looked up easily later via the uuid
             filter!(!Base.in_sysimage, ext_deps)
             depsmap[ext] = ext_deps
@@ -1142,13 +1149,17 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             pkg_exts[ext] = ext_deps
         end
         if !isempty(pkg_exts)
-            # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
-            # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
-            for (_pkg, deps) in depsmap # for each manifest dep
-                if !in(_pkg, keys(exts)) && pkg in deps # if not an extension and depends on pkg
-                    append!(deps, keys(pkg_exts)) # add the package extensions to deps
-                    filter!(!isequal(pkg), deps) # remove the pkg from deps
-                end
+            pkg_exts_map[pkg] = collect(keys(pkg_exts))
+        end
+    end
+    # this loop must be run after the full depsmap has been populated
+    for (pkg, pkg_exts) in pkg_exts_map
+        # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
+        # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
+        for (_pkg, deps) in depsmap # for each manifest dep
+            if !in(_pkg, keys(exts)) && pkg in deps # if not an extension and depends on pkg
+                append!(deps, pkg_exts) # add the package extensions to deps
+                filter!(!isequal(pkg), deps) # remove the pkg from deps
             end
         end
     end
