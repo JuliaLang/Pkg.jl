@@ -1456,6 +1456,15 @@ end
             end
         end
     end
+    # instantiate old manifest
+    isolate(loaded_depot=true) do
+        manifest_dir = joinpath(@__DIR__, "manifest", "old")
+        cd(manifest_dir) do
+            Pkg.activate(".")
+            Pkg.instantiate()
+            @test isinstalled("DelimitedFiles")
+        end
+    end
     # `instantiate` on a lonely manifest should detect duplicate names
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         simple_package_path = copy_test_package(tempdir, "SimplePackage")
