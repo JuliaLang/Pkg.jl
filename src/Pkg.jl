@@ -797,9 +797,7 @@ function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     end
 
     if curr_time - DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] > delay_secs
-        if ccall(:jl_generating_output, Cint, ()) != 1
-            @info("We haven't cleaned this depot up for a bit, running Pkg.gc()...")
-        end
+        printpkgstyle(ctx.io, :Info, "We haven't cleaned this depot up for a bit, running Pkg.gc()...", color = Base.info_color())
         try
             Pkg.gc(ctx; collect_delay)
             DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = curr_time
