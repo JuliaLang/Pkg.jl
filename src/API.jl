@@ -1140,6 +1140,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     # make a flat map of each dep and its direct deps
     depsmap = Dict{Base.PkgId, Vector{Base.PkgId}}()
     pkg_specs = PackageSpec[]
+    pkg_exts_map = Dict{Base.PkgId, Vector{Base.PkgId}}()
     for dep in ctx.env.manifest
         pkg = Base.PkgId(first(dep), last(dep).name)
         Base.in_sysimage(pkg) && continue
@@ -1148,6 +1149,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         # add any extensions
         weakdeps = last(dep).weakdeps
         pkg_exts = Dict{Base.PkgId, Vector{Base.PkgId}}()
+        prev_ext = nothing
         for (ext_name, extdep_names) in last(dep).exts
             ext_deps = Base.PkgId[]
             push!(ext_deps, pkg) # depends on parent package
@@ -1163,8 +1165,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 end
             end
             all_extdeps_available || continue
+            if prev_ext isa Base.PkgId
+                # also make the exts depend on eachother sequentially to avoid race
+                push!(ext_deps, prev_ext)
+            end
             ext_uuid = Base.uuid5(pkg.uuid, ext_name)
             ext = Base.PkgId(ext_uuid, ext_name)
+            prev_ext = ext
             push!(pkg_specs, PackageSpec(uuid = ext_uuid, name = ext_name)) # create this here as the name cannot be looked up easily later via the uuid
             filter!(!Base.in_sysimage, ext_deps)
             depsmap[ext] = ext_deps
@@ -1172,13 +1179,17 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             pkg_exts[ext] = ext_deps
         end
         if !isempty(pkg_exts)
-            # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
-            # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
-            for (_pkg, deps) in depsmap # for each manifest dep
-                if !in(_pkg, keys(exts)) && pkg in deps # if not an extension and depends on pkg
-                    append!(deps, keys(pkg_exts)) # add the package extensions to deps
-                    filter!(!isequal(pkg), deps) # remove the pkg from deps
-                end
+            pkg_exts_map[pkg] = collect(keys(pkg_exts))
+        end
+    end
+    # this loop must be run after the full depsmap has been populated
+    for (pkg, pkg_exts) in pkg_exts_map
+        # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
+        # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
+        for (_pkg, deps) in depsmap # for each manifest dep
+            if !in(_pkg, keys(exts)) && pkg in deps # if not an extension and depends on pkg
+                append!(deps, pkg_exts) # add the package extensions to deps
+                filter!(!isequal(pkg), deps) # remove the pkg from deps
             end
         end
     end
@@ -1337,31 +1348,38 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         end
                         bar.current = n_done - n_already_precomp
                         bar.max = n_total - n_already_precomp
-                        final_loop || print(iostr, sprint(io -> show_progress(io, bar; termwidth = displaysize(ctx.io)[2]); context=io), "\n")
+                        # when sizing to the terminal width subtract a little to give some tolerance to resizing the
+                        # window between print cycles
+                        termwidth = displaysize(io)[2] - 4
+                        if !final_loop
+                            str = sprint(io -> show_progress(io, bar; termwidth, carriagereturn=false); context=io)
+                            print(iostr, Base._truncate_at_width_or_chars(true, str, termwidth), "\n")
+                        end
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
                             _name = haskey(exts, dep) ? string(exts[dep], " → ", dep.name) : dep.name
                             name = dep in direct_deps ? _name : string(color_string(_name, :light_black))
-                            if dep in precomperr_deps
-                                print(iostr, color_string("  ? ", Base.warn_color()), name, "\n")
+                            line = if dep in precomperr_deps
+                                string(color_string("  ? ", Base.warn_color()), name)
                             elseif haskey(failed_deps, dep)
-                                print(iostr, color_string("  ✗ ", Base.error_color()), name, "\n")
+                                string(color_string("  ✗ ", Base.error_color()), name)
                             elseif was_recompiled[dep]
                                 !loaded && interrupted_or_done.set && continue
-                                print(iostr, color_string("  ✓ ", loaded ? Base.warn_color() : :green), name, "\n")
                                 loaded || @async begin # keep successful deps visible for short period
                                     sleep(1);
                                     filter!(!isequal(dep), pkg_queue)
                                 end
+                                string(color_string("  ✓ ", loaded ? Base.warn_color() : :green), name)
                             elseif started[dep]
                                 # Offset each spinner animation using the first character in the package name as the seed.
                                 # If not offset, on larger terminal fonts it looks odd that they all sync-up
                                 anim_char = anim_chars[(i + Int(dep.name[1])) % length(anim_chars) + 1]
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
-                                print(iostr, "  $anim_char_colored $name\n")
+                                string("  ", anim_char_colored, " ", name)
                             else
-                                print(iostr, "    $name\n")
+                                string("    ", name)
                             end
+                            println(iostr, Base._truncate_at_width_or_chars(true, line, termwidth))
                         end
                     end
                     last_length = length(pkg_queue_show)
