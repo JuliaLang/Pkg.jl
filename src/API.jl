@@ -1226,19 +1226,21 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     # if a list of packages is given, restrict to dependencies of given packages
     if !isempty(pkgs)
         pkgs_names = [p.name for p in pkgs]
-        function collect_all_deps(depsmap, dep, alldeps=Base.PkgId[])
-            append!(alldeps, depsmap[dep])
+        function collect_all_deps(depsmap, dep, alldeps=Set{Base.PkgId}())
             for _dep in depsmap[dep]
-                collect_all_deps(depsmap, _dep, alldeps)
+                if !(_dep in alldeps)
+                    push!(alldeps, _dep)
+                    collect_all_deps(depsmap, _dep, alldeps)
+                end
             end
             return alldeps
         end
-        keep = Base.PkgId[]
+        keep = Set{Base.PkgId}()
         for dep in depsmap
             dep_pkgid = first(dep)
             if dep_pkgid.name in pkgs_names
                 push!(keep, dep_pkgid)
-                append!(keep, collect_all_deps(depsmap, dep_pkgid))
+                collect_all_deps(depsmap, dep_pkgid, keep)
             end
         end
         for ext in keys(exts)
