@@ -44,12 +44,12 @@ end
 # more accurate name is `should_be_tracking_registered_version`
 # the only way to know for sure is to key into the registries
 tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version=VERSION) =
-    !is_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
+    !is_upgradeable_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
 
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     pkg.tree_hash   !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
     pkg.path        !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
-    is_or_was_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
+    is_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
     nothing
 end
 

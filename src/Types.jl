@@ -23,7 +23,7 @@ using SHA
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror, PkgPrecompileError,
-    has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
+    has_name, has_uuid, is_stdlib, is_upgradeable_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
@@ -427,9 +427,21 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
-const FORMER_STDLIBS = ["DelimitedFiles", "Statistics"]
-const FORMER_STDLIBS_UUIDS = Set{UUID}()
+# These have registered version in the Registry,
+# until a new version is registered we will not consider
+# them for upgrading. This is opt-out instead of the previous opt-in.
+const NON_UPGRADEABLE_STDLIBS = [
+    "ArgTools", "Artifacts", "Downloads", "LazyArtifacts", "LibCURL",
+    "NetworkOptions", "SHA", "Tar", "TOML"]
+
+# These are used directly by libjulia-*
+const NON_UPGRADEABLE_JLLS = [
+    "CompilerSupportLibraries_jll",
+    "libLLVM_jll", ]
+
+const NON_UPGRADEABLE_STDLIBS_UUIDS = Set{UUID}()
 const STDLIB = Ref{DictStdLibs}()
+
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
@@ -440,9 +452,8 @@ function load_stdlib()
         v_str = get(project, "version", nothing)::Union{String, Nothing}
         version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
-        if name in FORMER_STDLIBS
-            push!(FORMER_STDLIBS_UUIDS, UUID(uuid))
-            continue
+        if name in NON_UPGRADEABLE_STDLIBS
+            push!(NON_UPGRADEABLE_STDLIBS_UUIDS, UUID(uuid))
         end
         stdlib[UUID(uuid)] = (name, version)
     end
@@ -456,11 +467,7 @@ function stdlibs()
     return STDLIB[]
 end
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
-# Includes former stdlibs
-function is_or_was_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
-    return is_stdlib(uuid, julia_version) || uuid in FORMER_STDLIBS_UUIDS
-end
-
+is_upgradeable_stdlib(uuid::UUID) = is_stdlib(uuid) && !(uuid in NON_UPGRADEABLE_STDLIBS_UUIDS)
 
 # Find the entry in `STDLIBS_BY_VERSION`
 # that corresponds to the requested version, and use that.
@@ -493,6 +500,20 @@ function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
         return is_stdlib(uuid)
     end
 
+    last_stdlibs = get_last_stdlibs(julia_version)
+    # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
+    # fall through with an empty `last_stdlibs`, which will always return `false`.
+    return uuid in keys(last_stdlibs)
+end
+
+# Allow asking if something is an stdlib for a particular version of Julia
+function is_upgradeable_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
+    # Only use the cache if we are asking for stdlibs in a custom Julia version
+    if julia_version == VERSION
+        return is_upgradeable_stdlib(uuid)
+    end
+
+    error("Not implemented")
     last_stdlibs = get_last_stdlibs(julia_version)
     # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
     # fall through with an empty `last_stdlibs`, which will always return `false`.
