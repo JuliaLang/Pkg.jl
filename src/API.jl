@@ -1219,15 +1219,11 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             did_visit_dep = false
             return true
         end
-        if did_visit_dep ? inpath : scan_deps!(pkg, dmap)
-            # Found a cycle. Delete this and all parents
-            return true
+        if did_visit_dep 
+            return inpath
         end
-        return false
-    end
-    function scan_deps!(pkg, dmap)
         for dep in dmap[pkg]
-            scan_pkg!(dep, dmap) && return true
+            scan_pkg!(dep, dmap) && return true # Encountered a cycle. Delete this and all parents.
         end
         could_be_cycle[pkg] = false
         return false
