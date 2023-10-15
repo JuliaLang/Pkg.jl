@@ -1221,7 +1221,6 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
         if did_visit_dep ? inpath : scan_deps!(pkg, dmap)
             # Found a cycle. Delete this and all parents
-            # to let this cycle be found again by another toplevel dep
             return true
         end
         return false
