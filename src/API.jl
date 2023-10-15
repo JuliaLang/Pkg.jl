@@ -1208,13 +1208,32 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     # find and guard against circular deps
     circular_deps = Base.PkgId[]
-    function in_deps(_pkgs, deps, dmap)
-        isempty(deps) && return false
-        !isempty(intersect(_pkgs, deps)) && return true
-        return any(dep->in_deps(vcat(_pkgs, dep), dmap[dep], dmap), deps)
+    # Three states
+    # !haskey -> never visited
+    # true -> cannot be compiled due to a cycle (or not yet determined)
+    # false -> not depending on a cycle
+    could_be_cycle = Dict{Base.PkgId, Bool}()
+    function scan_pkg!(pkg, dmap)
+        did_visit_dep = true
+        inpath = get!(could_be_cycle, pkg) do
+            did_visit_dep = false
+            return true
+        end
+        if did_visit_dep ? inpath : scan_deps!(pkg, dmap)
+            # Found a cycle. Delete this and all parents
+            return true
+        end
+        return false
     end
-    for (pkg, deps) in depsmap
-        if in_deps([pkg], deps, depsmap)
+    function scan_deps!(pkg, dmap)
+        for dep in dmap[pkg]
+            scan_pkg!(dep, dmap) && return true
+        end
+        could_be_cycle[pkg] = false
+        return false
+    end
+    for pkg in keys(depsmap)
+        if scan_pkg!(pkg, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
         end
