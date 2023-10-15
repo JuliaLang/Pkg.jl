@@ -1681,9 +1681,9 @@ function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::
     if cachefile === false
         pid, hostname, age = FileWatching.Pidfile.parse_pidfile(pidfile)
         pkgspidlocked[pkg] = if isempty(hostname) || hostname == gethostname()
-            "process (pid: $pid)"
+            "process (pid: $pid, pidfile: $pidfile)"
         else
-            "machine (hostname: $hostname, pid: $pid)"
+            "machine (hostname: $hostname, pid: $pid, pidfile: $pidfile)"
         end
         !fancyprint && lock(print_lock) do
             println(io, "    ", pkg.name, color_string(" Being precompiled by another $(pkgspidlocked[pkg])", Base.info_color()))
