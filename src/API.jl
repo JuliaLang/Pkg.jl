@@ -1675,7 +1675,7 @@ function color_string(cstr::String, col::Union{Int64, Symbol})
 end
 
 function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
-    stale_age = 10  # match stale_age in loading.jl
+    stale_age = Base.compilecache_pidlock_stale_age
     pidfile = Base.compilecache_pidfile_path(pkg)
     cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age)
     if cachefile === false
