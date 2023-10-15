@@ -1210,10 +1210,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     circular_deps = Base.PkgId[]
     # Three states
     # !haskey -> never visited
-    # true -> could be part of a cycle
-    # false -> not part of a cycle
+    # true -> cannot be compiled due to a cycle (or not yet determined)
+    # false -> not depending on a cycle
     could_be_cycle = Dict{Base.PkgId, Bool}()
-    dfs_num = 0
     function scan_pkg!(pkg, dmap)
         did_visit_dep = true
         inpath = get!(could_be_cycle, pkg) do
@@ -1223,7 +1222,6 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         if did_visit_dep ? inpath : scan_deps!(pkg, dmap)
             # Found a cycle. Delete this and all parents
             # to let this cycle be found again by another toplevel dep
-            delete!(could_be_cycle, pkg)
             return true
         end
         return false
