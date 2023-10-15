@@ -513,7 +513,6 @@ function is_upgradeable_stdlib(uuid::UUID, julia_version::Union{VersionNumber, N
         return is_upgradeable_stdlib(uuid)
     end
 
-    error("Not implemented")
     last_stdlibs = get_last_stdlibs(julia_version)
     # Note that if the user asks for something like `julia_version = 0.7.0`, we'll
     # fall through with an empty `last_stdlibs`, which will always return `false`.
