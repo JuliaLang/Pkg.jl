@@ -910,7 +910,7 @@ end
     # these tests.
     registry_url = "https://github.com/JuliaRegistries/General.git"
     registry_commit = "030d6dae0df2ad6c3b2f90d41749df3eedb8d1b1"
-    isolate_and_pin_registry(loaded_depot=true; registry_url, registry_commit) do; mktempdir() do tmp
+    Utils.isolate_and_pin_registry(loaded_depot=true; registry_url, registry_commit) do; mktempdir() do tmp
         # All
         copy_test_package(tmp, "ShouldPreserveAll"; use_pkg=false)
         Pkg.activate(joinpath(tmp, "ShouldPreserveAll"))
