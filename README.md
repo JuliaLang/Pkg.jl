@@ -1,5 +1,7 @@
 # Pkg
 
+Hello world.
+
 Development repository for Julia's package manager,
 shipped with Julia v1.0 and above.
 
