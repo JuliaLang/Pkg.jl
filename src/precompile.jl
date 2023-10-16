@@ -80,7 +80,7 @@ function pkg_precompile()
     DEFAULT_IO[] = UnstableIO(devnull)
     Downloads.DOWNLOADER[] = Downloads.Downloader(; grace=1.0)
 
-    withenv("JULIA_PKG_SERVER" => nothing) do
+    withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
             tmp = _run_precompilation_script_setup()
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
                     Pkg.add("TestPkg")
