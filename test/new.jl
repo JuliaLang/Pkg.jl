@@ -904,7 +904,13 @@ end
 # ## Resolve tiers
 #
 @testset "add: resolve tiers" begin
-    isolate(loaded_depot=true) do; mktempdir() do tmp
+    # The MetaGraphs version tested below relied on a JLD2 version
+    # that couldn't actually be loaded on julia 1.9+ so General
+    # will be patched. This checks out a commit before then to maintain
+    # these tests.
+    registry_url = "https://github.com/JuliaRegistries/General.git"
+    registry_commit = "030d6dae0df2ad6c3b2f90d41749df3eedb8d1b1"
+    isolate_and_pin_registry(loaded_depot=true; registry_url, registry_commit) do; mktempdir() do tmp
         # All
         copy_test_package(tmp, "ShouldPreserveAll"; use_pkg=false)
         Pkg.activate(joinpath(tmp, "ShouldPreserveAll"))
