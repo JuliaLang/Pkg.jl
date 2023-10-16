@@ -108,5 +108,8 @@ function pkg_precompile()
     end
 end
 
-pkg_precompile()
+if Base.get_bool_env("JULIA_PKG_PRECOMPILATION_WORKLOAD", true)
+    pkg_precompile()
+end
+
 end
