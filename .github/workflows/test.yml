@@ -75,7 +75,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v1.0.0
-      - uses: julia-actions/setup-julia@latest
+      - uses: julia-actions/setup-julia@v1
         with:
           # version: '1.6'
           version: 'nightly'
