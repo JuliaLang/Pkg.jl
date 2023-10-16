@@ -57,7 +57,6 @@ jobs:
           # See https://github.com/actions/virtual-environments/issues/712
           echo "TMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
           echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
-      - run: julia --color=yes .ci/test_and_change_uuid.jl
       - run: julia --project --color=yes --pkgimages=no --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
@@ -80,7 +79,6 @@ jobs:
           version: 'nightly'
       - name: Generate docs
         run: |
-          julia --color=yes .ci/test_and_change_uuid.jl
           julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
           julia --project=docs --color=yes docs/make.jl pdf
         env:
