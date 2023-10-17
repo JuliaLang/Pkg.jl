@@ -110,10 +110,8 @@ function pkg_precompile()
             # end
         # end
     end
-    empty!(DEPOT_PATH)
-    empty!(LOAD_PATH)
-    append!(DEPOT_PATH, original_depot_path)
-    append!(LOAD_PATH, original_load_path)
+    copy!(DEPOT_PATH, original_depot_path)
+    copy!(LOAD_PATH, original_load_path)
     return nothing
 end
 
