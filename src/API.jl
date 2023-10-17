@@ -1669,20 +1669,21 @@ function color_string(cstr::String, col::Union{Int64, Symbol})
 end
 
 function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
+    stale_age = Base.compilecache_pidlock_stale_age
     pidfile = Base.compilecache_pidfile_path(pkg)
-    cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age=300) # match stale_age in loading.jl
+    cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age)
     if cachefile === false
         pid, hostname, age = FileWatching.Pidfile.parse_pidfile(pidfile)
         pkgspidlocked[pkg] = if isempty(hostname) || hostname == gethostname()
-            "process (pid: $pid)"
+            "process (pid: $pid, pidfile: $pidfile)"
         else
-            "machine (hostname: $hostname, pid: $pid)"
+            "machine (hostname: $hostname, pid: $pid, pidfile: $pidfile)"
         end
         !fancyprint && lock(print_lock) do
             println(io, "    ", pkg.name, color_string(" Being precompiled by another $(pkgspidlocked[pkg])", Base.info_color()))
         end
         # wait until the lock is available
-        FileWatching.mkpidlock(pidfile; stale_age=300) do # match stale_age in loading.jl
+        FileWatching.mkpidlock(pidfile; stale_age) do
             # double-check in case the other process crashed or the lock expired
             if Base.isprecompiled(pkg; ignore_loaded=true) # don't use caches for this as the env state will have changed
                 return nothing # returning nothing indicates a process waited for another
