@@ -334,6 +334,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test isempty(c)
         c, r = test_complete("rm --project Exam")
         @test isempty(c)
+        c, r = test_complete("free PackageWithDep")
+        @test "PackageWithDependency" in c # given this was devved
 
         c, r = test_complete("rm -m PackageWithDep")
         @test "PackageWithDependency" in c
@@ -363,6 +365,12 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "remove" in c
         @test apply_completion("rm E") == "rm Example"
         @test apply_completion("add Exampl") == "add Example"
+        c, r = test_complete("free Exa")
+        @test isempty(c) # given this was added i.e. not fixed
+        pkg"pin Example"
+        c, r = test_complete("free Exa")
+        @test "Example" in c
+        pkg"free Example"
 
         # help mode
         @test apply_completion("?ad") == "?add"

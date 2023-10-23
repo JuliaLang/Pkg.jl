@@ -127,6 +127,15 @@ function complete_installed_packages_and_compat(options, partial)
     end
 end
 
+function complete_fixed_packages(options, partial)
+    env = try EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    return unique!([entry.name for (uuid, entry) in env.manifest.deps if Operations.isfixed(entry)])
+end
+
 function complete_add_dev(options, partial, i1, i2)
     comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)

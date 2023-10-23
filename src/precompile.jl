@@ -75,12 +75,16 @@ function _run_precompilation_script_setup()
 end
 
 function pkg_precompile()
+    original_depot_path = copy(DEPOT_PATH)
+    original_load_path = copy(LOAD_PATH)
+
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
     # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
     DEFAULT_IO[] = UnstableIO(devnull)
     Downloads.DOWNLOADER[] = Downloads.Downloader(; grace=1.0)
 
-    withenv("JULIA_PKG_SERVER" => nothing) do
+    # We need to override JULIA_PKG_UNPACK_REGISTRY to fix https://github.com/JuliaLang/Pkg.jl/issues/3663
+    withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
             tmp = _run_precompilation_script_setup()
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
                     Pkg.add("TestPkg")
@@ -106,6 +110,9 @@ function pkg_precompile()
             # end
         # end
     end
+    copy!(DEPOT_PATH, original_depot_path)
+    copy!(LOAD_PATH, original_load_path)
+    return nothing
 end
 
 pkg_precompile()

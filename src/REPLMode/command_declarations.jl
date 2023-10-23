@@ -207,7 +207,7 @@ PSA[:name => "free",
         PSA[:name => "all", :api => :all_pkgs => true],
     ],
     :arg_parser => parse_package,
-    :completions => complete_installed_packages,
+    :completions => complete_fixed_packages,
     :description => "undoes a `pin`, `develop`, or stops tracking a repo",
     :help => md"""
     free pkg[=uuid] ...
