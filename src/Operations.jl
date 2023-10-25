@@ -1650,9 +1650,7 @@ function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args
 end
 
 function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
-    pkgdir = joinpath(@__DIR__, "..")
     code = """
-        pushfirst!(LOAD_PATH, $(repr(pkgdir)))
         try using Pkg
         catch
             @warn "Pkg failed to load, skipping precompilation."
@@ -1755,12 +1753,22 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         tmp_preferences = joinpath(tmp, first(Base.preferences_names))
 
         # Copy env info over to temp env
-        if sandbox_project_override !== nothing
-            Types.write_project(sandbox_project_override, tmp_project)
-        elseif isfile(sandbox_project)
-            cp(sandbox_project, tmp_project)
-            chmod(tmp_project, 0o600)
+        if sandbox_project_override === nothing
+            if isfile(sandbox_project)
+                sandbox_project_override = read_project(sandbox_project)
+            else
+                sandbox_project_override = Project()
+            end
         end
+        # add Pkg so that the test environment sandbox subprocesses can be precompiled
+        Pkg_uuid = UUID(PkgUUID)
+        if get!(sandbox_project_override.deps, "Pkg", Pkg_uuid) != Pkg_uuid
+            @warn """
+            A package called Pkg is declared as a dependency with a UUID that doesn't match the Pkg stdlib.
+            This may cause unexpected behavior"""
+        end
+        Types.write_project(sandbox_project_override, tmp_project)
+
         # create merged manifest
         # - copy over active subgraph
         # - abspath! to maintain location of all deved nodes
