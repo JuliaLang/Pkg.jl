@@ -98,9 +98,11 @@ end
 function temp_cleanup_purge(; force::Bool=false)
     @info "temp_cleanup_purge started"
     need_gc = Sys.iswindows()
+    contents = nothing
     for (path, asap) in Base.Filesystem.TEMP_CLEANUP
-        @time path try
+        t = @elapsed try
             if (force || asap) && ispath(path)
+                contents = isfile(path) ? "file" : readdir(path)
                 need_gc && GC.gc(true)
                 need_gc = false
                 Base.Filesystem.prepare_for_deletion(path)
@@ -112,6 +114,9 @@ function temp_cleanup_purge(; force::Bool=false)
                 Failed to clean up temporary path $(repr(path))
                 $ex
                 """ _group=:file
+        end
+        if t > 1
+            @info "$path took $(t) seconds" contents
         end
     end
 end
