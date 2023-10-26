@@ -95,7 +95,28 @@ Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger())
     end
 end
 
-@showtime Base.Filesystem.temp_cleanup_purge(force=true)
+function temp_cleanup_purge(; force::Bool=false)
+    @info "temp_cleanup_purge started"
+    need_gc = Sys.iswindows()
+    for (path, asap) in Base.Filesystem.TEMP_CLEANUP
+        @time path try
+            if (force || asap) && ispath(path)
+                need_gc && GC.gc(true)
+                need_gc = false
+                Base.Filesystem.prepare_for_deletion(path)
+                rm(path, recursive=true, force=true)
+            end
+            !ispath(path) && delete!(Base.Filesystem.TEMP_CLEANUP, path)
+        catch ex
+            @warn """
+                Failed to clean up temporary path $(repr(path))
+                $ex
+                """ _group=:file
+        end
+    end
+end
+
+@showtime temp_cleanup_purge(force=true)
 
 end # module
 
