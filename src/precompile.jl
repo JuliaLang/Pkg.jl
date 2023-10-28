@@ -129,7 +129,6 @@ function pkg_precompile()
                 Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), Pkg.REPLMode.PkgCompletionProvider, REPL.LineEdit.PromptState})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_argument), Pkg.REPLMode.CommandSpec, Array{String, 1}, String, Int64, Int64})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_add_dev), Base.Dict{Symbol, Any}, String, Int64, Int64})
-
             # end
         # end
     end
