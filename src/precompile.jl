@@ -94,7 +94,22 @@ function pkg_precompile()
                     Pkg.update(; update_registry=false)
                     Pkg.status()
                     pkgs_path = abspath(joinpath(dirname(pathof(Pkg)), ".." ,"test", "test_packages"))
-                    for test_package in readdir(pkgs_path)
+                    # Precompile a diverse set of test packages
+                    # Check all test packages occasionally if anything has been missed
+                    # test_packages = readdir(pkgs_path)
+                    test_packages = (
+                        "ActiveProjectInTestSubgraph",
+                        "BasicSandbox",
+                        "DependsOnExample",
+                        "PackageWithDependency",
+                        "SameNameDifferentUUID",
+                        "SimplePackage",
+                        "BasicCompat",
+                        "PackageWithDependency",
+                        "SameNameDifferentUUID",
+                        "SimplePackage"
+                    )
+                    for test_package in test_packages
                         Pkg.activate(joinpath(pkgs_path, test_package))
                     end
                     Pkg.activate(; temp=true)
