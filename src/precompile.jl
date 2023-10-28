@@ -93,8 +93,20 @@ function pkg_precompile()
                     Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
                     Pkg.update(; update_registry=false)
                     Pkg.status()
+
                 end
                 Pkg.precompile()
+                Pkg.activate("TestPkg.jl")
+                pkgs_path = abspath(joinpath(dirname(pathof(Pkg)), ".." ,"test", "test_packages"))
+                Pkg.activate(joinpath(pkgs_path, "A"))
+                Pkg.activate(joinpath(pkgs_path, "BasicCompat"))
+                Pkg.activate(joinpath(pkgs_path, "HDF5"))
+                Pkg.activate(joinpath(pkgs_path, "ImageMorphology"))
+                Pkg.activate(joinpath(pkgs_path, "Plots"))
+                Pkg.activate(joinpath(pkgs_path, "A"))
+                Pkg.activate(joinpath(pkgs_path, "HDF5"))
+                Pkg.activate(; temp=true)
+                Pkg.activate()
                 try Base.rm(tmp; recursive=true)
                 catch
                 end
@@ -107,6 +119,7 @@ function pkg_precompile()
                 Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), Pkg.REPLMode.PkgCompletionProvider, REPL.LineEdit.PromptState})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_argument), Pkg.REPLMode.CommandSpec, Array{String, 1}, String, Int64, Int64})
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_add_dev), Base.Dict{Symbol, Any}, String, Int64, Int64})
+
             # end
         # end
     end
