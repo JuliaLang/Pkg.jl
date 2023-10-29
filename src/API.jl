@@ -1413,7 +1413,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                                 waiting = if haskey(pkgspidlocked, dep)
                                     who_has_lock = pkgspidlocked[dep]
-                                    color_string(" Being precompiled by another $(who_has_lock)", Base.info_color())
+                                    color_string(" Being precompiled by $(who_has_lock)", Base.info_color())
                                 elseif dep in taskwaiting
                                     color_string(" Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
                                 else
@@ -1675,12 +1675,16 @@ function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::
     if cachefile === false
         pid, hostname, age = FileWatching.Pidfile.parse_pidfile(pidfile)
         pkgspidlocked[pkg] = if isempty(hostname) || hostname == gethostname()
-            "process (pid: $pid, pidfile: $pidfile)"
+            if pid == getpid()
+                "an async task in this process (pidfile: $pidfile)"
+            else
+                "another process (pid: $pid, pidfile: $pidfile)"
+            end
         else
-            "machine (hostname: $hostname, pid: $pid, pidfile: $pidfile)"
+            "another machine (hostname: $hostname, pid: $pid, pidfile: $pidfile)"
         end
         !fancyprint && lock(print_lock) do
-            println(io, "    ", pkg.name, color_string(" Being precompiled by another $(pkgspidlocked[pkg])", Base.info_color()))
+            println(io, "    ", pkg.name, color_string(" Being precompiled by $(pkgspidlocked[pkg])", Base.info_color()))
         end
         # wait until the lock is available
         FileWatching.mkpidlock(pidfile; stale_age) do
