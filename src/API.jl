@@ -1202,13 +1202,32 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     # find and guard against circular deps
     circular_deps = Base.PkgId[]
-    function in_deps(_pkgs, deps, dmap)
-        isempty(deps) && return false
-        !isempty(intersect(_pkgs, deps)) && return true
-        return any(dep->in_deps(vcat(_pkgs, dep), dmap[dep], dmap), deps)
+    # Three states
+    # !haskey -> never visited
+    # true -> cannot be compiled due to a cycle (or not yet determined)
+    # false -> not depending on a cycle
+    could_be_cycle = Dict{Base.PkgId, Bool}()
+    function scan_pkg!(pkg, dmap)
+        did_visit_dep = true
+        inpath = get!(could_be_cycle, pkg) do
+            did_visit_dep = false
+            return true
+        end
+        if did_visit_dep ? inpath : scan_deps!(pkg, dmap)
+            # Found a cycle. Delete this and all parents
+            return true
+        end
+        return false
     end
-    for (pkg, deps) in depsmap
-        if in_deps([pkg], deps, depsmap)
+    function scan_deps!(pkg, dmap)
+        for dep in dmap[pkg]
+            scan_pkg!(dep, dmap) && return true
+        end
+        could_be_cycle[pkg] = false
+        return false
+    end
+    for pkg in keys(depsmap)
+        if scan_pkg!(pkg, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
         end
@@ -1220,19 +1239,21 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     # if a list of packages is given, restrict to dependencies of given packages
     if !isempty(pkgs)
         pkgs_names = [p.name for p in pkgs]
-        function collect_all_deps(depsmap, dep, alldeps=Base.PkgId[])
-            append!(alldeps, depsmap[dep])
+        function collect_all_deps(depsmap, dep, alldeps=Set{Base.PkgId}())
             for _dep in depsmap[dep]
-                collect_all_deps(depsmap, _dep, alldeps)
+                if !(_dep in alldeps)
+                    push!(alldeps, _dep)
+                    collect_all_deps(depsmap, _dep, alldeps)
+                end
             end
             return alldeps
         end
-        keep = Base.PkgId[]
+        keep = Set{Base.PkgId}()
         for dep in depsmap
             dep_pkgid = first(dep)
             if dep_pkgid.name in pkgs_names
                 push!(keep, dep_pkgid)
-                append!(keep, collect_all_deps(depsmap, dep_pkgid))
+                collect_all_deps(depsmap, dep_pkgid, keep)
             end
         end
         for ext in keys(exts)
@@ -1392,7 +1413,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                                 anim_char_colored = dep in direct_deps ? anim_char : color_string(anim_char, :light_black)
                                 waiting = if haskey(pkgspidlocked, dep)
                                     who_has_lock = pkgspidlocked[dep]
-                                    color_string(" Being precompiled by another $(who_has_lock)", Base.info_color())
+                                    color_string(" Being precompiled by $(who_has_lock)", Base.info_color())
                                 elseif dep in taskwaiting
                                     color_string(" Waiting for background task / IO / timer. Interrupt to inspect", Base.warn_color())
                                 else
@@ -1648,20 +1669,25 @@ function color_string(cstr::String, col::Union{Int64, Symbol})
 end
 
 function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
+    stale_age = Base.compilecache_pidlock_stale_age
     pidfile = Base.compilecache_pidfile_path(pkg)
-    cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age=300) # match stale_age in loading.jl
+    cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age)
     if cachefile === false
         pid, hostname, age = FileWatching.Pidfile.parse_pidfile(pidfile)
         pkgspidlocked[pkg] = if isempty(hostname) || hostname == gethostname()
-            "process (pid: $pid)"
+            if pid == getpid()
+                "an async task in this process (pidfile: $pidfile)"
+            else
+                "another process (pid: $pid, pidfile: $pidfile)"
+            end
         else
-            "machine (hostname: $hostname, pid: $pid)"
+            "another machine (hostname: $hostname, pid: $pid, pidfile: $pidfile)"
         end
         !fancyprint && lock(print_lock) do
-            println(io, "    ", pkg.name, color_string(" Being precompiled by another $(pkgspidlocked[pkg])", Base.info_color()))
+            println(io, "    ", pkg.name, color_string(" Being precompiled by $(pkgspidlocked[pkg])", Base.info_color()))
         end
         # wait until the lock is available
-        FileWatching.mkpidlock(pidfile; stale_age=300) do # match stale_age in loading.jl
+        FileWatching.mkpidlock(pidfile; stale_age) do
             # double-check in case the other process crashed or the lock expired
             if Base.isprecompiled(pkg; ignore_loaded=true) # don't use caches for this as the env state will have changed
                 return nothing # returning nothing indicates a process waited for another

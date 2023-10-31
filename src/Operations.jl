@@ -1027,8 +1027,6 @@ function gen_build_code(build_file::String; inherit_project::Bool = false)
         """
     return ```
         $(Base.julia_cmd()) -O0 --color=no --history-file=no
-        --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
-        --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         $(inherit_project ? `--project=$(Base.active_project())` : ``)
         --eval $code
         ```
@@ -2023,6 +2021,7 @@ end
 
 # Handles the interrupting of a subprocess gracefully to avoid orphaning
 function subprocess_handler(cmd::Cmd, ctx, sandbox_ctx, error_msg::String)
+    @debug "Running command" cmd
     p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
     interrupted = false
     try
