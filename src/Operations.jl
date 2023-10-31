@@ -1818,13 +1818,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             end
 
             reset_all_compat!(temp_ctx.env.project)
-
-            # Absolutify stdlibs paths
-            for (uuid, entry) in temp_ctx.env.manifest
-                if is_stdlib(uuid)
-                    entry.path = Types.stdlib_path(entry.name)
-                end
-            end
             write_env(temp_ctx.env, update_undo = false)
 
             # Run sandboxed code
@@ -2033,6 +2026,7 @@ end
 
 # Handles the interrupting of a subprocess gracefully to avoid orphaning
 function subprocess_handler(cmd::Cmd, ctx, sandbox_ctx, error_msg::String)
+    @debug "Running command" cmd
     p = run(pipeline(ignorestatus(cmd), stdout = sandbox_ctx.io, stderr = stderr_f()), wait = false)
     interrupted = false
     try

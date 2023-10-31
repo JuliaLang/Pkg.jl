@@ -36,7 +36,7 @@ jobs:
           - "pkg.julialang.org"
         julia-version:
           # - '1.6'
-          - '1.9-nightly'
+          - '1.9'
         exclude:
           - os: macOS-latest
             julia-arch: x86
@@ -46,8 +46,8 @@ jobs:
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
-      - uses: actions/checkout@v3
-      - uses: julia-actions/setup-julia@latest
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
@@ -72,8 +72,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v1.0.0
-      - uses: julia-actions/setup-julia@latest
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v1
         with:
           # version: '1.6'
           version: '1.9-nightly'
