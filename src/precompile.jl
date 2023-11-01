@@ -107,7 +107,8 @@ function pkg_precompile()
                         "BasicCompat",
                         "PackageWithDependency",
                         "SameNameDifferentUUID",
-                        "SimplePackage"
+                        "SimplePackage",
+                        joinpath("ExtensionExamples", "HasExtensions.jl")
                     )
                     for test_package in test_packages
                         Pkg.activate(joinpath(pkgs_path, test_package))
