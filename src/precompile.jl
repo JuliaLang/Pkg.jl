@@ -93,7 +93,7 @@ function pkg_precompile()
                     Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
                     Pkg.update(; update_registry=false)
                     Pkg.status()
-                    pkgs_path = abspath(joinpath(dirname(pathof(Pkg)), ".." ,"test", "test_packages"))
+                    pkgs_path = pkgdir(Pkg, "test", "test_packages")
                     # Precompile a diverse set of test packages
                     # Check all test packages occasionally if anything has been missed
                     # test_packages = readdir(pkgs_path)
