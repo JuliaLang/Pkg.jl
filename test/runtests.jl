@@ -97,7 +97,7 @@ end
 
 if haskey(ENV, "CI")
     # if CI don't clean up as it will be slower than the runner filesystem reset
-    empty!(Base.TEMP_CLEANUP)
+    empty!(Base.Filesystem.TEMP_CLEANUP)
 else
     @showtime Base.Filesystem.temp_cleanup_purge(force=true)
 end
