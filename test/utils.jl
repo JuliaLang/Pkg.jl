@@ -81,7 +81,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
                 loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
                 fn()
             finally
-                if target_depot !== nothing && isdir(target_depot)
+                if !haskey(ENV, "CI") && target_depot !== nothing && isdir(target_depot)
                     try
                         Base.rm(target_depot; force=true, recursive=true)
                     catch err
@@ -148,12 +148,14 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
                 push!(DEPOT_PATH, depot_dir)
                 fn(env_dir)
             finally
-                try
-                    rm && Base.rm(env_dir; force=true, recursive=true)
-                    rm && Base.rm(depot_dir; force=true, recursive=true)
-                catch err
-                    # Avoid raising an exception here as it will mask the original exception
-                    println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
+                if !haskey(ENV, "CI")
+                    try
+                        rm && Base.rm(env_dir; force=true, recursive=true)
+                        rm && Base.rm(depot_dir; force=true, recursive=true)
+                    catch err
+                        # Avoid raising an exception here as it will mask the original exception
+                        println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
+                    end
                 end
             end
         end
@@ -175,11 +177,13 @@ function cd_tempdir(f; rm=true)
     cd(tmp) do
         f(tmp)
     end
-    try
-        rm && Base.rm(tmp; force = true, recursive = true)
-    catch err
-        # Avoid raising an exception here as it will mask the original exception
-        println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
+    if !haskey(ENV, "CI")
+        try
+            rm && Base.rm(tmp; force = true, recursive = true)
+        catch err
+            # Avoid raising an exception here as it will mask the original exception
+            println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
+        end
     end
 end
 
@@ -212,11 +216,13 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
         applicable(f, env_path) ? f(env_path) : f()
     finally
         Base.ACTIVE_PROJECT[] = prev_active
-        try
-            rm && Base.rm(env_path; force = true, recursive = true)
-        catch err
-            # Avoid raising an exception here as it will mask the original exception
-            println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
+        if !haskey(ENV, "CI")
+            try
+                rm && Base.rm(env_path; force = true, recursive = true)
+            catch err
+                # Avoid raising an exception here as it will mask the original exception
+                println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
+            end
         end
     end
 end
