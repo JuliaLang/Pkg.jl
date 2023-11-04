@@ -1079,7 +1079,11 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
                     _from_loading::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
-    already_instantiated || instantiate(ctx; allow_autoprecomp=false, kwargs...)
+    if !already_instantiated 
+        instantiate(ctx; allow_autoprecomp=false, kwargs...)
+        @debug "precompile: instantiated"
+    end
+        
     time_start = time_ns()
 
     # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
@@ -1152,6 +1156,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             pkg_exts_map[pkg] = collect(keys(pkg_exts))
         end
     end
+    @debug "precompile: deps collected"
     # this loop must be run after the full depsmap has been populated
     for (pkg, pkg_exts) in pkg_exts_map
         # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
@@ -1163,6 +1168,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             end
         end
     end
+    @debug "precompile: extensions collected"
 
     # if the active environment is a package, add that
     ctx_env_pkg = ctx.env.pkg
@@ -1201,6 +1207,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         was_recompiled[pkgid] = false
         push!(pkg_specs, get_or_make_pkgspec(pkg_specs, ctx, pkgid.uuid))
     end
+    @debug "precompile: signalling initialized"
 
     # remove packages that are suspended because they errored before
     # note that when `Pkg.precompile` is manually called, all suspended packages are unsuspended
@@ -1241,6 +1248,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     if !isempty(circular_deps)
         @warn """Circular dependency detected. Precompilation will be skipped for:\n  $(join(string.(circular_deps), "\n  "))"""
     end
+    @debug "precompile: circular dep check done"
 
     # if a list of packages is given, restrict to dependencies of given packages
     if !isempty(pkgs)
@@ -1282,6 +1290,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     else
         target = "project..."
     end
+    @debug "precompile: packages filtered"
 
     pkg_queue = Base.PkgId[]
     failed_deps = Dict{Base.PkgId, String}()
@@ -1452,6 +1461,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     if !_from_loading
         Base.LOADING_CACHE[] = Base.LoadingCache()
     end
+    @debug "precompile: starting precompilation loop"
     ## precompilation loop
     for (pkg, deps) in depsmap
         cachepaths = Base.find_all_in_cache_path(pkg)
