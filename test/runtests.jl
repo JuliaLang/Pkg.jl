@@ -95,7 +95,12 @@ Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger())
     end
 end
 
-@showtime Base.Filesystem.temp_cleanup_purge(force=true)
+if haskey(ENV, "CI")
+    # if CI don't clean up as it will be slower than the runner filesystem reset
+    empty!(Base.Filesystem.TEMP_CLEANUP)
+else
+    @showtime Base.Filesystem.temp_cleanup_purge(force=true)
+end
 
 end # module
 
