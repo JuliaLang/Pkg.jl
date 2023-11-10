@@ -77,6 +77,17 @@ Note that Pkg.jl deviates from the SemVer specification when it comes to version
 the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 
 
+### The `manifest` field
+
+`manifest` specifies an external manifest file (`Manifest.toml`) for the project. This is particularly useful for managing package dependencies in a more granular or shared manner across multiple projects, for example:
+```toml
+manifest = "../Manifest.toml"
+```
+
+This specified `Manifest.toml` does not need to be a subset of the project's own manifest. 
+The project inherits any version constraints or package specifications from the referenced manifest and is integrated into the dependency resolution process.
+
+
 ### The `[deps]` section
 
 All dependencies of the package/project are listed in the `[deps]` section. Each dependency
