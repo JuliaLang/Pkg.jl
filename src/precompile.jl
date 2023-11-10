@@ -138,5 +138,7 @@ function pkg_precompile()
     return nothing
 end
 
-pkg_precompile()
+if Base.generating_output()
+    pkg_precompile()
+end
 end
