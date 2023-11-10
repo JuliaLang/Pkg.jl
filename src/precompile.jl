@@ -117,7 +117,9 @@ function pkg_precompile()
                     Pkg.activate()
                     Pkg.activate("TestPkg.jl")
                 end
-                Pkg.precompile()
+                if Base.generating_output()
+                    Pkg.precompile()
+                end
                 try Base.rm(tmp; recursive=true)
                 catch
                 end
