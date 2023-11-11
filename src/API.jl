@@ -1079,11 +1079,11 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
                     _from_loading::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
-    if !already_instantiated 
+    if !already_instantiated
         instantiate(ctx; allow_autoprecomp=false, kwargs...)
         @debug "precompile: instantiated"
     end
-        
+
     time_start = time_ns()
 
     # Windows sometimes hits a ReadOnlyMemoryError, so we halve the default number of tasks. Issue #2323
@@ -1497,7 +1497,6 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 queued = precomp_queued(pkgspec)
 
                 circular = pkg in circular_deps
-                # skip stale checking and force compilation if any dep was recompiled in this session
                 is_stale = true
                 if !circular && (queued || (!suspended && (is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, stale_cache, cachepaths, sourcepath))))
                     Base.acquire(parallel_limiter)
