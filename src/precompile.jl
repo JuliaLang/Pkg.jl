@@ -47,41 +47,41 @@ let
         write(
             "registries/Registry/Registry.toml",
             """
-name = "Registry"
-uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
-repo = "https://github.com/JuliaRegistries/Registry.git"
-[packages]
-$uuid = { name = "TestPkg", path = "T/TestPkg" }
-""",
+            name = "Registry"
+            uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
+            repo = "https://github.com/JuliaRegistries/Registry.git"
+            [packages]
+            $uuid = { name = "TestPkg", path = "T/TestPkg" }
+            """,
         )
         write(
             "registries/Registry/T/TestPkg/Compat.toml",
             """
-["0"]
-julia = "1"
-""",
+            ["0"]
+            julia = "1"
+            """,
         )
         write(
             "registries/Registry/T/TestPkg/Deps.toml",
             """
-["0"]
-Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
-""",
+            ["0"]
+            Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+            """,
         )
         write(
             "registries/Registry/T/TestPkg/Versions.toml",
             """
-["0.1.0"]
-git-tree-sha1 = "$tree_hash"
-""",
+            ["0.1.0"]
+            git-tree-sha1 = "$tree_hash"
+            """,
         )
         write(
             "registries/Registry/T/TestPkg/Package.toml",
             """
-name = "TestPkg"
-uuid = "$uuid"
-repo = "$(escape_string(tmp))/TestPkg.jl"
-""",
+            name = "TestPkg"
+            uuid = "$uuid"
+            repo = "$(escape_string(tmp))/TestPkg.jl"
+            """,
         )
         Tar.create("registries/Registry", "registries/Registry.tar")
         cmd = `$(Pkg.PlatformEngines.exe7z()) a "registries/Registry.tar.gz" -tgzip "registries/Registry.tar"`
@@ -89,10 +89,10 @@ repo = "$(escape_string(tmp))/TestPkg.jl"
         write(
             "registries/Registry.toml",
             """
-      git-tree-sha1 = "11b5fad51c4f98cfe0c145ceab0b8fb63fed6f81"
-      uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
-      path = "Registry.tar.gz"
-""",
+            git-tree-sha1 = "11b5fad51c4f98cfe0c145ceab0b8fb63fed6f81"
+            uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
+            path = "Registry.tar.gz"
+            """,
         )
         Base.rm("registries/Registry"; recursive = true)
         return tmp
@@ -150,42 +150,11 @@ repo = "$(escape_string(tmp))/TestPkg.jl"
             Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
             Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init),REPL.LineEditREPL})
             Base.precompile(Tuple{typeof(Pkg.API.status)})
-            Base.precompile(
-                Tuple{
-                    typeof(Pkg.Types.read_project_compat),
-                    Base.Dict{String,Any},
-                    Pkg.Types.Project,
-                },
-            )
+            Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat),Base.Dict{String,Any},Pkg.Types.Project,},)
             Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval),Base.RegexMatch})
-            Base.precompile(
-                Tuple{
-                    typeof(REPL.LineEdit.complete_line),
-                    Pkg.REPLMode.PkgCompletionProvider,
-                    REPL.LineEdit.PromptState,
-                },
-            )
-            Base.precompile(
-                Tuple{
-                    typeof(Pkg.REPLMode.complete_argument),
-                    Pkg.REPLMode.CommandSpec,
-                    Array{String,1},
-                    String,
-                    Int64,
-                    Int64,
-                },
-            )
-            Base.precompile(
-                Tuple{
-                    typeof(Pkg.REPLMode.complete_add_dev),
-                    Base.Dict{Symbol,Any},
-                    String,
-                    Int64,
-                    Int64,
-                },
-            )
-            # end
-            # end
+            Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line),Pkg.REPLMode.PkgCompletionProvider,REPL.LineEdit.PromptState,},)
+            Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_argument),Pkg.REPLMode.CommandSpec,Array{String,1},String,Int64,Int64,},)
+            Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_add_dev),Base.Dict{Symbol,Any},String,Int64,Int64,},)
         end
         copy!(DEPOT_PATH, original_depot_path)
         copy!(LOAD_PATH, original_load_path)
