@@ -14,7 +14,7 @@ such as installing, updating and removing packages.
     it is highly recommended to read the full manual, which is available here:
     [https://pkgdocs.julialang.org](https://pkgdocs.julialang.org).
     For a tutorial on creating packages, see
-    [Creating Packages](@ref creating-packages-tutorial).
+    [Creating Packages](https://docs.julialang.org/en/v1/tutorials/creating-packages/).
 
 ```@eval
 import Markdown
