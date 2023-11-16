@@ -1029,10 +1029,10 @@ function gen_build_code(build_file::String; inherit_project::Bool = false)
         """
     # This will make it so that running Pkg.build runs the build in a session with --startup=no
     # *unless* the parent julia session is started with --startup=yes explicitly.
-    start_flag = Base.JLOptions().startupfile == 1 ? "yes" : "no"
+    startup_flag = Base.JLOptions().startupfile == 1 ? "yes" : "no"
     return ```
         $(Base.julia_cmd()) -O0 --color=no --history-file=no
-        --startup-file=$(startup_flag)
+        --startup-file=$startup_flag
         $(inherit_project ? `--project=$(Base.active_project())` : ``)
         --eval $code
         ```
