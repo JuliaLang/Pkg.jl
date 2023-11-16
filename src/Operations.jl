@@ -1028,7 +1028,7 @@ function gen_build_code(build_file::String; inherit_project::Bool = false)
         include($(repr(build_file)))
         """
     return ```
-        $(Base.julia_cmd()) -O0 --color=no --history-file=no
+        $(Base.julia_cmd()) -O0 --color=no --history-file=no --startup=no
         $(inherit_project ? `--project=$(Base.active_project())` : ``)
         --eval $code
         ```
