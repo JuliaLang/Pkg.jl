@@ -57,7 +57,6 @@ include("Versions.jl")
 include("Registry/Registry.jl")
 include("Resolve/Resolve.jl")
 include("Types.jl")
-include("BinaryPlatforms_compat.jl")
 include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
@@ -71,6 +70,8 @@ import .Types: PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLE
 # Import artifacts API
 using .Artifacts, .PlatformEngines
 
+# Alias legacy binary platforms compatibility from Base
+const BinaryPlatforms = Base.BinaryPlatforms.PkgCompat
 
 """
     PackageMode
