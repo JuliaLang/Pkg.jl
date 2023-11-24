@@ -60,7 +60,7 @@ Status `~/environments/v1.9/Manifest.toml`
 
 Since standard libraries (e.g. ` Dates`) are shipped with Julia, they do not have a version.
 
-To specify that you need a particular version (or set of versions) of a package, use the `compat` commad. For example,
+To specify that you want a particular version (or set of versions) of a package, use the `compat` command. For example,
 to require any patch release of the v0.21 series of JSON after v0.21.4, call `compat JSON 0.21.4`:
 
 ```julia-repl
