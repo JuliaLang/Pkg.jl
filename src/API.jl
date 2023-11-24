@@ -2103,6 +2103,7 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         catch e
             if e isa ResolverError
                 printpkgstyle(io, :Error, string(e.msg), color = Base.warn_color())
+                printpkgstyle(io, :Hint, "Call `update` to attempt to meet the compatibility requirements.", color = Base.info_color())
             else
                 rethrow()
             end
