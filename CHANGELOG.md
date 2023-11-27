@@ -5,6 +5,8 @@ Pkg v1.11 Release Notes
   Pkg has always obeyed this compat when working with Registry packages. This change affects mostly local packages. ([#3526])
 - `pkg> add` and `Pkg.add` will now add compat entries for new direct dependencies if the active environment is a
   package (has a `name` and `uuid` entry) ([#3732])
+- Dependencies can now be directly added as weak deps or extras via the `pkg> add --weak/extra Foo` or
+  `Pkg.add("Foo", target=:weakdeps/:extras)` forms ([#3708])
 
 Pkg v1.10 Release Notes
 =======================

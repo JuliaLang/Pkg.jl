@@ -1002,6 +1002,16 @@ end
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;name="Example", version="0.5.0")]
         @test isempty(opts)
+        # Add as a weakdep.
+        api, args, opts = first(Pkg.pkg"add --weak Example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test opts == Dict(:target => :weakdeps)
+        # Add as an extra.
+        api, args, opts = first(Pkg.pkg"add --extra Example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test opts == Dict(:target => :extras)
         # Add using direct URL syntax.
         api, args, opts = first(Pkg.pkg"add https://github.com/00vareladavid/Unregistered.jl#0.1.0")
         @test api == Pkg.add

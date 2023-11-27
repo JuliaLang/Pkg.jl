@@ -110,8 +110,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -119,6 +119,9 @@ a package, also inside that package.
 
 If the active environment is a package (the Project has both `name` and `uuid` fields) compat entries will be
 added automatically with a lower bound of the added version.
+
+To add as a weak dependency (in the `[weakdeps]` field) set the kwarg `target=:weakdeps`.
+To add as an extra dep (in the `[extras]` field) set `target=:extras`.
 
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using a tiered algorithm.
@@ -150,9 +153,13 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 !!! compat "Julia 1.9"
     The `PRESERVE_TIERED_INSTALLED` and `PRESERVE_ALL_INSTALLED` strategies requires at least Julia 1.9.
 
+!!! compat "Julia 1.11"
+    The `weak` kwarg requires at least Julia 1.11.
+
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
+Pkg.add("Example", weak=true) # Add a package from registry as a weak dependency
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release

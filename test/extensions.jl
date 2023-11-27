@@ -78,4 +78,13 @@ using Test
         @test occursin("HasExtensions", out)
         @test occursin("HasDepWithExtensions", out)
     end
+    isolate(loaded_depot=false) do
+        withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
+            Pkg.activate(; temp=true)
+            Pkg.add("Example", weak=true)
+            proj = Pkg.Types.Context().env.project
+            @test isempty(proj.deps)
+            @test proj.weakdeps == Dict{String, Base.UUID}("Example" => Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+        end
+    end
 end
