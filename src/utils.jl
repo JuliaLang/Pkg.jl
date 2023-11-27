@@ -1,9 +1,13 @@
 
+const pkgstyle_indent = textwidth(string(:Precompiling)) # "Precompiling" is the longest operation
 function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false; color=:green)
-    indent = textwidth(string(:Precompiling)) # "Precompiling" is the longest operation
-    ignore_indent && (indent = 0)
-    printstyled(io, lpad(string(cmd), indent), color=color, bold=true)
-    println(io, " ", text)
+    indent = ignore_indent ? 0 : pkgstyle_indent
+    prompt = lpad(string(cmd), indent)
+    printstyled(io, prompt, color=color, bold=true)
+    for (i, line) in enumerate(split(text, '\n'))
+        i > 1 && print(io, " "^(length(prompt))) # indent following rows for alignment
+        println(io, " ", line)
+    end
 end
 
 function linewrap(str::String; io = stdout_f(), padding = 0, width = Base.displaysize(io)[2])
