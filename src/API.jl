@@ -223,6 +223,13 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     end
 
     Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+
+    if Base.get_bool_env("JULIA_PKG_VSCODE_DEV", false)
+        for pkg in pkgs
+            path = Operations.source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
+            run(`code -a $path`)
+        end
+    end
     return
 end
 
