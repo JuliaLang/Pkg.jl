@@ -34,7 +34,7 @@ For example:
 authors = [
   "Some One <someone@email.com>",
   "Foo Bar <foo@bar.com>",
-  {name = "Baz Qux", email = "bazqux@example.com", orcid = "0000-0001-8048-6810"},
+  {name = "Baz Qux", email = "bazqux@example.com", orcid = "0000-0000-0000-0000"},
 ]
 ```
 
