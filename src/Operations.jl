@@ -2425,6 +2425,16 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             printpkgstyle(io, :Info, "Some packages have new versions but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
     end
+    if outdated && !no_packages_upgradable
+        printpkgstyle(io, :Info, """
+            If a package is marked by $upgradable_indicator but not upgrading, the resolver may \
+            have other less optimal solutions that do so.
+            You can try the following (in recommended order):
+              - setting compat for the package at the desired version and running `update` again.
+              - forcing by `add Foo@(version)`, but a following `upgrade` may downgrade again.
+              - forcing by `pin Foo@(version)`. Pinning avoids downgrade but may be too inflexible to maintain.
+            """, color=Base.info_color(), ignore_indent)
+    end
 
     return nothing
 end
