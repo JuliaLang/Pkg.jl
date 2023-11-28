@@ -161,7 +161,28 @@ let
         return nothing
     end
 
+    struct FakeTerminal <: REPL.Terminals.UnixTerminal
+        in_stream::IOBuffer
+        out_stream::IOBuffer
+        err_stream::IOBuffer
+        hascolor::Bool
+        raw::Bool
+        FakeTerminal() = new(IOBuffer(), IOBuffer(), IOBuffer(), false, true)
+    end
+    REPL.raw!(::FakeTerminal, raw::Bool) = raw
+
+    function pkg_replmode_precompile()
+        term = FakeTerminal()
+        repl = REPL.LineEditREPL(term, true)
+        REPL.run_repl(repl)
+        REPLMode.repl_init(repl)
+    end
+
     if Base.generating_output()
+        Base.Experimental.@force_compile
+        Pkg.__init__()
         pkg_precompile()
+        Pkg.REPLMode.__init__()
+        pkg_replmode_precompile()
     end
 end
