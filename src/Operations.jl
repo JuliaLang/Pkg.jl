@@ -799,19 +799,21 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
         if isfile(artifacts_toml)
             selector_path = joinpath(pkg_root, ".pkg", "select_artifacts.jl")
 
-            # If there is a dynamic artifact selector, run that in an appropriate sandbox to select artifacts
+            # If there is a dynamic artifact selector, run that to select artifacts
             if isfile(selector_path)
-                # Despite the fact that we inherit the project, since the in-memory manifest
-                # has not been updated yet, if we try to load any dependencies, it may fail.
-                # Therefore, this project inheritance is really only for Preferences, not dependencies.
-                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) -t1 --startup-file=no $(triplet(platform))`)
-                meta_toml = String(read(select_cmd))
-                res = TOML.tryparse(meta_toml)
+                res = mktemp() do path, io
+                    redirect_stdout(io) do
+                        include(selector_path)
+                    end
+                    close(io)
+                    meta_toml = read(path, String)
+                    TOML.tryparse(meta_toml)
+                end
                 if res isa TOML.ParserError
                     errstr = sprint(showerror, res; context=stderr)
                     pkgerror("failed to parse TOML output from running $(repr(selector_path)), got: \n$errstr")
                 else
-                    push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
+                    push!(artifacts_tomls, (artifacts_toml, res))
                 end
             else
                 # Otherwise, use the standard selector from `Artifacts`
