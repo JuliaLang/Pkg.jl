@@ -23,21 +23,20 @@ are described below.
 ### The `authors` field
 
 For a package, the optional `authors` field is a TOML array describing the package authors. 
-Entries in the array can either be a string in the form `NAME <EMAIL>`, or arrays with the following keys:
- - `name` (required): the name of the author
- - `email`: email address
- - `orcid`: 16-digit [ORCID](https://orcid.org/) identifier as a string
- - `github`: [GitHub](https://github.com/) username
+Entries in the array can either be a string in the form of `NAME` or `NAME <EMAIL>`, or arrays with the following keys:
+ - `name` (string, required): the name of the author
+ - `email` (string, optional): email address 
+ - `orcid` (string, optional): 16-digit [ORCID](https://orcid.org/) identifier
+ - `url` (string, optional): a URL associated with the author (e.g. personal website, GitHub page)
 
 For example:
 ```toml
 authors = [
   "Some One <someone@email.com>",
   "Foo Bar <foo@bar.com>",
-  {name = "Baz Qux", email = "bazqux@example.com", orcid = "0000-0000-0000-0000"},
+  {name = "Baz Qux", email = "bazqux@example.com", orcid = "0000-0000-0000-0000", url = "https://github.com/bazqux"},
 ]
 ```
-
 
 ### The `name` field
 
