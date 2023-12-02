@@ -40,7 +40,7 @@ It is possible to add multiple packages in one command as `pkg> add A B C`.
 The status output contains the packages you have added yourself, in this case, `JSON`:
 
 ```julia-repl
-(@v1.8) pkg> st
+(@v1.11) pkg> st
     Status `~/.julia/environments/v1.8/Project.toml`
   [682c06a0] JSON v0.21.3
 ```
@@ -48,7 +48,7 @@ The status output contains the packages you have added yourself, in this case, `
 The manifest status shows all the packages in the environment, including recursive dependencies:
 
 ```julia-repl
-(@v1.8) pkg> st -m
+(@v1.11) pkg> st -m
 Status `~/environments/v1.9/Manifest.toml`
   [682c06a0] JSON v0.21.3
   [69de0a69] Parsers v2.4.0
@@ -59,6 +59,27 @@ Status `~/environments/v1.9/Manifest.toml`
 ```
 
 Since standard libraries (e.g. ` Dates`) are shipped with Julia, they do not have a version.
+
+To specify that you want a particular version (or set of versions) of a package, use the `compat` command. For example,
+to require any patch release of the v0.21 series of JSON after v0.21.4, call `compat JSON 0.21.4`:
+
+```julia-repl
+(@1.11) pkg> compat JSON 0.21.4
+      Compat entry set:
+  JSON = "0.21.4"
+     Resolve checking for compliance with the new compat rules...
+       Error empty intersection between JSON@0.21.3 and project compatibility 0.21.4 - 0.21
+  Suggestion Call `update` to attempt to meet the compatibility requirements.
+
+(@1.11) pkg> update
+    Updating registry at `~/.julia/registries/General.toml`
+    Updating `~/.julia/environments/1.11/Project.toml`
+  [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
+    Updating `~/.julia/environments/1.11/Manifest.toml`
+  [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
+```
+
+See the section on [Compatibility](@ref) for more on using the compat system.
 
 After a package is added to the project, it can be loaded in Julia:
 
