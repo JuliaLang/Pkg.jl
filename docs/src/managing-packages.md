@@ -71,7 +71,7 @@ to require any patch release of the v0.21 series of JSON after v0.21.4, call `co
        Error empty intersection between JSON@0.21.3 and project compatibility 0.21.4 - 0.21
   Suggestion Call `update` to attempt to meet the compatibility requirements.
 
-(@1.11) pkg> up
+(@1.11) pkg> update
     Updating registry at `~/.julia/registries/General.toml`
     Updating `~/.julia/environments/1.11/Project.toml`
   [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
