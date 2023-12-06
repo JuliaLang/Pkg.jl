@@ -165,19 +165,16 @@ end
 # This has to be done after the packages have been downloaded
 # since we need access to the Project file to read the information
 # about extensions
-function fixup_ext!(env, pkgs)
-    for pkg in pkgs
+function fixup_ext!(env::EnvCache)
+    for pkg in values(env.manifest)
         v = joinpath(source_path(env.manifest_file, pkg), "Project.toml")
-        if haskey(env.manifest, pkg.uuid)
-            entry = env.manifest[pkg.uuid]
-            if isfile(v)
-                p = Types.read_project(v)
-                entry.weakdeps = p.weakdeps
-                entry.exts = p.exts
-                for (name, _) in p.weakdeps
-                    if !haskey(p.deps, name)
-                        delete!(entry.deps, name)
-                    end
+        if isfile(v)
+            p = Types.read_project(v)
+            pkg.weakdeps = p.weakdeps
+            pkg.exts = p.exts
+            for (name, _) in p.weakdeps
+                if !haskey(p.deps, name)
+                    delete!(pkg.deps, name)
                 end
             end
         end
@@ -1389,7 +1386,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixup_ext!(ctx.env, pkgs)
+    fixup_ext!(ctx.env)
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
@@ -1412,7 +1409,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixup_ext!(ctx.env, pkgs)
+    fixup_ext!(ctx.env)
     download_artifacts(ctx.env; platform=platform, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1540,7 +1537,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixup_ext!(ctx.env, pkgs)
+    fixup_ext!(ctx.env)
     download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io, hidden_upgrades_info = true)
@@ -1586,7 +1583,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
 
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new = download_source(ctx)
-    fixup_ext!(ctx.env, pkgs)
+    fixup_ext!(ctx.env)
     download_artifacts(ctx.env; julia_version=ctx.julia_version, io=ctx.io)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1630,7 +1627,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
 
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
         new = download_source(ctx)
-        fixup_ext!(ctx.env, pkgs)
+        fixup_ext!(ctx.env)
         download_artifacts(ctx.env, io=ctx.io)
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io=ctx.io)
