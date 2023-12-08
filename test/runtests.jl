@@ -65,9 +65,9 @@ include("utils.jl")
 Utils.check_init_reg()
 
 Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
-    @testset "Pkg" begin
+    @testset "Pkg" verbose=true begin
         try
-            @testset "$f" for f in [
+            @testset "$f" verbose=true for f in [
                 "new.jl",
                 "pkg.jl",
                 "repl.jl",
