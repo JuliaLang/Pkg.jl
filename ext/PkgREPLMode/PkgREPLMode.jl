@@ -16,7 +16,7 @@ import Pkg: stdout_f, stderr_f
 
 using Pkg.Types: PKGMODE_PROJECT, PKGMODE_MANIFEST, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 using Pkg.Types: PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
-using Pkg.Types: Context, PkgError, pkgerror
+using Pkg.Types: Context, PkgError, pkgerror, EnvCache
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)

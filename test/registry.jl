@@ -8,7 +8,7 @@ using Pkg.Types: PkgError, manifest_info, PackageSpec, EnvCache
 using ..Utils
 
 const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
-using PkgREPLMode: pkgstr
+using .PkgREPLMode: pkgstr
 
 
 function setup_test_registries(dir = pwd())

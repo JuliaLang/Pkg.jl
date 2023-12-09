@@ -1,5 +1,7 @@
 module DocView
 
+_displaysize(io::IO) = displaysize(io)::Tuple{Int,Int}
+
 # This code is duplicated from REPL.jl
 # Considering breaking this into an independent package
 
