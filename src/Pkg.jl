@@ -7,7 +7,6 @@ if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_m
 end
 
 import Random
-import REPL
 import TOML
 using Dates
 
@@ -61,14 +60,16 @@ include("PlatformEngines.jl")
 include("Versions.jl")
 include("Registry/Registry.jl")
 include("Resolve/Resolve.jl")
+include("DocView.jl")
 include("Types.jl")
 include("BinaryPlatforms_compat.jl")
 include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
-include("REPLMode/REPLMode.jl")
 
-import .REPLMode: @pkg_str
+# Stub For PkgREPLMode to implement
+macro pkg_str end
+
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
 import .Types: PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
@@ -732,17 +733,6 @@ const is_manifest_current = API.is_manifest_current
 function __init__()
     DEFAULT_IO[] = nothing
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-    if isdefined(Base, :active_repl)
-        REPLMode.repl_init(Base.active_repl)
-    else
-        atreplinit() do repl
-            if isinteractive() && repl isa REPL.LineEditREPL
-                isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
-                REPLMode.repl_init(repl)
-            end
-        end
-    end
-    push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
     if !isassigned(Base.PKG_PRECOMPILE_HOOK)
         # allows Base to use Pkg.precompile during loading
         # disable via `Base.PKG_PRECOMPILE_HOOK[] = Returns(nothing)`

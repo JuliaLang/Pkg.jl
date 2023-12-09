@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module REPLMode
+module PkgREPLMode
 
 using Markdown, UUIDs, Dates
 
@@ -8,9 +8,15 @@ import REPL
 import REPL: LineEdit, REPLCompletions
 import REPL: TerminalMenus
 
-import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
-using ..Types, ..Operations, ..API, ..Registry, ..Resolve
-import ..stdout_f, ..stderr_f
+import Pkg: compat, @pkg_str
+import Pkg: casesensitive_isdir, OFFLINE_MODE, linewrap, pathrepr
+using Pkg: Types, Operations, API, Registry, Resolve
+using Pkg: PackageSpec
+import Pkg: stdout_f, stderr_f
+
+using Pkg.Types: PKGMODE_PROJECT, PKGMODE_MANIFEST, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
+using Pkg.Types: PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
+using Pkg.Types: Context
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)
@@ -32,7 +38,7 @@ end
 
 # TODO assert names matching lex regex
 # assert now so that you don't fail at user time
-# see function `REPLMode.api_options`
+# see function `PkgREPLMode.api_options`
 function OptionSpec(;name::String,
                     short_name::Union{Nothing,String}=nothing,
                     takes_arg::Bool=false,
@@ -450,7 +456,7 @@ end
 ######################
 
 # Provide a string macro pkg"cmd" that can be used in the same way
-# as the REPLMode `pkg> cmd`. Useful for testing and in environments
+# as the PkgREPLMode `pkg> cmd`. Useful for testing and in environments
 # where we do not have a REPL, e.g. IJulia.
 struct MiniREPL <: REPL.AbstractREPL
     display::TextDisplay
@@ -463,7 +469,21 @@ REPL.REPLDisplay(repl::MiniREPL) = repl.display
 
 const minirepl = Ref{MiniREPL}()
 
-__init__() = minirepl[] = MiniREPL()
+function __init__()
+    minirepl[] = MiniREPL()
+    if isdefined(Base, :active_repl)
+        repl_init(Base.active_repl)
+    else
+        atreplinit() do repl
+            if isinteractive() && repl isa REPL.LineEditREPL
+                isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
+                repl_init(repl)
+            end
+        end
+    end
+    push!(empty!(REPL.install_packages_hooks), try_prompt_pkg_add)
+end
+
 
 macro pkg_str(str::String)
     :($(do_cmd)(minirepl[], $str; do_rethrow=true))
@@ -534,7 +554,7 @@ function promptf()
     return "$(prefix)pkg> "
 end
 
-# Set up the repl Pkg REPLMode
+# Set up the repl PkgREPLMode
 function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     pkg_mode = LineEdit.Prompt(promptf;
         prompt_prefix = repl.options.hascolor ? Base.text_colors[:blue] : "",
@@ -563,7 +583,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     mk = REPL.mode_keymap(main)
 
     shell_mode = nothing
-    for mode in Base.active_repl.interface.modes
+    for mode in repl.interface.modes
         if mode isa LineEdit.Prompt
             mode.prompt == "shell> " && (shell_mode = mode)
         end
@@ -701,12 +721,12 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         printstyled(ctx.io, " │ "; color=:green)
         println(ctx.io, "Install package$(plural4)?")
         msg2 = string("add ", join(available_pkgs, ' '))
-        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", REPLMode.promptf()))))
+        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", PkgREPLMode.promptf()))))
             printstyled(ctx.io, " │   "; color=:green)
             if i == 1
-                printstyled(ctx.io, REPLMode.promptf(); color=:blue)
+                printstyled(ctx.io, PkgREPLMode.promptf(); color=:blue)
             else
-                print(ctx.io, " "^length(REPLMode.promptf()))
+                print(ctx.io, " "^length(PkgREPLMode.promptf()))
             end
             println(ctx.io, line)
         end
@@ -778,5 +798,100 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         return true
     end
 end
+
+function compat(ctx::Context; io = nothing)
+    io = something(io, ctx.io)
+    can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
+    printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
+    longest_dep_len = max(5, length.(collect(keys(ctx.env.project.deps)))...)
+    opt_strs = String[]
+    opt_pkgs = String[]
+    compat_str = Operations.get_compat_str(ctx.env.project, "julia")
+    push!(opt_strs, Operations.compat_line(io, "julia", nothing, compat_str, longest_dep_len, indent = ""))
+    push!(opt_pkgs, "julia")
+    for (dep, uuid) in sort(collect(ctx.env.project.deps); by = x->x.first)
+        compat_str = Operations.get_compat_str(ctx.env.project, dep)
+        push!(opt_strs, Operations.compat_line(io, dep, uuid, compat_str, longest_dep_len, indent = ""))
+        push!(opt_pkgs, dep)
+    end
+    menu = TerminalMenus.RadioMenu(opt_strs, pagesize=length(opt_strs))
+    choice = try
+        TerminalMenus.request("  Select an entry to edit:", menu)
+    catch err
+        if err isa InterruptException # if ^C is entered
+            println(io)
+            return false
+        end
+        rethrow()
+    end
+    choice == -1 && return false
+    dep = opt_pkgs[choice]
+    current_compat_str = something(Operations.get_compat_str(ctx.env.project, dep), "")
+    resp = try
+        prompt = "  Edit compat entry for $(dep):"
+        print(io, prompt)
+        buffer = current_compat_str
+        cursor = length(buffer)
+        start_pos = length(prompt) + 2
+        move_start = "\e[$(start_pos)G"
+        clear_to_end = "\e[0J"
+        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid},Int32), stdin.handle, true)
+        while true
+            print(io, move_start, clear_to_end, buffer, "\e[$(start_pos + cursor)G")
+            inp = TerminalMenus._readkey(stdin)
+            if inp == '\r' # Carriage return
+                println(io)
+                break
+            elseif inp == '\x03' # cltr-C
+                println(io)
+                return
+            elseif inp == TerminalMenus.ARROW_RIGHT
+                cursor = min(length(buffer), cursor + 1)
+            elseif inp == TerminalMenus.ARROW_LEFT
+                cursor = max(0, cursor - 1)
+            elseif inp == TerminalMenus.HOME_KEY
+                cursor = (0)
+            elseif inp == TerminalMenus.END_KEY
+                cursor = length(buffer)
+            elseif inp == TerminalMenus.DEL_KEY
+                if cursor == 0
+                    buffer = buffer[2:end]
+                elseif cursor < length(buffer)
+                    buffer = buffer[1:cursor] * buffer[(cursor + 2):end]
+                end
+            elseif inp isa TerminalMenus.Key
+                # ignore all other escaped (multi-byte) keys
+            elseif inp == '\x7f' # backspace
+                if cursor == 1
+                    buffer = buffer[2:end]
+                elseif cursor == length(buffer)
+                    buffer = buffer[1:end - 1]
+                elseif cursor > 0
+                    buffer = buffer[1:(cursor-1)] * buffer[(cursor + 1):end]
+                else
+                    continue
+                end
+                cursor -= 1
+            else
+                if cursor == 0
+                    buffer = inp * buffer
+                elseif cursor == length(buffer)
+                    buffer = buffer * inp
+                else
+                    buffer = buffer[1:cursor] * inp * buffer[(cursor + 1):end]
+                end
+                cursor += 1
+            end
+        end
+        buffer
+    finally
+        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid},Int32), stdin.handle, false)
+    end
+    new_entry = strip(resp)
+    compat(ctx, dep, string(new_entry))
+    return
+end
+
+include("precompile.jl")
 
 end #module

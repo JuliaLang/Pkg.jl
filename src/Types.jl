@@ -6,9 +6,7 @@ using UUIDs
 using Random
 using Dates
 import LibGit2
-import REPL
 import Base.string
-using REPL.TerminalMenus
 
 using TOML
 import ..Pkg, ..Registry
@@ -1012,7 +1010,7 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
                         println(io)
                         prefix = "   Suggestions:"
                         printstyled(io, prefix, color = Base.info_color())
-                        REPL.printmatches(io, name, all_names_ranked; cols = REPL._displaysize(ctx.io)[2] - length(prefix))
+                        DocView.printmatches(io, name, all_names_ranked; cols = DocView._displaysize(ctx.io)[2] - length(prefix))
                     end
                 else
                     join(io, uuids, ", ", " or ")
@@ -1032,7 +1030,7 @@ end
 
 # copied from REPL to efficiently expose if any score is >0
 function fuzzysort(search::String, candidates::Vector{String})
-    scores = map(cand -> (REPL.fuzzyscore(search, cand), -Float64(REPL.levenshtein(search, cand))), candidates)
+    scores = map(cand -> (DocView.fuzzyscore(search, cand), -Float64(DocView.levenshtein(search, cand))), candidates)
     candidates[sortperm(scores)] |> reverse, any(s -> s[1] > 0, scores)
 end
 

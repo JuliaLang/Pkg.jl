@@ -1,4 +1,4 @@
-import ..isdir_nothrow, ..Registry.RegistrySpec, ..isurl
+import Pkg: isdir_nothrow, Registry.RegistrySpec, isurl
 
 struct PackageIdentifier
     val::String
