@@ -3,10 +3,12 @@ import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
-using Pkg.REPLMode: pkgstr
 using Pkg.Types: PkgError, manifest_info, PackageSpec, EnvCache
 
 using ..Utils
+
+const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
+using PkgREPLMode: pkgstr
 
 
 function setup_test_registries(dir = pwd())

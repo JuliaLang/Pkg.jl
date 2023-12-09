@@ -20,6 +20,7 @@ using ..Utils
 
 const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"), url = "https://github.com/JuliaLang/Example.jl")
 const PackageSpec = Pkg.Types.PackageSpec
+const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
 
 import Pkg.Types: semver_spec, VersionSpec
 @testset "semver notation" begin
@@ -546,7 +547,7 @@ temp_pkg_dir() do project_path
             end end
             Pkg.activate()
             # make sure things still work
-            Pkg.REPLMode.pkgstr("dev $target_dir")
+            PkgREPLMode.pkgstr("dev $target_dir")
             @test isinstalled((name="FooBar", uuid=UUID(uuid)))
             Pkg.rm("FooBar")
             @test !isinstalled((name="FooBar", uuid=UUID(uuid)))
@@ -734,7 +735,7 @@ import Markdown
 @testset "REPL command doc generation" begin
     # test that the way doc building extracts
     # docstrings for Pkg REPL commands work
-    d = Dict(Pkg.REPLMode.canonical_names())
+    d = Dict(PkgREPLMode.canonical_names())
     @test d["add"].help isa Markdown.MD
     @test d["registry add"].help isa Markdown.MD
 end

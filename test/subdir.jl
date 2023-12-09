@@ -2,11 +2,13 @@ module SubdirTests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, UUIDs, Test
-using Pkg.REPLMode: pkgstr
 using Pkg.Types: PackageSpec
 using Pkg: stdout_f, stderr_f
 
 using ..Utils
+
+const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
+using PkgREPLMode: pkgstr
 
 # Derived from RegistryTools' gitcmd.
 function gitcmd(path::AbstractString)

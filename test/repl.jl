@@ -13,6 +13,8 @@ import LibGit2
 
 using ..Utils
 
+const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
+
 @testset "help" begin
     pkg"?"
     pkg"?  "
@@ -88,15 +90,15 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg2 = "UnregisteredWithProject"
     pkg2_uuid = UUID("58262bb0-2073-11e8-3727-4fe182c12249")
     p2 = git_init_package(tmp_pkg_path, joinpath(@__DIR__, "test_packages/$pkg2"))
-    Pkg.REPLMode.pkgstr("add $p2")
-    Pkg.REPLMode.pkgstr("pin $pkg2")
+    PkgREPLMode.pkgstr("add $p2")
+    PkgREPLMode.pkgstr("pin $pkg2")
     # FIXME: this confuses the precompile logic to know what is going on with the user
     # FIXME: why isn't this testing the Pkg after importing, rather than after freeing it
     #@eval import Example
     #@eval import $(Symbol(pkg2))
     @test Pkg.dependencies()[pkg2_uuid].version == v"0.1.0"
-    Pkg.REPLMode.pkgstr("free $pkg2")
-    @test_throws PkgError Pkg.REPLMode.pkgstr("free $pkg2")
+    PkgREPLMode.pkgstr("free $pkg2")
+    @test_throws PkgError PkgREPLMode.pkgstr("free $pkg2")
     Pkg.test("UnregisteredWithProject")
 
     write(joinpath(p2, "Project.toml"), """
@@ -110,11 +112,11 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
         LibGit2.commit(repo, "bump version"; author = TEST_SIG, committer=TEST_SIG)
         pkg"update"
         @test Pkg.dependencies()[pkg2_uuid].version == v"0.2.0"
-        Pkg.REPLMode.pkgstr("rm $pkg2")
+        PkgREPLMode.pkgstr("rm $pkg2")
 
         c = LibGit2.commit(repo, "empty commit"; author = TEST_SIG, committer=TEST_SIG)
         c_hash = LibGit2.GitHash(c)
-        Pkg.REPLMode.pkgstr("add $p2#$c")
+        PkgREPLMode.pkgstr("add $p2#$c")
     end
 
     mktempdir() do tmp_dev_dir
@@ -152,7 +154,7 @@ temp_pkg_dir() do path
     p2 = git_init_package(path, joinpath(@__DIR__, "test_packages/$pkg2"))
     Pkg.activate(p2)
     Pkg.status() # should not throw
-    Pkg.REPLMode.pkgstr("status") # should not throw
+    PkgREPLMode.pkgstr("status") # should not throw
 end
 
 temp_pkg_dir() do project_path; cd(project_path) do
@@ -167,8 +169,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
                     p1_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithProject")
                     p1_new_path = joinpath(tmp, "UnregisteredWithProject")
                     cp(p1_path, p1_new_path)
-                    Pkg.REPLMode.pkgstr("develop $(p1_new_path)")
-                    Pkg.REPLMode.pkgstr("build; precompile")
+                    PkgREPLMode.pkgstr("develop $(p1_new_path)")
+                    PkgREPLMode.pkgstr("build; precompile")
                     @test realpath(Base.find_package("UnregisteredWithProject")) == realpath(joinpath(p1_new_path, "src", "UnregisteredWithProject.jl"))
                     @test Pkg.dependencies()[UUID("58262bb0-2073-11e8-3727-4fe182c12249")].version == v"0.1.0"
                     Pkg.test("UnregisteredWithProject")
@@ -287,7 +289,7 @@ temp_pkg_dir() do depot
     end
 end
 
-test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))
+test_complete(s) = PkgREPLMode.completions(s, lastindex(s))
 apply_completion(str) = begin
     c, r, s = test_complete(str)
     str[1:prevind(str, first(r))]*first(c)
@@ -320,7 +322,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         c, r = test_complete("rm Exam")
         @test isempty(c)
 
-        Pkg.REPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithDependency"))")
+        PkgREPLMode.pkgstr("develop $(joinpath(@__DIR__, "test_packages", "PackageWithDependency"))")
 
         c, r = test_complete("rm PackageWithDep")
         @test "PackageWithDependency" in c
@@ -473,7 +475,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             pkg"build BigProject"
             @test_throws PkgError pkg"add BigProject"
             # the command below also tests multiline input
-            Pkg.REPLMode.pkgstr("""
+            PkgREPLMode.pkgstr("""
                 test SubModule
                 test SubModule2
                 test BigProject
@@ -533,9 +535,9 @@ temp_pkg_dir() do project_path
             pkg_name = "WeirdName77"
             setup_package(dir_name, pkg_name)
             uuid = extract_uuid("$dir_name/$pkg_name/Project.toml")
-            Pkg.REPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
+            PkgREPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
             @test isinstalled((name=pkg_name, uuid = UUID(uuid)))
-            Pkg.REPLMode.pkgstr("remove \"$pkg_name\"")
+            PkgREPLMode.pkgstr("remove \"$pkg_name\"")
             @test !isinstalled((name=pkg_name, uuid = UUID(uuid)))
 
             # testing dir name with significant characters
@@ -543,9 +545,9 @@ temp_pkg_dir() do project_path
             pkg_name = "WeirdName77"
             setup_package(dir_name, pkg_name)
             uuid = extract_uuid("$dir_name/$pkg_name/Project.toml")
-            Pkg.REPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
+            PkgREPLMode.pkgstr("add \"$dir_name/$pkg_name\"")
             @test isinstalled((name=pkg_name, uuid = UUID(uuid)))
-            Pkg.REPLMode.pkgstr("remove '$pkg_name'")
+            PkgREPLMode.pkgstr("remove '$pkg_name'")
             @test !isinstalled((name=pkg_name, uuid = UUID(uuid)))
 
             # more complicated input
@@ -561,17 +563,17 @@ temp_pkg_dir() do project_path
             setup_package(dir2, pkg_name2)
             uuid2 = extract_uuid("$dir2/$pkg_name2/Project.toml")
 
-            Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
+            PkgREPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
             @test isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
             @test isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
-            Pkg.REPLMode.pkgstr("remove '$pkg_name1' $pkg_name2")
+            PkgREPLMode.pkgstr("remove '$pkg_name1' $pkg_name2")
             @test !isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
             @test !isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
 
-            Pkg.REPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
+            PkgREPLMode.pkgstr("add '$dir1/$pkg_name1' \"$dir2/$pkg_name2\"")
             @test isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
             @test isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
-            Pkg.REPLMode.pkgstr("remove '$pkg_name1' \"$pkg_name2\"")
+            PkgREPLMode.pkgstr("remove '$pkg_name1' \"$pkg_name2\"")
             @test !isinstalled((name=pkg_name1, uuid = UUID(uuid1)))
             @test !isinstalled((name=pkg_name2, uuid = UUID(uuid2)))
         end
@@ -579,15 +581,15 @@ temp_pkg_dir() do project_path
 end
 
 @testset "parse package url win" begin
-    pkg_id = Pkg.REPLMode.PackageIdentifier("https://github.com/abc/ABC.jl")
-    pkg_spec = Pkg.REPLMode.parse_package_identifier(pkg_id; add_or_develop=true)
+    pkg_id = PkgREPLMode.PackageIdentifier("https://github.com/abc/ABC.jl")
+    pkg_spec = PkgREPLMode.parse_package_identifier(pkg_id; add_or_develop=true)
     @test typeof(pkg_spec) == Pkg.Types.PackageSpec
 end
 
 @testset "parse git url (issue #1935) " begin
     urls = ["https://github.com/abc/ABC.jl.git", "https://abc.github.io/ABC.jl"]
     for url in urls
-        @test Pkg.REPLMode.package_lex([Pkg.REPLMode.QString((url), false)]) == [url]
+        @test PkgREPLMode.package_lex([PkgREPLMode.QString((url), false)]) == [url]
     end
 end
 
@@ -602,41 +604,41 @@ end
     end
 
     with_temp_env("SomeEnv") do
-        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+        @test PkgREPLMode.promptf() == "(SomeEnv) pkg> "
     end
 
     with_temp_env("this_is_a_test_for_truncating_long_folder_names_in_the_prompt") do
-        @test Pkg.REPLMode.promptf() == "(this_is_a_test_for_truncati...) pkg> "
+        @test PkgREPLMode.promptf() == "(this_is_a_test_for_truncati...) pkg> "
     end
 
     env_name = "Test2"
     with_temp_env(env_name) do env_path
         projfile_path = joinpath(env_path, "Project.toml")
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        @test PkgREPLMode.promptf() == "($env_name) pkg> "
 
         newname = "NewName"
         set_name(projfile_path, newname)
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test PkgREPLMode.promptf() == "($newname) pkg> "
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test PkgREPLMode.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test PkgREPLMode.promptf() == "($newname) pkg> "
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test PkgREPLMode.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test PkgREPLMode.promptf() == "($newname) pkg> "
     end
 end
 
 @testset "test" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do;
         Pkg.add("Example")
-        @test_throws PkgError Pkg.REPLMode.pkgstr("test --project Example")
-        Pkg.REPLMode.pkgstr("test --coverage Example")
-        Pkg.REPLMode.pkgstr("test Example")
+        @test_throws PkgError PkgREPLMode.pkgstr("test --project Example")
+        PkgREPLMode.pkgstr("test --coverage Example")
+        PkgREPLMode.pkgstr("test Example")
     end
     end
     end
@@ -682,9 +684,9 @@ end
 
 @testset "subcommands" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir; with_temp_env() do
-        Pkg.REPLMode.pkg"package add Example"
+        PkgREPLMode.pkg"package add Example"
         @test isinstalled(TEST_PKG)
-        Pkg.REPLMode.pkg"package rm Example"
+        PkgREPLMode.pkg"package rm Example"
         @test !isinstalled(TEST_PKG)
     end end end
 end
@@ -692,14 +694,14 @@ end
 @testset "REPL API `up`" begin
     # errors
     temp_pkg_dir() do project_path; with_temp_env() do;
-        @test_throws PkgError Pkg.REPLMode.pkgstr("up --major --minor")
+        @test_throws PkgError PkgREPLMode.pkgstr("up --major --minor")
     end end
 end
 
 @testset "Inference" begin
-    @inferred Pkg.REPLMode.OptionSpecs(Pkg.REPLMode.OptionDeclaration[])
-    @inferred Pkg.REPLMode.CommandSpecs(Pkg.REPLMode.CommandDeclaration[])
-    @inferred Pkg.REPLMode.CompoundSpecs(Pair{String,Vector{Pkg.REPLMode.CommandDeclaration}}[])
+    @inferred PkgREPLMode.OptionSpecs(PkgREPLMode.OptionDeclaration[])
+    @inferred PkgREPLMode.CommandSpecs(PkgREPLMode.CommandDeclaration[])
+    @inferred PkgREPLMode.CompoundSpecs(Pair{String,Vector{PkgREPLMode.CommandDeclaration}}[])
 end
 
 # To be used to reply to a prompt
@@ -717,16 +719,16 @@ end
 
 @testset "REPL missing package install hook" begin
     isolate(loaded_depot=true) do
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+        @test PkgREPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
 
         # don't offer to install the dummy "julia" entry that's in General
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
+        @test PkgREPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
 
         withreply("n") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+            @test PkgREPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
         end
         withreply("y") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+            @test PkgREPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
         end
     end
 end
