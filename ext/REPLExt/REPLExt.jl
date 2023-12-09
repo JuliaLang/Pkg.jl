@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module PkgREPLMode
+module REPLExt
 
 using Markdown, UUIDs, Dates
 
@@ -38,7 +38,7 @@ end
 
 # TODO assert names matching lex regex
 # assert now so that you don't fail at user time
-# see function `PkgREPLMode.api_options`
+# see function `REPLExt.api_options`
 function OptionSpec(;name::String,
                     short_name::Union{Nothing,String}=nothing,
                     takes_arg::Bool=false,
@@ -456,7 +456,7 @@ end
 ######################
 
 # Provide a string macro pkg"cmd" that can be used in the same way
-# as the PkgREPLMode `pkg> cmd`. Useful for testing and in environments
+# as the REPLExt `pkg> cmd`. Useful for testing and in environments
 # where we do not have a REPL, e.g. IJulia.
 struct MiniREPL <: REPL.AbstractREPL
     display::TextDisplay
@@ -554,7 +554,7 @@ function promptf()
     return "$(prefix)pkg> "
 end
 
-# Set up the repl PkgREPLMode
+# Set up the repl REPLExt
 function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     pkg_mode = LineEdit.Prompt(promptf;
         prompt_prefix = repl.options.hascolor ? Base.text_colors[:blue] : "",
@@ -721,12 +721,12 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         printstyled(ctx.io, " │ "; color=:green)
         println(ctx.io, "Install package$(plural4)?")
         msg2 = string("add ", join(available_pkgs, ' '))
-        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", PkgREPLMode.promptf()))))
+        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", REPLExt.promptf()))))
             printstyled(ctx.io, " │   "; color=:green)
             if i == 1
-                printstyled(ctx.io, PkgREPLMode.promptf(); color=:blue)
+                printstyled(ctx.io, REPLExt.promptf(); color=:blue)
             else
-                print(ctx.io, " "^length(PkgREPLMode.promptf()))
+                print(ctx.io, " "^length(REPLExt.promptf()))
             end
             println(ctx.io, line)
         end

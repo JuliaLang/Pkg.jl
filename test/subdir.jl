@@ -7,8 +7,8 @@ using Pkg: stdout_f, stderr_f
 
 using ..Utils
 
-const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
-using .PkgREPLMode: pkgstr
+const REPLExt = Base.get_extension(Pkg, :REPLExt)
+using .REPLExt: pkgstr
 
 # Derived from RegistryTools' gitcmd.
 function gitcmd(path::AbstractString)

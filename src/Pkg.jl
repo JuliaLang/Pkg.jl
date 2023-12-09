@@ -67,7 +67,7 @@ include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
 
-# Stub For PkgREPLMode to implement
+# Stub For REPLExt to implement
 macro pkg_str end
 
 import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED

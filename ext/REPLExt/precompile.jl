@@ -11,13 +11,13 @@ end
 REPL.raw!(::FakeTerminal, raw::Bool) = raw
 
 function pkgreplmode_precompile()
-    PkgREPLMode.__init__()
-    PkgREPLMode.try_prompt_pkg_add(Symbol[:notapackage])
-    PkgREPLMode.promptf()
+    REPLExt.__init__()
+    REPLExt.try_prompt_pkg_add(Symbol[:notapackage])
+    REPLExt.promptf()
     term = FakeTerminal()
     repl = REPL.LineEditREPL(term, true)
     REPL.run_repl(repl)
-    PkgREPLMode.repl_init(repl)
+    REPLExt.repl_init(repl)
 end
 
 if Base.generating_output()

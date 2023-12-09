@@ -7,8 +7,8 @@ using Pkg.Types: PkgError, manifest_info, PackageSpec, EnvCache
 
 using ..Utils
 
-const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
-using .PkgREPLMode: pkgstr
+const REPLExt = Base.get_extension(Pkg, :REPLExt)
+using .REPLExt: pkgstr
 
 
 function setup_test_registries(dir = pwd())

@@ -10,7 +10,7 @@ using  ..Utils
 import ..HistoricalStdlibVersions
 using Logging
 
-const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
+const REPLExt = Base.get_extension(Pkg, :REPLExt)
 
 general_uuid = UUID("23338594-aafe-5451-b93e-139f81909106") # UUID for `General`
 exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
@@ -314,7 +314,7 @@ end
 #
 @testset "activate: repl" begin
     isolate(loaded_depot=true) do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         # - activate shared env
         api, args, opts = first(Pkg.pkg"activate --shared Foo")
         @test api == Pkg.activate
@@ -958,7 +958,7 @@ end
 #
 @testset "add: REPL" begin
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         # Add using UUID syntax
         api, args, opts = first(Pkg.pkg"add 7876af07-990d-54b4-ab0e-23690620f79a")
         @test api == Pkg.add
@@ -1013,7 +1013,7 @@ end
     end
     # check casesensitive resolution of paths
     isolate() do; cd_tempdir() do dir
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         mkdir("example")
         api, args, opts = first(Pkg.pkg"add Example")
         @test api == Pkg.add
@@ -1345,7 +1345,7 @@ end
 #
 @testset "develop: REPL" begin
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         # registered name
         api, args, opts = first(Pkg.pkg"develop Example")
         @test api == Pkg.develop
@@ -1517,7 +1517,7 @@ end
 #
 @testset "instantiate: REPL" begin
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, opts = first(Pkg.pkg"instantiate --verbose")
         @test api == Pkg.instantiate
         @test opts == Dict(:verbose => true)
@@ -1532,7 +1532,7 @@ end
 #
 @testset "why: REPL" begin
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, opts = first(Pkg.pkg"why Foo")
         @test api == Pkg.why
         @test first(opts).name == "Foo"
@@ -1785,7 +1785,7 @@ end
 
 @testset "update: REPL" begin
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, opts = first(Pkg.pkg"up")
         @test api == Pkg.update
         @test isempty(opts)
@@ -1920,7 +1920,7 @@ end
 #
 @testset "free: REPL" begin
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, args, opts = first(Pkg.pkg"free Example")
         @test api == Pkg.free
         @test args == [Pkg.PackageSpec(;name="Example")]
@@ -2035,7 +2035,7 @@ end
 
 @testset "rm: REPL" begin
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, args, opts = first(Pkg.pkg"rm Example")
         @test api == Pkg.rm
         @test args == [Pkg.PackageSpec(;name="Example")]
@@ -2086,7 +2086,7 @@ end
         Pkg.free(all_pkgs = true)
     end
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, args, opts = first(Pkg.pkg"pin --all")
         @test api == Pkg.pin
         @test isempty(args)
@@ -2109,7 +2109,7 @@ end
 #
 @testset "build" begin
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, args, opts = first(Pkg.pkg"build")
         @test api == Pkg.build
         @test isempty(args)
@@ -2163,7 +2163,7 @@ end
 @testset "gc" begin
     # REPL
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, opts = first(Pkg.pkg"gc")
         @test api == Pkg.gc
         @test isempty(opts)
@@ -2179,7 +2179,7 @@ end
 @testset "precompile" begin
     # REPL
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
 
         api, opts = first(Pkg.pkg"precompile")
         @test api == Pkg.precompile
@@ -2210,18 +2210,18 @@ end
 @testset "generate" begin
     # REPL
     isolate() do
-        PkgREPLMode.TEST_MODE[] = true
+        REPLExt.TEST_MODE[] = true
         api, arg, opts = first(Pkg.pkg"generate Foo")
         @test api == Pkg.API.generate
         @test arg == "Foo"
         @test isempty(opts)
         mktempdir() do dir
-            api, arg, opts = first(PkgREPLMode.pkgstr("generate $(joinpath(dir, "Foo"))"))
+            api, arg, opts = first(REPLExt.pkgstr("generate $(joinpath(dir, "Foo"))"))
             @test arg == joinpath(dir, "Foo")
             # issue #1435
             if !Sys.iswindows()
                 withenv("HOME" => dir) do
-                    api, arg, opts = first(PkgREPLMode.pkgstr("generate ~/Bar"))
+                    api, arg, opts = first(REPLExt.pkgstr("generate ~/Bar"))
                     @test arg == joinpath(dir, "Bar")
                 end
             end

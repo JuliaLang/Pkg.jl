@@ -3,7 +3,7 @@
 module Utils
 
 import ..Pkg
-import ..PkgREPLMode
+import ..REPLExt
 import Pkg: stdout_f, stderr_f
 using Tar
 using TOML
@@ -70,7 +70,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
         Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
         Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
-        PkgREPLMode.TEST_MODE[] = false
+        REPLExt.TEST_MODE[] = false
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
@@ -99,7 +99,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         Base.HOME_PROJECT[] = old_home_project
         Base.ACTIVE_PROJECT[] = old_active_project
         cd(old_working_directory)
-        PkgREPLMode.TEST_MODE[] = false # reset unconditionally
+        REPLExt.TEST_MODE[] = false # reset unconditionally
         Pkg.Registry.DEFAULT_REGISTRIES[1].path = old_general_registry_path
         Pkg.Registry.DEFAULT_REGISTRIES[1].url = old_general_registry_url
         Pkg.Registry.DEFAULT_REGISTRIES[1].linked = old_general_registry_linked

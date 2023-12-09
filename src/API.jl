@@ -1991,7 +1991,7 @@ function activate(f::Function, new_project::AbstractString)
     end
 end
 
-# interactive compat is implemented in PkgREPLMode
+# interactive compat is implemented in REPLExt
 
 function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io = nothing, kwargs...)
     io = something(io, ctx.io)

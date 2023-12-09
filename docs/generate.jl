@@ -17,8 +17,8 @@ function generate(io, command)
         <section>
     ```
     ```@eval
-    using Pkg
-    Dict(Base.get_extension(Pkg, :PkgREPLMode).canonical_names())["$(command)"].help
+    using Pkg, REPL
+    Dict(Base.get_extension(Pkg, :REPLExt).canonical_names())["$(command)"].help
     ```
     ```@raw html
         </section>

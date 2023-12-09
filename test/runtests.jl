@@ -12,7 +12,7 @@ module PkgTestsInner
 import Pkg
 using REPL: REPL
 
-const PkgREPLMode = Base.get_extension(Pkg, :PkgREPLMode)
+const REPLExt = Base.get_extension(Pkg, :REPLExt)
 
 # Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
 if Base.find_package("HistoricalStdlibVersions") === nothing
@@ -61,7 +61,7 @@ else
     Pkg.DEFAULT_IO[] = stdout
 end
 
-PkgREPLMode.minirepl[] = PkgREPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
+REPLExt.minirepl[] = REPLExt.MiniREPL() # re-set this given DEFAULT_IO has changed
 
 include("utils.jl")
 
