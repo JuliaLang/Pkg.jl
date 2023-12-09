@@ -469,27 +469,21 @@ REPL.REPLDisplay(repl::MiniREPL) = repl.display
 
 const minirepl = Ref{MiniREPL}()
 
-function __init__()
-    minirepl[] = MiniREPL()
-    if isdefined(Base, :active_repl)
-        repl_init(Base.active_repl)
-    else
-        atreplinit() do repl
-            if isinteractive() && repl isa REPL.LineEditREPL
-                isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
-                repl_init(repl)
-            end
-        end
-    end
-    push!(empty!(REPL.install_packages_hooks), try_prompt_pkg_add)
-end
-
-
 macro pkg_str(str::String)
     :($(do_cmd)(minirepl[], $str; do_rethrow=true))
 end
 
 pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
+
+function __init__()
+    minirepl[] = MiniREPL()
+    if isdefined(Base, :active_repl)
+        repl_init(Base.active_repl)
+    else
+        atreplinit(repl_init)
+    end
+    push!(empty!(REPL.install_packages_hooks), try_prompt_pkg_add)
+end
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
@@ -613,7 +607,13 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     return pkg_mode
 end
 
-function repl_init(repl::REPL.AbstractREPL)
+function repl_init(repl::REPL.LineEditREPL)
+    isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
+    _repl_init(repl)
+end
+repl_init(repl::REPL.AbstractREPL) = _repl_init(repl)
+
+function _repl_init(repl::REPL.AbstractREPL)
     main_mode = repl.interface.modes[1]
     pkg_mode = create_mode(repl, main_mode)
     push!(repl.interface.modes, pkg_mode)
