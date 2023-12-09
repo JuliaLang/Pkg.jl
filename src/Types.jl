@@ -9,7 +9,7 @@ import LibGit2
 import Base.string
 
 using TOML
-import ..Pkg, ..Registry
+import ..Pkg, ..Registry, ..DocView
 import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
