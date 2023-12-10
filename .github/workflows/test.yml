@@ -62,7 +62,7 @@ jobs:
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
       - uses: actions/upload-artifact@v3
         with:
-          name: Pkg.log
+          name: ${{ join(matrix.*, '-') }}_Pkg.log
           path: ${{ github.workspace }}/Pkg.log
       - uses: julia-actions/julia-processcoverage@v1
         env:
