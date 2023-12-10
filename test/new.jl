@@ -2714,16 +2714,12 @@ for v in (nothing, "true")
                         @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
                         Pkg.rm(TEST_PKG.name)
                     end
-                    if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) && Sys.iswindows()) == false
+                    if Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false
                         # TODO: fix. on GH windows runners cli git will prompt for credentials here
+                        # on other runners it noisily prompts but continues
                         @testset "via url" begin
                             # git cli can be noisy on CI where user auth isn't set up, so ignore stderr
-                            # i.e.
-                            # Username for 'https://github.com': Username for 'https://github.com':
-                            # fatal: could not read Username for 'https://github.com': terminal prompts disabled
-                            redirect_stderr(devnull) do
-                                Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
-                            end
+                            Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
                             @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
                             Pkg.rm(TEST_PKG.name)
                         end
