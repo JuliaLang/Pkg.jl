@@ -12,8 +12,9 @@ module PkgTestsInner
 import Pkg
 using Test, Logging
 
-@testset "Test that we have imported the correct package" begin
-    @test realpath(dirname(dirname(Base.pathof(Pkg)))) == realpath(dirname(@__DIR__))
+if realpath(dirname(dirname(Base.pathof(Pkg)))) != realpath(dirname(@__DIR__))
+    @show dirname(dirname(Base.pathof(Pkg))) realpath(dirname(@__DIR__))
+    error("The wrong Pkg is being tested")
 end
 
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
