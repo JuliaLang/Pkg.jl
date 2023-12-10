@@ -60,7 +60,6 @@ jobs:
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
-          JULIA_PKG_TEST_QUIET: "true" # "true" is the default. i.e. tests are quiet when this env var isn't set
       - uses: actions/upload-artifact@v3
         with:
           name: Pkg.log
