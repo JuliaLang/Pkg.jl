@@ -54,7 +54,9 @@ jobs:
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
-      - run: julia --project --color=yes --pkgimages=no --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: true
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
