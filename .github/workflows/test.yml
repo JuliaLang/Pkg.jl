@@ -41,22 +41,19 @@ jobs:
           - os: macOS-latest
             julia-arch: x86
     steps:
-      - name: Set git to use LF
+      - name: Set git to use LF and Fix TEMP on windows
         if: matrix.os == 'windows-latest'
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
+          # See https://github.com/actions/virtual-environments/issues/712
+          echo "TMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
+          echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
-      - name: Fix TEMP on windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          # See https://github.com/actions/virtual-environments/issues/712
-          echo "TMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
-          echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
       - run: julia --project --color=yes --pkgimages=no --check-bounds=yes -e 'import Pkg; Pkg.build(); Pkg.test(; coverage=true)'
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
