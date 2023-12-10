@@ -61,6 +61,7 @@ jobs:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
       - uses: actions/upload-artifact@v3
+        if: ${{ always() }}
         with:
           name: ${{ join(matrix.*, '-') }}_Pkg.log
           path: ${{ github.workspace }}/Pkg.log
