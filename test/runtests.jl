@@ -10,22 +10,6 @@ original_project = Base.active_project()
 module PkgTestsInner
 
 import Pkg
-
-# Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
-if Base.find_package("HistoricalStdlibVersions") === nothing
-    @debug "Installing HistoricalStdlibVersions for Pkg tests"
-    iob = IOBuffer()
-    Pkg.activate(; temp = true)
-    try
-        Pkg.add("HistoricalStdlibVersions", io=iob) # Needed for custom julia version resolve tests
-    catch
-        println(String(take!(iob)))
-        rethrow()
-    end
-end
-
-import HistoricalStdlibVersions
-
 using Test, Logging
 
 @testset "Test that we have imported the correct package" begin
@@ -58,6 +42,21 @@ Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO
 include("utils.jl")
 
 Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
+
+    # Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
+    if Base.find_package("HistoricalStdlibVersions") === nothing
+        @debug "Installing HistoricalStdlibVersions for Pkg tests"
+        iob = IOBuffer()
+        Pkg.activate(; temp = true)
+        try
+            Pkg.add("HistoricalStdlibVersions", io=iob) # Needed for custom julia version resolve tests
+        catch
+            println(String(take!(iob)))
+            rethrow()
+        end
+    end
+
+    @eval import HistoricalStdlibVersions
 
     if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
         s = read(`curl -sLI $(server)`, String);
