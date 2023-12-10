@@ -34,11 +34,6 @@ end
 
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
 
-if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
-    s = read(`curl -sLI $(server)`, String);
-    @info "Pkg Server metadata:\n$s"
-end
-
 ### Disable logging output if true (default)
 hide_logs = Base.get_bool_env("JULIA_PKG_TEST_QUIET", true)
 
@@ -62,9 +57,15 @@ Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO
 
 include("utils.jl")
 
-Utils.check_init_reg()
-
 Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
+
+    if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
+        s = read(`curl -sLI $(server)`, String);
+        @info "Pkg Server metadata:\n$s"
+    end
+
+    Utils.check_init_reg()
+
     @testset "Pkg" begin
         try
             @testset "$f" for f in [
