@@ -2714,17 +2714,14 @@ for v in (nothing, "true")
                         @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
                         Pkg.rm(TEST_PKG.name)
                     end
-                    if Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false
-                        # TODO: fix. on GH windows runners cli git will prompt for credentials here
-                        # on other runners it noisily prompts but continues
-                        println("here $v")
-                        @testset "via url" begin
-                            # git cli can be noisy on CI where user auth isn't set up, so ignore stderr
-                            Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
-                            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                            Pkg.rm(TEST_PKG.name)
-                        end
-                    end
+                    # TODO: fix.
+                    # On GH windows runners cli git will prompt for credentials and hang.
+                    # On other runners it noisily prompts but continues
+                    # @testset "via url" begin
+                    #     Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
+                    #     @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                    #     Pkg.rm(TEST_PKG.name)
+                    # end
                 end
                 if !Sys.iswindows()
                     # TODO: fix. on GH windows runners cli git will prompt for credentials here
