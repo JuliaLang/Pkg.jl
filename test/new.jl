@@ -2717,6 +2717,7 @@ for v in (nothing, "true")
                     if Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false
                         # TODO: fix. on GH windows runners cli git will prompt for credentials here
                         # on other runners it noisily prompts but continues
+                        println("here $v")
                         @testset "via url" begin
                             # git cli can be noisy on CI where user auth isn't set up, so ignore stderr
                             Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
