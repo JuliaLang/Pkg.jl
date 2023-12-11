@@ -2715,7 +2715,7 @@ for v in (nothing, "true")
                 end
                 if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false) && !Sys.iswindows()
                     # TODO: fix. On GH windows runners cli git will prompt for credentials and hang.
-                    # On other runners git cli it's noisy when an url is given.
+                    # On other runners git cli is noisy when an url is given.
                     @testset "via url" begin
                         Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
                         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
