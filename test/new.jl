@@ -2717,12 +2717,12 @@ for v in (nothing, "true")
                     # TODO: fix. On GH windows runners cli git will prompt for credentials and hang.
                     # On other runners git cli it's noisy when an url is given.
                     @testset "via url" begin
-                        Pkg.add(url="git@github.com:JuliaLang/Example.jl", use_git_for_all_downloads=true)
+                        Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
                         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
                         Pkg.rm(TEST_PKG.name)
                     end
                     @testset "failures" begin
-                        doesnotexist = "git@github.com:DoesNotExist/DoesNotExist.jl"
+                        doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
                         @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
                         @test_throws Pkg.Types.PkgError Pkg.Registry.add(Pkg.RegistrySpec(url=doesnotexist))
                     end
