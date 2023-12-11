@@ -2713,7 +2713,7 @@ for v in (nothing, "true")
                     @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
                     Pkg.rm(TEST_PKG.name)
                 end
-                if !Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) || Sys.iswindows()
+                if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false) && !Sys.iswindows()
                     # TODO: fix. On GH windows runners cli git will prompt for credentials and hang.
                     # On other runners git cli it's noisy when an url is given.
                     @testset "via url" begin
