@@ -2708,26 +2708,22 @@ for v in (nothing, "true")
     withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0) do
         @testset "downloads with JULIA_PKG_USE_CLI_GIT = $v" begin
             isolate() do
-                @testset "libgit2 downloads" begin
-                    @testset "via name" begin
-                        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                @testset "via name" begin
+                    Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                    @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                    @eval import $(Symbol(TEST_PKG.name))
+                    @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
+                    Pkg.rm(TEST_PKG.name)
+                end
+                if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false) && !Sys.iswindows()
+                    # TODO: fix. On GH windows runners cli git will prompt for credentials and hang.
+                    # On other runners git cli is noisy when an url is given.
+                    @testset "via url" begin
+                        Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
                         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                        @eval import $(Symbol(TEST_PKG.name))
-                        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
                         Pkg.rm(TEST_PKG.name)
                     end
-                    if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) && Sys.iswindows()) == false
-                        # TODO: fix. on GH windows runners cli git will prompt for credentials here
-                        @testset "via url" begin
-                            Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
-                            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                            Pkg.rm(TEST_PKG.name)
-                        end
-                    end
-                end
-                if !Sys.iswindows()
-                    # TODO: fix. on GH windows runners cli git will prompt for credentials here
-                    @testset "libgit2 failures" begin
+                    @testset "failures" begin
                         doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
                         @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
                         @test_throws Pkg.Types.PkgError Pkg.Registry.add(Pkg.RegistrySpec(url=doesnotexist))
