@@ -10,50 +10,23 @@ original_project = Base.active_project()
 module PkgTestsInner
 
 import Pkg
-
-# Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
-if Base.find_package("HistoricalStdlibVersions") === nothing
-    @debug "Installing HistoricalStdlibVersions for Pkg tests"
-    iob = IOBuffer()
-    Pkg.activate(; temp = true)
-    try
-        Pkg.add("HistoricalStdlibVersions", io=iob) # Needed for custom julia version resolve tests
-    catch
-        println(String(take!(iob)))
-        rethrow()
-    end
-end
-
-import HistoricalStdlibVersions
-
 using Test, Logging
 
-@testset "Test that we have imported the correct package" begin
-    @test realpath(dirname(dirname(Base.pathof(Pkg)))) == realpath(dirname(@__DIR__))
+if realpath(dirname(dirname(Base.pathof(Pkg)))) != realpath(dirname(@__DIR__))
+    @show dirname(dirname(Base.pathof(Pkg))) realpath(dirname(@__DIR__))
+    error("The wrong Pkg is being tested")
 end
 
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
 
-if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
-    s = read(`curl -sLI $(server)`, String);
-    @info "Pkg Server metadata:\n$s"
-end
-
-### Disable logging output if true (default)
-hide_logs = Base.get_bool_env("JULIA_PKG_TEST_QUIET", true)
-
 logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
 ### Send all Pkg output to a file called Pkg.log
-
 islogging = logdir !== nothing
 
 if islogging
     logfile = joinpath(logdir, "Pkg.log")
     Pkg.DEFAULT_IO[] = open(logfile, "a")
     @info "Pkg test output is being logged to file" logfile
-elseif hide_logs
-    Pkg.DEFAULT_IO[] = Base.BufferStream()
-    @info "Pkg test output is silenced"
 else
     Pkg.DEFAULT_IO[] = stdout
 end
@@ -61,10 +34,30 @@ end
 Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
 
 include("utils.jl")
+Logging.with_logger(islogging ? Logging.ConsoleLogger(Pkg.DEFAULT_IO[]) : Logging.current_logger()) do
 
-Utils.check_init_reg()
+    # Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
+    if Base.find_package("HistoricalStdlibVersions") === nothing
+        @debug "Installing HistoricalStdlibVersions for Pkg tests"
+        iob = IOBuffer()
+        Pkg.activate(; temp = true)
+        try
+            Pkg.add("HistoricalStdlibVersions", io=iob) # Needed for custom julia version resolve tests
+        catch
+            println(String(take!(iob)))
+            rethrow()
+        end
+    end
 
-Logging.with_logger(hide_logs ? Logging.NullLogger() : Logging.current_logger()) do
+    @eval import HistoricalStdlibVersions
+
+    if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
+        s = read(`curl -sLI $(server)`, String);
+        @info "Pkg Server metadata:\n$s"
+    end
+
+    Utils.check_init_reg()
+
     @testset "Pkg" begin
         try
             @testset "$f" for f in [
