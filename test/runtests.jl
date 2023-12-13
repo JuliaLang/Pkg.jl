@@ -6,9 +6,10 @@ original_depot_path = copy(Base.DEPOT_PATH)
 original_load_path = copy(Base.LOAD_PATH)
 original_env = copy(ENV)
 original_project = Base.active_project()
-original_wd = pwd()
 
 module PkgTestsInner
+
+original_wd = pwd()
 
 import Pkg
 using Test, Logging
