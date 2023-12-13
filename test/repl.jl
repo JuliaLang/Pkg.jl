@@ -182,31 +182,32 @@ temp_pkg_dir() do project_path; cd(project_path) do
     # nested
     mktempdir() do other_dir
         mktempdir() do tmp;
-            cd(tmp)
-            pkg"generate HelloWorld"
-            cd("HelloWorld") do
-                with_current_env() do
-                    uuid1 = Pkg.generate("SubModule1")["SubModule1"]
-                    uuid2 = Pkg.generate("SubModule2")["SubModule2"]
-                    pkg"develop ./SubModule1"
-                    mkdir("tests")
-                    cd("tests")
-                    pkg"develop ../SubModule2"
-                    @test Pkg.dependencies()[uuid1].version == v"0.1.0"
-                    @test Pkg.dependencies()[uuid2].version == v"0.1.0"
-                    # make sure paths to SubModule1 and SubModule2 are relative
-                    manifest = Pkg.Types.Context().env.manifest
-                    @test manifest[uuid1].path == "SubModule1"
-                    @test manifest[uuid2].path == "SubModule2"
+            cd(tmp) do
+                pkg"generate HelloWorld"
+                cd("HelloWorld") do
+                    with_current_env() do
+                        uuid1 = Pkg.generate("SubModule1")["SubModule1"]
+                        uuid2 = Pkg.generate("SubModule2")["SubModule2"]
+                        pkg"develop ./SubModule1"
+                        mkdir("tests")
+                        cd("tests")
+                        pkg"develop ../SubModule2"
+                        @test Pkg.dependencies()[uuid1].version == v"0.1.0"
+                        @test Pkg.dependencies()[uuid2].version == v"0.1.0"
+                        # make sure paths to SubModule1 and SubModule2 are relative
+                        manifest = Pkg.Types.Context().env.manifest
+                        @test manifest[uuid1].path == "SubModule1"
+                        @test manifest[uuid2].path == "SubModule2"
+                    end
                 end
-            end
-            cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
-            cd(joinpath(other_dir, "HelloWorld"))
-            with_current_env() do
-                # Check that these didn't generate absolute paths in the Manifest by copying
-                # to another directory
-                @test Base.find_package("SubModule1") == joinpath(pwd(), "SubModule1", "src", "SubModule1.jl")
-                @test Base.find_package("SubModule2") == joinpath(pwd(), "SubModule2", "src", "SubModule2.jl")
+                cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
+                cd(joinpath(other_dir, "HelloWorld"))
+                with_current_env() do
+                    # Check that these didn't generate absolute paths in the Manifest by copying
+                    # to another directory
+                    @test Base.find_package("SubModule1") == joinpath(pwd(), "SubModule1", "src", "SubModule1.jl")
+                    @test Base.find_package("SubModule2") == joinpath(pwd(), "SubModule2", "src", "SubModule2.jl")
+                end
             end
         end
     end

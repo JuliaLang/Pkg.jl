@@ -9,6 +9,8 @@ original_project = Base.active_project()
 
 module PkgTestsInner
 
+original_wd = pwd()
+
 import Pkg
 using Test, Logging
 
@@ -84,6 +86,7 @@ Logging.with_logger(islogging ? Logging.ConsoleLogger(Pkg.DEFAULT_IO[]) : Loggin
             end
         finally
             islogging && close(Pkg.DEFAULT_IO[])
+            cd(original_wd)
         end
     end
 end
