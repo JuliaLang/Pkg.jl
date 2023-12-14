@@ -192,23 +192,20 @@ function projectfile_path(env_path::String; strict=false)
 end
 
 function manifestfile_path(env_path::String; strict=false)
-    man_names = @static Base.manifest_names isa Tuple ? Base.manifest_names : Base.manifest_names()
-    for name in man_names
+    for name in Base.manifest_names
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
     if strict
         return nothing
     else
-        n_names = length(man_names)
-        if n_names == 1
-            return joinpath(env_path, only(man_name))
+        # given no matching manifest exists, if JuliaProject.toml is used,
+        # prefer to create JuliaManifest.toml, otherwise Manifest.toml
+        project, _ = splitext(basename(projectfile_path(env_path)::String))
+        if project == "JuliaProject"
+            return joinpath(env_path, "JuliaManifest.toml")
         else
-            project = basename(projectfile_path(env_path)::String)
-            idx = findfirst(x -> x == project, Base.project_names)
-            @assert idx !== nothing
-            idx = idx + (n_names - length(Base.project_names)) # ignore custom name if present
-            return joinpath(env_path, man_names[idx])
+            return joinpath(env_path, "Manifest.toml")
         end
     end
 end
