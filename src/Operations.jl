@@ -1645,7 +1645,7 @@ end
 function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
     test_file = testfile(source_path)
     code = """
-        if Base.JLOptions().code_coverage > 0 && Base.JLOptions().tracked_path != CNULL
+        if Base.JLOptions().code_coverage > 0 && Base.JLOptions().tracked_path != C_NULL
             @show unsafe_string(Base.JLOptions().tracked_path)
         end
         $(Base.load_path_setup_code(false))
