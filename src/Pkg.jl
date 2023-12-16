@@ -110,8 +110,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, installed=false)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, installed=false)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
