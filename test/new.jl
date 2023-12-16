@@ -2428,12 +2428,7 @@ end
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\(<v$v\\)"), str)
-        open(Base.active_project(), "a") do io
-            write(io, """
-                  [compat]
-                  Example = "0.4.1"
-            """)
-        end
+        compat("Example", "0.4.1")
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\[<v0.4.1\\], \\(<v$v\\)"), str)

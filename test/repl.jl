@@ -483,14 +483,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             json_uuid = Pkg.project().dependencies["JSON"]
             current_json = Pkg.dependencies()[json_uuid].version
             old_project = read("Project.toml", String)
-            open("Project.toml"; append=true) do io
-                print(io, """
-
-                [compat]
-                JSON = "0.18.0"
-                """
-                )
-            end
+            compat("JSON", "0.18.0")
             pkg"up"
             @test Pkg.dependencies()[json_uuid].version.minor == 18
             write("Project.toml", old_project)
