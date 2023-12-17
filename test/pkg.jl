@@ -243,7 +243,9 @@ temp_pkg_dir() do project_path
 
         @test !any(endswith(".cov"), readdir(pkgdir)) # should be no cov files to start with
         Pkg.test(TEST_PKG.name; coverage=true)
-        @show readdir(pkgdir)
+        @show readdir(pkgdir) pkgdir
+        sleep(5)
+        @show readdir(pkgdir) pkgdir
         @test any(endswith(".cov"), readdir(pkgdir))
         Pkg.rm(TEST_PKG.name)
     end
