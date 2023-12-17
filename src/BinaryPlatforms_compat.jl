@@ -7,14 +7,11 @@ export platform_key_abi, platform_dlext, valid_dl_path, arch, libc,
        call_abi, wordsize, triplet, select_platform, platforms_match,
        CompilerABI, Platform, UnknownPlatform, Linux, MacOS, Windows, FreeBSD
 
-import Base.BinaryPlatforms: libgfortran_version, libstdcxx_version, platform_name,
-                             wordsize, platform_dlext, tags, arch, libc, call_abi,
-                             cxxstring_abi
-
-struct UnknownPlatform <: AbstractPlatform
-    UnknownPlatform(args...; kwargs...) = new()
+function UnknownPlatform(args...; kwargs...)
+    p = Platform("unknown", "unknown")
+    delete!(p.tags, "arch")
+    return p
 end
-tags(::UnknownPlatform) = Dict{String,String}("os"=>"unknown")
 
 
 struct CompilerABI
@@ -46,47 +43,30 @@ cxxstring_abi(cabi::CompilerABI) = cabi.cxxstring_abi
 
 for T in (:Linux, :Windows, :MacOS, :FreeBSD)
     @eval begin
-        struct $(T) <: AbstractPlatform
-            p::Platform
-            function $(T)(arch::Symbol; compiler_abi=nothing, kwargs...)
-                if compiler_abi !== nothing
-                    kwargs = (; kwargs...,
-                        :libgfortran_version => libgfortran_version(compiler_abi),
-                        :libstdcxx_version => libstdcxx_version(compiler_abi),
-                        :cxxstring_abi => cxxstring_abi(compiler_abi)
-                    )
-                end
-                return new(Platform(string(arch), $(string(T)); kwargs..., validate_strict=true))
+        function $(T)(arch::Symbol; compiler_abi=nothing, kwargs...)
+            if compiler_abi !== nothing
+                kwargs = (; kwargs...,
+                    :libgfortran_version => libgfortran_version(compiler_abi),
+                    :libstdcxx_version => libstdcxx_version(compiler_abi),
+                    :cxxstring_abi => cxxstring_abi(compiler_abi)
+                )
             end
+            return Platform(string(arch), $(string(T)); kwargs..., validate_strict=true)
         end
     end
 end
 
-const PlatformUnion = Union{Linux,MacOS,Windows,FreeBSD}
-
 # First, methods we need to coerce to Symbol for backwards-compatibility
 for f in (:arch, :libc, :call_abi, :cxxstring_abi)
     @eval begin
-        function $(f)(p::PlatformUnion)
-            str = $(f)(p.p)
+        function $(f)(p::AbstractPlatform)
+            str = Base.BinaryPlatforms.$(f)(p)
             if str === nothing
                 return nothing
             end
             return Symbol(str)
         end
     end
-end
-
-# Next, things we don't need to coerce
-for f in (:libgfortran_version, :libstdcxx_version, :platform_name, :wordsize, :platform_dlext, :tags, :triplet)
-    @eval begin
-        $(f)(p::PlatformUnion) = $(f)(p.p)
-    end
-end
-
-# Finally, add equality testing between these wrapper types and other AbstractPlatforms
-@eval begin
-    Base.:(==)(a::PlatformUnion, b::AbstractPlatform) = b == a.p
 end
 
 # Add one-off functions
