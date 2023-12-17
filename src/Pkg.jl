@@ -41,14 +41,18 @@ const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 
-struct UnstableIO <: IO
-    io::IO
+# See discussion in https://github.com/JuliaLang/julia/pull/52249
+const UnstableIO = IOContext{IO}
+function unstableio(@nospecialize(io::IO))
+    # Needed to prevent specialization https://github.com/JuliaLang/julia/pull/52249#discussion_r1401199265
+    _io = Base.inferencebarrier(io)
+    IOContext{IO}(
+        _io,
+        get(_io,:color,false) ? Base.ImmutableDict{Symbol,Any}(:color, true) : Base.ImmutableDict{Symbol,Any}()
+    )
 end
-Base.write(io::UnstableIO, b::UInt8) = write(io.io, b)::Int
-Base.get(io::UnstableIO, val, default) = get(io.io, val, default)
-Base.print(io::UnstableIO, arg::Union{SubString{String}, String}) = print(io.io, arg)
-stderr_f() = something(DEFAULT_IO[], UnstableIO(stderr))
-stdout_f() = something(DEFAULT_IO[], UnstableIO(stdout))
+stderr_f() = something(DEFAULT_IO[], unstableio(stderr))
+stdout_f() = something(DEFAULT_IO[], unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
 can_fancyprint(io::IO) = ((io isa Base.TTY) || (io isa UnstableIO && io.io isa Base.TTY)) && (get(ENV, "CI", nothing) != "true")

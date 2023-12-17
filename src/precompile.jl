@@ -105,7 +105,7 @@ let
 
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
         # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
-        DEFAULT_IO[] = UnstableIO(devnull)
+        DEFAULT_IO[] = unstableio(devnull)
         Downloads.DOWNLOADER[] = Downloads.Downloader(; grace = 1.0)
 
         # We need to override JULIA_PKG_UNPACK_REGISTRY to fix https://github.com/JuliaLang/Pkg.jl/issues/3663
