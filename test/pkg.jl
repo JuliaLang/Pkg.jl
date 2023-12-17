@@ -233,6 +233,8 @@ temp_pkg_dir() do project_path
     end
 
     @testset "testing" begin
+        @info "here"
+        Pkg.status()
         Pkg.add(TEST_PKG.name)
 
         pkgdir = dirname(Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name)))
@@ -241,6 +243,7 @@ temp_pkg_dir() do project_path
 
         @test !any(endswith(".cov"), readdir(pkgdir)) # should be no cov files to start with
         Pkg.test(TEST_PKG.name; coverage=true)
+        @show readdir(pkgdir)
         @test any(endswith(".cov"), readdir(pkgdir))
         Pkg.rm(TEST_PKG.name)
     end
