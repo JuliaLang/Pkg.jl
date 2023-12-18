@@ -1757,6 +1757,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
     sandbox_project = projectfile_path(sandbox_path)
 
     mktempdir() do tmp
+        tmp = realpath(tmp)
         tmp_project  = projectfile_path(tmp)
         tmp_manifest = manifestfile_path(tmp)
         tmp_preferences = joinpath(tmp, first(Base.preferences_names))
