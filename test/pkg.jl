@@ -241,7 +241,7 @@ temp_pkg_dir() do project_path
         recursive_rm_cov_files(pkgdir) # clean out cov files from previous test runs
 
         @test !any(endswith(".cov"), readdir(pkgdir)) # should be no cov files to start with
-        Pkg.test(TEST_PKG.name; coverage=true, test_fn = ()->(using InteractiveUtils, Example; eval(Meta.parse("@functionloc Example.hello(\"foo\")"))))
+        Pkg.test(TEST_PKG.name; coverage=true)
         @show readdir(pkgdir) pkgdir
         @test any(endswith(".cov"), readdir(pkgdir))
         Pkg.rm(TEST_PKG.name)
