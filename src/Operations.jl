@@ -1679,7 +1679,7 @@ end
 
 function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_args)
     coverage_arg = if coverage isa Bool
-        coverage ? string("@", realpath(source_path)) : "none"
+        coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
         coverage
     else
