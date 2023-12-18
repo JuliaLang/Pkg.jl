@@ -234,7 +234,6 @@ temp_pkg_dir() do project_path
 
     @testset "testing" begin
         @info "here"
-        Pkg.status()
         Pkg.add(TEST_PKG.name)
 
         pkgdir = dirname(Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name)))
@@ -242,9 +241,7 @@ temp_pkg_dir() do project_path
         recursive_rm_cov_files(pkgdir) # clean out cov files from previous test runs
 
         @test !any(endswith(".cov"), readdir(pkgdir)) # should be no cov files to start with
-        Pkg.test(TEST_PKG.name; coverage=true, test_fn = ()->(using InteractiveUtils, Example; @functionloc Example.hello("foo")))
-        @show readdir(pkgdir) pkgdir
-        sleep(5)
+        Pkg.test(TEST_PKG.name; coverage=true, test_fn = ()->(using InteractiveUtils, Example; eval(Meta.parse("@functionloc Example.hello(\"foo\")"))))
         @show readdir(pkgdir) pkgdir
         @test any(endswith(".cov"), readdir(pkgdir))
         Pkg.rm(TEST_PKG.name)
