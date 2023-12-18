@@ -1653,7 +1653,10 @@ function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args
         cd($(repr(dirname(test_file))))
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
+        try
         isdefined(Main, :Example) && @show functionloc(Example.hello)
+        catch
+        end
         """
     return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
