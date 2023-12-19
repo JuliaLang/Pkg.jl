@@ -455,7 +455,15 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-is_manifest_current(ctx::Context = Context()) = Operations.is_manifest_current(ctx.env)
+is_manifest_current(ctx::Context) = Operations.is_manifest_current(ctx.env)
+function is_manifest_current(path::AbstractString)
+    project_file = projectfile_path(path, strict = true)
+    if project_file === nothing
+        pkgerror("could not find project file at `$path`")
+    end
+    env = EnvCache(project_file)
+    return Operations.is_manifest_current(env)
+end
 
 const UsageDict = Dict{String,DateTime}
 const UsageByDepotDict = Dict{String,UsageDict}

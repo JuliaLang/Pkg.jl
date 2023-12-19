@@ -186,17 +186,17 @@ end
 
                 Pkg.activate(; temp=true)
                 Pkg.add("Example")
-                @test Pkg.is_manifest_current() === true
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
 
                 Pkg.compat("Example", "0.4")
-                @test Pkg.is_manifest_current() === false
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
                 Pkg.status(io = iob)
                 sync_msg_str = r"The project dependencies or compat requirements have changed since the manifest was last resolved."
                 @test occursin(sync_msg_str, String(take!(iob)))
                 @test_logs (:warn, sync_msg_str) Pkg.instantiate()
 
                 Pkg.update()
-                @test Pkg.is_manifest_current() === true
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
                 Pkg.status(io = iob)
                 @test !occursin(sync_msg_str, String(take!(iob)))
 
@@ -206,7 +206,7 @@ end
                 @test_logs (:warn, sync_msg_str) Pkg.instantiate()
 
                 Pkg.rm("Example")
-                @test Pkg.is_manifest_current() === true
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
                 Pkg.status(io = iob)
                 @test !occursin(sync_msg_str, String(take!(iob)))
             end
