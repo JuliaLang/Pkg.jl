@@ -1556,7 +1556,6 @@ end
         @test str ==
         """  StaticArrays → LinearAlgebra
           StaticArrays → Statistics → LinearAlgebra
-          StaticArrays → Statistics → SparseArrays → LinearAlgebra
         """
     end
 end

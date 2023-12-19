@@ -13,7 +13,7 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
        list_tarball_files, recursive_rm_cov_files
 
-const CACHE_DIRECTORY = mktempdir(; cleanup = true)
+const CACHE_DIRECTORY = realpath(mktempdir(; cleanup = true))
 
 const LOADED_DEPOT = joinpath(CACHE_DIRECTORY, "loaded_depot")
 
@@ -75,7 +75,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
                 "JULIA_PKG_DEVDIR" => nothing) do
             target_depot = nothing
             try
-                target_depot = mktempdir()
+                target_depot = realpath(mktempdir())
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, target_depot)
                 loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
@@ -141,8 +141,8 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
-            env_dir = mktempdir()
-            depot_dir = mktempdir()
+            env_dir = realpath(mktempdir())
+            depot_dir = realpath(mktempdir())
             try
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
@@ -173,7 +173,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
 end
 
 function cd_tempdir(f; rm=true)
-    tmp = mktempdir()
+    tmp = realpath(mktempdir())
     cd(tmp) do
         f(tmp)
     end
@@ -209,7 +209,7 @@ end
 
 function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
     prev_active = Base.ACTIVE_PROJECT[]
-    env_path = joinpath(mktempdir(), env_name)
+    env_path = joinpath(realpath(mktempdir()), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
     try
