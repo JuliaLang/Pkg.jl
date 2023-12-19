@@ -1073,10 +1073,11 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
         end
     end
     unique!(repo_infos)
-    if isinteractive()
+    if isinteractive() && isassigned(Base.REPL_MODULE_REF)
+        TM = Base.REPL_MODULE_REF[].TerminalMenus
         # prompt for which UUID was intended:
-        menu = RadioMenu(String["Registry: $(value[1]) - Repo: $(value[2]) - UUID: $(value[3])" for value in repo_infos])
-        choice = request("There are multiple registered `$name` packages, choose one:", menu)
+        menu = TM.RadioMenu(String["Registry: $(value[1]) - Repo: $(value[2]) - UUID: $(value[3])" for value in repo_infos])
+        choice = TM.request("There are multiple registered `$name` packages, choose one:", menu)
         choice == -1 && return nothing
         return repo_infos[choice][3]
     else
