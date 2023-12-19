@@ -431,7 +431,7 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # until a new version is registered we will not consider
 # them for upgrading. This is opt-out instead of the previous opt-in.
 const NON_UPGRADEABLE_STDLIBS = [
-    "ArgTools", "Artifacts", "Downloads", "LazyArtifacts", "LibCURL",
+    "ArgTools", "Artifacts", "Downloads", "LibCURL",
     "NetworkOptions", "SHA", "Tar", "TOML"]
 
 # These are used directly by libjulia-*
