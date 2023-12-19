@@ -1645,18 +1645,10 @@ end
 function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
     test_file = testfile(source_path)
     code = """
-        if Base.JLOptions().code_coverage > 0 && Base.JLOptions().tracked_path != C_NULL
-            @show mktempdir() abspath(mktempdir())
-            @show unsafe_string(Base.JLOptions().tracked_path)
-        end
         $(Base.load_path_setup_code(false))
         cd($(repr(dirname(test_file))))
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
-        try
-        isdefined(Main, :Example) && @show functionloc(Example.hello)
-        catch
-        end
         """
     return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
@@ -1760,7 +1752,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
     sandbox_project = projectfile_path(sandbox_path)
 
     mktempdir() do tmp
-        tmp = realpath(tmp)
         tmp_project  = projectfile_path(tmp)
         tmp_manifest = manifestfile_path(tmp)
         tmp_preferences = joinpath(tmp, first(Base.preferences_names))

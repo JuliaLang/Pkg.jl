@@ -233,7 +233,6 @@ temp_pkg_dir() do project_path
     end
 
     @testset "testing" begin
-        @info "here"
         Pkg.add(TEST_PKG.name)
 
         pkgdir = dirname(Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name)))
