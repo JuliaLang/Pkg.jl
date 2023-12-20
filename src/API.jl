@@ -1110,8 +1110,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
     fancyprint = can_fancyprint(io) && !timing
 
+    hascolor = get(io, :color, false)::Bool
     function color_string(cstr::String, col::Union{Int64, Symbol})
-        if get(io, :color, false)::Bool
+        if hascolor
             enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
             disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
             return string(enable_ansi, cstr, disable_ansi)
