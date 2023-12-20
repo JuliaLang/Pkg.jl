@@ -577,10 +577,13 @@ end
     end
     # Double add should not change state, this would be an unnecessary change.
     isolate(loaded_depot=true) do
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.Types.Context().env.project.compat["Example"] == "0.3.0"
         Pkg.add("Example")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test Pkg.Types.Context().env.project.compat["Example"] == "0.3.0"
     end
     # Adding a new package should not alter the version of existing packages.
     isolate(loaded_depot=true) do
