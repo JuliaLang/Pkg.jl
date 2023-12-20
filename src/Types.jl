@@ -265,7 +265,10 @@ Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames
 # only hash the deps and compat fields as they are the only fields that affect a resolve
 function project_resolve_hash(t::Project)
     iob = IOBuffer()
-    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(t.deps); by=first))
+    # Handle deps in both [deps] and [weakdeps]
+    _deps_weak = Dict(intersect(t.deps, t.weakdeps))
+    deps = filter(p->!haskey(_deps_weak, p.first), t.deps)
+    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(deps); by=first))
     foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
     return bytes2hex(sha1(seekstart(iob)))
 end
