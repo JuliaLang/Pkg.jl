@@ -225,7 +225,6 @@ import .FakeTerminals.FakeTerminal
             s2 = String(take!(iob2))
             @test occursin("Precompiling", s1)
             @test occursin("Precompiling", s2)
-            @show s1 s2
             @test any(contains("Being precompiled by another process (pid: "), (s1, s2))
         end
 
