@@ -101,11 +101,13 @@ PSA[:name => "add",
     :arg_parser => ((x,y) -> parse_package(x,y; add_or_dev=true)),
     :option_spec => [
         PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+        PSA[:name => "weak", :short_name => "w", :api => :target => :weakdeps],
+        PSA[:name => "extra", :short_name => "e", :api => :target => :extras],
     ],
     :completions => complete_add_dev,
     :description => "add packages to project",
     :help => md"""
-    add [--preserve=<opt>] pkg[=uuid] [@version] [#rev] ...
+    add [--preserve=<opt>] [-w|--weak] [-e|--extra] pkg[=uuid] [@version] [#rev] ...
 
 Add package `pkg` to the current project file. If `pkg` could refer to
 multiple different packages, specifying `uuid` allows you to disambiguate.
@@ -151,6 +153,8 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 ```
 pkg> add Example
 pkg> add --preserve=all Example
+pkg> add --weak Example
+pkg> add --extra Example
 pkg> add Example@0.5
 pkg> add Example#master
 pkg> add Example#c37b675
