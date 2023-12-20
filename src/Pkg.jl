@@ -154,12 +154,13 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
     The `PRESERVE_TIERED_INSTALLED` and `PRESERVE_ALL_INSTALLED` strategies requires at least Julia 1.9.
 
 !!! compat "Julia 1.11"
-    The `weak` kwarg requires at least Julia 1.11.
+    The `target` kwarg requires at least Julia 1.11.
 
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
-Pkg.add("Example", weak=true) # Add a package from registry as a weak dependency
+Pkg.add("Example", target=:weakdeps) # Add a package as a weak dependency
+Pkg.add("Example", target=:extras) # Add a package to the `[extras]` list
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
