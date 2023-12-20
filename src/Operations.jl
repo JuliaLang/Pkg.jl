@@ -1386,14 +1386,27 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     end
     foreach(pkg -> ctx.env.project.deps[pkg.name] = pkg.uuid, pkgs) # update set of deps
     # resolve
-    pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+    man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+    update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixup_ext!(ctx.env, pkgs)
+    fixup_ext!(ctx.env, man_pkgs)
 
     # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
     # and ensure they are all downloaded and unpacked as well:
     download_artifacts(ctx.env, platform=platform, julia_version=ctx.julia_version, io=ctx.io)
+
+    # if env is a package add compat entries
+    if ctx.env.project.name !== nothing && ctx.env.project.uuid !== nothing
+        compat_names = String[]
+        for pkg in pkgs
+            haskey(ctx.env.project.compat, pkg.name) && continue
+            pkgversion = Base.thispatch(ctx.env.manifest[pkg.uuid].version)
+            set_compat(ctx.env.project, pkg.name, string(pkgversion))
+            push!(compat_names, pkg.name)
+        end
+        printpkgstyle(ctx.io, :Compat, """entries added for $(join(compat_names, ", "))""")
+    end
+    record_project_hash(ctx.env) # compat entries changed the hash after it was last recorded in update_manifest!
 
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)

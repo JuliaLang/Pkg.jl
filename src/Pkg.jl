@@ -117,6 +117,9 @@ Add a package to the current project. This package will be available by using th
 `import` and `using` keywords in the Julia REPL, and if the current project is
 a package, also inside that package.
 
+If the active environment is a package (the Project has both `name` and `uuid` fields) compat entries will be
+added automatically with a lower bound of the added version.
+
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using a tiered algorithm.
 The `preserve` keyword argument allows you to key into a specific tier in the resolve algorithm.

@@ -577,10 +577,13 @@ end
     end
     # Double add should not change state, this would be an unnecessary change.
     isolate(loaded_depot=true) do
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         Pkg.add("Example")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
     end
     # Adding a new package should not alter the version of existing packages.
     isolate(loaded_depot=true) do
@@ -807,6 +810,23 @@ end
     isolate(loaded_depot=true) do
         Pkg.add(name="libpng_jll", version=v"1.6.37+5")
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+5"
+    end
+    # Adding a new package to a package should add compat entries
+    isolate(loaded_depot=true) do
+        mktempdir() do tempdir
+            Pkg.activate(tempdir)
+            mkpath(joinpath(tempdir, "src"))
+            touch(joinpath(tempdir, "src", "Foo.jl"))
+            ctx = Pkg.Types.Context()
+            ctx.env.project.name = "Foo"
+            ctx.env.project.uuid = UUIDs.UUID(0)
+            Pkg.Types.write_project(ctx.env)
+            Pkg.add(name="Example", version="0.3.0")
+            @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+            @test Pkg.Types.Context().env.project.compat["Example"] == Pkg.Types.Compat(Pkg.Types.VersionSpec("0.3"), "0.3.0")
+            Pkg.add(name="Example", version="0.3.1")
+            @test Pkg.Types.Context().env.project.compat["Example"] == Pkg.Types.Compat(Pkg.Types.VersionSpec("0.3"), "0.3.0")
+        end
     end
     end # withenv
 end
@@ -2428,12 +2448,7 @@ end
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\(<v$v\\)"), str)
-        open(Base.active_project(), "a") do io
-            write(io, """
-                  [compat]
-                  Example = "0.4.1"
-            """)
-        end
+        Pkg.compat("Example", "0.4.1")
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\[<v0.4.1\\], \\(<v$v\\)"), str)

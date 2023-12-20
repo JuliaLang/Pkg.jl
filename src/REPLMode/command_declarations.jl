@@ -114,6 +114,9 @@ are of the form `@1`, `@1.2` or `@1.2.3`, allowing any version with a prefix
 that matches, or ranges thereof, such as `@1.2-3.4.5`. A git revision can be
 specified by `#branch` or `#commit`.
 
+If the active environment is a package (the Project has both `name` and `uuid` fields) compat entries will be
+added automatically with a lower bound of the added version.
+
 If a local path is used as an argument to `add`, the path needs to be a git repository.
 The project will then track that git repository just like it would track a remote repository online.
 If the package is not located at the top of the git repository, a subdirectory can be specified with
