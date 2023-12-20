@@ -35,12 +35,12 @@ authors = [
 ]
 ```
 
-If all authors are specified by tables, it is possible to use a [TOML Array of Tables syntax](https://toml.io/en/v1.0.0#array-of-tables)
+If all authors are specified by tables, it is possible to use [the TOML Array of Tables syntax](https://toml.io/en/v1.0.0#array-of-tables)
 ```toml
 [[authors]]
 given-names = "Some"
 family-names = "One"
-email = "someone@email.com>"
+email = "someone@email.com"
 
 [[authors]]
 given-names = "Foo"
