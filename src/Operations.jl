@@ -1686,7 +1686,6 @@ function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_a
         $(Base.julia_cmd())
         --code-coverage=$(coverage_arg)
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
-        --compiled-modules=$(Bool(Base.JLOptions().use_compiled_modules) ? "yes" : "no")
         --check-bounds=yes
         --warn-overwrite=yes
         --depwarn=$(Base.JLOptions().depwarn == 2 ? "error" : "yes")
