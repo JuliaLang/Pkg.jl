@@ -1110,6 +1110,16 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
     fancyprint = can_fancyprint(io) && !timing
 
+    function color_string(cstr::String, col::Union{Int64, Symbol})
+        if get(io, :color, false)::Bool
+            enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
+            disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
+            return string(enable_ansi, cstr, disable_ansi)
+        else
+            return cstr
+        end
+    end
+
     recall_precompile_state() # recall suspended and force-queued packages
     !internal_call && precomp_unsuspend!() # when manually called, unsuspend all packages that were suspended due to precomp errors
 
@@ -1682,12 +1692,6 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
     end
     nothing
-end
-
-function color_string(cstr::String, col::Union{Int64, Symbol})
-    enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
-    disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
-    return string(enable_ansi, cstr, disable_ansi)
 end
 
 function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
