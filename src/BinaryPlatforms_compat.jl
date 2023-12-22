@@ -1,21 +1,30 @@
 module BinaryPlatforms
 
-using Base.BinaryPlatforms
+using Base: BinaryPlatforms as BBP
+using Base.BinaryPlatforms: platform_dlext, arch, libc,
+       libgfortran_version, libstdcxx_version, cxxstring_abi, parse_dl_name_version,
+       detect_libgfortran_version, detect_libstdcxx_version, detect_cxxstring_abi,
+       call_abi, wordsize, select_platform, platforms_match,
+       Platform, platform_name
+
 export platform_key_abi, platform_dlext, valid_dl_path, arch, libc,
        libgfortran_version, libstdcxx_version, cxxstring_abi, parse_dl_name_version,
        detect_libgfortran_version, detect_libstdcxx_version, detect_cxxstring_abi,
        call_abi, wordsize, triplet, select_platform, platforms_match,
        CompilerABI, Platform, UnknownPlatform, Linux, MacOS, Windows, FreeBSD
 
-import Base.BinaryPlatforms: libgfortran_version, libstdcxx_version, platform_name,
-                             wordsize, platform_dlext, tags, arch, libc, call_abi,
-                             cxxstring_abi
+# Distinct from Base.BinaryPlatforms.AbstractPlatform
+abstract type AbstractPlatform end
+Base.convert(::Type{T}, p::AbstractPlatform) where T <: BBP.AbstractPlatform = p.p::T
 
 struct UnknownPlatform <: AbstractPlatform
-    UnknownPlatform(args...; kwargs...) = new()
+    p::Platform
+    function UnknownPlatform(args...; kwargs...)
+        p = Platform("unknown", "unknown")
+        delete!(p.tags, "arch")
+        new(p)
+    end
 end
-tags(::UnknownPlatform) = Dict{String,String}("os"=>"unknown")
-
 
 struct CompilerABI
     libgfortran_version::Union{Nothing,VersionNumber}
@@ -40,9 +49,9 @@ function CompilerABI(cabi::CompilerABI; libgfortran_version=nothing,
     )
 end
 
-libgfortran_version(cabi::CompilerABI) = cabi.libgfortran_version
-libstdcxx_version(cabi::CompilerABI) = cabi.libstdcxx_version
-cxxstring_abi(cabi::CompilerABI) = cabi.cxxstring_abi
+BBP.libgfortran_version(cabi::CompilerABI) = cabi.libgfortran_version
+BBP.libstdcxx_version(cabi::CompilerABI) = cabi.libstdcxx_version
+BBP.cxxstring_abi(cabi::CompilerABI) = cabi.cxxstring_abi
 
 for T in (:Linux, :Windows, :MacOS, :FreeBSD)
     @eval begin
@@ -64,10 +73,11 @@ end
 
 const PlatformUnion = Union{Linux,MacOS,Windows,FreeBSD}
 
+
 # First, methods we need to coerce to Symbol for backwards-compatibility
 for f in (:arch, :libc, :call_abi, :cxxstring_abi)
     @eval begin
-        function $(f)(p::PlatformUnion)
+        function BBP.$(f)(p::AbstractPlatform)
             str = $(f)(p.p)
             if str === nothing
                 return nothing
@@ -77,23 +87,16 @@ for f in (:arch, :libc, :call_abi, :cxxstring_abi)
     end
 end
 
-# Next, things we don't need to coerce
-for f in (:libgfortran_version, :libstdcxx_version, :platform_name, :wordsize, :platform_dlext, :tags, :triplet)
-    @eval begin
-        $(f)(p::PlatformUnion) = $(f)(p.p)
-    end
-end
-
-# Finally, add equality testing between these wrapper types and other AbstractPlatforms
-@eval begin
-    Base.:(==)(a::PlatformUnion, b::AbstractPlatform) = b == a.p
-end
+# Finally, add equality testing between these wrapper types and BBP.AbstractPlatforms
+Base.:(==)(a::AbstractPlatform, b::AbstractPlatform) = a.p == b.p
+Base.:(==)(a::AbstractPlatform, b::BBP.AbstractPlatform) = b == a.p
+Base.:(==)(a::BBP.AbstractPlatform, b::AbstractPlatform) = a == b.p
 
 # Add one-off functions
 MacOS(; kwargs...) = MacOS(:x86_64; kwargs...)
 FreeBSD(; kwargs...) = FreeBSD(:x86_64; kwargs...)
 
-function triplet(p::AbstractPlatform)
+function triplet(p::Union{AbstractPlatform, BBP.AbstractPlatform})
     # We are going to sub off to `Base.BinaryPlatforms.triplet()` here,
     # with the important exception that we override `os_version` to better
     # mimic the old behavior of `triplet()`
@@ -117,7 +120,7 @@ This method is deprecated, import `Base.BinaryPlatforms` and use either `HostPla
 to get the current host platform, or `parse(Base.BinaryPlatforms.Platform, triplet)`
 to parse the triplet for some other platform instead.
 """
-platform_key_abi() = HostPlatform()
+platform_key_abi() = BBP.HostPlatform()
 platform_key_abi(triplet::AbstractString) = parse(Platform, triplet)
 
 """
@@ -129,9 +132,9 @@ E.g. returns `true` for a path like `"usr/lib/libfoo.so.3.5"`, but returns
 
 This method is deprecated and will be removed in Julia 2.0.
 """
-function valid_dl_path(path::AbstractString, platform::AbstractPlatform)
+function valid_dl_path(path::AbstractString, platform::Union{AbstractPlatform, BBP.AbstractPlatform})
     try
-        parse_dl_name_version(path, string(os(platform))::String)
+        parse_dl_name_version(path, string(BBP.os(platform))::String)
         return true
     catch e
         if isa(e, ArgumentError)
@@ -140,5 +143,28 @@ function valid_dl_path(path::AbstractString, platform::AbstractPlatform)
         rethrow(e)
     end
 end
+
+for f in (
+    :(Base.getindex), :(Base.haskey), :(Base.setindex!),
+    :(Sys.isapple), :(Sys.islinux), :(Sys.iswindows), :(Sys.isfreebsd), :(Sys.isbsd), :(Sys.isunix),
+    :(BBP.HostPlatform),
+    :(BBP.libgfortran_version), :(BBP.libstdcxx_version), :(BBP.os), :(BBP.os_version),
+    :(BBP.platform_dlext), :(BBP.platform_name), :(BBP.platforms_match),
+    :(BBP.triplet), :(BBP.wordsize)
+)
+    @eval begin
+        $f(p::AbstractPlatform, args...) = $f(p.p, args...)
+    end
+end
+BBP.platforms_match(a::String, b::AbstractPlatform) =
+    BBP.platforms_match(a, b.p)
+BBP.platforms_match(a::AbstractString, b::AbstractPlatform) =
+    BBP.platforms_match(a, b.p)
+BBP.platforms_match(a::AbstractPlatform, b::AbstractPlatform) =
+    BBP.platforms_match(a.p, b.p)
+BBP.platforms_match(a::BBP.AbstractPlatform, b::AbstractPlatform) =
+    BBP.platforms_match(a, b.p)
+BBP.select_platform(download_info::Dict, platform::AbstractPlatform) =
+    BBP.platforms_match(a, platform.p)
 
 end # module BinaryPlatforms
