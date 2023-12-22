@@ -165,6 +165,6 @@ BBP.platforms_match(a::AbstractPlatform, b::AbstractPlatform) =
 BBP.platforms_match(a::BBP.AbstractPlatform, b::AbstractPlatform) =
     BBP.platforms_match(a, b.p)
 BBP.select_platform(download_info::Dict, platform::AbstractPlatform) =
-    BBP.platforms_match(a, platform.p)
+    BBP.select_platform(download_info, platform.p)
 
 end # module BinaryPlatforms
