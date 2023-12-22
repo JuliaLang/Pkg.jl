@@ -14,7 +14,7 @@ import FileWatching
 
 import Base: StaleCacheKey
 
-import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, ..UnstableIO
+import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
 import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH
 using ..Types, ..TOML
@@ -1102,8 +1102,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(default_num_tasks)))
     parallel_limiter = Base.Semaphore(num_tasks)
     io = ctx.io
-    if io isa UnstableIO
-        # precompile does quite a bit of output and using the UnstableIO can cause
+    if io isa IOContext{IO}
+        # precompile does quite a bit of output and using the IOContext{IO} can cause
         # some slowdowns, the important part here is to not specialize the whole
         # precompile function on the io
         io = io.io

@@ -42,7 +42,6 @@ const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 
 # See discussion in https://github.com/JuliaLang/julia/pull/52249
-const UnstableIO = IOContext{IO}
 function unstableio(@nospecialize(io::IO))
     # Needed to prevent specialization https://github.com/JuliaLang/julia/pull/52249#discussion_r1401199265
     _io = Base.inferencebarrier(io)
@@ -55,7 +54,7 @@ stderr_f() = something(DEFAULT_IO[], unstableio(stderr))
 stdout_f() = something(DEFAULT_IO[], unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
-can_fancyprint(io::IO) = ((io isa Base.TTY) || (io isa UnstableIO && io.io isa Base.TTY)) && (get(ENV, "CI", nothing) != "true")
+can_fancyprint(io::IO) = ((io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
 include("utils.jl")
