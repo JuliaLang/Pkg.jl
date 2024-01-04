@@ -266,7 +266,6 @@ function unbind_artifact!(artifacts_toml::String, name::String;
 end
 
 if Sys.iswindows()
-    symlinks_work = true
     function check_symlinks()
         tmpdir = mktempdir()
         fpath = joinpath(tmpdir, "f")
@@ -275,7 +274,6 @@ if Sys.iswindows()
             symlink(fpath, joinpath(tmpdir, "s"))
             return true
         catch
-            global symlinks_work = false
             return false
         end
     end
@@ -331,7 +329,7 @@ function download_artifact(
         msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
         msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
         @static if Sys.iswindows()
-            if !symlinks_work || !check_symlinks()
+            if !check_symlinks()
                 msg *= """"
                 Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
                 You may need to activate Developer Mode in Windows.
