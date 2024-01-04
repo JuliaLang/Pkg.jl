@@ -265,6 +265,22 @@ function unbind_artifact!(artifacts_toml::String, name::String;
     return
 end
 
+if Sys.iswindows()
+    symlinks_work = true
+    function check_symlinks()
+        tmpdir = mktempdir()
+        fpath = joinpath(tmpdir, "f")
+        touch(fpath)
+        try
+            symlink(fpath, joinpath(tmpdir, "s"))
+            return true
+        catch
+            global symlinks_work = false
+            return false
+        end
+    end
+end
+
 """
     download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
                       verbose::Bool = false, io::IO=stderr)
@@ -314,6 +330,14 @@ function download_artifact(
         msg  = "Tree Hash Mismatch!\n"
         msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
         msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+        @static if Sys.iswindows()
+            if !symlinks_work || !check_symlinks()
+                msg *= """"
+                Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
+                You may need to activate Developer Mode in Windows.
+                """
+            end
+        end
         # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
         # and Pkg.jl#2317, we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
         # error and move the artifact to the expected location and return true
