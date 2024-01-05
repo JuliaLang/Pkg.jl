@@ -14,17 +14,6 @@ original_wd = pwd()
 import Pkg
 using Test, Logging
 
-# Break Base.symlink to simulate the typical Microsoft Windows user experience.
-if get(ENV, "JULIA_TEST_BREAK_BASE_SYMLINK", "false") == "true"
-    function Base.symlink(a::AbstractString, b::AbstractString; kwargs...)
-        throw(Base.IOError(
-            """On Windows, creating symlinks requires Administrator privileges.
-            symlink($(repr(a)), $(repr(b))): operation not permitted (EPERM)""",
-            -4048,
-        ))
-    end
-end
-
 if realpath(dirname(dirname(Base.pathof(Pkg)))) != realpath(dirname(@__DIR__))
     @show dirname(dirname(Base.pathof(Pkg))) realpath(dirname(@__DIR__))
     error("The wrong Pkg is being tested")

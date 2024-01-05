@@ -34,19 +34,12 @@ jobs:
         pkg-server:
           - ""
           - "pkg.julialang.org"
-        break-symlink: 
-          - "false"
-          - "true"
         julia-version:
           # - '1.6'
           - 'nightly'
         exclude:
           - os: macOS-latest
             julia-arch: x86
-          - os: macOS-latest
-            break-symlink: "true"
-          - os: ubuntu-latest
-            break-symlink: "true"
     steps:
       - name: Set git to use LF and fix TEMP on windows
         if: matrix.os == 'windows-latest'
@@ -66,7 +59,6 @@ jobs:
           coverage: true
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
-          JULIA_TEST_BREAK_BASE_SYMLINK: ${{ matrix.break-symlink }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}

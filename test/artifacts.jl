@@ -796,4 +796,21 @@ end
     end
 end
 
+if Sys.iswindows()
+    @testset "installing artifacts when symlinks are copied" begin
+        # copy symlinks to simulate the typical Microsoft Windows user experience.
+        withenv("BINARYPROVIDER_COPYDEREF" => "true") do
+            temp_pkg_dir() do tmpdir
+                artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
+                cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
+                Pkg.activate(tmpdir)
+                cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml)
+                @test !artifact_exists(cts_hash)
+                Pkg.instantiate()
+                @test artifact_exists(cts_hash)
+            end
+        end
+    end
+end
+
 end # module
