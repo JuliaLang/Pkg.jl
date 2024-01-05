@@ -266,7 +266,9 @@ function unbind_artifact!(artifacts_toml::String, name::String;
 end
 
 if Sys.iswindows()
+    # check whether symlinks can be made
     function check_symlinks()
+        PlatformEngines.copy_symlinks() && return false # for testing
         tmpdir = mktempdir()
         fpath = joinpath(tmpdir, "f")
         touch(fpath)
