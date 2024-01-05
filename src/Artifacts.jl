@@ -331,6 +331,7 @@ function download_artifact(
         @static if Sys.iswindows()
             if !check_symlinks()
                 msg *= """
+                
                 Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
                 You may need to activate Developer Mode in Windows.
                 """
