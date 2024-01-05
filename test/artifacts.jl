@@ -798,7 +798,8 @@ end
 
 if Sys.iswindows()
     @testset "installing artifacts when symlinks are copied" begin
-        # copy symlinks to simulate the typical Microsoft Windows user experience.
+        # copy symlinks to simulate the typical Microsoft Windows user experience where
+        # developer mode is not enabled (no admin rights)
         withenv("BINARYPROVIDER_COPYDEREF" => "true") do
             temp_pkg_dir() do tmpdir
                 artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
