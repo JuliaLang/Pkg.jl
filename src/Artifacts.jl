@@ -330,7 +330,7 @@ function download_artifact(
         msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
         @static if Sys.iswindows()
             if !check_symlinks()
-                msg *= """"
+                msg *= """
                 Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
                 You may need to activate Developer Mode in Windows.
                 """
