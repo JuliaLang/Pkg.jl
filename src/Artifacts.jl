@@ -331,9 +331,10 @@ function download_artifact(
         @static if Sys.iswindows()
             if !check_symlinks()
                 msg *= """
-                
+
                 Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
                 You may need to activate Developer Mode in Windows.
+                If you cannot you can set the env var `JULIA_PKG_IGNORE_HASHES=1` to ignore artifact hash mismatches.
                 """
             end
         end
