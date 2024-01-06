@@ -335,8 +335,10 @@ function download_artifact(
                 msg *= """
 
                 Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
-                You may need to activate Developer Mode in Windows.
-                If you cannot you can set the env var `JULIA_PKG_IGNORE_HASHES=1` to ignore artifact hash mismatches.
+                One solution is to activate Developer Mode in Windows, for instructions on how to do that, see:
+                    https://learn.microsoft.com/en-us/gaming/game-bar/guide/developer-mode
+                An alternative path is to set the environment variable  `JULIA_PKG_IGNORE_HASHES=1`
+                to ignore artifact hash mismatches, however this is generally not recommended.
                 """
             end
         end
