@@ -283,7 +283,7 @@ end
 
 Calculate the git tree hash of a given path.
 """
-function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,Nothing} = nothing, indent::Int=0) where HashType
+function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,Nothing} = nothing, indent::Int=0, skip_symlink=false) where HashType
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
     for f in sort(readdir(root; join=true); by = f -> gitmode(f) == mode_dir ? f*"/" : f)
         # Skip `.git` directories
@@ -302,7 +302,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,N
             if debug_out !== nothing
                 child_stream = IOBuffer()
             end
-            hash = tree_hash(HashType, filepath; debug_out=child_stream, indent=indent+1)
+            hash = tree_hash(HashType, filepath; debug_out=child_stream, indent=indent+1, skip_symlink)
             if debug_out !== nothing
                 indent_str = "| "^indent
                 println(debug_out, "$(indent_str)+ [D] $(basename(filepath)) - $(bytes2hex(hash))")
@@ -310,6 +310,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,N
                 println(debug_out, indent_str)
             end
         else
+            skip_symlink && islink(filepath) && continue
             hash = blob_hash(HashType, filepath)
             if debug_out !== nothing
                 indent_str = "| "^indent
@@ -334,7 +335,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,N
     end
     return SHA.digest!(ctx)
 end
-tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing) = tree_hash(SHA.SHA1_CTX, root; debug_out)
+tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing, skip_symlink = false) = tree_hash(SHA.SHA1_CTX, root; debug_out, skip_symlink)
 
 function check_valid_HEAD(repo)
     try LibGit2.head(repo)
