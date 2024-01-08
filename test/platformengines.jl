@@ -160,23 +160,27 @@ end
 const collapse_url = "https://github.com/staticfloat/small_bin/raw/master/collapse_the_symlink/collapse_the_symlink.tar.gz"
 const collapse_hash = "956c1201405f64d3465cc28cb0dec9d63c11a08cad28c381e13bb22e1fc469d3"
 @testset "Copyderef unpacking" begin
-    withenv("BINARYPROVIDER_COPYDEREF" => "true") do
-        mktempdir() do prefix
-            target_dir = joinpath(prefix, "target")
-            download_verify_unpack(collapse_url, collapse_hash, target_dir; verbose=true)
+    mktempdir() do prefix
+        target_dir = joinpath(prefix, "target")
+        @test :changed_symlink === download_verify_unpack(
+            collapse_url,
+            collapse_hash,
+            target_dir;
+            verbose=true,
+            copy_symlinks=true,
+        )
 
-            # Test that we get the files we expect
-            @test isfile(joinpath(target_dir, "collapse_the_symlink", "foo"))
-            @test isfile(joinpath(target_dir, "collapse_the_symlink", "foo.1"))
-            @test isfile(joinpath(target_dir, "collapse_the_symlink", "foo.1.1"))
+        # Test that we get the files we expect
+        @test isfile(joinpath(target_dir, "collapse_the_symlink", "foo"))
+        @test isfile(joinpath(target_dir, "collapse_the_symlink", "foo.1"))
+        @test isfile(joinpath(target_dir, "collapse_the_symlink", "foo.1.1"))
 
-            # Test that these are definitely not links
-            @test !islink(joinpath(target_dir, "collapse_the_symlink", "foo"))
-            @test !islink(joinpath(target_dir, "collapse_the_symlink", "foo.1.1"))
+        # Test that these are definitely not links
+        @test !islink(joinpath(target_dir, "collapse_the_symlink", "foo"))
+        @test !islink(joinpath(target_dir, "collapse_the_symlink", "foo.1.1"))
 
-            # Test that broken symlinks get transparently dropped
-            @test !ispath(joinpath(target_dir, "collapse_the_symlink", "broken"))
-        end
+        # Test that broken symlinks get transparently dropped
+        @test !ispath(joinpath(target_dir, "collapse_the_symlink", "broken"))
     end
 end
 

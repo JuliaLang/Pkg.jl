@@ -389,6 +389,21 @@ function copy_symlinks()
     lowercase(var) in ("false", "f", "no", "n", "0") ? false : nothing
 end
 
+# copied from Tar.jl because not public API
+function can_symlink(dir::AbstractString)
+    # guaranteed to be an empty directory
+    link_path = joinpath(dir, "link")
+    return try
+        symlink("target", link_path)
+        true
+    catch err
+        err isa Base.IOError || rethrow()
+        false
+    finally
+        rm(link_path, force=true)
+    end
+end
+
 function unpack(
     tarball_path::AbstractString,
     dest::AbstractString;
@@ -420,6 +435,7 @@ end
         force::Bool = false,
         verbose::Bool = false,
         quiet_download::Bool = false,
+        copy_symlinks::Bool = false,
         io::IO=stderr,
     )
 
@@ -444,7 +460,8 @@ If `ignore_existence` is set, the tarball is unpacked even if the destination
 directory already exists.
 
 Returns `true` if a tarball was actually unpacked, `false` if nothing was
-changed in the destination prefix.
+changed in the destination prefix, and `:changed_symlink` if `copy_symlinks` is 
+`true` and the tarball had a symlink.
 """
 function download_verify_unpack(
     url::AbstractString,
@@ -455,6 +472,7 @@ function download_verify_unpack(
     force::Bool = false,
     verbose::Bool = false,
     quiet_download::Bool = false,
+    copy_symlinks::Bool = false,
     io::IO=stderr_f(),
 )
     # First, determine whether we should keep this tarball around
@@ -519,12 +537,21 @@ function download_verify_unpack(
         return false
     end
 
+    # Record this so we can check if copy_symlinks caused a tree hash mismatch
+    tar_changed_symlink = Ref(false)
     try
         if verbose
             @info("Unpacking $(tarball_path) into $(dest)...")
         end
         open(`$(exe7z()) x $tarball_path -so`) do io
-            Tar.extract(io, dest, copy_symlinks = copy_symlinks())
+            if copy_symlinks
+                Tar.extract(io, dest; copy_symlinks=true) do header::Tar.Header
+                    tar_changed_symlink[] |= (header.type == :symlink)
+                    true
+                end
+            else
+                Tar.extract(io, dest; copy_symlinks=false)
+            end
         end
     finally
         if remove_tarball
@@ -534,8 +561,13 @@ function download_verify_unpack(
         end
     end
 
-    # Signify that we did some unpacking!
-    return true
+    if tar_changed_symlink[]
+        # Signify that we did some unpacking but changed a symlink
+        return :changed_symlink
+    else
+        # Signify that we did some unpacking!
+        return true
+    end
 end
 
 

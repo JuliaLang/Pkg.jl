@@ -295,10 +295,17 @@ function download_artifact(
     # location only after knowing what it is, and if something goes wrong in the process,
     # everything should be cleaned up.  Luckily, that is precisely what our
     # `create_artifact()` wrapper does, so we use that here.
+    local download_result
     calc_hash = try
         create_artifact() do dir
-            download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose,
-                quiet_download=quiet_download, io=io)
+            # Currently many windows systems don't support symlinks
+            # Here we check if symlinks need to be copied to work around this.
+            copy_symlinks = @something(
+                PlatformEngines.copy_symlinks(),
+                (Sys.iswindows() && !PlatformEngines.can_symlink(dir)),
+            )
+            download_result = download_verify_unpack(tarball_url, tarball_hash, dir; ignore_existence=true, verbose=verbose,
+                quiet_download=quiet_download, io=io, copy_symlinks)
         end
     catch err
         @debug "download_artifact error" tree_hash tarball_url tarball_hash err
@@ -314,12 +321,30 @@ function download_artifact(
         msg  = "Tree Hash Mismatch!\n"
         msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
         msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+        
+        # Since some windows systems don't support symlinks, 
+        # if this caused the mismatch, just give a warning.
+        # Pkg.jl#3643
+        ignore_hash_symlink = download_result === :changed_symlink
         # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
         # and Pkg.jl#2317, we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
         # error and move the artifact to the expected location and return true
-        ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
-        if ignore_hash
-            msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
+        ignore_hash_env = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+        if ignore_hash_env || ignore_hash_symlink
+            if ignore_hash_symlink
+                msg *= """
+
+                Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
+                One solution is to activate Developer Mode in Windows, for instructions on how to do that, see:
+                    https://learn.microsoft.com/en-us/gaming/game-bar/guide/developer-mode
+                An alternative path is to ignore the artifact hash mismatches, 
+                however this is generally not recommended.
+                """
+            end
+            if ignore_hash_env
+                msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1:"
+            end
+            msg *= "\nignoring error and moving artifact to the expected location"
             @error(msg)
             # Move it to the location we expected
             src = artifact_path(calc_hash; honor_overrides=false)

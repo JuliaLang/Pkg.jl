@@ -796,4 +796,20 @@ end
     end
 end
 
+@testset "installing artifacts when symlinks are copied" begin
+    # copy symlinks to simulate the typical Microsoft Windows user experience where
+    # developer mode is not enabled (no admin rights)
+    withenv("BINARYPROVIDER_COPYDEREF" => "true") do
+        temp_pkg_dir() do tmpdir
+            artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
+            cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
+            Pkg.activate(tmpdir)
+            cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml)
+            @test !artifact_exists(cts_hash)
+            @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any Pkg.instantiate()
+            @test artifact_exists(cts_hash)
+        end
+    end
+end
+
 end # module
