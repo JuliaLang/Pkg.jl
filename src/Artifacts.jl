@@ -1,4 +1,4 @@
-module Artifacts
+module PkgArtifacts
 
 using Artifacts, Base.BinaryPlatforms, SHA
 using ..MiniProgressBars, ..PlatformEngines
@@ -545,4 +545,6 @@ ensure_all_artifacts_installed(artifacts_toml::AbstractString; kwargs...) =
 extract_all_hashes(artifacts_toml::AbstractString; kwargs...) =
     extract_all_hashes(string(artifacts_toml)::String; kwargs...)
 
-end # module Artifacts
+end # module PkgArtifacts
+
+const Artifacts = PkgArtifacts

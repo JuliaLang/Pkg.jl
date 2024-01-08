@@ -9,7 +9,7 @@ const platform = @inferred Platform platform_key_abi()
 
 # This is a compatibility test; once we've fully migrated away from Pkg.BinaryPlatforms
 # to the new Base.BinaryPlatforms module, we can throw away the shim definitions in
-# `BinaryPlatforms_compat.jl` and drop these tests.
+# `BinaryPlatformsCompat.jl` and drop these tests.
 @testset "Compat - PlatformNames" begin
     # Ensure the platform type constructors are well behaved
     @testset "Platform constructors" begin
