@@ -48,7 +48,7 @@ function create_artifact(f::Function)
         # as something that was foolishly overridden.  This should be virtually impossible
         # unless the user has been very unwise, but let's be cautious.
         new_path = artifact_path(artifact_hash; honor_overrides=false)
-        _artifact_rename(new_path, temp_dir)
+        _mv_temp_artifact_dir(temp_dir, new_path)
 
         # Give the people what they want
         return artifact_hash
@@ -58,14 +58,21 @@ function create_artifact(f::Function)
     end
 end
 
-function _artifact_rename(new_path::String, temp_dir::String)::Nothing
+"""
+    _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
+
+Either rename the directory at `temp_dir` to `new_path` and set it to read-only
+or if `new_path` artifact already exists try to do nothing.
+"""
+function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
     if !isdir(new_path)
-        # Move this generated directory to its final destination, set it to read-only
         # mv(temp_dir, new_path)
+        # The `mv` function defaults to cp if rename returns an error.
+        # However, if this process is killed while copying, the artifact may get
+        # left in a corrupted state.
         err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
-        # on error, Check if directory was made by another process between
+        # On error, check if directory was made by another process between
         # the call to isdir and the call to rename.
-        # Do not default to cp because it is not atomic.
         if !isdir(new_path)
             error("$(repr(new_path)) could not be made")
         end
@@ -361,14 +368,12 @@ function download_artifact(
                 end
                 msg *= "\nIgnoring error and moving artifact to the expected location"
                 @error(msg)
-                # Move it to the location we expected
-                _artifact_rename(new_path, temp_dir)
             else
                 error(msg)
             end
         end
         # Move it to the location we expected
-        _artifact_rename(new_path, temp_dir)
+        _mv_temp_artifact_dir(temp_dir, new_path)
     catch err
         @debug "download_artifact error" tree_hash tarball_url tarball_hash err
         if isa(err, InterruptException)
