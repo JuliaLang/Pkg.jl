@@ -48,12 +48,7 @@ function create_artifact(f::Function)
         # as something that was foolishly overridden.  This should be virtually impossible
         # unless the user has been very unwise, but let's be cautious.
         new_path = artifact_path(artifact_hash; honor_overrides=false)
-        if !isdir(new_path)
-            # Move this generated directory to its final destination, set it to read-only
-            mv(temp_dir, new_path)
-            chmod(new_path, filemode(dirname(new_path)))
-            set_readonly(new_path)
-        end
+        _artifact_rename(new_path, temp_dir)
 
         # Give the people what they want
         return artifact_hash
@@ -61,6 +56,23 @@ function create_artifact(f::Function)
         # Always attempt to cleanup
         rm(temp_dir; recursive=true, force=true)
     end
+end
+
+function _artifact_rename(new_path::String, temp_dir::String)::Nothing
+    if !isdir(new_path)
+        # Move this generated directory to its final destination, set it to read-only
+        # mv(temp_dir, new_path)
+        err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
+        # on error, Check if directory was made by another process between
+        # the call to isdir and the call to rename.
+        # Do not default to cp because it is not atomic.
+        if !isdir(new_path)
+            error("$(repr(new_path)) could not be made")
+        end
+        chmod(new_path, filemode(dirname(new_path)))
+        set_readonly(new_path)
+    end
+    nothing
 end
 
 """
@@ -289,26 +301,74 @@ function download_artifact(
         return true
     end
 
-    # We download by using `create_artifact()`.  We do this because the download may
+    # Ensure the `artifacts` directory exists in our default depot
+    artifacts_dir = first(artifacts_dirs())
+    mkpath(artifacts_dir)
+    new_path = joinpath(artifacts_dir, bytes2hex(tree_hash.bytes))
+
+    # We download by using a temporary directory.  We do this because the download may
     # be corrupted or even malicious; we don't want to clobber someone else's artifact
     # by trusting the tree hash that has been given to us; we will instead download it
     # to a temporary directory, calculate the true tree hash, then move it to the proper
     # location only after knowing what it is, and if something goes wrong in the process,
-    # everything should be cleaned up.  Luckily, that is precisely what our
-    # `create_artifact()` wrapper does, so we use that here.
-    changed_symlinks_output = Pair{String,String}[]
-    copy_symlinks::Bool = false
-    calc_hash = try
-        create_artifact() do dir
-            # Currently many windows systems don't support symlinks
-            # Here we check if symlinks need to be copied to work around this.
-            copy_symlinks = @something(
-                PlatformEngines.copy_symlinks(),
-                (Sys.iswindows() && !PlatformEngines.can_symlink(dir)),
-            )
-            download_verify_unpack(tarball_url, tarball_hash, dir; ignore_existence=true, verbose,
-                quiet_download, io, copy_symlinks, changed_symlinks_output)
+    # everything should be cleaned up.
+
+    # Temporary directory where we'll do our creation business
+    temp_dir = mktempdir(artifacts_dir)
+
+    try
+        changed_symlinks_output = Pair{String,String}[]
+        copy_symlinks::Bool = @something(
+            PlatformEngines.copy_symlinks(),
+            (Sys.iswindows() && !PlatformEngines.can_symlink(temp_dir)),
+        )
+        download_verify_unpack(tarball_url, tarball_hash, temp_dir;
+            ignore_existence=true, verbose,
+            quiet_download, io, copy_symlinks, changed_symlinks_output,
+        )
+        calc_hash = SHA1(GitTools.tree_hash(temp_dir))
+        # Did we get what we expected?  If not, freak out.
+        if calc_hash.bytes != tree_hash.bytes
+            msg  = "Tree Hash Mismatch!\n"
+            msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
+            msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))\n"
+            msg *= "When downloading $(name)\n"
+            
+            # Since some windows systems don't support symlinks, 
+            # if this caused the mismatch, just give a warning.
+            # Pkg.jl#3643
+            ignore_hash_symlink = copy_symlinks && !isempty(changed_symlinks_output)
+            # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
+            # and Pkg.jl#2317, we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
+            # error and move the artifact to the expected location and return true
+            ignore_hash_env = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+            if ignore_hash_env || ignore_hash_symlink
+                if ignore_hash_symlink
+                    msg *= """
+
+                    Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
+                    One solution is to activate Developer Mode in Windows, for instructions on how to do that, see:
+                        https://learn.microsoft.com/en-us/gaming/game-bar/guide/developer-mode
+                    An alternative path is to ignore the artifact hash mismatches, 
+                    however this is generally not recommended.
+
+                    Symlinks that could not be extracted:
+                    $(sprint(io->show(io, MIME"text/plain"(), changed_symlinks_output)))
+                    """
+                end
+                if ignore_hash_env
+                    msg *= "\$JULIA_PKG_IGNORE_HASHES is set to 1:\n"
+                end
+                msg *= "\nIgnoring error and moving artifact to the expected location"
+                @error(msg)
+                # Move it to the location we expected
+                _artifact_rename(new_path, temp_dir)
+            else
+                error(msg)
+            end
         end
+        # Move it to the location we expected
+        _artifact_rename(new_path, temp_dir)
     catch err
         @debug "download_artifact error" tree_hash tarball_url tarball_hash err
         if isa(err, InterruptException)
@@ -316,51 +376,10 @@ function download_artifact(
         end
         # If something went wrong during download, return the error
         return err
+    finally
+        # Always attempt to cleanup
+        rm(temp_dir; recursive=true, force=true)
     end
-
-    # Did we get what we expected?  If not, freak out.
-    if calc_hash.bytes != tree_hash.bytes
-        msg  = "Tree Hash Mismatch!\n"
-        msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
-        msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))\n"
-        msg *= "When downloading $(name)\n"
-        
-        # Since some windows systems don't support symlinks, 
-        # if this caused the mismatch, just give a warning.
-        # Pkg.jl#3643
-        ignore_hash_symlink = copy_symlinks && !isempty(changed_symlinks_output)
-        # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
-        # and Pkg.jl#2317, we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
-        # error and move the artifact to the expected location and return true
-        ignore_hash_env = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
-        if ignore_hash_env || ignore_hash_symlink
-            if ignore_hash_symlink
-                msg *= """
-
-                Note: Julia cannot create symlinks, which may be the reason for the hash mismatch.
-                One solution is to activate Developer Mode in Windows, for instructions on how to do that, see:
-                    https://learn.microsoft.com/en-us/gaming/game-bar/guide/developer-mode
-                An alternative path is to ignore the artifact hash mismatches, 
-                however this is generally not recommended.
-
-                Symlinks that could not be extracted:
-                $(sprint(io->show(io, MIME"text/plain"(), changed_symlinks_output)))
-                """
-            end
-            if ignore_hash_env
-                msg *= "\$JULIA_PKG_IGNORE_HASHES is set to 1:\n"
-            end
-            msg *= "\nIgnoring error and moving artifact to the expected location"
-            @error(msg)
-            # Move it to the location we expected
-            src = artifact_path(calc_hash; honor_overrides=false)
-            dst = artifact_path(tree_hash; honor_overrides=false)
-            mv(src, dst; force=true)
-            return true
-        end
-        return ErrorException(msg)
-    end
-
     return true
 end
 
