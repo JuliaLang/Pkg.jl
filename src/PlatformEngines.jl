@@ -436,6 +436,7 @@ end
         verbose::Bool = false,
         quiet_download::Bool = false,
         copy_symlinks::Bool = false,
+        changed_symlinks_output = nothing,
         io::IO=stderr,
     )
 
@@ -460,8 +461,7 @@ If `ignore_existence` is set, the tarball is unpacked even if the destination
 directory already exists.
 
 Returns `true` if a tarball was actually unpacked, `false` if nothing was
-changed in the destination prefix, and `:changed_symlink` if `copy_symlinks` is 
-`true` and the tarball had a symlink.
+changed in the destination prefix.
 """
 function download_verify_unpack(
     url::AbstractString,
@@ -473,6 +473,7 @@ function download_verify_unpack(
     verbose::Bool = false,
     quiet_download::Bool = false,
     copy_symlinks::Bool = false,
+    changed_symlinks_output::Vector{Pair{String,String}} = Pair{String,String}[],
     io::IO=stderr_f(),
 )
     # First, determine whether we should keep this tarball around
@@ -537,20 +538,21 @@ function download_verify_unpack(
         return false
     end
 
-    # Record this so we can check if copy_symlinks caused a tree hash mismatch
-    tar_changed_symlink = Ref(false)
     try
         if verbose
             @info("Unpacking $(tarball_path) into $(dest)...")
         end
         open(`$(exe7z()) x $tarball_path -so`) do io
-            if copy_symlinks
+            # Record this so we can check if copy_symlinks caused a tree hash mismatch
+            if !copy_symlinks
+                Tar.extract(io, dest; copy_symlinks=false)
+            else
                 Tar.extract(io, dest; copy_symlinks=true) do header::Tar.Header
-                    tar_changed_symlink[] |= (header.type == :symlink)
+                    if (header.type == :symlink)
+                        push!(changed_symlinks_output, header.path=>header.link)
+                    end
                     true
                 end
-            else
-                Tar.extract(io, dest; copy_symlinks=false)
             end
         end
     finally
@@ -561,13 +563,8 @@ function download_verify_unpack(
         end
     end
 
-    if tar_changed_symlink[]
-        # Signify that we did some unpacking but changed a symlink
-        return :changed_symlink
-    else
-        # Signify that we did some unpacking!
-        return true
-    end
+    # Signify that we did some unpacking!
+    return true
 end
 
 

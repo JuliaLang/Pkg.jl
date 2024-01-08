@@ -267,7 +267,7 @@ end
 
 """
     download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
-                      verbose::Bool = false, io::IO=stderr)
+                      verbose::Bool = false, io::IO=stderr, name::String="")
 
 Download/install an artifact into the artifact store.  Returns `true` on success,
 returns an error object on failure.
@@ -283,6 +283,7 @@ function download_artifact(
     verbose::Bool = false,
     quiet_download::Bool = false,
     io::IO=stderr_f(),
+    name::String="",
 )
     if artifact_exists(tree_hash)
         return true
@@ -295,7 +296,8 @@ function download_artifact(
     # location only after knowing what it is, and if something goes wrong in the process,
     # everything should be cleaned up.  Luckily, that is precisely what our
     # `create_artifact()` wrapper does, so we use that here.
-    local download_result
+    changed_symlinks_output = Pair{String,String}[]
+    copy_symlinks::Bool = false
     calc_hash = try
         create_artifact() do dir
             # Currently many windows systems don't support symlinks
@@ -304,8 +306,8 @@ function download_artifact(
                 PlatformEngines.copy_symlinks(),
                 (Sys.iswindows() && !PlatformEngines.can_symlink(dir)),
             )
-            download_result = download_verify_unpack(tarball_url, tarball_hash, dir; ignore_existence=true, verbose=verbose,
-                quiet_download=quiet_download, io=io, copy_symlinks)
+            download_verify_unpack(tarball_url, tarball_hash, dir; ignore_existence=true, verbose,
+                quiet_download, io, copy_symlinks, changed_symlinks_output)
         end
     catch err
         @debug "download_artifact error" tree_hash tarball_url tarball_hash err
@@ -320,12 +322,13 @@ function download_artifact(
     if calc_hash.bytes != tree_hash.bytes
         msg  = "Tree Hash Mismatch!\n"
         msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
-        msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
+        msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))\n"
+        msg *= "When downloading $(name)\n"
         
         # Since some windows systems don't support symlinks, 
         # if this caused the mismatch, just give a warning.
         # Pkg.jl#3643
-        ignore_hash_symlink = download_result === :changed_symlink
+        ignore_hash_symlink = copy_symlinks && !isempty(changed_symlinks_output)
         # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
         # and Pkg.jl#2317, we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
         # error and move the artifact to the expected location and return true
@@ -339,12 +342,15 @@ function download_artifact(
                     https://learn.microsoft.com/en-us/gaming/game-bar/guide/developer-mode
                 An alternative path is to ignore the artifact hash mismatches, 
                 however this is generally not recommended.
+
+                Symlinks that could not be extracted:
+                $(sprint(io->show(io, MIME"text/plain"(), changed_symlinks_output)))
                 """
             end
             if ignore_hash_env
-                msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1:"
+                msg *= "\$JULIA_PKG_IGNORE_HASHES is set to 1:\n"
             end
-            msg *= "\nignoring error and moving artifact to the expected location"
+            msg *= "\nIgnoring error and moving artifact to the expected location"
             @error(msg)
             # Move it to the location we expected
             src = artifact_path(calc_hash; honor_overrides=false)
@@ -400,7 +406,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
             download_success = let url=url
                 @debug "Downloading artifact from Pkg server" name artifacts_toml platform url
                 with_show_download_info(io, name, quiet_download) do
-                    download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download, io=io)
+                    download_artifact(hash, url; verbose, quiet_download, io, name)
                 end
             end
             # download_success is either `true` or an error object
@@ -425,7 +431,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
             download_success = let url=url
                 @debug "Downloading artifact" name artifacts_toml platform url
                 with_show_download_info(io, name, quiet_download) do
-                    download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download, io=io)
+                    download_artifact(hash, url, tarball_hash; verbose, quiet_download, io, name)
                 end
             end
             # download_success is either `true` or an error object

@@ -162,13 +162,21 @@ const collapse_hash = "956c1201405f64d3465cc28cb0dec9d63c11a08cad28c381e13bb22e1
 @testset "Copyderef unpacking" begin
     mktempdir() do prefix
         target_dir = joinpath(prefix, "target")
-        @test :changed_symlink === download_verify_unpack(
+        changed_symlinks_output = Pair{String,String}[]
+        download_verify_unpack(
             collapse_url,
             collapse_hash,
             target_dir;
             verbose=true,
             copy_symlinks=true,
+            changed_symlinks_output,
         )
+
+        @test changed_symlinks_output == [
+            "collapse_the_symlink/foo" => "foo.1"
+            "collapse_the_symlink/foo.1.1" => "foo.1"
+            "collapse_the_symlink/broken" => "obviously_broken"
+        ]
 
         # Test that we get the files we expect
         @test isfile(joinpath(target_dir, "collapse_the_symlink", "foo"))
