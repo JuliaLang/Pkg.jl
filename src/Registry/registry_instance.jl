@@ -43,7 +43,7 @@ end
 # This is the information that exists in e.g. General/A/ACME
 struct PkgInfo
     # Package.toml:
-    repo::Union{String, Nothing}
+    repo::Union{String, Vector{String}, Nothing}
     subdir::Union{String, Nothing}
 
     # Versions.toml:
@@ -189,7 +189,7 @@ function init_package_info!(pkg::PkgEntry)
     d_p = parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Package.toml"))
     name = d_p["name"]::String
     name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
-    repo = get(d_p, "repo", nothing)::Union{Nothing, String}
+    repo = get(d_p, "repo", nothing)::Union{Nothing, String, Vector{String}}
     subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
 
     # Versions.toml

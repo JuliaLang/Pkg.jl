@@ -778,7 +778,11 @@ function find_urls(registries::Vector{Registry.RegistryInstance}, uuid::UUID)
         info = Registry.registry_info(reg_pkg)
         repo = info.repo
         repo === nothing && continue
-        push!(urls, repo)
+        if repo isa Vector
+            append!(urls, repo)
+        else
+            push!(urls, repo)
+        end
     end
     return urls
 end
