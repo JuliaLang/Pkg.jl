@@ -247,6 +247,7 @@ Base.@kwdef mutable struct Project
     uuid::Union{UUID, Nothing} = nothing
     version::Union{VersionTypes, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
+    path::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
     # deps that are also in weakdeps for backwards compat
@@ -576,7 +577,8 @@ function read_package(path::String)
         pkgerror("expected a `uuid` entry in project file at `$(abspath(path))`")
     end
     name = project.name
-    if !isfile(joinpath(dirname(path), "src", "$name.jl"))
+    pkgpath = joinpath(dirname(path), something(project.path, ""))
+    if !isfile(joinpath(pkgpath, "src", "$name.jl"))
         pkgerror("expected the file `src/$name.jl` to exist for package `$name` at `$(dirname(path))`")
     end
     return project
