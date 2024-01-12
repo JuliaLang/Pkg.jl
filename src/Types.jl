@@ -626,7 +626,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             end
         end
         if isdir(dev_path)
-            resolve_projectfile!(ctx.env, pkg, dev_path)
+            resolve_projectfile!(pkg, dev_path)
             error_if_in_sysimage(pkg)
             if is_local_path
                 pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
@@ -660,7 +660,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     if !has_name(pkg)
         LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, pkg.repo.source))
         cloned = true
-        resolve_projectfile!(ctx.env, pkg, package_path)
+        resolve_projectfile!(pkg, package_path)
     end
     if pkg.repo.subdir !== nothing
         repo_name = split(pkg.repo.source, '/', keepempty=false)[end]
@@ -688,7 +688,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         new = true
     end
     if !has_uuid(pkg)
-        resolve_projectfile!(ctx.env, pkg, dev_path)
+        resolve_projectfile!(pkg, dev_path)
     end
     error_if_in_sysimage(pkg)
     pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
@@ -829,7 +829,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             temp_path = mktempdir()
             GitTools.checkout_tree_to_path(repo, tree_hash_object, temp_path)
-            resolve_projectfile!(ctx.env, pkg, temp_path)
+            resolve_projectfile!(pkg, temp_path)
             error_if_in_sysimage(pkg)
 
             # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
@@ -855,7 +855,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     return new_uuids
 end
 
-function resolve_projectfile!(env::EnvCache, pkg, project_path)
+function resolve_projectfile!(pkg, project_path)
     project_file = projectfile_path(project_path; strict=true)
     project_file === nothing && pkgerror(string("could not find project file (Project.toml or JuliaProject.toml) in package at `",
                     something(pkg.repo.source, pkg.path, project_path), "` maybe `subdir` needs to be specified"))
