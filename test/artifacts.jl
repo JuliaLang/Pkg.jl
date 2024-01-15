@@ -779,8 +779,11 @@ end
             Dict("0"^40 => ["not", "a", "string", "or", "dict"]),
             r"failed to parse entry",
         )
+
+        # reset DEPOT_PATH and force Pkg to reload what it knows about artifact overrides
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
+        Pkg.Artifacts.load_overrides(;force=true)
     end
 end
 
