@@ -28,7 +28,7 @@ Precompiling environment...
   2 dependencies successfully precompiled in 2 seconds
 ```
 
-Here we added the package Example to the current environment (which is the default `@v1.8` environment).
+Here we added the package `JSON` to the current environment (which is the default `@v1.8` environment).
 In this example, we are using a fresh Julia installation,
 and this is our first time adding a package using Pkg. By default, Pkg installs the General registry
 and uses this registry to look up packages requested for inclusion in the current environment.
@@ -203,7 +203,7 @@ from that local repo are pulled when packages are updated.
 
 !!! warning
     Note that tracking a package through `add` is distinct from
-    `develop` (which is described in the next session). When using `add` on a local
+    `develop` (which is described in the next section). When using `add` on a local
     git repository, changes to files in the local package repository will not
     immediately be reflected when loading that package. The changes would have to be
     committed and the packages updated in order to pull in the changes. In the
@@ -473,7 +473,7 @@ Indeed, `A`'s requirements are such that we need `v0.2.0` of `C`.
          └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
 ```
 
-So we can see that `A` was `explicitly required, and in this case, it's because we were trying to
+So we can see that `A` was explicitly required, and in this case, it's because we were trying to
 `add` it to our environment.
 
 In summary, we explicitly asked to use `A` and `B`, but this gave a conflict for `D`.
