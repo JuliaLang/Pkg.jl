@@ -955,12 +955,6 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         end
     end
 
-    # Next, we calculate the space savings we're about to gain!
-    pretty_byte_str = (size) -> begin
-        bytes, mb = Base.prettyprint_getunits(size, length(Base._mem_units), Int64(1024))
-        return @sprintf("%.3f %s", bytes, Base._mem_units[mb])
-    end
-
     function recursive_dir_size(path)
         size = 0
         try
@@ -1001,7 +995,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         end
         if verbose
             printpkgstyle(ctx.io, :Deleted, pathrepr(path) * " (" *
-                pretty_byte_str(path_size) * ")")
+                Base.format_bytes(path_size) * ")")
         end
         return path_size
     end
@@ -1077,7 +1071,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         end
 
         s = ndel == 1 ? "" : "s"
-        bytes_saved_string = pretty_byte_str(freed)
+        bytes_saved_string = Base.format_bytes(freed)
         printpkgstyle(ctx.io, :Deleted, "$(ndel) $(name)$(s) ($bytes_saved_string)")
     end
     print_deleted(ndel_pkg, package_space_freed, "package installation")
