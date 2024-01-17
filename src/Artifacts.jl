@@ -2,6 +2,7 @@ module Artifacts
 
 using Artifacts, Base.BinaryPlatforms, SHA
 using ..MiniProgressBars, ..PlatformEngines
+using Tar: can_symlink
 
 import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
        ..stderr_f, ..printpkgstyle
@@ -311,19 +312,39 @@ function download_artifact(
 
     # Did we get what we expected?  If not, freak out.
     if calc_hash.bytes != tree_hash.bytes
-        msg  = "Tree Hash Mismatch!\n"
-        msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
-        msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
-        # Since tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
-        # and Pkg.jl#2317, we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the
-        # error and move the artifact to the expected location and return true
-        ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+        msg = """
+        Tree Hash Mismatch!
+          Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
+          Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))
+        """
+        # actual and expected artifiact paths
+        src = artifact_path(calc_hash; honor_overrides=false)
+        dst = artifact_path(tree_hash; honor_overrides=false)
+        # Since tree hash calculation is rather fragile and file system dependent,
+        # we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the error and move
+        # the artifact to the expected location and return true
+        ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
+        if ignore_hash_env_set
+            # default: false except Windows users who can't symlink
+            ignore_hash = Sys.iswindows() &&
+                !mktempdir(can_symlink, dirname(src))
+        else
+            ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+            ignore_hash === nothing && @error(
+                "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
+                ENV["JULIA_PKG_IGNORE_HASHES"],
+            )
+            ignore_hash = something(ignore_hash, false)
+        end
         if ignore_hash
-            msg *= "\n\$JULIA_PKG_IGNORE_HASHES is set to 1: ignoring error and moving artifact to the expected location"
+            desc = ignore_hash_env_set ?
+                "Environment variable \$JULIA_PKG_IGNORE_HASHES is true" :
+                "System is Windows and user cannot create symlinks"
+            msg *= "\n$desc: \
+                ignoring hash mismatch and moving \
+                artifact to the expected location"
             @error(msg)
             # Move it to the location we expected
-            src = artifact_path(calc_hash; honor_overrides=false)
-            dst = artifact_path(tree_hash; honor_overrides=false)
             mv(src, dst; force=true)
             return true
         end
