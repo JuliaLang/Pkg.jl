@@ -325,16 +325,16 @@ function download_artifact(
         # the artifact to the expected location and return true
         ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
         if ignore_hash_env_set
-            # default: false except Windows users who can't symlink
-            ignore_hash = Sys.iswindows() &&
-                !mktempdir(can_symlink, dirname(src))
-        else
             ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
             ignore_hash === nothing && @error(
                 "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
                 ENV["JULIA_PKG_IGNORE_HASHES"],
             )
             ignore_hash = something(ignore_hash, false)
+        else
+            # default: false except Windows users who can't symlink
+            ignore_hash = Sys.iswindows() &&
+                !mktempdir(can_symlink, dirname(src))
         end
         if ignore_hash
             desc = ignore_hash_env_set ?
