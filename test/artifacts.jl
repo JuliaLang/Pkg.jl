@@ -290,20 +290,27 @@ end
     @test_logs (:error, r"malformed, must be array or dict!") artifact_meta("broken_artifact", joinpath(badifact_dir, "not_a_table.toml"))
 
     # Next, test incorrect download errors
-    for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
-        with_artifacts_directory(dir) do
-            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
-            if !ignore_hash
-                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-            else
-                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
-                    path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                    @test endswith(path, "0000000000000000000000000000000000000000")
-                    @test isdir(path)
+    for ignore_hash in (false, true);
+        ignore_hash && ENV["JULIA_PKG_IGNORE_HASHES"] = "1"
+        try
+            mktempdir() do dir
+                with_artifacts_directory(dir) do
+                    @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
+                    if !ignore_hash
+                        @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                    else
+                        @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
+                            path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                            @test endswith(path, "0000000000000000000000000000000000000000")
+                            @test isdir(path)
+                        end
                     end
                 end
             end
-    end end end
+        finally
+            ignore_hash && delete!(ENV, "JULIA_PKG_IGNORE_HASHES")
+        end
+    end
 
     mktempdir() do dir
         with_artifacts_directory(dir) do
