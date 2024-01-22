@@ -1092,6 +1092,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     io = ctx.io
     fancyprint = can_fancyprint(io) && !timing
 
+    hascolor = get(io, :color, false)::Bool
+    color_string(cstr::String, col::Union{Int64, Symbol}) = _color_string(cstr, col, hascolor)
+
     recall_precompile_state() # recall suspended and force-queued packages
     !internal_call && precomp_unsuspend!() # when manually called, unsuspend all packages that were suspended due to precomp errors
 
@@ -1506,7 +1509,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     try
                         # allows processes to wait if another process is precompiling a given package to
                         # a functionally identical package cache (except for preferences, which may differ)
-                        t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked) do
+                        t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked, hascolor) do
                             Logging.with_logger(Logging.NullLogger()) do
                                 # The false here means we ignore loaded modules, so precompile for a fresh session
                                 Base.compilecache(pkg, sourcepath, std_pipe, std_pipe, false)
@@ -1660,13 +1663,17 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     nothing
 end
 
-function color_string(cstr::String, col::Union{Int64, Symbol})
-    enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
-    disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
-    return string(enable_ansi, cstr, disable_ansi)
+function _color_string(cstr::String, col::Union{Int64, Symbol}, hascolor)
+    if hascolor
+        enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
+        disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
+        return string(enable_ansi, cstr, disable_ansi)
+    else
+        return cstr
+    end
 end
 
-function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
+function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String}, hascolor)
     stale_age = Base.compilecache_pidlock_stale_age
     pidfile = Base.compilecache_pidfile_path(pkg)
     cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age)
@@ -1682,7 +1689,7 @@ function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::
             "another machine (hostname: $hostname, pid: $pid, pidfile: $pidfile)"
         end
         !fancyprint && lock(print_lock) do
-            println(io, "    ", pkg.name, color_string(" Being precompiled by $(pkgspidlocked[pkg])", Base.info_color()))
+            println(io, "    ", pkg.name, _color_string(" Being precompiled by $(pkgspidlocked[pkg])", Base.info_color(), hascolor))
         end
         # wait until the lock is available
         FileWatching.mkpidlock(pidfile; stale_age) do
@@ -2087,6 +2094,7 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         catch e
             if e isa ResolverError
                 printpkgstyle(io, :Error, string(e.msg), color = Base.warn_color())
+                printpkgstyle(io, :Suggestion, "Call `update` to attempt to meet the compatibility requirements.", color = Base.info_color())
             else
                 rethrow()
             end
