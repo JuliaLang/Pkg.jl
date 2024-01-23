@@ -49,6 +49,7 @@ function create_artifact(f::Function)
         # as something that was foolishly overridden.  This should be virtually impossible
         # unless the user has been very unwise, but let's be cautious.
         new_path = artifact_path(artifact_hash; honor_overrides=false)
+        _mv_temp_artifact_dir(temp_dir, new_path)
         if !isdir(new_path)
             # Move this generated directory to its final destination, set it to read-only
             mv(temp_dir, new_path)
@@ -62,6 +63,28 @@ function create_artifact(f::Function)
         # Always attempt to cleanup
         rm(temp_dir; recursive=true, force=true)
     end
+end
+
+"""
+    _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
+Either rename the directory at `temp_dir` to `new_path` and set it to read-only
+or if `new_path` artifact already exists try to do nothing.
+"""
+function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
+    if !isdir(new_path)
+        # This next step is like
+        # `mv(temp_dir, new_path)`.
+        # However, `mv` defaults to `cp` if `rename` returns an error.
+        # `cp` is not atomic, so avoid the potential of calling it.
+        err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
+        # Ignore rename error, but ensure `new_path` exists.
+        if !isdir(new_path)
+            error("$(repr(new_path)) could not be made")
+        end
+        chmod(new_path, filemode(dirname(new_path)))
+        set_readonly(new_path)
+    end
+    nothing
 end
 
 """
@@ -289,18 +312,65 @@ function download_artifact(
         return true
     end
 
-    # We download by using `create_artifact()`.  We do this because the download may
+    # Ensure the `artifacts` directory exists in our default depot
+    artifacts_dir = first(artifacts_dirs())
+    mkpath(artifacts_dir)
+    # expected artifact path
+    dst = joinpath(artifacts_dir, bytes2hex(tree_hash.bytes))
+
+    # We download by using a temporary directory.  We do this because the download may
     # be corrupted or even malicious; we don't want to clobber someone else's artifact
     # by trusting the tree hash that has been given to us; we will instead download it
     # to a temporary directory, calculate the true tree hash, then move it to the proper
     # location only after knowing what it is, and if something goes wrong in the process,
-    # everything should be cleaned up.  Luckily, that is precisely what our
-    # `create_artifact()` wrapper does, so we use that here.
-    calc_hash = try
-        create_artifact() do dir
-            download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose,
+    # everything should be cleaned up.
+
+    # Temporary directory where we'll do our creation business
+    temp_dir = mktempdir(artifacts_dir)
+
+    try
+        download_verify_unpack(tarball_url, tarball_hash, temp_dir, ignore_existence=true, verbose=verbose,
                 quiet_download=quiet_download, io=io)
+        calc_hash = SHA1(GitTools.tree_hash(temp_dir))
+
+        # Did we get what we expected?  If not, freak out.
+        if calc_hash.bytes != tree_hash.bytes
+            msg = """
+            Tree Hash Mismatch!
+              Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
+              Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))
+            """
+            # Since tree hash calculation is rather fragile and file system dependent,
+            # we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the error and move
+            # the artifact to the expected location and return true
+            ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
+            if ignore_hash_env_set
+                ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+                ignore_hash === nothing && @error(
+                    "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
+                    ENV["JULIA_PKG_IGNORE_HASHES"],
+                )
+                ignore_hash = something(ignore_hash, false)
+            else
+                # default: false except Windows users who can't symlink
+                ignore_hash = Sys.iswindows() &&
+                    !mktempdir(can_symlink, artifacts_dir)
+            end
+            if ignore_hash
+                desc = ignore_hash_env_set ?
+                    "Environment variable \$JULIA_PKG_IGNORE_HASHES is true" :
+                    "System is Windows and user cannot create symlinks"
+                msg *= "\n$desc: \
+                    ignoring hash mismatch and moving \
+                    artifact to the expected location"
+                @error(msg)
+                # Move it to the location we expected
+                _mv_temp_artifact_dir(temp_dir, dst)
+            else
+                error(msg)
+            end
         end
+        return true
     catch err
         @debug "download_artifact error" tree_hash tarball_url tarball_hash err
         if isa(err, InterruptException)
@@ -308,50 +378,10 @@ function download_artifact(
         end
         # If something went wrong during download, return the error
         return err
+    finally
+        # Always attempt to cleanup
+        rm(temp_dir; recursive=true, force=true)
     end
-
-    # Did we get what we expected?  If not, freak out.
-    if calc_hash.bytes != tree_hash.bytes
-        msg = """
-        Tree Hash Mismatch!
-          Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
-          Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))
-        """
-        # actual and expected artifiact paths
-        src = artifact_path(calc_hash; honor_overrides=false)
-        dst = artifact_path(tree_hash; honor_overrides=false)
-        # Since tree hash calculation is rather fragile and file system dependent,
-        # we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the error and move
-        # the artifact to the expected location and return true
-        ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
-        if ignore_hash_env_set
-            ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
-            ignore_hash === nothing && @error(
-                "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
-                ENV["JULIA_PKG_IGNORE_HASHES"],
-            )
-            ignore_hash = something(ignore_hash, false)
-        else
-            # default: false except Windows users who can't symlink
-            ignore_hash = Sys.iswindows() &&
-                !mktempdir(can_symlink, dirname(src))
-        end
-        if ignore_hash
-            desc = ignore_hash_env_set ?
-                "Environment variable \$JULIA_PKG_IGNORE_HASHES is true" :
-                "System is Windows and user cannot create symlinks"
-            msg *= "\n$desc: \
-                ignoring hash mismatch and moving \
-                artifact to the expected location"
-            @error(msg)
-            # Move it to the location we expected
-            mv(src, dst; force=true)
-            return true
-        end
-        return ErrorException(msg)
-    end
-
-    return true
 end
 
 """
