@@ -50,12 +50,6 @@ function create_artifact(f::Function)
         # unless the user has been very unwise, but let's be cautious.
         new_path = artifact_path(artifact_hash; honor_overrides=false)
         _mv_temp_artifact_dir(temp_dir, new_path)
-        if !isdir(new_path)
-            # Move this generated directory to its final destination, set it to read-only
-            mv(temp_dir, new_path)
-            chmod(new_path, filemode(dirname(new_path)))
-            set_readonly(new_path)
-        end
 
         # Give the people what they want
         return artifact_hash
@@ -364,13 +358,12 @@ function download_artifact(
                     ignoring hash mismatch and moving \
                     artifact to the expected location"
                 @error(msg)
-                # Move it to the location we expected
-                _mv_temp_artifact_dir(temp_dir, dst)
             else
                 error(msg)
             end
         end
-        return true
+        # Move it to the location we expected
+        _mv_temp_artifact_dir(temp_dir, dst)
     catch err
         @debug "download_artifact error" tree_hash tarball_url tarball_hash err
         if isa(err, InterruptException)
@@ -382,6 +375,7 @@ function download_artifact(
         # Always attempt to cleanup
         rm(temp_dir; recursive=true, force=true)
     end
+    return true
 end
 
 """
