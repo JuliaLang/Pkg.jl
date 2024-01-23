@@ -296,9 +296,10 @@ function download_artifact(
     # location only after knowing what it is, and if something goes wrong in the process,
     # everything should be cleaned up.  Luckily, that is precisely what our
     # `create_artifact()` wrapper does, so we use that here.
+    unpacked = false
     calc_hash = try
         create_artifact() do dir
-            download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose,
+            unpacked = download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=false, verbose=verbose,
                 quiet_download=quiet_download, io=io)
         end
     catch err
@@ -344,8 +345,13 @@ function download_artifact(
                 ignoring hash mismatch and moving \
                 artifact to the expected location"
             @error(msg)
-            # Move it to the location we expected
-            mv(src, dst; force=true)
+            if unpacked
+                # Move it to the location we expected
+                mv(src, dst; force=true)
+            else
+                # If we didn't unpack it because a valid artifact with that hash already existed, we need to copy it
+                cp(src, dst; force=true)
+            end
             return true
         end
         return ErrorException(msg)
