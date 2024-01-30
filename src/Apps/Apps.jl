@@ -31,7 +31,6 @@ function handle_project_file(sourcepath)
     isfile(project_file) || error("Project file not found: $project_file")
 
     project = Pkg.Types.read_project(project_file)
-    @show project
     isempty(project.apps) && error("No apps found in Project.toml for package $(project.name) at version $(project.version)")
     return project
 end
@@ -126,7 +125,6 @@ function add(pkg::PackageSpec)
 
     projectfile = joinpath(APP_ENV_FOLDER, pkg.name, "Project.toml")
     mkpath(dirname(projectfile))
-
     write_project(project, projectfile)
 
     # Move manifest if it exists here.
