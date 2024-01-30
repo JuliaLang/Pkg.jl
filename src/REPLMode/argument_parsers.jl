@@ -205,6 +205,15 @@ function parse_registry(word::AbstractString; add=false)::RegistrySpec
 end
 
 #
+# # Apps
+#
+function parse_app_add(raw_args::Vector{QString}, options)
+    return parse_package(raw_args, options; add_or_dev=true)
+end
+
+
+
+#
 # # Other
 #
 function parse_activate(args::Vector{QString}, options)

@@ -9,7 +9,7 @@ import REPL: LineEdit, REPLCompletions
 import REPL: TerminalMenus
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
-using ..Types, ..Operations, ..API, ..Registry, ..Resolve
+using ..Types, ..Operations, ..API, ..Registry, ..Resolve, ..Apps
 import ..stdout_f, ..stderr_f
 
 const TEST_MODE = Ref{Bool}(false)

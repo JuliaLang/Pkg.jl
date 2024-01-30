@@ -58,6 +58,19 @@ end
 read_project_targets(raw, project::Project) =
     pkgerror("Expected `targets` section to be a key-value list")
 
+read_project_apps(::Nothing, project::Project) = Dict{String,Any}()
+function read_project_apps(raw::Dict{String,Any}, project::Project)
+    other = raw
+    appinfos = Dict{String,AppInfo}()
+    for (name, info) in raw
+        info isa Dict{String,Any} || pkgerror("""
+            Expected value for app `$name` to be a dictionary.
+        """)
+        appinfos[name] = AppInfo(name, nothing, nothing, other)
+    end
+    return appinfos
+end
+
 read_project_compat(::Nothing, project::Project) = Dict{String,Compat}()
 function read_project_compat(raw::Dict{String,Any}, project::Project)
     compat = Dict{String,Compat}()
@@ -131,6 +144,7 @@ function Project(raw::Dict; file=nothing)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
+    project.apps     = read_project_apps(get(raw, "apps", nothing), project)
 
     # Handle deps in both [deps] and [weakdeps]
     project._deps_weak = Dict(intersect(project.deps, project.weakdeps))
