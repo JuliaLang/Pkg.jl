@@ -1013,9 +1013,11 @@ function find_urls(registries::Vector{Registry.RegistryInstance}, uuid::UUID)
 end
 
 
-function download_source(ctx::Context; readonly=true)
-    pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{PackageEntry, Set{String}, String}}[]
-    for pkg in values(ctx.env.manifest)
+download_source(ctx::Context; readonly=true) = download_source(ctx, values(ctx.env.manifest); readonly)
+
+function download_source(ctx::Context, pkgs; readonly=true)
+    pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
+    for pkg in pkgs
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
@@ -1100,7 +1102,7 @@ function download_source(ctx::Context; readonly=true)
         fancyprint = can_fancyprint(ctx.io)
         try
             for i in 1:length(pkgs_to_install)
-                pkg::PackageEntry, exc_or_success, bt_or_pathurls = take!(results)
+                pkg::eltype(pkgs), exc_or_success, bt_or_pathurls = take!(results)
                 exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
                                                         sprint(Base.showerror, exc_or_success, bt_or_pathurls))
                 success, (urls, path) = exc_or_success, bt_or_pathurls
@@ -1131,7 +1133,6 @@ function download_source(ctx::Context; readonly=true)
     # Use LibGit2 to download any remaining packages #
     ##################################################
     for (pkg, urls, path) in missed_packages
-        uuid = pkg.uuid
         install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
         readonly && set_readonly(path)
         vstr = if pkg.version !== nothing
