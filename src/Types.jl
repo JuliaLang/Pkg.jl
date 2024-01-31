@@ -1009,12 +1009,18 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
                     join(io, what, ", ", " or ")
                     print(io, ")")
                     all_names = available_names(ctx; manifest, include_registries = registry)
-                    all_names_ranked, any_score_gt_zero = fuzzysort(name, all_names)
-                    if any_score_gt_zero
+                    closest_names_ranked = levsort(name, all_names)
+                    if !isempty(closest_names_ranked)
                         println(io)
                         prefix = "   Suggestions:"
                         printstyled(io, prefix, color = Base.info_color())
-                        REPL.printmatches(io, name, all_names_ranked; cols = REPL._displaysize(ctx.io)[2] - length(prefix))
+                        printed_length = length(prefix)
+                        disp_width = displaysize(ctx.io)[2]
+                        for name in closest_names_ranked
+                            printed_length += length(name) + 1
+                            printed_length > disp_width && break # exit if next print will exceed terminal width
+                            print(io, " ", name)
+                        end
                     end
                 else
                     join(io, uuids, ", ", " or ")
@@ -1032,10 +1038,13 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
     pkgerror(msg)
 end
 
-# copied from REPL to efficiently expose if any score is >0
-function fuzzysort(search::String, candidates::Vector{String})
-    scores = map(cand -> (REPL.fuzzyscore(search, cand), -Float64(REPL.levenshtein(search, cand))), candidates)
-    candidates[sortperm(scores)] |> reverse, any(s -> s[1] > 0, scores)
+# a little more efficient than the version in REPL
+function levsort(search::String, candidates::Vector{String})
+    name_scores = map(cand -> (Float64(REPL.levenshtein(search, cand)), -REPL.fuzzyscore(search, cand), cand), candidates)
+    filter!(s->s[3] != "julia", name_scores)
+    filter!(s->s[1] <= 3, name_scores)
+    sort!(name_scores)
+    return map(s->s[3], name_scores)
 end
 
 function available_names(ctx::Context = Context(); manifest::Manifest = ctx.env.manifest, include_registries::Bool = true)
