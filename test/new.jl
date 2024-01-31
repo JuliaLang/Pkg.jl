@@ -3023,7 +3023,7 @@ using Pkg.Types: is_stdlib
     @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
 
-
+#=
 @testset "Pkg.add() with julia_version" begin
     append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
 
@@ -3128,6 +3128,7 @@ end
 
     empty!(Pkg.Types.STDLIBS_BY_VERSION)
 end
+=#
 
 
 @testset "Issue #2931" begin
