@@ -15,16 +15,23 @@ import Pkg.Registry
 const APP_ENV_FOLDER = joinpath(homedir(), ".julia", "environments", "apps")
 const APP_MANIFEST_FILE = joinpath(APP_ENV_FOLDER, "AppManifest.toml")
 const JULIA_BIN_PATH = joinpath(homedir(), ".julia", "bin")
+const XDG_BIN_PATH = joinpath(homedir(), ".local", "bin")
 
 ##################
 # Helper Methods #
 ##################
+
+function rm_julia_and_xdg_bin(name; kwargs)
+    Base.rm(joinpath(JULIA_BIN_PATH, name); kwargs...)
+    Base.rm(joinpath(XDG_BIN_PATH, name); kwargs...)
+end
 
 function handle_project_file(sourcepath)
     project_file = joinpath(sourcepath, "Project.toml")
     isfile(project_file) || error("Project file not found: $project_file")
 
     project = Pkg.Types.read_project(project_file)
+    @show project
     isempty(project.apps) && error("No apps found in Project.toml for package $(project.name) at version $(project.version)")
     return project
 end
@@ -119,6 +126,7 @@ function add(pkg::PackageSpec)
 
     projectfile = joinpath(APP_ENV_FOLDER, pkg.name, "Project.toml")
     mkpath(dirname(projectfile))
+
     write_project(project, projectfile)
 
     # Move manifest if it exists here.
@@ -260,7 +268,7 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
         delete!(manifest.deps, dep.uuid)
         for (appname, appinfo) in dep.apps
             @info "Deleted $(appname)"
-            Base.rm(joinpath(JULIA_BIN_PATH, appname); force=true)
+            rm_julia_and_xdg_bin(appname; force=true)
         end
         Base.rm(joinpath(APP_ENV_FOLDER, dep.name); recursive=true)
     else
@@ -270,7 +278,7 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
                 app = pkg.apps[app_idx]
                 @info "Deleted app $(app.name)"
                 delete!(pkg.apps, app.name)
-                Base.rm(joinpath(JULIA_BIN_PATH, app.name); force=true)
+                rm_julia_and_xdg_bin(appname; force=true)
             end
             if isempty(pkg.apps)
                 delete!(manifest.deps, uuid)
@@ -296,16 +304,22 @@ function generate_shims_for_apps(pkgname, apps, env)
 end
 
 function generate_shim(app::AppInfo, pkgname; julia_executable_path::String=joinpath(Sys.BINDIR, "julia"), env=joinpath(homedir(), ".julia", "environments", "apps", pkgname))
-    filename = joinpath(homedir(), ".julia", "bin", app.name * (Sys.iswindows() ? ".bat" : ""))
+    filename = app.name * (Sys.iswindows() ? ".bat" : "")
+    julia_bin_filename = joinpath(JULIA_BIN_PATH, filename)
     mkpath(dirname(filename))
     content = if Sys.iswindows()
         windows_shim(pkgname, julia_executable_path, env)
     else
         bash_shim(pkgname, julia_executable_path, env)
     end
-    overwrite_if_different(filename, content)
+    # TODO: Only overwrite if app is "controlled" by Julia?
+    overwrite_if_different(julia_bin_filename, content)
     if Sys.isunix()
-        chmod(filename, 0o755)
+        if isdir(XDG_BIN_PATH) && !isfile(joinpath(XDG_BIN_PATH, filename))
+            # TODO: Verify that this symlink is in fact pointing to the correct file.
+            symlink(julia_bin_filename, joinpath(XDG_BIN_PATH, filename))
+        end
+        chmod(julia_bin_filename, 0o755)
     end
 end
 
