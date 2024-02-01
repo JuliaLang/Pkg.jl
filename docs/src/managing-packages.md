@@ -488,6 +488,27 @@ To fix such errors, you have a number of options:
 - try fixing the problem yourself.
   This becomes easier once you understand `Project.toml` files and how they declare their compatibility requirements. We'll return to this example in [Fixing conflicts](@ref).
 
+## Manifest version mismatches
+
+Manifest files also record the Julia version used to resolve the project
+dependencies. As such, using an different Julia version can result in a
+different resolved manifest, and using an older Julia version than the one the
+manifest was generated with risks using packages incompatible with the current
+Julia version.
+
+When Pkg notices that there is a mismatch between the manifest Julia version and
+the current Julia version, it will prompt you and ask if you would like to:
+- **refresh** the manifest, by removing the current one and regenerating the manifest
+- **version** the manifest, by renaming the current one to `(Julia)Manifest-v{major}.{minor}.toml` and regenerating the manifest
+- **ignore** the mismatch
+
+The prompt only is shown in interactive sessions. In non-interactive sessions
+the default behaviour is to *ignore* the mismatch.
+
+The default behaviour of interactive an non-interactive sessions alike can be
+set through the `JULIA_PKG_MANIFEST_MISMATCH_ACTION` environment variable, which
+recognises the values: `ask`, `refresh`, `version`, and `ignore`.
+
 ## Garbage collecting old, unused packages
 
 As packages are updated and projects are deleted, installed package versions and artifacts that were

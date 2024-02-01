@@ -219,7 +219,14 @@ function read_manifest(f_or_io::Union{String, IO})
     if Base.is_v1_format_manifest(raw)
         raw = convert_v1_format_manifest(raw)
     end
-    return Manifest(raw, f_or_io)
+    if f_or_io isa String
+        raw = check_manifest_julia_maybe_recreate(raw, f_or_io)
+    end
+    if isnothing(raw)
+        return Manifest()
+    else
+        return Manifest(raw, f_or_io)
+    end
 end
 
 function convert_v1_format_manifest(old_raw_manifest::Dict)
@@ -229,6 +236,70 @@ function convert_v1_format_manifest(old_raw_manifest::Dict)
             # don't set julia_version as it is unknown in old manifests
         )
     return new_raw_manifest
+end
+
+# This responds based on the envvar JULIA_PKG_MANIFEST_MISMATCH_ACTION, which can be:
+# - ask (the interactive default): prompt the user to select one of the following actions.
+# - ignore (the noninteractive default): do nothing, try to use the existing manifest.
+# - refresh: delete and re-create the Manifest.toml.
+# - version: move the existing manifest to Manifest-vX.X.toml, generate a new Manifest.toml
+#   if a Manifest-vX.X.toml already exists, this behaves like "replace".
+function check_manifest_julia_maybe_recreate(raw::Dict{String, Any}, file::String)
+    julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]::String) : nothing
+    isnothing(julia_version) ||
+        (julia_version.major == VERSION.major && julia_version.minor == VERSION.minor) &&
+        return raw
+    action_mapping = Dict("ignore" => :ignore, "refresh" => :refresh, "version" => :version)
+    action = get(action_mapping,
+                 get(ENV, "JULIA_PKG_MANIFEST_MISMATCH_ACTION", "") |> lowercase,
+                 ifelse(isinteractive(), :ask, :ignore))
+    if action === :ask
+        action = try_prompt_resolve_manifest_conflict(julia_version)
+    end
+    action === :ignore && return raw
+    if action === :version
+        versioned_file =
+            joinpath(dirname(file),
+                     string(ifelse(occursin("Julia", basename(file)), "JuliaManifest", "Manifest"),
+                            "-v$(julia_version.major).$(julia_version.minor).toml"))
+        if ispath(versioned_file)
+            rm(file)
+        else
+            mv(file, versioned_file)
+        end
+    else # must be :refresh
+        rm(file)
+    end
+    return nothing
+end
+
+# This arguably should live in `REPLMode/REPLMode.jl`, however that module is
+# `include`d after this file, and so we can't reference any functions in it here.
+function try_prompt_resolve_manifest_conflict(manifest_ver::VersionNumber)
+    io = stderr_f()
+    ans = try
+        printstyled(io, " │ "; color=:green)
+        println(io, "The active project's manifest seems to be from an ", ifelse(manifest_ver < VERSION, "earlier", "later"), " version ")
+        printstyled(io, " │ "; color=:green)
+        print(io, "of Julia (")
+        printstyled(io, string(manifest_ver), color=:light_magenta)
+        print(io, ", this is ")
+        printstyled(io, string(VERSION), color=:light_magenta)
+        println(io, "), would you like to (r)efresh the manifest,")
+        printstyled(io, " │ "; color=:green)
+        println(io, "move it to a (v)ersioned copy then refresh, or (i)gnore this?")
+        printstyled(io, " └ "; color=:green)
+        Base.prompt(stdin, io, "(r/v/i)", default = ifelse(manifest_ver < VERSION, "i", "r"))
+    catch err
+        if err isa InterruptException # if ^C is entered
+            println(io, " i") # Indicate what action will be taken
+            "i"
+        else
+            rethrow()
+        end
+    end
+    answer_mapping = Dict("r" => :refresh, "v" => :version, "i" => :ignore)
+    get(answer_mapping, ans, :ignore)
 end
 
 ###########
