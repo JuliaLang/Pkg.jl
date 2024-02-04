@@ -563,7 +563,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     mk = REPL.mode_keymap(main)
 
     shell_mode = nothing
-    for mode in Base.active_repl.interface.modes
+    for mode in repl.interface.modes
         if mode isa LineEdit.Prompt
             mode.prompt == "shell> " && (shell_mode = mode)
         end
