@@ -6,9 +6,7 @@ using UUIDs
 using Random
 using Dates
 import LibGit2
-import REPL
 import Base.string
-using REPL.TerminalMenus
 
 using TOML
 import ..Pkg, ..Registry
@@ -979,6 +977,8 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     end
 end
 
+include("fuzzysorting.jl")
+
 # Ensure that all packages are fully resolved
 function ensure_resolved(ctx::Context, manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
@@ -1009,12 +1009,12 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
                     join(io, what, ", ", " or ")
                     print(io, ")")
                     all_names = available_names(ctx; manifest, include_registries = registry)
-                    all_names_ranked, any_score_gt_zero = fuzzysort(name, all_names)
+                    all_names_ranked, any_score_gt_zero = FuzzySort.fuzzysort(name, all_names)
                     if any_score_gt_zero
                         println(io)
                         prefix = "   Suggestions:"
                         printstyled(io, prefix, color = Base.info_color())
-                        REPL.printmatches(io, name, all_names_ranked; cols = REPL._displaysize(ctx.io)[2] - length(prefix))
+                        FuzzySorting.printmatches(io, name, all_names_ranked; cols = FuzzySorting._displaysize(ctx.io)[2] - length(prefix))
                     end
                 else
                     join(io, uuids, ", ", " or ")
@@ -1032,11 +1032,7 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
     pkgerror(msg)
 end
 
-# copied from REPL to efficiently expose if any score is >0
-function fuzzysort(search::String, candidates::Vector{String})
-    scores = map(cand -> (REPL.fuzzyscore(search, cand), -Float64(REPL.levenshtein(search, cand))), candidates)
-    candidates[sortperm(scores)] |> reverse, any(s -> s[1] > 0, scores)
-end
+
 
 function available_names(ctx::Context = Context(); manifest::Manifest = ctx.env.manifest, include_registries::Bool = true)
     all_names = String[]
@@ -1076,16 +1072,7 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
             push!(repo_infos, (reg.name, repo, uuid))
         end
     end
-    unique!(repo_infos)
-    if isinteractive()
-        # prompt for which UUID was intended:
-        menu = RadioMenu(String["Registry: $(value[1]) - Repo: $(value[2]) - UUID: $(value[3])" for value in repo_infos])
-        choice = request("There are multiple registered `$name` packages, choose one:", menu)
-        choice == -1 && return nothing
-        return repo_infos[choice][3]
-    else
-        pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
-    end
+    pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
 end
 
 # Determine current name for a given package UUID
