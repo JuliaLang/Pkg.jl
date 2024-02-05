@@ -2727,7 +2727,7 @@ end
 #
 # Note: these tests should be run on clean depots
 for v in (nothing, "true")
-    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0) do
+    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0, "GIT_ASKPASS" => "true") do
         @testset "downloads with JULIA_PKG_USE_CLI_GIT = $v" begin
             isolate() do
                 @testset "via name" begin
