@@ -377,21 +377,19 @@ end
 #############
 # Execution #
 #############
-function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
-    if !isinteractive() && !TEST_MODE[] && !PRINTED_REPL_WARNING[]
-        @warn "The Pkg REPL mode is intended for interactive use only, and should not be used from scripts. It is recommended to use the functional API instead."
-        PRINTED_REPL_WARNING[] = true
-    end
+function prepare_cmd(input)
+    statements = parse(input)
+    commands = map(Command, statements)
+    return commands
+end
+
+do_cmds(repl::REPL.AbstractREPL, input::String) = do_cmds(repl, prepare_cmd(input))
+do_cmds(input::String, io=stdout_f()) = do_cmds(prepare_cmd(input), io)
+
+function do_cmds(repl::REPL.AbstractREPL, commands::Vector{Command})
     try
-        statements = parse(input)
-        commands   = map(Command, statements)
-        xs = []
-        for command in commands
-            push!(xs, do_cmd!(command, repl))
-        end
-        return TEST_MODE[] ? xs : nothing
+        return do_cmds(commands, repl.t.out_stream)
     catch err
-        do_rethrow && rethrow()
         if err isa PkgError || err isa Resolve.ResolverError
             Base.display_error(repl.t.err_stream, ErrorException(sprint(showerror, err)), Ptr{Nothing}[])
         else
@@ -400,9 +398,22 @@ function do_cmd(repl::REPL.AbstractREPL, input::String; do_rethrow=false)
     end
 end
 
-function do_cmd!(command::Command, repl)
+
+function do_cmds(commands::Vector{Command}, io)
+    if !isinteractive() && !TEST_MODE[] && !PRINTED_REPL_WARNING[]
+        @warn "The Pkg REPL mode is intended for interactive use only, and should not be used from scripts. It is recommended to use the functional API instead."
+        PRINTED_REPL_WARNING[] = true
+    end
+    xs = []
+    for command in commands
+        push!(xs, do_cmd(command, io))
+    end
+    return TEST_MODE[] ? xs : nothing
+end
+
+function do_cmd(command::Command, io)
     # REPL specific commands
-    command.spec === SPECS["package"]["help"] && return Base.invokelatest(do_help!, command, repl)
+    command.spec === SPECS["package"]["help"] && return Base.invokelatest(do_help!, command, io)
     # API commands
     if command.spec.should_splat
         TEST_MODE[] && return command.spec.api, command.arguments..., command.options
@@ -421,10 +432,9 @@ function parse_command(words::Vector{QString})
     return statement.spec === nothing ?  statement.super : statement.spec
 end
 
-function do_help!(command::Command, repl::REPL.AbstractREPL)
-    disp = REPL.REPLDisplay(repl)
+function do_help!(command::Command, io)
     if isempty(command.arguments)
-        Base.display(disp, help)
+        show(io, MIME("text/plain"), help)
         return
     end
     help_md = md""
@@ -442,34 +452,23 @@ function do_help!(command::Command, repl::REPL.AbstractREPL)
         push!(help_md.content, cmd.help)
     end
     !isempty(command.arguments) && @warn "More than one command specified, only rendering help for first"
-    Base.display(disp, help_md)
+    show(io, MIME("text/plain"), help_md)
+end
+
+# Provide a string macro pkg"cmd" that can be used in the same way
+# as the REPLMode `pkg> cmd`. Useful for testing and in environments
+# where we do not have a REPL, e.g. IJulia.
+macro pkg_str(str::String)
+    :(pkgstr($str))
+end
+
+function pkgstr(str::String)
+    return do_cmds(str)
 end
 
 ######################
 # REPL mode creation #
 ######################
-
-# Provide a string macro pkg"cmd" that can be used in the same way
-# as the REPLMode `pkg> cmd`. Useful for testing and in environments
-# where we do not have a REPL, e.g. IJulia.
-struct MiniREPL <: REPL.AbstractREPL
-    display::TextDisplay
-    t::REPL.Terminals.TTYTerminal
-end
-function MiniREPL()
-    MiniREPL(TextDisplay(stdout_f()), REPL.Terminals.TTYTerminal(get(ENV, "TERM", Sys.iswindows() ? "" : "dumb"), stdin, stdout_f(), stderr_f()))
-end
-REPL.REPLDisplay(repl::MiniREPL) = repl.display
-
-const minirepl = Ref{MiniREPL}()
-
-__init__() = minirepl[] = MiniREPL()
-
-macro pkg_str(str::String)
-    :($(do_cmd)(minirepl[], $str; do_rethrow=true))
-end
-
-pkgstr(str::String) = do_cmd(minirepl[], str; do_rethrow=true)
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
@@ -554,7 +553,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
         ok || return REPL.transition(s, :abort)
         input = String(take!(buf))
         REPL.reset(repl)
-        do_cmd(repl, input)
+        do_cmds(repl, input)
         REPL.prepare_next(repl)
         REPL.reset_state(s)
         s.current_mode.sticky || REPL.transition(s, main)
