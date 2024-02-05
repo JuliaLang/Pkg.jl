@@ -497,6 +497,5 @@ Some commands have an alias, indicated below.
 end
 
 const help = gen_help()
-const REG_WARNED = Ref{Bool}(false)
 
 end #module

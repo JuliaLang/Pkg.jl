@@ -211,7 +211,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                     return
                 elseif reg.url !== nothing && reg.linked == true
-                    pkgerror("""
+                    Pkg.Types.pkgerror("""
                     A symlinked registry was requested but `path` was not set and `url` was set to `$url`.
                     Set only `path` and `linked = true` to use registry symlinking.
                     """)
@@ -382,7 +382,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
         for reg in unique(r -> r.uuid, find_installed_registries(io, depot_regs; depots=[depot]); seen=Set{UUID}())
             prev_update = get(registry_update_log, string(reg.uuid), nothing)::Union{Nothing, DateTime}
             if prev_update !== nothing
-                diff = now() - prev_update            
+                diff = now() - prev_update
                 if diff < update_cooldown
                     @debug "Skipping updating registry $(reg.name) since it is on cooldown: $(Dates.canonicalize(Millisecond(update_cooldown) - diff)) left"
                     continue

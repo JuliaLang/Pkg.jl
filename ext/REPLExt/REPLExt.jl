@@ -6,10 +6,10 @@ import REPL
 import .REPL: LineEdit, REPLCompletions, TerminalMenus
 
 import Pkg
-import .Pkg: linewrap, pathrepr, compat, can_fancyprint, printpkgstyle
+import .Pkg: linewrap, pathrepr, compat, can_fancyprint, printpkgstyle, PKGMODE_PROJECT
 using .Pkg: Types, Operations, API, Registry, Resolve, REPLMode
 
-using .REPLMode: Statement, CommandSpec, Command, prepare_cmd
+using .REPLMode: Statement, CommandSpec, Command, prepare_cmd, tokenize, core_parse, SPECS, api_options, parse_option, api_options, is_opt, wrap_option
 
 using .Types: Context, PkgError, pkgerror, EnvCache
 
@@ -177,6 +177,7 @@ function repl_init(repl::REPL.AbstractREPL)
     return
 end
 
+const REG_WARNED = Ref{Bool}(false)
 
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
     ctx = try
@@ -216,12 +217,12 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         printstyled(ctx.io, " │ "; color=:green)
         println(ctx.io, "Install package$(plural4)?")
         msg2 = string("add ", join(available_pkgs, ' '))
-        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", REPLMode.promptf()))))
+        for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", promptf()))))
             printstyled(ctx.io, " │   "; color=:green)
             if i == 1
-                printstyled(ctx.io, REPLMode.promptf(); color=:blue)
+                printstyled(ctx.io, promptf(); color=:blue)
             else
-                print(ctx.io, " "^length(REPLMode.promptf()))
+                print(ctx.io, " "^length(promptf()))
             end
             println(ctx.io, line)
         end
