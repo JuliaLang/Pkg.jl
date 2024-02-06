@@ -33,8 +33,6 @@ else
     Pkg.DEFAULT_IO[] = devnull # or stdout
 end
 
-Pkg.REPLMode.minirepl[] = Pkg.REPLMode.MiniREPL() # re-set this given DEFAULT_IO has changed
-
 include("utils.jl")
 Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.ConsoleLogger(Pkg.DEFAULT_IO[]) : Logging.current_logger()) do
 
