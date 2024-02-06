@@ -2727,7 +2727,10 @@ end
 #
 # Note: these tests should be run on clean depots
 for v in (nothing, "true")
-    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0) do
+    # On CI when JULIA_PKG_USE_CLI_GIT=true we need to tell the cli git to not prompt for credentials
+    # GIT_ASKPASS=true forces the credential provider to return "" https://stackoverflow.com/a/71057440
+    # GIT_TERMINAL_PROMPT=0 is also supposed to avoid the prompt but doesn't reliably https://github.com/JuliaLang/Pkg.jl/issues/3774
+    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0, "GIT_ASKPASS" => "true") do
         @testset "downloads with JULIA_PKG_USE_CLI_GIT = $v" begin
             isolate() do
                 @testset "via name" begin
