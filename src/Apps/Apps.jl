@@ -130,7 +130,10 @@ function add(pkg::PackageSpec)
         # TODO: Call build on the package if it was freshly installed?
     end
 
-    # Create the new package env.
+    # Check_sysiamge
+
+
+
     entry = PackageEntry(;apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid)
     update_app_manifest(entry)
     generate_shims_for_apps(entry.name, entry.apps, dirname(projectfile))
@@ -310,25 +313,29 @@ function generate_shim(app::AppInfo, pkgname; julia_executable_path::String=join
 end
 
 
-function bash_shim(pkgname, julia_executable_path::String, env)
+function bash_shim(pkgname, julia_executable_path::String, env, sysimage::Union{Nothing, String}=nothing)
+    sysimage_str = sysimage === nothing ? "" : "--sysimage=$sysimage"
     return """
         #!/usr/bin/env bash
 
         export JULIA_LOAD_PATH=$(repr(env))
         exec $julia_executable_path \\
             --startup-file=no \\
+            $sysimage_str \\
             -m $(pkgname) \\
             "\$@"
         """
 end
 
-function windows_shim(pkgname, julia_executable_path::String, env)
+function windows_shim(pkgname, julia_executable_path::String, env, sysimage::Union{Nothing, String}=nothing)
+    sysimage_str = sysimage === nothing ? "" : "--sysimage=$sysimage"
     return """
         @echo off
         set JULIA_LOAD_PATH=$(repr(env))
 
         $julia_executable_path ^
             --startup-file=no ^
+            $sysimage_str ^
             -m $(pkgname) ^
             %*
         """
@@ -398,6 +405,37 @@ function update_windows_PATH()
     occursin(JULIA_BIN_PATH, current_path) && return
     new_path = "$current_path;$JULIA_BIN_PATH"
     run(`setx PATH "$new_path"`)
+end
+
+
+############
+# Sysimage #
+############
+
+const PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
+const package_compiler_uuid = UUID("9b87118b-4619-50d2-8e1e-99f35a4d4d9d")
+const pkgcompiler_env = joinpath(pkg_scratchpath(), "packagecompiler_env")
+
+function install_packagecompiler()
+    mkpath(pkgcompiler_env)
+
+
+    Pkg.activate(pkgcompiler_env) do
+        # Check if PackageCompiler is installed
+        if !(package_compiler_uuid in Pkg.dependencies())
+            Pkg.add(; name="PackageCompiler", version="2")
+        end
+        # Activate scratch space
+    end
+end
+
+function create_sysimage(env)
+    install_packagecompiler()
+    sysimage_out = joinpath(env, "sys.so")
+    run(`$(Base.julia_cmd()) --project=$pkgcompiler_env
+        -e 'using PackageCompiler; PackageCompiler.create_sysimage(; project=$(repr(env)), sysimage_path = $(repr(sysimage_out))")'`)
+
 end
 
 end
