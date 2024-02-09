@@ -54,7 +54,7 @@ using Test
     isolate(loaded_depot=false) do
         depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot)
         Pkg.activate(; temp=true)
-        Pkg.Registry.add(Pkg.RegistrySpec(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry")))
+        Pkg.Registry.add(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry"))
         Pkg.Registry.add("General")
         Pkg.add("HasExtensions")
         Pkg.test("HasExtensions", julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
@@ -66,7 +66,7 @@ using Test
         withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
             depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot)
             Pkg.activate(; temp=true)
-            Pkg.Registry.add(Pkg.RegistrySpec(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry")))
+            Pkg.Registry.add(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry"))
             Pkg.Registry.add("General")
             Pkg.add("HasDepWithExtensions")
         end
