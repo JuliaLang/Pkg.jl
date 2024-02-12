@@ -1983,7 +1983,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
                 allow_reresolve || rethrow()
                 @debug err
                 @warn "Could not use exact versions of packages in manifest, re-resolving"
-                Pkg.up(temp_ctx; skip_writing_project=true)
+                Pkg.update(temp_ctx; skip_writing_project=true)
                 @debug "Using _clean_ dep graph"
             end
 
