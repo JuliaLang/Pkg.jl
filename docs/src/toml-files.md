@@ -128,6 +128,14 @@ For the details, see [`Pkg.instantiate`](@ref).
     The `Manifest.toml` file is generated and maintained by Pkg and, in general, this file
     should *never* be modified manually.
 
+### Different Manifests for Different Julia versions
+
+As of Julia v1.11, be named in the format `Manifest-v{major}.{minor}.toml`, and will be preferentially used by Julia of that version.
+For example, if there exists a `Manifest-v1.11.toml` and a `Manifest.toml` then Julia 1.11 will use the former, and but julia 1.10 (and 1.12, and all other versions) the latter.
+This means you can more easily manage different instantiated versions of your dependencies for different Julia versions when testing things out etc.
+Note that you can only have one `Project.toml`.
+The `Manifest-v{major}.{minor}.toml` files will not be automatically created, but after creation of a `Manifest.toml` by Pkg you can rename it, and it will there after be maintained through Pkg operations.
+
 
 ### `Manifest.toml` entries
 
