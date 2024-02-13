@@ -130,11 +130,14 @@ For the details, see [`Pkg.instantiate`](@ref).
 
 ### Different Manifests for Different Julia versions
 
-As of Julia v1.11, be named in the format `Manifest-v{major}.{minor}.toml`, and will be preferentially used by Julia of that version.
-For example, if there exists a `Manifest-v1.11.toml` and a `Manifest.toml` then Julia 1.11 will use the former, and but julia 1.10 (and 1.12, and all other versions) the latter.
-This means you can more easily manage different instantiated versions of your dependencies for different Julia versions when testing things out etc.
-Note that you can only have one `Project.toml`.
-The `Manifest-v{major}.{minor}.toml` files will not be automatically created, but after creation of a `Manifest.toml` by Pkg you can rename it, and it will there after be maintained through Pkg operations.
+Starting from Julia v1.11, there is an option to name manifest files in the format `Manifest-v{major}.{minor}.toml`.
+Julia will then preferentially use the version-specific manifest file if available.
+For example, if both `Manifest-v1.11.toml` and `Manifest.toml` exist, Julia 1.11 will prioritize using `Manifest-v1.11.toml`.
+However, Julia versions 1.10, 1.12, and all others will default to using `Manifest.toml`.
+This feature allows for easier management of different instantiated versions of dependencies for various Julia versions.
+Note that there can only be one `Project.toml` file. While `Manifest-v{major}.{minor}.toml` files are not automatically 
+created by Pkg, users can manually rename a `Manifest.toml` file to match
+the versioned format, and Pkg will subsequently maintain it through its operations.
 
 
 ### `Manifest.toml` entries
