@@ -44,9 +44,13 @@ jobs:
           - os: windows-latest
             julia-arch: aarch64
           - os: macOS-13
-            julia-arch: [x86, aarch64]
+            julia-arch: x86
+          - os: macOS-13
+            julia-arch: aarch64
           - os: macOS-14
-            julia-arch: [x86, x64]
+            julia-arch: x86
+          - os: macOS-14
+            julia-arch: x64
     steps:
       - name: Set git to use LF and fix TEMP on windows
         if: matrix.os == 'windows-latest'
