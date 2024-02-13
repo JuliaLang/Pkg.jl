@@ -53,7 +53,7 @@ jobs:
           echo "TMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
           echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1.9.6 # relax once other tags are updated
+      - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
