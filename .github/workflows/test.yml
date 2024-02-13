@@ -26,7 +26,8 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macOS-latest
+          - macOS-13 # intel
+          - macOS-14 # arm
           - windows-latest
         julia-arch:
           - 'x64'
@@ -38,7 +39,7 @@ jobs:
           # - '1.6'
           - 'nightly'
         exclude:
-          - os: macOS-latest
+          - os: macOS-*
             julia-arch: x86
     steps:
       - name: Set git to use LF and fix TEMP on windows
@@ -50,7 +51,7 @@ jobs:
           echo "TMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
           echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v1.9.6 # relax once other tags are updated
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
