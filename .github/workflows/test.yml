@@ -26,7 +26,6 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macOS-13 # intel
           - macOS-14 # arm
           - windows-latest
         julia-arch:
@@ -34,8 +33,7 @@ jobs:
           - 'x86'
           - 'aarch64'
         pkg-server:
-          - ""
-          - "pkg.julialang.org"
+          - "pkg.julialang.org" # Default to this for all except specific cases
         julia-version:
           - 'nightly'
         exclude:
@@ -43,14 +41,19 @@ jobs:
             julia-arch: aarch64
           - os: windows-latest
             julia-arch: aarch64
-          - os: macOS-13
-            julia-arch: x86
-          - os: macOS-13
-            julia-arch: aarch64
           - os: macOS-14
             julia-arch: x86
           - os: macOS-14
             julia-arch: x64
+        include:
+          - os: ubuntu-latest
+            julia-arch: 'x64'
+            julia-version: 'nightly'
+            pkg-server: ""
+          - os: ubuntu-latest
+            julia-arch: 'x64'
+            julia-version: 'nightly'
+            pkg-server: "pkg.julialang.org"
     steps:
       - name: Set git to use LF and fix TEMP on windows
         if: matrix.os == 'windows-latest'
