@@ -958,7 +958,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     # Next, we calculate the space savings we're about to gain!
     pretty_byte_str = (size) -> begin
         bytes, mb = Base.prettyprint_getunits(size, length(Base._mem_units), Int64(1024))
-        return @sprintf("%.3f %s", bytes, Base._mem_units[mb])
+        return @sprintf("%.3f %s%s", bytes, Base._mem_units[mb], (mb == 1 && bytes>1) ? "s" : "")
     end
 
     function recursive_dir_size(path)
