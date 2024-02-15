@@ -84,10 +84,11 @@ function promptf()
     return "$(prefix)pkg> "
 end
 
-do_cmds(repl::REPL.AbstractREPL, input::String) = do_cmds(repl, prepare_cmd(input))
-
-function do_cmds(repl::REPL.AbstractREPL, commands::Vector{Command})
+function do_cmds(repl::REPL.AbstractREPL, commands::Union{String, Vector{Command}})
     try
+        if commands isa String
+            commands = prepare_cmd(commands)
+        end
         return REPLMode.do_cmds(commands, repl.t.out_stream)
     catch err
         if err isa PkgError || err isa Resolve.ResolverError
