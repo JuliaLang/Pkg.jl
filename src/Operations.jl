@@ -1717,6 +1717,17 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args)
     ```
 end
 
+function gen_subprocess_cacheflags()
+    session_flags = Base.CacheFlags()
+    Base.CacheFlags(
+        session_flags.use_pkgimages,
+        session_flags.debug_level,
+        1, # `--checkbounds=yes`
+        Bool(Base.JLOptions().can_inline),
+        session_flags.debug_level
+    )
+end
+
 function with_temp_env(fn::Function, temp_env::String)
     load_path = copy(LOAD_PATH)
     active_project = Base.ACTIVE_PROJECT[]
@@ -1979,19 +1990,19 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
+            flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                flags = gen_subprocess_flags(source_path; coverage, julia_args)
+                cacheflags = gen_subprocess_cacheflags()
                 # Allow to fail?
                 Pkg.activate(sandbox_ctx.env.project_file; #=io=devnull=#) do
-                    Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, flags)
+                    Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, flags_cacheflags = flags => cacheflags)
                 end
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            flags = gen_subprocess_flags(source_path; coverage, julia_args)
             cmd = `$(Base.julia_cmd()) --project=$(testdir(source_path)) $(flags) --eval $code`
             p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Tests interrupted. Exiting the test process")
             if success(p)

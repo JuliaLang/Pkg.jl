@@ -1084,8 +1084,9 @@ end
 
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
-                    _from_loading::Bool=false, flags::Cmd=``, kwargs...)
+                    _from_loading::Bool=false, flags_cacheflags::Pair{Cmd, Base.CacheFlags}=(``=>Base.CacheFlags()), kwargs...)
     Context!(ctx; kwargs...)
+    flags, cacheflags = flags_cacheflags
     if !already_instantiated
         instantiate(ctx; allow_autoprecomp=false, kwargs...)
         @debug "precompile: instantiated"
@@ -1717,7 +1718,7 @@ function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::
         # wait until the lock is available
         FileWatching.mkpidlock(pidfile; stale_age) do
             # double-check in case the other process crashed or the lock expired
-            if Base.isprecompiled(pkg; ignore_loaded=true) # don't use caches for this as the env state will have changed
+            if Base.isprecompiled(pkg; ignore_loaded=true, flags=cacheflags) # don't use caches for this as the env state will have changed
                 return nothing # returning nothing indicates a process waited for another
             else
                 delete!(pkgspidlocked, pkg)
