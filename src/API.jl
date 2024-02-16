@@ -1085,6 +1085,14 @@ end
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
                     _from_loading::Bool=false, kwargs...)
+
+    if ccall(:jl_generating_output, Cint, ()) == 1
+        if !internal_call
+            @warn "Pkg.precompile cannot be called during package precompilation"
+        end
+        return
+    end
+
     Context!(ctx; kwargs...)
     if !already_instantiated
         instantiate(ctx; allow_autoprecomp=false, kwargs...)
