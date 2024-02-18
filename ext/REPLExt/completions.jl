@@ -187,9 +187,7 @@ function complete_argument(spec::CommandSpec, options::Vector{String},
         e isa PkgError && return String[]
         rethrow()
     end
-    return applicable(spec.completions, opts, partial, offset, index) ?
-        spec.completions(opts, partial, offset, index) :
-        spec.completions(opts, partial)
+    return spec.completions(opts, partial, offset, index)
 end
 
 function _completions(input, final, offset, index)

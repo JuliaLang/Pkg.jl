@@ -6,8 +6,6 @@ using UUIDs
 using Random: randstring
 import LibGit2, Dates, TOML
 
-import REPL
-using REPL.TerminalMenus
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,

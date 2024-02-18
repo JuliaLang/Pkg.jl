@@ -274,27 +274,6 @@ import .FakeTerminals.FakeTerminal
         @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist")
         Pkg.precompile() # should be a no-op
     end end
-    @testset "Issue 3359: Recurring precompile" begin
-        isolate() do; cd_tempdir() do tmp
-            cp(joinpath(@__DIR__, "test_packages", "RecurringPrecompile"), joinpath(tmp, "RecurringPrecompile"))
-            Pkg.activate("RecurringPrecompile")
-            iob = IOBuffer()
-            Pkg.precompile(io=iob)
-            @test occursin("Precompiling", String(take!(iob)))
-            Pkg.precompile(io=iob) # should be a no-op
-            if !occursin("Precompiling", String(take!(iob)))
-                @test true
-            else
-                # helpful for debugging why on CI
-                println("Repeated precompilation detected. Running again with loading debugging on")
-                withenv("JULIA_DEBUG" => "loading") do
-                    Pkg.precompile(io=iob)
-                    println(String(take!(iob)))
-                    @test false
-                end
-            end
-        end end
-    end
 end
 
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin

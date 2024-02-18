@@ -7,7 +7,6 @@ if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_m
 end
 
 import Random
-import REPL
 import TOML
 using Dates
 
@@ -644,8 +643,8 @@ For example, `Pkg.add` can be called either as the explicit or concise versions 
 | Explicit                                                            | Concise                                        |
 |:--------------------------------------------------------------------|:-----------------------------------------------|
 | `Pkg.add(PackageSpec(name="Package"))`                              | `Pkg.add(name = "Package")`                    |
-| `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
-|` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
+| `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(url="www.myhost.com/MyPkg")`                    |
+|` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="/MyPkg")])`|
 
 Below is a comparison between the REPL mode and the functional API:
 
@@ -701,15 +700,27 @@ const redo = API.redo
 
 """
     RegistrySpec(name::String)
-    RegistrySpec(; name, url, path)
+    RegistrySpec(; name, uuid, url, path)
 
 A `RegistrySpec` is a representation of a registry with various metadata, much like
 [`PackageSpec`](@ref).
+This includes:
+
+  * The `name` of the registry.
+  * The registry's unique `uuid`.
+  * The `url` to the registry.
+  * A local `path`.
 
 Most registry functions in Pkg take a `Vector` of `RegistrySpec` and do the operation
 on all the registries in the vector.
 
-# Examples
+Many functions that take a `RegistrySpec` can be called with a more concise notation with keyword arguments.
+For example, `Pkg.Registry.add` can be called either as the explicit or concise versions as:
+
+| Explicit                                                            | Concise                                        |
+|:--------------------------------------------------------------------|:-----------------------------------------------|
+| `Pkg.Registry.add(RegistrySpec(name="General"))`                                        | `Pkg.Registry.add(name = "General")`                                      |
+| `Pkg.Registry.add(RegistrySpec(url="https://github.com/JuliaRegistries/General.git")))` | `Pkg.Registry.add(url = "https://github.com/JuliaRegistries/General.git")`|
 
 Below is a comparison between the REPL mode and the functional API::
 
@@ -748,17 +759,6 @@ const is_manifest_current = API.is_manifest_current
 function __init__()
     DEFAULT_IO[] = nothing
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-    if isdefined(Base, :active_repl)
-        REPLMode.repl_init(Base.active_repl)
-    else
-        atreplinit() do repl
-            if isinteractive() && repl isa REPL.LineEditREPL
-                isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
-                REPLMode.repl_init(repl)
-            end
-        end
-    end
-    push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
     if !isassigned(Base.PKG_PRECOMPILE_HOOK)
         # allows Base to use Pkg.precompile during loading
         # disable via `Base.PKG_PRECOMPILE_HOOK[] = Returns(nothing)`

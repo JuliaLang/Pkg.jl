@@ -1,5 +1,16 @@
 const PSA = Pair{Symbol,Any}
 
+function get_complete_function(f)
+    return function(opts, partial, offset, index)
+        m = Base.get_extension(@__MODULE__, :REPLExt)
+        m === nothing && return String[]
+        completions = getglobal(m, f)
+        return applicable(completions, opts, partial, offset, index) ?
+            completions(opts, partial, offset, index) :
+            completions(opts, partial)
+    end
+end
+
 compound_declarations = [
 "package" => CommandDeclaration[
 PSA[:name => "test",
@@ -10,7 +21,7 @@ PSA[:name => "test",
     :option_spec => [
         PSA[:name => "coverage", :api => :coverage => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "run tests for packages",
     :help => md"""
     test [--coverage] pkg[=uuid] ...
@@ -26,7 +37,7 @@ PSA[:name => "help",
     :api => identity, # dummy API function
     :arg_count => 0 => Inf,
     :arg_parser => ((x,y) -> x),
-    :completions => complete_help,
+    :completions => get_complete_function(:complete_help),
     :description => "show this message",
     :help => md"""
     [?|help]
@@ -69,7 +80,7 @@ PSA[:name => "remove",
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
         PSA[:name => "all", :api => :all_pkgs => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "remove packages from project or manifest",
     :help => md"""
     [rm|remove] [-p|--project] pkg[=uuid] ...
@@ -104,7 +115,7 @@ PSA[:name => "add",
         PSA[:name => "weak", :short_name => "w", :api => :target => :weakdeps],
         PSA[:name => "extra", :short_name => "e", :api => :target => :extras],
     ],
-    :completions => complete_add_dev,
+    :completions => get_complete_function(:complete_add_dev),
     :description => "add packages to project",
     :help => md"""
     add [--preserve=<opt>] [-w|--weak] [-e|--extra] pkg[=uuid] [@version] [#rev] ...
@@ -178,7 +189,7 @@ PSA[:name => "develop",
         PSA[:name => "shared", :api => :shared => true],
         PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
-    :completions => complete_add_dev,
+    :completions => get_complete_function(:complete_add_dev),
     :description => "clone the full package repo locally for development",
     :help => md"""
     [dev|develop] [--preserve=<opt>] [--shared|--local] pkg[=uuid] ...
@@ -214,7 +225,7 @@ PSA[:name => "free",
         PSA[:name => "all", :api => :all_pkgs => true],
     ],
     :arg_parser => parse_package,
-    :completions => complete_fixed_packages,
+    :completions => get_complete_function(:complete_fixed_packages),
     :description => "undoes a `pin`, `develop`, or stops tracking a repo",
     :help => md"""
     free pkg[=uuid] ...
@@ -229,7 +240,7 @@ PSA[:name => "why",
     :should_splat => false,
     :arg_count => 1 => 1,
     :arg_parser => parse_package,
-    :completions => complete_all_installed_packages,
+    :completions => get_complete_function(:complete_all_installed_packages),
     :description => "shows why a package is in the manifest",
     :help => md"""
     why pkg[=uuid] ...
@@ -249,7 +260,7 @@ PSA[:name => "pin",
         PSA[:name => "all", :api => :all_pkgs => true],
     ],
     :arg_parser => parse_package,
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "pins the version of packages",
     :help => md"""
     pin pkg[=uuid] ...
@@ -275,7 +286,7 @@ PSA[:name => "build",
     :option_spec => [
         PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "run the build script for packages",
     :help => md"""
     build [-v|--verbose] pkg[=uuid] ...
@@ -304,7 +315,7 @@ PSA[:name => "activate",
         PSA[:name => "shared", :api => :shared => true],
         PSA[:name => "temp", :api => :temp => true],
     ],
-    :completions => complete_activate,
+    :completions => get_complete_function(:complete_activate),
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
     activate
@@ -338,7 +349,7 @@ PSA[:name => "update",
         PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
         PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "update packages in manifest",
     :help => md"""
     [up|update] [-p|--project]  [opts] pkg[=uuid] [@version] ...
@@ -373,7 +384,7 @@ Create a minimal project called `pkgname` in the current folder. For more featur
 PSA[:name => "precompile",
     :api => API.precompile,
     :arg_count => 0 => Inf,
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "precompile all the project dependencies",
     :help => md"""
     precompile
@@ -405,7 +416,7 @@ PSA[:name => "status",
         PSA[:name => "compat", :short_name => "c", :api => :compat => true],
         PSA[:name => "extensions", :short_name => "e", :api => :extensions => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "summarize contents of and changes to environment",
     :help => md"""
     [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
@@ -439,7 +450,7 @@ The `--compat` option alone shows project compat entries.
 PSA[:name => "compat",
     :api => API.compat,
     :arg_count => 0 => 2,
-    :completions => complete_installed_packages_and_compat,
+    :completions => get_complete_function(:complete_installed_packages_and_compat),
     :description => "edit compat entries in the current Project and re-resolve",
     :help => md"""
     compat [pkg] [compat_string]

@@ -1,7 +1,6 @@
 using LibGit2: LibGit2
 using Tar: Tar
 using Downloads
-using REPL
 
 let
     function _run_precompilation_script_setup()
@@ -116,7 +115,6 @@ let
                     Pkg.add("TestPkg")
                     Pkg.develop(Pkg.PackageSpec(path = "TestPkg.jl"))
                     Pkg.add(Pkg.PackageSpec(path = "TestPkg.jl/"))
-                    Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
                     Pkg.update(; update_registry = false)
                     Pkg.status()
                     pkgs_path = pkgdir(Pkg, "test", "test_packages")
@@ -150,14 +148,9 @@ let
             catch
             end
 
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init),REPL.LineEditREPL})
             Base.precompile(Tuple{typeof(Pkg.API.status)})
             Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat),Base.Dict{String,Any},Pkg.Types.Project,},)
             Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval),Base.RegexMatch})
-            Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line),Pkg.REPLMode.PkgCompletionProvider,REPL.LineEdit.PromptState,},)
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_argument),Pkg.REPLMode.CommandSpec,Array{String,1},String,Int64,Int64,},)
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_add_dev),Base.Dict{Symbol,Any},String,Int64,Int64,},)
         end
         copy!(DEPOT_PATH, original_depot_path)
         copy!(LOAD_PATH, original_load_path)
