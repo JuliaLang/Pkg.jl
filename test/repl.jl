@@ -10,6 +10,8 @@ using UUIDs
 using Test
 using TOML
 import LibGit2
+import REPL
+const REPLExt = Base.get_extension(Pkg, :REPLExt)
 
 using ..Utils
 
@@ -288,7 +290,7 @@ temp_pkg_dir() do depot
     end
 end
 
-test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))
+test_complete(s) = REPLExt.completions(s, lastindex(s))
 apply_completion(str) = begin
     c, r, s = test_complete(str)
     str[1:prevind(str, first(r))]*first(c)
@@ -483,14 +485,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             json_uuid = Pkg.project().dependencies["JSON"]
             current_json = Pkg.dependencies()[json_uuid].version
             old_project = read("Project.toml", String)
-            open("Project.toml"; append=true) do io
-                print(io, """
-
-                [compat]
-                JSON = "0.18.0"
-                """
-                )
-            end
+            Pkg.compat("JSON", "0.18.0")
             pkg"up"
             @test Pkg.dependencies()[json_uuid].version.minor == 18
             write("Project.toml", old_project)
@@ -603,32 +598,32 @@ end
     end
 
     with_temp_env("SomeEnv") do
-        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+        @test REPLExt.promptf() == "(SomeEnv) pkg> "
     end
 
     with_temp_env("this_is_a_test_for_truncating_long_folder_names_in_the_prompt") do
-        @test Pkg.REPLMode.promptf() == "(this_is_a_test_for_truncati...) pkg> "
+        @test REPLExt.promptf() == "(this_is_a_test_for_truncati...) pkg> "
     end
 
     env_name = "Test2"
     with_temp_env(env_name) do env_path
         projfile_path = joinpath(env_path, "Project.toml")
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        @test REPLExt.promptf() == "($env_name) pkg> "
 
         newname = "NewName"
         set_name(projfile_path, newname)
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test REPLExt.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test REPLExt.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
     end
 end
 
@@ -718,16 +713,16 @@ end
 
 @testset "REPL missing package install hook" begin
     isolate(loaded_depot=true) do
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+        @test REPLExt.try_prompt_pkg_add(Symbol[:notapackage]) == false
 
         # don't offer to install the dummy "julia" entry that's in General
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
+        @test REPLExt.try_prompt_pkg_add(Symbol[:julia]) == false
 
         withreply("n") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
         end
         withreply("y") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == true
         end
     end
 end

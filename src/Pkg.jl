@@ -7,7 +7,6 @@ if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_m
 end
 
 import Random
-import REPL
 import TOML
 using Dates
 
@@ -113,12 +112,18 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
 a package, also inside that package.
+
+If the active environment is a package (the Project has both `name` and `uuid` fields) compat entries will be
+added automatically with a lower bound of the added version.
+
+To add as a weak dependency (in the `[weakdeps]` field) set the kwarg `target=:weakdeps`.
+To add as an extra dep (in the `[extras]` field) set `target=:extras`.
 
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using a tiered algorithm.
@@ -150,9 +155,14 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 !!! compat "Julia 1.9"
     The `PRESERVE_TIERED_INSTALLED` and `PRESERVE_ALL_INSTALLED` strategies requires at least Julia 1.9.
 
+!!! compat "Julia 1.11"
+    The `target` kwarg requires at least Julia 1.11.
+
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
+Pkg.add("Example", target=:weakdeps) # Add a package as a weak dependency
+Pkg.add("Example", target=:extras) # Add a package to the `[extras]` list
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
@@ -636,8 +646,8 @@ For example, `Pkg.add` can be called either as the explicit or concise versions 
 | Explicit                                                            | Concise                                        |
 |:--------------------------------------------------------------------|:-----------------------------------------------|
 | `Pkg.add(PackageSpec(name="Package"))`                              | `Pkg.add(name = "Package")`                    |
-| `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
-|` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
+| `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(url="www.myhost.com/MyPkg")`                    |
+|` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="/MyPkg")])`|
 
 Below is a comparison between the REPL mode and the functional API:
 
@@ -693,15 +703,27 @@ const redo = API.redo
 
 """
     RegistrySpec(name::String)
-    RegistrySpec(; name, url, path)
+    RegistrySpec(; name, uuid, url, path)
 
 A `RegistrySpec` is a representation of a registry with various metadata, much like
 [`PackageSpec`](@ref).
+This includes:
+
+  * The `name` of the registry.
+  * The registry's unique `uuid`.
+  * The `url` to the registry.
+  * A local `path`.
 
 Most registry functions in Pkg take a `Vector` of `RegistrySpec` and do the operation
 on all the registries in the vector.
 
-# Examples
+Many functions that take a `RegistrySpec` can be called with a more concise notation with keyword arguments.
+For example, `Pkg.Registry.add` can be called either as the explicit or concise versions as:
+
+| Explicit                                                            | Concise                                        |
+|:--------------------------------------------------------------------|:-----------------------------------------------|
+| `Pkg.Registry.add(RegistrySpec(name="General"))`                                        | `Pkg.Registry.add(name = "General")`                                      |
+| `Pkg.Registry.add(RegistrySpec(url="https://github.com/JuliaRegistries/General.git")))` | `Pkg.Registry.add(url = "https://github.com/JuliaRegistries/General.git")`|
 
 Below is a comparison between the REPL mode and the functional API::
 
@@ -740,17 +762,6 @@ const is_manifest_current = API.is_manifest_current
 function __init__()
     DEFAULT_IO[] = nothing
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-    if isdefined(Base, :active_repl)
-        REPLMode.repl_init(Base.active_repl)
-    else
-        atreplinit() do repl
-            if isinteractive() && repl isa REPL.LineEditREPL
-                isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
-                REPLMode.repl_init(repl)
-            end
-        end
-    end
-    push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
     if !isassigned(Base.PKG_PRECOMPILE_HOOK)
         # allows Base to use Pkg.precompile during loading
         # disable via `Base.PKG_PRECOMPILE_HOOK[] = Returns(nothing)`

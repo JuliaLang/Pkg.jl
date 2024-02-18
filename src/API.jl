@@ -9,7 +9,6 @@ using Dates
 import LibGit2
 import Logging
 using Serialization
-using REPL.TerminalMenus
 import FileWatching
 
 import Base: StaleCacheKey
@@ -157,7 +156,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:add, :up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
+            $(f in (:up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
             return ret
         end
@@ -227,7 +226,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
-             platform::AbstractPlatform=HostPlatform(), kwargs...)
+             platform::AbstractPlatform=HostPlatform(), target::Symbol=:deps, kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
 
@@ -275,7 +274,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
         end
     end
 
-    Operations.add(ctx, pkgs, new_git; preserve, platform)
+    Operations.add(ctx, pkgs, new_git; preserve, platform, target)
     return
 end
 
@@ -1110,6 +1109,9 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
     fancyprint = can_fancyprint(io) && !timing
 
+    hascolor = get(io, :color, false)::Bool
+    color_string(cstr::String, col::Union{Int64, Symbol}) = _color_string(cstr, col, hascolor)
+
     recall_precompile_state() # recall suspended and force-queued packages
     !internal_call && precomp_unsuspend!() # when manually called, unsuspend all packages that were suspended due to precomp errors
 
@@ -1530,7 +1532,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     try
                         # allows processes to wait if another process is precompiling a given package to
                         # a functionally identical package cache (except for preferences, which may differ)
-                        t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked) do
+                        t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked, hascolor) do
                             Logging.with_logger(Logging.NullLogger()) do
                                 # The false here means we ignore loaded modules, so precompile for a fresh session
                                 Base.compilecache(pkg, sourcepath, std_pipe, std_pipe, false)
@@ -1684,13 +1686,17 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     nothing
 end
 
-function color_string(cstr::String, col::Union{Int64, Symbol})
-    enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
-    disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
-    return string(enable_ansi, cstr, disable_ansi)
+function _color_string(cstr::String, col::Union{Int64, Symbol}, hascolor)
+    if hascolor
+        enable_ansi  = get(Base.text_colors, col, Base.text_colors[:default])
+        disable_ansi = get(Base.disable_text_style, col, Base.text_colors[:default])
+        return string(enable_ansi, cstr, disable_ansi)
+    else
+        return cstr
+    end
 end
 
-function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String})
+function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg::Base.PkgId, pkgspidlocked::Dict{Base.PkgId,String}, hascolor)
     stale_age = Base.compilecache_pidlock_stale_age
     pidfile = Base.compilecache_pidfile_path(pkg)
     cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age)
@@ -1706,7 +1712,7 @@ function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::
             "another machine (hostname: $hostname, pid: $pid, pidfile: $pidfile)"
         end
         !fancyprint && lock(print_lock) do
-            println(io, "    ", pkg.name, color_string(" Being precompiled by $(pkgspidlocked[pkg])", Base.info_color()))
+            println(io, "    ", pkg.name, _color_string(" Being precompiled by $(pkgspidlocked[pkg])", Base.info_color(), hascolor))
         end
         # wait until the lock is available
         FileWatching.mkpidlock(pidfile; stale_age) do
@@ -2000,98 +2006,6 @@ function activate(f::Function, new_project::AbstractString)
     end
 end
 
-function compat(ctx::Context; io = nothing)
-    io = something(io, ctx.io)
-    can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
-    printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
-    longest_dep_len = max(5, length.(collect(keys(ctx.env.project.deps)))...)
-    opt_strs = String[]
-    opt_pkgs = String[]
-    compat_str = Operations.get_compat_str(ctx.env.project, "julia")
-    push!(opt_strs, Operations.compat_line(io, "julia", nothing, compat_str, longest_dep_len, indent = ""))
-    push!(opt_pkgs, "julia")
-    for (dep, uuid) in sort(collect(ctx.env.project.deps); by = x->x.first)
-        compat_str = Operations.get_compat_str(ctx.env.project, dep)
-        push!(opt_strs, Operations.compat_line(io, dep, uuid, compat_str, longest_dep_len, indent = ""))
-        push!(opt_pkgs, dep)
-    end
-    menu = TerminalMenus.RadioMenu(opt_strs, pagesize=length(opt_strs))
-    choice = try
-        TerminalMenus.request("  Select an entry to edit:", menu)
-    catch err
-        if err isa InterruptException # if ^C is entered
-            println(io)
-            return false
-        end
-        rethrow()
-    end
-    choice == -1 && return false
-    dep = opt_pkgs[choice]
-    current_compat_str = something(Operations.get_compat_str(ctx.env.project, dep), "")
-    resp = try
-        prompt = "  Edit compat entry for $(dep):"
-        print(io, prompt)
-        buffer = current_compat_str
-        cursor = length(buffer)
-        start_pos = length(prompt) + 2
-        move_start = "\e[$(start_pos)G"
-        clear_to_end = "\e[0J"
-        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid},Int32), stdin.handle, true)
-        while true
-            print(io, move_start, clear_to_end, buffer, "\e[$(start_pos + cursor)G")
-            inp = TerminalMenus._readkey(stdin)
-            if inp == '\r' # Carriage return
-                println(io)
-                break
-            elseif inp == '\x03' # cltr-C
-                println(io)
-                return
-            elseif inp == TerminalMenus.ARROW_RIGHT
-                cursor = min(length(buffer), cursor + 1)
-            elseif inp == TerminalMenus.ARROW_LEFT
-                cursor = max(0, cursor - 1)
-            elseif inp == TerminalMenus.HOME_KEY
-                cursor = (0)
-            elseif inp == TerminalMenus.END_KEY
-                cursor = length(buffer)
-            elseif inp == TerminalMenus.DEL_KEY
-                if cursor == 0
-                    buffer = buffer[2:end]
-                elseif cursor < length(buffer)
-                    buffer = buffer[1:cursor] * buffer[(cursor + 2):end]
-                end
-            elseif inp isa TerminalMenus.Key
-                # ignore all other escaped (multi-byte) keys
-            elseif inp == '\x7f' # backspace
-                if cursor == 1
-                    buffer = buffer[2:end]
-                elseif cursor == length(buffer)
-                    buffer = buffer[1:end - 1]
-                elseif cursor > 0
-                    buffer = buffer[1:(cursor-1)] * buffer[(cursor + 1):end]
-                else
-                    continue
-                end
-                cursor -= 1
-            else
-                if cursor == 0
-                    buffer = inp * buffer
-                elseif cursor == length(buffer)
-                    buffer = buffer * inp
-                else
-                    buffer = buffer[1:cursor] * inp * buffer[(cursor + 1):end]
-                end
-                cursor += 1
-            end
-        end
-        buffer
-    finally
-        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid},Int32), stdin.handle, false)
-    end
-    new_entry = strip(resp)
-    compat(ctx, dep, string(new_entry))
-    return
-end
 function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io = nothing, kwargs...)
     io = something(io, ctx.io)
     pkg = pkg == "Julia" ? "julia" : pkg
@@ -2147,19 +2061,17 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
 
     function find_paths!(final_paths, current, path = UUID[])
         push!(path, current)
-        if !(current in values(ctx.env.project.deps))
-            for p in incoming[current]
-                if p in path
-                    # detected dependency cycle and none of the dependencies in the cycle
-                    # are in the project could happen when manually modifying
-                    # the project and running this function function before a
-                    # resolve
-                    continue
-                end
-                find_paths!(final_paths, p, copy(path))
+        current in values(ctx.env.project.deps) && push!(final_paths, path) # record once we've traversed to a project dep
+        haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
+        for p in incoming[current]
+            if p in path
+                # detected dependency cycle and none of the dependencies in the cycle
+                # are in the project could happen when manually modifying
+                # the project and running this function function before a
+                # resolve
+                continue
             end
-        else
-            push!(final_paths, path)
+            find_paths!(final_paths, p, copy(path))
         end
     end
 
@@ -2167,10 +2079,10 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
     for pkg in pkgs
         !first && println(io)
         first = false
-        final_paths = []
+        final_paths = Set{Vector{UUID}}()
         find_paths!(final_paths, pkg.uuid)
         foreach(reverse!, final_paths)
-        final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], final_paths)
+        final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], collect(final_paths))
         sort!(final_paths_names, by = x -> (x, length(x)))
         delimiter = sprint((io, args) -> printstyled(io, args...; color=:light_green), "→", context=io)
         for path in final_paths_names

@@ -6,9 +6,7 @@ using UUIDs
 using Random
 using Dates
 import LibGit2
-import REPL
 import Base.string
-using REPL.TerminalMenus
 
 using TOML
 import ..Pkg, ..Registry
@@ -247,6 +245,7 @@ Base.@kwdef mutable struct Project
     uuid::Union{UUID, Nothing} = nothing
     version::Union{VersionTypes, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
+    path::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
     # deps that are also in weakdeps for backwards compat
@@ -265,7 +264,10 @@ Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames
 # only hash the deps and compat fields as they are the only fields that affect a resolve
 function project_resolve_hash(t::Project)
     iob = IOBuffer()
-    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(t.deps); by=first))
+    # Handle deps in both [deps] and [weakdeps]
+    _deps_weak = Dict(intersect(t.deps, t.weakdeps))
+    deps = filter(p->!haskey(_deps_weak, p.first), t.deps)
+    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(deps); by=first))
     foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
     return bytes2hex(sha1(seekstart(iob)))
 end
@@ -573,7 +575,8 @@ function read_package(path::String)
         pkgerror("expected a `uuid` entry in project file at `$(abspath(path))`")
     end
     name = project.name
-    if !isfile(joinpath(dirname(path), "src", "$name.jl"))
+    pkgpath = joinpath(dirname(path), something(project.path, ""))
+    if !isfile(joinpath(pkgpath, "src", "$name.jl"))
         pkgerror("expected the file `src/$name.jl` to exist for package `$name` at `$(dirname(path))`")
     end
     return project
@@ -623,7 +626,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             end
         end
         if isdir(dev_path)
-            resolve_projectfile!(ctx.env, pkg, dev_path)
+            resolve_projectfile!(pkg, dev_path)
             error_if_in_sysimage(pkg)
             if is_local_path
                 pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
@@ -657,7 +660,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     if !has_name(pkg)
         LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, pkg.repo.source))
         cloned = true
-        resolve_projectfile!(ctx.env, pkg, package_path)
+        resolve_projectfile!(pkg, package_path)
     end
     if pkg.repo.subdir !== nothing
         repo_name = split(pkg.repo.source, '/', keepempty=false)[end]
@@ -685,7 +688,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         new = true
     end
     if !has_uuid(pkg)
-        resolve_projectfile!(ctx.env, pkg, dev_path)
+        resolve_projectfile!(pkg, dev_path)
     end
     error_if_in_sysimage(pkg)
     pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
@@ -826,7 +829,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             temp_path = mktempdir()
             GitTools.checkout_tree_to_path(repo, tree_hash_object, temp_path)
-            resolve_projectfile!(ctx.env, pkg, temp_path)
+            resolve_projectfile!(pkg, temp_path)
             error_if_in_sysimage(pkg)
 
             # Now that we are fully resolved (name, UUID, tree_hash, repo.source, repo.rev), we can finally
@@ -852,7 +855,7 @@ function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     return new_uuids
 end
 
-function resolve_projectfile!(env::EnvCache, pkg, project_path)
+function resolve_projectfile!(pkg, project_path)
     project_file = projectfile_path(project_path; strict=true)
     project_file === nothing && pkgerror(string("could not find project file (Project.toml or JuliaProject.toml) in package at `",
                     something(pkg.repo.source, pkg.path, project_path), "` maybe `subdir` needs to be specified"))
@@ -974,6 +977,8 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     end
 end
 
+include("fuzzysorting.jl")
+
 # Ensure that all packages are fully resolved
 function ensure_resolved(ctx::Context, manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
@@ -1009,7 +1014,7 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
                         println(io)
                         prefix = "   Suggestions:"
                         printstyled(io, prefix, color = Base.info_color())
-                        REPL.printmatches(io, name, all_names_ranked; cols = REPL._displaysize(ctx.io)[2] - length(prefix))
+                        FuzzySorting.printmatches(io, name, all_names_ranked; cols = FuzzySorting._displaysize(ctx.io)[2] - length(prefix))
                     end
                 else
                     join(io, uuids, ", ", " or ")
@@ -1029,7 +1034,7 @@ end
 
 # copied from REPL to efficiently expose if any score is >0
 function fuzzysort(search::String, candidates::Vector{String})
-    scores = map(cand -> (REPL.fuzzyscore(search, cand), -Float64(REPL.levenshtein(search, cand))), candidates)
+    scores = map(cand -> (FuzzySorting.fuzzyscore(search, cand), -Float64(FuzzySorting.levenshtein(search, cand))), candidates)
     candidates[sortperm(scores)] |> reverse, any(s -> s[1] > 0, scores)
 end
 
@@ -1071,16 +1076,7 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
             push!(repo_infos, (reg.name, repo, uuid))
         end
     end
-    unique!(repo_infos)
-    if isinteractive()
-        # prompt for which UUID was intended:
-        menu = RadioMenu(String["Registry: $(value[1]) - Repo: $(value[2]) - UUID: $(value[3])" for value in repo_infos])
-        choice = request("There are multiple registered `$name` packages, choose one:", menu)
-        choice == -1 && return nothing
-        return repo_infos[choice][3]
-    else
-        pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
-    end
+    pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
 end
 
 # Determine current name for a given package UUID

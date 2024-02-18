@@ -26,20 +26,34 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macOS-latest
+          - macOS-14 # arm
           - windows-latest
         julia-arch:
           - 'x64'
           - 'x86'
+          - 'aarch64'
         pkg-server:
-          - ""
-          - "pkg.julialang.org"
+          - "pkg.julialang.org" # Default to this for all except specific cases
         julia-version:
-          # - '1.6'
           - 'nightly'
         exclude:
-          - os: macOS-latest
+          - os: ubuntu-latest
+            julia-arch: aarch64
+          - os: windows-latest
+            julia-arch: aarch64
+          - os: macOS-14
             julia-arch: x86
+          - os: macOS-14
+            julia-arch: x64
+        include:
+          - os: ubuntu-latest
+            julia-arch: 'x64'
+            julia-version: 'nightly'
+            pkg-server: ""
+          - os: ubuntu-latest
+            julia-arch: 'x64'
+            julia-version: 'nightly'
+            pkg-server: "pkg.julialang.org"
     steps:
       - name: Set git to use LF and fix TEMP on windows
         if: matrix.os == 'windows-latest'
@@ -60,7 +74,7 @@ jobs:
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: ${{ join(matrix.*, '-') }}_Pkg.log
