@@ -1717,17 +1717,6 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args)
     ```
 end
 
-function gen_subprocess_cacheflags()
-    session_flags = Base.CacheFlags()
-    Base.CacheFlags(
-        session_flags.use_pkgimages,
-        session_flags.debug_level,
-        1, # `--checkbounds=yes`
-        Bool(Base.JLOptions().can_inline),
-        session_flags.debug_level
-    )
-end
-
 function with_temp_env(fn::Function, temp_env::String)
     load_path = copy(LOAD_PATH)
     active_project = Base.ACTIVE_PROJECT[]
@@ -1993,8 +1982,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                cacheflags = gen_subprocess_cacheflags()
-                # Allow to fail?
+                cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
                 Pkg.activate(sandbox_ctx.env.project_file; #=io=devnull=#) do
                     Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, flags_cacheflags = flags => cacheflags)
                 end
