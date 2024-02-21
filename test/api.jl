@@ -38,6 +38,7 @@ using ..Utils
         cd(mkdir("tests"))
         Pkg.activate("Foo") # activate developed Foo from another directory
         @test Base.active_project() == joinpath(path, "modules", "Foo", "Project.toml")
+        @test_throws PkgError Pkg.activate("temp"; shared = true) # Disallow naming a shared env as `temp`.
         Pkg.activate() # activate LOAD_PATH project
         @test Base.ACTIVE_PROJECT[] === nothing
     end end

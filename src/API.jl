@@ -1968,6 +1968,8 @@ function _activate_dep(dep_name::AbstractString)
 end
 function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
+    shared && path == "temp" && pkgerror("""`temp` is an invalid name for a shared environment.
+        To create a temporary environment use `Pkg.activate(; temp = true)`""")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
         # 1. if path exists, activate that
