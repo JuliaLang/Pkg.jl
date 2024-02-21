@@ -240,6 +240,8 @@ temp_pkg_dir() do project_path
         pkg"activate ."
         #=@test_logs (:info, r"activating new environment at ")))=# pkg"activate --shared Foo" # activate shared Foo
         @test Base.active_project() == joinpath(Pkg.envdir(), "Foo", "Project.toml")
+        pkg"activate --shared stdlib" # activate shared STDLIB
+        @test Base.active_project() == joinpath(Sys.STDLIB, "Project.toml")
         pkg"activate ."
         rm("Foo"; force=true, recursive=true)
         pkg"activate Foo" # activate path from developed Foo
