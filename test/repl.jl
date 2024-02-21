@@ -265,6 +265,15 @@ temp_pkg_dir() do project_path
         pop!(Base.DEPOT_PATH)
         pkg"activate" # activate LOAD_PATH project
         @test Base.ACTIVE_PROJECT[] === nothing
+        pkg"activate @temp" # activate a temporary environment
+        @test dirname(Base.ACTIVE_PROJECT[]) == tempdir()
+        pkg"activate @stdlib" # activate the STDLIB environment
+        @test Base.ACTIVE_PROJECT[] == Sys.STDLIB
+        pkg"activate @." # activate current project
+        @test Base.ACTIVE_PROJECT[] == Base.current_project()
+        pkg"activate @" # activate active project
+        @test Base.ACTIVE_PROJECT[] === Base.active_project()
+
         # expansion of ~
         if !Sys.iswindows()
             pkg"activate ~/Foo_lzTkPF6N"

@@ -218,6 +218,15 @@ function parse_activate(args::Vector{QString}, options)
         if x == "-"
             options[:prev] = true
             return []
+        elseif x == "@temp"
+            options[:temp] = true
+            return []
+        elseif x == "@stdlib"
+            return [Sys.STDLIB]
+        elseif x == "@."
+            return [Base.current_project()]
+        elseif x == "@"
+            return [Base.active_project()]
         elseif first(x) == '@'
             options[:shared] = true
             return [x[2:end]]
