@@ -91,6 +91,8 @@ In short, `instantiate` is your friend to make sure an environment is ready to u
     ```bash
     $ julia --project=. myscript.jl
     ```
+    For Julia 1.7 or later, `--project=@stdlib` activates stdlib environment.
+    For Julia 1.11 or later, `--project=@temp` activates temporary environment.
 
 
 ## Temporary environments
@@ -115,6 +117,13 @@ between several incompatible packages.
   [7876af07] + Example v0.5.3
 ```
 
+```julia-repl
+(@v1.11) pkg> activate @temp # requires Julia 1.11 or later
+  Activating new project at `/tmp/jl_OzBmCP`
+
+(jl_OzBmCP) pkg>
+```
+
 ## Shared environments
 
 A "shared" environment is simply an environment that exists in `~/.julia/environments`. The default `v1.9` environment is
@@ -135,6 +144,24 @@ Shared environments can be activated with the `--shared` flag to `activate`:
 ```
 
 Shared environments have a `@` before their name in the Pkg REPL prompt.
+
+Shared stdlib environment that exists in `Sys.STDLIB` can be activated as follows:
+```julia-repl
+(@v1.11) pkg> activate --shared stdlib
+  Activating project at `@stdlib/v1.11`
+
+(v1.11) pkg>
+```
+
+```julia-repl
+(@v1.11) pkg> activate @stdlib
+  Activating project at `@stdlib/v1.11`
+
+(v1.11) pkg>
+```
+
+!!! note
+    For Julia 1.11 or later `temp` is an invalid name for a shared environment as `activate @temp` creates temporary environments.
 
 
 ## Environment Precompilation
