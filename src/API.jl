@@ -1509,7 +1509,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
                 circular = pkg in circular_deps
                 is_stale = true
-                if !circular && (queued || (!suspended && (is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, stale_cache, cachepaths, sourcepath))))
+                if !circular && (queued || (!suspended && (is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, flags=cacheflags, stale_cache, cachepaths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
 
