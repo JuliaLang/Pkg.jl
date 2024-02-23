@@ -135,12 +135,14 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
                 write("Manifest.toml", manifest)
                 mktempdir() do depot_dir
                     pushfirst!(DEPOT_PATH, depot_dir)
+                    Base.append_bundled_depot_path!(DEPOT_PATH)
                     pkg"instantiate"
                     @test Pkg.dependencies()[pkg2_uuid].version == v"0.2.0"
                 end
             finally
                 empty!(DEPOT_PATH)
                 append!(DEPOT_PATH, old_depot)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
             end
         end # cd_tempdir
     end # withenv
@@ -164,6 +166,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             try
                 empty!(DEPOT_PATH)
                 pushfirst!(DEPOT_PATH, depot_dir)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
                 withenv("JULIA_PKG_DEVDIR" => tmp) do
                     # Test an unregistered package
                     p1_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithProject")
@@ -178,6 +181,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             finally
                 empty!(DEPOT_PATH)
                 append!(DEPOT_PATH, old_depot)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
             end
         end # withenv
     end # mktempdir

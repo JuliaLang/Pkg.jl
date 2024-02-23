@@ -652,6 +652,7 @@ end
         old_depot_path = copy(DEPOT_PATH)
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, [depot1, depot2, depot3])
+        Base.append_bundled_depot_path!(DEPOT_PATH)
 
         # First sanity check; does our depot path searching code actually work properly?
         @test startswith(artifact_path(foo_hash), depot3)
@@ -784,6 +785,7 @@ end
         # reset DEPOT_PATH and force Pkg to reload what it knows about artifact overrides
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.Artifacts.load_overrides(;force=true)
     end
 end
