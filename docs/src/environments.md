@@ -70,8 +70,8 @@ Cloning into 'Example.jl'...
 Activating project at `~/Example.jl`
 
 (Example) pkg> instantiate
-  No Changes to `~/Example.jl/Project.toml`
-  No Changes to `~/Example.jl/Manifest.toml`
+  No added or removed packages to `~/Example.jl/Project.toml`
+  No added or removed packages to `~/Example.jl/Manifest.toml`
 ```
 
 If the project contains a manifest, this will install the packages in the same state that is given by that manifest.

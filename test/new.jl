@@ -2278,8 +2278,8 @@ end
         # Double add should not claim "Updating"
         Pkg.add(Pkg.PackageSpec(; name="Example", version="0.3.0"); io=io)
         output = String(take!(io))
-        @test occursin(r"No Changes to `.+Project\.toml`", output)
-        @test occursin(r"No Changes to `.+Manifest\.toml`", output)
+        @test occursin(r"No added or removed packages to `.+Project\.toml`", output)
+        @test occursin(r"No added or removed packages to `.+Manifest\.toml`", output)
         # From tracking registry to tracking repo
         Pkg.add(Pkg.PackageSpec(; name="Example", rev="master"); io=io)
         output = String(take!(io))
@@ -2401,22 +2401,22 @@ end
         git_init_and_commit(projdir)
         ## empty project + empty diff
         Pkg.status(; io=io, diff=true)
-        @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
+        @test occursin(r"No added or removed packages to `.+Project\.toml`", readline(io))
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
-        @test occursin(r"No Changes to `.+Manifest\.toml`", readline(io))
+        @test occursin(r"No added or removed packages to `.+Manifest\.toml`", readline(io))
         ### empty diff + filter
         Pkg.status("Example"; io=io, diff=true)
-        @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
+        @test occursin(r"No added or removed packages to `.+Project\.toml`", readline(io))
         ## non-empty project but empty diff
         Pkg.add("Markdown")
         git_init_and_commit(dirname(Pkg.project().path))
         Pkg.status(; io=io, diff=true)
-        @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
+        @test occursin(r"No added or removed packages to `.+Project\.toml`", readline(io))
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
-        @test occursin(r"No Changes to `.+Manifest\.toml`", readline(io))
+        @test occursin(r"No added or removed packages to `.+Manifest\.toml`", readline(io))
         ### filter should still show "empty diff"
         Pkg.status("Example"; io=io, diff=true)
-        @test occursin(r"No Changes to `.+Project\.toml`", readline(io))
+        @test occursin(r"No added or removed packages to `.+Project\.toml`", readline(io))
         ## non-empty project + non-empty diff
         Pkg.rm("Markdown")
         Pkg.add(name="Example", version="0.3.0")

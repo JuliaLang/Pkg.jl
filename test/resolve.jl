@@ -740,8 +740,8 @@ end
         iob = IOBuffer()
         Pkg.resolve(io = iob)
         str = String(take!(iob))
-        @test occursin(r"No Changes to .*Project.toml", str)
-        @test occursin(r"No Changes to .*Manifest.toml", str)
+        @test occursin(r"No added or removed packages to .*Project.toml", str)
+        @test occursin(r"No added or removed packages to .*Manifest.toml", str)
     end
 end
 
