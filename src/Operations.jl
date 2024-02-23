@@ -1676,29 +1676,16 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
     end
 end
 
-function gen_test_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
+function gen_test_code(source_path::String; test_args::Cmd)
     test_file = testfile(source_path)
-    code = """
+    return """
         $(Base.load_path_setup_code(false))
         cd($(repr(dirname(test_file))))
         append!(empty!(ARGS), $(repr(test_args.exec)))
         include($(repr(test_file)))
         """
-    return gen_subprocess_cmd(code, source_path; coverage, julia_args)
 end
 
-function gen_test_precompile_code(source_path::String; coverage, julia_args::Cmd, test_args::Cmd)
-    code = """
-        try using Pkg
-        catch
-            @warn "Pkg failed to load, skipping precompilation."
-        else
-            Pkg.activate($(repr(Base.active_project())))
-            Pkg.precompile(warn_loaded = false)
-        end
-        """
-    return gen_subprocess_cmd(code, source_path; coverage, julia_args)
-end
 
 function get_threads_spec()
     if Threads.nthreads(:interactive) > 0
@@ -1708,7 +1695,7 @@ function get_threads_spec()
     end
 end
 
-function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_args)
+function gen_subprocess_flags(source_path::String; coverage, julia_args)
     coverage_arg = if coverage isa Bool
         coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
@@ -1717,7 +1704,6 @@ function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_a
         throw(ArgumentError("coverage should be a boolean or a string."))
     end
     return ```
-        $(Base.julia_cmd())
         --code-coverage=$(coverage_arg)
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --check-bounds=yes
@@ -1728,7 +1714,6 @@ function gen_subprocess_cmd(code::String, source_path::String; coverage, julia_a
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
         --threads=$(get_threads_spec())
         $(julia_args)
-        --eval $(code)
     ```
 end
 
@@ -1796,13 +1781,6 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
             else
                 sandbox_project_override = Project()
             end
-        end
-        # add Pkg so that the test environment sandbox subprocesses can be precompiled
-        Pkg_uuid = UUID(PkgUUID)
-        if get!(sandbox_project_override.deps, "Pkg", Pkg_uuid) != Pkg_uuid
-            @warn """
-            A package called Pkg is declared as a dependency with a UUID that doesn't match the Pkg stdlib.
-            This may cause unexpected behavior"""
         end
         Types.write_project(sandbox_project_override, tmp_project)
 
@@ -2001,23 +1979,19 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
+            flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                # Precompile in a child process with the test julia args to ensure native caches match test setup
-                cmd = gen_test_precompile_code(source_path; coverage, julia_args, test_args)
-                p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Precompilation of test environment interrupted. Exiting the test precompilation process")
-                if !success(p)
-                    if interrupted
-                        return
-                    else
-                        printpkgstyle(ctx.io, :Testing, "Precompilation of test environment failed. Continuing to tests", color = Base.warn_color())
-                    end
+                cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
+                Pkg.activate(sandbox_ctx.env.project_file; #=io=devnull=#) do
+                    Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, flags_cacheflags = flags => cacheflags)
                 end
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
-            cmd = gen_test_code(source_path; coverage, julia_args, test_args)
+            code = gen_test_code(source_path; test_args)
+            cmd = `$(Base.julia_cmd()) $(flags) --eval $code`
             p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
