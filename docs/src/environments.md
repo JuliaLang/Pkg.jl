@@ -66,7 +66,7 @@ shell> git clone https://github.com/JuliaLang/Example.jl.git
 Cloning into 'Example.jl'...
 ...
 
-(@v1.9) pkg> activate Example.jl
+(@v1.12) pkg> activate Example.jl
 Activating project at `~/Example.jl`
 
 (Example) pkg> instantiate
