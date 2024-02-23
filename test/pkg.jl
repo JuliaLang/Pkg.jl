@@ -571,6 +571,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
     cd(tmp) do; @testset "instantiating updated repo" begin
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo1)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         LibGit2.close(LibGit2.clone(TEST_PKG.url, "Example.jl"))
         mkdir("machine1")
         cd("machine1")
@@ -580,6 +581,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         cp("machine1", "machine2")
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo2)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         cd("machine2")
         Pkg.activate(".")
         Pkg.instantiate()
@@ -595,6 +597,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         cd("../machine1")
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo1)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.activate(".")
         Pkg.update()
         cd("..")
@@ -602,6 +605,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         cd("machine2")
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo2)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.activate(".")
         Pkg.instantiate()
     end end
