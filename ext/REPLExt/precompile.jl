@@ -11,6 +11,7 @@ let
 
     function pkgreplmode_precompile()
         __init__()
+        Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
         try_prompt_pkg_add(Symbol[:notapackage])
         promptf()
         term = FakeTerminal()
@@ -23,4 +24,4 @@ let
         pkgreplmode_precompile()
     end
 
-    end # let
+end # let
