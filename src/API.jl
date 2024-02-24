@@ -1082,6 +1082,8 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
     end
 end
 
+const PRECOMPILE_SPINNER_INTERVAL = Ref(0.1)
+
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
                     _from_loading::Bool=false, flags_cacheflags::Pair{Cmd, Base.CacheFlags}=(``=>Base.CacheFlags()), kwargs...)
@@ -1386,7 +1388,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 printpkgstyle(io, :Precompiling, target)
                 print(io, ansi_disablecursor)
             end
-            t = Timer(0; interval=1/10)
+            t = Timer(0; interval=PRECOMPILE_SPINNER_INTERVAL[])
             anim_chars = ["◐","◓","◑","◒"]
             i = 1
             last_length = 0
