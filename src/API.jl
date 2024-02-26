@@ -1084,9 +1084,8 @@ end
 
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
-                    _from_loading::Bool=false, flags_cacheflags::Pair{Cmd, Base.CacheFlags}=(``=>Base.CacheFlags()), kwargs...)
+                    _from_loading::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
-    flags, cacheflags = flags_cacheflags
     if !already_instantiated
         instantiate(ctx; allow_autoprecomp=false, kwargs...)
         @debug "precompile: instantiated"
@@ -1509,7 +1508,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
                 circular = pkg in circular_deps
                 is_stale = true
-                if !circular && (queued || (!suspended && (is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, flags=cacheflags, stale_cache, cachepaths, sourcepath))))
+                if !circular && (queued || (!suspended && (is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, stale_cache, cachepaths, sourcepath))))
                     Base.acquire(parallel_limiter)
                     is_direct_dep = pkg in direct_deps
 
@@ -1536,7 +1535,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         t = @elapsed ret = maybe_cachefile_lock(io, print_lock, fancyprint, pkg, pkgspidlocked, hascolor) do
                             Logging.with_logger(Logging.NullLogger()) do
                                 # The false here means we ignore loaded modules, so precompile for a fresh session
-                                Base.compilecache(pkg, sourcepath, std_pipe, std_pipe, false; flags)
+                                Base.compilecache(pkg, sourcepath, std_pipe, std_pipe, false)
                             end
                         end
                         t_str = timing ? string(lpad(round(t * 1e3, digits = 1), 9), " ms") : ""
@@ -1718,7 +1717,7 @@ function maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::
         # wait until the lock is available
         FileWatching.mkpidlock(pidfile; stale_age) do
             # double-check in case the other process crashed or the lock expired
-            if Base.isprecompiled(pkg; ignore_loaded=true, flags=cacheflags) # don't use caches for this as the env state will have changed
+            if Base.isprecompiled(pkg; ignore_loaded=true) # don't use caches for this as the env state will have changed
                 return nothing # returning nothing indicates a process waited for another
             else
                 delete!(pkgspidlocked, pkg)
