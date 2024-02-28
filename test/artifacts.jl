@@ -471,7 +471,7 @@ end
 
             # Test that if we load the package, it knows how to find its own artifact,
             # because it feeds the right `Platform` object through to `@artifact_str()`
-            cmd = setenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
+            cmd = addenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
                          "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
                          "FLOOBLECRANK" => flooblecrank_status)
             using_output = chomp(String(read(cmd)))
