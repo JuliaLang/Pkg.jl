@@ -101,6 +101,7 @@ Base.@kwdef struct ProjectInfo
     version::Union{Nothing,VersionNumber}
     ispackage::Bool
     dependencies::Dict{String,UUID}
+    sources::Dict{String,Dict{String,String}}
     path::String
 end
 
@@ -113,6 +114,7 @@ function project(env::EnvCache)::ProjectInfo
         version      = pkg === nothing ? nothing : pkg.version::VersionNumber,
         ispackage    = pkg !== nothing,
         dependencies = env.project.deps,
+        sources      = env.project.sources,
         path         = env.project_file
     )
 end
