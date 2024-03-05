@@ -62,11 +62,12 @@ end
 """
     _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
 Either rename the directory at `temp_dir` to `new_path` and set it to read-only
-or if `new_path` artifact already exists try to to do nothing.
+or if `new_path` artifact already exists try to do nothing.
 """
 function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
     if !isdir(new_path)
-        # This next step is like `mv(temp_dir, new_path)`.
+        # This next step is like
+        # `mv(temp_dir, new_path)`.
         # However, `mv` defaults to `cp` if `rename` returns an error.
         # `cp` is not atomic, so avoid the potential of calling it.
         err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
