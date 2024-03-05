@@ -1103,6 +1103,12 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         @debug "precompile: instantiated"
     end
 
+    # TODO: Maybe this should be done in Base?
+
+    if !isfile(ctx.env.project_file)
+        return
+    end
+
     activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
         return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, flags_cacheflags, io=ctx.io)
