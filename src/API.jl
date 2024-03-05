@@ -1105,7 +1105,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.PrecompilePkgs.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, flags_cacheflags, io=ctx.io)
+        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, flags_cacheflags, io=ctx.io)
     end
 end
 
