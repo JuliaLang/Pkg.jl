@@ -1826,14 +1826,18 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
         tmp_preferences = joinpath(tmp, first(Base.preferences_names))
 
         # Copy env info over to temp env
+        has_sandbox_project = false
         if sandbox_project_override === nothing
             if isfile(sandbox_project)
                 sandbox_project_override = read_project(sandbox_project)
+                has_sandbox_project = true
             else
                 sandbox_project_override = Project()
             end
         end
-        abspath!(ctx.env, sandbox_project_override)
+        if !has_sandbox_project
+            abspath!(ctx.env, sandbox_project_override)
+        end
         Types.write_project(sandbox_project_override, tmp_project)
 
         # create merged manifest
@@ -1871,6 +1875,9 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
         # sandbox
         with_temp_env(tmp) do
             temp_ctx = Context()
+            if has_sandbox_project
+                abspath!(sandbox_env, temp_ctx.env.project)
+            end
             temp_ctx.env.project.deps[target.name] = target.uuid
 
             if force_latest_compatible_version
