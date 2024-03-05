@@ -53,30 +53,59 @@ function create_artifact(f::Function)
 
         # Give the people what they want
         return artifact_hash
-    finally
-        # Always attempt to cleanup
-        rm(temp_dir; recursive=true, force=true)
+    catch err
+        if !isa(err, InterruptException)
+            # Attempt to cleanup
+            _try_rm(temp_dir)
+        end
+        rethrow()
     end
 end
 
 """
     _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
 Either rename the directory at `temp_dir` to `new_path` and set it to read-only
-or if `new_path` artifact already exists try to do nothing.
+or if `new_path` artifact already exists try to delete `temp_dir`.
 """
 function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
-    if !isdir(new_path)
-        # This next step is like
-        # `mv(temp_dir, new_path)`.
-        # However, `mv` defaults to `cp` if `rename` returns an error.
-        # `cp` is not atomic, so avoid the potential of calling it.
+    # This next step is kind of like `mv(temp_dir, new_path; force=true)`.
+    # However, `mv` defaults to `cp` if `rename` returns an error.
+    # `cp` is not atomic, so avoid the potential of calling it.
+    err::Int32 = 0
+    # TODO retry the following a few times if the temp_dir is busy
+    if isdir(new_path)
+        _try_rm(temp_dir)
+        return
+    else
         err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
-        # Ignore rename error, but ensure `new_path` exists.
-        if !isdir(new_path)
-            error("$(repr(new_path)) could not be made")
+        if err ≥ 0
+            # rename worked, so no need to try to remove temp_dir
+            chmod(new_path, filemode(dirname(new_path)))
+            set_readonly(new_path)
+            return
+        else
+            if isdir(new_path)
+                _try_rm(temp_dir)
+                return
+            end
         end
-        chmod(new_path, filemode(dirname(new_path)))
-        set_readonly(new_path)
+    end
+    @error "your anti-virus may be interfering with artifact installation"
+    Base.uv_error("rename of $(repr(temp_dir)) to $(repr(new_path))", err)
+end
+
+function _try_rm(temp_dir::String)::Nothing
+    try
+        rm(temp_dir; recursive=true, force=true)
+    catch ex
+        if isa(ex, Base.IOError)
+            @warn """
+            Failed to clean up temporary directory $(repr(temp_dir))
+            $ex
+            """
+        else
+            rethrow()
+        end
     end
     nothing
 end
@@ -369,11 +398,9 @@ function download_artifact(
         if isa(err, InterruptException)
             rethrow(err)
         end
+        _try_rm(temp_dir)
         # If something went wrong during download, return the error
         return err
-    finally
-        # Always attempt to cleanup
-        rm(temp_dir; recursive=true, force=true)
     end
     return true
 end
