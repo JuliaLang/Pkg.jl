@@ -60,7 +60,7 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
 
     @testset "Pkg" begin
         try
-            @testset "$f" for f in [
+        @testset "$f" for f in [
                 "new.jl",
                 "pkg.jl",
                 "repl.jl",
@@ -76,7 +76,8 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
                 "misc.jl",
                 "force_latest_compatible_version.jl",
                 "manifests.jl",
-                "project_manifest.jl"
+                "project_manifest.jl",
+                "sources.jl"
                 ]
                 @info "==== Testing `test/$f`"
                 flush(Pkg.DEFAULT_IO[])
