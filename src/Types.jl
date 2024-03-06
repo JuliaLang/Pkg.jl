@@ -458,6 +458,8 @@ function stdlibs()
     end
     return STDLIB[]
 end
+# Load stdlibs during precompilation
+stdlibs()
 is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
 # Includes former stdlibs
 function is_or_was_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
