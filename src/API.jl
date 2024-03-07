@@ -1142,9 +1142,17 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         return
     end
 
+    io = ctx.io
+    if io isa UnstableIO
+        # precompile does quite a bit of output and using the UnstableIO can cause
+        # some slowdowns, the important part here is to not specialize the whole
+        # precompile function on the io
+        io = io.io
+    end
+
     activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, flags_cacheflags, io=ctx.io)
+        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, flags_cacheflags, io)
     end
 end
 
