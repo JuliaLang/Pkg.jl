@@ -1053,13 +1053,15 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
     # Delete any files that could not be rm-ed and were specially moved to the delayed delete directory.
     # Do this silently because it's out of scope for Pkg.gc() but it's helpful to use this opportunity to do it
-    if isdir(Base.Filesystem.delayed_delete_dir())
-        for p in readdir(Base.Filesystem.delayed_delete_dir(), join=true)
-            try
-                Base.Filesystem.prepare_for_deletion(p)
-                Base.rm(p; recursive=true, force=true, allow_delayed_delete=false)
-            catch e
-                @debug "Failed to delete $p" exception=e
+    if isdefined(Base.Filesystem, :delayed_delete_dir)
+        if isdir(Base.Filesystem.delayed_delete_dir())
+            for p in readdir(Base.Filesystem.delayed_delete_dir(), join=true)
+                try
+                    Base.Filesystem.prepare_for_deletion(p)
+                    Base.rm(p; recursive=true, force=true, allow_delayed_delete=false)
+                catch e
+                    @debug "Failed to delete $p" exception=e
+                end
             end
         end
     end
