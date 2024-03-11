@@ -68,11 +68,23 @@ end
 
 function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
+    pkgs = _load_direct_deps(env.project, env.manifest, pkgs; preserve)
+    for subproject in env.project.subprojects
+        append!(pkgs, _load_direct_deps(subproject, env.manifest, pkgs; preserve))
+    end
+    if env.base_project !== nothing
+        append!(pkgs, _load_direct_deps(env.base_project, env.manifest, pkgs; preserve))
+    end
+    return pkgs
+end
+
+function _load_direct_deps(project::Project, manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
+                          preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs = copy(pkgs)
-    for (name::String, uuid::UUID) in env.project.deps
+    for (name::String, uuid::UUID) in project.deps
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
-        path, repo = get_path_repo(env.project, name)
-        entry = manifest_info(env.manifest, uuid)
+        path, repo = get_path_repo(project, name)
+        entry = manifest_info(manifest, uuid)
         push!(pkgs, entry === nothing ?
               PackageSpec(;uuid=uuid, name=name, path=path, repo=repo) :
               PackageSpec(;
@@ -105,6 +117,7 @@ function load_manifest_deps(manifest::Manifest, pkgs::Vector{PackageSpec}=Packag
     end
     return pkgs
 end
+
 
 function load_all_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
                        preserve::PreserveLevel=PRESERVE_ALL)
@@ -942,7 +955,7 @@ project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.ma
 
 function prune_manifest(env::EnvCache)
     # if project uses another manifest, only prune project entry in manifest
-    if dirname(env.project_file) != dirname(env.manifest_file)
+    if env.base_project === nothing && dirname(env.project_file) != dirname(env.manifest_file)
         proj_entry = env.manifest[env.project.uuid]
         proj_entry.deps = env.project.deps
     else
