@@ -109,6 +109,16 @@ function read_project_sources(raw::Dict{String,Any}, project::Project)
     return sources
 end
 
+read_project_subprojects(::Nothing, project::Project) = String[]
+function read_project_subprojects(raw::Vector, project::Project)
+    subprojects = String[]
+    for path in raw
+        path isa String || pkgerror("Expected entry in `subprojects` to be strings")
+        push!(subprojects, path)
+    end
+    return subprojects
+end
+
 function validate(project::Project; file=nothing)
     # deps
     location_string = file === nothing ? "" : " at $(repr(file))."
@@ -173,6 +183,7 @@ function Project(raw::Dict; file=nothing)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
+    project.subprojects = read_project_subprojects(get(raw, "subprojects", nothing), project)
 
     # Handle deps in both [deps] and [weakdeps]
     project._deps_weak = Dict(intersect(project.deps, project.weakdeps))
@@ -192,7 +203,7 @@ function read_project(f_or_io::Union{String, IO})
         if e isa TOML.ParserError
             pkgerror("Could not parse project: ", sprint(showerror, e))
         end
-        rethrow()
+        pkgerror("Errored when reading $f_or_io, got: ", sprint(showerror, e))
     end
     return Project(raw; file= f_or_io isa IO ? nothing : f_or_io)
 end

@@ -258,6 +258,7 @@ Base.@kwdef mutable struct Project
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
+    subprojects::Vector{String} = Vector{String}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
@@ -335,6 +336,18 @@ function Base.show(io::IO, pkg::PackageEntry)
     print(io, ")")
 end
 
+function base_project(project_file)
+    base_dir = abspath(joinpath(dirname(project_file), ".."))
+    base_project = Base.env_project_file(base_dir)
+    base_project isa String || return nothing
+    d = Base.parsed_toml(base_project)
+    subprojects = get(d, "subprojects", nothing)::Union{Vector{String}, Nothing}
+    subprojects === nothing && return nothing
+    if basename(dirname(project_file)) in subprojects
+        return base_project
+    end
+    return nothing
+end
 
 mutable struct EnvCache
     # environment info:
@@ -346,6 +359,8 @@ mutable struct EnvCache
     pkg::Union{PackageSpec, Nothing}
     # cache of metadata:
     project::Project
+    base_project::Union{Project,Nothing}
+    sub_projects::Dict{String,Project} # paths relative to base
     manifest::Manifest
     # What these where at creation of the EnvCache
     original_project::Project
@@ -371,6 +386,21 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     # determine manifest file
     dir = abspath(project_dir)
     manifest_file = project.manifest
+
+    base_proj = base_project(project_file)
+    subprojects = Dict{String,Project}()
+    if base_proj !== nothing
+        dir = dirname(base_proj)
+        base_proj = read_project(base_proj)
+        manifest_file = base_proj.manifest
+        this_subproject_path = basename(dirname(project_file))
+        for path in base_proj.subprojects
+            if path == this_subproject_path
+                continue
+            end
+            subprojects[path] = read_project(joinpath(dir, path))
+        end
+    end
     manifest_file = manifest_file !== nothing ?
         (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
         manifestfile_path(dir)::String
@@ -382,10 +412,14 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         manifest_file,
         project_package,
         project,
+        base_proj,
+        subprojects,
         manifest,
         deepcopy(project),
         deepcopy(manifest),
         )
+
+
 
     return env′
 end
