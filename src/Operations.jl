@@ -70,7 +70,7 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs_direct = _load_direct_deps(env.project, env.manifest, pkgs; preserve)
 
-    for subproject in env.sub_projects
+    for (_, subproject) in env.sub_projects
         append!(pkgs_direct, _load_direct_deps(subproject, env.manifest, pkgs; preserve))
     end
 
@@ -441,7 +441,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     for pkg in pkgs
         compat = VersionSpec()
         compat = intersect(compat, get_compat(env.project, pkg.name))
-        for subproject in env.project.subprojects
+        for (_, subproject) in env.sub_projects
             compat = intersect(compat, get_compat(subproject, pkg.name))
         end
         if env.base_project !== nothing
@@ -995,7 +995,7 @@ function prune_manifest(env::EnvCache)
         proj_entry.deps = env.project.deps
     else
         keep = Set(values(env.project.deps))
-        for subproject in env.sub_projects
+        for (_, subproject) in env.sub_projects
             keep = union(keep, collect(values(subproject.deps)))
         end
         if env.base_project !== nothing
