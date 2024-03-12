@@ -951,6 +951,12 @@ end
 # Disambiguate name/uuid package specifications using project info.
 function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     uuids = env.project.deps
+    for (_, subproject) in env.sub_projects
+        merge!(uuids, subproject.deps)
+    end
+    if env.base_project !== nothing
+        merge!(uuids, env.base_project.deps)
+    end
     names = Dict(uuid => name for (name, uuid) in uuids)
     for pkg in pkgs
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
