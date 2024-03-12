@@ -84,9 +84,9 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
         # TODO: Assert that projects do not have conflicting sources
         pkg = pkgs_direct[idxs[1]]
         idx_to_drop = Int[]
-        for i in idxs[2:end]
+        for i in Iterators.drop(idxs, 1)
             # Merge in sources from other projects
-            # Manifest info like pineed, tree_hash and version should be the same
+            # Manifest info like pinned, tree_hash and version should be the same
             # since that is all loaded from the same manifest
             if pkg.path === nothing && pkgs_direct[i].path !== nothing
                 pkg.path = pkgs_direct[i].path
