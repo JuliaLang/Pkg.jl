@@ -2046,7 +2046,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
                 Pkg.activate(sandbox_ctx.env.project_file; #=io=devnull=#) do
-                    Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, flags_cacheflags = flags => cacheflags)
+                    Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, configs = flags => cacheflags)
                 end
             end
 

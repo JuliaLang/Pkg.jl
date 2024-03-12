@@ -1131,7 +1131,8 @@ end
 
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
-                    _from_loading::Bool=false, flags_cacheflags::Pair{Cmd, Base.CacheFlags}=(``=>Base.CacheFlags()), kwargs...)
+                    _from_loading::Bool=false, configs::Union{Base.Precompilation.Config,Vector{Base.Precompilation.Config}}=(``=>Base.CacheFlags()),
+                    kwargs...)
     Context!(ctx; kwargs...)
     if !already_instantiated
         instantiate(ctx; allow_autoprecomp=false, kwargs...)
@@ -1154,7 +1155,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, flags_cacheflags, io)
+        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, io)
     end
 end
 
