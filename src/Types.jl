@@ -386,9 +386,15 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     # determine manifest file
     dir = abspath(project_dir)
     manifest_file = project.manifest
+    subprojects = Dict{String,Project}()
+
+    for path in project.subprojects
+        subproject_path = joinpath(dir, path)
+        proj = Base.locate_project_file(subproject_path)
+        subprojects[proj] = proj isa String ? read_project(proj) : Project() # error if project does not exist?
+    end
 
     base_proj = base_project(project_file)
-    subprojects = Dict{String,Project}()
     if base_proj !== nothing
         dir = dirname(base_proj)
         base_proj = read_project(base_proj)
@@ -398,7 +404,9 @@ function EnvCache(env::Union{Nothing,String}=nothing)
             if path == this_subproject_path
                 continue
             end
-            subprojects[path] = read_project(joinpath(dir, path))
+            subproject_path = joinpath(dir, path)
+            proj = Base.locate_project_file(subproject_path)
+            subprojects[proj] = proj isa String ? read_project(proj) : Project() # error if project does not exist?
         end
     end
     manifest_file = manifest_file !== nothing ?
