@@ -1839,7 +1839,7 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     end
     # preserve important nodes
     project = read_project(test_project)
-    keep = Set(target.uuid)
+    keep = Set([target.uuid])
     union!(keep, values(project.deps))
     record_project_hash(env)
     # prune and return
