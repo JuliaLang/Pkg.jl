@@ -68,25 +68,53 @@ end
 
 function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
-    pkgs = _load_direct_deps(env.project, env.manifest, pkgs; preserve)
-    for subproject in env.project.subprojects
-        append!(pkgs, _load_direct_deps(subproject, env.manifest, pkgs; preserve))
+    pkgs_direct = _load_direct_deps(env.project, env.manifest, pkgs; preserve)
+
+    for subproject in env.sub_projects
+        append!(pkgs_direct, _load_direct_deps(subproject, env.manifest, pkgs; preserve))
     end
+
     if env.base_project !== nothing
-        append!(pkgs, _load_direct_deps(env.base_project, env.manifest, pkgs; preserve))
+        append!(pkgs_direct, _load_direct_deps(env.base_project, env.manifest, pkgs; preserve))
     end
-    return pkgs
+
+    unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
+    for uuid in unique_uuids
+        idxs = findall(pkg -> pkg.uuid == uuid, pkgs_direct)
+        # TODO: Assert that projects do not have conflicting sources
+        pkg = pkgs_direct[idxs[1]]
+        idx_to_drop = Int[]
+        for i in idxs[2:end]
+            # Merge in sources from other projects
+            # Manifest info like pineed, tree_hash and version should be the same
+            # since that is all loaded from the same manifest
+            if pkg.path === nothing && pkgs_direct[i].path !== nothing
+                pkg.path = pkgs_direct[i].path
+            end
+            if pkg.repo.source === nothing && pkgs_direct[i].repo.source !== nothing
+                pkg.repo.source = pkgs_direct[i].repo.source
+            end
+            if pkg.repo.rev === nothing && pkgs_direct[i].repo.rev !== nothing
+                pkg.repo.rev = pkgs_direct[i].repo.rev
+            end
+            push!(idx_to_drop, i)
+        end
+        sort!(unique!(idx_to_drop))
+        deleteat!(pkgs_direct, idx_to_drop)
+    end
+
+    return vcat(pkgs, pkgs_direct)
 end
 
 function _load_direct_deps(project::Project, manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
-    pkgs = copy(pkgs)
+    pkgs_direct = PackageSpec[]
     for (name::String, uuid::UUID) in project.deps
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         path, repo = get_path_repo(project, name)
         entry = manifest_info(manifest, uuid)
-        push!(pkgs, entry === nothing ?
-              PackageSpec(;uuid=uuid, name=name, path=path, repo=repo) :
+        push!(pkgs_direct, entry === nothing ?
+              PackageSpec(;uuid, name, path, repo) :
               PackageSpec(;
                 uuid      = uuid,
                 name      = name,
@@ -97,7 +125,7 @@ function _load_direct_deps(project::Project, manifest::Manifest, pkgs::Vector{Pa
                 version   = load_version(entry.version, isfixed(entry), preserve),
               ))
     end
-    return pkgs
+    return pkgs_direct
 end
 
 function load_manifest_deps(manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
