@@ -391,7 +391,8 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     for path in project.subprojects
         subproject_path = joinpath(dir, path)
         proj = Base.locate_project_file(subproject_path)
-        subprojects[proj] = proj isa String ? read_project(proj) : Project() # error if project does not exist?
+        projpath = proj isa String ? proj : joinpath(subproject_path, "Project.toml")
+        subprojects[projpath] = (proj isa String ? read_project(proj) : Project()) # error if project does not exist?
     end
 
     base_proj = base_project(project_file)
@@ -406,7 +407,8 @@ function EnvCache(env::Union{Nothing,String}=nothing)
             end
             subproject_path = joinpath(dir, path)
             proj = Base.locate_project_file(subproject_path)
-            subprojects[proj] = proj isa String ? read_project(proj) : Project() # error if project does not exist?
+            projpath = proj isa String ? proj : joinpath(subproject_path, "Project.toml")
+            subprojects[projpath] = (proj isa String ? read_project(proj) : Project()) # error if project does not exist?
         end
     end
     manifest_file = manifest_file !== nothing ?
