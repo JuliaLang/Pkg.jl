@@ -966,13 +966,19 @@ function prune_manifest(env::EnvCache)
         proj_entry = env.manifest[env.project.uuid]
         proj_entry.deps = env.project.deps
     else
-        keep = collect(values(env.project.deps))
+        keep = Set(values(env.project.deps))
+        for subproject in env.sub_projects
+            keep = union(keep, collect(values(subproject.deps)))
+        end
+        if env.base_project !== nothing
+            keep = union(keep, collect(values(env.base_project.deps)))
+        end
         env.manifest = prune_manifest(env.manifest, keep)
     end
     return env.manifest
 end
 
-function prune_manifest(manifest::Manifest, keep::Vector{UUID})
+function prune_manifest(manifest::Manifest, keep::Set{UUID})
     while !isempty(keep)
         clean = true
         for (uuid, entry) in manifest
@@ -1805,8 +1811,8 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     end
     # preserve important nodes
     project = read_project(test_project)
-    keep = [target.uuid]
-    append!(keep, collect(values(project.deps)))
+    keep = Set(target.uuid)
+    union!(keep, values(project.deps))
     record_project_hash(env)
     # prune and return
     return prune_manifest(env.manifest, keep)
