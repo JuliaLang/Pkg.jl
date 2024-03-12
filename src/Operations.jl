@@ -411,7 +411,14 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
 
     # check compat
     for pkg in pkgs
-        compat = get_compat(env.project, pkg.name)
+        compat = VersionSpec()
+        compat = intersect(compat, get_compat(env.project, pkg.name))
+        for subproject in env.project.subprojects
+            compat = intersect(compat, get_compat(subproject, pkg.name))
+        end
+        if env.base_project !== nothing
+            compat = intersect(compat, get_compat(env.base_project, pkg.name))
+        end
         v = intersect(pkg.version, compat)
         if isempty(v)
             throw(Resolve.ResolverError(
