@@ -336,23 +336,10 @@ function Base.show(io::IO, pkg::PackageEntry)
     print(io, ")")
 end
 
-function base_project(project_file)
-    base_dir = abspath(joinpath(dirname(project_file), ".."))
-    base_project = Base.env_project_file(base_dir)
-    base_project isa String || return nothing
-    d = Base.parsed_toml(base_project)
-    subprojects = get(d, "subprojects", nothing)::Union{Vector{String}, Nothing}
-    subprojects === nothing && return nothing
-    if basename(dirname(project_file)) in subprojects
-        return base_project
-    end
-    return nothing
-end
-
 function find_root_base_project(start_project::String)
     project_file = start_project
     while true
-        base_project_file = base_project(project_file)
+        base_project_file = Base.base_project(project_file)
         base_project_file === nothing && return project_file
         project_file = base_project_file
     end
