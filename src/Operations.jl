@@ -2603,6 +2603,21 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     # display
     filter_uuids = [pkg.uuid::UUID for pkg in pkgs if pkg.uuid !== nothing]
     filter_names = [pkg.name::String for pkg in pkgs if pkg.name !== nothing]
+
+    for (name, uuid) in env.project.deps
+        push!(filter_uuids, uuid)
+        push!(filter_names, name)
+    end
+    base_project_file = Base.base_project(env.project_file)
+    # Non package sub projects can load from base project as well
+    if env.pkg === nothing && base_project_file !== nothing
+        base_project = read_project(base_project_file)
+        for (name, uuid) in base_project.deps
+            push!(filter_uuids, uuid)
+            push!(filter_names, name)
+        end
+    end
+
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
