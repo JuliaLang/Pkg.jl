@@ -124,6 +124,19 @@ function _load_direct_deps(project::Project, manifest::Manifest, pkgs::Vector{Pa
     return pkgs_direct
 end
 
+function load_direct_deps_loadable(env::EnvCache)
+    pkgs_direct = _load_direct_deps(env.project, env.manifest)
+    if env.pkg === nothing
+        base_project_file = Base.base_project(env.project_file)
+        if base_project_file !== nothing
+            base_project = read_project(base_project_file)
+            append!(pkgs_direct, _load_direct_deps(base_project, env.manifest))
+        end
+    end
+    unique!(pkg -> pkg.uuid, pkgs_direct)
+    return pkgs_direct
+end
+
 function load_manifest_deps(manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
                             preserve::PreserveLevel=PRESERVE_ALL)
     pkgs = copy(pkgs)
@@ -162,9 +175,25 @@ function load_all_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
     return load_direct_deps(env, pkgs; preserve=preserve)
 end
 
+function load_all_deps_loadable(env::EnvCache)
+    deps = load_all_deps(env)
+    keep = Set{UUID}(values(env.project.deps))
+    if env.pkg === nothing
+        base_project_file = Base.base_project(env.project_file)
+        if base_project_file !== nothing
+            base_project = read_project(base_project_file)
+            union!(keep, values(base_project.deps))
+        end
+    end
+    prune_deps(env.manifest, keep)
+    filtered = filter(pkg -> pkg.uuid in keep, deps)
+    return filtered
+end
+
+
 function is_instantiated(env::EnvCache; platform = HostPlatform())::Bool
     # Load everything
-    pkgs = load_all_deps(env)
+    pkgs = load_all_deps_loadable(env)
     # If the top-level project is a package, ensure it is instantiated as well
     if env.pkg !== nothing
         # Top-level project may already be in the manifest (cyclic deps)
@@ -320,6 +349,7 @@ isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
     source = project_rel_path(env, source_path(env.manifest_file, pkg))
     source_env = EnvCache(projectfile_path(source))
+    # XXX: Skip loading deps from subprojects here?
     pkgs = load_all_deps(source_env)
     for pkg in filter(is_tracking_path, pkgs)
         if any(x -> x.uuid == pkg.uuid, developed)
@@ -1003,9 +1033,15 @@ function prune_manifest(env::EnvCache)
 end
 
 function prune_manifest(manifest::Manifest, keep::Set{UUID})
+    prune_deps(manifest, keep)
+    manifest.deps = Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
+    return manifest
+end
+
+function prune_deps(iterator, keep::Set{UUID})
     while !isempty(keep)
         clean = true
-        for (uuid, entry) in manifest
+        for (uuid, entry) in iterator
             uuid in keep || continue
             for dep in values(entry.deps)
                 dep in keep && continue
@@ -1015,8 +1051,6 @@ function prune_manifest(manifest::Manifest, keep::Set{UUID})
         end
         clean && break
     end
-    manifest.deps = Dict(uuid => entry for (uuid, entry) in manifest if uuid in keep)
-    return manifest
 end
 
 function record_project_hash(env::EnvCache)
@@ -2305,18 +2339,27 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     return sort!(unique!(packages_holding_back)), max_version, max_version_in_compat
 end
 
-function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifest=true)
+function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifest=true, all_subprojects=false)
     function index_pkgs(pkgs, uuid)
         idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
         return idx === nothing ? nothing : pkgs[idx]
     end
     # load deps
-    new = manifest ? load_manifest_deps(new_env.manifest) : load_direct_deps(new_env)
+    if all_subprojects
+        new = manifest ? load_all_deps(new_env) : load_direct_deps(new_env)
+    else
+        new = manifest ? load_all_deps_loadable(new_env) : load_direct_deps_loadable(new_env)
+    end
+
     T, S = Union{UUID,Nothing}, Union{PackageSpec,Nothing}
     if old_env === nothing
         return Tuple{T,S,S}[(pkg.uuid, nothing, pkg)::Tuple{T,S,S} for pkg in new]
     end
-    old = manifest ? load_manifest_deps(old_env.manifest) : load_direct_deps(old_env)
+    if all_subprojects
+        old = manifest ? load_all_deps(old_env) : load_direct_deps(old_env)
+    else
+        old = manifest ? load_all_deps_loadable(old_env) : load_direct_deps_loadable(old_env)
+    end
     # merge old and new into single array
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
     return Tuple{T,S,S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T,S,S} for uuid in all_uuids]
@@ -2376,14 +2419,14 @@ struct PackageStatusData
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, outdated::Bool, extensions::Bool, io::IO,
+                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, all_subprojects::Bool, outdated::Bool, extensions::Bool, io::IO,
                       mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.warn_color()), "⌅", context=io)
     filter = !isempty(uuids) || !isempty(names)
     # setup
-    xs = diff_array(old_env, env; manifest=manifest)
+    xs = diff_array(old_env, env; manifest, all_subprojects)
     # filter and return early if possible
     if isempty(xs) && !diff
         printpkgstyle(io, header, "$(pathrepr(manifest ? env.manifest_file : env.project_file)) (empty " *
@@ -2579,7 +2622,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, outdated::Bool=false, extensions::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
+                io::IO, all_subprojects::Bool=false, outdated::Bool=false, extensions::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2604,27 +2647,13 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     filter_uuids = [pkg.uuid::UUID for pkg in pkgs if pkg.uuid !== nothing]
     filter_names = [pkg.name::String for pkg in pkgs if pkg.name !== nothing]
 
-    for (name, uuid) in env.project.deps
-        push!(filter_uuids, uuid)
-        push!(filter_names, name)
-    end
-    base_project_file = Base.base_project(env.project_file)
-    # Non package sub projects can load from base project as well
-    if env.pkg === nothing && base_project_file !== nothing
-        base_project = read_project(base_project_file)
-        for (name, uuid) in base_project.deps
-            push!(filter_uuids, uuid)
-            push!(filter_names, name)
-        end
-    end
-
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, all_subprojects, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, all_subprojects, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
         tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""

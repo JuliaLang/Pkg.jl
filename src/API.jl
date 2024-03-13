@@ -82,7 +82,7 @@ end
 
 dependencies() = dependencies(EnvCache())
 function dependencies(env::EnvCache)
-    pkgs = Operations.load_all_deps(env)
+    pkgs = Operations.load_all_deps_loadable(env)
     return Dict(pkg.uuid::UUID => package_info(env, pkg) for pkg in pkgs)
 end
 function dependencies(fn::Function, uuid::UUID)
@@ -1171,7 +1171,8 @@ end
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
-                     platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true, kwargs...)
+                     platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true,
+                     all_subprojects::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
@@ -1221,7 +1222,11 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         return
     end
 
-    pkgs = Operations.load_all_deps(ctx.env)
+    if all_subprojects
+        pkgs = Operations.load_all_deps(ctx.env)
+    else
+        pkgs = Operations.load_all_deps_loadable(ctx.env)
+    end
     try
         # First try without updating the registry
         Operations.check_registered(ctx.registries, pkgs)
@@ -1279,14 +1284,14 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, all_subprojects::Bool=false, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
         extensions && pkgerror("Compat status has no `extensions` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions, all_subprojects)
     end
     return nothing
 end
@@ -1435,9 +1440,18 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
         end
     end
 
+    project_deps = Set(values(ctx.env.project.deps))
+    if ctx.env.pkg === nothing
+        base_project_file = Base.base_project(ctx.env.project_file)
+        if base_project_file !== nothing
+            base_project = Types.read_project(base_project_file)
+            union!(project_deps, values(base_project.deps))
+        end
+    end
+
     function find_paths!(final_paths, current, path = UUID[])
         push!(path, current)
-        current in values(ctx.env.project.deps) && push!(final_paths, path) # record once we've traversed to a project dep
+        current in project_deps && push!(final_paths, path) # record once we've traversed to a project dep
         haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
         for p in incoming[current]
             if p in path
