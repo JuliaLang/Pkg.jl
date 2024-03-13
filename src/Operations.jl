@@ -74,10 +74,6 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
         append!(pkgs_direct, _load_direct_deps(subproject, env.manifest, pkgs; preserve))
     end
 
-    if env.base_project !== nothing
-        append!(pkgs_direct, _load_direct_deps(env.base_project, env.manifest, pkgs; preserve))
-    end
-
     unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
     for uuid in unique_uuids
         idxs = findall(pkg -> pkg.uuid == uuid, pkgs_direct)
@@ -330,6 +326,8 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
             continue
         end
         # normalize path
+        # TODO: If path is collected from project, it is relative to the project file
+        # otherwise relative to manifest file....
         pkg.path = Types.relative_project_path(env.manifest_file,
                    project_rel_path(source_env,
                    source_path(source_env.manifest_file, pkg)))
@@ -443,9 +441,6 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
         compat = intersect(compat, get_compat(env.project, pkg.name))
         for (_, subproject) in env.sub_projects
             compat = intersect(compat, get_compat(subproject, pkg.name))
-        end
-        if env.base_project !== nothing
-            compat = intersect(compat, get_compat(env.base_project, pkg.name))
         end
         v = intersect(pkg.version, compat)
         if isempty(v)
@@ -990,16 +985,13 @@ project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.ma
 
 function prune_manifest(env::EnvCache)
     # if project uses another manifest, only prune project entry in manifest
-    if env.base_project === nothing && dirname(env.project_file) != dirname(env.manifest_file)
+    if isempty(env.sub_projects) && dirname(env.project_file) != dirname(env.manifest_file)
         proj_entry = env.manifest[env.project.uuid]
         proj_entry.deps = env.project.deps
     else
         keep = Set(values(env.project.deps))
         for (_, subproject) in env.sub_projects
             keep = union(keep, collect(values(subproject.deps)))
-        end
-        if env.base_project !== nothing
-            keep = union(keep, collect(values(env.base_project.deps)))
         end
         env.manifest = prune_manifest(env.manifest, keep)
     end

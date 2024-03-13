@@ -349,6 +349,28 @@ function base_project(project_file)
     return nothing
 end
 
+function find_root_base_project(start_project::String)
+    project_file = start_project
+    while true
+        base_project_file = base_project(project_file)
+        base_project_file === nothing && return project_file
+        project_file = base_project_file
+    end
+end
+
+function collect_all_subprojects(base_project_file::String, d::Dict{String, Project}=Dict{String, Project}())
+    base_project = read_project(base_project_file)
+    d[base_project_file] = base_project
+    for subproject in base_project.subprojects
+        subproject_folder = abspath(dirname(base_project_file), subproject)
+        subproject_file = Base.locate_project_file(subproject_folder)
+        if subproject_file isa String
+            collect_all_subprojects(subproject_file, d)
+        end
+    end
+    return d
+end
+
 mutable struct EnvCache
     # environment info:
     env::Union{Nothing,String}
@@ -359,7 +381,6 @@ mutable struct EnvCache
     pkg::Union{PackageSpec, Nothing}
     # cache of metadata:
     project::Project
-    base_project::Union{Project,Nothing}
     sub_projects::Dict{String,Project} # paths relative to base
     manifest::Manifest
     # What these where at creation of the EnvCache
@@ -368,7 +389,9 @@ mutable struct EnvCache
 end
 
 function EnvCache(env::Union{Nothing,String}=nothing)
+    # @show env
     project_file = find_project_file(env)
+    # @show project_file
     project_dir = dirname(project_file)
     # read project file
     project = read_project(project_file)
@@ -385,32 +408,13 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     end
     # determine manifest file
     dir = abspath(project_dir)
-    manifest_file = project.manifest
-    subprojects = Dict{String,Project}()
 
-    for path in project.subprojects
-        subproject_path = joinpath(dir, path)
-        proj = Base.locate_project_file(subproject_path)
-        projpath = proj isa String ? proj : joinpath(subproject_path, "Project.toml")
-        subprojects[projpath] = (proj isa String ? read_project(proj) : Project()) # error if project does not exist?
-    end
+    root_base_proj_file = find_root_base_project(project_file)
 
-    base_proj = base_project(project_file)
-    if base_proj !== nothing
-        dir = dirname(base_proj)
-        base_proj = read_project(base_proj)
-        manifest_file = base_proj.manifest
-        this_subproject_path = basename(dirname(project_file))
-        for path in base_proj.subprojects
-            if path == this_subproject_path
-                continue
-            end
-            subproject_path = joinpath(dir, path)
-            proj = Base.locate_project_file(subproject_path)
-            projpath = proj isa String ? proj : joinpath(subproject_path, "Project.toml")
-            subprojects[projpath] = (proj isa String ? read_project(proj) : Project()) # error if project does not exist?
-        end
-    end
+    manifest_file = Base.project_file_manifest_path(root_base_proj_file)
+    subprojects = collect_all_subprojects(root_base_proj_file)
+    delete!(subprojects, abspath(project_file))
+
     manifest_file = manifest_file !== nothing ?
         (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
         manifestfile_path(dir)::String
@@ -422,14 +426,11 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         manifest_file,
         project_package,
         project,
-        base_proj,
         subprojects,
         manifest,
         deepcopy(project),
         deepcopy(manifest),
         )
-
-
 
     return env′
 end
@@ -960,12 +961,9 @@ end
 
 # Disambiguate name/uuid package specifications using project info.
 function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
-    uuids = env.project.deps
+    uuids = copy(env.project.deps)
     for (_, subproject) in env.sub_projects
         merge!(uuids, subproject.deps)
-    end
-    if env.base_project !== nothing
-        merge!(uuids, env.base_project.deps)
     end
     names = Dict(uuid => name for (name, uuid) in uuids)
     for pkg in pkgs
@@ -1170,6 +1168,7 @@ function write_env(env::EnvCache; update_undo=true,
             end
         end
     end
+
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end
