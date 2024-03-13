@@ -393,6 +393,14 @@ end
 # i.e. dropbuild(v"2.0.1-rc1.21321") == v"2.0.1-rc1"
 dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v.prerelease) ? () : (v.prerelease[1],))
 
+function get_compat_all_projects(env, name)
+    compat = get_compat(env.project, name)
+    for (_, subproject) in env.sub_projects
+        compat = intersect(compat, get_compat(subproject, name))
+    end
+    return compat
+end
+
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
@@ -405,7 +413,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     if julia_version !== nothing
         # only set the manifest julia_version if ctx.julia_version is not nothing
         env.manifest.julia_version = dropbuild(VERSION)
-        v = intersect(julia_version, get_compat(env.project, "julia"))
+        v = intersect(julia_version, get_compat_all_projects(env, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
@@ -437,11 +445,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
 
     # check compat
     for pkg in pkgs
-        compat = VersionSpec()
-        compat = intersect(compat, get_compat(env.project, pkg.name))
-        for (_, subproject) in env.sub_projects
-            compat = intersect(compat, get_compat(subproject, pkg.name))
-        end
+        compat = get_compat_all_projects(env, pkg.name)
         v = intersect(pkg.version, compat)
         if isempty(v)
             throw(Resolve.ResolverError(
@@ -2230,7 +2234,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         versions = filter(v -> !Registry.isyanked(info, v), versions)
         max_version_reg = maximum(versions; init=v"0")
         max_version = max(max_version, max_version_reg)
-        compat_spec = get_compat(env.project, pkg.name)
+        compat_spec = get_compat_all_projects(env, pkg.name)
         versions_in_compat = filter(in(compat_spec), keys(reg_compat_info))
         max_version_in_compat = max(max_version_in_compat, maximum(versions_in_compat; init=v"0"))
     end
