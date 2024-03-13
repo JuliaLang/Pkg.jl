@@ -36,7 +36,7 @@ temp_pkg_dir() do project_path
 
             # Add some deps to PrivatePackage
             Pkg.activate("PrivatePackage")
-            Pkg.add("Chairmarks")
+            Pkg.add(; name="Chairmarks", version=v"1.2.0")
             @test !isfile("PrivatePackage/Manifest.toml")
             d = TOML.parsefile("PrivatePackage/Project.toml")
             d["subprojects"] = ["test"]
@@ -46,6 +46,13 @@ temp_pkg_dir() do project_path
                 using Chairmarks
             end
             """)
+            io = IOBuffer()
+            Pkg.status(; io)
+            status = String(take!(io))
+            for pkg in ["Crayons v", "Example v", "TestSpecificPackage v"]
+                @test !occursin(pkg, status)
+            end
+            @test occursin("Chairmarks v", status)
 
             # Make a test subproject in PrivatePackage
             # Note that this is a "nested subproject" since in this environment
@@ -62,6 +69,20 @@ temp_pkg_dir() do project_path
             """)
             # A nested subproject should still use the root base manifest
             @test !isfile("PrivatePackage/test/Manifest.toml")
+            # Test status shows deps in test-subproject + base (MonoRepoSub)
+            io = IOBuffer()
+            Pkg.status(; io)
+            status = String(take!(io))
+            for pkg in ["Crayons", "Example", "TestSpecificPackage"]
+                @test !occursin(pkg, status)
+            end
+            @test occursin("Test v", status)
+
+            Pkg.status(; io, all_subprojects=true)
+            status = String(take!(io))
+            for pkg in ["Crayons", "Example", "Test"]
+                @test occursin(pkg, status)
+            end
 
             # Add tests to MonorepoSub
             mkdir("test")
@@ -79,6 +100,13 @@ temp_pkg_dir() do project_path
             abs_pkg = abspath("TestSpecificPackage") # TODO: Make relative after #3842 is fixed
             d["sources"] = Dict("TestSpecificPackage" => Dict("path" => abs_pkg))
             Pkg.Types.write_project(d, "test/Project.toml")
+            # Test status shows deps in test-subproject + base (MonoRepoSub)
+            io = IOBuffer()
+            Pkg.status(; io)
+            status = String(take!(io))
+            for pkg in ["Crayons", "Example", "PrivatePackage", "TestSpecificPackage", "Test"]
+                @test occursin(pkg, status)
+            end
 
             @test !isfile("test/Manifest.toml")
             write("test/runtests.jl", """
@@ -103,6 +131,8 @@ temp_pkg_dir() do project_path
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
+
+
         end
     end
 end
