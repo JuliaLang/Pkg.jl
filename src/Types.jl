@@ -258,7 +258,7 @@ Base.@kwdef mutable struct Project
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
-    subprojects::Vector{String} = Vector{String}()
+    subprojects::Union{String, Vector{String}} = Vector{String}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
@@ -348,9 +348,14 @@ end
 function collect_all_subprojects(base_project_file::String, d::Dict{String, Project}=Dict{String, Project}())
     base_project = read_project(base_project_file)
     d[base_project_file] = base_project
-    for subproject in base_project.subprojects
-        subproject_folder = abspath(dirname(base_project_file), subproject)
-        subproject_file = Base.locate_project_file(subproject_folder)
+    base_project_file_dir = dirname(base_project_file)
+    if base_project.subprojects === "*"
+        subproject_paths = readdir(base_project_file_dir; join=true)
+    else
+        subproject_paths = [abspath(base_project_file_dir, subproject) for subproject in base_project.subprojects]
+    end
+    for subproject_path in subproject_paths
+        subproject_file = Base.locate_project_file(subproject_path)
         if subproject_file isa String
             collect_all_subprojects(subproject_file, d)
         end
@@ -393,15 +398,17 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     else
         project_package = nothing
     end
-    # determine manifest file
-    dir = abspath(project_dir)
 
+    manifest_file = project.manifest
     root_base_proj_file = find_root_base_project(project_file)
+    subprojects = Dict{String, Project}()
+    if isfile(root_base_proj_file)
+        manifest_file = Base.project_file_manifest_path(root_base_proj_file)
+        subprojects = collect_all_subprojects(root_base_proj_file)
+        delete!(subprojects, abspath(project_file))
+    end
 
-    manifest_file = Base.project_file_manifest_path(root_base_proj_file)
-    subprojects = collect_all_subprojects(root_base_proj_file)
-    delete!(subprojects, abspath(project_file))
-
+    dir = abspath(project_dir)
     manifest_file = manifest_file !== nothing ?
         (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
         manifestfile_path(dir)::String
