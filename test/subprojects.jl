@@ -36,7 +36,7 @@ temp_pkg_dir() do project_path
 
             # Add some deps to PrivatePackage
             Pkg.activate("PrivatePackage")
-            Pkg.add(; name="Chairmarks", version=v"1.2.0")
+            Pkg.add(; name="Chairmarks", version=v"1.1.2")
             @test !isfile("PrivatePackage/Manifest.toml")
             d = TOML.parsefile("PrivatePackage/Project.toml")
             d["subprojects"] = ["test"]

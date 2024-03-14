@@ -118,6 +118,12 @@ function read_project_subprojects(raw::Vector, project::Project)
     end
     return subprojects
 end
+function read_project_subprojects(raw::String, project::Project)
+    if raw !== "*"
+        pkgerror("Expected `subprojects` to be a list of strings or \"*\"")
+    end
+    return raw
+end
 
 function validate(project::Project; file=nothing)
     # deps
