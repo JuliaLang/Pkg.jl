@@ -4,6 +4,7 @@ keywords = ["package management"]
 license = "MIT"
 desc = "The next-generation Julia package manager."
 version = "1.12.0"
+subprojects = ["test", "docs"]
 
 [deps]
 Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -27,14 +28,3 @@ REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 
 [extensions]
 REPLExt = "REPL"
-
-[compat]
-HistoricalStdlibVersions = "1.2"
-
-[extras]
-HistoricalStdlibVersions = "6df8b67a-e8a0-4029-b4b7-ac196fe72102"
-Preferences = "21216c6a-2e73-6563-6e65-726566657250"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["REPL", "Test", "Preferences", "HistoricalStdlibVersions"]

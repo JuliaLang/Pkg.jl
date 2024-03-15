@@ -2106,6 +2106,35 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     # sandbox
     pkgs_errored = Tuple{String, Base.Process}[]
     for (pkg, source_path) in zip(pkgs, source_paths)
+        # TODO: DRY with code below.
+        # If the test is in the our "workspace", no need to create a temp env etc, just activate and run thests
+        if testdir(source_path) in dirname.(keys(ctx.env.sub_projects))
+            env = EnvCache(testdir(source_path))
+            status(env, ctx.registries; mode=PKGMODE_COMBINED, io=ctx.io, ignore_indent = false, show_usagetips = false)
+            flags = gen_subprocess_flags(source_path; coverage, julia_args)
+
+            if should_autoprecompile()
+                cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
+                Pkg.precompile(; io=ctx.io, flags_cacheflags = flags => cacheflags)
+            end
+
+            printpkgstyle(ctx.io, :Testing, "Running tests...")
+            flush(ctx.io)
+            code = gen_test_code(source_path; test_args)
+            cmd = `$(Base.julia_cmd()) $(flags) --eval $code`
+
+            path_sep = Sys.iswindows() ? ';' : ':'
+            p, interrupted = withenv("JULIA_LOAD_PATH" => "@$(path_sep)$(testdir(source_path))", "JULIA_PROJECT" => nothing) do
+                subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
+            end
+            if success(p)
+                printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
+            elseif !interrupted
+                push!(pkgs_errored, (pkg.name, p))
+            end
+            continue
+        end
+
         # compatibility shim between "targets" and "test/Project.toml"
         local test_project_preferences, test_project_override
         if isfile(projectfile_path(testdir(source_path)))
@@ -2138,7 +2167,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
             cmd = `$(Base.julia_cmd()) $(flags) --threads=$(get_threads_spec()) --eval $code`
-            p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Tests interrupted. Exiting the test process")
+            p, interrupted = subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
             elseif !interrupted
@@ -2189,8 +2218,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 end
 
 # Handles the interrupting of a subprocess gracefully to avoid orphaning
-function subprocess_handler(cmd::Cmd, ctx, sandbox_ctx, error_msg::String)
-    stdout = sandbox_ctx.io
+function subprocess_handler(cmd::Cmd, io::IO, error_msg::String)
+    stdout = io
     stderr = stderr_f()
     stdout isa UnstableIO && (stdout = stdout.io)
     stderr isa UnstableIO && (stderr = stderr.io)
@@ -2203,7 +2232,7 @@ function subprocess_handler(cmd::Cmd, ctx, sandbox_ctx, error_msg::String)
         if e isa InterruptException
             interrupted = true
             print("\n")
-            printpkgstyle(ctx.io, :Testing, "$error_msg\n", color = Base.error_color())
+            printpkgstyle(io, :Testing, "$error_msg\n", color = Base.error_color())
             # Give some time for the child interrupt handler to print a stacktrace and exit,
             # then kill the process if still running
             if timedwait(() -> !process_running(p), 4) == :timed_out
