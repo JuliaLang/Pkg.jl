@@ -91,7 +91,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
-    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    bar = MiniProgressBar(header = "Cloning:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
         LibGit2.Callbacks(
