@@ -36,6 +36,7 @@ makedocs(
         "environments.md",
         "compatibility.md",
         "registries.md",
+        "depots.md",
         "artifacts.md",
         "glossary.md",
         "toml-files.md",
