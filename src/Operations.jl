@@ -1753,7 +1753,6 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args)
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
-        --threads=$(get_threads_spec())
         $(julia_args)
     ```
 end
@@ -2047,14 +2046,14 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
                 Pkg.activate(sandbox_ctx.env.project_file; #=io=devnull=#) do
-                    Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, flags_cacheflags = flags => cacheflags)
+                    Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, configs = flags => cacheflags)
                 end
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            cmd = `$(Base.julia_cmd()) $(flags) --eval $code`
+            cmd = `$(Base.julia_cmd()) $(flags) --threads=$(get_threads_spec()) --eval $code`
             p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
