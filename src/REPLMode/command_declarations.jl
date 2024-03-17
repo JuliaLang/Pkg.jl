@@ -308,6 +308,7 @@ packages have changed causing the current Manifest to be out of sync.
 """,
 ],
 PSA[:name => "activate",
+    :short_name => "act",
     :api => API.activate,
     :arg_count => 0 => 1,
     :arg_parser => parse_activate,
@@ -318,9 +319,9 @@ PSA[:name => "activate",
     :completions => get_complete_function(:complete_activate),
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
-    activate
-    activate [--shared] path
-    activate --temp
+    [act|activate]
+    [act|activate] [--shared] path
+    [act|activate] --temp
 
 Activate the environment at the given `path`, or use the first project found in
 `LOAD_PATH` (ignoring `"@"`) if no `path` is specified.
