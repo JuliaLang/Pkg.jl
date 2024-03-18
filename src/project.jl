@@ -110,8 +110,8 @@ function read_project_sources(raw::Dict{String,Any}, project::Project)
 end
 
 read_project_workspace(::Nothing, project::Project) = Dict{String,Any}()
-function read_project_workspace(raw::Vector, project::Project)
-    workspace_table = Dict{String,Dict{String, Any}}()
+function read_project_workspace(raw::Dict, project::Project)
+    workspace_table = Dict{String,Any}()
     for (key, val) in raw
         if key == "subprojects"
             for path in val
@@ -124,6 +124,9 @@ function read_project_workspace(raw::Vector, project::Project)
     end
     return workspace_table
 end
+read_project_workspace(raw, project::Project) =
+    pkgerror("Expected `workspace` section to be a key-value list")
+
 
 function validate(project::Project; file=nothing)
     # deps

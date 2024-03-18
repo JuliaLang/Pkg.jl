@@ -4,6 +4,8 @@ keywords = ["package management"]
 license = "MIT"
 desc = "The next-generation Julia package manager."
 version = "1.12.0"
+
+[workspace]
 subprojects = ["test", "docs"]
 
 [deps]

@@ -258,7 +258,7 @@ Base.@kwdef mutable struct Project
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
-    workspace::Dict{String, Dict{String, Any}} = Dict{String, Dict{String, Any}}()
+    workspace::Dict{String, Any} = Dict{String, Any}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
@@ -349,7 +349,11 @@ function collect_workspace(base_project_file::String, d::Dict{String, Project}=D
     base_project = read_project(base_project_file)
     d[base_project_file] = base_project
     base_project_file_dir = dirname(base_project_file)
-    subproject_paths = [abspath(base_project_file_dir, subproject) for subproject in base_project.workspace]
+
+    # TODO: Type annots
+    subprojects = get(base_project.workspace, "subprojects", nothing)
+    subprojects === nothing && return d
+    subproject_paths = [abspath(base_project_file_dir, subproject) for subproject in subprojects::Vector{String}]
     for subproject_path in subproject_paths
         subproject_file = Base.locate_project_file(subproject_path)
         if subproject_file isa String
