@@ -213,15 +213,25 @@ end
 function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
     manifest = env.manifest
     empty!(manifest)
-    # if we're updating env.pkg that refers to another manifest, we want to change
-    # pkg.path, if present, to be relative to the manifest instead of an abspath
-    if env.project.manifest !== nothing && env.pkg.path !== nothing
+    # Is this copy needed?
+    pkgs = copy(pkgs)
+
+    if env.pkg !== nothing
         env.pkg.path = Types.relative_project_path(env.manifest_file,
                         project_rel_path(env, source_path(env.manifest_file, env.pkg)))
+        push!(pkgs, env.pkg::PackageSpec)
     end
-    if env.pkg !== nothing
-        pkgs = push!(copy(pkgs), env.pkg::PackageSpec)
+
+    for (projfile, subproject) in env.workspace
+        if subproject.name !== nothing && subproject.uuid !== nonmissingtype
+            pkg = PackageSpec(;name = subproject.name, uuid = subproject.uuid,
+                               version = subproject.version, path=dirname(projfile))
+            pkg.path = Types.relative_project_path(env.manifest_file,
+                        project_rel_path(env, source_path(env.manifest_file, pkg)))
+            push!(pkgs, pkg)
+        end
     end
+
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
                              tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid)
@@ -1024,8 +1034,14 @@ function prune_manifest(env::EnvCache)
         proj_entry.deps = env.project.deps
     else
         keep = Set(values(env.project.deps))
+        if env.pkg !== nothing
+            push!(keep, env.pkg.uuid)
+        end
         for (_, subproject) in env.workspace
             keep = union(keep, collect(values(subproject.deps)))
+            if subproject.uuid !== nothing
+                push!(keep, subproject.uuid)
+            end
         end
         env.manifest = prune_manifest(env.manifest, keep)
     end
