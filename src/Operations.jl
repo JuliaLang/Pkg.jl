@@ -2490,6 +2490,12 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         end
         # main print
         printpkgstyle(io, header, pathrepr(manifest ? env.manifest_file : env.project_file), ignore_indent)
+        if workspace && !manifest
+            for (path, _) in env.workspace
+                relative_path = Types.relative_project_path(env.project_file, path)
+                printpkgstyle(io, :Status, relative_path, true)
+            end
+        end
         # Sort stdlibs and _jlls towards the end in status output
         xs = sort!(xs, by = (x -> (is_stdlib(x[1]), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
     end
