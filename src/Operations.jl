@@ -70,7 +70,7 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs_direct = _load_direct_deps(env.project, env.manifest, pkgs; preserve)
 
-    for (_, subproject) in env.sub_projects
+    for (_, subproject) in env.workspace
         append!(pkgs_direct, _load_direct_deps(subproject, env.manifest, pkgs; preserve))
     end
 
@@ -425,7 +425,7 @@ dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v
 
 function get_compat_all_projects(env, name)
     compat = get_compat(env.project, name)
-    for (_, subproject) in env.sub_projects
+    for (_, subproject) in env.workspace
         compat = intersect(compat, get_compat(subproject, name))
     end
     return compat
@@ -1019,12 +1019,12 @@ project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.ma
 
 function prune_manifest(env::EnvCache)
     # if project uses another manifest, only prune project entry in manifest
-    if isempty(env.sub_projects) && dirname(env.project_file) != dirname(env.manifest_file)
+    if isempty(env.workspace) && dirname(env.project_file) != dirname(env.manifest_file)
         proj_entry = env.manifest[env.project.uuid]
         proj_entry.deps = env.project.deps
     else
         keep = Set(values(env.project.deps))
-        for (_, subproject) in env.sub_projects
+        for (_, subproject) in env.workspace
             keep = union(keep, collect(values(subproject.deps)))
         end
         env.manifest = prune_manifest(env.manifest, keep)
@@ -2108,7 +2108,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
     for (pkg, source_path) in zip(pkgs, source_paths)
         # TODO: DRY with code below.
         # If the test is in the our "workspace", no need to create a temp env etc, just activate and run thests
-        if testdir(source_path) in dirname.(keys(ctx.env.sub_projects))
+        if testdir(source_path) in dirname.(keys(ctx.env.workspace))
             env = EnvCache(testdir(source_path))
             status(env, ctx.registries; mode=PKGMODE_COMBINED, io=ctx.io, ignore_indent = false, show_usagetips = false)
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
@@ -2368,13 +2368,13 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     return sort!(unique!(packages_holding_back)), max_version, max_version_in_compat
 end
 
-function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifest=true, all_subprojects=false)
+function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifest=true, workspace=false)
     function index_pkgs(pkgs, uuid)
         idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
         return idx === nothing ? nothing : pkgs[idx]
     end
     # load deps
-    if all_subprojects
+    if workspace
         new = manifest ? load_all_deps(new_env) : load_direct_deps(new_env)
     else
         new = manifest ? load_all_deps_loadable(new_env) : load_direct_deps_loadable(new_env)
@@ -2384,7 +2384,7 @@ function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifes
     if old_env === nothing
         return Tuple{T,S,S}[(pkg.uuid, nothing, pkg)::Tuple{T,S,S} for pkg in new]
     end
-    if all_subprojects
+    if workspace
         old = manifest ? load_all_deps(old_env) : load_direct_deps(old_env)
     else
         old = manifest ? load_all_deps_loadable(old_env) : load_direct_deps_loadable(old_env)
@@ -2448,14 +2448,14 @@ struct PackageStatusData
 end
 
 function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, all_subprojects::Bool, outdated::Bool, extensions::Bool, io::IO,
+                      uuids::Vector, names::Vector; manifest=true, diff=false, ignore_indent::Bool, workspace::Bool, outdated::Bool, extensions::Bool, io::IO,
                       mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool=true)
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.error_color()), "→", context=io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color=:green), "⌃", context=io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color=Base.warn_color()), "⌅", context=io)
     filter = !isempty(uuids) || !isempty(names)
     # setup
-    xs = diff_array(old_env, env; manifest, all_subprojects)
+    xs = diff_array(old_env, env; manifest, workspace)
     # filter and return early if possible
     if isempty(xs) && !diff
         printpkgstyle(io, header, "$(pathrepr(manifest ? env.manifest_file : env.project_file)) (empty " *
@@ -2651,7 +2651,7 @@ end
 
 function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}=PackageSpec[];
                 header=nothing, mode::PackageMode=PKGMODE_PROJECT, git_diff::Bool=false, env_diff=nothing, ignore_indent=true,
-                io::IO, all_subprojects::Bool=false, outdated::Bool=false, extensions::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
+                io::IO, workspace::Bool=false, outdated::Bool=false, extensions::Bool=false, hidden_upgrades_info::Bool=false, show_usagetips::Bool=true)
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
@@ -2679,10 +2679,10 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, all_subprojects, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest=false, diff, ignore_indent, io, workspace, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, all_subprojects, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
         tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""

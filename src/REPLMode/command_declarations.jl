@@ -56,17 +56,17 @@ PSA[:name => "instantiate",
         PSA[:name => "project", :short_name => "p", :api => :manifest => false],
         PSA[:name => "manifest", :short_name => "m", :api => :manifest => true],
         PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
-        PSA[:name => "all", :api => :all_subprojects => true],
+        PSA[:name => "workspace", :api => :workspace => true],
     ],
     :description => "downloads all the dependencies for the project",
     :help => md"""
-    instantiate [-v|--verbose] [--all]
-    instantiate [-v|--verbose] [--all][-m|--manifest]
-    instantiate [-v|--verbose] [--all] [-p|--project]
+    instantiate [-v|--verbose] [--workspace]
+    instantiate [-v|--verbose] [--workspace][-m|--manifest]
+    instantiate [-v|--verbose] [--workspace] [-p|--project]
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
-If `--all` is given, all subprojects will be instantiated.
+If `--workspace` is given, all dependencies in the workspace will be downloaded.
 
 After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
@@ -417,16 +417,16 @@ PSA[:name => "status",
         PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
         PSA[:name => "compat", :short_name => "c", :api => :compat => true],
         PSA[:name => "extensions", :short_name => "e", :api => :extensions => true],
-        PSA[:name => "all", :api => :all_subprojects => true],
+        PSA[:name => "all", :api => :workspace => true],
     ],
     :completions => get_complete_function(:complete_installed_packages),
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    [st|status] [-d|--diff] [-all] [-o|--outdated] [pkgs...]
-    [st|status] [-d|--diff] [-all] [-o|--outdated] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-all] [-o|--outdated] [-m|--manifest] [pkgs...]
-    [st|status] [-d|--diff] [-all] [-e|--extensions] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-all] [-e|--extensions] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
 Show the status of the current environment. Packages marked with `⌃` have new
@@ -444,7 +444,7 @@ If there are any packages listed as arguments the output will be limited to thos
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 The `--compat` option alone shows project compat entries.
-The `--all` option shows the (merged) status of packages in all subprojects.
+The `--workspace` option shows the (merged) status of packages in the workspace.
 
 !!! compat "Julia 1.8"
     The `⌃` and `⌅` indicators were added in Julia 1.8.

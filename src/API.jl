@@ -1172,7 +1172,7 @@ instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
                      platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true,
-                     all_subprojects::Bool=false, kwargs...)
+                     workspace::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
@@ -1222,7 +1222,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         return
     end
 
-    if all_subprojects
+    if workspace
         pkgs = Operations.load_all_deps(ctx.env)
     else
         pkgs = Operations.load_all_deps_loadable(ctx.env)
@@ -1284,14 +1284,14 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, all_subprojects::Bool=false, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, workspace::Bool=false, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
         extensions && pkgerror("Compat status has no `extensions` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions, all_subprojects)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions, workspace)
     end
     return nothing
 end

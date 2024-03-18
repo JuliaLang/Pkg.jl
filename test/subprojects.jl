@@ -78,7 +78,7 @@ temp_pkg_dir() do project_path
             end
             @test occursin("Test v", status)
 
-            Pkg.status(; io, all_subprojects=true)
+            Pkg.status(; io, workspace=true)
             status = String(take!(io))
             for pkg in ["Crayons", "Example", "Test"]
                 @test occursin(pkg, status)

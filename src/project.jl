@@ -109,20 +109,20 @@ function read_project_sources(raw::Dict{String,Any}, project::Project)
     return sources
 end
 
-read_project_subprojects(::Nothing, project::Project) = String[]
-function read_project_subprojects(raw::Vector, project::Project)
-    subprojects = String[]
-    for path in raw
-        path isa String || pkgerror("Expected entry in `subprojects` to be strings")
-        push!(subprojects, path)
+read_project_workspace(::Nothing, project::Project) = Dict{String,Any}()
+function read_project_workspace(raw::Vector, project::Project)
+    workspace_table = Dict{String,Dict{String, Any}}()
+    for (key, val) in raw
+        if key == "subprojects"
+            for path in val
+                path isa String || pkgerror("Expected entry in `subprojects` to be strings")
+            end
+        else
+            pkgerror("Invalid key `$key` in `workspace`")
+        end
+        workspace_table[key] = val
     end
-    return subprojects
-end
-function read_project_subprojects(raw::String, project::Project)
-    if raw !== "*"
-        pkgerror("Expected `subprojects` to be a list of strings or \"*\"")
-    end
-    return raw
+    return workspace_table
 end
 
 function validate(project::Project; file=nothing)
@@ -189,7 +189,7 @@ function Project(raw::Dict; file=nothing)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat   = read_project_compat(get(raw, "compat", nothing), project)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
-    project.subprojects = read_project_subprojects(get(raw, "subprojects", nothing), project)
+    project.workspace = read_project_workspace(get(raw, "workspace", nothing), project)
 
     # Handle deps in both [deps] and [weakdeps]
     project._deps_weak = Dict(intersect(project.deps, project.weakdeps))
@@ -238,6 +238,7 @@ function destructure(project::Project)::Dict
     entry!("name",     project.name)
     entry!("uuid",     project.uuid)
     entry!("version",  project.version)
+    entry!("workspace", project.workspace)
     entry!("manifest", project.manifest)
     entry!("path",     project.path)
     entry!("deps",     merge(project.deps, project._deps_weak))
@@ -249,7 +250,7 @@ function destructure(project::Project)::Dict
     return raw
 end
 
-const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "subprojects", "deps", "weakdeps", "sources", "extensions", "compat"]
+const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "workspace", "deps", "weakdeps", "sources", "extensions", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
