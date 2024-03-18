@@ -1,5 +1,6 @@
 [deps]
 HistoricalStdlibVersions = "6df8b67a-e8a0-4029-b4b7-ac196fe72102"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
