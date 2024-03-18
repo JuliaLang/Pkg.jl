@@ -1424,7 +1424,7 @@ compat(;kwargs...) = compat(Context(); kwargs...)
 # why #
 #######
 
-function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
+function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool=false, kwargs...)
     require_not_empty(pkgs, :why)
 
     manifest_resolve!(ctx.env.manifest, pkgs)
@@ -1441,11 +1441,10 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
     end
 
     project_deps = Set(values(ctx.env.project.deps))
-    if ctx.env.pkg === nothing
-        base_project_file = Base.base_project(ctx.env.project_file)
-        if base_project_file !== nothing
-            base_project = Types.read_project(base_project_file)
-            union!(project_deps, values(base_project.deps))
+
+    if workspace
+        for (_, subproject) in ctx.env.workspace
+            union!(project_deps, values(subproject.deps))
         end
     end
 
