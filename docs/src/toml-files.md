@@ -128,21 +128,22 @@ constraints in detail. It is also possible to list constraints on `julia` itself
 julia = "1.1"
 ```
 
-### The `[subprojects]` section
+### The `[workspace]` section
 
-A (base) project can contain multiple "subprojects," each of which is represented by a folder within the same directory as the base project. These subprojects have their own project files, similar to the base project file, allowing them to include their own dependencies, compatibility information, and even function as full packages.
+A (base) project can define a "workspace" each of which is represented by a folder within the same directory as the base project. These subprojects have their own project files, similar to the base project file, allowing them to include their own dependencies, compatibility information, and even function as full packages.
 
-Subprojects are defined in the base project file using a list of folder names, like so:
+A workspece is defined in the base project by giving a list of the subprojects in it:
 
 ```toml
+[workspace]
 subprojects = ["test", "docs", "benchmarks", "PrivatePackage"]
 ```
 
-In a subproject, any script can use both its own declared dependencies and those of the base project. However, if the subproject is a package, it is restricted to using only the dependencies defined in its project file.
-
-When the package manager resolves dependencies, it considers the requirements of both the base project and its subprojects. The compatible versions identified during this process are recorded in a single manifest file located next to the base project file.
+When the package manager resolves dependencies, it considers the requirements of all the projects in the workspace. The compatible versions identified during this process are recorded in a single manifest file located next to the base project file.
 
 This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding documentation or benchmarks to a package by including additional dependencies beyond those of the package itself.
+
+Workspace can be nested, that is a project that itself is a subproject can also define a workspace.
 
 ## `Manifest.toml`
 

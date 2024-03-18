@@ -470,7 +470,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false, all_subprojects=false, io::IO=stderr)
+    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -478,7 +478,7 @@ Otherwise, resolve a set of feasible packages from the `Project.toml` files
 and install them.
 `verbose = true` prints the build output to `stdout`/`stderr` instead of
 redirecting to the `build.log` file.
-`all_subprojects=true` will also instantiate all subprojects in the project
+`workspace=true` will also instantiate all subprojects in the project
 (and not only those loadable from the current active project).
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
@@ -498,7 +498,7 @@ const resolve = API.resolve
 
 """
     Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false,
-               compat::Bool=false, extensions::Bool=false, all_subprojects::Bool=false, io::IO=stdout)
+               compat::Bool=false, extensions::Bool=false, workspace::Bool=false, io::IO=stdout)
 
 
 Print out the status of the project/manifest.
@@ -536,7 +536,7 @@ of those that are currently loaded.
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 
-Setting `all_subprojects=true` will show the (merged) status of packages
+Setting `workspace=true` will show the (merged) status of packages
 in all subprojects.
 
 See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest

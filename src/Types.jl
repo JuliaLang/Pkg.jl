@@ -258,7 +258,7 @@ Base.@kwdef mutable struct Project
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
-    subprojects::Union{String, Vector{String}} = Vector{String}()
+    workspace::Dict{String, Dict{String, Any}} = Dict{String, Dict{String, Any}}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
@@ -345,19 +345,15 @@ function find_root_base_project(start_project::String)
     end
 end
 
-function collect_all_subprojects(base_project_file::String, d::Dict{String, Project}=Dict{String, Project}())
+function collect_workspace(base_project_file::String, d::Dict{String, Project}=Dict{String, Project}())
     base_project = read_project(base_project_file)
     d[base_project_file] = base_project
     base_project_file_dir = dirname(base_project_file)
-    if base_project.subprojects === "*"
-        subproject_paths = readdir(base_project_file_dir; join=true)
-    else
-        subproject_paths = [abspath(base_project_file_dir, subproject) for subproject in base_project.subprojects]
-    end
+    subproject_paths = [abspath(base_project_file_dir, subproject) for subproject in base_project.workspace]
     for subproject_path in subproject_paths
         subproject_file = Base.locate_project_file(subproject_path)
         if subproject_file isa String
-            collect_all_subprojects(subproject_file, d)
+            collect_workspace(subproject_file, d)
         end
     end
     return d
@@ -373,7 +369,7 @@ mutable struct EnvCache
     pkg::Union{PackageSpec, Nothing}
     # cache of metadata:
     project::Project
-    sub_projects::Dict{String,Project} # paths relative to base
+    workspace::Dict{String,Project} # paths relative to base
     manifest::Manifest
     # What these where at creation of the EnvCache
     original_project::Project
@@ -401,11 +397,11 @@ function EnvCache(env::Union{Nothing,String}=nothing)
 
     manifest_file = project.manifest
     root_base_proj_file = find_root_base_project(project_file)
-    subprojects = Dict{String, Project}()
+    workspace = Dict{String, Project}()
     if isfile(root_base_proj_file)
         manifest_file = Base.project_file_manifest_path(root_base_proj_file)
-        subprojects = collect_all_subprojects(root_base_proj_file)
-        delete!(subprojects, abspath(project_file))
+        workspace = collect_workspace(root_base_proj_file)
+        delete!(workspace, abspath(project_file))
     end
 
     dir = abspath(project_dir)
@@ -420,7 +416,7 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         manifest_file,
         project_package,
         project,
-        subprojects,
+        workspace,
         manifest,
         deepcopy(project),
         deepcopy(manifest),
@@ -956,7 +952,7 @@ end
 # Disambiguate name/uuid package specifications using project info.
 function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     uuids = copy(env.project.deps)
-    for (_, subproject) in env.sub_projects
+    for (_, subproject) in env.workspace
         merge!(uuids, subproject.deps)
     end
     names = Dict(uuid => name for (name, uuid) in uuids)
