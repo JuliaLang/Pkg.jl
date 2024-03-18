@@ -68,10 +68,10 @@ end
 
 function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
-    pkgs_direct = _load_direct_deps(env.project, env.manifest, pkgs; preserve)
+    pkgs_direct = load_project_deps(env.project, env.manifest, pkgs; preserve)
 
     for (_, subproject) in env.workspace
-        append!(pkgs_direct, _load_direct_deps(subproject, env.manifest, pkgs; preserve))
+        append!(pkgs_direct, load_project_deps(subproject, env.manifest, pkgs; preserve))
     end
 
     unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
@@ -102,7 +102,7 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
     return vcat(pkgs, pkgs_direct)
 end
 
-function _load_direct_deps(project::Project, manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
+function load_project_deps(project::Project, manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs_direct = PackageSpec[]
     for (name::String, uuid::UUID) in project.deps
@@ -121,19 +121,6 @@ function _load_direct_deps(project::Project, manifest::Manifest, pkgs::Vector{Pa
                 version   = load_version(entry.version, isfixed(entry), preserve),
               ))
     end
-    return pkgs_direct
-end
-
-function load_direct_deps_loadable(env::EnvCache)
-    pkgs_direct = _load_direct_deps(env.project, env.manifest)
-    if env.pkg === nothing
-        base_project_file = Base.base_project(env.project_file)
-        if base_project_file !== nothing
-            base_project = read_project(base_project_file)
-            append!(pkgs_direct, _load_direct_deps(base_project, env.manifest))
-        end
-    end
-    unique!(pkg -> pkg.uuid, pkgs_direct)
     return pkgs_direct
 end
 
@@ -178,13 +165,6 @@ end
 function load_all_deps_loadable(env::EnvCache)
     deps = load_all_deps(env)
     keep = Set{UUID}(values(env.project.deps))
-    if env.pkg === nothing
-        base_project_file = Base.base_project(env.project_file)
-        if base_project_file !== nothing
-            base_project = read_project(base_project_file)
-            union!(keep, values(base_project.deps))
-        end
-    end
     prune_deps(env.manifest, keep)
     filtered = filter(pkg -> pkg.uuid in keep, deps)
     return filtered
@@ -2393,7 +2373,7 @@ function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifes
     if workspace
         new = manifest ? load_all_deps(new_env) : load_direct_deps(new_env)
     else
-        new = manifest ? load_all_deps_loadable(new_env) : load_direct_deps_loadable(new_env)
+        new = manifest ? load_all_deps_loadable(new_env) : load_project_deps(new_env.project, new_env.manifest)
     end
 
     T, S = Union{UUID,Nothing}, Union{PackageSpec,Nothing}
@@ -2403,7 +2383,7 @@ function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifes
     if workspace
         old = manifest ? load_all_deps(old_env) : load_direct_deps(old_env)
     else
-        old = manifest ? load_all_deps_loadable(old_env) : load_direct_deps_loadable(old_env)
+        old = manifest ? load_all_deps_loadable(old_env) : load_project_deps(new_env.project, new_env.manifest)
     end
     # merge old and new into single array
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
