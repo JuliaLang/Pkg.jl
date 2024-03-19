@@ -2092,7 +2092,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         # TODO: DRY with code below.
         # If the test is in the our "workspace", no need to create a temp env etc, just activate and run thests
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
-            env = EnvCache(testdir(source_path))
+            proj = Base.locate_project_file(testdir(source_path))
+            env = EnvCache(proj)
             status(env, ctx.registries; mode=PKGMODE_COMBINED, io=ctx.io, ignore_indent = false, show_usagetips = false)
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
