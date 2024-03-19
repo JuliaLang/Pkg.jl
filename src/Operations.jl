@@ -177,9 +177,13 @@ function load_all_deps_loadable(env::EnvCache)
 end
 
 
-function is_instantiated(env::EnvCache; platform = HostPlatform())::Bool
+function is_instantiated(env::EnvCache, workspace::Bool; platform = HostPlatform())::Bool
     # Load everything
-    pkgs = load_all_deps_loadable(env)
+    if workspace
+        pkgs = Operations.load_all_deps(env)
+    else
+        pkgs = Operations.load_all_deps_loadable(env)
+    end
     # If the top-level project is a package, ensure it is instantiated as well
     if env.pkg !== nothing
         # Top-level project may already be in the manifest (cyclic deps)
