@@ -61,7 +61,7 @@ PSA[:name => "instantiate",
     :description => "downloads all the dependencies for the project",
     :help => md"""
     instantiate [-v|--verbose] [--workspace]
-    instantiate [-v|--verbose] [--workspace][-m|--manifest]
+    instantiate [-v|--verbose] [--workspace] [-m|--manifest]
     instantiate [-v|--verbose] [--workspace] [-p|--project]
 
 Download all the dependencies for the current project at the version given by the project's manifest.
@@ -391,6 +391,9 @@ PSA[:name => "precompile",
     :arg_count => 0 => Inf,
     :completions => get_complete_function(:complete_installed_packages),
     :description => "precompile all the project dependencies",
+    :option_spec => [
+        PSA[:name => "workspace", :api => :workspace => true],
+    ],
     :help => md"""
     precompile
     precompile pkgs...
