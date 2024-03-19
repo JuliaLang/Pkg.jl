@@ -68,10 +68,10 @@ end
 
 function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
-    pkgs_direct = load_project_deps(env.project, env.manifest, pkgs; preserve)
+    pkgs_direct = load_project_deps(env.project, env.project_file, env.manifest, env.manifest_file, pkgs; preserve)
 
-    for (_, project) in env.workspace
-        append!(pkgs_direct, load_project_deps(project, env.manifest, pkgs; preserve))
+    for (path, project) in env.workspace
+        append!(pkgs_direct, load_project_deps(project, path, env.manifest, env.manifest_file, pkgs; preserve))
     end
 
     unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
@@ -102,9 +102,15 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
     return vcat(pkgs, pkgs_direct)
 end
 
-function load_project_deps(project::Project, manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
+function load_project_deps(project::Project, project_file::String, manifest::Manifest, manifest_file::String, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs_direct = PackageSpec[]
+    if project.name !== nothing && project.uuid !== nothing && findfirst(pkg -> pkg.uuid == project.uuid, pkgs) === nothing
+        path = Types.relative_project_path(manifest_file, dirname(project_file))
+        pkg = PackageSpec(;name=project.name, uuid=project.uuid, version=project.version, path)
+        push!(pkgs_direct, pkg)
+    end
+
     for (name::String, uuid::UUID) in project.deps
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         path, repo = get_path_repo(project, name)
@@ -196,21 +202,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
     # Is this copy needed?
     pkgs = copy(pkgs)
 
-    if env.pkg !== nothing
-        env.pkg.path = Types.relative_project_path(env.manifest_file,
-                        project_rel_path(env, source_path(env.manifest_file, env.pkg)))
-        push!(pkgs, env.pkg::PackageSpec)
-    end
-
-    for (projfile, project) in env.workspace
-        if project.name !== nothing && project.uuid !== nonmissingtype
-            pkg = PackageSpec(;name = project.name, uuid = project.uuid,
-                               version = project.version, path=dirname(projfile))
-            pkg.path = Types.relative_project_path(env.manifest_file,
-                        project_rel_path(env, source_path(env.manifest_file, pkg)))
-            push!(pkgs, pkg)
-        end
-    end
+    pkg_uuids = Dict{UUID, Project}()
 
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
@@ -219,11 +211,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
             # Only set stdlib versions for versioned (external) stdlibs
             entry.version = stdlib_version(pkg.uuid, julia_version)
         end
-        if Types.is_project(env, pkg)
-            entry.deps = env.project.deps
-        else
-            entry.deps = deps_map[pkg.uuid]
-        end
+        entry.deps = deps_map[pkg.uuid]
         env.manifest[pkg.uuid] = entry
     end
     prune_manifest(env)
@@ -339,7 +327,7 @@ isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
     source = project_rel_path(env, source_path(env.manifest_file, pkg))
     source_env = EnvCache(projectfile_path(source))
-    pkgs = load_project_deps(source_env.project, source_env.manifest)
+    pkgs = load_project_deps(source_env.project, source_env.project_file, source_env.manifest, source_env.manifest_file)
     for pkg in filter(is_tracking_path, pkgs)
         if any(x -> x.uuid == pkg.uuid, developed)
             continue
@@ -2372,7 +2360,7 @@ function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifes
     if workspace
         new = manifest ? load_all_deps(new_env) : load_direct_deps(new_env)
     else
-        new = manifest ? load_all_deps_loadable(new_env) : load_project_deps(new_env.project, new_env.manifest)
+        new = manifest ? load_all_deps_loadable(new_env) : load_project_deps(new_env.project, new_env.project_file, new_env.manifest, new_env.manifest_file)
     end
 
     T, S = Union{UUID,Nothing}, Union{PackageSpec,Nothing}
@@ -2382,7 +2370,7 @@ function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifes
     if workspace
         old = manifest ? load_all_deps(old_env) : load_direct_deps(old_env)
     else
-        old = manifest ? load_all_deps_loadable(old_env) : load_project_deps(new_env.project, new_env.manifest)
+        old = manifest ? load_all_deps_loadable(old_env) : load_project_deps(new_env.project, new_env.project_file, new_env.manifest, new_env.manifest_file)
     end
     # merge old and new into single array
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])

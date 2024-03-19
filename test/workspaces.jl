@@ -24,7 +24,7 @@ temp_pkg_dir() do project_path
             Pkg.generate("PrivatePackage")
             Pkg.develop(path="PrivatePackage")
             d = TOML.parsefile("Project.toml")
-            d["projects"] = ["test", "docs", "benchmarks", "PrivatePackage"]
+            d["workspace"] = Dict("projects" => ["test", "docs", "benchmarks", "PrivatePackage"])
             abs_path = abspath("PrivatePackage") # TODO: Make relative after #3842 is fixed
             d["sources"] = Dict("PrivatePackage" => Dict("path" => abs_path))
             Pkg.Types.write_project(d, "Project.toml")
@@ -39,7 +39,7 @@ temp_pkg_dir() do project_path
             Pkg.add(; name="Chairmarks", version=v"1.1.2")
             @test !isfile("PrivatePackage/Manifest.toml")
             d = TOML.parsefile("PrivatePackage/Project.toml")
-            d["projects"] = ["test"]
+            d["workspace"] = Dict("projects" => ["test"])
             Pkg.Types.write_project(d, "PrivatePackage/Project.toml")
             write("PrivatePackage/src/PrivatePackage.jl", """
             module PrivatePackage
@@ -61,11 +61,11 @@ temp_pkg_dir() do project_path
             Pkg.activate("PrivatePackage/test")
             # This adds too many packages to the Project file...
             Pkg.add("Test")
-            @test length(Pkg.project().dependencies) == 1
+            Pkg.develop(path="PrivatePackage")
+            @test length(Pkg.project().dependencies) == 2
             write("PrivatePackage/test/runtests.jl", """
-                using Test # nested subproject specific
-                using PrivatePackage # subproject package
-                using Chairmarks # base project dependency
+                using Test
+                using PrivatePackage
             """)
             # A nested subproject should still use the root base manifest
             @test !isfile("PrivatePackage/test/Manifest.toml")
@@ -91,6 +91,7 @@ temp_pkg_dir() do project_path
             Pkg.add("Test")
             Pkg.add("Crayons")
             Pkg.compat("Crayons", "=4.0.1, =4.0.2, =4.0.3, =4.0.4")
+            Pkg.develop(; path=".")
             # Compat in base package should prevent updating to 4.0.4
             Pkg.update()
             @test Pkg.dependencies()[UUID("a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f")].version == v"4.0.3"
@@ -100,21 +101,13 @@ temp_pkg_dir() do project_path
             abs_pkg = abspath("TestSpecificPackage") # TODO: Make relative after #3842 is fixed
             d["sources"] = Dict("TestSpecificPackage" => Dict("path" => abs_pkg))
             Pkg.Types.write_project(d, "test/Project.toml")
-            # Test status shows deps in test-subproject + base (MonoRepoSub)
-            io = IOBuffer()
-            Pkg.status(; io)
-            status = String(take!(io))
-            for pkg in ["Crayons", "Example", "PrivatePackage", "TestSpecificPackage", "Test"]
-                @test occursin(pkg, status)
-            end
 
             @test !isfile("test/Manifest.toml")
             write("test/runtests.jl", """
-                using Test # subproject specific
-                using PrivatePackage # base project specific with source
-                using TestSpecificPackage # subproject specific with source
-                using MonorepoSub # base project
-                using Example # base project dependency
+                using Test
+                using Crayons
+                using TestSpecificPackage
+                using MonorepoSub
             """)
 
             # Test that the subprojects are working
@@ -131,8 +124,6 @@ temp_pkg_dir() do project_path
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
-
-
         end
     end
 end
