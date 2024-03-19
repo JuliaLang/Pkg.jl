@@ -1217,7 +1217,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Finally, run `Pkg.instantiate()` again.")
     end
     # check if all source code and artifacts are downloaded to exit early
-    if Operations.is_instantiated(ctx.env; platform)
+    if Operations.is_instantiated(ctx.env, workspace; platform)
         allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
