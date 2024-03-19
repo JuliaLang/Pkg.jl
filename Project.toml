@@ -6,7 +6,7 @@ desc = "The next-generation Julia package manager."
 version = "1.12.0"
 
 [workspace]
-subprojects = ["test", "docs"]
+projects = ["test", "docs"]
 
 [deps]
 Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"

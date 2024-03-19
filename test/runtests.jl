@@ -78,7 +78,7 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
                 "manifests.jl",
                 "project_manifest.jl",
                 "sources.jl",
-                "subprojects.jl"
+                "workspaces.jl"
                 ]
                 @info "==== Testing `test/$f`"
                 flush(Pkg.DEFAULT_IO[])

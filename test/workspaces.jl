@@ -24,7 +24,7 @@ temp_pkg_dir() do project_path
             Pkg.generate("PrivatePackage")
             Pkg.develop(path="PrivatePackage")
             d = TOML.parsefile("Project.toml")
-            d["subprojects"] = ["test", "docs", "benchmarks", "PrivatePackage"]
+            d["projects"] = ["test", "docs", "benchmarks", "PrivatePackage"]
             abs_path = abspath("PrivatePackage") # TODO: Make relative after #3842 is fixed
             d["sources"] = Dict("PrivatePackage" => Dict("path" => abs_path))
             Pkg.Types.write_project(d, "Project.toml")
@@ -39,7 +39,7 @@ temp_pkg_dir() do project_path
             Pkg.add(; name="Chairmarks", version=v"1.1.2")
             @test !isfile("PrivatePackage/Manifest.toml")
             d = TOML.parsefile("PrivatePackage/Project.toml")
-            d["subprojects"] = ["test"]
+            d["projects"] = ["test"]
             Pkg.Types.write_project(d, "PrivatePackage/Project.toml")
             write("PrivatePackage/src/PrivatePackage.jl", """
             module PrivatePackage
