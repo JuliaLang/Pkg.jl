@@ -479,8 +479,7 @@ Otherwise, resolve a set of feasible packages from the `Project.toml` files
 and install them.
 `verbose = true` prints the build output to `stdout`/`stderr` instead of
 redirecting to the `build.log` file.
-`workspace=true` will also instantiate all subprojects in the project
-(and not only those loadable from the current active project).
+`workspace=true` will also instantiate all projects in the workspace.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
 
@@ -538,7 +537,7 @@ Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 
 Setting `workspace=true` will show the (merged) status of packages
-in all subprojects.
+in the workspace.
 
 See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.

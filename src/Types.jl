@@ -350,14 +350,13 @@ function collect_workspace(base_project_file::String, d::Dict{String, Project}=D
     d[base_project_file] = base_project
     base_project_file_dir = dirname(base_project_file)
 
-    # TODO: Type annots
-    subprojects = get(base_project.workspace, "subprojects", nothing)
-    subprojects === nothing && return d
-    subproject_paths = [abspath(base_project_file_dir, subproject) for subproject in subprojects::Vector{String}]
-    for subproject_path in subproject_paths
-        subproject_file = Base.locate_project_file(subproject_path)
-        if subproject_file isa String
-            collect_workspace(subproject_file, d)
+    projects = get(base_project.workspace, "projects", nothing)::Union{Nothing,Vector{String}}
+    projects === nothing && return d
+    project_paths = [abspath(base_project_file_dir, project) for project in projects]
+    for project_path in project_paths
+        project_file = Base.locate_project_file(project_path)
+        if project_file isa String
+            collect_workspace(project_file, d)
         end
     end
     return d
@@ -956,8 +955,8 @@ end
 # Disambiguate name/uuid package specifications using project info.
 function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     uuids = copy(env.project.deps)
-    for (_, subproject) in env.workspace
-        merge!(uuids, subproject.deps)
+    for (_, project) in env.workspace
+        merge!(uuids, project.deps)
     end
     names = Dict(uuid => name for (name, uuid) in uuids)
     for pkg in pkgs

@@ -113,9 +113,9 @@ read_project_workspace(::Nothing, project::Project) = Dict{String,Any}()
 function read_project_workspace(raw::Dict, project::Project)
     workspace_table = Dict{String,Any}()
     for (key, val) in raw
-        if key == "subprojects"
+        if key == "projects"
             for path in val
-                path isa String || pkgerror("Expected entry in `subprojects` to be strings")
+                path isa String || pkgerror("Expected entry in `projects` to be strings")
             end
         else
             pkgerror("Invalid key `$key` in `workspace`")

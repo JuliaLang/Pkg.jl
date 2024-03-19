@@ -1443,8 +1443,8 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool=fa
     project_deps = Set(values(ctx.env.project.deps))
 
     if workspace
-        for (_, subproject) in ctx.env.workspace
-            union!(project_deps, values(subproject.deps))
+        for (_, project) in ctx.env.workspace
+            union!(project_deps, values(project.deps))
         end
     end
 

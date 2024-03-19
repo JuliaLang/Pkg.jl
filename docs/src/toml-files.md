@@ -130,20 +130,22 @@ julia = "1.1"
 
 ### The `[workspace]` section
 
-A (base) project can define a "workspace" each of which is represented by a folder within the same directory as the base project. These subprojects have their own project files, similar to the base project file, allowing them to include their own dependencies, compatibility information, and even function as full packages.
-
-A workspece is defined in the base project by giving a list of the subprojects in it:
-
-```toml
-[workspace]
-subprojects = ["test", "docs", "benchmarks", "PrivatePackage"]
-```
+A project file can define a workspace by giving a set of projects that is part of that workspace.
+Each project in a workspace can include their own dependencies, compatibility information, and even function as full packages.
 
 When the package manager resolves dependencies, it considers the requirements of all the projects in the workspace. The compatible versions identified during this process are recorded in a single manifest file located next to the base project file.
 
+A workspace is defined in the base project by giving a list of the projects in it:
+
+```toml
+[workspace]
+projects = ["test", "docs", "benchmarks", "PrivatePackage"]
+```
+
 This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding documentation or benchmarks to a package by including additional dependencies beyond those of the package itself.
 
-Workspace can be nested, that is a project that itself is a subproject can also define a workspace.
+Workspace can be nested, that ism a project that itself defines a workspace can also be part of another workspace.
+In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
 ## `Manifest.toml`
 

@@ -70,8 +70,8 @@ function load_direct_deps(env::EnvCache, pkgs::Vector{PackageSpec}=PackageSpec[]
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs_direct = load_project_deps(env.project, env.manifest, pkgs; preserve)
 
-    for (_, subproject) in env.workspace
-        append!(pkgs_direct, load_project_deps(subproject, env.manifest, pkgs; preserve))
+    for (_, project) in env.workspace
+        append!(pkgs_direct, load_project_deps(project, env.manifest, pkgs; preserve))
     end
 
     unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
@@ -202,10 +202,10 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         push!(pkgs, env.pkg::PackageSpec)
     end
 
-    for (projfile, subproject) in env.workspace
-        if subproject.name !== nothing && subproject.uuid !== nonmissingtype
-            pkg = PackageSpec(;name = subproject.name, uuid = subproject.uuid,
-                               version = subproject.version, path=dirname(projfile))
+    for (projfile, project) in env.workspace
+        if project.name !== nothing && project.uuid !== nonmissingtype
+            pkg = PackageSpec(;name = project.name, uuid = project.uuid,
+                               version = project.version, path=dirname(projfile))
             pkg.path = Types.relative_project_path(env.manifest_file,
                         project_rel_path(env, source_path(env.manifest_file, pkg)))
             push!(pkgs, pkg)
@@ -339,8 +339,7 @@ isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
     source = project_rel_path(env, source_path(env.manifest_file, pkg))
     source_env = EnvCache(projectfile_path(source))
-    # XXX: Skip loading deps from subprojects here?
-    pkgs = load_all_deps(source_env)
+    pkgs = load_project_deps(source_env.project, source_env.manifest)
     for pkg in filter(is_tracking_path, pkgs)
         if any(x -> x.uuid == pkg.uuid, developed)
             continue
@@ -415,8 +414,8 @@ dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v
 
 function get_compat_all_projects(env, name)
     compat = get_compat(env.project, name)
-    for (_, subproject) in env.workspace
-        compat = intersect(compat, get_compat(subproject, name))
+    for (_, project) in env.workspace
+        compat = intersect(compat, get_compat(project, name))
     end
     return compat
 end
@@ -1017,10 +1016,10 @@ function prune_manifest(env::EnvCache)
         if env.pkg !== nothing
             push!(keep, env.pkg.uuid)
         end
-        for (_, subproject) in env.workspace
-            keep = union(keep, collect(values(subproject.deps)))
-            if subproject.uuid !== nothing
-                push!(keep, subproject.uuid)
+        for (_, project) in env.workspace
+            keep = union(keep, collect(values(project.deps)))
+            if project.uuid !== nothing
+                push!(keep, project.uuid)
             end
         end
         env.manifest = prune_manifest(env.manifest, keep)
