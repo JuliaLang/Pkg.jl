@@ -245,17 +245,17 @@ function reset_all_compat!(proj::Project)
     return nothing
 end
 
-function collect_project(pkg::PackageSpec, path::String)
+function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
     project_file = projectfile_path(path; strict=true)
     if project_file === nothing
-        pkgerror("could not find project file for package $(err_rep(pkg)) at `$path`")
+        pkgerror("could not find project file for package at `$path`")
     end
-    project = read_package(project_file)
+    project = read_project(project_file)
     julia_compat = get_compat(project, "julia")
     if !isnothing(julia_compat) && !(VERSION in julia_compat)
-        pkgerror("julia version requirement from Project.toml's compat section not satisfied for package $(err_rep(pkg)) at `$path`")
+        pkgerror("julia version requirement from Project.toml's compat section not satisfied for package at `$path`")
     end
     for (name, uuid) in project.deps
         path, repo = get_path_repo(project, name)
@@ -267,11 +267,13 @@ function collect_project(pkg::PackageSpec, path::String)
         push!(deps, PackageSpec(name, uuid, vspec))
         push!(weakdeps, uuid)
     end
-    if project.version !== nothing
-        pkg.version = project.version
-    else
-        # @warn("project file for $(pkg.name) is missing a `version` entry")
-        pkg.version = VersionNumber(0)
+    if pkg !== nothing
+        if project.version !== nothing
+            pkg.version = project.version
+        else
+            # @warn("project file for $(pkg.name) is missing a `version` entry")
+            pkg.version = VersionNumber(0)
+        end
     end
     return deps, weakdeps
 end
@@ -309,13 +311,13 @@ end
 function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     deps_map = Dict{UUID,Vector{PackageSpec}}()
     weak_map = Dict{UUID,Set{UUID}}()
-    if env.pkg !== nothing
-        pkg = env.pkg
-        deps, weakdeps = collect_project(pkg, dirname(env.project_file))
-        deps_map[pkg.uuid] = deps
-        weak_map[pkg.uuid] = weakdeps
-        names[pkg.uuid] = pkg.name
-    end
+
+    uuid = env.pkg === nothing ? Base.dummy_uuid(env.project_file) : env.pkg.uuid
+    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file))
+    deps_map[uuid] = deps
+    weak_map[uuid] = weakdeps
+    names[uuid] = env.pkg === nothing ? "project" : env.pkg.name
+
     for pkg in pkgs
         # add repo package if necessary
         if (pkg.repo.rev !== nothing || pkg.repo.source !== nothing) && pkg.tree_hash === nothing
@@ -345,7 +347,8 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
             fix_pkg = pkgs[idx]
         end
-        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q, weak_map[uuid])
+        fixpkgversion = fix_pkg === nothing ? v"0.0.0" : fix_pkg.version
+        fixed[uuid] = Resolve.Fixed(fixpkgversion, q, weak_map[uuid])
     end
     return fixed
 end
@@ -520,7 +523,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                 path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
-                proj = read_package(proj_file)
+                proj = read_project(proj_file)
 
                 v = something(proj.version, VERSION)
 

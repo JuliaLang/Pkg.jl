@@ -417,7 +417,7 @@ Base.@kwdef mutable struct Context
     julia_version::Union{VersionNumber,Nothing} = VERSION
 end
 
-project_uuid(env::EnvCache) = env.pkg === nothing ? nothing : env.pkg.uuid
+project_uuid(env::EnvCache) = env.pkg === nothing ? Base.dummy_uuid(env.project_file) : env.pkg.uuid
 collides_with_project(env::EnvCache, pkg::PackageSpec) =
     is_project_name(env, pkg.name) || is_project_uuid(env, pkg.uuid)
 is_project(env::EnvCache, pkg::PackageSpec) = is_project_uuid(env, pkg.uuid)
@@ -565,22 +565,6 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
         end
     end
     return
-end
-
-function read_package(path::String)
-    project = read_project(path)
-    if project.name === nothing
-        pkgerror("expected a `name` entry in project file at `$(abspath(path))`")
-    end
-    if project.uuid === nothing
-        pkgerror("expected a `uuid` entry in project file at `$(abspath(path))`")
-    end
-    name = project.name
-    pkgpath = joinpath(dirname(path), something(project.path, ""))
-    if !isfile(joinpath(pkgpath, "src", "$name.jl"))
-        pkgerror("expected the file `src/$name.jl` to exist for package `$name` at `$(dirname(path))`")
-    end
-    return project
 end
 
 const refspecs = ["+refs/*:refs/remotes/cache/*"]
@@ -860,7 +844,7 @@ function resolve_projectfile!(pkg, project_path)
     project_file = projectfile_path(project_path; strict=true)
     project_file === nothing && pkgerror(string("could not find project file (Project.toml or JuliaProject.toml) in package at `",
                     something(pkg.repo.source, pkg.path, project_path), "` maybe `subdir` needs to be specified"))
-    project_data = read_package(project_file)
+    project_data = read_project(project_file)
     if pkg.uuid === nothing || pkg.uuid == project_data.uuid
         pkg.uuid = project_data.uuid
     else
