@@ -177,7 +177,7 @@ function load_all_deps_loadable(env::EnvCache)
 end
 
 
-function is_instantiated(env::EnvCache, workspace::Bool; platform = HostPlatform())::Bool
+function is_instantiated(env::EnvCache, workspace::Bool=false; platform = HostPlatform())::Bool
     # Load everything
     if workspace
         pkgs = Operations.load_all_deps(env)
@@ -359,6 +359,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     deps_map = Dict{UUID,Vector{PackageSpec}}()
     weak_map = Dict{UUID,Set{UUID}}()
 
+    # TODO: Collect from all projects in workspace
     uuid = Types.project_uuid(env)
     deps, weakdeps = collect_project(env.pkg, dirname(env.project_file))
     deps_map[uuid] = deps
@@ -404,7 +405,10 @@ end
 # i.e. dropbuild(v"2.0.1-rc1.21321") == v"2.0.1-rc1"
 dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v.prerelease) ? () : (v.prerelease[1],))
 
-function get_compat_all_projects(env, name)
+function get_compat_workspace(env, name)
+    # Are we allowing packages with the same name and different uuids
+    # in different project files in the same workspace? In that case,
+    # need to pass in a UUID here instead of a name.
     compat = get_compat(env.project, name)
     for (_, project) in env.workspace
         compat = intersect(compat, get_compat(project, name))
@@ -424,7 +428,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     if julia_version !== nothing
         # only set the manifest julia_version if ctx.julia_version is not nothing
         env.manifest.julia_version = dropbuild(VERSION)
-        v = intersect(julia_version, get_compat_all_projects(env, "julia"))
+        v = intersect(julia_version, get_compat_workspace(env, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module=nothing _file=nothing
         end
@@ -456,7 +460,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
 
     # check compat
     for pkg in pkgs
-        compat = get_compat_all_projects(env, pkg.name)
+        compat = get_compat_workspace(env, pkg.name)
         v = intersect(pkg.version, compat)
         if isempty(v)
             throw(Resolve.ResolverError(
@@ -1041,7 +1045,7 @@ function prune_deps(iterator, keep::Set{UUID})
 end
 
 function record_project_hash(env::EnvCache)
-    env.manifest.other["project_hash"] = Types.project_resolve_hash(env.project)
+    env.manifest.other["project_hash"] = Types.workspace_resolve_hash(env)
 end
 
 #########
@@ -2285,7 +2289,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         versions = filter(v -> !Registry.isyanked(info, v), versions)
         max_version_reg = maximum(versions; init=v"0")
         max_version = max(max_version, max_version_reg)
-        compat_spec = get_compat_all_projects(env, pkg.name)
+        compat_spec = get_compat_workspace(env, pkg.name)
         versions_in_compat = filter(in(compat_spec), keys(reg_compat_info))
         max_version_in_compat = max(max_version_in_compat, maximum(versions_in_compat; init=v"0"))
     end
@@ -2688,7 +2692,7 @@ end
 function is_manifest_current(env::EnvCache)
     if haskey(env.manifest.other, "project_hash")
         recorded_hash = env.manifest.other["project_hash"]
-        current_hash = Types.project_resolve_hash(env.project)
+        current_hash = Types.workspace_resolve_hash(env)
         return recorded_hash == current_hash
     else
         # Manifest doesn't have a hash of the source Project recorded

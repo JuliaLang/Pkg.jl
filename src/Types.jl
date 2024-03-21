@@ -263,16 +263,7 @@ end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
-# only hash the deps and compat fields as they are the only fields that affect a resolve
-function project_resolve_hash(t::Project)
-    iob = IOBuffer()
-    # Handle deps in both [deps] and [weakdeps]
-    _deps_weak = Dict(intersect(t.deps, t.weakdeps))
-    deps = filter(p->!haskey(_deps_weak, p.first), t.deps)
-    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(deps); by=first))
-    foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
-    return bytes2hex(sha1(seekstart(iob)))
-end
+
 
 Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
@@ -561,6 +552,39 @@ function Context!(ctx::Context; kwargs...)
         setfield!(ctx, k, v)
     end
     return ctx
+end
+
+function load_workspace_weak_deps(env::EnvCache)
+    # TODO: Possible name collision between projects in a workspace?
+    weakdeps = Dict{String, UUID}()
+    merge!(weakdeps, env.project.weakdeps)
+    for (_, proj) in env.workspace
+        merge!(weakdeps, proj.weakdeps)
+    end
+    return weakdeps
+end
+
+# only hash the deps and compat fields as they are the only fields that affect a resolve
+function workspace_resolve_hash(env::EnvCache)
+    # Handle deps in both [deps] and [weakdeps]
+    deps = Dict(pkg.name => pkg.uuid for pkg in Pkg.Operations.load_direct_deps(env))
+    weakdeps = load_workspace_weak_deps(env)
+    alldeps = merge(deps, weakdeps)
+    compats = Dict(name => Pkg.Operations.get_compat_workspace(env, name) for (name, uuid) in alldeps)
+    iob = IOBuffer()
+    for (name, uuid) in sort!(collect(deps); by=first)
+        println(iob, name, "=", uuid)
+    end
+    println(iob)
+    for (name, uuid) in sort!(collect(weakdeps); by=first)
+        println(iob, name, "=", uuid)
+    end
+    println(iob)
+    for (name, compat) in sort!(collect(compats); by=first)
+        println(iob, name, "=", compat)
+    end
+    str = String(take!(iob))
+    return bytes2hex(sha1(str))
 end
 
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
