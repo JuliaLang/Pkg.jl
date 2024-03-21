@@ -264,10 +264,14 @@ Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2,
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
 # only hash the deps and compat fields as they are the only fields that affect a resolve
-function project_resolve_hash(t::Project)
+function workspace_resolve_hash(env::EnvCache)
     iob = IOBuffer()
     # Handle deps in both [deps] and [weakdeps]
     _deps_weak = Dict(intersect(t.deps, t.weakdeps))
+    pkgs = Operations.load_direct_deps(env)
+    sort!(pkgs, by=p->p.name)
+    compats = [get_compat_workspace(env, pkg.name) for pkg in pkgs]
+    # workjs
     deps = filter(p->!haskey(_deps_weak, p.first), t.deps)
     foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(deps); by=first))
     foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
