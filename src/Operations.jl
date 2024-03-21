@@ -249,8 +249,6 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
     project_file = projectfile_path(path; strict=true)
-    weakdeps = Set{UUID}()
-    project_file = projectfile_path(path; strict=true)
     project = project_file === nothing ?  Project() : read_project(project_file)
     julia_compat = get_compat(project, "julia")
     if !isnothing(julia_compat) && !(VERSION in julia_compat)
