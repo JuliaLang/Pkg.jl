@@ -179,11 +179,11 @@ end
 # about extensions
 function fixup_ext!(env, pkgs)
     for pkg in pkgs
-        v = joinpath(source_path(env.manifest_file, pkg), "Project.toml")
         if haskey(env.manifest, pkg.uuid)
             entry = env.manifest[pkg.uuid]
-            if isfile(v)
-                p = Types.read_project(v)
+            project_file = Base.locate_project_file(source_path(env.manifest_file, pkg))
+            if isfile(project_file)
+                p = Types.read_project(project_file)
                 entry.weakdeps = p.weakdeps
                 entry.exts = p.exts
                 for (name, _) in p.weakdeps
