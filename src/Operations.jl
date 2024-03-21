@@ -249,10 +249,9 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
     project_file = projectfile_path(path; strict=true)
-    if project_file === nothing
-        pkgerror("could not find project file for package at `$path`")
-    end
-    project = read_project(project_file)
+    weakdeps = Set{UUID}()
+    project_file = projectfile_path(path; strict=true)
+    project = project_file === nothing ?  Project() : read_project(project_file)
     julia_compat = get_compat(project, "julia")
     if !isnothing(julia_compat) && !(VERSION in julia_compat)
         pkgerror("julia version requirement from Project.toml's compat section not satisfied for package at `$path`")
