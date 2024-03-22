@@ -1,0 +1,8 @@
+[deps]
+WebIO = "0f1e0344-ec1d-5b48-a673-e5cf874b6c29"
+
+[weakdeps]
+WebSockets = "104b5d7c-a370-577a-8038-80a2059c5097"
+
+[compat]
+WebSockets = "~1.5"

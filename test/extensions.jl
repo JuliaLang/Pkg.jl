@@ -1,5 +1,6 @@
 using  .Utils
 using Test
+using UUIDs
 
 @testset "weak deps" begin
     he_root = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasExtensions.jl")
@@ -91,6 +92,16 @@ using Test
             proj = Pkg.Types.Context().env.project
             @test isempty(proj.deps)
             @test proj.extras == Dict{String, Base.UUID}("Example" => Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+        end
+    end
+
+    isolate(loaded_depot=false) do
+        mktempdir() do dir
+            path = joinpath(@__DIR__, "test_packages", "TestWeakDepProject")
+            cp(path, joinpath(dir, "TestWeakDepProject"))
+            Pkg.activate(joinpath(dir, "TestWeakDepProject"))
+            Pkg.resolve()
+            Pkg.dependencies()[UUID("104b5d7c-a370-577a-8038-80a2059c5097")].version < v"1.6.0"
         end
     end
 end
