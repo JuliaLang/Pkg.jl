@@ -520,7 +520,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
                 path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
                 proj_file = projectfile_path(path; strict=true)
                 @assert proj_file !== nothing
-                proj = read_project(proj_file)
+                proj = read_package(proj_file)
 
                 v = something(proj.version, VERSION)
 
