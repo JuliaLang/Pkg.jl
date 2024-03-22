@@ -1,5 +1,6 @@
 using  .Utils
 using Test
+using UUIDs
 
 @testset "weak deps" begin
     he_root = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasExtensions.jl")
@@ -77,5 +78,16 @@ using Test
         @test occursin("OffsetArraysExt", out)
         @test occursin("HasExtensions", out)
         @test occursin("HasDepWithExtensions", out)
+    end
+
+    isolate(loaded_depot=false) do
+        mktempdir() do dir
+            Pkg.Registry.add("General")
+            path = joinpath(@__DIR__, "test_packages", "TestWeakDepProject")
+            cp(path, joinpath(dir, "TestWeakDepProject"))
+            Pkg.activate(joinpath(dir, "TestWeakDepProject"))
+            Pkg.resolve()
+            @test Pkg.dependencies()[UUID("2ab3a3ac-af41-5b50-aa03-7779005ae688")].version == v"0.3.26"
+        end
     end
 end
