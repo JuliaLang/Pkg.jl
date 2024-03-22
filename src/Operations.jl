@@ -309,7 +309,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     deps_map = Dict{UUID,Vector{PackageSpec}}()
     weak_map = Dict{UUID,Set{UUID}}()
 
-    uuid = project_uuid(env)
+    uuid = Types.project_uuid(env)
     deps, weakdeps = collect_project(env.pkg, dirname(env.project_file))
     deps_map[uuid] = deps
     weak_map[uuid] = weakdeps
