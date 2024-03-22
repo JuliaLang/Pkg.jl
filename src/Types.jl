@@ -446,7 +446,8 @@ Base.@kwdef mutable struct Context
     julia_version::Union{VersionNumber,Nothing} = VERSION
 end
 
-project_uuid(env::EnvCache) = env.pkg === nothing ? Base.dummy_uuid(env.project_file) : env.pkg.uuid
+project_uuid(env::EnvCache) = project_uuid(env.project, env.project_file)
+project_uuid(project::Project, project_file::String) = @something(project.uuid, Base.dummy_uuid(project_file))
 collides_with_project(env::EnvCache, pkg::PackageSpec) =
     is_project_name(env, pkg.name) || is_project_uuid(env, pkg.uuid)
 is_project(env::EnvCache, pkg::PackageSpec) = is_project_uuid(env, pkg.uuid)

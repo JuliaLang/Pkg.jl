@@ -359,12 +359,20 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     deps_map = Dict{UUID,Vector{PackageSpec}}()
     weak_map = Dict{UUID,Set{UUID}}()
 
-    # TODO: Collect from all projects in workspace
     uuid = Types.project_uuid(env)
     deps, weakdeps = collect_project(env.pkg, dirname(env.project_file))
     deps_map[uuid] = deps
     weak_map[uuid] = weakdeps
     names[uuid] = env.pkg === nothing ? "project" : env.pkg.name
+
+    for (path, project) in env.workspace
+        uuid = Types.project_uuid(project, path)
+        pkg = project.name === nothing ? nothing : PackageSpec(name=project.name, uuid=uuid)
+        deps, weakdeps = collect_project(pkg, path)
+        deps_map[Types.project_uuid(env)] = deps
+        weak_map[Types.project_uuid(env)] = weakdeps
+        names[uuid] = project.name === nothing ? "project" : project.name
+    end
 
     for pkg in pkgs
         # add repo package if necessary
