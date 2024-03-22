@@ -3,6 +3,9 @@ Pkg v1.12 Release Notes
 
 - It is now possible to specify "sources" for packages in a `[sources]` section in Project.toml.
   This can be used to add non-registered normal or test dependencies.
+- Pkg now has support for "workspaces" which is a way to resolve multiple project files into a single manifest.
+  The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been updated
+  to take a `workspace` option. Read more about this feature in the manual about the TOML-files.
 
 Pkg v1.11 Release Notes
 =======================

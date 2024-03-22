@@ -248,10 +248,12 @@ PSA[:name => "why",
     :completions => get_complete_function(:complete_all_installed_packages),
     :description => "shows why a package is in the manifest",
     :help => md"""
-    why pkg[=uuid] ...
+    why [--workspace] pkg[=uuid] ...
 
 Show the reason why packages are in the manifest, printed as a path through the
 dependency graph starting at the direct dependencies.
+The `workspace` option can be used to show the path from any dependency of a project in
+the workspace.
 
 !!! compat "Julia 1.9"
     The `why` function is added in Julia 1.9
@@ -395,11 +397,12 @@ PSA[:name => "precompile",
         PSA[:name => "workspace", :api => :workspace => true],
     ],
     :help => md"""
-    precompile
-    precompile pkgs...
+    precompile [--workspace]
+    precompile [--workspace] pkgs...
 
 Precompile all or specified dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
+The `workspace` option will precompile all packages in the workspace and not only the active project.
 
 Errors will only throw when precompiling the top-level dependencies, given that
 not all manifest dependencies may be loaded by the top-level dependencies on the given system.
