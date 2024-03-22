@@ -1,8 +1,9 @@
 [deps]
-WebIO = "0f1e0344-ec1d-5b48-a673-e5cf874b6c29"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 
 [weakdeps]
-WebSockets = "104b5d7c-a370-577a-8038-80a2059c5097"
+LogExpFunctions = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
 
 [compat]
-WebSockets = "~1.5"
+ForwardDiff = "=0.10.36"
+LogExpFunctions = "=0.3.26"
