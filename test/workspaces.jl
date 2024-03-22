@@ -1,4 +1,4 @@
-module SubProjectsTest
+module WorkspaceTest
 
 import ..Pkg # ensure we are using the correct Pkg
 using Test
@@ -109,6 +109,22 @@ temp_pkg_dir() do project_path
                 using TestSpecificPackage
                 using MonorepoSub
             """)
+
+            Pkg.activate(".")
+            env = Pkg.Types.EnvCache()
+            hash_1 = Pkg.Types.workspace_resolve_hash(env)
+            Pkg.activate("PrivatePackage")
+            env = Pkg.Types.EnvCache()
+            hash_2 = Pkg.Types.workspace_resolve_hash(env)
+            Pkg.activate("test")
+            env = Pkg.Types.EnvCache()
+            hash_3 = Pkg.Types.workspace_resolve_hash(env)
+            Pkg.activate("PrivatePackage/test")
+            env = Pkg.Types.EnvCache()
+            hash_4 = Pkg.Types.workspace_resolve_hash(env)
+
+            @test hash_1 == hash_2 == hash_3 == hash_4
+
 
             # Test that the subprojects are working
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="test" test/runtests.jl`))
