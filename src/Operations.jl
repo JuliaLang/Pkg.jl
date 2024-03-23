@@ -1627,14 +1627,14 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
         existing_uuid == pkg.uuid ||
             pkgerror("""Refusing to add package $(err_rep(pkg)).
                      Package `$(pkg.name)=$(existing_uuid)` with the same name already exists as a direct dependency.
-                     To remove the existing package, use `import Pkg; Pkg.rm("$(pkg.name)")`.
+                     To remove the existing package, use `$(Base.isinteractive() ? """pkg> rm $(pkg.name)""" : """import Pkg; Pkg.rm("$(pkg.name)")""")`.
                      """)
         # package with the same uuid exist in the project: assert they have the same name
         name = findfirst(==(pkg.uuid), ctx.env.project.deps)
         name === nothing || name == pkg.name ||
             pkgerror("""Refusing to add package $(err_rep(pkg)).
                      Package `$name=$(pkg.uuid)` with the same UUID already exists as a direct dependency.
-                     To remove the existing package, use `import Pkg; Pkg.rm("$name")`.
+                     To remove the existing package, use `$(Base.isinteractive() ? """pkg> rm $name""" : """import Pkg; Pkg.rm("$name")""")`.
                      """)
         # package with the same uuid exist in the manifest: assert they have the same name
         entry = get(ctx.env.manifest, pkg.uuid, nothing)
