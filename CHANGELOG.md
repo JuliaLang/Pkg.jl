@@ -2,7 +2,7 @@ Pkg v1.12 Release Notes
 =======================
 
 - It is now possible to specify "sources" for packages in a `[sources]` section in Project.toml.
-  This can be used to add non-registered normal or test dependencies.
+  This can be used to add non-registered normal or test dependencies. Packages are also automatically added to `[sources]` when they are added by url or devved.
 
 Pkg v1.11 Release Notes
 =======================
