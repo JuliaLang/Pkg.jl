@@ -128,6 +128,24 @@ constraints in detail. It is also possible to list constraints on `julia` itself
 julia = "1.1"
 ```
 
+### The `[workspace]` section
+
+A project file can define a workspace by giving a set of projects that is part of that workspace.
+Each project in a workspace can include their own dependencies, compatibility information, and even function as full packages.
+
+When the package manager resolves dependencies, it considers the requirements of all the projects in the workspace. The compatible versions identified during this process are recorded in a single manifest file located next to the base project file.
+
+A workspace is defined in the base project by giving a list of the projects in it:
+
+```toml
+[workspace]
+projects = ["test", "docs", "benchmarks", "PrivatePackage"]
+```
+
+This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding documentation or benchmarks to a package by including additional dependencies beyond those of the package itself.
+
+Workspace can be nested, that ism a project that itself defines a workspace can also be part of another workspace.
+In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
 ## `Manifest.toml`
 

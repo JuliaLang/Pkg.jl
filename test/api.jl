@@ -249,6 +249,7 @@ import .FakeTerminals.FakeTerminal
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
         Pkg.activate(".")
         Pkg.activate("CircularDep3")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
 
         Pkg.activate(temp=true)

@@ -77,7 +77,8 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
                 "force_latest_compatible_version.jl",
                 "manifests.jl",
                 "project_manifest.jl",
-                "sources.jl"
+                "sources.jl",
+                "workspaces.jl"
                 ]
                 @info "==== Testing `test/$f`"
                 flush(Pkg.DEFAULT_IO[])

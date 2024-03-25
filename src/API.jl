@@ -82,7 +82,7 @@ end
 
 dependencies() = dependencies(EnvCache())
 function dependencies(env::EnvCache)
-    pkgs = Operations.load_all_deps(env)
+    pkgs = Operations.load_all_deps_loadable(env)
     return Dict(pkg.uuid::UUID => package_info(env, pkg) for pkg in pkgs)
 end
 function dependencies(fn::Function, uuid::UUID)
@@ -1132,7 +1132,7 @@ end
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
                     _from_loading::Bool=false, configs::Union{Base.Precompilation.Config,Vector{Base.Precompilation.Config}}=(``=>Base.CacheFlags()),
-                    kwargs...)
+                    workspace::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if !already_instantiated
         instantiate(ctx; allow_autoprecomp=false, kwargs...)
@@ -1148,14 +1148,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     io = ctx.io
     if io isa UnstableIO
         # precompile does quite a bit of output and using the UnstableIO can cause
-        # some slowdowns, the important part here is to not specialize the whole
-        # precompile function on the io
+        # some slowdowns
         io = io.io
     end
 
     activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, io)
+        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest=workspace, io)
     end
 end
 
@@ -1171,7 +1170,8 @@ end
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
-                     platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true, kwargs...)
+                     platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true,
+                     workspace::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
@@ -1216,12 +1216,16 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                  " Finally, run `Pkg.instantiate()` again.")
     end
     # check if all source code and artifacts are downloaded to exit early
-    if Operations.is_instantiated(ctx.env; platform)
+    if Operations.is_instantiated(ctx.env, workspace; platform)
         allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
 
-    pkgs = Operations.load_all_deps(ctx.env)
+    if workspace
+        pkgs = Operations.load_all_deps(ctx.env)
+    else
+        pkgs = Operations.load_all_deps_loadable(ctx.env)
+    end
     try
         # First try without updating the registry
         Operations.check_registered(ctx.registries, pkgs)
@@ -1279,14 +1283,14 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, workspace::Bool=false, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
         extensions && pkgerror("Compat status has no `extensions` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions, workspace)
     end
     return nothing
 end
@@ -1419,7 +1423,7 @@ compat(;kwargs...) = compat(Context(); kwargs...)
 # why #
 #######
 
-function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
+function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool=false, kwargs...)
     require_not_empty(pkgs, :why)
 
     manifest_resolve!(ctx.env.manifest, pkgs)
@@ -1435,9 +1439,17 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
         end
     end
 
+    project_deps = Set(values(ctx.env.project.deps))
+
+    if workspace
+        for (_, project) in ctx.env.workspace
+            union!(project_deps, values(project.deps))
+        end
+    end
+
     function find_paths!(final_paths, current, path = UUID[])
         push!(path, current)
-        current in values(ctx.env.project.deps) && push!(final_paths, path) # record once we've traversed to a project dep
+        current in project_deps && push!(final_paths, path) # record once we've traversed to a project dep
         haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
         for p in incoming[current]
             if p in path

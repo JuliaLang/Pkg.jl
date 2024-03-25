@@ -258,20 +258,12 @@ Base.@kwdef mutable struct Project
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
+    workspace::Dict{String, Any} = Dict{String, Any}()
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
 
-# only hash the deps and compat fields as they are the only fields that affect a resolve
-function project_resolve_hash(t::Project)
-    iob = IOBuffer()
-    # Handle deps in both [deps] and [weakdeps]
-    _deps_weak = Dict(intersect(t.deps, t.weakdeps))
-    deps = filter(p->!haskey(_deps_weak, p.first), t.deps)
-    foreach(((name, uuid),) -> println(iob, name, "=", uuid), sort!(collect(deps); by=first))
-    foreach(((name, compat),) -> println(iob, name, "=", compat.val), sort!(collect(t.compat); by=first))
-    return bytes2hex(sha1(seekstart(iob)))
-end
+
 
 Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
@@ -301,6 +293,7 @@ Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing,VersionNumber} = nothing # only set to VERSION when resolving
+    project_hash::Union{Nothing,SHA1} = nothing
     manifest_format::VersionNumber = v"2.0.0"
     deps::Dict{UUID,PackageEntry} = Dict{UUID,PackageEntry}()
     other::Dict{String,Any} = Dict{String,Any}()
@@ -335,6 +328,31 @@ function Base.show(io::IO, pkg::PackageEntry)
     print(io, ")")
 end
 
+function find_root_base_project(start_project::String)
+    project_file = start_project
+    while true
+        base_project_file = Base.base_project(project_file)
+        base_project_file === nothing && return project_file
+        project_file = base_project_file
+    end
+end
+
+function collect_workspace(base_project_file::String, d::Dict{String, Project}=Dict{String, Project}())
+    base_project = read_project(base_project_file)
+    d[base_project_file] = base_project
+    base_project_file_dir = dirname(base_project_file)
+
+    projects = get(base_project.workspace, "projects", nothing)::Union{Nothing,Vector{String}}
+    projects === nothing && return d
+    project_paths = [abspath(base_project_file_dir, project) for project in projects]
+    for project_path in project_paths
+        project_file = Base.locate_project_file(project_path)
+        if project_file isa String
+            collect_workspace(project_file, d)
+        end
+    end
+    return d
+end
 
 mutable struct EnvCache
     # environment info:
@@ -346,6 +364,7 @@ mutable struct EnvCache
     pkg::Union{PackageSpec, Nothing}
     # cache of metadata:
     project::Project
+    workspace::Dict{String,Project} # paths relative to base
     manifest::Manifest
     # What these where at creation of the EnvCache
     original_project::Project
@@ -353,7 +372,9 @@ mutable struct EnvCache
 end
 
 function EnvCache(env::Union{Nothing,String}=nothing)
+    # @show env
     project_file = find_project_file(env)
+    # @show project_file
     project_dir = dirname(project_file)
     # read project file
     project = read_project(project_file)
@@ -368,9 +389,17 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     else
         project_package = nothing
     end
-    # determine manifest file
-    dir = abspath(project_dir)
+
     manifest_file = project.manifest
+    root_base_proj_file = find_root_base_project(project_file)
+    workspace = Dict{String, Project}()
+    if isfile(root_base_proj_file)
+        manifest_file = Base.project_file_manifest_path(root_base_proj_file)
+        workspace = collect_workspace(root_base_proj_file)
+        delete!(workspace, abspath(project_file))
+    end
+
+    dir = abspath(project_dir)
     manifest_file = manifest_file !== nothing ?
         (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
         manifestfile_path(dir)::String
@@ -382,6 +411,7 @@ function EnvCache(env::Union{Nothing,String}=nothing)
         manifest_file,
         project_package,
         project,
+        workspace,
         manifest,
         deepcopy(project),
         deepcopy(manifest),
@@ -417,7 +447,8 @@ Base.@kwdef mutable struct Context
     julia_version::Union{VersionNumber,Nothing} = VERSION
 end
 
-project_uuid(env::EnvCache) = env.pkg === nothing ? Base.dummy_uuid(env.project_file) : env.pkg.uuid
+project_uuid(env::EnvCache) = project_uuid(env.project, env.project_file)
+project_uuid(project::Project, project_file::String) = @something(project.uuid, Base.dummy_uuid(project_file))
 collides_with_project(env::EnvCache, pkg::PackageSpec) =
     is_project_name(env, pkg.name) || is_project_uuid(env, pkg.uuid)
 is_project(env::EnvCache, pkg::PackageSpec) = is_project_uuid(env, pkg.uuid)
@@ -523,6 +554,39 @@ function Context!(ctx::Context; kwargs...)
         setfield!(ctx, k, v)
     end
     return ctx
+end
+
+function load_workspace_weak_deps(env::EnvCache)
+    # TODO: Possible name collision between projects in a workspace?
+    weakdeps = Dict{String, UUID}()
+    merge!(weakdeps, env.project.weakdeps)
+    for (_, proj) in env.workspace
+        merge!(weakdeps, proj.weakdeps)
+    end
+    return weakdeps
+end
+
+# only hash the deps and compat fields as they are the only fields that affect a resolve
+function workspace_resolve_hash(env::EnvCache)
+    # Handle deps in both [deps] and [weakdeps]
+    deps = Dict(pkg.name => pkg.uuid for pkg in Pkg.Operations.load_direct_deps(env))
+    weakdeps = load_workspace_weak_deps(env)
+    alldeps = merge(deps, weakdeps)
+    compats = Dict(name => Pkg.Operations.get_compat_workspace(env, name) for (name, uuid) in alldeps)
+    iob = IOBuffer()
+    for (name, uuid) in sort!(collect(deps); by=first)
+        println(iob, name, "=", uuid)
+    end
+    println(iob)
+    for (name, uuid) in sort!(collect(weakdeps); by=first)
+        println(iob, name, "=", uuid)
+    end
+    println(iob)
+    for (name, compat) in sort!(collect(compats); by=first)
+        println(iob, name, "=", compat)
+    end
+    str = String(take!(iob))
+    return bytes2hex(sha1(str))
 end
 
 function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
@@ -916,7 +980,10 @@ end
 
 # Disambiguate name/uuid package specifications using project info.
 function project_deps_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
-    uuids = env.project.deps
+    uuids = copy(env.project.deps)
+    for (_, project) in env.workspace
+        merge!(uuids, project.deps)
+    end
     names = Dict(uuid => name for (name, uuid) in uuids)
     for pkg in pkgs
         if has_name(pkg) && !has_uuid(pkg) && pkg.name in keys(uuids)
@@ -1120,6 +1187,7 @@ function write_env(env::EnvCache; update_undo=true,
             end
         end
     end
+
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end

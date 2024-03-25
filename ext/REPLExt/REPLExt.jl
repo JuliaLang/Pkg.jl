@@ -68,10 +68,17 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
-                if textwidth(project_name) > 30
-                    project_name = first(project_name, 27) * "..."
+                root = Types.find_root_base_project(project_file)
+                rootname = projname(root)
+                if root !== project_file
+                    path_prefix = "/" * dirname(Types.relative_project_path(root, project_file))
+                else
+                    path_prefix = ""
                 end
-                prefix = "($(project_name)) "
+                if textwidth(rootname) > 30
+                    rootname = first(rootname, 27) * "..."
+                end
+                prefix = "($(rootname)$(path_prefix)) "
                 prev_prefix = prefix
                 prev_project_timestamp = mtime(project_file)
                 prev_project_file = project_file
