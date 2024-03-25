@@ -1148,8 +1148,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     io = ctx.io
     if io isa UnstableIO
         # precompile does quite a bit of output and using the UnstableIO can cause
-        # some slowdowns, the important part here is to not specialize the whole
-        # precompile function on the io
+        # some slowdowns
         io = io.io
     end
 

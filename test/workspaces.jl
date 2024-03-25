@@ -11,7 +11,7 @@ end
 
 
 temp_pkg_dir() do project_path
-    cd(project_path) do
+    cd(project_path) do; with_temp_env() do
         name = "MonorepoSub"
         rm(name, force=true, recursive=true)
         Pkg.generate(name)
@@ -141,7 +141,7 @@ temp_pkg_dir() do project_path
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
             @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
         end
-    end
+    end end
 end
 
 end # module
