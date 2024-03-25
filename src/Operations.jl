@@ -2387,7 +2387,7 @@ function diff_array(old_env::Union{EnvCache,Nothing}, new_env::EnvCache; manifes
     if workspace
         old = manifest ? load_all_deps(old_env) : load_direct_deps(old_env)
     else
-        old = manifest ? load_all_deps_loadable(old_env) : load_project_deps(new_env.project, new_env.project_file, new_env.manifest, new_env.manifest_file)
+        old = manifest ? load_all_deps_loadable(old_env) : load_project_deps(old_env.project, old_env.project_file, old_env.manifest, old_env.manifest_file)
     end
     # merge old and new into single array
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
