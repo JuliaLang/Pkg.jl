@@ -127,19 +127,21 @@ temp_pkg_dir() do project_path
 
 
             # Test that the subprojects are working
-            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="test" test/runtests.jl`))
-            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
-            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
-            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
+            withenv("JULIA_DEPOT_PATH" => first(Base.DEPOT_PATH)) do
+                @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="test" test/runtests.jl`))
+                @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
+                @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
+                @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
 
-            rm("Manifest.toml")
-            Pkg.activate(".")
-            Pkg.resolve()
-            # Resolve should have fixed the manifest so that everything above works from the existing project files
-            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="test" test/runtests.jl`))
-            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
-            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
-            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
+                rm("Manifest.toml")
+                Pkg.activate(".")
+                Pkg.resolve()
+                # Resolve should have fixed the manifest so that everything above works from the existing project files
+                @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="test" test/runtests.jl`))
+                @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
+                @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
+                @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
+            end
         end
     end end
 end
