@@ -9,6 +9,7 @@ end
 import Random
 import TOML
 using Dates
+using Base: UnstableIO
 
 export @pkg_str
 export PackageSpec
@@ -40,12 +41,6 @@ const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 
-struct UnstableIO <: IO
-    io::IO
-end
-Base.write(io::UnstableIO, b::UInt8) = write(io.io, b)::Int
-Base.get(io::UnstableIO, val, default) = get(io.io, val, default)
-Base.print(io::UnstableIO, arg::Union{SubString{String}, String}) = print(io.io, arg)
 stderr_f() = something(DEFAULT_IO[], UnstableIO(stderr))
 stdout_f() = something(DEFAULT_IO[], UnstableIO(stdout))
 const PREV_ENV_PATH = Ref{String}("")
@@ -61,7 +56,6 @@ include("Versions.jl")
 include("Registry/Registry.jl")
 include("Resolve/Resolve.jl")
 include("Types.jl")
-include("BinaryPlatforms_compat.jl")
 include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
@@ -75,6 +69,8 @@ import .Types: PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLE
 # Import artifacts API
 using .Artifacts, .PlatformEngines
 
+# Alias legacy binary platforms compatibility from Base
+const BinaryPlatforms = Base.BinaryPlatforms.PkgCompat
 
 """
     PackageMode
