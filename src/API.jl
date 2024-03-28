@@ -1334,6 +1334,8 @@ function _activate_dep(dep_name::AbstractString)
 end
 function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
+    shared && path == "temp" && pkgerror("""`temp` is an invalid name for a shared environment.
+        To create a temporary environment use `Pkg.activate(; temp = true)`""")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
         # 1. if path exists, activate that
@@ -1348,20 +1350,24 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
             end
         end
     else
-        # initialize `fullpath` in case of empty `Pkg.depots()`
-        fullpath = ""
-        # loop over all depots to check if the shared environment already exists
-        for depot in Pkg.depots()
-            fullpath = joinpath(Pkg.envdir(depot), path)
-            isdir(fullpath) && break
-        end
-        # this disallows names such as "Foo/bar", ".", "..", etc
-        if basename(abspath(fullpath)) != path
-            pkgerror("not a valid name for a shared environment: $(path)")
-        end
-        # unless the shared environment already exists, place it in the first depots
-        if !isdir(fullpath)
-            fullpath = joinpath(Pkg.envdir(Pkg.depots1()), path)
+        if path == "stdlib"
+            fullpath = Sys.STDLIB
+        else
+            # initialize `fullpath` in case of empty `Pkg.depots()`
+            fullpath = ""
+            # loop over all depots to check if the shared environment already exists
+            for depot in Pkg.depots()
+                fullpath = joinpath(Pkg.envdir(depot), path)
+                isdir(fullpath) && break
+            end
+            # this disallows names such as "Foo/bar", ".", "..", etc
+            if basename(abspath(fullpath)) != path
+                pkgerror("not a valid name for a shared environment: $(path)")
+            end
+            # unless the shared environment already exists, place it in the first depots
+            if !isdir(fullpath)
+                fullpath = joinpath(Pkg.envdir(Pkg.depots1()), path)
+            end
         end
     end
     if !isnothing(Base.active_project())
