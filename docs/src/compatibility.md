@@ -163,6 +163,41 @@ PkgA = "0.2 - 0.5"     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
 PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```
 
+### Checking specifications
+
+Pkg.jl parses a given version specification using `Pkg.Versions.semver_spec`.
+You can check if a particular version of a package is contained in a particular
+range by using this command. For example:
+
+```julia
+julia> v"0.1.0" in Pkg.Versions.semver_spec("=0.1")
+true
+
+julia> v"0.1.0" in Pkg.Versions.semver_spec("=0.1.1")
+false
+
+julia> v"0.1.0" in Pkg.Versions.semver_spec("0.1 - 0.2")
+true
+
+julia> v"0.3.0" in Pkg.Versions.semver_spec("~0.3.2")
+false
+
+julia> v"0.3.3" in Pkg.Versions.semver_spec("0.1 - 0.2, ~0.3.2")
+true
+
+julia> # Grid of versions:
+       versions = [[VersionNumber(major, minor, patch) for patch=0:8, minor=0:3, major=0:1]...];
+
+julia> filter(v -> v in Pkg.Versions.semver_spec("0.1.8 - 0.2.2, ^0.3.6"), versions)
+7-element Vector{VersionNumber}:
+ v"0.1.8"
+ v"0.2.0"
+ v"0.2.1"
+ v"0.2.2"
+ v"0.3.6"
+ v"0.3.7"
+ v"0.3.8"
+```
 
 ## Fixing conflicts
 
