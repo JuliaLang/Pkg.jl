@@ -476,13 +476,20 @@ function with_show_download_info(f, io, name, quiet_download)
         fancyprint && print_progress_bottom(io)
         printpkgstyle(io, :Downloading, "artifact: $name")
     end
+    success = false
     try
-        return f()
+        result = f()
+        success = result === true
+        return result
     finally
         if !quiet_download
             fancyprint && print(io, "\033[1A") # move cursor up one line
             fancyprint && print(io, "\033[2K") # clear line
-            fancyprint && printpkgstyle(io, :Downloaded, "artifact: $name")
+            if success 
+                fancyprint && printpkgstyle(io, :Downloaded, "artifact: $name")
+            else
+                printpkgstyle(io, :Failure, "artifact: $name", color = :red)
+            end
         end
     end
 end
