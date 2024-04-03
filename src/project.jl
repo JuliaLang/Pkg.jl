@@ -182,7 +182,10 @@ function Project(raw::Dict; file=nothing)
     project.other    = raw
     project.name     = get(raw, "name", nothing)::Union{String, Nothing}
     project.manifest = get(raw, "manifest", nothing)::Union{String, Nothing}
-    project.path     = get(raw, "path", nothing)::Union{String, Nothing}
+    project.entrypath     = get(raw, "path", nothing)::Union{String, Nothing}
+    if project.entrypath === nothing
+        project.entrypath = get(raw, "entrypath", nothing)::Union{String, Nothing}
+    end
     project.uuid     = read_project_uuid(get(raw, "uuid", nothing))
     project.version  = read_project_version(get(raw, "version", nothing))
     project.deps     = read_project_deps(get(raw, "deps", nothing), "deps")
@@ -243,7 +246,7 @@ function destructure(project::Project)::Dict
     entry!("version",  project.version)
     entry!("workspace", project.workspace)
     entry!("manifest", project.manifest)
-    entry!("path",     project.path)
+    entry!("entrypath",     project.entrypath)
     entry!("deps",     merge(project.deps, project._deps_weak))
     entry!("weakdeps", project.weakdeps)
     entry!("sources",  project.sources)

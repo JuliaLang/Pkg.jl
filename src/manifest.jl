@@ -279,6 +279,7 @@ function destructure(manifest::Manifest)::Dict
             path = join(splitpath(path), "/")
         end
         entry!(new_entry, "path", path)
+        entry!(new_entry, "entrypath", entry.entrypath)
         repo_source = entry.repo.source
         if repo_source !== nothing && Sys.iswindows() && !isabspath(repo_source) && !isurl(repo_source)
             repo_source = join(splitpath(repo_source), "/")

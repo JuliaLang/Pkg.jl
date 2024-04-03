@@ -3198,4 +3198,20 @@ if :version in fieldnames(Base.PkgOrigin)
 end
 end
 
+temp_pkg_dir() do project_path
+    @testset "test entrypath entries" begin
+        mktempdir() do dir
+            path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "ProjectPath"))
+            cp(path, joinpath(dir, "ProjectPath"))
+            cd(joinpath(dir, "ProjectPath")) do
+                with_current_env() do
+                    Pkg.resolve()
+                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPath'`))
+                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPathDep'`))
+                end
+            end
+        end
+    end
+end
+
 end #module

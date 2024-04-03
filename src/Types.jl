@@ -234,7 +234,7 @@ Base.@kwdef mutable struct Project
     uuid::Union{UUID, Nothing} = nothing
     version::Union{VersionTypes, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
-    path::Union{String, Nothing} = nothing
+    entrypath::Union{String, Nothing} = nothing
     # Sections
     deps::Dict{String,UUID} = Dict{String,UUID}()
     # deps that are also in weakdeps for backwards compat
@@ -258,6 +258,7 @@ Base.@kwdef mutable struct PackageEntry
     name::Union{String,Nothing} = nothing
     version::Union{VersionNumber,Nothing} = nothing
     path::Union{String,Nothing} = nothing
+    entrypath::Union{String,Nothing} = nothing
     pinned::Bool = false
     repo::GitRepo = GitRepo()
     tree_hash::Union{Nothing,SHA1} = nothing
@@ -270,6 +271,7 @@ end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.version == t2.version &&
     t1.path == t2.path &&
+    t1.entrypath == t2.entrypath &&
     t1.pinned == t2.pinned &&
     t1.repo == t2.repo &&
     t1.tree_hash == t2.tree_hash &&
@@ -278,7 +280,7 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.exts == t2.exts &&
     t1.uuid == t2.uuid
     # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init=h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entrypath, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init=h)  # omits `other`
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing,VersionNumber} = nothing # only set to VERSION when resolving
@@ -629,7 +631,7 @@ function read_package(path::String)
         pkgerror("expected a `uuid` entry in project file at `$(abspath(path))`")
     end
     name = project.name
-    entry_point = something(project.path, joinpath("src", "$(name).jl"))
+    entry_point = something(project.entrypath, joinpath("src", "$(name).jl"))
     pkgpath = joinpath(dirname(path), entry_point)
     if !isfile(pkgpath)
         pkgerror("expected the file `$pkgpath` to exist for package `$name` at `$(dirname(path))`")
