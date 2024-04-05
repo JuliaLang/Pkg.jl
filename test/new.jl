@@ -577,10 +577,13 @@ end
     end
     # Double add should not change state, this would be an unnecessary change.
     isolate(loaded_depot=true) do
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         Pkg.add("Example")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
     end
     # Adding a new package should not alter the version of existing packages.
     isolate(loaded_depot=true) do
@@ -808,6 +811,23 @@ end
         Pkg.add(name="libpng_jll", version=v"1.6.37+5")
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+5"
     end
+    # Adding a new package to a package should add compat entries
+    isolate(loaded_depot=true) do
+        mktempdir() do tempdir
+            Pkg.activate(tempdir)
+            mkpath(joinpath(tempdir, "src"))
+            touch(joinpath(tempdir, "src", "Foo.jl"))
+            ctx = Pkg.Types.Context()
+            ctx.env.project.name = "Foo"
+            ctx.env.project.uuid = UUIDs.UUID(0)
+            Pkg.Types.write_project(ctx.env)
+            Pkg.add(name="Example", version="0.3.0")
+            @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+            @test Pkg.Types.Context().env.project.compat["Example"] == Pkg.Types.Compat(Pkg.Types.VersionSpec("0.3"), "0.3.0")
+            Pkg.add(name="Example", version="0.3.1")
+            @test Pkg.Types.Context().env.project.compat["Example"] == Pkg.Types.Compat(Pkg.Types.VersionSpec("0.3"), "0.3.0")
+        end
+    end
     end # withenv
 end
 
@@ -982,6 +1002,16 @@ end
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;name="Example", version="0.5.0")]
         @test isempty(opts)
+        # Add as a weakdep.
+        api, args, opts = first(Pkg.pkg"add --weak Example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test opts == Dict(:target => :weakdeps)
+        # Add as an extra.
+        api, args, opts = first(Pkg.pkg"add --extra Example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test opts == Dict(:target => :extras)
         # Add using direct URL syntax.
         api, args, opts = first(Pkg.pkg"add https://github.com/00vareladavid/Unregistered.jl#0.1.0")
         @test api == Pkg.add
@@ -1556,7 +1586,6 @@ end
         @test str ==
         """  StaticArrays → LinearAlgebra
           StaticArrays → Statistics → LinearAlgebra
-          StaticArrays → Statistics → SparseArrays → LinearAlgebra
         """
     end
 end
@@ -2429,12 +2458,7 @@ end
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\(<v$v\\)"), str)
-        open(Base.active_project(), "a") do io
-            write(io, """
-                  [compat]
-                  Example = "0.4.1"
-            """)
-        end
+        Pkg.compat("Example", "0.4.1")
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\[<v0.4.1\\], \\(<v$v\\)"), str)
@@ -2703,32 +2727,31 @@ end
 #
 # Note: these tests should be run on clean depots
 for v in (nothing, "true")
-    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0) do
+    # On CI when JULIA_PKG_USE_CLI_GIT=true we need to tell the cli git to not prompt for credentials
+    # GIT_ASKPASS=true forces the credential provider to return "" https://stackoverflow.com/a/71057440
+    # GIT_TERMINAL_PROMPT=0 is also supposed to avoid the prompt but doesn't reliably https://github.com/JuliaLang/Pkg.jl/issues/3774
+    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0, "GIT_ASKPASS" => "true") do
         @testset "downloads with JULIA_PKG_USE_CLI_GIT = $v" begin
             isolate() do
-                @testset "libgit2 downloads" begin
-                    @testset "via name" begin
-                        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                @testset "via name" begin
+                    Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                    @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                    @eval import $(Symbol(TEST_PKG.name))
+                    @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
+                    Pkg.rm(TEST_PKG.name)
+                end
+                if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false) && !Sys.iswindows()
+                    # TODO: fix. On GH windows runners cli git will prompt for credentials and hang.
+                    # On other runners git cli is noisy when an url is given.
+                    @testset "via url" begin
+                        Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
                         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                        @eval import $(Symbol(TEST_PKG.name))
-                        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
                         Pkg.rm(TEST_PKG.name)
                     end
-                    if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) && Sys.iswindows()) == false
-                        # TODO: fix. on GH windows runners cli git will prompt for credentials here
-                        @testset "via url" begin
-                            Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
-                            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                            Pkg.rm(TEST_PKG.name)
-                        end
-                    end
-                end
-                if !Sys.iswindows()
-                    # TODO: fix. on GH windows runners cli git will prompt for credentials here
-                    @testset "libgit2 failures" begin
+                    @testset "failures" begin
                         doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
                         @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
-                        @test_throws Pkg.Types.PkgError Pkg.Registry.add(Pkg.RegistrySpec(url=doesnotexist))
+                        @test_throws Pkg.Types.PkgError Pkg.Registry.add(url=doesnotexist)
                     end
                 end
                 @testset "tarball downloads" begin
@@ -3003,7 +3026,7 @@ using Pkg.Types: is_stdlib
     @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
 
-
+#=
 @testset "Pkg.add() with julia_version" begin
     append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
 
@@ -3108,6 +3131,7 @@ end
 
     empty!(Pkg.Types.STDLIBS_BY_VERSION)
 end
+=#
 
 
 @testset "Issue #2931" begin

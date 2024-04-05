@@ -1,5 +1,16 @@
 const PSA = Pair{Symbol,Any}
 
+function get_complete_function(f)
+    return function(opts, partial, offset, index)
+        m = Base.get_extension(@__MODULE__, :REPLExt)
+        m === nothing && return String[]
+        completions = getglobal(m, f)
+        return applicable(completions, opts, partial, offset, index) ?
+            completions(opts, partial, offset, index) :
+            completions(opts, partial)
+    end
+end
+
 compound_declarations = [
 "package" => CommandDeclaration[
 PSA[:name => "test",
@@ -10,7 +21,7 @@ PSA[:name => "test",
     :option_spec => [
         PSA[:name => "coverage", :api => :coverage => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "run tests for packages",
     :help => md"""
     test [--coverage] pkg[=uuid] ...
@@ -26,7 +37,7 @@ PSA[:name => "help",
     :api => identity, # dummy API function
     :arg_count => 0 => Inf,
     :arg_parser => ((x,y) -> x),
-    :completions => complete_help,
+    :completions => get_complete_function(:complete_help),
     :description => "show this message",
     :help => md"""
     [?|help]
@@ -45,15 +56,17 @@ PSA[:name => "instantiate",
         PSA[:name => "project", :short_name => "p", :api => :manifest => false],
         PSA[:name => "manifest", :short_name => "m", :api => :manifest => true],
         PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
+        PSA[:name => "workspace", :api => :workspace => true],
     ],
     :description => "downloads all the dependencies for the project",
     :help => md"""
-    instantiate [-v|--verbose]
-    instantiate [-v|--verbose] [-m|--manifest]
-    instantiate [-v|--verbose] [-p|--project]
+    instantiate [-v|--verbose] [--workspace]
+    instantiate [-v|--verbose] [--workspace] [-m|--manifest]
+    instantiate [-v|--verbose] [--workspace] [-p|--project]
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+If `--workspace` is given, all dependencies in the workspace will be downloaded.
 
 After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
@@ -69,7 +82,7 @@ PSA[:name => "remove",
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
         PSA[:name => "all", :api => :all_pkgs => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "remove packages from project or manifest",
     :help => md"""
     [rm|remove] [-p|--project] pkg[=uuid] ...
@@ -101,11 +114,13 @@ PSA[:name => "add",
     :arg_parser => ((x,y) -> parse_package(x,y; add_or_dev=true)),
     :option_spec => [
         PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+        PSA[:name => "weak", :short_name => "w", :api => :target => :weakdeps],
+        PSA[:name => "extra", :short_name => "e", :api => :target => :extras],
     ],
-    :completions => complete_add_dev,
+    :completions => get_complete_function(:complete_add_dev),
     :description => "add packages to project",
     :help => md"""
-    add [--preserve=<opt>] pkg[=uuid] [@version] [#rev] ...
+    add [--preserve=<opt>] [-w|--weak] [-e|--extra] pkg[=uuid] [@version] [#rev] ...
 
 Add package `pkg` to the current project file. If `pkg` could refer to
 multiple different packages, specifying `uuid` allows you to disambiguate.
@@ -113,6 +128,9 @@ multiple different packages, specifying `uuid` allows you to disambiguate.
 are of the form `@1`, `@1.2` or `@1.2.3`, allowing any version with a prefix
 that matches, or ranges thereof, such as `@1.2-3.4.5`. A git revision can be
 specified by `#branch` or `#commit`.
+
+If the active environment is a package (the Project has both `name` and `uuid` fields) compat entries will be
+added automatically with a lower bound of the added version.
 
 If a local path is used as an argument to `add`, the path needs to be a git repository.
 The project will then track that git repository just like it would track a remote repository online.
@@ -148,6 +166,8 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 ```
 pkg> add Example
 pkg> add --preserve=all Example
+pkg> add --weak Example
+pkg> add --extra Example
 pkg> add Example@0.5
 pkg> add Example#master
 pkg> add Example#c37b675
@@ -171,7 +191,7 @@ PSA[:name => "develop",
         PSA[:name => "shared", :api => :shared => true],
         PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
-    :completions => complete_add_dev,
+    :completions => get_complete_function(:complete_add_dev),
     :description => "clone the full package repo locally for development",
     :help => md"""
     [dev|develop] [--preserve=<opt>] [--shared|--local] pkg[=uuid] ...
@@ -207,7 +227,7 @@ PSA[:name => "free",
         PSA[:name => "all", :api => :all_pkgs => true],
     ],
     :arg_parser => parse_package,
-    :completions => complete_fixed_packages,
+    :completions => get_complete_function(:complete_fixed_packages),
     :description => "undoes a `pin`, `develop`, or stops tracking a repo",
     :help => md"""
     free pkg[=uuid] ...
@@ -221,14 +241,19 @@ PSA[:name => "why",
     :api => API.why,
     :should_splat => false,
     :arg_count => 1 => 1,
+    :option_spec => [
+        PSA[:name => "workspace", :api => :workspace => true],
+    ],
     :arg_parser => parse_package,
-    :completions => complete_all_installed_packages,
+    :completions => get_complete_function(:complete_all_installed_packages),
     :description => "shows why a package is in the manifest",
     :help => md"""
-    why pkg[=uuid] ...
+    why [--workspace] pkg[=uuid] ...
 
 Show the reason why packages are in the manifest, printed as a path through the
 dependency graph starting at the direct dependencies.
+The `workspace` option can be used to show the path from any dependency of a project in
+the workspace.
 
 !!! compat "Julia 1.9"
     The `why` function is added in Julia 1.9
@@ -242,7 +267,7 @@ PSA[:name => "pin",
         PSA[:name => "all", :api => :all_pkgs => true],
     ],
     :arg_parser => parse_package,
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "pins the version of packages",
     :help => md"""
     pin pkg[=uuid] ...
@@ -268,7 +293,7 @@ PSA[:name => "build",
     :option_spec => [
         PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "run the build script for packages",
     :help => md"""
     build [-v|--verbose] pkg[=uuid] ...
@@ -297,7 +322,7 @@ PSA[:name => "activate",
         PSA[:name => "shared", :api => :shared => true],
         PSA[:name => "temp", :api => :temp => true],
     ],
-    :completions => complete_activate,
+    :completions => get_complete_function(:complete_activate),
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
     activate
@@ -331,7 +356,7 @@ PSA[:name => "update",
         PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
         PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "update packages in manifest",
     :help => md"""
     [up|update] [-p|--project]  [opts] pkg[=uuid] [@version] ...
@@ -366,14 +391,18 @@ Create a minimal project called `pkgname` in the current folder. For more featur
 PSA[:name => "precompile",
     :api => API.precompile,
     :arg_count => 0 => Inf,
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "precompile all the project dependencies",
+    :option_spec => [
+        PSA[:name => "workspace", :api => :workspace => true],
+    ],
     :help => md"""
-    precompile
-    precompile pkgs...
+    precompile [--workspace]
+    precompile [--workspace] pkgs...
 
 Precompile all or specified dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
+The `workspace` option will precompile all packages in the workspace and not only the active project.
 
 Errors will only throw when precompiling the top-level dependencies, given that
 not all manifest dependencies may be loaded by the top-level dependencies on the given system.
@@ -397,15 +426,16 @@ PSA[:name => "status",
         PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
         PSA[:name => "compat", :short_name => "c", :api => :compat => true],
         PSA[:name => "extensions", :short_name => "e", :api => :extensions => true],
+        PSA[:name => "workspace", :api => :workspace => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => get_complete_function(:complete_installed_packages),
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
-    [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
-    [st|status] [-d|--diff] [-e|--extensions] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-e|--extensions] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
 Show the status of the current environment. Packages marked with `⌃` have new
@@ -423,6 +453,7 @@ If there are any packages listed as arguments the output will be limited to thos
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 The `--compat` option alone shows project compat entries.
+The `--workspace` option shows the (merged) status of packages in the workspace.
 
 !!! compat "Julia 1.8"
     The `⌃` and `⌅` indicators were added in Julia 1.8.
@@ -432,7 +463,7 @@ The `--compat` option alone shows project compat entries.
 PSA[:name => "compat",
     :api => API.compat,
     :arg_count => 0 => 2,
-    :completions => complete_installed_packages_and_compat,
+    :completions => get_complete_function(:complete_installed_packages_and_compat),
     :description => "edit compat entries in the current Project and re-resolve",
     :help => md"""
     compat [pkg] [compat_string]

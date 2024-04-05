@@ -1,12 +1,11 @@
 using LibGit2: LibGit2
 using Tar: Tar
 using Downloads
-using REPL
 
-let
-    function _run_precompilation_script_setup()
-        tmp = mktempdir()
-        cd(tmp)
+# used by REPLExt too
+function _run_precompilation_script_setup()
+    tmp = mktempdir()
+    cd(tmp) do
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, tmp)
         pushfirst!(LOAD_PATH, "@")
@@ -95,9 +94,11 @@ let
             """,
         )
         Base.rm("registries/Registry"; recursive = true)
-        return tmp
     end
+    return tmp
+end
 
+let
     function pkg_precompile()
         original_depot_path = copy(DEPOT_PATH)
         original_load_path = copy(LOAD_PATH)
@@ -110,51 +111,47 @@ let
         # We need to override JULIA_PKG_UNPACK_REGISTRY to fix https://github.com/JuliaLang/Pkg.jl/issues/3663
         withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
             tmp = _run_precompilation_script_setup()
-            withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
-                Pkg.add("TestPkg")
-                Pkg.develop(Pkg.PackageSpec(path = "TestPkg.jl"))
-                Pkg.add(Pkg.PackageSpec(path = "TestPkg.jl/"))
-                Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage])
-                Pkg.update(; update_registry = false)
-                Pkg.status()
-                pkgs_path = pkgdir(Pkg, "test", "test_packages")
-                # Precompile a diverse set of test packages
-                # Check all test packages occasionally if anything has been missed
-                # test_packages = readdir(pkgs_path)
-                test_packages = (
-                    "ActiveProjectInTestSubgraph",
-                    "BasicSandbox",
-                    "DependsOnExample",
-                    "PackageWithDependency",
-                    "SameNameDifferentUUID",
-                    "SimplePackage",
-                    "BasicCompat",
-                    "PackageWithDependency",
-                    "SameNameDifferentUUID",
-                    "SimplePackage",
-                    joinpath("ExtensionExamples", "HasExtensions.jl"),
-                )
-                for test_package in test_packages
-                    Pkg.activate(joinpath(pkgs_path, test_package))
+            cd(tmp) do
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
+                    Pkg.add("TestPkg")
+                    Pkg.develop(Pkg.PackageSpec(path = "TestPkg.jl"))
+                    Pkg.add(Pkg.PackageSpec(path = "TestPkg.jl/"))
+                    Pkg.update(; update_registry = false)
+                    Pkg.status()
+                    pkgs_path = pkgdir(Pkg, "test", "test_packages")
+                    # Precompile a diverse set of test packages
+                    # Check all test packages occasionally if anything has been missed
+                    # test_packages = readdir(pkgs_path)
+                    test_packages = (
+                        "ActiveProjectInTestSubgraph",
+                        "BasicSandbox",
+                        "DependsOnExample",
+                        "PackageWithDependency",
+                        "SameNameDifferentUUID",
+                        "SimplePackage",
+                        "BasicCompat",
+                        "PackageWithDependency",
+                        "SameNameDifferentUUID",
+                        "SimplePackage",
+                        joinpath("ExtensionExamples", "HasExtensions.jl"),
+                    )
+                    for test_package in test_packages
+                        Pkg.activate(joinpath(pkgs_path, test_package))
+                    end
+                    Pkg.activate(; temp = true)
+                    Pkg.activate()
+                    Pkg.activate("TestPkg.jl")
                 end
-                Pkg.activate(; temp = true)
-                Pkg.activate()
-                Pkg.activate("TestPkg.jl")
+                Pkg.precompile()
             end
-            Pkg.precompile()
             try
                 Base.rm(tmp; recursive = true)
             catch
             end
 
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.promptf)})
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.repl_init),REPL.LineEditREPL})
             Base.precompile(Tuple{typeof(Pkg.API.status)})
             Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat),Base.Dict{String,Any},Pkg.Types.Project,},)
             Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval),Base.RegexMatch})
-            Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line),Pkg.REPLMode.PkgCompletionProvider,REPL.LineEdit.PromptState,},)
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_argument),Pkg.REPLMode.CommandSpec,Array{String,1},String,Int64,Int64,},)
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.complete_add_dev),Base.Dict{Symbol,Any},String,Int64,Int64,},)
         end
         copy!(DEPOT_PATH, original_depot_path)
         copy!(LOAD_PATH, original_load_path)
