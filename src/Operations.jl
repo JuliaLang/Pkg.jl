@@ -1482,6 +1482,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
+        delete!(ctx.env.project.weakdeps, pkg.name)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         is_dep = any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
         source_path, source_repo = get_path_repo(ctx.env.project, pkg.name)
@@ -1544,6 +1545,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
+        delete!(ctx.env.project.weakdeps, pkg.name)
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     # resolve & apply package versions
