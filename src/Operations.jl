@@ -232,7 +232,7 @@ function fixups_from_projectfile!(env::EnvCache)
             p = Types.read_project(v)
             pkg.weakdeps = p.weakdeps
             pkg.exts = p.exts
-            pkg.entrypath = p.entrypath
+            pkg.entryfile = p.entryfile
             for (name, _) in p.weakdeps
                 if !haskey(p.deps, name)
                     delete!(pkg.deps, name)

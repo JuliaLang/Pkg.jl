@@ -3199,7 +3199,7 @@ end
 end
 
 temp_pkg_dir() do project_path
-    @testset "test entrypath entries" begin
+    @testset "test entryfile entries" begin
         mktempdir() do dir
             path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "ProjectPath"))
             cp(path, joinpath(dir, "ProjectPath"))
