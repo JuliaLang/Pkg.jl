@@ -2419,7 +2419,10 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
                     pkgerror(isnothing(pkg.name) ? "M" : "$(pkg.name) has a malformed Project.toml, ",
                              "the extension package $extdep is not listed in [weakdeps] or [deps]")
                 end
-                uuid = weakdepses[extdep]
+                uuid = get(weakdepses, extdep, nothing)
+                if uuid === nothing
+                    uuid = depses[extdep]
+                end
                 loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, extdep))
                 push!(extdeps_info, (extdep, loaded))
             end
