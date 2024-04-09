@@ -2404,6 +2404,7 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
     manifest = env.manifest
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
+    depses = manifest_info.deps
     weakdepses = manifest_info.weakdeps
     exts = manifest_info.exts
     if !isempty(weakdepses) && !isempty(exts)
@@ -2414,9 +2415,10 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
             # Check if deps are loaded
             extdeps_info= Tuple{String, Bool}[]
             for extdep in extdeps
-                haskey(weakdepses, extdep) ||
-                    pkgerror(isnothing(pkg.name) ? "M" : "$(pkg.name) has a m",
-                             "alformed Project.toml, the extension package $extdep is not listed in [weakdeps]")
+                if !(haskey(weakdepses, extdep) || haskey(depses, extdep))
+                    pkgerror(isnothing(pkg.name) ? "M" : "$(pkg.name) has a malformed Project.toml, ",
+                             "the extension package $extdep is not listed in [weakdeps] or [deps]")
+                end
                 uuid = weakdepses[extdep]
                 loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, extdep))
                 push!(extdeps_info, (extdep, loaded))
