@@ -1483,6 +1483,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
+        delete!(ctx.env.project.weakdeps, pkg.name)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         is_dep = any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
         source_path, source_repo = get_path_repo(ctx.env.project, pkg.name)
@@ -1545,6 +1546,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
+        delete!(ctx.env.project.weakdeps, pkg.name)
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     # resolve & apply package versions
@@ -2403,6 +2405,7 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
     manifest = env.manifest
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
+    depses = manifest_info.deps
     weakdepses = manifest_info.weakdeps
     exts = manifest_info.exts
     if !isempty(weakdepses) && !isempty(exts)
@@ -2413,10 +2416,14 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
             # Check if deps are loaded
             extdeps_info= Tuple{String, Bool}[]
             for extdep in extdeps
-                haskey(weakdepses, extdep) ||
-                    pkgerror(isnothing(pkg.name) ? "M" : "$(pkg.name) has a m",
-                             "alformed Project.toml, the extension package $extdep is not listed in [weakdeps]")
-                uuid = weakdepses[extdep]
+                if !(haskey(weakdepses, extdep) || haskey(depses, extdep))
+                    pkgerror(isnothing(pkg.name) ? "M" : "$(pkg.name) has a malformed Project.toml, ",
+                             "the extension package $extdep is not listed in [weakdeps] or [deps]")
+                end
+                uuid = get(weakdepses, extdep, nothing)
+                if uuid === nothing
+                    uuid = depses[extdep]
+                end
                 loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, extdep))
                 push!(extdeps_info, (extdep, loaded))
             end
