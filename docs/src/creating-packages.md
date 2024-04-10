@@ -1,4 +1,4 @@
-# **5.** Creating Packages
+# [Creating Packages](@id creating-packages-tutorial)
 
 ## Generating files for a package
 
@@ -160,7 +160,7 @@ it does add a new feature, that the message must be three words long.
 Later, we may wish to change `greet_alien` to
 
 ```julia
-"Greet an alien by a the name of \"Zork\"."
+"Greet an alien by the name of \"Zork\"."
 greet_alien() = print("Hello Zork")
 ```
 
@@ -246,7 +246,7 @@ in expression starting at /home/kc/HelloWorld/deps/build.jl:1
     A build step should generally not create or modify any files in the package directory. If you need to store some files
     from the build step, use the [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) package.
 
-## Adding tests to the package
+## [Adding tests to the package](@id adding-tests-to-packages)
 
 When a package is tested the file `test/runtests.jl` is executed:
 
@@ -556,16 +556,16 @@ This is done by making the following changes (using the example above):
 #### Using an extension while supporting older Julia versions
 
 In the case where one wants to use an extension (without worrying about the
-feature of the extension begin available on older Julia versions) while still
+feature of the extension being available on older Julia versions) while still
 supporting older Julia versions the packages under `[weakdeps]` should be
 duplicated into `[extras]`. This is an unfortunate duplication, but without
 doing this the project verifier under older Julia versions will throw an error
 if it finds packages under `[compat]` that is not listed in `[extras]`.
 
-## Package naming guidelines
+## Package naming rules
 
 Package names should be sensible to most Julia users, *even to those who are not domain experts*.
-The following guidelines apply to the `General` registry but may be useful for other package
+The following rules apply to the `General` registry but may be useful for other package
 registries as well.
 
 Since the `General` registry belongs to the entire community, people may have opinions about
@@ -600,12 +600,25 @@ may fit your package better.
        and other packages each implement a unique approach based on a particular design philosophy.
      * In contrast, `SortingAlgorithms` provides a consistent interface to use many well-established
        sorting algorithms.
-6. Packages that wrap external libraries or programs should be named after those libraries or programs.
+6. Packages that wrap external libraries or programs can be named after those libraries or programs.
 
      * `CPLEX.jl` wraps the `CPLEX` library, which can be identified easily in a web search.
      * `MATLAB.jl` provides an interface to call the MATLAB engine from within Julia.
+
 7. Avoid naming a package closely to an existing package
      * `Websocket` is too close to `WebSockets` and can be confusing to users. Rather use a new name such as `SimpleWebsockets`.
+
+8. Avoid using a distinctive name that is already in use in a well known, unrelated project.
+     * Don't use the names `Tkinter.jl`, `TkinterGUI.jl`, etc. for a package that is unrelated
+       to the popular `tkinter` python package, even if it provides bindings to Tcl/Tk.
+       A package name of `Tkinter.jl` would only be appropriate if the package used Python's
+       library to accomplish its work or was spearheaded by the same community of developers.
+     * It's okay to name a package `HTTP.jl` even though it is unrelated to the popular rust
+       crate `http` because in most usages the name "http" refers to the hypertext transfer
+       protocol, not to the `http` rust crate.
+     * It's okay to name a package `OpenSSL.jl` if it provides an interface to the OpenSSL
+       library, even without explicit affiliation with the creators of the OpenSSL (provided
+       there's no copyright or trademark infringement etc.)
 
 ## Registering packages
 
