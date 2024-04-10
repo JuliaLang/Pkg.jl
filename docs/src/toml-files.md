@@ -39,7 +39,7 @@ name = "Example"
 The name must be a valid [identifier](https://docs.julialang.org/en/v1/base/base/#Base.isidentifier)
 (a sequence of Unicode characters that does not start with a number and is neither `true` nor `false`).
 For packages, it is recommended to follow the
-[package naming guidelines](@ref Package-naming-guidelines). The `name` field is mandatory
+[package naming rules](@ref Package-naming-rules). The `name` field is mandatory
 for packages.
 
 
@@ -135,7 +135,7 @@ Julia will then preferentially use the version-specific manifest file if availab
 For example, if both `Manifest-v1.11.toml` and `Manifest.toml` exist, Julia 1.11 will prioritize using `Manifest-v1.11.toml`.
 However, Julia versions 1.10, 1.12, and all others will default to using `Manifest.toml`.
 This feature allows for easier management of different instantiated versions of dependencies for various Julia versions.
-Note that there can only be one `Project.toml` file. While `Manifest-v{major}.{minor}.toml` files are not automatically 
+Note that there can only be one `Project.toml` file. While `Manifest-v{major}.{minor}.toml` files are not automatically
 created by Pkg, users can manually rename a `Manifest.toml` file to match
 the versioned format, and Pkg will subsequently maintain it through its operations.
 
