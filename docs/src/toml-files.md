@@ -1,4 +1,4 @@
-# [**9.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
+# [**10.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
 
 Two files that are central to Pkg are `Project.toml` and `Manifest.toml`. `Project.toml`
 and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (hence the
@@ -39,8 +39,8 @@ name = "Example"
 The name must be a valid [identifier](https://docs.julialang.org/en/v1/base/base/#Base.isidentifier)
 (a sequence of Unicode characters that does not start with a number and is neither `true` nor `false`).
 For packages, it is recommended to follow the
-[package naming guidelines](https://docs.julialang.org/en/v1/tutorials/creating-packages/#Package-naming-guidelines).
-The `name` field is mandatory for packages.
+[package naming rules](@ref Package-naming-rules). The `name` field is mandatory
+for packages.
 
 
 ### The `uuid` field
