@@ -194,6 +194,7 @@ function fixup_ext!(env, pkgs)
             end
         end
     end
+    prune_manifest(env)
 end
 
 ####################
