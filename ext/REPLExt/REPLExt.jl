@@ -235,7 +235,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             println(ctx.io, line)
         end
         printstyled(ctx.io, " └ "; color=:green)
-        Base.prompt(stdin, ctx.io, "(y/n/o)", default = "y")
+        Base.prompt(stdin, ctx.io, "(y/t/n/o)", default = "y")
     catch err
         if err isa InterruptException # if ^C is entered
             println(ctx.io)
@@ -250,6 +250,9 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     resp = strip(resp)
     lower_resp = lowercase(resp)
     if lower_resp in ["y", "yes"]
+        API.add(string.(available_pkgs))
+    elseif lower_resp in ["t"]
+        activate(temp=true)
         API.add(string.(available_pkgs))
     elseif lower_resp in ["o"]
         editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
