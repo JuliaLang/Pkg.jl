@@ -240,6 +240,7 @@ function fixups_from_projectfile!(env::EnvCache)
             end
         end
     end
+    prune_manifest(env)
 end
 
 ####################
