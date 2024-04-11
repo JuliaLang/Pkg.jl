@@ -2130,19 +2130,17 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
 
     function find_paths!(final_paths, current, path = UUID[])
         push!(path, current)
-        if !(current in values(ctx.env.project.deps))
-            for p in incoming[current]
-                if p in path
-                    # detected dependency cycle and none of the dependencies in the cycle
-                    # are in the project could happen when manually modifying
-                    # the project and running this function function before a
-                    # resolve
-                    continue
-                end
-                find_paths!(final_paths, p, copy(path))
+        current in values(ctx.env.project.deps) && push!(final_paths, path) # record once we've traversed to a project dep
+        haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
+        for p in incoming[current]
+            if p in path
+                # detected dependency cycle and none of the dependencies in the cycle
+                # are in the project could happen when manually modifying
+                # the project and running this function function before a
+                # resolve
+                continue
             end
-        else
-            push!(final_paths, path)
+            find_paths!(final_paths, p, copy(path))
         end
     end
 
@@ -2150,10 +2148,10 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, kwargs...)
     for pkg in pkgs
         !first && println(io)
         first = false
-        final_paths = []
+        final_paths = Set{Vector{UUID}}()
         find_paths!(final_paths, pkg.uuid)
         foreach(reverse!, final_paths)
-        final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], final_paths)
+        final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], collect(final_paths))
         sort!(final_paths_names, by = x -> (x, length(x)))
         delimiter = sprint((io, args) -> printstyled(io, args...; color=:light_green), "→", context=io)
         for path in final_paths_names
