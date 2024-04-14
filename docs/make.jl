@@ -34,6 +34,7 @@ makedocs(
         "getting-started.md",
         "managing-packages.md",
         "environments.md",
+        "creating-packages.md",
         "compatibility.md",
         "registries.md",
         "artifacts.md",

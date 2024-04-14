@@ -225,12 +225,13 @@ See also [`PackageSpec`](@ref), [`PackageMode`](@ref).
 const rm = API.rm
 
 """
-    Pkg.why(pkg::Union{String, Vector{String}})
-    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.why(pkg::Union{String, Vector{String}}; workspace::Bool=false)
+    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}}; workspace::Bool=false)
 
 Show the reason why this package is in the manifest.
 The output is all the different ways to reach the package
 through the dependency graph starting from the dependencies.
+If `workspace` is true, this will consider all projects in the workspace and not just the active one.
 
 !!! compat "Julia 1.9"
     This function requires at least Julia 1.9.
@@ -473,7 +474,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false, io::IO=stderr)
+    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -481,6 +482,7 @@ Otherwise, resolve a set of feasible packages from the `Project.toml` files
 and install them.
 `verbose = true` prints the build output to `stdout`/`stderr` instead of
 redirecting to the `build.log` file.
+`workspace=true` will also instantiate all projects in the workspace.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
 
@@ -498,7 +500,8 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false,
+               compat::Bool=false, extensions::Bool=false, workspace::Bool=false, io::IO=stdout)
 
 
 Print out the status of the project/manifest.
@@ -535,6 +538,9 @@ of those that are currently loaded.
 
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
+
+Setting `workspace=true` will show the (merged) status of packages
+in the workspace.
 
 See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
