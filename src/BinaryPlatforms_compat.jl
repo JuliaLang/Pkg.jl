@@ -64,6 +64,8 @@ end
 
 const PlatformUnion = Union{Linux,MacOS,Windows,FreeBSD}
 
+Base.convert(::Type{Platform}, p::PlatformUnion) = p.p
+
 # First, methods we need to coerce to Symbol for backwards-compatibility
 for f in (:arch, :libc, :call_abi, :cxxstring_abi)
     @eval begin

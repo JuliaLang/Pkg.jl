@@ -788,6 +788,7 @@ function install_git(
 end
 
 function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform())
+    platform = convert(Platform, platform)::Platform
     # Check to see if this package has an (Julia)Artifacts.toml
     artifacts_tomls = Tuple{String,Base.TOML.TOMLDict}[]
     for f in artifact_names
@@ -825,6 +826,7 @@ function download_artifacts(env::EnvCache;
                             julia_version = VERSION,
                             verbose::Bool=false,
                             io::IO=stderr_f())
+    platform = convert(Platform, platform)::Platform
     pkg_roots = String[]
     for (uuid, pkg) in env.manifest
         pkg = manifest_info(env.manifest, uuid)
@@ -845,6 +847,7 @@ function download_artifacts(env::EnvCache;
 end
 
 function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform=HostPlatform())
+    platform = convert(Platform, platform)::Platform
     for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
         for name in keys(artifacts)
             if !artifact_exists(Base.SHA1(artifacts[name]["git-tree-sha1"]))
@@ -1481,6 +1484,7 @@ end
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
              preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform(),
              target::Symbol=:deps)
+    platform = convert(Platform, platform)::Platform
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
@@ -1544,6 +1548,7 @@ end
 # Input: name, uuid, and path
 function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
                  preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform())
+    platform = convert(Platform, platform)::Platform
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs

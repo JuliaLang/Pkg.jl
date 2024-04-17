@@ -211,6 +211,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=Operations.default_preserve(), platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
+    platform = convert(Platform, platform)::Platform
 
     for pkg in pkgs
         check_package_name(pkg.name, "develop")
@@ -257,6 +258,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
              platform::AbstractPlatform=HostPlatform(), target::Symbol=:deps, kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
+    platform = convert(Platform, platform)::Platform
 
     for pkg in pkgs
         check_package_name(pkg.name, "add")
@@ -1173,6 +1175,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true,
                      workspace::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
+    platform = convert(Platform, platform)::Platform
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
     end

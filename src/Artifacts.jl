@@ -183,6 +183,9 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         download_info::Union{Vector{<:Tuple},Nothing} = nothing,
                         lazy::Bool = false,
                         force::Bool = false)
+    if !isnothing(platform)
+        platform = convert(Platform, platform)::Platform
+    end
     # First, check to see if this artifact is already bound:
     if isfile(artifacts_toml)
         artifact_dict = parse_toml(artifacts_toml)
@@ -263,6 +266,9 @@ Silently fails if no such binding exists within the file.
 """
 function unbind_artifact!(artifacts_toml::String, name::String;
                          platform::Union{AbstractPlatform,Nothing} = nothing)
+    if !isnothing(platform)
+        platform = convert(Platform, platform)::Platform
+    end
     artifact_dict = parse_toml(artifacts_toml)
     if !haskey(artifact_dict, name)
         return
@@ -395,6 +401,7 @@ function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    verbose::Bool = false,
                                    quiet_download::Bool = false,
                                    io::IO=stderr_f())
+    platform = convert(Platform, platform)::Platform
     meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
@@ -409,6 +416,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
                                    verbose::Bool = false,
                                    quiet_download::Bool = false,
                                    io::IO=stderr_f())
+    platform = convert(Platform, platform)::Platform
     hash = SHA1(meta["git-tree-sha1"])
 
     if !artifact_exists(hash)
@@ -526,6 +534,7 @@ function ensure_all_artifacts_installed(artifacts_toml::String;
                                         verbose::Bool = false,
                                         quiet_download::Bool = false,
                                         io::IO=stderr_f())
+    platform = convert(Platform, platform)::Platform
     # This function should not be called anymore; use `select_downloadable_artifacts()` directly.
     Base.depwarn("`ensure_all_artifacts_installed()` is deprecated; iterate over `select_downloadable_artifacts()` output with `ensure_artifact_installed()`.", :ensure_all_artifacts_installed)
     # Collect all artifacts we're supposed to install
@@ -552,6 +561,7 @@ function extract_all_hashes(artifacts_toml::String;
                             platform::AbstractPlatform = HostPlatform(),
                             pkg_uuid::Union{Nothing,Base.UUID} = nothing,
                             include_lazy::Bool = false)
+    platform = convert(Platform, platform)::Platform
     hashes = Base.SHA1[]
     if !isfile(artifacts_toml)
         return hashes
