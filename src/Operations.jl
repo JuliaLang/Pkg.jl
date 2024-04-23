@@ -12,7 +12,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UnstableIO
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
 
 #########
@@ -2108,8 +2108,8 @@ end
 function subprocess_handler(cmd::Cmd, ctx, sandbox_ctx, error_msg::String)
     stdout = sandbox_ctx.io
     stderr = stderr_f()
-    stdout isa UnstableIO && (stdout = stdout.io)
-    stderr isa UnstableIO && (stderr = stderr.io)
+    stdout isa IOContext{IO} && (stdout = stdout.io)
+    stderr isa IOContext{IO} && (stderr = stderr.io)
     @debug "Running command" cmd
     p = run(pipeline(ignorestatus(cmd); stdout, stderr), wait = false)
     interrupted = false
