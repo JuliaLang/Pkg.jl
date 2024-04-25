@@ -1398,7 +1398,7 @@ function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryIns
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
-             preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform(),
+             allow_autoprecomp::Bool=true, preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform(),
              target::Symbol=:deps)
     assert_can_add(ctx, pkgs)
     # load manifest data
@@ -1449,7 +1449,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io=ctx.io)
         build_versions(ctx, union(new_apply, new_git))
-        Pkg._auto_precompile(ctx)
+        allow_autoprecomp && Pkg._auto_precompile(ctx)
     else
         record_project_hash(ctx.env)
         write_env(ctx.env)
