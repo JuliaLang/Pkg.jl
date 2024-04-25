@@ -12,7 +12,7 @@ import FileWatching
 
 import Base: StaleCacheKey
 
-import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, ..UnstableIO
+import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
 import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH
 using ..Types, ..TOML
@@ -254,7 +254,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
-             platform::AbstractPlatform=HostPlatform(), target::Symbol=:deps, kwargs...)
+             platform::AbstractPlatform=HostPlatform(), target::Symbol=:deps, allow_autoprecomp::Bool=true, kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
 
@@ -303,7 +303,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
         update_source_if_set(ctx.env.project, pkg)
     end
 
-    Operations.add(ctx, pkgs, new_git; preserve, platform, target)
+    Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target)
     return
 end
 
@@ -1146,8 +1146,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
 
     io = ctx.io
-    if io isa UnstableIO
-        # precompile does quite a bit of output and using the UnstableIO can cause
+    if io isa IOContext{IO}
+        # precompile does quite a bit of output and using the IOContext{IO} can cause
         # some slowdowns, the important part here is to not specialize the whole
         # precompile function on the io
         io = io.io

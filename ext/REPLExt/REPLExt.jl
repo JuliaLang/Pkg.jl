@@ -243,7 +243,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     resp = strip(resp)
     lower_resp = lowercase(resp)
     if lower_resp in ["y", "yes"]
-        API.add(string.(available_pkgs))
+        API.add(string.(available_pkgs); allow_autoprecomp=false)
     elseif lower_resp in ["o"]
         editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
         option_list = String[]
@@ -281,7 +281,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         end
         choice == -1 && return false
         API.activate(shown_envs[choice]) do
-            API.add(string.(available_pkgs))
+            API.add(string.(available_pkgs); allow_autoprecomp=false)
         end
     elseif (lower_resp in ["n"])
         return false

@@ -12,7 +12,7 @@ import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashe
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE, UnstableIO
+import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
 
 #########
@@ -194,6 +194,7 @@ function fixup_ext!(env, pkgs)
             end
         end
     end
+    prune_manifest(env)
 end
 
 ####################
@@ -1397,7 +1398,7 @@ function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryIns
 end
 
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
-             preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform(),
+             allow_autoprecomp::Bool=true, preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform(),
              target::Symbol=:deps)
     assert_can_add(ctx, pkgs)
     # load manifest data
@@ -1448,7 +1449,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io=ctx.io)
         build_versions(ctx, union(new_apply, new_git))
-        Pkg._auto_precompile(ctx)
+        allow_autoprecomp && Pkg._auto_precompile(ctx)
     else
         record_project_hash(ctx.env)
         write_env(ctx.env)
@@ -2108,8 +2109,8 @@ end
 function subprocess_handler(cmd::Cmd, ctx, sandbox_ctx, error_msg::String)
     stdout = sandbox_ctx.io
     stderr = stderr_f()
-    stdout isa UnstableIO && (stdout = stdout.io)
-    stderr isa UnstableIO && (stderr = stderr.io)
+    stdout isa IOContext{IO} && (stdout = stdout.io)
+    stderr isa IOContext{IO} && (stderr = stderr.io)
     @debug "Running command" cmd
     p = run(pipeline(ignorestatus(cmd); stdout, stderr), wait = false)
     interrupted = false
