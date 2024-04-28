@@ -41,8 +41,11 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
         try
             isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x)
         catch e
-            (e isa Base.IOError && e.code == Base.UV_EACCES) || rethrow()
-            return false
+            if e isa Base.IOError && e.code == Base.UV_EACCES
+                return false
+            else
+                rethrow()
+            end
         end
     end
     if expanded_user
