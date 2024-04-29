@@ -2115,6 +2115,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
             proj = Base.locate_project_file(testdir(source_path))
             env = EnvCache(proj)
+            # Instantiate test env
+            Pkg.instantiate(Context(env=env); allow_autoprecomp = false)
             status(env, ctx.registries; mode=PKGMODE_COMBINED, io=ctx.io, ignore_indent = false, show_usagetips = false)
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
