@@ -385,7 +385,9 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     root_base_proj_file = find_root_base_project(project_file)
     workspace = Dict{String, Project}()
     if isfile(root_base_proj_file)
-        manifest_file = Base.project_file_manifest_path(root_base_proj_file)
+        if root_base_proj_file !== project_file
+            manifest_file = manifestfile_path(dirname(root_base_proj_file))
+        end
         workspace = collect_workspace(root_base_proj_file)
         delete!(workspace, abspath(project_file))
     end
