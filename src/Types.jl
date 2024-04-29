@@ -844,15 +844,15 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             if pkg.repo.rev === nothing
                 pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
             end
-
-            obj_branch = get_object_or_branch(repo, pkg.repo.rev)
+            rev_or_hash = pkg.tree_hash === nothing ? pkg.repo.rev : pkg.tree_hash
+            obj_branch = get_object_or_branch(repo, rev_or_hash)
             fetched = false
             if obj_branch === nothing
                 fetched = true
                 GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
-                obj_branch = get_object_or_branch(repo, pkg.repo.rev)
+                obj_branch = get_object_or_branch(repo, rev_or_hash)
                 if obj_branch === nothing
-                    pkgerror("Did not find rev $(pkg.repo.rev) in repository")
+                    pkgerror("Did not find rev $(rev_or_hash) in repository")
                 end
             end
             gitobject, isbranch = obj_branch
@@ -862,7 +862,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             ispinned = innerentry !== nothing && innerentry.pinned
             if isbranch && !fetched && !ispinned
                 GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
-                gitobject, isbranch = get_object_or_branch(repo, pkg.repo.rev)
+                gitobject, isbranch = get_object_or_branch(repo, rev_or_hash)
             end
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
