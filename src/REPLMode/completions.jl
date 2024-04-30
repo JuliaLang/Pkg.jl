@@ -37,7 +37,17 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
     cmp = REPL.REPLCompletions.complete_path(s, i2, shell_escape=true)
     cmp2 = cmp[2]
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
-    completions = filter!(x -> isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x), completions)
+    completions = filter!(completions) do x
+        try
+            isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x)
+        catch e
+            if e isa Base.IOError && e.code == Base.UV_EACCES
+                return false
+            else
+                rethrow()
+            end
+        end
+    end
     if expanded_user
         if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
             completions = [joinpath(s, "")]
