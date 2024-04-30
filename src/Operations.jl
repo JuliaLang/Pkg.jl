@@ -375,11 +375,15 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
 
     for pkg in pkgs
         # add repo package if necessary
-        if (pkg.repo.rev !== nothing || pkg.repo.source !== nothing) && pkg.tree_hash === nothing
+        source = source_path(env.manifest_file, pkg)
+        path = source === nothing ? nothing : project_rel_path(env, source)
+        if (path === nothing || !isdir(path)) && (pkg.repo.rev !== nothing || pkg.repo.source !== nothing)
             # ensure revved package is installed
+            # pkg.tree_hash is set in here
             Types.handle_repo_add!(Types.Context(env=env), pkg)
+            # Recompute path
+            path = project_rel_path(env, source_path(env.manifest_file, pkg))
         end
-        path = project_rel_path(env, source_path(env.manifest_file, pkg))
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
         end
@@ -2111,6 +2115,8 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
             proj = Base.locate_project_file(testdir(source_path))
             env = EnvCache(proj)
+            # Instantiate test env
+            Pkg.instantiate(Context(env=env); allow_autoprecomp = false)
             status(env, ctx.registries; mode=PKGMODE_COMBINED, io=ctx.io, ignore_indent = false, show_usagetips = false)
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 

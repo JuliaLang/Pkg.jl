@@ -3213,5 +3213,21 @@ temp_pkg_dir() do project_path
         end
     end
 end
+@testset "test resolve with tree hash" begin
+    mktempdir() do dir
+        path = abspath(joinpath(@__DIR__, "../test", "test_packages", "ResolveWithRev"))
+        cp(path, joinpath(dir, "ResolveWithRev"))
+        cd(joinpath(dir, "ResolveWithRev")) do
+            with_current_env() do
+                @test !isfile("Manifest.toml")
+                @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                Pkg.resolve()
+                @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
+                Pkg.resolve()
+            end
+        end
+    end
+end
 
 end #module

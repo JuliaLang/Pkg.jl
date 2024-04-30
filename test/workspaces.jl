@@ -146,4 +146,22 @@ temp_pkg_dir() do project_path
     end end
 end
 
+@testset "test resolve with tree hash" begin
+    mktempdir() do dir
+        path = abspath(joinpath(@__DIR__, "../test", "test_packages", "WorkspaceTestInstantiate"))
+        cp(path, joinpath(dir, "WorkspaceTestInstantiate"))
+        cd(joinpath(dir, "WorkspaceTestInstantiate")) do
+            with_current_env() do
+                @test !isfile("Manifest.toml")
+                @test !isfile("test/Manifest.toml")
+                Pkg.test()
+                @test isfile("Manifest.toml")
+                @test !isfile("test/Manifest.toml")
+                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
+                Pkg.test()
+            end
+        end
+    end
+end
+
 end # module
