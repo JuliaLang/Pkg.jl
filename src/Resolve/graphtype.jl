@@ -914,12 +914,17 @@ function showlog(io::IO, rlog::ResolveLog; view::Symbol = :plain)
     end
 end
 
+ansi_length(s) = textwidth(replace(s, r"\e\[[0-9]+(?:;[0-9]+)*m" => ""))
+
 function showlogjournal(io::IO, rlog::ResolveLog)
     journal = rlog.journal
     id(p) = p == UUID0 ? "[global event]" : logstr(pkgID(p, rlog))
-    padding = maximum(length(id(p)) for (p,_) in journal; init=0)
+    padding = maximum(ansi_length(id(p)) for (p,_) in journal; init=0)
     for (p,msg) in journal
-        println(io, ' ', rpad(id(p), padding), ": ", msg)
+        s = id(p)
+        l = ansi_length(s)
+        pad = max(0, padding - l)
+        println(io, ' ', s, ' '^pad, ": ", msg)
     end
 end
 
