@@ -717,8 +717,8 @@ function log_event_implicit_req!(graph::Graph, p1::Int, vmask::BitVector, p0::In
     other_id = pkgID(other_p, rlog)
     if any(vmask)
         if all(vmask[1:(end-1)])    # Check if all versions are allowed (except uninstalled)
-            msg = ""
-            other_entry = nothing   # Don't propagate the log if all versions allowed
+            @assert other_p ≠ uuid_julia
+            msg = "required (without additional version restrictions) by $(logstr(other_id))"
         else
             msg = "restricted by "
             if other_p == uuid_julia
