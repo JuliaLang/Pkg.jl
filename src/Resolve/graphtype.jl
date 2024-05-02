@@ -463,6 +463,7 @@ function check_consistency(graph::Graph)
     # TODO: check ignored and solve_stack
 
     @assert np ≥ 0
+    @assert data.spp ≡ spp
     for x in Any[spp, gadj, gmsk, gconstr, adjdict, ignored, rlog.pool, pkgs, pdict, pvers, vdict]
         @assert length(x)::Int == np
     end
