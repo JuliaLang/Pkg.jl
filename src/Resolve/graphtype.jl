@@ -262,7 +262,7 @@ mutable struct Graph
             vn = pvers[p0][v0]
             req = Dict{Int,VersionSpec}()
             uuid0 = pkgs[p0]
-            vnmap = get(Dict{String,VersionSpec}, compat[uuid0], vn)
+            vnmap = get(Dict{UUID,VersionSpec}, compat[uuid0], vn)
             for (uuid1, vs) in vnmap
                 p1 = pdict[uuid1]
                 p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
