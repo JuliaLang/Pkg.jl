@@ -159,7 +159,10 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
         Set{Int}(1:graph.np) :
         Set{Int}(graph.data.pdict[p] for p in sources)
 
-    simplify_graph!(graph, isources)
+    propagate_constraints!(graph)
+    disable_unreachable!(graph, isources)
+    prune_graph!(graph)
+    compute_eq_classes!(graph)
 
     np = graph.np
     spp = graph.spp

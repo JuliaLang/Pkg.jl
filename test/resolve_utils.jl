@@ -116,7 +116,7 @@ function sanity_tst(deps_data, expected_result; pkgs=[])
 end
 sanity_tst(deps_data; kw...) = sanity_tst(deps_data, []; kw...)
 
-function resolve_tst(deps_data, reqs_data, want_data = nothing; clean_graph = false)
+function resolve_tst(deps_data, reqs_data, want_data = nothing; validate_versions = true)
     if VERBOSE
         println()
         @info("resolving")
@@ -126,7 +126,7 @@ function resolve_tst(deps_data, reqs_data, want_data = nothing; clean_graph = fa
     graph = graph_from_data(deps_data)
     reqs = reqs_from_data(reqs_data, graph)
     add_reqs!(graph, reqs)
-    simplify_graph!(graph, clean_graph = clean_graph)
+    simplify_graph!(graph; validate_versions)
     want = resolve(graph)
 
     id(u) = pkgID(u, graph)

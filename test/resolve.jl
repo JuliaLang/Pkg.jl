@@ -162,6 +162,12 @@ end
     want_data = Dict("B"=>v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
+    # require A (must give an error)
+    reqs_data = Any[
+        ["A", "*"]
+    ]
+    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+
 
     VERBOSE && @info("SCHEME 5")
     ## DEPENDENCY SCHEME 5: THREE PACKAGES, DAG, WITH IMPLICIT INCONSISTENCY
