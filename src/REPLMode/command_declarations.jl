@@ -321,6 +321,7 @@ PSA[:name => "activate",
     activate
     activate [--shared] path
     activate --temp
+    activate - (activates the previously active environment)
 
 Activate the environment at the given `path`, or use the first project found in
 `LOAD_PATH` (ignoring `"@"`) if no `path` is specified.
@@ -332,6 +333,7 @@ When the option `--shared` is given, `path` will be assumed to be a directory na
 it will be placed in the first depot of the stack.
 Use the `--temp` option to create temporary environments which are removed when the julia
 process is exited.
+Use a single `-` to activate the previously active environment.
 """ ,
 ],
 PSA[:name => "update",
