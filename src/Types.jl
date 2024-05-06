@@ -216,7 +216,7 @@ function find_project_file(env::Union{Nothing,String}=nothing)
     end
     if isfile(project_file) && !contains(basename(project_file), "Project")
         pkgerror("""
-        The active project has been set to toml file that isn't a Project file: $project_file
+        The active project has been set to a file that isn't a Project file: $project_file
         The project path must be to a Project file or directory.
         """)
     end
