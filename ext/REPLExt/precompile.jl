@@ -28,6 +28,10 @@ let
         end
         copy!(DEPOT_PATH, original_depot_path)
         copy!(LOAD_PATH, original_load_path)
+
+        Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), REPLExt.PkgCompletionProvider, REPL.LineEdit.PromptState})
+        Base.precompile(Tuple{typeof(REPL.REPLCompletions.completion_text), REPL.REPLCompletions.PackageCompletion})
+        Base.precompile(Tuple{typeof(REPLExt.on_done), REPL.LineEdit.MIState, Base.GenericIOBuffer{Memory{UInt8}}, Bool, REPL.LineEditREPL})
     end
 
     if Base.generating_output()
