@@ -803,7 +803,9 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
             if isfile(selector_path)
                 res = mktemp() do path, io
                     redirect_stdout(io) do
-                        include(selector_path)
+                        m = Module()
+                        @eval m include(x) = Base.include(@__MODULE__, x)
+                        Base.include(m, selector_path)
                     end
                     close(io)
                     meta_toml = read(path, String)
