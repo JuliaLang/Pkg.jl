@@ -802,10 +802,17 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
             # If there is a dynamic artifact selector, run that to select artifacts
             if isfile(selector_path)
                 res = mktemp() do path, io
-                    redirect_stdout(io) do
+                    old_args = copy(ARGS)
+                    empty!(ARGS)
+                    push!(ARGS, triplet(platform))
+                    try
                         m = Module()
                         @eval m include(x) = Base.include(@__MODULE__, x)
-                        Base.include(m, selector_path)
+                        redirect_stdout(io) do
+                            Base.include(m, selector_path)
+                        end
+                    finally
+                        copy!(ARGS, old_args)
                     end
                     close(io)
                     meta_toml = read(path, String)
