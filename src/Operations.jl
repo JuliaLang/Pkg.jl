@@ -2505,6 +2505,10 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if Types.is_project_uuid(env, uuid)
             continue
         end
+        changed = old != new
+        if diff && !changed
+            continue
+        end
         latest_version = true
         # Outdated info
         cinfo = nothing
@@ -2541,7 +2545,6 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             # allow space in the gutter for two icons on a single line
             lpadding = 3
         end
-        changed = old != new
         all_packages_downloaded &= (!changed || pkg_downloaded)
         no_packages_upgradable &= (!changed || !pkg_upgradable)
         no_visible_packages_heldback &= (!changed || !pkg_heldback)
@@ -2551,8 +2554,6 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     end
 
     for pkg in package_statuses
-        diff && !pkg.changed && continue # in diff mode don't print packages that didn't change
-
         pad = 0
         print_padding(x) = (print(io, x); pad += 1)
 
