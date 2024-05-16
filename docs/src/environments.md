@@ -194,7 +194,7 @@ To disable the auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
 
 The indicators next to the package names displayed during precompilation
 indicate the status of that package's precompilation. A `?` character indicates
-that [TODO: something to do with waiting?]; animated "clock" characters
+that a `PrecompilableError` was thrown which indicates precompilation was disallowed i.e. `__precompile__(false)`; animated "clock" characters
 (`◐`,`◓`,`◑`,`◒`) indicate that the package is currently being precompiled; a
 `✓` indicates that the package has been successfully precompiled [TODO: these
 disappear when... all their dependencies are also precompiled?]; a `✗` indicates
