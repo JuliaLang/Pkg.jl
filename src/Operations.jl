@@ -732,7 +732,7 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 # Despite the fact that we inherit the project, since the in-memory manifest
                 # has not been updated yet, if we try to load any dependencies, it may fail.
                 # Therefore, this project inheritance is really only for Preferences, not dependencies.
-                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) -t1 --startup-file=no $(triplet(platform))`)
+                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) --compile=min -t1 --startup-file=no $(triplet(platform))`)
                 meta_toml = String(read(select_cmd))
                 res = TOML.tryparse(meta_toml)
                 if res isa TOML.ParserError
@@ -2368,6 +2368,10 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if Types.is_project_uuid(env, uuid)
             continue
         end
+        changed = old != new
+        if diff && !changed
+            continue
+        end
         latest_version = true
         # Outdated info
         cinfo = nothing
@@ -2404,7 +2408,6 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             # allow space in the gutter for two icons on a single line
             lpadding = 3
         end
-        changed = old != new
         all_packages_downloaded &= (!changed || pkg_downloaded)
         no_packages_upgradable &= (!changed || !pkg_upgradable)
         no_visible_packages_heldback &= (!changed || !pkg_heldback)
@@ -2414,8 +2417,6 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
     end
 
     for pkg in package_statuses
-        diff && !pkg.changed && continue # in diff mode don't print packages that didn't change
-
         pad = 0
         print_padding(x) = (print(io, x); pad += 1)
 

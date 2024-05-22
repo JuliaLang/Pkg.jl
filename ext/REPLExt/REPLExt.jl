@@ -23,7 +23,7 @@ include("compat.jl")
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
-function LineEdit.complete_line(c::PkgCompletionProvider, s)
+function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool=false)
     partial = REPL.beforecursor(s.input_buffer)
     full = LineEdit.input_string(s)
     ret, range, should_complete = completions(full, lastindex(partial))
@@ -99,6 +99,16 @@ function do_cmds(repl::REPL.AbstractREPL, commands::Union{String, Vector{Command
     end
 end
 
+function on_done(s, buf, ok, repl)
+    ok || return REPL.transition(s, :abort)
+    input = String(take!(buf))
+    REPL.reset(repl)
+    do_cmds(repl, input)
+    REPL.prepare_next(repl)
+    REPL.reset_state(s)
+    s.current_mode.sticky || REPL.transition(s, main)
+end
+
 # Set up the repl Pkg REPLMode
 function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     pkg_mode = LineEdit.Prompt(promptf;
@@ -115,15 +125,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     search_prompt, skeymap = LineEdit.setup_search_keymap(hp)
     prefix_prompt, prefix_keymap = LineEdit.setup_prefix_keymap(hp, pkg_mode)
 
-    pkg_mode.on_done = (s, buf, ok) -> begin
-        ok || return REPL.transition(s, :abort)
-        input = String(take!(buf))
-        REPL.reset(repl)
-        do_cmds(repl, input)
-        REPL.prepare_next(repl)
-        REPL.reset_state(s)
-        s.current_mode.sticky || REPL.transition(s, main)
-    end
+    pkg_mode.on_done = (s, buf, ok) -> Base.@invokelatest(on_done(s, buf, ok, repl))
 
     mk = REPL.mode_keymap(main)
 
