@@ -8,7 +8,7 @@ using Pkg.Types
 using Pkg.Types: VersionBound
 using UUIDs
 using Pkg.Resolve
-import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, Fixed, Requires
+import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, ResolverTimeoutError, Fixed, Requires
 import ..HistoricalStdlibVersions
 
 include("utils.jl")
@@ -641,13 +641,12 @@ end
 end
 
 @testset "realistic" begin
-    VERBOSE && @info("SCHEME REALISTIC 1")
-    ## DEPENDENCY SCHEME 15: A REALISTIC EXAMPLE
-    ## ref Julia issue #21485
-
     tmp = mktempdir()
     Pkg.PlatformEngines.unpack(joinpath(@__DIR__, "resolvedata.tar.gz"), tmp; verbose=false)
 
+    VERBOSE && @info("SCHEME REALISTIC 1")
+    ## DEPENDENCY SCHEME 15: A REALISTIC EXAMPLE
+    ## ref Julia issue #21485
 
     include(joinpath(tmp, "resolvedata1.jl"))
 
@@ -671,19 +670,36 @@ end
 
     @test sanity_tst(ResolveData3.deps_data, ResolveData3.problematic_data)
     @test resolve_tst(ResolveData3.deps_data, ResolveData3.reqs_data, ResolveData3.want_data)
+
+    VERBOSE && @info("SCHEME REALISTIC 4")
+    ## DEPENDENCY SCHEME 18: AN UNSAT REALISTIC EXAMPLE IN WHICH THE RESOLVER HANGS FOR MINUTES
+    ## The resolve_tst call is intended to fail (by timeout) with validate_versions=false
+    ## ref Pkg.jl issue #3878
+
+    include(joinpath(tmp, "resolvedata4.jl"))
+
+    @test sanity_tst(ResolveData4.deps_data, ResolveData4.problematic_data)
+    withenv("JULIA_PKG_RESOLVE_MAX_TIME"=>10) do
+        @test_throws ResolverError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data)
+    end
+    withenv("JULIA_PKG_RESOLVE_MAX_TIME"=>1e-5) do
+        # this test may fail if graph preprocessing or the greedy solver get better
+        @test_throws ResolverTimeoutError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data; validate_versions=false)
+    end
+
 end
 
 @testset "nasty" begin
     VERBOSE && @info("SCHEME NASTY")
-    ## DEPENDENCY SCHEME 16: A NASTY CASE
+    ## DEPENDENCY SCHEME 19: A NASTY CASE
 
     include("NastyGenerator.jl")
-    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = true)
+    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat=true)
 
     @test sanity_tst(deps_data, problematic_data)
     @test resolve_tst(deps_data, reqs_data, want_data)
 
-    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = false)
+    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat=false)
 
     @test sanity_tst(deps_data, problematic_data)
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)

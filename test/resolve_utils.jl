@@ -2,11 +2,12 @@
 
 module ResolveUtils
 
+using Test
 using UUIDs
 import ..Pkg # ensure we are using the correct Pkg
 using Pkg.Types
 using Pkg.Resolve
-using Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, Fixed, Requires
+using Pkg.Resolve: add_reqs!, simplify_graph!, Fixed, Requires
 
 export sanity_tst, resolve_tst, VERBOSE
 
@@ -136,7 +137,7 @@ function resolve_tst(deps_data, reqs_data, want_data = nothing; validate_version
             if u ∉ keys(wd)
                 @info "resolver decided to install $(id(u)) (v$vn), package wasn't expected"
             elseif vn ≠ wd[u]
-            @info "version mismatch for $(id(u)), resolver wants v$vn, expected v$(wd[u])"
+                @info "version mismatch for $(id(u)), resolver wants v$vn, expected v$(wd[u])"
             end
         end
         for (u,vn) in wd
