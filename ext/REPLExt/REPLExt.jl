@@ -26,7 +26,7 @@ struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool=false)
     partial = REPL.beforecursor(s.input_buffer)
     full = LineEdit.input_string(s)
-    ret, range, should_complete = completions(full, lastindex(partial))
+    ret, range, should_complete = completions(full, lastindex(partial); hint)
     return ret, partial[range], should_complete
 end
 
