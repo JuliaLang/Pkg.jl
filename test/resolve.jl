@@ -736,7 +736,7 @@ end
     # All stdlibs should be installable and resolvable
     temp_pkg_dir() do dir
         Pkg.activate(temp=true)
-        Pkg.add(map(first, values(Pkg.Types.load_stdlib())))    # add all stdlibs
+        Pkg.add(map(x -> x.name, values(Pkg.Types.load_stdlib())))    # add all stdlibs
         iob = IOBuffer()
         Pkg.resolve(io = iob)
         str = String(take!(iob))
