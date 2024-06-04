@@ -279,7 +279,21 @@ function Base.print(io::IO, s::VersionSpec)
     end
     print(io, ']')
 end
-Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
+
+function Base.show(io::IO, s::VersionSpec)
+    print(io, "VersionSpec(")
+    if length(s.ranges) == 1
+        print(io, '"', s.ranges[1], '"')
+    else
+        print(io, "[")
+        for i = 1:length(s.ranges)
+            1 < i && print(io, ", ")
+            print(io, '"', s.ranges[i], '"')
+        end
+        print(io, ']')
+    end
+    print(io, ")")
+end
 
 
 ###################
