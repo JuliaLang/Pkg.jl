@@ -24,9 +24,10 @@ PSA[:name => "test",
     :completions => get_complete_function(:complete_installed_packages),
     :description => "run tests for packages",
     :help => md"""
-    test [--coverage] pkg[=uuid] ...
+    test [--coverage] [pkg[=uuid]] ...
 
-Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
+Run the tests for package `pkg`, or for the current project (which thus needs to be
+a package) if `pkg` is ommitted.  This is done by running the file `test/runtests.jl`
 in the package directory. The option `--coverage` can be used to run the tests with
 coverage enabled. The `startup.jl` file is disabled during testing unless
 julia is started with `--startup-file=yes`.
