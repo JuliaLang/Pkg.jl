@@ -15,7 +15,10 @@ function to_tar_path_format(file::AbstractString)
 end
 
 # See loading.jl
-const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
+const TOML_CACHE = let parser = Base.TOML.Parser()
+    parser.Dates = Dates
+    Base.TOMLCache(parser, Dict{String, Dict{String, Any}}())
+end
 const TOML_LOCK = ReentrantLock()
 _parsefile(toml_file::AbstractString) = Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK)
 function parsefile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, file::AbstractString)
@@ -23,7 +26,9 @@ function parsefile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractStr
         return _parsefile(joinpath(folder, file))
     else
         content = in_memory_registry[to_tar_path_format(file)]
-        return TOML.Internals.parse(TOML.Parser(content; filepath=file))
+        parser = Base.TOML.Parser(content; filepath=file)
+        parser.Dates = Dates
+        return Base.TOML.parse(parser)
     end
 end
 
