@@ -88,9 +88,9 @@ function complete_remote_package(partial; hint::Bool)
                     if is_julia_compat === nothing || is_julia_compat
                         push!(cmp, name)
                         # In hint mode the result is only used if there is a single matching entry
-                        # so we can return no matches in case of more than one match
+                        # so we abort the search
                         if hint && found_match
-                            return String[]
+                            return sort!(collect(cmp))
                         end
                         found_match = true
                         break
