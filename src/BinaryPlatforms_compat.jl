@@ -12,10 +12,13 @@ import Base.BinaryPlatforms: libgfortran_version, libstdcxx_version, platform_na
                              cxxstring_abi
 
 struct UnknownPlatform <: AbstractPlatform
-    UnknownPlatform(args...; kwargs...) = new()
+    p::Platform
+    function UnknownPlatform(args...; kwargs...)
+        p = Platform("unknown", "unknown")
+        delete!(p.tags, "arch")
+        new(p)
+    end
 end
-tags(::UnknownPlatform) = Dict{String,String}("os"=>"unknown")
-
 
 struct CompilerABI
     libgfortran_version::Union{Nothing,VersionNumber}
@@ -62,7 +65,7 @@ for T in (:Linux, :Windows, :MacOS, :FreeBSD)
     end
 end
 
-const PlatformUnion = Union{Linux,MacOS,Windows,FreeBSD}
+const PlatformUnion = Union{UnknownPlatform,Linux,MacOS,Windows,FreeBSD}
 
 # First, methods we need to coerce to Symbol for backwards-compatibility
 for f in (:arch, :libc, :call_abi, :cxxstring_abi)
