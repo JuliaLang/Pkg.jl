@@ -21,7 +21,7 @@ using SHA
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror,
-    has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
+    has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, stdlib_infos, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
@@ -479,12 +479,18 @@ function load_stdlib()
 end
 
 function stdlibs()
+    # This maintains a compatible format for `stdlibs()`, but new code should always
+    # prefer `stdlib_infos` as it is more future-proofed, by returning a structure
+    # rather than a tuple of elements.
+    return Dict(uuid => (info.name, info.version) for (uuid, info) in stdlib_infos())
+end
+function stdlib_infos()
     if !isassigned(STDLIB)
         STDLIB[] = load_stdlib()
     end
     return STDLIB[]
 end
-is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
+is_stdlib(uuid::UUID) = uuid in keys(stdlib_infos())
 # Includes former stdlibs
 function is_or_was_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
     return is_stdlib(uuid, julia_version) || uuid in FORMER_STDLIBS_UUIDS
@@ -502,7 +508,7 @@ end
 # If we can't find one, defaults to `UNREGISTERED_STDLIBS`
 function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_current_version = false)
     if !use_historical_for_current_version && julia_version == VERSION
-        return stdlibs()
+        return stdlib_infos()
     end
     historical_stdlibs_check()
     last_stdlibs = UNREGISTERED_STDLIBS
@@ -1040,14 +1046,14 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, info) in stdlibs()
+            for (uuid, info) in stdlib_infos()
                 if info.name == pkg.name
                     pkg.uuid = uuid
                 end
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            info = get(stdlibs(), pkg.uuid, nothing)
+            info = get(stdlib_infos(), pkg.uuid, nothing)
             if info !== nothing
                 pkg.name = info.name
             end
