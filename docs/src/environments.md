@@ -192,6 +192,14 @@ force these packages to be retried, as `pkg> precompile` will always retry all p
 
 To disable the auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
 
+The indicators next to the package names displayed during precompilation
+indicate the status of that package's precompilation. Animated "clock" characters
+(`◐`,`◓`,`◑`,`◒`) indicate that the package is currently being precompiled.
+A checkmark (`✓`) indicates that the package has been successfully precompiled (after which that package will disappear from the list).
+A question mark (`?`) character indicates that a `PrecompilableError` was thrown, indicating that precompilation was disallowed,
+i.e. `__precompile__(false)` in that package.
+An `✗` indicates that the package failed to precompile.
+
 ### Precompiling new versions of loaded packages
 
 If a package that has been updated is already loaded in the session, the precompilation process will go ahead and precompile
