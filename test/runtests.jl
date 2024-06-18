@@ -42,7 +42,7 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
         iob = IOBuffer()
         Pkg.activate(; temp = true)
         try
-            Pkg.add("HistoricalStdlibVersions", io=iob) # Needed for custom julia version resolve tests
+            Pkg.add(name="HistoricalStdlibVersions", version="1.2", uuid="6df8b67a-e8a0-4029-b4b7-ac196fe72102", io=iob) # Needed for custom julia version resolve tests
         catch
             println(String(take!(iob)))
             rethrow()
