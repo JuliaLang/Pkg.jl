@@ -227,6 +227,7 @@ temp_pkg_dir() do project_path
         @test_throws Pkg.Types.PkgError pkg"activate --shared ./Foo"
         @test_throws Pkg.Types.PkgError pkg"activate --shared Foo/Bar"
         @test_throws Pkg.Types.PkgError pkg"activate --shared ../Bar"
+        @test_throws Pkg.Types.PkgError pkg"activate --shared temp"
         # check that those didn't change the environment
         @test Base.active_project() == joinpath(path, "Project.toml")
         mkdir("Foo")
@@ -239,6 +240,8 @@ temp_pkg_dir() do project_path
         pkg"activate ."
         #=@test_logs (:info, r"activating new environment at ")))=# pkg"activate --shared Foo" # activate shared Foo
         @test Base.active_project() == joinpath(Pkg.envdir(), "Foo", "Project.toml")
+        pkg"activate --shared stdlib" # activate shared STDLIB
+        @test Base.active_project() == joinpath(Sys.STDLIB, "Project.toml")
         pkg"activate ."
         rm("Foo"; force=true, recursive=true)
         pkg"activate Foo" # activate path from developed Foo
@@ -265,6 +268,15 @@ temp_pkg_dir() do project_path
         pop!(Base.DEPOT_PATH)
         pkg"activate" # activate LOAD_PATH project
         @test Base.ACTIVE_PROJECT[] === nothing
+        pkg"activate @temp" # activate a temporary environment
+        @test dirname(Base.ACTIVE_PROJECT[]) == tempdir()
+        pkg"activate @stdlib" # activate the STDLIB environment
+        @test Base.ACTIVE_PROJECT[] == Sys.STDLIB
+        pkg"activate @." # activate current project
+        @test Base.ACTIVE_PROJECT[] == Base.current_project()
+        pkg"activate @" # activate active project
+        @test Base.ACTIVE_PROJECT[] === Base.active_project()
+
         # expansion of ~
         if !Sys.iswindows()
             pkg"activate ~/Foo_lzTkPF6N"
