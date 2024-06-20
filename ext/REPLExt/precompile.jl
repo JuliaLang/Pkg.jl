@@ -1,11 +1,11 @@
 let
     struct FakeTerminal <: REPL.Terminals.UnixTerminal
-        in_stream::IOBuffer
-        out_stream::IOBuffer
-        err_stream::IOBuffer
+        in_stream::IO
+        out_stream::IO
+        err_stream::IO
         hascolor::Bool
         raw::Bool
-        FakeTerminal() = new(IOBuffer(), IOBuffer(), IOBuffer(), false, true)
+        FakeTerminal() = new(Base.BufferStream(), IOBuffer(), IOBuffer(), false, true)
     end
     REPL.raw!(::FakeTerminal, raw::Bool) = raw
 
@@ -22,8 +22,11 @@ let
                 promptf()
                 term = FakeTerminal()
                 repl = REPL.LineEditREPL(term, true)
-                REPL.run_repl(repl)
+                t = @async REPL.run_repl(repl)
+                sleep(5) # is there something better to wait for??
                 repl_init(repl)
+                close(term.in_stream)
+                wait(t)
             end
         end
         copy!(DEPOT_PATH, original_depot_path)
