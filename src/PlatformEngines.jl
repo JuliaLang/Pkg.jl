@@ -345,15 +345,20 @@ function download_verify(
     mkpath(dirname(dest))
 
     # Download the file, optionally continuing
-    f = retry(delays = fill(1.0, 3)) do
+    attempts = 3
+    for i in 1:attempts
         try
             download(url, dest; verbose=verbose || !quiet_download)
         catch err
-            @debug "download and verify failed" url dest err
-            rethrow()
+            @debug "download and verify failed on attempt $i/$attempts" url dest err
+            # for system errors like `no space left on device` exit after first try
+            if err isa SystemError || i == attempts
+                rethrow()
+            else
+                sleep(1)
+            end
         end
     end
-    f()
     if hash !== nothing && !verify(dest, hash; verbose=verbose)
         # If the file already existed, it's possible the initially downloaded chunk
         # was bad.  If verification fails after downloading, auto-delete the file
