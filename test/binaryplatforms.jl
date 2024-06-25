@@ -42,6 +42,8 @@ const platform = @inferred Platform platform_key_abi()
         # Explicitly test that we can pass arguments to UnknownPlatform,
         # and it doesn't do anything.
         @test UnknownPlatform(:riscv; libc=:fuschia_libc) == UnknownPlatform()
+        @test arch(FreeBSD()) == :x86_64
+        @test arch(MacOS()) == :x86_64
     end
 
     @testset "Platform properties" begin
@@ -82,6 +84,7 @@ const platform = @inferred Platform platform_key_abi()
         @test triplet(MacOS()) == "x86_64-apple-darwin14"
         @test triplet(FreeBSD(:x86_64)) == "x86_64-unknown-freebsd11.1"
         @test triplet(FreeBSD(:i686)) == "i686-unknown-freebsd11.1"
+        @test platform_key_abi("i686-w64-mingw32") == Windows(:i686)
     end
 
     @testset "Valid DL paths" begin
@@ -109,6 +112,8 @@ const platform = @inferred Platform platform_key_abi()
                 cxxstring_abi=cxxstring_abi,
             )
             @test platforms_match(Linux(:x86_64), Linux(:x86_64, compiler_abi=cabi))
+            @test platforms_match(convert(Platform,Linux(:x86_64)), Linux(:x86_64, compiler_abi=cabi))
+            @test platforms_match(Linux(:x86_64), convert(Platform, Linux(:x86_64, compiler_abi=cabi)))
             @test platforms_match(Linux(:x86_64, compiler_abi=cabi), Linux(:x86_64))
 
             # Also test auto-string-parsing
@@ -137,6 +142,9 @@ const platform = @inferred Platform platform_key_abi()
 
             @test !platforms_match(Linux(arch, compiler_abi=base_cabi), Linux(arch, compiler_abi=cabi))
         end
+        @test platforms_match(triplet(Linux(:x86_64)), Linux(:x86_64))
+        @test platforms_match(@view(triplet(Linux(:x86_64))[1:end]), Linux(:x86_64))
+        @test Base.BinaryPlatforms.select_platform(Dict(Linux(:x86_64) => 5), Linux(:x86_64)) == 5
     end
 
     @testset "Sys.is* overloading" begin
