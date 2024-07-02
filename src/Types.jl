@@ -53,8 +53,7 @@ function deepcopy_toml(x::Dict{String, Any})
 end
 
 # See loading.jl
-const TOML_CACHE = let parser = Base.TOML.Parser()
-    parser.Dates = Dates
+const TOML_CACHE = let parser = Base.TOML.Parser{Dates}()
     Base.TOMLCache(parser, Dict{String, Dict{String, Any}}())
 end
 const TOML_LOCK = ReentrantLock()
