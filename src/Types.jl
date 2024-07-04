@@ -230,6 +230,12 @@ function find_project_file(env::Union{Nothing,String}=nothing)
                 abspath(env, Base.project_names[end])
         end
     end
+    if isfile(project_file) && !contains(basename(project_file), "Project")
+        pkgerror("""
+        The active project has been set to a file that isn't a Project file: $project_file
+        The project path must be to a Project file or directory.
+        """)
+    end
     @assert project_file isa String &&
         (isfile(project_file) || !ispath(project_file) ||
          isdir(project_file) && isempty(readdir(project_file)))
