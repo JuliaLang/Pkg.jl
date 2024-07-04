@@ -560,8 +560,15 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
             usage[k] = [Dict("time" => maximum(times))]
         end
 
-        open(usage_file, "w") do io
-            TOML.print(io, usage, sorted=true)
+        tempfile = tempname()
+        try
+            open(tempfile, "w") do io
+                TOML.print(io, usage, sorted=true)
+            end
+            TOML.parsefile(tempfile) # compare to `usage` ?
+            mv(tempfile, usage_file; force=true) # only mv if parse succeeds
+        catch err
+            @error "Failed to write valid usage file `$usage_file`" tempfile
         end
     end
     return
