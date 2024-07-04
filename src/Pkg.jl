@@ -730,7 +730,9 @@ function __init__()
             end
         end
     end
-    push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
+    if !in(REPLMode.try_prompt_pkg_add, REPL.install_packages_hooks)
+        push!(REPL.install_packages_hooks, REPLMode.try_prompt_pkg_add)
+    end
     Base.PKG_PRECOMPILE_HOOK[] = precompile # allows Base to use Pkg.precompile during loading
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
     return nothing
