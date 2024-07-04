@@ -42,7 +42,15 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
         iob = IOBuffer()
         Pkg.activate(; temp = true)
         try
-            Pkg.add(name="HistoricalStdlibVersions", version="1.2", uuid="6df8b67a-e8a0-4029-b4b7-ac196fe72102", io=iob) # Needed for custom julia version resolve tests
+            # Needed for custom julia version resolve tests
+            # Don't use the toplevel PKg.add() command to avoid accidentally installing another copy of the registry
+            spec = Pkg.PackageSpec(
+                name="HistoricalStdlibVersions", 
+                url="https://github.com/JuliaPackaging/HistoricalStdlibVersions.jl",
+                rev="39d6ab6e71b614242976ab014635ac7ef039cb58", #= version="1.2", =#
+                uuid="6df8b67a-e8a0-4029-b4b7-ac196fe72102")
+            Pkg.API.handle_package_input!(spec)
+            Pkg.add(Pkg.API.Context(), [spec], io=iob)
         catch
             println(String(take!(iob)))
             rethrow()
