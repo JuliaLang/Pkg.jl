@@ -1485,8 +1485,8 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     show_update(ctx.env, ctx.registries; io=ctx.io)
 end
 
-update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, is_dep::Bool) = pkg
-function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, is_dep::Bool)
+update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
+function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.pinned
         if pkg.version == VersionSpec()
             println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
@@ -1630,8 +1630,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
         delete!(ctx.env.project.weakdeps, pkg.name)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         is_dep = any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
-        source_path, source_repo = get_path_repo(ctx.env.project, pkg.name)
-        pkgs[i] = update_package_add(ctx, pkg, entry, source_path, source_repo, is_dep)
+        pkgs[i] = update_package_add(ctx, pkg, entry, is_dep)
     end
 
     names = (p.name for p in pkgs)

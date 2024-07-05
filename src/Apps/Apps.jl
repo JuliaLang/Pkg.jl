@@ -3,7 +3,7 @@ module Apps
 using Pkg
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
                  pkgerror
-using Pkg.Operations: print_single, source_path
+using Pkg.Operations: print_single, source_path, update_package_add
 using Pkg.API: handle_package_input!
 using TOML, UUIDs
 import Pkg.Registry
@@ -21,9 +21,9 @@ const XDG_BIN_PATH = joinpath(homedir(), ".local", "bin")
 # Helper Methods #
 ##################
 
-function rm_julia_and_xdg_bin(name; kwargs)
+function rm_julia_and_xdg_bin(name; kwargs...)
     Base.rm(joinpath(JULIA_BIN_PATH, name); kwargs...)
-    Base.rm(joinpath(XDG_BIN_PATH, name); kwargs...)
+    # Base.rm(joinpath(XDG_BIN_PATH, name); kwargs...)
 end
 
 function handle_project_file(sourcepath)
@@ -43,6 +43,7 @@ end
 
 function overwrite_if_different(file, content)
     if !isfile(file) || read(file, String) != content
+        mkpath(dirname(file))
         open(file, "w") do f
             write(f, content)
         end
@@ -103,7 +104,7 @@ function add(pkg::PackageSpec)
     new = false
     if pkg.repo.source !== nothing || pkg.repo.rev !== nothing
         entry = Pkg.API.manifest_info(ctx.env.manifest, pkg.uuid)
-        pkg = Pkg.Operations.update_package_add(ctx, pkg, entry, false)
+        pkg = update_package_add(ctx, pkg, entry, false)
         new = handle_repo_add!(ctx, pkg)
     else
         pkgs = [pkg]
@@ -117,7 +118,8 @@ function add(pkg::PackageSpec)
 
     sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = handle_project_file(sourcepath)
-    project.path = sourcepath
+    # TODO: Wrong if package itself has a sourcepath?
+    project.entryfile = joinpath(sourcepath, "src", "$(project.name).jl")
 
     # TODO: Type stab
     # appdeps = get(project, "appdeps", Dict())
@@ -204,12 +206,7 @@ function status(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
 
         printstyled("[", string(dep.uuid)[1:8], "] "; color = :light_black)
         print_single(stdout, dep)
-        single_app = length(info.apps) == 1
-        if !single_app
-            println()
-        else
-            print(":")
-        end
+        println()
         for (appname, appinfo) in info.apps
             if !is_pkg && pkg_or_app !== nothing && appname !== pkg_or_app
                 continue
@@ -313,10 +310,12 @@ function generate_shim(app::AppInfo, pkgname; julia_executable_path::String=join
     # TODO: Only overwrite if app is "controlled" by Julia?
     overwrite_if_different(julia_bin_filename, content)
     if Sys.isunix()
+        #=
         if isdir(XDG_BIN_PATH) && !isfile(joinpath(XDG_BIN_PATH, filename))
             # TODO: Verify that this symlink is in fact pointing to the correct file.
             symlink(julia_bin_filename, joinpath(XDG_BIN_PATH, filename))
         end
+        =#
         chmod(julia_bin_filename, 0o755)
     end
 end

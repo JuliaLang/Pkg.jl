@@ -158,7 +158,7 @@ end
 
 # TODO: Move
 import Pkg: Operations, Types, Apps
-function complete_installed_apps(options, partial)
+function complete_installed_apps(options, partial; hint)
     manifest = try
         Types.read_manifest(joinpath(Apps.APP_ENV_FOLDER, "AppManifest.toml"))
     catch err
