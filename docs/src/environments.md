@@ -196,7 +196,7 @@ The indicators next to the package names displayed during precompilation
 indicate the status of that package's precompilation. 
 
 - `[◐, ◓, ◑, ◒]` Animated "clock" characters indicate that the package is currently being precompiled.
-- `✓` A checkmark indicates that the package has been successfully precompiled (after which that package will disappear from the list).
+- `✓` A green checkmark indicates that the package has been successfully precompiled (after which that package will disappear from the list). If the checkmark is yellow it means that the package is currently loaded so the session will need to be restarted to access the version that was just precompiled.
 - `?` A question mark character indicates that a `PrecompilableError` was thrown, indicating that precompilation was disallowed, i.e. `__precompile__(false)` in that package.
 - `✗` A cross indicates that the package failed to precompile.
 
