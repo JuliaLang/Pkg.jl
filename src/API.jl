@@ -21,7 +21,7 @@ using Base.BinaryPlatforms
 import ..stderr_f, ..stdout_f
 using ..Artifacts: artifact_paths
 using ..MiniProgressBars
-import ..Resolve: ResolverError
+import ..Resolve: ResolverError, ResolverTimeoutError
 
 include("generate.jl")
 
@@ -1398,7 +1398,7 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         try
             resolve(ctx)
         catch e
-            if e isa ResolverError
+            if e isa ResolverError || e isa ResolverTimeoutError
                 printpkgstyle(io, :Error, string(e.msg), color = Base.warn_color())
                 printpkgstyle(io, :Suggestion, "Call `update` to attempt to meet the compatibility requirements.", color = Base.info_color())
             else

@@ -1,13 +1,13 @@
 const PSA = Pair{Symbol,Any}
 
 function get_complete_function(f)
-    return function(opts, partial, offset, index)
+    return function(opts, partial, offset, index; hint::Bool)
         m = Base.get_extension(@__MODULE__, :REPLExt)
         m === nothing && return String[]
         completions = getglobal(m, f)
         return applicable(completions, opts, partial, offset, index) ?
-            completions(opts, partial, offset, index) :
-            completions(opts, partial)
+            completions(opts, partial, offset, index; hint) :
+            completions(opts, partial; hint)
     end
 end
 
@@ -24,9 +24,10 @@ PSA[:name => "test",
     :completions => get_complete_function(:complete_installed_packages),
     :description => "run tests for packages",
     :help => md"""
-    test [--coverage] pkg[=uuid] ...
+    test [--coverage] [pkg[=uuid]] ...
 
-Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
+Run the tests for package `pkg`, or for the current project (which thus needs to be
+a package) if `pkg` is ommitted.  This is done by running the file `test/runtests.jl`
 in the package directory. The option `--coverage` can be used to run the tests with
 coverage enabled. The `startup.jl` file is disabled during testing unless
 julia is started with `--startup-file=yes`.

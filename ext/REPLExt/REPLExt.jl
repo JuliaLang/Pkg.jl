@@ -26,7 +26,7 @@ struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool=false)
     partial = REPL.beforecursor(s.input_buffer)
     full = LineEdit.input_string(s)
-    ret, range, should_complete = completions(full, lastindex(partial))
+    ret, range, should_complete = completions(full, lastindex(partial); hint)
     return ret, partial[range], should_complete
 end
 
@@ -318,7 +318,9 @@ function __init__()
             end
         end
     end
-    push!(empty!(REPL.install_packages_hooks), try_prompt_pkg_add)
+    if !in(try_prompt_pkg_add, REPL.install_packages_hooks)
+        push!(REPL.install_packages_hooks, try_prompt_pkg_add)
+    end
 end
 
 include("precompile.jl")

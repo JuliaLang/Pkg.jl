@@ -11,7 +11,7 @@ function _shared_envs()
     return possible
 end
 
-function complete_activate(options, partial, i1, i2)
+function complete_activate(options, partial, i1, i2; hint::Bool)
     shared = get(options, :shared, false)
     if shared
         return _shared_envs()
@@ -62,7 +62,8 @@ end
 
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
-function complete_remote_package(partial)
+function complete_remote_package(partial; hint::Bool)
+    found_match = false
     isempty(partial) && return String[]
     cmp = Set{String}()
     for reg in Registry.reachable_registries()
@@ -79,7 +80,6 @@ function complete_remote_package(partial)
                     is_julia_compat = nothing
                     for (pkg_uuid, vspec) in uncompressed_compat
                         if pkg_uuid == JULIA_UUID
-                            found_julia_compat = true
                             is_julia_compat = VERSION in vspec
                             is_julia_compat && continue
                         end
@@ -87,6 +87,12 @@ function complete_remote_package(partial)
                     # Found a compatible version or compat on julia at all => compatible
                     if is_julia_compat === nothing || is_julia_compat
                         push!(cmp, name)
+                        # In hint mode the result is only used if there is a single matching entry
+                        # so we abort the search
+                        if hint && found_match
+                            return sort!(collect(cmp))
+                        end
+                        found_match = true
                         break
                     end
                 end
@@ -96,7 +102,7 @@ function complete_remote_package(partial)
     return sort!(collect(cmp))
 end
 
-function complete_help(options, partial)
+function complete_help(options, partial; hint::Bool)
     names = String[]
     for cmds in values(SPECS)
          append!(names, [spec.canonical_name for spec in values(cmds)])
@@ -104,7 +110,7 @@ function complete_help(options, partial)
     return sort!(unique!(append!(names, collect(keys(SPECS)))))
 end
 
-function complete_installed_packages(options, partial)
+function complete_installed_packages(options, partial; hint::Bool)
     env = try EnvCache()
     catch err
         err isa PkgError || rethrow()
@@ -116,7 +122,7 @@ function complete_installed_packages(options, partial)
         unique!([entry.name for (uuid, entry) in env.manifest])
 end
 
-function complete_all_installed_packages(options, partial)
+function complete_all_installed_packages(options, partial; hint::Bool)
     env = try EnvCache()
     catch err
         err isa PkgError || rethrow()
@@ -125,7 +131,7 @@ function complete_all_installed_packages(options, partial)
     return unique!([entry.name for (uuid, entry) in env.manifest])
 end
 
-function complete_installed_packages_and_compat(options, partial)
+function complete_installed_packages_and_compat(options, partial; hint::Bool)
     env = try EnvCache()
     catch err
         err isa PkgError || rethrow()
@@ -137,7 +143,7 @@ function complete_installed_packages_and_compat(options, partial)
     end
 end
 
-function complete_fixed_packages(options, partial)
+function complete_fixed_packages(options, partial; hint::Bool)
     env = try EnvCache()
     catch err
         err isa PkgError || rethrow()
@@ -146,12 +152,12 @@ function complete_fixed_packages(options, partial)
     return unique!([entry.name for (uuid, entry) in env.manifest.deps if Operations.isfixed(entry)])
 end
 
-function complete_add_dev(options, partial, i1, i2)
+function complete_add_dev(options, partial, i1, i2; hint::Bool)
     comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)
         return comps, idx, !isempty(comps)
     end
-    comps = vcat(comps, sort(complete_remote_package(partial)))
+    comps = vcat(comps, sort(complete_remote_package(partial; hint)))
     if !isempty(partial)
         append!(comps, filter!(startswith(partial), first.(values(Types.stdlibs()))))
     end
@@ -187,7 +193,7 @@ complete_opt(opt_specs) =
 
 function complete_argument(spec::CommandSpec, options::Vector{String},
                            partial::AbstractString, offset::Int,
-                           index::Int)
+                           index::Int; hint::Bool)
     spec.completions === nothing && return String[]
     # finish parsing opts
     local opts
@@ -197,10 +203,10 @@ function complete_argument(spec::CommandSpec, options::Vector{String},
         e isa PkgError && return String[]
         rethrow()
     end
-    return spec.completions(opts, partial, offset, index)
+    return spec.completions(opts, partial, offset, index; hint)
 end
 
-function _completions(input, final, offset, index)
+function _completions(input, final, offset, index; hint::Bool)
     statement, word_count, partial = nothing, nothing, nothing
     try
         words = tokenize(input)[end]
@@ -223,11 +229,11 @@ function _completions(input, final, offset, index)
         command_is_focused() && return String[], 0:-1, false
 
         if final # complete arg by default
-            x = complete_argument(statement.spec, statement.options, partial, offset, index)
+            x = complete_argument(statement.spec, statement.options, partial, offset, index; hint)
         else # complete arg or opt depending on last token
             x = is_opt(partial) ?
                 complete_opt(statement.spec.option_specs) :
-                complete_argument(statement.spec, statement.options, partial, offset, index)
+                complete_argument(statement.spec, statement.options, partial, offset, index; hint)
         end
     end
 
@@ -242,7 +248,7 @@ function _completions(input, final, offset, index)
     end
 end
 
-function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
+function completions(full, index; hint::Bool=false)::Tuple{Vector{String},UnitRange{Int},Bool}
     pre = full[1:index]
     isempty(pre) && return default_commands(), 0:-1, false # empty input -> complete commands
     offset_adjust = 0
@@ -254,5 +260,5 @@ function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
     last = split(pre, ' ', keepempty=true)[end]
     offset = isempty(last) ? index+1+offset_adjust : last.offset+1+offset_adjust
     final  = isempty(last) # is the cursor still attached to the final token?
-    return _completions(pre, final, offset, index)
+    return _completions(pre, final, offset, index; hint)
 end
