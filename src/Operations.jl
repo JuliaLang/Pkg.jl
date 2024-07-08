@@ -1982,9 +1982,9 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
                 err isa Resolve.ResolverError || rethrow()
                 allow_reresolve || rethrow()
                 @debug err
-                printpkgstyle(ctx.io, :Sandbox, "Could not use exact versions of packages in manifest. Re-resolving dependencies", color=Base.warn_color())
+                printpkgstyle(ctx.io, :Test, "Could not use exact versions of packages in manifest. Re-resolving dependencies", color=Base.warn_color())
                 Pkg.update(temp_ctx; skip_writing_project=true, update_registry=false, io=ctx.io)
-                printpkgstyle(ctx.io, :Sandbox, "Successfully re-resolved")
+                printpkgstyle(ctx.io, :Test, "Successfully re-resolved")
                 @debug "Using _clean_ dep graph"
             end
 
