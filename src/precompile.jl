@@ -105,7 +105,7 @@ let
 
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
         # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
-        DEFAULT_IO[] = UnstableIO(devnull)
+        DEFAULT_IO[] = unstableio(devnull)
         Downloads.DOWNLOADER[] = Downloads.Downloader(; grace = 1.0)
 
         # We need to override JULIA_PKG_UNPACK_REGISTRY to fix https://github.com/JuliaLang/Pkg.jl/issues/3663
@@ -152,6 +152,13 @@ let
             Base.precompile(Tuple{typeof(Pkg.API.status)})
             Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat),Base.Dict{String,Any},Pkg.Types.Project,},)
             Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval),Base.RegexMatch})
+
+            Base.precompile(Tuple{typeof(Pkg.REPLMode.do_cmds), Array{Pkg.REPLMode.Command, 1}, Base.TTY})
+
+            Base.precompile(Tuple{typeof(Pkg.Types.read_project_workspace), Base.Dict{String, Any}, Pkg.Types.Project})
+            Base.precompile(Tuple{Type{Pkg.REPLMode.QString}, String, Bool})
+            Base.precompile(Tuple{typeof(Pkg.REPLMode.parse_package), Array{Pkg.REPLMode.QString, 1}, Base.Dict{Symbol, Any}})
+            Base.precompile(Tuple{Type{Pkg.REPLMode.Command}, Pkg.REPLMode.CommandSpec, Base.Dict{Symbol, Any}, Array{Pkg.Types.PackageSpec, 1}})
         end
         copy!(DEPOT_PATH, original_depot_path)
         copy!(LOAD_PATH, original_load_path)

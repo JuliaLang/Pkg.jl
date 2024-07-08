@@ -2387,10 +2387,11 @@ end
         Pkg.add( name="Example", version="0.3.0")
         Pkg.add("Markdown")
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST)
-        @test occursin(r"Status `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] Example\s*v0\.3\.0", readline(io))
-        @test occursin(r"\[2a0f44e3\] Base64", readline(io))
-        @test occursin(r"\[d6f4376e\] Markdown", readline(io))
+        statuslines = readlines(io)
+        @test occursin(r"Status `.+Manifest.toml`", first(statuslines))
+        @test any(l -> occursin(r"\[7876af07\] Example\s*v0\.3\.0", l), statuslines)
+        @test any(l -> occursin(r"\[2a0f44e3\] Base64", l), statuslines)
+        @test any(l -> occursin(r"\[d6f4376e\] Markdown", l), statuslines)
     end
     # Diff API
     isolate(loaded_depot=true) do
@@ -2428,11 +2429,12 @@ end
         @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
         ## diff manifest
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
-        @test occursin(r"Diff `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
-        @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
-        @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
-        @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
+        statuslines = readlines(io)
+        @test occursin(r"Diff `.+Manifest.toml`", first(statuslines))
+        @test any(l -> occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", l), statuslines)
+        @test any(l -> occursin(r"\[2a0f44e3\] - Base64", l), statuslines)
+        @test any(l -> occursin(r"\[d6f4376e\] - Markdown", l), statuslines)
+        @test any(l -> occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", l), statuslines)
         ## diff project with filtering
         Pkg.status("Markdown"; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -3196,6 +3198,38 @@ if :version in fieldnames(Base.PkgOrigin)
         Pkg.respect_sysimage_versions(true)
     end
 end
+end
+
+temp_pkg_dir() do project_path
+    @testset "test entryfile entries" begin
+        mktempdir() do dir
+            path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "ProjectPath"))
+            cp(path, joinpath(dir, "ProjectPath"))
+            cd(joinpath(dir, "ProjectPath")) do
+                with_current_env() do
+                    Pkg.resolve()
+                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPath'`))
+                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPathDep'`))
+                end
+            end
+        end
+    end
+end
+@testset "test resolve with tree hash" begin
+    mktempdir() do dir
+        path = abspath(joinpath(@__DIR__, "../test", "test_packages", "ResolveWithRev"))
+        cp(path, joinpath(dir, "ResolveWithRev"))
+        cd(joinpath(dir, "ResolveWithRev")) do
+            with_current_env() do
+                @test !isfile("Manifest.toml")
+                @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                Pkg.resolve()
+                @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
+                Pkg.resolve()
+            end
+        end
+    end
 end
 
 end #module

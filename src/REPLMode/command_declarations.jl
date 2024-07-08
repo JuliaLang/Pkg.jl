@@ -1,13 +1,13 @@
 const PSA = Pair{Symbol,Any}
 
 function get_complete_function(f)
-    return function(opts, partial, offset, index)
+    return function(opts, partial, offset, index; hint::Bool)
         m = Base.get_extension(@__MODULE__, :REPLExt)
         m === nothing && return String[]
         completions = getglobal(m, f)
         return applicable(completions, opts, partial, offset, index) ?
-            completions(opts, partial, offset, index) :
-            completions(opts, partial)
+            completions(opts, partial, offset, index; hint) :
+            completions(opts, partial; hint)
     end
 end
 
@@ -24,9 +24,10 @@ PSA[:name => "test",
     :completions => get_complete_function(:complete_installed_packages),
     :description => "run tests for packages",
     :help => md"""
-    test [--coverage] pkg[=uuid] ...
+    test [--coverage] [pkg[=uuid]] ...
 
-Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
+Run the tests for package `pkg`, or for the current project (which thus needs to be
+a package) if `pkg` is ommitted.  This is done by running the file `test/runtests.jl`
 in the package directory. The option `--coverage` can be used to run the tests with
 coverage enabled. The `startup.jl` file is disabled during testing unless
 julia is started with `--startup-file=yes`.
@@ -56,15 +57,17 @@ PSA[:name => "instantiate",
         PSA[:name => "project", :short_name => "p", :api => :manifest => false],
         PSA[:name => "manifest", :short_name => "m", :api => :manifest => true],
         PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
+        PSA[:name => "workspace", :api => :workspace => true],
     ],
     :description => "downloads all the dependencies for the project",
     :help => md"""
-    instantiate [-v|--verbose]
-    instantiate [-v|--verbose] [-m|--manifest]
-    instantiate [-v|--verbose] [-p|--project]
+    instantiate [-v|--verbose] [--workspace]
+    instantiate [-v|--verbose] [--workspace] [-m|--manifest]
+    instantiate [-v|--verbose] [--workspace] [-p|--project]
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+If `--workspace` is given, all dependencies in the workspace will be downloaded.
 
 After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
@@ -239,14 +242,19 @@ PSA[:name => "why",
     :api => API.why,
     :should_splat => false,
     :arg_count => 1 => 1,
+    :option_spec => [
+        PSA[:name => "workspace", :api => :workspace => true],
+    ],
     :arg_parser => parse_package,
     :completions => get_complete_function(:complete_all_installed_packages),
     :description => "shows why a package is in the manifest",
     :help => md"""
-    why pkg[=uuid] ...
+    why [--workspace] pkg[=uuid] ...
 
 Show the reason why packages are in the manifest, printed as a path through the
 dependency graph starting at the direct dependencies.
+The `workspace` option can be used to show the path from any dependency of a project in
+the workspace.
 
 !!! compat "Julia 1.9"
     The `why` function is added in Julia 1.9
@@ -321,6 +329,7 @@ PSA[:name => "activate",
     activate
     activate [--shared] path
     activate --temp
+    activate - (activates the previously active environment)
 
 Activate the environment at the given `path`, or use the first project found in
 `LOAD_PATH` (ignoring `"@"`) if no `path` is specified.
@@ -332,6 +341,7 @@ When the option `--shared` is given, `path` will be assumed to be a directory na
 it will be placed in the first depot of the stack.
 Use the `--temp` option to create temporary environments which are removed when the julia
 process is exited.
+Use a single `-` to activate the previously active environment.
 """ ,
 ],
 PSA[:name => "update",
@@ -386,12 +396,16 @@ PSA[:name => "precompile",
     :arg_count => 0 => Inf,
     :completions => get_complete_function(:complete_installed_packages),
     :description => "precompile all the project dependencies",
+    :option_spec => [
+        PSA[:name => "workspace", :api => :workspace => true],
+    ],
     :help => md"""
-    precompile
-    precompile pkgs...
+    precompile [--workspace]
+    precompile [--workspace] pkgs...
 
 Precompile all or specified dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
+The `workspace` option will precompile all packages in the workspace and not only the active project.
 
 Errors will only throw when precompiling the top-level dependencies, given that
 not all manifest dependencies may be loaded by the top-level dependencies on the given system.
@@ -415,15 +429,16 @@ PSA[:name => "status",
         PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
         PSA[:name => "compat", :short_name => "c", :api => :compat => true],
         PSA[:name => "extensions", :short_name => "e", :api => :extensions => true],
+        PSA[:name => "workspace", :api => :workspace => true],
     ],
     :completions => get_complete_function(:complete_installed_packages),
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    [st|status] [-d|--diff] [-o|--outdated] [pkgs...]
-    [st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
-    [st|status] [-d|--diff] [-e|--extensions] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-e|--extensions] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-m|--manifest] [pkgs...]
     [st|status] [-c|--compat] [pkgs...]
 
 Show the status of the current environment. Packages marked with `⌃` have new
@@ -441,6 +456,7 @@ If there are any packages listed as arguments the output will be limited to thos
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
 The `--compat` option alone shows project compat entries.
+The `--workspace` option shows the (merged) status of packages in the workspace.
 
 !!! compat "Julia 1.8"
     The `⌃` and `⌅` indicators were added in Julia 1.8.

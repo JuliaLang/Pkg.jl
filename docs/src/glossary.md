@@ -1,4 +1,4 @@
-# [**8.** Glossary](@id Glossary)
+# [**9.** Glossary](@id Glossary)
 
 **Project:** a source tree with a standard layout, including a `src` directory
 for the main body of Julia code, a `test` directory for testing the project,
