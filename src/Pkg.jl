@@ -18,7 +18,7 @@ export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_I
 export Registry, RegistrySpec
 
 public actiivate, add, build, compat, develop, free, gc, generate, instantiate, 
-       pin, precompile, redo, remove, resolve, status, test, undo, update, why
+       pin, precompile, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
 function depots1()
