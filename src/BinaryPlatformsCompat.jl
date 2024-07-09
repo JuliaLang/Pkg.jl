@@ -1,4 +1,4 @@
-module BinaryPlatforms
+module BinaryPlatformsCompat
 
 using Base.BinaryPlatforms
 export platform_key_abi, platform_dlext, valid_dl_path, arch, libc,
@@ -141,4 +141,6 @@ function valid_dl_path(path::AbstractString, platform::AbstractPlatform)
     end
 end
 
-end # module BinaryPlatforms
+end # module BinaryPlatformsCompat
+
+const BinaryPlatforms = BinaryPlatformsCompat
