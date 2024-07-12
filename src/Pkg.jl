@@ -17,6 +17,9 @@ export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
+public activate, add, build, compat, develop, free, gc, generate, instantiate, 
+       pin, precompile, redo, rm, resolve, status, test, undo, update, why
+
 depots() = Base.DEPOT_PATH
 function depots1()
     d = depots()
