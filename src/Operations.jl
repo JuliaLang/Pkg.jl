@@ -452,7 +452,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
         end
     end
 
-    names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in stdlibs())
+    names = Dict{UUID, String}(uuid => info.name for (uuid, info) in stdlib_infos())
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
     # But we only want to use information for those packages that we don't know about
@@ -514,7 +514,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
-            name = is_stdlib(uuid) ? first(stdlibs()[uuid]) : registered_name(registries, uuid)
+            name = is_stdlib(uuid) ? stdlib_infos()[uuid].name : registered_name(registries, uuid)
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
@@ -576,37 +576,26 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
             uuid in keys(fixed) && continue
             all_compat_u = get_or_make!(all_compat, uuid)
             weak_compat_u = get_or_make!(weak_compat, uuid)
-
-            uuid_is_stdlib = false
-            stdlib_name = ""
-            stdlib_version = nothing
-            if haskey(stdlibs_for_julia_version, uuid)
-                uuid_is_stdlib = true
-                stdlib_name, stdlib_version = stdlibs_for_julia_version[uuid]
-            end
+            uuid_is_stdlib = haskey(stdlibs_for_julia_version, uuid)
 
             # If we're requesting resolution of a package that is an
             # unregistered stdlib we must special-case it here.  This is further
             # complicated by the fact that we can ask this question relative to
             # a Julia version.
             if (julia_version != VERSION && is_unregistered_stdlib(uuid)) || uuid_is_stdlib
-                path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
-                proj_file = projectfile_path(path; strict=true)
-                @assert proj_file !== nothing
-                proj = read_package(proj_file)
+                # We use our historical stdlib versioning data to unpack the version, deps and weakdeps of this uuid
+                stdlib_info = stdlibs_for_julia_version[uuid]
+                v = something(stdlib_info.version, VERSION)
 
-                v = something(proj.version, VERSION)
-
-                # TODO look at compat section for stdlibs?
                 all_compat_u_vr = get_or_make!(all_compat_u, v)
-                for (_, other_uuid) in proj.deps
+                for other_uuid in stdlib_info.deps
                     push!(uuids, other_uuid)
                     all_compat_u_vr[other_uuid] = VersionSpec()
                 end
 
-                if !isempty(proj.weakdeps)
+                if !isempty(stdlib_info.weakdeps)
                     weak_all_compat_u_vr = get_or_make!(weak_compat_u, v)
-                    for (_, other_uuid) in proj.weakdeps
+                    for other_uuid in stdlib_info.weakdeps
                         push!(uuids, other_uuid)
                         all_compat_u_vr[other_uuid] = VersionSpec()
                         push!(weak_all_compat_u_vr, other_uuid)

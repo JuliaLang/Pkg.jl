@@ -159,7 +159,7 @@ function complete_add_dev(options, partial, i1, i2; hint::Bool)
     end
     comps = vcat(comps, sort(complete_remote_package(partial; hint)))
     if !isempty(partial)
-        append!(comps, filter!(startswith(partial), first.(values(Types.stdlibs()))))
+        append!(comps, filter!(startswith(partial), [info.name for info in values(Types.stdlib_infos())]))
     end
     return comps, idx, !isempty(comps)
 end
