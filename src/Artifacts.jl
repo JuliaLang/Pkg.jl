@@ -301,6 +301,7 @@ function download_artifact(
     verbose::Bool = false,
     quiet_download::Bool = false,
     io::IO=stderr_f(),
+    progress::Union{Function, Nothing} = nothing,
 )
     if artifact_exists(tree_hash)
         return true
@@ -323,8 +324,8 @@ function download_artifact(
     temp_dir = mktempdir(artifacts_dir)
 
     try
-        download_verify_unpack(tarball_url, tarball_hash, temp_dir, ignore_existence=true, verbose=verbose,
-                quiet_download=quiet_download, io=io)
+        download_verify_unpack(tarball_url, tarball_hash, temp_dir;
+                                ignore_existence=true, verbose, quiet_download, io, progress)
         calc_hash = SHA1(GitTools.tree_hash(temp_dir))
 
         # Did we get what we expected?  If not, freak out.
@@ -408,67 +409,87 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
                                    platform::AbstractPlatform = HostPlatform(),
                                    verbose::Bool = false,
                                    quiet_download::Bool = false,
-                                   io::IO=stderr_f())
+                                   progress_callback::Union{Function,Nothing} = nothing,
+                                   io::IO=stderr_f(),
+                                   progress::Union{Function,Nothing}=nothing)
+
     hash = SHA1(meta["git-tree-sha1"])
-
     if !artifact_exists(hash)
-        errors = Any[]
-        # first try downloading from Pkg server
-        # TODO: only do this if Pkg server knows about this package
-        if (server = pkg_server()) !== nothing
-            url = "$server/artifact/$hash"
-            download_success = let url=url
-                @debug "Downloading artifact from Pkg server" name artifacts_toml platform url
-                with_show_download_info(io, name, quiet_download) do
-                    download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download, io=io)
-                end
-            end
-            # download_success is either `true` or an error object
-            if download_success === true
-                return artifact_path(hash)
-            else
-                @debug "Failed to download artifact from Pkg server" download_success
-                push!(errors, (url, download_success))
+        if isnothing(progress_callback) || verbose == true
+            return try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, verbose, quiet_download, io)
+        else
+            return Threads.@spawn begin
+                try_artifact_download_sources(name, meta, artifacts_toml; platform, quiet_download=true, io, progress)
             end
         end
-
-        # If this artifact does not exist on-disk already, ensure it has download
-        # information, then download it!
-        if !haskey(meta, "download")
-            error("Cannot automatically install '$(name)'; no download section in '$(artifacts_toml)'")
-        end
-
-        # Attempt to download from all sources
-        for entry in meta["download"]
-            url = entry["url"]
-            tarball_hash = entry["sha256"]
-            download_success = let url=url
-                @debug "Downloading artifact" name artifacts_toml platform url
-                with_show_download_info(io, name, quiet_download) do
-                    download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download, io=io)
-                end
-            end
-            # download_success is either `true` or an error object
-            if download_success === true
-                return artifact_path(hash)
-            else
-                @debug "Failed to download artifact" download_success
-                push!(errors, (url, download_success))
-            end
-        end
-        errmsg = """
-        Unable to automatically download/install artifact '$(name)' from sources listed in '$(artifacts_toml)'.
-        Sources attempted:
-        """
-        for (url, err) in errors
-            errmsg *= "- $(url)\n"
-            errmsg *= "    Error: $(sprint(showerror, err))\n"
-        end
-        error(errmsg)
     else
         return artifact_path(hash)
     end
 end
+
+function try_artifact_download_sources(
+            name::String, hash::SHA1, meta::Dict, artifacts_toml::String;
+            platform::AbstractPlatform=HostPlatform(),
+            verbose::Bool=false,
+            quiet_download::Bool=false,
+            io::IO=stderr_f(),
+            progress::Union{Function,Nothing}=nothing)
+
+    errors = Any[]
+    # first try downloading from Pkg server
+    # TODO: only do this if Pkg server knows about this package
+    if (server = pkg_server()) !== nothing
+        url = "$server/artifact/$hash"
+        download_success = let url = url
+            @debug "Downloading artifact from Pkg server" name artifacts_toml platform url
+            with_show_download_info(io, name, quiet_download) do
+                download_artifact(hash, url; verbose, quiet_download, io, progress)
+            end
+        end
+        # download_success is either `true` or an error object
+        if download_success === true
+            return artifact_path(hash)
+        else
+            @debug "Failed to download artifact from Pkg server" download_success
+            push!(errors, (url, download_success))
+        end
+    end
+
+    # If this artifact does not exist on-disk already, ensure it has download
+    # information, then download it!
+    if !haskey(meta, "download")
+        error("Cannot automatically install '$(name)'; no download section in '$(artifacts_toml)'")
+    end
+
+    # Attempt to download from all sources
+    for entry in meta["download"]
+        url = entry["url"]
+        tarball_hash = entry["sha256"]
+        download_success = let url = url
+            @debug "Downloading artifact" name artifacts_toml platform url
+            with_show_download_info(io, name, quiet_download) do
+                download_artifact(hash, url, tarball_hash; verbose, quiet_download, io, progress)
+            end
+        end
+        # download_success is either `true` or an error object
+        if download_success === true
+            return artifact_path(hash)
+        else
+            @debug "Failed to download artifact" download_success
+            push!(errors, (url, download_success))
+        end
+    end
+    errmsg = """
+    Unable to automatically download/install artifact '$(name)' from sources listed in '$(artifacts_toml)'.
+    Sources attempted:
+    """
+    for (url, err) in errors
+        errmsg *= "- $(url)\n"
+        errmsg *= "    Error: $(sprint(showerror, err))\n"
+    end
+    error(errmsg)
+end
+
 
 function with_show_download_info(f, io, name, quiet_download)
     fancyprint = can_fancyprint(io)
@@ -485,7 +506,7 @@ function with_show_download_info(f, io, name, quiet_download)
         if !quiet_download
             fancyprint && print(io, "\033[1A") # move cursor up one line
             fancyprint && print(io, "\033[2K") # clear line
-            if success 
+            if success
                 fancyprint && printpkgstyle(io, :Downloaded, "artifact: $name")
             else
                 printpkgstyle(io, :Failure, "artifact: $name", color = :red)

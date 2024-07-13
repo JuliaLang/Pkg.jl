@@ -828,15 +828,34 @@ function download_artifacts(env::EnvCache;
         pkg_root === nothing || push!(pkg_roots, pkg_root)
     end
     push!(pkg_roots, dirname(env.project_file))
+    used_artifact_tomls = Set{String}()
+    download_jobs = Channel{Function}(Inf)
+    # download_progresses = # Dict for each live job of (total, now) -> nothing
     for pkg_root in pkg_roots
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
-                ensure_artifact_installed(name, artifacts[name], artifacts_toml;
+                # @info name
+                push!(download_jobs,
+                    () -> ensure_artifact_installed(name, artifacts[name], artifacts_toml;
                                             verbose, quiet_download=!(usable_io(io)), io=io)
+                )
             end
-            write_env_usage(artifacts_toml, "artifact_usage.toml")
+            push!(used_artifact_tomls, artifacts_toml)
         end
+    end
+    close(download_jobs)
+
+    sema = Base.Semaphore(20)
+    # TODO: figure out printing & error handling
+    @sync for f in download_jobs
+        Threads.@spawn Base.acquire(sema) do
+            f()
+        end
+    end
+
+    for f in used_artifact_tomls
+        write_env_usage(f, "artifact_usage.toml")
     end
 end
 
