@@ -281,8 +281,16 @@ function download(
     else
         (total, now) -> nothing
     end
+    # During precompilation don't use the default downloader as it has a
+    # 30s grace period that will cause the pending process warning on 1.10
+    # (on 1.11 the downloader is finalized before the pending process detector)
+    downloader = if ccall(:jl_generating_output, Cint, ()) != 0
+        Downloads.Downloader(grace=0)
+    else
+        nothing
+    end
     try
-        Downloads.download(url, dest; headers, progress)
+        Downloads.download(url, dest; headers, progress, downloader)
     finally
         do_fancy && end_progress(io, bar)
     end
