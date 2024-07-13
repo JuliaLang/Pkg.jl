@@ -9,11 +9,11 @@ Base.@kwdef mutable struct MiniProgressBar
     header::String = ""
     color::Symbol = :nothing
     width::Int = 40
-    current::Int = 0.0
-    prev::Int = 0.0
+    current::Int = 0
+    prev::Int = 0
     has_shown::Bool = false
     time_shown::Float64 = 0.0
-    percentage::Bool = true
+    mode::Symbol = :percentage # :percentage :int :data
     always_reprint::Bool = false
     indent::Int = 4
 end
@@ -47,10 +47,14 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
     p.prev = p.current
     p.has_shown = true
 
-    progress_text = if p.percentage
+    progress_text = if p.mode == :percentage
         @sprintf "%2.1f %%" perc
-    else
+    elseif p.mode == :int
         string(p.current, "/",  p.max)
+    elseif p.mode == :data
+        string(Base.format_bytes(p.current), "/", Base.format_bytes(p.max))
+    else
+        error("Unknown mode $(p.mode)")
     end
     termwidth = @something termwidth displaysize(io)[2]
     max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))

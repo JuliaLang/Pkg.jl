@@ -255,7 +255,8 @@ function download(
     verbose::Bool = false,
     headers::Vector{Pair{String,String}} = Pair{String,String}[],
     auth_header::Union{Pair{String,String}, Nothing} = nothing,
-    io::IO=stderr_f()
+    io::IO=stderr_f(),
+    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
 )
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
@@ -268,7 +269,9 @@ function download(
     end
 
     do_fancy = verbose && can_fancyprint(io)
-    progress = if do_fancy
+    progress = if !isnothing(progress)
+        progress
+    elseif do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
         start_progress(io, bar)
         let bar=bar
@@ -326,6 +329,7 @@ function download_verify(
     verbose::Bool = false,
     force::Bool = false,
     quiet_download::Bool = false,
+    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
 )
     # Whether the file existed in the first place
     file_existed = false
@@ -352,7 +356,7 @@ function download_verify(
     attempts = 3
     for i in 1:attempts
         try
-            download(url, dest; verbose=verbose || !quiet_download)
+            download(url, dest; verbose=verbose || !quiet_download, progress)
             break
         catch err
             @debug "download and verify failed on attempt $i/$attempts" url dest err
@@ -466,6 +470,7 @@ function download_verify_unpack(
     verbose::Bool = false,
     quiet_download::Bool = false,
     io::IO=stderr_f(),
+    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
 )
     # First, determine whether we should keep this tarball around
     remove_tarball = false
@@ -510,8 +515,7 @@ function download_verify_unpack(
 
     # Download the tarball; if it already existed and we needed to remove it
     # then we should remove the unpacked path as well
-    should_delete = !download_verify(url, hash, tarball_path;
-                                     force=force, verbose=verbose, quiet_download=quiet_download)
+    should_delete = !download_verify(url, hash, tarball_path; force, verbose, quiet_download, progress)
     if should_delete
         if verbose
             @info("Removing dest directory $(dest) as source tarball changed")
