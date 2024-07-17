@@ -1816,6 +1816,7 @@ end
 
 function gen_subprocess_flags(source_path::String; coverage, julia_args)
     coverage_arg = if coverage isa Bool
+        # source_path is the package root, not "src" so "ext" etc. is included
         coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
         coverage
