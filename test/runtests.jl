@@ -48,7 +48,7 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
             spec = Pkg.PackageSpec(
                 name="HistoricalStdlibVersions", 
                 url="https://github.com/JuliaPackaging/HistoricalStdlibVersions.jl",
-                rev="39d6ab6e71b614242976ab014635ac7ef039cb58", #= version="1.2", =#
+                rev="5879c5f690795208481c60b904f4af4e8c1eeef8", #= version="2.0.0", =#
                 uuid="6df8b67a-e8a0-4029-b4b7-ac196fe72102")
             Pkg.API.handle_package_input!(spec)
             Pkg.add(Pkg.API.Context(), [spec], io=iob)
