@@ -21,7 +21,7 @@ using SHA
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror,
-    has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, write_env, write_env_usage, parse_toml,
+    has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, stdlib_infos, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
     registered_name,
     manifest_info,
@@ -480,35 +480,47 @@ function load_stdlib()
             push!(FORMER_STDLIBS_UUIDS, UUID(uuid))
             continue
         end
-        stdlib[UUID(uuid)] = (name, version)
+        deps = UUID.(values(get(project, "deps", Dict{String,Any}())))
+        weakdeps = UUID.(values(get(project, "weakdeps", Dict{String,Any}())))
+        stdlib[UUID(uuid)] = StdlibInfo(name, Base.UUID(uuid), version, deps, weakdeps)
     end
     return stdlib
 end
 
 function stdlibs()
+    # This maintains a compatible format for `stdlibs()`, but new code should always
+    # prefer `stdlib_infos` as it is more future-proofed, by returning a structure
+    # rather than a tuple of elements.
+    return Dict(uuid => (info.name, info.version) for (uuid, info) in stdlib_infos())
+end
+function stdlib_infos()
     if !isassigned(STDLIB)
         STDLIB[] = load_stdlib()
     end
     return STDLIB[]
 end
-is_stdlib(uuid::UUID) = uuid in keys(stdlibs())
+is_stdlib(uuid::UUID) = uuid in keys(stdlib_infos())
 # Includes former stdlibs
 function is_or_was_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
     return is_stdlib(uuid, julia_version) || uuid in FORMER_STDLIBS_UUIDS
 end
 
 
+function historical_stdlibs_check()
+    if isempty(STDLIBS_BY_VERSION)
+        pkgerror("If you want to set `julia_version`, you must first populate the `STDLIBS_BY_VERSION` global constant.  Try `using HistoricalStdlibVersions`")
+    end
+end
+
 # Find the entry in `STDLIBS_BY_VERSION`
 # that corresponds to the requested version, and use that.
 # If we can't find one, defaults to `UNREGISTERED_STDLIBS`
 function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_current_version = false)
     if !use_historical_for_current_version && julia_version == VERSION
-        return stdlibs()
+        return stdlib_infos()
     end
+    historical_stdlibs_check()
     last_stdlibs = UNREGISTERED_STDLIBS
-    if isempty(STDLIBS_BY_VERSION)
-        pkgerror("If you want to set `julia_version`, you must first populate the `STDLIBS_BY_VERSION` global constant")
-    end
     for (version, stdlibs) in STDLIBS_BY_VERSION
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
             break
@@ -520,7 +532,10 @@ end
 # If `julia_version` is set to `nothing`, that means (essentially) treat all registered
 # stdlibs as normal packages so that we get the latest versions of everything, ignoring
 # julia compat.  So we set the list of stdlibs to that of only the unregistered stdlibs.
-get_last_stdlibs(::Nothing) = UNREGISTERED_STDLIBS
+function get_last_stdlibs(::Nothing)
+    historical_stdlibs_check()
+    return UNREGISTERED_STDLIBS
+end
 
 # Allow asking if something is an stdlib for a particular version of Julia
 function is_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
@@ -544,10 +559,13 @@ function stdlib_version(uuid::UUID, julia_version::Union{VersionNumber,Nothing})
     if !(uuid in keys(last_stdlibs))
         return nothing
     end
-    return last_stdlibs[uuid][2]
+    return last_stdlibs[uuid].version
 end
 
-is_unregistered_stdlib(uuid::UUID) = haskey(UNREGISTERED_STDLIBS, uuid)
+function is_unregistered_stdlib(uuid::UUID)
+    historical_stdlibs_check()
+    return haskey(UNREGISTERED_STDLIBS, uuid)
+end
 
 Context!(kw_context::Vector{Pair{Symbol,Any}})::Context =
     Context!(Context(); kw_context...)
@@ -1044,13 +1062,17 @@ function stdlib_resolve!(pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
         @assert has_name(pkg) || has_uuid(pkg)
         if has_name(pkg) && !has_uuid(pkg)
-            for (uuid, (name, version)) in stdlibs()
-                name == pkg.name && (pkg.uuid = uuid)
+            for (uuid, info) in stdlib_infos()
+                if info.name == pkg.name
+                    pkg.uuid = uuid
+                end
             end
         end
         if !has_name(pkg) && has_uuid(pkg)
-            name, version = get(stdlibs(), pkg.uuid, (nothing, nothing))
-            nothing !== name && (pkg.name = name)
+            info = get(stdlib_infos(), pkg.uuid, nothing)
+            if info !== nothing
+                pkg.name = info.name
+            end
         end
     end
 end

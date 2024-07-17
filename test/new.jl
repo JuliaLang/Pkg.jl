@@ -2999,12 +2999,12 @@ end
 
 using Pkg.Types: is_stdlib
 @testset "is_stdlib() across versions" begin
-    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.register!()
 
     networkoptions_uuid = UUID("ca575930-c2e3-43a9-ace4-1e988b2c1908")
     pkg_uuid = UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
 
-    # Assume we're running on v1.6+
+    # Test NetworkOptions across multiple versions (It became an stdlib in v1.6+, and was registered)
     @test is_stdlib(networkoptions_uuid)
     @test is_stdlib(networkoptions_uuid, v"1.6")
     @test !is_stdlib(networkoptions_uuid, v"1.5")
@@ -3012,7 +3012,7 @@ using Pkg.Types: is_stdlib
     @test !is_stdlib(networkoptions_uuid, v"0.7")
     @test !is_stdlib(networkoptions_uuid, nothing)
 
-    # Pkg is an unregistered stdlib
+    # Pkg is an unregistered stdlib and has always been an stdlib
     @test is_stdlib(pkg_uuid)
     @test is_stdlib(pkg_uuid, v"1.0")
     @test is_stdlib(pkg_uuid, v"1.6")
@@ -3020,17 +3020,16 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, v"0.7")
     @test is_stdlib(pkg_uuid, nothing)
 
-    empty!(Pkg.Types.STDLIBS_BY_VERSION)
-
+    HistoricalStdlibVersions.unregister!()
     # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
     # but that we throw a PkgError if we ask for a particular julia version.
     @test is_stdlib(networkoptions_uuid)
     @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
 
-#=
+
 @testset "Pkg.add() with julia_version" begin
-    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.register!()
 
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
@@ -3131,9 +3130,8 @@ end
         @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
     end
 
-    empty!(Pkg.Types.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.unregister!()
 end
-=#
 
 
 @testset "Issue #2931" begin
