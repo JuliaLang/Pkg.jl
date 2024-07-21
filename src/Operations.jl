@@ -2410,6 +2410,7 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
         v = ExtInfo[]
         for (ext, extdeps) in exts
             extdeps isa String && (extdeps = String[extdeps])
+            # Note: `get_extension` returns nothing for stdlibs that are loaded via `require_stdlib`
             ext_loaded = (Base.get_extension(Base.PkgId(pkg.uuid, pkg.name), Symbol(ext)) !== nothing)
             # Check if deps are loaded
             extdeps_info= Tuple{String, Bool}[]
