@@ -618,9 +618,9 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             usage_path = joinpath(logdir(depot), fname)
             if !(isempty(usage)::Bool) || isfile(usage_path)
                 let usage=usage
-                    open(usage_path, "w") do io
-                        TOML.print(io, usage, sorted=true)
-                    end
+                    buffer = IOBuffer()
+                    TOML.print(buffer, usage, sorted=true)
+                    write(usage_path, take!(buffer))
                 end
             end
         end
@@ -950,9 +950,9 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         # Write out the `new_orphanage` for this depot
         mkpath(dirname(orphanage_file))
-        open(orphanage_file, "w") do io
-            TOML.print(io, new_orphanage, sorted=true)
-        end
+        buffer = IOBuffer()
+        TOML.print(buffer, new_orphanage, sorted=true)
+        write(orphanage_file, take!(buffer))
     end
 
     function recursive_dir_size(path)
