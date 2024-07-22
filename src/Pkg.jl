@@ -17,7 +17,7 @@ export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
-public activate, add, build, compat, develop, free, gc, generate, instantiate, 
+public activate, add, build, compat, develop, free, gc, generate, instantiate,
        pin, precompile, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
@@ -266,13 +266,17 @@ const update = API.up
     Pkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; kwargs...)
 
 **Keyword arguments:**
-  - `coverage::Bool=false`: enable or disable generation of coverage statistics.
+  - `coverage::Union{Bool,String}=false`: enable or disable generation of coverage statistics for the tested package.
+    If a string is passed it is passed directly to `--code-coverage` in the test process so e.g. "user" will test all user code.
   - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
 
 !!! compat "Julia 1.9"
     `allow_reresolve` requires at least Julia 1.9.
+
+!!! compat "Julia 1.9"
+    Passing a string to `coverage` requires at least Julia 1.9.
 
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its
