@@ -228,9 +228,11 @@ end
 # about extensions
 function fixups_from_projectfile!(env::EnvCache)
     for pkg in values(env.manifest)
-        v = joinpath(source_path(env.manifest_file, pkg), "Project.toml")
-        if isfile(v)
-            p = Types.read_project(v)
+        # isfile_casesenstive within locate_project_file used to error on Windows if given a
+        # relative path so abspath it to be extra safe https://github.com/JuliaLang/julia/pull/55220
+        project_file = Base.locate_project_file(abspath(source_path(env.manifest_file, pkg)))
+        if isfile(project_file)
+            p = Types.read_project(project_file)
             pkg.weakdeps = p.weakdeps
             pkg.exts = p.exts
             pkg.entryfile = p.entryfile
@@ -2104,7 +2106,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         # TODO: DRY with code below.
         # If the test is in the our "workspace", no need to create a temp env etc, just activate and run thests
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
-            proj = Base.locate_project_file(testdir(source_path))
+            proj = Base.locate_project_file(abspath(testdir(source_path)))
             env = EnvCache(proj)
             # Instantiate test env
             Pkg.instantiate(Context(env=env); allow_autoprecomp = false)
