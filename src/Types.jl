@@ -544,7 +544,12 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     ## Atomically write usage file using process id locking
     FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
         usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
+            try
+                TOML.parsefile(usage_file)
+            catch err
+                @warn "Failed to parse usage file `$usage_file`, ignoring." err
+                Dict{String, Any}()
+            end
         else
             Dict{String, Any}()
         end
