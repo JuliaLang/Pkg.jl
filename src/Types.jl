@@ -217,6 +217,12 @@ function find_project_file(env::Union{Nothing,String}=nothing)
                 abspath(env, Base.project_names[end])
         end
     end
+    if isfile(project_file) && !contains(basename(project_file), "Project")
+        pkgerror("""
+        The active project has been set to a file that isn't a Project file: $project_file
+        The project path must be to a Project file or directory.
+        """)
+    end
     @assert project_file isa String &&
         (isfile(project_file) || !ispath(project_file) ||
          isdir(project_file) && isempty(readdir(project_file)))
@@ -530,7 +536,12 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
     ## Atomically write usage file using process id locking
     FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
         usage = if isfile(usage_file)
-            TOML.parsefile(usage_file)
+            try
+                TOML.parsefile(usage_file)
+            catch err
+                @warn "Failed to parse usage file `$usage_file`, ignoring." err
+                Dict{String, Any}()
+            end
         else
             Dict{String, Any}()
         end
@@ -552,8 +563,15 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
             usage[k] = [Dict("time" => maximum(times))]
         end
 
-        open(usage_file, "w") do io
-            TOML.print(io, usage, sorted=true)
+        tempfile = tempname()
+        try
+            open(tempfile, "w") do io
+                TOML.print(io, usage, sorted=true)
+            end
+            TOML.parsefile(tempfile) # compare to `usage` ?
+            mv(tempfile, usage_file; force=true) # only mv if parse succeeds
+        catch err
+            @error "Failed to write valid usage file `$usage_file`" tempfile
         end
     end
     return

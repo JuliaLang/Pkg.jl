@@ -14,6 +14,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
+import ...Pkg: usable_io
 
 #########
 # Utils #
@@ -769,7 +770,7 @@ function download_artifacts(env::EnvCache;
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
                 ensure_artifact_installed(name, artifacts[name], artifacts_toml;
-                                            verbose, quiet_download=!(io isa Base.TTY), io=io)
+                                            verbose, quiet_download=!(usable_io(io)), io=io)
             end
             write_env_usage(artifacts_toml, "artifact_usage.toml")
         end
@@ -2292,6 +2293,7 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
         v = ExtInfo[]
         for (ext, extdeps) in exts
             extdeps isa String && (extdeps = String[extdeps])
+            # Note: `get_extension` returns nothing for stdlibs that are loaded via `require_stdlib`
             ext_loaded = (Base.get_extension(Base.PkgId(pkg.uuid, pkg.name), Symbol(ext)) !== nothing)
             # Check if deps are loaded
             extdeps_info= Tuple{String, Bool}[]
