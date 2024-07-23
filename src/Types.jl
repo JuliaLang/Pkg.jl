@@ -346,7 +346,7 @@ function collect_workspace(base_project_file::String, d::Dict{String, Project}=D
     projects === nothing && return d
     project_paths = [abspath(base_project_file_dir, project) for project in projects]
     for project_path in project_paths
-        project_file = Base.locate_project_file(project_path)
+        project_file = Base.locate_project_file(abspath(project_path))
         if project_file isa String
             collect_workspace(project_file, d)
         end
