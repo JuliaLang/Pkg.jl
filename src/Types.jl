@@ -1114,8 +1114,8 @@ function ensure_resolved(ctx::Context, manifest::Manifest,
                     join(io, what, ", ", " or ")
                     print(io, ")")
                     all_names = available_names(ctx; manifest, include_registries = registry)
-                    all_names_ranked, any_score_gt_zero = fuzzysort(name, all_names)
-                    if any_score_gt_zero
+                    all_names_ranked, any_score_gt_thresh = fuzzysort(name, all_names)
+                    if any_score_gt_thresh
                         println(io)
                         prefix = "   Suggestions:"
                         printstyled(io, prefix, color = Base.info_color())
@@ -1140,7 +1140,7 @@ end
 # copied from REPL to efficiently expose if any score is >0
 function fuzzysort(search::String, candidates::Vector{String})
     scores = map(cand -> (FuzzySorting.fuzzyscore(search, cand), -Float64(FuzzySorting.levenshtein(search, cand))), candidates)
-    candidates[sortperm(scores)] |> reverse, any(s -> s[1] > 0, scores)
+    candidates[sortperm(scores)] |> reverse, any(s -> s[1] >= 0.5, scores)
 end
 
 function available_names(ctx::Context = Context(); manifest::Manifest = ctx.env.manifest, include_registries::Bool = true)
