@@ -757,6 +757,7 @@ end
 @testset "undo redo functionality" begin
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
     temp_pkg_dir() do project_path; with_temp_env() do
+        Pkg.activate(project_path)
         # Example
         Pkg.add(TEST_PKG.name)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)

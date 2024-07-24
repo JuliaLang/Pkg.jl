@@ -134,7 +134,7 @@ We can ask for information about the active environment by using `status`:
 ```
 
 `~/tutorial/Project.toml` is the location of the active environment's **project file**.
-A project file is a [TOML](https://toml.io/en/) file here Pkg stores the packages that have been explicitly installed.
+A project file is a [TOML](https://toml.io/en/) file where Pkg stores the packages that have been explicitly installed.
 Notice this new environment is empty.
 Let us add some packages and observe:
 

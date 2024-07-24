@@ -1,0 +1,17 @@
+# This file is machine-generated - editing it directly is not advised
+
+julia_version = "1.12.0-DEV"
+manifest_format = "2.0"
+project_hash = "65567d20ea33b8d376b53b9e9e96938f75d0fab1"
+
+[[deps.Example]]
+git-tree-sha1 = "e64c907c88640c370060a89aaae1b641eedc3dfc"
+repo-rev = "master"
+repo-url = "https://what.is.this.url???"
+uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+version = "0.5.4"
+
+[[deps.LocalPkg]]
+path = "what/is/this/path???"
+uuid = "fcf55292-0d03-4e8a-9e0b-701580031fc3"
+version = "0.1.0"

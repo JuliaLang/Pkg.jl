@@ -471,7 +471,7 @@ end
 
             # Test that if we load the package, it knows how to find its own artifact,
             # because it feeds the right `Platform` object through to `@artifact_str()`
-            cmd = setenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
+            cmd = addenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
                          "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
                          "FLOOBLECRANK" => flooblecrank_status)
             using_output = chomp(String(read(cmd)))
@@ -779,8 +779,11 @@ end
             Dict("0"^40 => ["not", "a", "string", "or", "dict"]),
             r"failed to parse entry",
         )
+
+        # reset DEPOT_PATH and force Pkg to reload what it knows about artifact overrides
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
+        Pkg.Artifacts.load_overrides(;force=true)
     end
 end
 
@@ -793,6 +796,32 @@ end
         @test !artifact_exists(cts_hash)
         Pkg.instantiate()
         @test artifact_exists(cts_hash)
+    end
+end
+
+@testset "installing artifacts when symlinks are copied" begin
+    # copy symlinks to simulate the typical Microsoft Windows user experience where
+    # developer mode is not enabled (no admin rights)
+    withenv("BINARYPROVIDER_COPYDEREF"=>"true", "JULIA_PKG_IGNORE_HASHES"=>"true") do
+        temp_pkg_dir() do tmpdir
+            artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
+            cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
+            Pkg.activate(tmpdir)
+            cts_real_hash = create_artifact() do dir
+                local meta = Artifacts.artifact_meta("collapse_the_symlink", artifacts_toml)
+                local collapse_url = meta["download"][1]["url"]
+                local collapse_hash = meta["download"][1]["sha256"]
+                # Because "BINARYPROVIDER_COPYDEREF"=>"true", this will copy symlinks.
+                download_verify_unpack(collapse_url, collapse_hash, dir; verbose=true, ignore_existence=true)
+            end
+            cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml)
+            @test !artifact_exists(cts_hash)
+            @test artifact_exists(cts_real_hash)
+            @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any Pkg.instantiate()
+            @test artifact_exists(cts_hash)
+            # Make sure existing artifacts don't get deleted.
+            @test artifact_exists(cts_real_hash)
+        end
     end
 end
 

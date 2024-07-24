@@ -10,6 +10,8 @@ using UUIDs
 using Test
 using TOML
 import LibGit2
+import REPL
+const REPLExt = Base.get_extension(Pkg, :REPLExt)
 
 using ..Utils
 
@@ -182,31 +184,32 @@ temp_pkg_dir() do project_path; cd(project_path) do
     # nested
     mktempdir() do other_dir
         mktempdir() do tmp;
-            cd(tmp)
-            pkg"generate HelloWorld"
-            cd("HelloWorld") do
-                with_current_env() do
-                    uuid1 = Pkg.generate("SubModule1")["SubModule1"]
-                    uuid2 = Pkg.generate("SubModule2")["SubModule2"]
-                    pkg"develop ./SubModule1"
-                    mkdir("tests")
-                    cd("tests")
-                    pkg"develop ../SubModule2"
-                    @test Pkg.dependencies()[uuid1].version == v"0.1.0"
-                    @test Pkg.dependencies()[uuid2].version == v"0.1.0"
-                    # make sure paths to SubModule1 and SubModule2 are relative
-                    manifest = Pkg.Types.Context().env.manifest
-                    @test manifest[uuid1].path == "SubModule1"
-                    @test manifest[uuid2].path == "SubModule2"
+            cd(tmp) do
+                pkg"generate HelloWorld"
+                cd("HelloWorld") do
+                    with_current_env() do
+                        uuid1 = Pkg.generate("SubModule1")["SubModule1"]
+                        uuid2 = Pkg.generate("SubModule2")["SubModule2"]
+                        pkg"develop ./SubModule1"
+                        mkdir("tests")
+                        cd("tests")
+                        pkg"develop ../SubModule2"
+                        @test Pkg.dependencies()[uuid1].version == v"0.1.0"
+                        @test Pkg.dependencies()[uuid2].version == v"0.1.0"
+                        # make sure paths to SubModule1 and SubModule2 are relative
+                        manifest = Pkg.Types.Context().env.manifest
+                        @test manifest[uuid1].path == "SubModule1"
+                        @test manifest[uuid2].path == "SubModule2"
+                    end
                 end
-            end
-            cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
-            cd(joinpath(other_dir, "HelloWorld"))
-            with_current_env() do
-                # Check that these didn't generate absolute paths in the Manifest by copying
-                # to another directory
-                @test Base.find_package("SubModule1") == joinpath(pwd(), "SubModule1", "src", "SubModule1.jl")
-                @test Base.find_package("SubModule2") == joinpath(pwd(), "SubModule2", "src", "SubModule2.jl")
+                cp("HelloWorld", joinpath(other_dir, "HelloWorld"))
+                cd(joinpath(other_dir, "HelloWorld"))
+                with_current_env() do
+                    # Check that these didn't generate absolute paths in the Manifest by copying
+                    # to another directory
+                    @test Base.find_package("SubModule1") == joinpath(pwd(), "SubModule1", "src", "SubModule1.jl")
+                    @test Base.find_package("SubModule2") == joinpath(pwd(), "SubModule2", "src", "SubModule2.jl")
+                end
             end
         end
     end
@@ -287,7 +290,7 @@ temp_pkg_dir() do depot
     end
 end
 
-test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))
+test_complete(s) = REPLExt.completions(s, lastindex(s))
 apply_completion(str) = begin
     c, r, s = test_complete(str)
     str[1:prevind(str, first(r))]*first(c)
@@ -334,6 +337,8 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test isempty(c)
         c, r = test_complete("rm --project Exam")
         @test isempty(c)
+        c, r = test_complete("free PackageWithDep")
+        @test "PackageWithDependency" in c # given this was devved
 
         c, r = test_complete("rm -m PackageWithDep")
         @test "PackageWithDependency" in c
@@ -363,6 +368,12 @@ temp_pkg_dir() do project_path; cd(project_path) do
         @test "remove" in c
         @test apply_completion("rm E") == "rm Example"
         @test apply_completion("add Exampl") == "add Example"
+        c, r = test_complete("free Exa")
+        @test isempty(c) # given this was added i.e. not fixed
+        pkg"pin Example"
+        c, r = test_complete("free Exa")
+        @test "Example" in c
+        pkg"free Example"
 
         # help mode
         @test apply_completion("?ad") == "?add"
@@ -474,14 +485,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             json_uuid = Pkg.project().dependencies["JSON"]
             current_json = Pkg.dependencies()[json_uuid].version
             old_project = read("Project.toml", String)
-            open("Project.toml"; append=true) do io
-                print(io, """
-
-                [compat]
-                JSON = "0.18.0"
-                """
-                )
-            end
+            Pkg.compat("JSON", "0.18.0")
             pkg"up"
             @test Pkg.dependencies()[json_uuid].version.minor == 18
             write("Project.toml", old_project)
@@ -594,32 +598,32 @@ end
     end
 
     with_temp_env("SomeEnv") do
-        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+        @test REPLExt.promptf() == "(SomeEnv) pkg> "
     end
 
     with_temp_env("this_is_a_test_for_truncating_long_folder_names_in_the_prompt") do
-        @test Pkg.REPLMode.promptf() == "(this_is_a_test_for_truncati...) pkg> "
+        @test REPLExt.promptf() == "(this_is_a_test_for_truncati...) pkg> "
     end
 
     env_name = "Test2"
     with_temp_env(env_name) do env_path
         projfile_path = joinpath(env_path, "Project.toml")
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        @test REPLExt.promptf() == "($env_name) pkg> "
 
         newname = "NewName"
         set_name(projfile_path, newname)
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test REPLExt.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test REPLExt.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
     end
 end
 
@@ -709,16 +713,16 @@ end
 
 @testset "REPL missing package install hook" begin
     isolate(loaded_depot=true) do
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+        @test REPLExt.try_prompt_pkg_add(Symbol[:notapackage]) == false
 
         # don't offer to install the dummy "julia" entry that's in General
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
+        @test REPLExt.try_prompt_pkg_add(Symbol[:julia]) == false
 
         withreply("n") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
         end
         withreply("y") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == true
         end
     end
 end

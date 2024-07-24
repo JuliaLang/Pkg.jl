@@ -577,10 +577,13 @@ end
     end
     # Double add should not change state, this would be an unnecessary change.
     isolate(loaded_depot=true) do
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         Pkg.add(name="Example", version="0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
         Pkg.add("Example")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        @test !haskey(Pkg.Types.Context().env.project.compat, "Example")
     end
     # Adding a new package should not alter the version of existing packages.
     isolate(loaded_depot=true) do
@@ -808,6 +811,23 @@ end
         Pkg.add(name="libpng_jll", version=v"1.6.37+5")
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+5"
     end
+    # Adding a new package to a package should add compat entries
+    isolate(loaded_depot=true) do
+        mktempdir() do tempdir
+            Pkg.activate(tempdir)
+            mkpath(joinpath(tempdir, "src"))
+            touch(joinpath(tempdir, "src", "Foo.jl"))
+            ctx = Pkg.Types.Context()
+            ctx.env.project.name = "Foo"
+            ctx.env.project.uuid = UUIDs.UUID(0)
+            Pkg.Types.write_project(ctx.env)
+            Pkg.add(name="Example", version="0.3.0")
+            @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+            @test Pkg.Types.Context().env.project.compat["Example"] == Pkg.Types.Compat(Pkg.Types.VersionSpec("0.3"), "0.3.0")
+            Pkg.add(name="Example", version="0.3.1")
+            @test Pkg.Types.Context().env.project.compat["Example"] == Pkg.Types.Compat(Pkg.Types.VersionSpec("0.3"), "0.3.0")
+        end
+    end
     end # withenv
 end
 
@@ -904,7 +924,13 @@ end
 # ## Resolve tiers
 #
 @testset "add: resolve tiers" begin
-    isolate(loaded_depot=true) do; mktempdir() do tmp
+    # The MetaGraphs version tested below relied on a JLD2 version
+    # that couldn't actually be loaded on julia 1.9+ so General
+    # will be patched. This checks out a commit before then to maintain
+    # these tests.
+    registry_url = "https://github.com/JuliaRegistries/General.git"
+    registry_commit = "030d6dae0df2ad6c3b2f90d41749df3eedb8d1b1"
+    Utils.isolate_and_pin_registry(; registry_url, registry_commit) do; mktempdir() do tmp
         # All
         copy_test_package(tmp, "ShouldPreserveAll"; use_pkg=false)
         Pkg.activate(joinpath(tmp, "ShouldPreserveAll"))
@@ -976,6 +1002,16 @@ end
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;name="Example", version="0.5.0")]
         @test isempty(opts)
+        # Add as a weakdep.
+        api, args, opts = first(Pkg.pkg"add --weak Example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test opts == Dict(:target => :weakdeps)
+        # Add as an extra.
+        api, args, opts = first(Pkg.pkg"add --extra Example")
+        @test api == Pkg.add
+        @test args == [Pkg.PackageSpec(;name="Example")]
+        @test opts == Dict(:target => :extras)
         # Add using direct URL syntax.
         api, args, opts = first(Pkg.pkg"add https://github.com/00vareladavid/Unregistered.jl#0.1.0")
         @test api == Pkg.add
@@ -1550,7 +1586,6 @@ end
         @test str ==
         """  StaticArrays → LinearAlgebra
           StaticArrays → Statistics → LinearAlgebra
-          StaticArrays → Statistics → SparseArrays → LinearAlgebra
         """
     end
 end
@@ -2352,10 +2387,11 @@ end
         Pkg.add( name="Example", version="0.3.0")
         Pkg.add("Markdown")
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST)
-        @test occursin(r"Status `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] Example\s*v0\.3\.0", readline(io))
-        @test occursin(r"\[2a0f44e3\] Base64", readline(io))
-        @test occursin(r"\[d6f4376e\] Markdown", readline(io))
+        statuslines = readlines(io)
+        @test occursin(r"Status `.+Manifest.toml`", first(statuslines))
+        @test any(l -> occursin(r"\[7876af07\] Example\s*v0\.3\.0", l), statuslines)
+        @test any(l -> occursin(r"\[2a0f44e3\] Base64", l), statuslines)
+        @test any(l -> occursin(r"\[d6f4376e\] Markdown", l), statuslines)
     end
     # Diff API
     isolate(loaded_depot=true) do
@@ -2393,11 +2429,12 @@ end
         @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
         ## diff manifest
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
-        @test occursin(r"Diff `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
-        @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
-        @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
-        @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
+        statuslines = readlines(io)
+        @test occursin(r"Diff `.+Manifest.toml`", first(statuslines))
+        @test any(l -> occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", l), statuslines)
+        @test any(l -> occursin(r"\[2a0f44e3\] - Base64", l), statuslines)
+        @test any(l -> occursin(r"\[d6f4376e\] - Markdown", l), statuslines)
+        @test any(l -> occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", l), statuslines)
         ## diff project with filtering
         Pkg.status("Markdown"; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -2423,12 +2460,7 @@ end
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\(<v$v\\)"), str)
-        open(Base.active_project(), "a") do io
-            write(io, """
-                  [compat]
-                  Example = "0.4.1"
-            """)
-        end
+        Pkg.compat("Example", "0.4.1")
         Pkg.status(; outdated=true, io=io)
         str = String(take!(io))
         @test occursin(Regex("⌃\\s*\\[7876af07\\] Example\\s*v0.4.0\\s*\\[<v0.4.1\\], \\(<v$v\\)"), str)
@@ -2697,32 +2729,31 @@ end
 #
 # Note: these tests should be run on clean depots
 for v in (nothing, "true")
-    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0) do
+    # On CI when JULIA_PKG_USE_CLI_GIT=true we need to tell the cli git to not prompt for credentials
+    # GIT_ASKPASS=true forces the credential provider to return "" https://stackoverflow.com/a/71057440
+    # GIT_TERMINAL_PROMPT=0 is also supposed to avoid the prompt but doesn't reliably https://github.com/JuliaLang/Pkg.jl/issues/3774
+    withenv("JULIA_PKG_USE_CLI_GIT" => v, "GIT_TERMINAL_PROMPT" => 0, "GIT_ASKPASS" => "true") do
         @testset "downloads with JULIA_PKG_USE_CLI_GIT = $v" begin
             isolate() do
-                @testset "libgit2 downloads" begin
-                    @testset "via name" begin
-                        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                @testset "via name" begin
+                    Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+                    @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+                    @eval import $(Symbol(TEST_PKG.name))
+                    @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
+                    Pkg.rm(TEST_PKG.name)
+                end
+                if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false) && !Sys.iswindows()
+                    # TODO: fix. On GH windows runners cli git will prompt for credentials and hang.
+                    # On other runners git cli is noisy when an url is given.
+                    @testset "via url" begin
+                        Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
                         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                        @eval import $(Symbol(TEST_PKG.name))
-                        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
                         Pkg.rm(TEST_PKG.name)
                     end
-                    if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) && Sys.iswindows()) == false
-                        # TODO: fix. on GH windows runners cli git will prompt for credentials here
-                        @testset "via url" begin
-                            Pkg.add(url="https://github.com/JuliaLang/Example.jl", use_git_for_all_downloads=true)
-                            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                            Pkg.rm(TEST_PKG.name)
-                        end
-                    end
-                end
-                if !Sys.iswindows()
-                    # TODO: fix. on GH windows runners cli git will prompt for credentials here
-                    @testset "libgit2 failures" begin
+                    @testset "failures" begin
                         doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
                         @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
-                        @test_throws Pkg.Types.PkgError Pkg.Registry.add(Pkg.RegistrySpec(url=doesnotexist))
+                        @test_throws Pkg.Types.PkgError Pkg.Registry.add(url=doesnotexist)
                     end
                 end
                 @testset "tarball downloads" begin
@@ -2968,12 +2999,12 @@ end
 
 using Pkg.Types: is_stdlib
 @testset "is_stdlib() across versions" begin
-    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.register!()
 
     networkoptions_uuid = UUID("ca575930-c2e3-43a9-ace4-1e988b2c1908")
     pkg_uuid = UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
 
-    # Assume we're running on v1.6+
+    # Test NetworkOptions across multiple versions (It became an stdlib in v1.6+, and was registered)
     @test is_stdlib(networkoptions_uuid)
     @test is_stdlib(networkoptions_uuid, v"1.6")
     @test !is_stdlib(networkoptions_uuid, v"1.5")
@@ -2981,7 +3012,7 @@ using Pkg.Types: is_stdlib
     @test !is_stdlib(networkoptions_uuid, v"0.7")
     @test !is_stdlib(networkoptions_uuid, nothing)
 
-    # Pkg is an unregistered stdlib
+    # Pkg is an unregistered stdlib and has always been an stdlib
     @test is_stdlib(pkg_uuid)
     @test is_stdlib(pkg_uuid, v"1.0")
     @test is_stdlib(pkg_uuid, v"1.6")
@@ -2989,8 +3020,7 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, v"0.7")
     @test is_stdlib(pkg_uuid, nothing)
 
-    empty!(Pkg.Types.STDLIBS_BY_VERSION)
-
+    HistoricalStdlibVersions.unregister!()
     # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
     # but that we throw a PkgError if we ask for a particular julia version.
     @test is_stdlib(networkoptions_uuid)
@@ -2999,7 +3029,7 @@ end
 
 
 @testset "Pkg.add() with julia_version" begin
-    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.register!()
 
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
@@ -3100,7 +3130,7 @@ end
         @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
     end
 
-    empty!(Pkg.Types.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.unregister!()
 end
 
 
@@ -3166,6 +3196,38 @@ if :version in fieldnames(Base.PkgOrigin)
         Pkg.respect_sysimage_versions(true)
     end
 end
+end
+
+temp_pkg_dir() do project_path
+    @testset "test entryfile entries" begin
+        mktempdir() do dir
+            path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "ProjectPath"))
+            cp(path, joinpath(dir, "ProjectPath"))
+            cd(joinpath(dir, "ProjectPath")) do
+                with_current_env() do
+                    Pkg.resolve()
+                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPath'`))
+                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPathDep'`))
+                end
+            end
+        end
+    end
+end
+@testset "test resolve with tree hash" begin
+    mktempdir() do dir
+        path = abspath(joinpath(@__DIR__, "../test", "test_packages", "ResolveWithRev"))
+        cp(path, joinpath(dir, "ResolveWithRev"))
+        cd(joinpath(dir, "ResolveWithRev")) do
+            with_current_env() do
+                @test !isfile("Manifest.toml")
+                @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                Pkg.resolve()
+                @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
+                Pkg.resolve()
+            end
+        end
+    end
 end
 
 end #module

@@ -112,7 +112,7 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
     return final
 end
 
-function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest_format::VersionNumber, stage1::Dict{String,Vector{Stage1}}, other::Dict{String, Any})
+function validate_manifest(julia_version::Union{Nothing,VersionNumber}, project_hash::Union{Nothing,SHA1}, manifest_format::VersionNumber, stage1::Dict{String,Vector{Stage1}}, other::Dict{String, Any})
     # expand vector format deps
     for (name, infos) in stage1, info in infos
         info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
@@ -143,11 +143,13 @@ function validate_manifest(julia_version::Union{Nothing,VersionNumber}, manifest
             end
         end
     end
-    return Manifest(; julia_version, manifest_format, deps, other)
+    return Manifest(; julia_version, project_hash, manifest_format, deps, other)
 end
 
 function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
     julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]::String) : nothing
+    project_hash = haskey(raw, "project_hash") ? SHA1(raw["project_hash"]::String) : nothing
+
     manifest_format = VersionNumber(raw["manifest_format"]::String)
     if !in(manifest_format.major, 1:2)
         if f_or_io isa IO
@@ -200,7 +202,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
         end
         other[k] = v
     end
-    return validate_manifest(julia_version, manifest_format, stage1, other)
+    return validate_manifest(julia_version, project_hash, manifest_format, stage1, other)
 end
 
 function read_manifest(f_or_io::Union{String, IO})
@@ -253,8 +255,11 @@ function destructure(manifest::Manifest)::Dict
         raw = Dict{String,Vector{Dict{String,Any}}}()
     elseif manifest.manifest_format.major == 2
         raw = Dict{String,Any}()
-        if !isnothing(manifest.julia_version) # don't write julia_version if nothing
+        if !isnothing(manifest.julia_version)
             raw["julia_version"] = manifest.julia_version
+        end
+        if !isnothing(manifest.project_hash)
+            raw["project_hash"] = manifest.project_hash
         end
         raw["manifest_format"] = string(manifest.manifest_format.major, ".", manifest.manifest_format.minor)
         raw["deps"] = Dict{String,Vector{Dict{String,Any}}}()
@@ -274,6 +279,7 @@ function destructure(manifest::Manifest)::Dict
             path = join(splitpath(path), "/")
         end
         entry!(new_entry, "path", path)
+        entry!(new_entry, "entryfile", entry.entryfile)
         repo_source = entry.repo.source
         if repo_source !== nothing && Sys.iswindows() && !isabspath(repo_source) && !isurl(repo_source)
             repo_source = join(splitpath(repo_source), "/")

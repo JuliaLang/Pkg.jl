@@ -4,13 +4,13 @@ The following discusses Pkg's interaction with environments. For more on the rol
 
 ## Creating your own environments
 
-So far we have added packages to the default environment at `~/.julia/environments/v1.8`. It is however easy to create other, independent, projects.
+So far we have added packages to the default environment at `~/.julia/environments/v1.9`. It is however easy to create other, independent, projects.
 This approach has the benefit of allowing you to check in a `Project.toml`, and even a `Manifest.toml` if you wish, into version control (e.g. git) alongside your code.
 It should be pointed out that when two projects use the same package at the same version, the content of this package is not duplicated.
 In order to create a new project, create a directory for it and then activate that directory to make it the "active project", which package operations manipulate:
 
 ```julia-repl
-(@v1.8) pkg> activate MyProject
+(@v1.9) pkg> activate MyProject
 Activating new environment at `~/MyProject/Project.toml`
 
 (MyProject) pkg> st
@@ -45,7 +45,7 @@ Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 julia> print(read(joinpath("MyProject", "Manifest.toml"), String))
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.8.2"
+julia_version = "1.9.4"
 manifest_format = "2.0"
 project_hash = "2ca1c6c58cb30e79e021fb54e5626c96d05d5fdc"
 
@@ -66,7 +66,7 @@ shell> git clone https://github.com/JuliaLang/Example.jl.git
 Cloning into 'Example.jl'...
 ...
 
-(@v1.8) pkg> activate Example.jl
+(@v1.9) pkg> activate Example.jl
 Activating project at `~/Example.jl`
 
 (Example) pkg> instantiate
@@ -103,7 +103,7 @@ also want a scratch space to try out a new package, or a sandbox to resolve vers
 between several incompatible packages.
 
 ```julia-repl
-(@v1.8) pkg> activate --temp # requires Julia 1.5 or later
+(@v1.9) pkg> activate --temp # requires Julia 1.5 or later
   Activating new environment at `/var/folders/34/km3mmt5930gc4pzq1d08jvjw0000gn/T/jl_a31egx/Project.toml`
 
 (jl_a31egx) pkg> add Example
@@ -117,18 +117,18 @@ between several incompatible packages.
 
 ## Shared environments
 
-A "shared" environment is simply an environment that exists in `~/.julia/environments`. The default `v1.8` environment is
+A "shared" environment is simply an environment that exists in `~/.julia/environments`. The default `v1.9` environment is
 therefore a shared environment:
 
 ```julia-repl
-(@v1.8) pkg> st
-Status `~/.julia/environments/v1.8/Project.toml`
+(@v1.9) pkg> st
+Status `~/.julia/environments/v1.9/Project.toml`
 ```
 
 Shared environments can be activated with the `--shared` flag to `activate`:
 
 ```julia-repl
-(@v1.8) pkg> activate --shared mysharedenv
+(@v1.9) pkg> activate --shared mysharedenv
   Activating project at `~/.julia/environments/mysharedenv`
 
 (@mysharedenv) pkg>
@@ -151,7 +151,7 @@ or using Pkg's precompile option, which can precompile the entire environment, o
 which can be significantly faster than the code-load route above.
 
 ```julia-repl
-(@v1.8) pkg> precompile
+(@v1.9) pkg> precompile
 Precompiling environment...
   23 dependencies successfully precompiled in 36 seconds
 ```
@@ -165,7 +165,7 @@ By default, any package that is added to a project or updated in a Pkg action wi
 with its dependencies.
 
 ```julia-repl
-(@v1.8) pkg> add Images
+(@v1.9) pkg> add Images
    Resolving package versions...
     Updating `~/.julia/environments/v1.9/Project.toml`
   [916415d5] + Images v0.25.2
@@ -191,6 +191,14 @@ automatically tries and will skip that package with a brief warning. Manual prec
 force these packages to be retried, as `pkg> precompile` will always retry all packages.
 
 To disable the auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
+
+The indicators next to the package names displayed during precompilation
+indicate the status of that package's precompilation. 
+
+- `[◐, ◓, ◑, ◒]` Animated "clock" characters indicate that the package is currently being precompiled.
+- `✓` A green checkmark indicates that the package has been successfully precompiled (after which that package will disappear from the list). If the checkmark is yellow it means that the package is currently loaded so the session will need to be restarted to access the version that was just precompiled.
+- `?` A question mark character indicates that a `PrecompilableError` was thrown, indicating that precompilation was disallowed, i.e. `__precompile__(false)` in that package.
+- `✗` A cross indicates that the package failed to precompile.
 
 ### Precompiling new versions of loaded packages
 

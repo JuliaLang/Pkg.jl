@@ -28,7 +28,7 @@ Precompiling environment...
   2 dependencies successfully precompiled in 2 seconds
 ```
 
-Here we added the package Example to the current environment (which is the default `@v1.8` environment).
+Here we added the package `JSON` to the current environment (which is the default `@v1.8` environment).
 In this example, we are using a fresh Julia installation,
 and this is our first time adding a package using Pkg. By default, Pkg installs the General registry
 and uses this registry to look up packages requested for inclusion in the current environment.
@@ -40,7 +40,7 @@ It is possible to add multiple packages in one command as `pkg> add A B C`.
 The status output contains the packages you have added yourself, in this case, `JSON`:
 
 ```julia-repl
-(@v1.8) pkg> st
+(@v1.11) pkg> st
     Status `~/.julia/environments/v1.8/Project.toml`
   [682c06a0] JSON v0.21.3
 ```
@@ -48,7 +48,7 @@ The status output contains the packages you have added yourself, in this case, `
 The manifest status shows all the packages in the environment, including recursive dependencies:
 
 ```julia-repl
-(@v1.8) pkg> st -m
+(@v1.11) pkg> st -m
 Status `~/environments/v1.9/Manifest.toml`
   [682c06a0] JSON v0.21.3
   [69de0a69] Parsers v2.4.0
@@ -59,6 +59,27 @@ Status `~/environments/v1.9/Manifest.toml`
 ```
 
 Since standard libraries (e.g. ` Dates`) are shipped with Julia, they do not have a version.
+
+To specify that you want a particular version (or set of versions) of a package, use the `compat` command. For example,
+to require any patch release of the v0.21 series of JSON after v0.21.4, call `compat JSON 0.21.4`:
+
+```julia-repl
+(@1.11) pkg> compat JSON 0.21.4
+      Compat entry set:
+  JSON = "0.21.4"
+     Resolve checking for compliance with the new compat rules...
+       Error empty intersection between JSON@0.21.3 and project compatibility 0.21.4 - 0.21
+  Suggestion Call `update` to attempt to meet the compatibility requirements.
+
+(@1.11) pkg> update
+    Updating registry at `~/.julia/registries/General.toml`
+    Updating `~/.julia/environments/1.11/Project.toml`
+  [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
+    Updating `~/.julia/environments/1.11/Manifest.toml`
+  [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
+```
+
+See the section on [Compatibility](@ref) for more on using the compat system.
 
 After a package is added to the project, it can be loaded in Julia:
 
@@ -182,7 +203,7 @@ from that local repo are pulled when packages are updated.
 
 !!! warning
     Note that tracking a package through `add` is distinct from
-    `develop` (which is described in the next session). When using `add` on a local
+    `develop` (which is described in the next section). When using `add` on a local
     git repository, changes to files in the local package repository will not
     immediately be reflected when loading that package. The changes would have to be
     committed and the packages updated in order to pull in the changes. In the
@@ -452,7 +473,7 @@ Indeed, `A`'s requirements are such that we need `v0.2.0` of `C`.
          └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
 ```
 
-So we can see that `A` was `explicitly required, and in this case, it's because we were trying to
+So we can see that `A` was explicitly required, and in this case, it's because we were trying to
 `add` it to our environment.
 
 In summary, we explicitly asked to use `A` and `B`, but this gave a conflict for `D`.

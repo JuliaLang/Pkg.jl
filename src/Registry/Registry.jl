@@ -7,6 +7,8 @@ using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, 
 using UUIDs, LibGit2, TOML, Dates
 import FileWatching
 
+public add, rm, status, update
+
 include("registry_instance.jl")
 
 mutable struct RegistrySpec
@@ -33,13 +35,19 @@ The no-argument `Pkg.Registry.add()` will install the default registries.
 # Examples
 ```julia
 Pkg.Registry.add("General")
-Pkg.Registry.add(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
-Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General.git"))
+Pkg.Registry.add(uuid = "23338594-aafe-5451-b93e-139f81909106")
+Pkg.Registry.add(url = "https://github.com/JuliaRegistries/General.git")
 ```
 """
 add(reg::Union{String,RegistrySpec}; kwargs...) = add([reg]; kwargs...)
 add(regs::Vector{String}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
-add(; kwargs...) = add(RegistrySpec[]; kwargs...)
+function add(; name=nothing, uuid=nothing, url=nothing, path=nothing, linked=nothing, kwargs...)
+    if all(isnothing, (name, uuid, url, path, linked))
+        add(RegistrySpec[]; kwargs...)
+    else
+        add([RegistrySpec(; name, uuid, url, path, linked)]; kwargs...)
+    end
+end
 function add(regs::Vector{RegistrySpec}; io::IO=stderr_f(), depot=depots1())
     if isempty(regs)
         download_default_registries(io, only_if_empty = false; depot)
@@ -211,7 +219,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                     printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                     return
                 elseif reg.url !== nothing && reg.linked == true
-                    pkgerror("""
+                    Pkg.Types.pkgerror("""
                     A symlinked registry was requested but `path` was not set and `url` was set to `$url`.
                     Set only `path` and `linked = true` to use registry symlinking.
                     """)
@@ -280,11 +288,14 @@ Remove registries.
 # Examples
 ```julia
 Pkg.Registry.rm("General")
-Pkg.Registry.rm(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
+Pkg.Registry.rm(uuid = "23338594-aafe-5451-b93e-139f81909106")
 ```
 """
 rm(reg::Union{String,RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
 rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
+function rm(; name=nothing, uuid=nothing, url=nothing, path=nothing, linked=nothing, kwargs...)
+    rm([RegistrySpec(; name, uuid, url, path, linked)]; kwargs...)
+end
 function rm(regs::Vector{RegistrySpec}; io::IO=stderr_f())
     for registry in find_installed_registries(io, regs; depots=first(Base.DEPOT_PATH))
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
@@ -364,12 +375,19 @@ all available registries.
 ```julia
 Pkg.Registry.update()
 Pkg.Registry.update("General")
-Pkg.Registry.update(RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"))
+Pkg.Registry.update(uuid = "23338594-aafe-5451-b93e-139f81909106")
 ```
 """
 update(reg::Union{String,RegistrySpec}; kwargs...) = update([reg]; kwargs...)
 update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
-function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), force::Bool=true, depots = [depots1()], update_cooldown = Second(1))
+function update(; name=nothing, uuid=nothing, url=nothing, path=nothing, linked=nothing, kwargs...)
+    if all(isnothing, (name, uuid, url, path, linked))
+        update(RegistrySpec[]; kwargs...)
+    else
+        update([RegistrySpec(; name, uuid, url, path, linked)]; kwargs...)
+    end
+end
+function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true, depots = [depots1()], update_cooldown = Second(1))
     registry_update_log = get_registry_update_log()
     for depot in depots
         depot_regs = isempty(regs) ? reachable_registries(; depots=depot) : regs
@@ -382,7 +400,7 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
         for reg in unique(r -> r.uuid, find_installed_registries(io, depot_regs; depots=[depot]); seen=Set{UUID}())
             prev_update = get(registry_update_log, string(reg.uuid), nothing)::Union{Nothing, DateTime}
             if prev_update !== nothing
-                diff = now() - prev_update            
+                diff = now() - prev_update
                 if diff < update_cooldown
                     @debug "Skipping updating registry $(reg.name) since it is on cooldown: $(Dates.canonicalize(Millisecond(update_cooldown) - diff)) left"
                     continue

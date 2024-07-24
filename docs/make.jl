@@ -28,6 +28,7 @@ makedocs(
     modules = [Pkg],
     sitename = "Pkg.jl",
     doctest = false,
+    warnonly = :missing_docs,
     pages = Any[
         "index.md",
         "getting-started.md",

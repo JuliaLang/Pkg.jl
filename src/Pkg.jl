@@ -7,7 +7,6 @@ if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_m
 end
 
 import Random
-import REPL
 import TOML
 using Dates
 
@@ -17,6 +16,9 @@ export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
 export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
+
+public activate, add, build, compat, develop, free, gc, generate, instantiate,
+       pin, precompile, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
 function depots1()
@@ -41,17 +43,21 @@ const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 
-struct UnstableIO <: IO
-    io::IO
+# See discussion in https://github.com/JuliaLang/julia/pull/52249
+function unstableio(@nospecialize(io::IO))
+    # Needed to prevent specialization https://github.com/JuliaLang/julia/pull/52249#discussion_r1401199265
+    _io = Base.inferencebarrier(io)
+    IOContext{IO}(
+        _io,
+        get(_io,:color,false) ? Base.ImmutableDict{Symbol,Any}(:color, true) : Base.ImmutableDict{Symbol,Any}()
+    )
 end
-Base.write(io::UnstableIO, b::UInt8) = write(io.io, b)::Int
-Base.get(io::UnstableIO, val, default) = get(io.io, val, default)
-Base.print(io::UnstableIO, arg::Union{SubString{String}, String}) = print(io.io, arg)
-stderr_f() = something(DEFAULT_IO[], UnstableIO(stderr))
-stdout_f() = something(DEFAULT_IO[], UnstableIO(stdout))
+stderr_f() = something(DEFAULT_IO[], unstableio(stderr))
+stdout_f() = something(DEFAULT_IO[], unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
-can_fancyprint(io::IO) = ((io isa Base.TTY) || (io isa UnstableIO && io.io isa Base.TTY)) && (get(ENV, "CI", nothing) != "true")
+usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
+can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
 include("utils.jl")
@@ -110,12 +116,18 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, installed=false)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, installed=false)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
 a package, also inside that package.
+
+If the active environment is a package (the Project has both `name` and `uuid` fields) compat entries will be
+added automatically with a lower bound of the added version.
+
+To add as a weak dependency (in the `[weakdeps]` field) set the kwarg `target=:weakdeps`.
+To add as an extra dep (in the `[extras]` field) set `target=:extras`.
 
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using a tiered algorithm.
@@ -147,9 +159,14 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 !!! compat "Julia 1.9"
     The `PRESERVE_TIERED_INSTALLED` and `PRESERVE_ALL_INSTALLED` strategies requires at least Julia 1.9.
 
+!!! compat "Julia 1.11"
+    The `target` kwarg requires at least Julia 1.11.
+
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
+Pkg.add("Example", target=:weakdeps) # Add a package as a weak dependency
+Pkg.add("Example", target=:extras) # Add a package to the `[extras]` list
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
@@ -212,12 +229,13 @@ See also [`PackageSpec`](@ref), [`PackageMode`](@ref).
 const rm = API.rm
 
 """
-    Pkg.why(pkg::Union{String, Vector{String}})
-    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.why(pkg::Union{String, Vector{String}}; workspace::Bool=false)
+    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}}; workspace::Bool=false)
 
 Show the reason why this package is in the manifest.
 The output is all the different ways to reach the package
 through the dependency graph starting from the dependencies.
+If `workspace` is true, this will consider all projects in the workspace and not just the active one.
 
 !!! compat "Julia 1.9"
     This function requires at least Julia 1.9.
@@ -249,13 +267,17 @@ const update = API.up
     Pkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; kwargs...)
 
 **Keyword arguments:**
-  - `coverage::Bool=false`: enable or disable generation of coverage statistics.
+  - `coverage::Union{Bool,String}=false`: enable or disable generation of coverage statistics for the tested package.
+    If a string is passed it is passed directly to `--code-coverage` in the test process so e.g. "user" will test all user code.
   - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
 
 !!! compat "Julia 1.9"
     `allow_reresolve` requires at least Julia 1.9.
+
+!!! compat "Julia 1.9"
+    Passing a string to `coverage` requires at least Julia 1.9.
 
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its
@@ -463,7 +485,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false, io::IO=stderr)
+    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -471,6 +493,7 @@ Otherwise, resolve a set of feasible packages from the `Project.toml` files
 and install them.
 `verbose = true` prints the build output to `stdout`/`stderr` instead of
 redirecting to the `build.log` file.
+`workspace=true` will also instantiate all projects in the workspace.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
 
@@ -488,12 +511,13 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout)
+    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false,
+               compat::Bool=false, extensions::Bool=false, workspace::Bool=false, io::IO=stdout)
 
 
 Print out the status of the project/manifest.
 
-Packages marked with `⌃` have new versions that can be installed, e.g. via [`Pkg.up`](@ref).
+Packages marked with `⌃` have new versions that can be installed, e.g. via [`Pkg.update`](@ref).
 Those marked with `⌅` have new versions available, but cannot be installed due to compatibility conflicts with other packages. To see why, set the
 keyword argument `outdated=true`.
 
@@ -501,13 +525,14 @@ Setting `outdated=true` will only show packages that are not on the latest versi
 their maximum version and why they are not on the latest version (either due to other
 packages holding them back due to compatibility constraints, or due to compatibility in the project file).
 As an example, a status output like:
-```
-pkg> Pkg.status(; outdated=true)
+```julia-repl
+julia> Pkg.status(; outdated=true)
 Status `Manifest.toml`
 ⌃ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
 ⌅ [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
 ⌅ [2ab3a3ac] LogExpFunctions v0.2.5 (<v0.3.0): SpecialFunctions
 ```
+
 means that the latest version of Crayons is 4.0.4 but the latest version compatible
 with the `[compat]` section in the current project is 3.0.0.
 The latest version of NearestNeighbors is 0.4.9 but due to compat constrains in the project
@@ -525,6 +550,9 @@ of those that are currently loaded.
 
 Setting `diff=true` will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
+
+Setting `workspace=true` will show the (merged) status of packages
+in the workspace.
 
 See [`Pkg.project`](@ref) and [`Pkg.dependencies`](@ref) to get the project/manifest
 status as a Julia object instead of printing it.
@@ -636,8 +664,8 @@ For example, `Pkg.add` can be called either as the explicit or concise versions 
 | Explicit                                                            | Concise                                        |
 |:--------------------------------------------------------------------|:-----------------------------------------------|
 | `Pkg.add(PackageSpec(name="Package"))`                              | `Pkg.add(name = "Package")`                    |
-| `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(name = "Package")`                    |
-|` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="MyPkg")])`|
+| `Pkg.add(PackageSpec(url="www.myhost.com/MyPkg")))`                 | `Pkg.add(url="www.myhost.com/MyPkg")`                    |
+|` Pkg.add([PackageSpec(name="Package"), PackageSpec(path="/MyPkg"])` | `Pkg.add([(;name="Package"), (;path="/MyPkg")])`|
 
 Below is a comparison between the REPL mode and the functional API:
 
@@ -693,15 +721,27 @@ const redo = API.redo
 
 """
     RegistrySpec(name::String)
-    RegistrySpec(; name, url, path)
+    RegistrySpec(; name, uuid, url, path)
 
 A `RegistrySpec` is a representation of a registry with various metadata, much like
 [`PackageSpec`](@ref).
+This includes:
+
+  * The `name` of the registry.
+  * The registry's unique `uuid`.
+  * The `url` to the registry.
+  * A local `path`.
 
 Most registry functions in Pkg take a `Vector` of `RegistrySpec` and do the operation
 on all the registries in the vector.
 
-# Examples
+Many functions that take a `RegistrySpec` can be called with a more concise notation with keyword arguments.
+For example, `Pkg.Registry.add` can be called either as the explicit or concise versions as:
+
+| Explicit                                                            | Concise                                        |
+|:--------------------------------------------------------------------|:-----------------------------------------------|
+| `Pkg.Registry.add(RegistrySpec(name="General"))`                                        | `Pkg.Registry.add(name = "General")`                                      |
+| `Pkg.Registry.add(RegistrySpec(url="https://github.com/JuliaRegistries/General.git")))` | `Pkg.Registry.add(url = "https://github.com/JuliaRegistries/General.git")`|
 
 Below is a comparison between the REPL mode and the functional API::
 
@@ -723,30 +763,28 @@ Upgrades the format of the current or specified manifest file from v1.0 to v2.0 
 const upgrade_manifest = API.upgrade_manifest
 
 """
-    is_manifest_current(ctx::Context = Context())
+    is_manifest_current(path::AbstractString)
 
-Returns whether the active manifest was resolved from the active project state.
+Returns whether the manifest for the project at `path` was resolved from the current project file.
 For instance, if the project had compat entries changed, but the manifest wasn't re-resolved, this would return false.
 
-If the manifest doesn't have the project hash recorded, `nothing` is returned.
+If the manifest doesn't have the project hash recorded, or if there is no manifest file, `nothing` is returned.
+
+This function can be used in tests to verify that the manifest is synchronized with the project file:
+
+    using Pkg, Test, Package
+    @test Pkg.is_manifest_current(pkgdir(Package))
 """
 const is_manifest_current = API.is_manifest_current
 
 function __init__()
     DEFAULT_IO[] = nothing
     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
-    if isdefined(Base, :active_repl)
-        REPLMode.repl_init(Base.active_repl)
-    else
-        atreplinit() do repl
-            if isinteractive() && repl isa REPL.LineEditREPL
-                isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
-                REPLMode.repl_init(repl)
-            end
-        end
+    if !isassigned(Base.PKG_PRECOMPILE_HOOK)
+        # allows Base to use Pkg.precompile during loading
+        # disable via `Base.PKG_PRECOMPILE_HOOK[] = Returns(nothing)`
+        Base.PKG_PRECOMPILE_HOOK[] = precompile
     end
-    push!(empty!(REPL.install_packages_hooks), REPLMode.try_prompt_pkg_add)
-    Base.PKG_PRECOMPILE_HOOK[] = precompile # allows Base to use Pkg.precompile during loading
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
     _auto_gc_enabled[] = !Base.get_bool_env("JULIA_PKG_DISABLE_AUTO_GC", false)
     return nothing
@@ -801,7 +839,7 @@ function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     end
 
     if curr_time - DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] > delay_secs
-        @info("We haven't cleaned this depot up for a bit, running Pkg.gc()...")
+        printpkgstyle(ctx.io, :Info, "We haven't cleaned this depot up for a bit, running Pkg.gc()...", color = Base.info_color())
         try
             Pkg.gc(ctx; collect_delay)
             DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = curr_time
