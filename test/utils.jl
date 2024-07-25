@@ -73,14 +73,21 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
-            target_depot = nothing
+            target_depot = realpath(mktempdir())
+            push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
+            push!(DEPOT_PATH, target_depot)
+            loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
+            depot_mtimes = Dict(d => mtime(d) for d in DEPOT_PATH if isdir(d))
             try
-                target_depot = realpath(mktempdir())
-                push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
-                push!(DEPOT_PATH, target_depot)
-                loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
                 fn()
             finally
+                for (d, t) in depot_mtimes
+                    d == target_depot && continue # tests allowed to modify target depot
+                    isdir(d) || continue
+                    if mtime(d) != t
+                        error("shared depot $d was modified during isolated test: readdir(depot) = $(readdir(d))")
+                    end
+                end
                 if !haskey(ENV, "CI") && target_depot !== nothing && isdir(target_depot)
                     try
                         Base.rm(target_depot; force=true, recursive=true)
