@@ -125,9 +125,9 @@ temp_pkg_dir() do project_path
 
             @test hash_1 == hash_2 == hash_3 == hash_4
 
-
             # Test that the subprojects are working
-            withenv("JULIA_DEPOT_PATH" => first(Base.DEPOT_PATH)) do
+            depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+            withenv("JULIA_DEPOT_PATH" => depot_path_string) do
                 @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="test" test/runtests.jl`))
                 @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
                 @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
