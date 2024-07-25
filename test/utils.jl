@@ -107,7 +107,7 @@ end
 
 function isolate_and_pin_registry(fn::Function; registry_url::String, registry_commit::String)
     isolate(loaded_depot = false, linked_reg = true) do
-        this_gen_reg_path = joinpath(last(Base.DEPOT_PATH), "registries", "General")
+        this_gen_reg_path = joinpath(first(Base.DEPOT_PATH), "registries", "General")
         rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
         cmd = `git clone $(registry_url) $(this_gen_reg_path)`
         run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
