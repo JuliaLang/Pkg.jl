@@ -17,6 +17,9 @@ export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
+public activate, add, build, compat, develop, free, gc, generate, instantiate,
+       pin, precompile, redo, rm, resolve, status, test, undo, update, why
+
 depots() = Base.DEPOT_PATH
 function depots1()
     d = depots()
@@ -53,7 +56,8 @@ stderr_f() = something(DEFAULT_IO[], unstableio(stderr))
 stdout_f() = something(DEFAULT_IO[], unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
-can_fancyprint(io::IO) = ((io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)) && (get(ENV, "CI", nothing) != "true")
+usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
+can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
 include("utils.jl")
@@ -263,13 +267,17 @@ const update = API.up
     Pkg.test(pkgs::Union{PackageSpec, Vector{PackageSpec}}; kwargs...)
 
 **Keyword arguments:**
-  - `coverage::Bool=false`: enable or disable generation of coverage statistics.
+  - `coverage::Union{Bool,String}=false`: enable or disable generation of coverage statistics for the tested package.
+    If a string is passed it is passed directly to `--code-coverage` in the test process so e.g. "user" will test all user code.
   - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
 
 !!! compat "Julia 1.9"
     `allow_reresolve` requires at least Julia 1.9.
+
+!!! compat "Julia 1.9"
+    Passing a string to `coverage` requires at least Julia 1.9.
 
 Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
 positional argument is given to `Pkg.test`. A package is tested by running its
@@ -514,13 +522,14 @@ Setting `outdated=true` will only show packages that are not on the latest versi
 their maximum version and why they are not on the latest version (either due to other
 packages holding them back due to compatibility constraints, or due to compatibility in the project file).
 As an example, a status output like:
-```
-pkg> Pkg.status(; outdated=true)
+```julia-repl
+julia> Pkg.status(; outdated=true)
 Status `Manifest.toml`
 ⌃ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
 ⌅ [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
 ⌅ [2ab3a3ac] LogExpFunctions v0.2.5 (<v0.3.0): SpecialFunctions
 ```
+
 means that the latest version of Crayons is 4.0.4 but the latest version compatible
 with the `[compat]` section in the current project is 3.0.0.
 The latest version of NearestNeighbors is 0.4.9 but due to compat constrains in the project

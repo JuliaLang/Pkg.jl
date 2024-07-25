@@ -318,7 +318,9 @@ function __init__()
             end
         end
     end
-    push!(empty!(REPL.install_packages_hooks), try_prompt_pkg_add)
+    if !in(try_prompt_pkg_add, REPL.install_packages_hooks)
+        push!(REPL.install_packages_hooks, try_prompt_pkg_add)
+    end
 end
 
 include("precompile.jl")

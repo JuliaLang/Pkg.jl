@@ -159,7 +159,7 @@ function complete_add_dev(options, partial, i1, i2; hint::Bool)
     end
     comps = vcat(comps, sort(complete_remote_package(partial; hint)))
     if !isempty(partial)
-        append!(comps, filter!(startswith(partial), first.(values(Types.stdlibs()))))
+        append!(comps, filter!(startswith(partial), [info.name for info in values(Types.stdlib_infos())]))
     end
     return comps, idx, !isempty(comps)
 end
@@ -194,6 +194,21 @@ complete_opt(opt_specs) =
 function complete_argument(spec::CommandSpec, options::Vector{String},
                            partial::AbstractString, offset::Int,
                            index::Int; hint::Bool)
+    if spec.completions isa Symbol
+        # if completions is a symbol, it is a function in REPLExt that needs to be forwarded
+        # to REPLMode (couldn't be linked there because REPLExt is not a dependency of REPLMode)
+        completions = try
+            getglobal(REPLExt, spec.completions)
+        catch
+            @error "REPLMode indicates a completion function called :$(spec.completions) that cannot be found in REPLExt"
+            rethrow()
+        end
+        spec.completions = function(opts, partial, offset, index; hint::Bool)
+                applicable(completions, opts, partial, offset, index) ?
+                    completions(opts, partial, offset, index; hint) :
+                    completions(opts, partial; hint)
+            end
+    end
     spec.completions === nothing && return String[]
     # finish parsing opts
     local opts

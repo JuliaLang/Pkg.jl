@@ -14,6 +14,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
+import ...Pkg: usable_io
 
 #########
 # Utils #
@@ -227,9 +228,11 @@ end
 # about extensions
 function fixups_from_projectfile!(env::EnvCache)
     for pkg in values(env.manifest)
-        v = joinpath(source_path(env.manifest_file, pkg), "Project.toml")
-        if isfile(v)
-            p = Types.read_project(v)
+        # isfile_casesenstive within locate_project_file used to error on Windows if given a
+        # relative path so abspath it to be extra safe https://github.com/JuliaLang/julia/pull/55220
+        project_file = Base.locate_project_file(abspath(source_path(env.manifest_file, pkg)))
+        if project_file isa String && isfile(project_file)
+            p = Types.read_project(project_file)
             pkg.weakdeps = p.weakdeps
             pkg.exts = p.exts
             pkg.entryfile = p.entryfile
@@ -452,7 +455,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
         end
     end
 
-    names = Dict{UUID, String}(uuid => name for (uuid, (name, version)) in stdlibs())
+    names = Dict{UUID, String}(uuid => info.name for (uuid, info) in stdlib_infos())
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
     # But we only want to use information for those packages that we don't know about
@@ -514,7 +517,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
-            name = is_stdlib(uuid) ? first(stdlibs()[uuid]) : registered_name(registries, uuid)
+            name = is_stdlib(uuid) ? stdlib_infos()[uuid].name : registered_name(registries, uuid)
             push!(pkgs, PackageSpec(;name=name, uuid=uuid, version=ver))
         end
     end
@@ -576,37 +579,26 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
             uuid in keys(fixed) && continue
             all_compat_u = get_or_make!(all_compat, uuid)
             weak_compat_u = get_or_make!(weak_compat, uuid)
-
-            uuid_is_stdlib = false
-            stdlib_name = ""
-            stdlib_version = nothing
-            if haskey(stdlibs_for_julia_version, uuid)
-                uuid_is_stdlib = true
-                stdlib_name, stdlib_version = stdlibs_for_julia_version[uuid]
-            end
+            uuid_is_stdlib = haskey(stdlibs_for_julia_version, uuid)
 
             # If we're requesting resolution of a package that is an
             # unregistered stdlib we must special-case it here.  This is further
             # complicated by the fact that we can ask this question relative to
             # a Julia version.
             if (julia_version != VERSION && is_unregistered_stdlib(uuid)) || uuid_is_stdlib
-                path = Types.stdlib_path(stdlibs_for_julia_version[uuid][1])
-                proj_file = projectfile_path(path; strict=true)
-                @assert proj_file !== nothing
-                proj = read_package(proj_file)
+                # We use our historical stdlib versioning data to unpack the version, deps and weakdeps of this uuid
+                stdlib_info = stdlibs_for_julia_version[uuid]
+                v = something(stdlib_info.version, VERSION)
 
-                v = something(proj.version, VERSION)
-
-                # TODO look at compat section for stdlibs?
                 all_compat_u_vr = get_or_make!(all_compat_u, v)
-                for (_, other_uuid) in proj.deps
+                for other_uuid in stdlib_info.deps
                     push!(uuids, other_uuid)
                     all_compat_u_vr[other_uuid] = VersionSpec()
                 end
 
-                if !isempty(proj.weakdeps)
+                if !isempty(stdlib_info.weakdeps)
                     weak_all_compat_u_vr = get_or_make!(weak_compat_u, v)
-                    for (_, other_uuid) in proj.weakdeps
+                    for other_uuid in stdlib_info.weakdeps
                         push!(uuids, other_uuid)
                         all_compat_u_vr[other_uuid] = VersionSpec()
                         push!(weak_all_compat_u_vr, other_uuid)
@@ -841,7 +833,7 @@ function download_artifacts(env::EnvCache;
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
                 ensure_artifact_installed(name, artifacts[name], artifacts_toml;
-                                            verbose, quiet_download=!(io isa Base.TTY), io=io)
+                                            verbose, quiet_download=!(usable_io(io)), io=io)
             end
             write_env_usage(artifacts_toml, "artifact_usage.toml")
         end
@@ -1826,6 +1818,7 @@ end
 
 function gen_subprocess_flags(source_path::String; coverage, julia_args)
     coverage_arg = if coverage isa Bool
+        # source_path is the package root, not "src" so "ext" etc. is included
         coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
         coverage
@@ -1982,9 +1975,9 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
                 err isa Resolve.ResolverError || rethrow()
                 allow_reresolve || rethrow()
                 @debug err
-                @warn "Could not use exact versions of packages in manifest, re-resolving"
-                temp_ctx.env.manifest.deps = Dict(uuid => entry for (uuid, entry) in temp_ctx.env.manifest.deps if isfixed(entry))
-                Pkg.resolve(temp_ctx; io=devnull, skip_writing_project=true)
+                printpkgstyle(ctx.io, :Test, "Could not use exact versions of packages in manifest. Re-resolving dependencies", color=Base.warn_color())
+                Pkg.update(temp_ctx; skip_writing_project=true, update_registry=false, io=ctx.io)
+                printpkgstyle(ctx.io, :Test, "Successfully re-resolved")
                 @debug "Using _clean_ dep graph"
             end
 
@@ -2113,7 +2106,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
         # TODO: DRY with code below.
         # If the test is in the our "workspace", no need to create a temp env etc, just activate and run thests
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
-            proj = Base.locate_project_file(testdir(source_path))
+            proj = Base.locate_project_file(abspath(testdir(source_path)))
             env = EnvCache(proj)
             # Instantiate test env
             Pkg.instantiate(Context(env=env); allow_autoprecomp = false)
@@ -2419,6 +2412,7 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
         v = ExtInfo[]
         for (ext, extdeps) in exts
             extdeps isa String && (extdeps = String[extdeps])
+            # Note: `get_extension` returns nothing for stdlibs that are loaded via `require_stdlib`
             ext_loaded = (Base.get_extension(Base.PkgId(pkg.uuid, pkg.name), Symbol(ext)) !== nothing)
             # Check if deps are loaded
             extdeps_info= Tuple{String, Bool}[]
