@@ -32,7 +32,7 @@ end # module
 ```toml
 # Project.toml
 
-...
+# standard fields here
 
 [apps]
 reverse = {}
@@ -47,16 +47,16 @@ $ reverse some input string
 emos tupni gnirts
 ```
 
+directly in the terminal.
+
 ## Installing Julia apps
 
-The installation of Julia apps are similar to installing julia libraries but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add`.
+The installation of Julia apps are similar to installing julia libraries but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add` (`develop` is also available).
 
 !!! note
-    The path `.julia/bin` has to be added to your `PATH` in order for
-
-
+    The path `.julia/bin` has to be added to your `PATH` in order for apps to be runnable after being installed.
+    Pkg currently does not do this for you.
 
 ## Other information
 
-- The app will currently run with the same Julia executable as was used to install the app. To update the Julia executable used run...
--
+- The app will currently run with the same Julia executable as was used to install the app.
