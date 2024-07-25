@@ -744,6 +744,7 @@ end
         # Verify that the name-based override worked; extract paths from module that
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
+            add_this_pkg()
             # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
             (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
                 using ArtifactOverrideLoading
