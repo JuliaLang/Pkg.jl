@@ -589,7 +589,7 @@ pkg> registry status
     :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
-    :completions => get_complete_function(:complete_installed_apps),
+    :completions => :complete_installed_apps,
     :description => "show status of apps",
     :help => md"""
     show status of apps
@@ -600,7 +600,7 @@ PSA[:name => "add",
     :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_app_add,
-    :completions => get_complete_function(:complete_add_dev),
+    :completions => :complete_add_dev,
     :description => "add app",
     :help => md"""
     app add pkg
@@ -615,7 +615,7 @@ PSA[:name => "remove",
     :should_splat => false,
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
-    :completions => get_complete_function(:complete_installed_apps),
+    :completions => :complete_installed_apps,
     :description => "remove packages from project or manifest",
     :help => md"""
     app [rm|remove] pkg ...
@@ -630,7 +630,7 @@ PSA[:name => "develop",
     :should_splat => false,
     :arg_count => 1 => Inf,
     :arg_parser => (x,y) -> parse_package(x,y; add_or_dev=true),
-    :completions => get_complete_function(:complete_add_dev),
+    :completions => :complete_add_dev,
     :description => "develop a package and install all the apps in it",
     :help => md"""
     app [dev|develop] pkg[=uuid] ...

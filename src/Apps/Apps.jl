@@ -12,18 +12,18 @@ import Pkg.Registry
 # Constants #
 #############
 
+# Should use `DEPOT_PATH[1]` instead of `homedir()`?
 const APP_ENV_FOLDER = joinpath(homedir(), ".julia", "environments", "apps")
 const APP_MANIFEST_FILE = joinpath(APP_ENV_FOLDER, "AppManifest.toml")
 const JULIA_BIN_PATH = joinpath(homedir(), ".julia", "bin")
-const XDG_BIN_PATH = joinpath(homedir(), ".local", "bin")
+
 
 ##################
 # Helper Methods #
 ##################
 
-function rm_julia_and_xdg_bin(name; kwargs...)
+function rm_shim(name; kwargs...)
     Base.rm(joinpath(JULIA_BIN_PATH, name); kwargs...)
-    # Base.rm(joinpath(XDG_BIN_PATH, name); kwargs...)
 end
 
 function handle_project_file(sourcepath)
@@ -44,13 +44,11 @@ end
 function overwrite_if_different(file, content)
     if !isfile(file) || read(file, String) != content
         mkpath(dirname(file))
-        open(file, "w") do f
-            write(f, content)
-        end
+        write(file, content)
     end
 end
 
-function get_latest_version_register(pkg::PackageSpec, regs)
+function get_max_version_register(pkg::PackageSpec, regs)
     max_v = nothing
     tree_hash = nothing
     for reg in regs
@@ -111,7 +109,7 @@ function add(pkg::PackageSpec)
         Pkg.Operations.registry_resolve!(ctx.registries, pkgs)
         Pkg.Operations.ensure_resolved(ctx, ctx.env.manifest, pkgs, registry=true)
 
-        pkg.version, pkg.tree_hash = get_latest_version_register(pkg, ctx.registries)
+        pkg.version, pkg.tree_hash = get_max_version_register(pkg, ctx.registries)
 
         new = Pkg.Operations.download_source(ctx, pkgs)
     end
@@ -130,9 +128,9 @@ function add(pkg::PackageSpec)
     write_project(project, projectfile)
 
     # Move manifest if it exists here.
-
-    Pkg.activate(joinpath(APP_ENV_FOLDER, pkg.name))
-    Pkg.instantiate()
+    Pkg.activate(joinpath(APP_ENV_FOLDER, pkg.name)) do
+        Pkg.instantiate()
+    end
 
     if new
         # TODO: Call build on the package if it was freshly installed?
@@ -216,6 +214,7 @@ function status(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
     end
 end
 
+#=
 function precompile(pkg::Union{Nothing, String}=nothing)
     manifest = Pkg.Types.read_manifest(joinpath(APP_ENV_FOLDER, "AppManifest.toml"))
     deps = Pkg.Operations.load_manifest_deps(manifest)
@@ -231,6 +230,7 @@ function precompile(pkg::Union{Nothing, String}=nothing)
         end
     end
 end
+=#
 
 function require_not_empty(pkgs, f::Symbol)
     pkgs === nothing && return
@@ -263,7 +263,7 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
         delete!(manifest.deps, dep.uuid)
         for (appname, appinfo) in dep.apps
             @info "Deleted $(appname)"
-            rm_julia_and_xdg_bin(appname; force=true)
+            rm_shim(appname; force=true)
         end
         Base.rm(joinpath(APP_ENV_FOLDER, dep.name); recursive=true)
     else
@@ -273,7 +273,7 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
                 app = pkg.apps[app_idx]
                 @info "Deleted app $(app.name)"
                 delete!(pkg.apps, app.name)
-                rm_julia_and_xdg_bin(appname; force=true)
+                rm_shim(app.name; force=true)
             end
             if isempty(pkg.apps)
                 delete!(manifest.deps, uuid)
@@ -307,15 +307,8 @@ function generate_shim(app::AppInfo, pkgname; julia_executable_path::String=join
     else
         bash_shim(pkgname, julia_executable_path, env)
     end
-    # TODO: Only overwrite if app is "controlled" by Julia?
     overwrite_if_different(julia_bin_filename, content)
     if Sys.isunix()
-        #=
-        if isdir(XDG_BIN_PATH) && !isfile(joinpath(XDG_BIN_PATH, filename))
-            # TODO: Verify that this symlink is in fact pointing to the correct file.
-            symlink(julia_bin_filename, joinpath(XDG_BIN_PATH, filename))
-        end
-        =#
         chmod(julia_bin_filename, 0o755)
     end
 end
@@ -346,6 +339,9 @@ function windows_shim(pkgname, julia_executable_path::String, env)
 end
 
 
+
+
+#=
 #################
 # PATH handling #
 #################
@@ -410,5 +406,6 @@ function update_windows_PATH()
     new_path = "$current_path;$JULIA_BIN_PATH"
     run(`setx PATH "$new_path"`)
 end
+=#
 
 end
