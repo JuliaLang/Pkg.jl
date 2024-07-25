@@ -147,14 +147,21 @@ function develop(pkg::String)
     develop(PackageSpec(pkg))
 end
 
+function develop(pkg::Vector{PackageSpec})
+    for p in pkg
+        develop(p)
+    end
+end
+
 function develop(pkg::PackageSpec)
+    if pkg.path !== nothing
+        pkg.path == abspath(pkg.path)
+    end
     handle_package_input!(pkg)
     ctx = app_context()
-
     handle_repo_develop!(ctx, pkg, #=shared =# true)
-
-
-    project = handle_project_file(pkg.path)
+    sourcepath = abspath(source_path(ctx.env.manifest_file, pkg))
+    project = handle_project_file(sourcepath)
 
     # Seems like the `.repo.source` field is not cleared.
     # At least repo-url is still in the manifest after doing a dev with a path
@@ -164,9 +171,9 @@ function develop(pkg::PackageSpec)
         pkg.repo.source = nothing
     end
 
-    entry = PackageEntry(;apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid)
+    entry = PackageEntry(;apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = sourcepath, repo = pkg.repo, uuid=pkg.uuid)
     update_app_manifest(entry)
-    generate_shims_for_apps(entry.name, entry.apps, entry.path)
+    generate_shims_for_apps(entry.name, entry.apps, sourcepath)
 end
 
 function status(pkgs_or_apps::Vector)
@@ -265,7 +272,9 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
             @info "Deleted $(appname)"
             rm_shim(appname; force=true)
         end
-        Base.rm(joinpath(APP_ENV_FOLDER, dep.name); recursive=true)
+        if dep.path === nothing
+            Base.rm(joinpath(APP_ENV_FOLDER, dep.name); recursive=true)
+        end
     else
         for (uuid, pkg) in manifest.deps
             app_idx = findfirst(app -> app.name == pkg_or_app, pkg.apps)
