@@ -333,6 +333,9 @@ finding artifacts and packages that are thereafter not used by any other project
 marking them as "orphaned".  This method will only remove orphaned objects (package
 versions, artifacts, and scratch spaces) that have been continually un-used for a period
 of `collect_delay`; which defaults to seven days.
+
+To disable automatic garbage collection, you can set the environment variable
+`JULIA_PKG_GC_AUTO` to `"false"` before starting Julia or call `API.auto_gc(false)`.
 """
 const gc = API.gc
 
@@ -617,8 +620,8 @@ In offline mode Pkg tries to do as much as possible without connecting
 to internet. For example, when adding a package Pkg only considers
 versions that are already downloaded in version resolution.
 
-To work in offline mode across Julia sessions you can
-set the environment variable `JULIA_PKG_OFFLINE` to `"true"`.
+To work in offline mode across Julia sessions you can set the environment
+variable `JULIA_PKG_OFFLINE` to `"true"` before starting Julia.
 """
 offline(b::Bool=true) = (OFFLINE_MODE[] = b; nothing)
 
@@ -783,6 +786,7 @@ function __init__()
         Base.PKG_PRECOMPILE_HOOK[] = precompile
     end
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
+    _auto_gc_enabled[] = Base.get_bool_env("JULIA_PKG_GC_AUTO", true)
     return nothing
 end
 
