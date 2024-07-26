@@ -104,10 +104,6 @@ function _resolve(manifest::Manifest, pkgname=nothing)
     write_manifest(manifest, app_manifest_file())
 end
 
-function _gc()
-
-end
-
 function add(pkg::String)
     pkg = PackageSpec(pkg)
     add(pkg)
@@ -205,7 +201,6 @@ end
 
 function status(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
     # TODO: Sort.
-    # TODO: Show julia version
     pkg_or_app = pkg_or_app === nothing ? nothing : pkg_or_app.name
     manifest = Pkg.Types.read_manifest(joinpath(app_env_folder(), "AppManifest.toml"))
     deps = Pkg.Operations.load_manifest_deps(manifest)
@@ -230,7 +225,8 @@ function status(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
             if !is_pkg && pkg_or_app !== nothing && appname !== pkg_or_app
                 continue
             end
-            printstyled("  $(appname) $(appinfo.julia_command) \n", color=:green)
+            julia_cmd = contractuser(appinfo.julia_command)
+            printstyled("  $(appname) $(julia_cmd) \n", color=:green)
         end
     end
 end
