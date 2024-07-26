@@ -76,6 +76,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
             target_depot = realpath(mktempdir())
             push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
             push!(DEPOT_PATH, target_depot)
+            Base.append_bundled_depot_path!(DEPOT_PATH)
             loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
             depot_mtimes = Dict(d => mtime(d) for d in DEPOT_PATH if isdir(d))
             try
@@ -153,6 +154,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
             try
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
                 fn(env_dir)
             finally
                 if rm && !haskey(ENV, "CI")

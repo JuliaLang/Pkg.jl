@@ -36,6 +36,7 @@ Pkg._auto_gc_enabled[] = false
         # And set the loaded depot as our working depot.
         empty!(DEPOT_PATH)
         push!(DEPOT_PATH, LOADED_DEPOT)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         # Now we double check we have a clean slate.
         @test isempty(Pkg.dependencies())
         # A simple `add` should set up some things for us:
@@ -556,6 +557,7 @@ end
     isolate() do; mktempdir() do tempdir
         empty!(DEPOT_PATH)
         push!(DEPOT_PATH, tempdir)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         rm(tempdir; force=true, recursive=true)
         @test !isdir(first(DEPOT_PATH))
         Pkg.add("JSON")
@@ -1195,6 +1197,7 @@ end
     isolate() do; cd_tempdir() do dir
         empty!(DEPOT_PATH)
         push!(DEPOT_PATH, "temp")
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.develop("JSON")
         Pkg.dependencies(json_uuid) do pkg
             @test Base.samefile(pkg.source, abspath(joinpath("temp", "dev", "JSON")))
