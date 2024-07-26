@@ -1582,4 +1582,17 @@ function upgrade_manifest(ctx::Context = Context())
     return nothing
 end
 
+"""
+    auto_gc(on::Bool)
+
+Enable or disable automatic garbage collection of packages and artifacts.
+Return the previous state.
+"""
+function auto_gc(on::Bool)
+    pstate = _auto_gc_enabled[]
+    _auto_gc_enabled[] = on
+
+    return pstate
+end
+
 end # module
