@@ -53,7 +53,7 @@ using UUIDs
     end
 
     isolate(loaded_depot=false) do
-        depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot)
+        depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot); Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.activate(; temp=true)
         Pkg.Registry.add(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry"))
         Pkg.Registry.add("General")
@@ -65,7 +65,7 @@ using UUIDs
     end
     isolate(loaded_depot=false) do
         withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
-            depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot)
+            depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot); Base.append_bundled_depot_path!(DEPOT_PATH)
             Pkg.activate(; temp=true)
             Pkg.Registry.add(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry"))
             Pkg.Registry.add("General")
