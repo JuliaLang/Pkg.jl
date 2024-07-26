@@ -2,7 +2,7 @@ module Apps
 
 using Pkg
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
-                 pkgerror
+                 pkgerror, projectfile_path, manifestfile_path
 using Pkg.Operations: print_single, source_path, update_package_add
 using Pkg.API: handle_package_input!
 using TOML, UUIDs
@@ -20,7 +20,8 @@ function rm_shim(name; kwargs...)
 end
 
 function get_project(sourcepath)
-    project_file = joinpath(sourcepath, "Project.toml")
+    project_file = projectfile_path(sourcepath)
+
     isfile(project_file) || error("Project file not found: $project_file")
 
     project = Pkg.Types.read_project(project_file)
@@ -69,8 +70,43 @@ end
 # Main Functions #
 ##################
 
-# TODO: Add functions similar to API that takes name, Vector{String} etc and promotes it to `Vector{PackageSpec}`..
 
+function _resolve(manifest::Manifest, pkgname=nothing)
+    for (uuid, pkg) in manifest.deps
+        if pkgname !== nothing && pkg.name !== pkgname
+            continue
+        end
+        if pkg.path == nothing
+            projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
+            sourcepath = source_path(app_manifest_file(), pkg)
+            project = get_project(sourcepath)
+            project.entryfile = joinpath(sourcepath, "src", "$(project.name).jl")
+            mkpath(dirname(projectfile))
+            write_project(project, projectfile)
+            package_manifest_file = manifestfile_path(sourcepath; strict=true)
+            if package_manifest_file !== nothing
+                cp(package_manifest_file, joinpath(app_env_folder(), pkg.name, basename(package_manifest_file)); force=true)
+            end
+            # Move manifest if it exists here.
+
+            Pkg.activate(joinpath(app_env_folder(), pkg.name)) do
+                Pkg.instantiate()
+            end
+        else
+            # TODO: Not hardcode Project.toml
+            projectfile = projectfile_path(source_path(app_manifest_file(), pkg))
+        end
+
+        # TODO: Julia path
+        generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), joinpath(Sys.BINDIR, "julia"))
+    end
+
+    write_manifest(manifest, app_manifest_file())
+end
+
+function _gc()
+
+end
 
 function add(pkg::String)
     pkg = PackageSpec(pkg)
@@ -106,7 +142,7 @@ function add(pkg::PackageSpec)
         new = Pkg.Operations.download_source(ctx, pkgs)
     end
 
-    sourcepath = source_path(manifest_file, pkg)
+    sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = get_project(sourcepath)
     # TODO: Wrong if package itself has a sourcepath?
 
@@ -115,36 +151,6 @@ function add(pkg::PackageSpec)
 
     _resolve(manifest, pkg.name)
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
-end
-
-function _resolve(manifest::Manifest, pkgname=nothing)
-    for (uuid, pkg) in manifest.deps
-        if pkgname !== nothing && pkg.name !== pkgname
-            continue
-        end
-        if pkg.path == nothing
-            projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
-            sourcepath = source_path(app_manifest_file(), pkg)
-            project = get_project(sourcepath)
-            project.entryfile = joinpath(sourcepath, "src", "$(project.name).jl")
-            mkpath(dirname(projectfile))
-            write_project(project, projectfile)
-            # Move manifest if it exists here.
-
-            Pkg.activate(joinpath(app_env_folder(), pkg.name)) do
-                Pkg.instantiate()
-            end
-        else
-            # TODO: Not hardcode Project.toml
-            projectfile = joinpath(source_path(app_manifest_file(), pkg), "Project.toml")
-            @show projectfile
-        end
-
-        # TODO: Julia path
-        generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), joinpath(Sys.BINDIR, "julia"))
-    end
-
-    write_manifest(manifest, app_manifest_file())
 end
 
 function develop(pkg::String)
