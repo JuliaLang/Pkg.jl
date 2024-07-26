@@ -160,7 +160,7 @@ end
 import Pkg: Operations, Types, Apps
 function complete_installed_apps(options, partial; hint)
     manifest = try
-        Types.read_manifest(joinpath(Apps.APP_ENV_FOLDER, "AppManifest.toml"))
+        Types.read_manifest(joinpath(Apps.app_env_folder(), "AppManifest.toml"))
     catch err
         err isa PkgError || rethrow()
         return String[]
