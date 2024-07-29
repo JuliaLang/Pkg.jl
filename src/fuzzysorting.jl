@@ -90,8 +90,8 @@ function fuzzyscore(needle::AbstractString, haystack::AbstractString)
 end
 
 function fuzzysort(search::String, candidates::Vector{String})
-    scores = map(cand -> fuzzyscore(search, cand), candidates)
-    candidates[sortperm(scores)] |> reverse
+    scores = map(cand -> (FuzzySorting.fuzzyscore(search, cand), -Float64(FuzzySorting.levenshtein(search, cand))), candidates)
+    candidates[sortperm(scores)] |> reverse, any(s -> s[1] >= print_score_threshold, scores)
 end
 
 # Levenshtein Distance
@@ -137,11 +137,13 @@ function printmatch(io::IO, word, match)
     end
 end
 
+const print_score_threshold = 0.5
+
 function printmatches(io::IO, word, matches; cols::Int = _displaysize(io)[2])
     total = 0
     for match in matches
         total + length(match) + 1 > cols && break
-        fuzzyscore(word, match) < 0.5 && break
+        fuzzyscore(word, match) < print_score_threshold && break
         print(io, " ")
         printmatch(io, word, match)
         total += length(match) + 1

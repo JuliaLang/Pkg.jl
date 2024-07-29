@@ -36,6 +36,7 @@ Pkg._auto_gc_enabled[] = false
         # And set the loaded depot as our working depot.
         empty!(DEPOT_PATH)
         push!(DEPOT_PATH, LOADED_DEPOT)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         # Now we double check we have a clean slate.
         @test isempty(Pkg.dependencies())
         # A simple `add` should set up some things for us:
@@ -556,6 +557,7 @@ end
     isolate() do; mktempdir() do tempdir
         empty!(DEPOT_PATH)
         push!(DEPOT_PATH, tempdir)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         rm(tempdir; force=true, recursive=true)
         @test !isdir(first(DEPOT_PATH))
         Pkg.add("JSON")
@@ -1195,6 +1197,7 @@ end
     isolate() do; cd_tempdir() do dir
         empty!(DEPOT_PATH)
         push!(DEPOT_PATH, "temp")
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.develop("JSON")
         Pkg.dependencies(json_uuid) do pkg
             @test Base.samefile(pkg.source, abspath(joinpath("temp", "dev", "JSON")))
@@ -2387,10 +2390,11 @@ end
         Pkg.add( name="Example", version="0.3.0")
         Pkg.add("Markdown")
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST)
-        @test occursin(r"Status `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] Example\s*v0\.3\.0", readline(io))
-        @test occursin(r"\[2a0f44e3\] Base64", readline(io))
-        @test occursin(r"\[d6f4376e\] Markdown", readline(io))
+        statuslines = readlines(io)
+        @test occursin(r"Status `.+Manifest.toml`", first(statuslines))
+        @test any(l -> occursin(r"\[7876af07\] Example\s*v0\.3\.0", l), statuslines)
+        @test any(l -> occursin(r"\[2a0f44e3\] Base64", l), statuslines)
+        @test any(l -> occursin(r"\[d6f4376e\] Markdown", l), statuslines)
     end
     # Diff API
     isolate(loaded_depot=true) do
@@ -2428,11 +2432,12 @@ end
         @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
         ## diff manifest
         Pkg.status(; io=io, mode=Pkg.PKGMODE_MANIFEST, diff=true)
-        @test occursin(r"Diff `.+Manifest.toml`", readline(io))
-        @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
-        @test occursin(r"\[2a0f44e3\] - Base64", readline(io))
-        @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
-        @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
+        statuslines = readlines(io)
+        @test occursin(r"Diff `.+Manifest.toml`", first(statuslines))
+        @test any(l -> occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", l), statuslines)
+        @test any(l -> occursin(r"\[2a0f44e3\] - Base64", l), statuslines)
+        @test any(l -> occursin(r"\[d6f4376e\] - Markdown", l), statuslines)
+        @test any(l -> occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", l), statuslines)
         ## diff project with filtering
         Pkg.status("Markdown"; io=io, diff=true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -2983,7 +2988,7 @@ end
 @testset "relative depot path" begin
     isolate(loaded_depot=false) do
         mktempdir() do tmp
-            withenv("JULIA_DEPOT_PATH" => "tmp") do
+            withenv("JULIA_DEPOT_PATH" => tmp) do
                 Base.init_depot_path()
                 cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
                 git_init_and_commit(joinpath(tmp, "BasicSandbox"))
@@ -2997,12 +3002,12 @@ end
 
 using Pkg.Types: is_stdlib
 @testset "is_stdlib() across versions" begin
-    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.register!()
 
     networkoptions_uuid = UUID("ca575930-c2e3-43a9-ace4-1e988b2c1908")
     pkg_uuid = UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
 
-    # Assume we're running on v1.6+
+    # Test NetworkOptions across multiple versions (It became an stdlib in v1.6+, and was registered)
     @test is_stdlib(networkoptions_uuid)
     @test is_stdlib(networkoptions_uuid, v"1.6")
     @test !is_stdlib(networkoptions_uuid, v"1.5")
@@ -3010,7 +3015,7 @@ using Pkg.Types: is_stdlib
     @test !is_stdlib(networkoptions_uuid, v"0.7")
     @test !is_stdlib(networkoptions_uuid, nothing)
 
-    # Pkg is an unregistered stdlib
+    # Pkg is an unregistered stdlib and has always been an stdlib
     @test is_stdlib(pkg_uuid)
     @test is_stdlib(pkg_uuid, v"1.0")
     @test is_stdlib(pkg_uuid, v"1.6")
@@ -3018,17 +3023,16 @@ using Pkg.Types: is_stdlib
     @test is_stdlib(pkg_uuid, v"0.7")
     @test is_stdlib(pkg_uuid, nothing)
 
-    empty!(Pkg.Types.STDLIBS_BY_VERSION)
-
+    HistoricalStdlibVersions.unregister!()
     # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
     # but that we throw a PkgError if we ask for a particular julia version.
     @test is_stdlib(networkoptions_uuid)
     @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
 
-#=
+
 @testset "Pkg.add() with julia_version" begin
-    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.register!()
 
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
@@ -3129,9 +3133,8 @@ end
         @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
     end
 
-    empty!(Pkg.Types.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.unregister!()
 end
-=#
 
 
 @testset "Issue #2931" begin
@@ -3196,6 +3199,38 @@ if :version in fieldnames(Base.PkgOrigin)
         Pkg.respect_sysimage_versions(true)
     end
 end
+end
+
+temp_pkg_dir() do project_path
+    @testset "test entryfile entries" begin
+        mktempdir() do dir
+            path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "ProjectPath"))
+            cp(path, joinpath(dir, "ProjectPath"))
+            cd(joinpath(dir, "ProjectPath")) do
+                with_current_env() do
+                    Pkg.resolve()
+                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPath'`))
+                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPathDep'`))
+                end
+            end
+        end
+    end
+end
+@testset "test resolve with tree hash" begin
+    mktempdir() do dir
+        path = abspath(joinpath(@__DIR__, "../test", "test_packages", "ResolveWithRev"))
+        cp(path, joinpath(dir, "ResolveWithRev"))
+        cd(joinpath(dir, "ResolveWithRev")) do
+            with_current_env() do
+                @test !isfile("Manifest.toml")
+                @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                Pkg.resolve()
+                @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
+                Pkg.resolve()
+            end
+        end
+    end
 end
 
 end #module

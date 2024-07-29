@@ -23,10 +23,10 @@ include("compat.jl")
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
-function LineEdit.complete_line(c::PkgCompletionProvider, s)
+function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool=false)
     partial = REPL.beforecursor(s.input_buffer)
     full = LineEdit.input_string(s)
-    ret, range, should_complete = completions(full, lastindex(partial))
+    ret, range, should_complete = completions(full, lastindex(partial); hint)
     return ret, partial[range], should_complete
 end
 
@@ -68,10 +68,17 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
-                if textwidth(project_name) > 30
-                    project_name = first(project_name, 27) * "..."
+                root = Types.find_root_base_project(project_file)
+                rootname = projname(root)
+                if root !== project_file
+                    path_prefix = "/" * dirname(Types.relative_project_path(root, project_file))
+                else
+                    path_prefix = ""
                 end
-                prefix = "($(project_name)) "
+                if textwidth(rootname) > 30
+                    rootname = first(rootname, 27) * "..."
+                end
+                prefix = "($(rootname)$(path_prefix)) "
                 prev_prefix = prefix
                 prev_project_timestamp = mtime(project_file)
                 prev_project_file = project_file
@@ -99,6 +106,16 @@ function do_cmds(repl::REPL.AbstractREPL, commands::Union{String, Vector{Command
     end
 end
 
+function on_done(s, buf, ok, repl)
+    ok || return REPL.transition(s, :abort)
+    input = String(take!(buf))
+    REPL.reset(repl)
+    do_cmds(repl, input)
+    REPL.prepare_next(repl)
+    REPL.reset_state(s)
+    s.current_mode.sticky || REPL.transition(s, main)
+end
+
 # Set up the repl Pkg REPLMode
 function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     pkg_mode = LineEdit.Prompt(promptf;
@@ -115,15 +132,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     search_prompt, skeymap = LineEdit.setup_search_keymap(hp)
     prefix_prompt, prefix_keymap = LineEdit.setup_prefix_keymap(hp, pkg_mode)
 
-    pkg_mode.on_done = (s, buf, ok) -> begin
-        ok || return REPL.transition(s, :abort)
-        input = String(take!(buf))
-        REPL.reset(repl)
-        do_cmds(repl, input)
-        REPL.prepare_next(repl)
-        REPL.reset_state(s)
-        s.current_mode.sticky || REPL.transition(s, main)
-    end
+    pkg_mode.on_done = (s, buf, ok) -> Base.@invokelatest(on_done(s, buf, ok, repl))
 
     mk = REPL.mode_keymap(main)
 
@@ -243,7 +252,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     resp = strip(resp)
     lower_resp = lowercase(resp)
     if lower_resp in ["y", "yes"]
-        API.add(string.(available_pkgs))
+        API.add(string.(available_pkgs); allow_autoprecomp=false)
     elseif lower_resp in ["o"]
         editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
         option_list = String[]
@@ -281,7 +290,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         end
         choice == -1 && return false
         API.activate(shown_envs[choice]) do
-            API.add(string.(available_pkgs))
+            API.add(string.(available_pkgs); allow_autoprecomp=false)
         end
     elseif (lower_resp in ["n"])
         return false
@@ -309,7 +318,9 @@ function __init__()
             end
         end
     end
-    push!(empty!(REPL.install_packages_hooks), try_prompt_pkg_add)
+    if !in(try_prompt_pkg_add, REPL.install_packages_hooks)
+        push!(REPL.install_packages_hooks, try_prompt_pkg_add)
+    end
 end
 
 include("precompile.jl")

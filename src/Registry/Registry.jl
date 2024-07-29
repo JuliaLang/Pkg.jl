@@ -7,6 +7,8 @@ using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, 
 using UUIDs, LibGit2, TOML, Dates
 import FileWatching
 
+public add, rm, status, update
+
 include("registry_instance.jl")
 
 mutable struct RegistrySpec

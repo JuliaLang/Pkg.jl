@@ -64,16 +64,16 @@ end
 # Commands #
 #----------#
 const CommandDeclaration = Vector{Pair{Symbol,Any}}
-struct CommandSpec
-    canonical_name::String
-    short_name::Union{Nothing,String}
-    api::Function
-    should_splat::Bool
-    argument_spec::ArgSpec
-    option_specs::Dict{String,OptionSpec}
-    completions::Union{Nothing,Function}
-    description::String
-    help::Union{Nothing,Markdown.MD}
+mutable struct CommandSpec
+    const canonical_name::String
+    const short_name::Union{Nothing,String}
+    const api::Function
+    const should_splat::Bool
+    const argument_spec::ArgSpec
+    const option_specs::Dict{String,OptionSpec}
+    completions::Union{Nothing,Symbol,Function} # Symbol is used as a marker for REPLExt to assign the function of that name
+    const description::String
+    const help::Union{Nothing,Markdown.MD}
 end
 
 default_parser(xs, options) = unwrap(xs)
@@ -84,7 +84,7 @@ function CommandSpec(;name::Union{Nothing,String}           = nothing,
                      option_spec::Vector{OptionDeclaration} = OptionDeclaration[],
                      help::Union{Nothing,Markdown.MD}       = nothing,
                      description::Union{Nothing,String}     = nothing,
-                     completions::Union{Nothing,Function}   = nothing,
+                     completions::Union{Nothing,Symbol,Function}   = nothing,
                      arg_count::Pair                        = (0=>0),
                      arg_parser::Function                   = default_parser,
                      )::CommandSpec
