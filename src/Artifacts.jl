@@ -78,8 +78,6 @@ function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
         else
             # Ignore rename error, if `new_path` exists.
             if !isdir(new_path)
-                @error """your anti-virus may be interfering with artifact installation 
-                          See https://github.com/JuliaLang/Pkg.jl/issues/3822"""
                 Base.uv_error("rename of $(repr(temp_dir)) to $(repr(new_path))", err)
             end
         end
