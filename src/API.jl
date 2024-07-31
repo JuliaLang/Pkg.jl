@@ -191,18 +191,23 @@ function update_source_if_set(project, pkg)
     source = get(project.sources, pkg.name, nothing)
     source === nothing && return
     # This should probably not modify the dicts directly...
-    if pkg.repo.source !== nothing
-        source["url"] = pkg.repo.source
-        delete!(source, "path")
-    end
-    if pkg.repo.rev !== nothing
-        source["rev"] = pkg.repo.rev
-        delete!(source, "path")
-    end
-    if pkg.path !== nothing
-        source["path"] = pkg.path
-        delete!(source, "url")
-        delete!(source, "rev")
+    if pkg.repo == GitRepo()
+        delete!(project.sources, pkg.name)
+    else
+        # This should probably not modify the dicts directly...
+        if pkg.repo.source !== nothing
+            source["url"] = pkg.repo.source
+            delete!(source, "path")
+        end
+        if pkg.repo.rev !== nothing
+            source["rev"] = pkg.repo.rev
+            delete!(source, "path")
+        end
+        if pkg.path !== nothing
+            source["path"] = pkg.path
+            delete!(source, "url")
+            delete!(source, "rev")
+        end
     end
     if pkg.subdir !== nothing
         source["subdir"] = pkg.subdir
