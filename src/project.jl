@@ -107,8 +107,8 @@ read_project_compat(raw, project::Project) =
 
 read_project_sources(::Nothing, project::Project) = Dict{String,Dict{String,String}}()
 function read_project_sources(raw::Dict{String,Any}, project::Project)
-    valid_keys = ("path", "url", "rev", "subdir")
-    sources = Dict{String,Dict{String,String}}()
+    valid_keys = ("path", "url", "rev")
+    sources = Dict{String,String}()
     for (name, source) in raw
         if !(source isa AbstractDict)
             pkgerror("Expected `source` section to be a table")
