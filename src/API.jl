@@ -190,7 +190,6 @@ end
 function update_source_if_set(project, pkg)
     source = get(project.sources, pkg.name, nothing)
     source === nothing && return
-    # This should probably not modify the dicts directly...
     if pkg.repo == GitRepo()
         delete!(project.sources, pkg.name)
     else
