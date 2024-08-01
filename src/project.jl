@@ -92,7 +92,7 @@ read_project_compat(raw, project::Project) =
 
 read_project_sources(::Nothing, project::Project) = Dict{String,Any}()
 function read_project_sources(raw::Dict{String,Any}, project::Project)
-    valid_keys = ("path", "url", "rev")
+    valid_keys = ("path", "url", "rev", "subdir")
     sources = Dict{String,Any}()
     for (name, source) in raw
         if !(source isa AbstractDict)
