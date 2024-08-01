@@ -203,6 +203,9 @@ function update_source_if_set(project, pkg)
             source["rev"] = pkg.repo.rev
             delete!(source, "path")
         end
+        if pkg.repo.subdir !== nothing
+            source["subdir"] = pkg.repo.subdir
+        end
         if pkg.path !== nothing
             source["path"] = pkg.path
             delete!(source, "url")
