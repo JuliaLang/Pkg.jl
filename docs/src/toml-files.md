@@ -1,4 +1,4 @@
-# [**9.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
+# [**10.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
 
 Two files that are central to Pkg are `Project.toml` and `Manifest.toml`. `Project.toml`
 and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (hence the
@@ -39,8 +39,8 @@ name = "Example"
 The name must be a valid [identifier](https://docs.julialang.org/en/v1/base/base/#Base.isidentifier)
 (a sequence of Unicode characters that does not start with a number and is neither `true` nor `false`).
 For packages, it is recommended to follow the
-[package naming guidelines](https://docs.julialang.org/en/v1/tutorials/creating-packages/#Package-naming-guidelines).
-The `name` field is mandatory for packages.
+[package naming rules](@ref Package-naming-rules). The `name` field is mandatory
+for packages.
 
 
 ### The `uuid` field
@@ -128,6 +128,24 @@ constraints in detail. It is also possible to list constraints on `julia` itself
 julia = "1.1"
 ```
 
+### The `[workspace]` section
+
+A project file can define a workspace by giving a set of projects that is part of that workspace.
+Each project in a workspace can include their own dependencies, compatibility information, and even function as full packages.
+
+When the package manager resolves dependencies, it considers the requirements of all the projects in the workspace. The compatible versions identified during this process are recorded in a single manifest file located next to the base project file.
+
+A workspace is defined in the base project by giving a list of the projects in it:
+
+```toml
+[workspace]
+projects = ["test", "docs", "benchmarks", "PrivatePackage"]
+```
+
+This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding documentation or benchmarks to a package by including additional dependencies beyond those of the package itself.
+
+Workspace can be nested, that ism a project that itself defines a workspace can also be part of another workspace.
+In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
 ## `Manifest.toml`
 

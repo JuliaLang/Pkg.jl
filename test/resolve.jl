@@ -8,7 +8,7 @@ using Pkg.Types
 using Pkg.Types: VersionBound
 using UUIDs
 using Pkg.Resolve
-import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, Fixed, Requires
+import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, ResolverTimeoutError, Fixed, Requires
 import ..HistoricalStdlibVersions
 
 include("utils.jl")
@@ -161,6 +161,12 @@ end
     ]
     want_data = Dict("B"=>v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require A (must give an error)
+    reqs_data = Any[
+        ["A", "*"]
+    ]
+    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
 
     VERBOSE && @info("SCHEME 5")
@@ -635,13 +641,12 @@ end
 end
 
 @testset "realistic" begin
-    VERBOSE && @info("SCHEME REALISTIC 1")
-    ## DEPENDENCY SCHEME 15: A REALISTIC EXAMPLE
-    ## ref Julia issue #21485
-
     tmp = mktempdir()
     Pkg.PlatformEngines.unpack(joinpath(@__DIR__, "resolvedata.tar.gz"), tmp; verbose=false)
 
+    VERBOSE && @info("SCHEME REALISTIC 1")
+    ## DEPENDENCY SCHEME 15: A REALISTIC EXAMPLE
+    ## ref Julia issue #21485
 
     include(joinpath(tmp, "resolvedata1.jl"))
 
@@ -665,27 +670,43 @@ end
 
     @test sanity_tst(ResolveData3.deps_data, ResolveData3.problematic_data)
     @test resolve_tst(ResolveData3.deps_data, ResolveData3.reqs_data, ResolveData3.want_data)
+
+    VERBOSE && @info("SCHEME REALISTIC 4")
+    ## DEPENDENCY SCHEME 18: AN UNSAT REALISTIC EXAMPLE IN WHICH THE RESOLVER HANGS FOR MINUTES
+    ## The resolve_tst call is intended to fail (by timeout) with validate_versions=false
+    ## ref Pkg.jl issue #3878
+
+    include(joinpath(tmp, "resolvedata4.jl"))
+
+    @test sanity_tst(ResolveData4.deps_data, ResolveData4.problematic_data)
+    withenv("JULIA_PKG_RESOLVE_MAX_TIME"=>10) do
+        @test_throws ResolverError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data)
+    end
+    withenv("JULIA_PKG_RESOLVE_MAX_TIME"=>1e-5) do
+        # this test may fail if graph preprocessing or the greedy solver get better
+        @test_throws ResolverTimeoutError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data; validate_versions=false)
+    end
+
 end
 
 @testset "nasty" begin
     VERBOSE && @info("SCHEME NASTY")
-    ## DEPENDENCY SCHEME 16: A NASTY CASE
+    ## DEPENDENCY SCHEME 19: A NASTY CASE
 
     include("NastyGenerator.jl")
-    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = true)
+    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat=true)
 
     @test sanity_tst(deps_data, problematic_data)
     @test resolve_tst(deps_data, reqs_data, want_data)
 
-    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = false)
+    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat=false)
 
     @test sanity_tst(deps_data, problematic_data)
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 end
 
-#=
 @testset "Resolving for another version of Julia" begin
-    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.register!()
     temp_pkg_dir() do dir
         function find_by_name(versions, name)
             idx = findfirst(p -> p.name == name, versions)
@@ -728,15 +749,14 @@ end
         @test mpfr !== nothing
         @test mpfr.version.major == 4 && mpfr.version.minor == 0
     end
-    empty!(Pkg.Types.STDLIBS_BY_VERSION)
+    HistoricalStdlibVersions.unregister!()
 end
-=#
 
 @testset "Stdlib resolve smoketest" begin
     # All stdlibs should be installable and resolvable
     temp_pkg_dir() do dir
         Pkg.activate(temp=true)
-        Pkg.add(map(first, values(Pkg.Types.load_stdlib())))    # add all stdlibs
+        Pkg.add(map(x -> x.name, values(Pkg.Types.load_stdlib())))    # add all stdlibs
         iob = IOBuffer()
         Pkg.resolve(io = iob)
         str = String(take!(iob))

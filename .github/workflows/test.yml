@@ -64,7 +64,7 @@ jobs:
           echo "TMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
           echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
@@ -90,13 +90,13 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v2
         with:
           # version: '1.6'
           version: 'nightly'
       - name: Generate docs
         run: |
-          julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
+          julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate();'
           julia --project=docs --color=yes docs/make.jl pdf
         env:
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}

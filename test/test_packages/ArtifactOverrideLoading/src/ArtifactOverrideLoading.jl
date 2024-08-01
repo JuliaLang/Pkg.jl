@@ -1,6 +1,6 @@
 __precompile__(false)
 module ArtifactOverrideLoading
-using Pkg.Artifacts
+using Artifacts
 export arty_path, barty_path
 
 # These will fail (get set to `nothing`) unless they get redirected

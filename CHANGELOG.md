@@ -3,10 +3,15 @@ Pkg v1.12 Release Notes
 
 - It is now possible to specify "sources" for packages in a `[sources]` section in Project.toml.
   This can be used to add non-registered normal or test dependencies. Packages are also automatically added to `[sources]` when they are added by url or devved.
+- Pkg now has support for "workspaces" which is a way to resolve multiple project files into a single manifest.
+  The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been updated
+  to take a `workspace` option. Read more about this feature in the manual about the TOML-files.
 
 Pkg v1.11 Release Notes
 =======================
 
+- It is now possible to specify "sources" for packages in a `[sources]` section in Project.toml.
+  This can be used to add non-registered normal or test dependencies.
 - Pkg now obeys `[compat]` bounds for `julia` and raises an error if the version of the running Julia binary is incompatible with the bounds in `Project.toml`.
   Pkg has always obeyed this compat when working with Registry packages. This change affects mostly local packages. ([#3526])
 - `pkg> add` and `Pkg.add` will now add compat entries for new direct dependencies if the active environment is a

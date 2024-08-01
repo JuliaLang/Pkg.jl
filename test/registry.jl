@@ -278,6 +278,7 @@ end
     # only clone default registry if there are no registries installed at all
     temp_pkg_dir() do depot1; mktempdir() do depot2
         append!(empty!(DEPOT_PATH), [depot1, depot2])
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         @test length(Pkg.Registry.reachable_registries()) == 0
         Pkg.add("Example")
         @test length(Pkg.Registry.reachable_registries()) == 1
