@@ -153,7 +153,7 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 (see `JULIA_MAX_NUM_PRECOMPILE_FILES`).
 
 **Examples**
-```
+```julia-repl
 pkg> add Example
 pkg> add --preserve=all Example
 pkg> add --weak Example
@@ -201,7 +201,7 @@ The preserve strategies offered by `add` are also available via the `preserve` a
 See `add` for more information.
 
 **Examples**
-```jl
+```julia-repl
 pkg> develop Example
 pkg> develop https://github.com/JuliaLang/Example.jl
 pkg> develop ~/mypackages/Example
@@ -267,7 +267,7 @@ Pin packages to given versions, or the current version if no version is specifie
 A pinned package has the symbol `⚲` next to its version in the status list.. Specifying `--all` will pin all dependencies (direct and indirect).
 
 **Examples**
-```
+```julia-repl
 pkg> pin Example
 pkg> pin Example@0.5.0
 pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
@@ -517,7 +517,7 @@ it adds known registries, i.e. the General registry and registries
 served by the configured package server.
 
 **Examples**
-```
+```julia-repl
 pkg> registry add General
 pkg> registry add https://www.my-custom-registry.com
 pkg> registry add
@@ -537,7 +537,7 @@ PSA[:name => "remove",
 Remove package registries `reg...`.
 
 **Examples**
-```
+```julia-repl
 pkg> registry [rm|remove] General
 ```
 """,
@@ -557,7 +557,7 @@ Update package registries `reg...`. If no registries are specified
 all registries will be updated.
 
 **Examples**
-```
+```julia-repl
 pkg> registry up
 pkg> registry up General
 ```
@@ -573,7 +573,7 @@ PSA[:name => "status",
 Display information about installed registries.
 
 **Examples**
-```
+```julia-repl
 pkg> registry status
 ```
 """,
