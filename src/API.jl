@@ -438,6 +438,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
                 pkgerror("pinning a package requires a single version, not a versionrange")
             end
         end
+        update_source_if_set(ctx.env.project, pkg)
     end
 
     project_deps_resolve!(ctx.env, pkgs)
