@@ -206,6 +206,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
             open(joinpath(regdir, reg.name * ".toml"), "w") do io
                 TOML.print(io, reg_info)
             end
+            printpkgstyle(io, :Added, "`$(reg.name)` registry to $(Base.contractuser(regdir))")
         else
             mktempdir() do tmp
                 if reg.path !== nothing && reg.linked == true # symlink to local source
