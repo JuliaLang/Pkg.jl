@@ -279,7 +279,7 @@ function download(
             end
         end
     else
-        (total, now) -> nothing
+        nothing
     end
     try
         Downloads.download(url, dest; headers, progress)
