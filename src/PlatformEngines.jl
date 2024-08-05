@@ -349,6 +349,7 @@ function download_verify(
     for i in 1:attempts
         try
             download(url, dest; verbose=verbose || !quiet_download)
+            break
         catch err
             @debug "download and verify failed on attempt $i/$attempts" url dest err
             # for system errors like `no space left on device` exit after first try
