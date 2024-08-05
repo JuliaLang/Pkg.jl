@@ -275,11 +275,15 @@ function download(
             (total, now) -> begin
                 bar.max = total
                 bar.current = now
-                show_progress(io, bar)
+                # Downloads.download attatches the progress indicator to the header request too
+                # which is only ~100 bytes, and will report as 0 - 100% progress immediately
+                # then dip down to 0 before the actual download starts. So we only show the
+                # progress bar once the real download starts.
+                total > 1000 && show_progress(io, bar)
             end
         end
     else
-        (total, now) -> nothing
+        nothing
     end
     # During precompilation don't use the default downloader as it has a
     # 30s grace period that will cause the pending process warning on 1.10
@@ -357,6 +361,7 @@ function download_verify(
     for i in 1:attempts
         try
             download(url, dest; verbose=verbose || !quiet_download)
+            break
         catch err
             @debug "download and verify failed on attempt $i/$attempts" url dest err
             # for system errors like `no space left on device` exit after first try
