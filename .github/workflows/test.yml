@@ -36,7 +36,7 @@ jobs:
           - "pkg.julialang.org"
         julia-version:
           # - '1.6'
-          - '1.10-nightly'
+          - '1.10'
         exclude:
           - os: macOS-latest
             julia-arch: x86
@@ -47,7 +47,7 @@ jobs:
           git config --global core.autocrlf false
           git config --global core.eol lf
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
@@ -73,10 +73,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v2
         with:
           # version: '1.6'
-          version: 'nightly'
+          version: '1.10'
       - name: Generate docs
         run: |
           julia --color=yes .ci/test_and_change_uuid.jl
