@@ -1516,8 +1516,10 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
             compat_names = String[]
             for pkg in pkgs
                 haskey(ctx.env.project.compat, pkg.name) && continue
-                pkgversion = Base.thispatch(ctx.env.manifest[pkg.uuid].version)
-                set_compat(ctx.env.project, pkg.name, string(pkgversion))
+                v = ctx.env.manifest[pkg.uuid].version
+                v === nothing && continue
+                pkgversion = string(Base.thispatch(v))
+                set_compat(ctx.env.project, pkg.name, pkgversion)
                 push!(compat_names, pkg.name)
             end
             printpkgstyle(ctx.io, :Compat, """entries added for $(join(compat_names, ", "))""")
