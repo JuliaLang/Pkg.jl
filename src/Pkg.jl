@@ -485,7 +485,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr)
+    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr, julia_version_strict=false)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -496,6 +496,7 @@ redirecting to the `build.log` file.
 `workspace=true` will also instantiate all projects in the workspace.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
+`julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
 After packages have been installed the project will be precompiled.
 See more at [Environment Precompilation](@ref).
