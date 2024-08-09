@@ -47,16 +47,18 @@ PSA[:name => "instantiate",
         PSA[:name => "manifest", :short_name => "m", :api => :manifest => true],
         PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
         PSA[:name => "workspace", :api => :workspace => true],
+        PSA[:name => "julia_version_strict", :api => :julia_version_strict => false],
     ],
     :description => "downloads all the dependencies for the project",
     :help => md"""
-    instantiate [-v|--verbose] [--workspace]
-    instantiate [-v|--verbose] [--workspace] [-m|--manifest]
-    instantiate [-v|--verbose] [--workspace] [-p|--project]
+    instantiate [-v|--verbose] [--workspace] [--julia_version_strict]
+    instantiate [-v|--verbose] [--workspace] [--julia_version_strict] [-m|--manifest]
+    instantiate [-v|--verbose] [--workspace] [--julia_version_strict] [-p|--project]
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
 If `--workspace` is given, all dependencies in the workspace will be downloaded.
+If `--julia_version_strict` is given, manifest version check failures will error instead of log warnings.
 
 After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
