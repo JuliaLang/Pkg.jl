@@ -1116,7 +1116,6 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         # add any extensions
         weakdeps = last(dep).weakdeps
         pkg_exts = Dict{Base.PkgId, Vector{Base.PkgId}}()
-        prev_ext = nothing
         for (ext_name, extdep_names) in last(dep).exts
             ext_deps = Base.PkgId[]
             push!(ext_deps, pkg) # depends on parent package
@@ -1132,13 +1131,8 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 end
             end
             all_extdeps_available || continue
-            if prev_ext isa Base.PkgId
-                # also make the exts depend on eachother sequentially to avoid race
-                push!(ext_deps, prev_ext)
-            end
             ext_uuid = Base.uuid5(pkg.uuid, ext_name)
             ext = Base.PkgId(ext_uuid, ext_name)
-            prev_ext = ext
             push!(pkg_specs, PackageSpec(uuid = ext_uuid, name = ext_name)) # create this here as the name cannot be looked up easily later via the uuid
             filter!(!Base.in_sysimage, ext_deps)
             depsmap[ext] = ext_deps
@@ -1149,6 +1143,52 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             pkg_exts_map[pkg] = collect(keys(pkg_exts))
         end
     end
+
+    # An extension effectively depends on another extension if it has all the the
+    # dependencies of that other extension
+    function expand_dependencies(depsmap)
+        function visit!(visited, node, all_deps)
+            if node in visited
+                return
+            end
+            push!(visited, node)
+            for dep in get(Set{Base.PkgId}, depsmap, node)
+                if !(dep in all_deps)
+                    push!(all_deps, dep)
+                    visit!(visited, dep, all_deps)
+                end
+            end
+        end
+
+        depsmap_transitive = Dict{Base.PkgId, Set{Base.PkgId}}()
+        for package in keys(depsmap)
+            # Initialize a set to keep track of all dependencies for 'package'
+            all_deps = Set{Base.PkgId}()
+            visited = Set{Base.PkgId}()
+            visit!(visited, package, all_deps)
+            # Update depsmap with the complete set of dependencies for 'package'
+            depsmap_transitive[package] = all_deps
+        end
+        return depsmap_transitive
+    end
+
+    depsmap_transitive = expand_dependencies(depsmap)
+
+    for (_, extensions_1) in pkg_exts_map
+        for extension_1 in extensions_1
+            deps_ext_1 = depsmap_transitive[extension_1]
+            for (_, extensions_2) in pkg_exts_map
+                for extension_2 in extensions_2
+                    extension_1 == extension_2 && continue
+                    deps_ext_2 = depsmap_transitive[extension_2]
+                    if issubset(deps_ext_2, deps_ext_1)
+                        push!(depsmap[extension_1], extension_2)
+                    end
+                end
+            end
+        end
+    end
+
     # this loop must be run after the full depsmap has been populated
     for (pkg, pkg_exts) in pkg_exts_map
         # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
