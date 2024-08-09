@@ -1563,6 +1563,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                 length(tasks) == 1 && notify(interrupted_or_done)
             end
         end
+        Base.errormonitor(task) # interrupts are handled separately so ok to watch for other errors like this
         push!(tasks, task)
     end
     isempty(tasks) && notify(interrupted_or_done)
