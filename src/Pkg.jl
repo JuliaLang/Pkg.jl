@@ -500,6 +500,9 @@ dependencies in the manifest and instantiate the resulting project.
 
 After packages have been installed the project will be precompiled.
 See more at [Environment Precompilation](@ref).
+
+!!! compat "Julia 1.12"
+    The `julia_version_strict` keyword argument requires at least Julia 1.12.
 """
 const instantiate = API.instantiate
 
