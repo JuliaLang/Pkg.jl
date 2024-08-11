@@ -1415,7 +1415,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             while !printloop_should_exit
                 lock(print_lock) do
                     term_size = Base.displaysize(ctx.io)::Tuple{Int,Int}
-                    num_deps_show = term_size[1] - 3
+                    num_deps_show = max(term_size[1] - 3, 2) # show at least 2 deps
                     pkg_queue_show = if !interrupted_or_done.set && length(pkg_queue) > num_deps_show
                         last(pkg_queue, num_deps_show)
                     else
