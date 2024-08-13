@@ -1746,6 +1746,7 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
                  force_latest_compatible_version::Bool=false,
                  allow_earlier_backwards_compatible_versions::Bool=true,
                  allow_reresolve::Bool=true)
+    active_manifest = manifestfile_path(dirname(ctx.env.manifest_file))
     sandbox_project = projectfile_path(sandbox_path)
 
     mktempdir() do tmp
@@ -1767,15 +1768,15 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec, target_path::S
         # - copy over fixed subgraphs from test subgraph
         # really only need to copy over "special" nodes
         sandbox_env = Types.EnvCache(projectfile_path(sandbox_path))
-        abspath!(sandbox_env, sandbox_env.manifest)
-        for (uuid, entry) in sandbox_env.manifest.deps
-            entry_working = get(working_manifest, uuid, nothing)
-            if entry_working === nothing
-                working_manifest[uuid] = entry
-            else # Check for collision between the sandbox manifest and the "parent" manifest
-                if entry_working != entry && (ctx.env.pkg !== nothing && ctx.env.pkg.uuid != uuid)
-                    @warn "Entry in manifest at \"$sandbox_path\" for package \"$(entry_working.name)\" differs from that in \"$(ctx.env.manifest_file)\""
-                else
+        sandbox_manifest = abspath!(sandbox_env, sandbox_env.manifest)
+        for (name, uuid) in sandbox_env.project.deps
+            entry = get(sandbox_manifest, uuid, nothing)
+            if entry !== nothing && isfixed(entry)
+                subgraph = prune_manifest(sandbox_manifest, [uuid])
+                for (uuid, entry) in subgraph
+                    if haskey(working_manifest, uuid)
+                        pkgerror("can not merge projects")
+                    end
                     working_manifest[uuid] = entry
                 end
             end
