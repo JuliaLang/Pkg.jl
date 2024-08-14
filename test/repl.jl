@@ -460,7 +460,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
     end # testset
 end end
 
-temp_pkg_dir() do project_path; cd(project_path) do
+isolate(loaded_depot=true) do; temp_pkg_dir() do project_path; cd(project_path) do
     mktempdir() do tmp
         cp(joinpath(@__DIR__, "test_packages", "BigProject"), joinpath(tmp, "BigProject"))
         cd(joinpath(tmp, "BigProject"))
@@ -497,7 +497,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             @test Pkg.dependencies()[json_uuid].version == current_json
         end
     end
-end; end
+end; end; end
 
 temp_pkg_dir() do project_path
     cd(project_path) do
