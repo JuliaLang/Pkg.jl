@@ -269,7 +269,7 @@ function download(
 
     do_fancy = verbose && can_fancyprint(io)
     progress = if do_fancy
-        bar = MiniProgressBar(header="Downloading", color=Base.info_color())
+        bar = MiniProgressBar(header="Downloading", color=Base.info_color(), bytes=true, percentage=false)
         start_progress(io, bar)
         let bar=bar
             (total, now) -> begin

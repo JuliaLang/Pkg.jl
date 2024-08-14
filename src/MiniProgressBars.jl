@@ -14,6 +14,7 @@ Base.@kwdef mutable struct MiniProgressBar
     has_shown::Bool = false
     time_shown::Float64 = 0.0
     percentage::Bool = true
+    bytes::Bool=true
     always_reprint::Bool = false
     indent::Int = 4
 end
@@ -49,6 +50,8 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
 
     progress_text = if p.percentage
         @sprintf "%2.1f %%" perc
+    elseif p.bytes
+        string(Base.format_bytes(p.current), "/", Base.format_bytes(p.max))
     else
         string(p.current, "/",  p.max)
     end
@@ -56,7 +59,9 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
     max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
     n_filled = ceil(Int, max_progress_width * perc / 100)
     n_left = max_progress_width - n_filled
+    ansi_clearline = "\e[2K"
     to_print = sprint(; context=io) do io
+        print(io, ansi_clearline)
         print(io, " "^p.indent)
         printstyled(io, p.header, color=p.color, bold=true)
         print(io, " [")
