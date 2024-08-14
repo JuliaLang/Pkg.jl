@@ -480,12 +480,14 @@ isolate(loaded_depot=true) do; temp_pkg_dir() do project_path; cd(project_path) 
             pkg"build BigProject"
             @test_throws PkgError pkg"add BigProject"
             # the command below also tests multiline input
-            Pkg.REPLMode.pkgstr("""
-                test SubModule
-                test SubModule2
-                test BigProject
-                test
-                """)
+            withenv("JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")) do
+                Pkg.REPLMode.pkgstr("""
+                    test SubModule
+                    test SubModule2
+                    test BigProject
+                    test
+                    """)
+            end
             json_uuid = Pkg.project().dependencies["JSON"]
             current_json = Pkg.dependencies()[json_uuid].version
             old_project = read("Project.toml", String)
