@@ -52,7 +52,7 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
     elseif p.mode == :int
         string(p.current, "/",  p.max)
     elseif p.mode == :data
-        string(Base.format_bytes(p.current), "/", Base.format_bytes(p.max))
+        lpad(string(Base.format_bytes(p.current), "/", Base.format_bytes(p.max)), 23)
     else
         error("Unknown mode $(p.mode)")
     end

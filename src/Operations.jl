@@ -822,6 +822,7 @@ function download_artifacts(ctx::Context;
                             verbose::Bool=false)
     env = ctx.env
     io = ctx.io
+    fancyprint = can_fancyprint(io)
     pkg_roots = String[]
     for (uuid, pkg) in env.manifest
         pkg = manifest_info(env.manifest, uuid)
@@ -830,9 +831,11 @@ function download_artifacts(ctx::Context;
     end
     push!(pkg_roots, dirname(env.project_file))
     used_artifact_tomls = Set{String}()
-    download_jobs = Channel{Function}(Inf) # ctx.num_concurrent_downloads
+    download_jobs = Channel{Function}(Inf)
 
+    print_lock = Base.ReentrantLock() # for non-fancyprint printing
     download_states = Dict{String, Tuple{Bool,MiniProgressBar}}()
+    errors = Channel{Any}()
     is_done = false
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
@@ -840,16 +843,6 @@ function download_artifacts(ctx::Context;
     ansi_cleartoendofline = "\e[0K"
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
-    termwidth = displaysize(io)[2]
-
-    longest_name = 0
-    for pkg_root in pkg_roots
-        for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
-            for name in keys(artifacts)
-                longest_name = max(longest_name, textwidth(name))
-            end
-        end
-    end
 
     for pkg_root in pkg_roots
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
@@ -867,6 +860,7 @@ function download_artifacts(ctx::Context;
                         () -> begin
                             ret()
                             download_states[name] = (false, bar)
+                            fancyprint || @lock print_lock println(io, "Downloaded $name")
                         end
                     )
                 end
@@ -876,68 +870,72 @@ function download_artifacts(ctx::Context;
     end
     close(download_jobs)
 
-    if !isempty(download_states)
-
+    if !isempty(download_jobs)
         longest_name = maximum(textwidth, keys(download_states))
         for (name, (running, bar)) in download_states
             bar.header = rpad(name, longest_name)
         end
-
         @sync begin
-            t_print = Threads.@spawn begin
-                try
-                    print(io, ansi_disablecursor)
-                    first = true
-                    timer = Timer(0, interval=1/24)
-                    main_bar = MiniProgressBar(; indent=0, header = "Downloading artifacts", color = :green, mode = :int, always_reprint=true)
-                    main_bar.max = length(download_states)
-                    while !is_done
-                        main_bar.current = length(filter(x -> !x[2][1], download_states))
-                        str = sprint(context=io) do iostr
-                            first || print(iostr, ansi_cleartoend)
-                            n_printed = 1
-                            show_progress(iostr, main_bar; termwidth, carriagereturn=false)
-                            println(iostr)
-                            for (name, (running, bar)) in sort(collect(download_states), by=kv->kv[2][2].max, rev=true)
-                                running && bar.max > 1000 && bar.current > 0 || continue
-                                show_progress(iostr, bar; termwidth, carriagereturn=false)
+            if fancyprint
+                t_print = Threads.@spawn begin
+                    try
+                        print(io, ansi_disablecursor)
+                        first = true
+                        timer = Timer(0, interval=1/10)
+                        main_bar = MiniProgressBar(; indent=0, header = "Downloading artifacts", color = :green, mode = :int, always_reprint=true)
+                        main_bar.max = length(download_states)
+                        while !is_done
+                            main_bar.current = count(x -> !x[2][1], download_states)
+                            str = sprint(context=io) do iostr
+                                first || print(iostr, ansi_cleartoend)
+                                n_printed = 1
+                                show_progress(iostr, main_bar; carriagereturn=false)
                                 println(iostr)
-                                n_printed += 1
+                                for (name, (running, bar)) in sort!(collect(download_states), by=kv->kv[2][2].max, rev=true)
+                                    running && bar.max > 1000 && bar.current > 0 || continue
+                                    show_progress(iostr, bar; carriagereturn=false)
+                                    println(iostr)
+                                    n_printed += 1
+                                end
+                                is_done || print(iostr, ansi_moveup(n_printed), ansi_movecol1)
+                                first = false
                             end
-                            is_done || print(iostr, ansi_moveup(n_printed), ansi_movecol1)
-                            first = false
+                            print(io, str)
+                            wait(timer)
                         end
-                        print(io, str)
-                        wait(timer)
+                        print(io, ansi_cleartoend)
+                        main_bar.current = count(x -> !x[2][1], download_states)
+                        show_progress(io, main_bar; carriagereturn=false)
+                        println(io)
+                    catch e
+                        e isa InterruptException || rethrow()
+                        is_done = true
+                    finally
+                        print(io, ansi_enablecursor)
                     end
-                    print(io, ansi_cleartoend)
-                    main_bar.current = length(filter(x -> !x[2][1], download_states))
-                    show_progress(io, main_bar; termwidth, carriagereturn=false)
-                    println(io)
-                catch e
-                    e isa InterruptException || rethrow()
-                    is_done = true
-                finally
-                    print(io, ansi_enablecursor)
                 end
+                Base.errormonitor(t_print)
             end
-            Base.errormonitor(t_print)
 
             # TODO: figure out error handling/reporting
             sema = Base.Semaphore(ctx.num_concurrent_downloads)
             @sync for f in download_jobs
                 is_done && break
-                t = Threads.@spawn begin
-                    try
-                        Base.acquire(f, sema)
-                    catch e
-                        e isa InterruptException || rethrow()
-                        is_done = true
-                    end
+                Threads.@spawn try
+                    Base.acquire(f, sema)
+                catch e
+                    is_done = true
+                    put!(errors, e)
                 end
-                Base.errormonitor(t)
             end
             is_done = true
+        end
+        if !isempty(errors)
+            for e in errors
+                Base.showerror(io, e)
+                length(errors) > 1 && print(io, "\n----------------\n")
+            end
+            pkgerror("Failed to download some artifacts")
         end
     end
 
