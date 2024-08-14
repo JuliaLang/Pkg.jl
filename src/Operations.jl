@@ -898,7 +898,7 @@ function download_artifacts(ctx::Context;
                             n_printed = 1
                             show_progress(iostr, main_bar; termwidth, carriagereturn=false)
                             println(iostr)
-                            for (name, (running, bar)) in download_states
+                            for (name, (running, bar)) in sort(collect(download_states), by=kv->kv[2][2].max, rev=true)
                                 running && bar.max > 1000 && bar.current > 0 || continue
                                 show_progress(iostr, bar; termwidth, carriagereturn=false)
                                 println(iostr)
