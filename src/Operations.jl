@@ -882,7 +882,7 @@ function download_artifacts(ctx::Context;
                         print(io, ansi_disablecursor)
                         first = true
                         timer = Timer(0, interval=1/10)
-                        main_bar = MiniProgressBar(; indent=0, header = "Downloading artifacts", color = :green, mode = :int, always_reprint=true)
+                        main_bar = MiniProgressBar(; indent=1, header = "Downloading artifacts", color = :green, mode = :int, always_reprint=true)
                         main_bar.max = length(download_states)
                         while !is_done
                             main_bar.current = count(x -> !x[2][1], download_states)
@@ -1052,7 +1052,7 @@ function download_source(ctx::Context; readonly=true)
             end
         end
 
-        bar = MiniProgressBar(; indent=2, header = "Downloading packages", color = Base.info_color(),
+        bar = MiniProgressBar(; indent=1, header = "Downloading packages", color = Base.info_color(),
                                   mode=:int, always_reprint=true)
         bar.max = length(pkgs_to_install)
         fancyprint = can_fancyprint(ctx.io)
