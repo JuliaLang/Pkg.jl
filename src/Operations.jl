@@ -844,6 +844,7 @@ function download_artifacts(ctx::Context;
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
 
+    longest_name = "" # will be updated later
     for pkg_root in pkg_roots
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
@@ -860,7 +861,10 @@ function download_artifacts(ctx::Context;
                         () -> begin
                             ret()
                             download_states[name] = (false, bar)
-                            fancyprint || @lock print_lock printpkgstyle(io, :Downloaded, "artifact $name $(MiniProgressBars.pkg_format_bytes(bar.max))")
+                            if !fancyprint
+                                rname = rpad(name, longest_name)
+                                @lock print_lock printpkgstyle(io, :Downloaded, "artifact $rname $(MiniProgressBars.pkg_format_bytes(bar.max; sigdigits=1))")
+                            end
                         end
                     )
                 end
