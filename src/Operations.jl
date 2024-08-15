@@ -860,7 +860,7 @@ function download_artifacts(ctx::Context;
                         () -> begin
                             ret()
                             download_states[name] = (false, bar)
-                            fancyprint || @lock print_lock printpkgstyle(io, :Downloaded, "artifact $name $(pkg_format_bytes(bar.max))")
+                            fancyprint || @lock print_lock printpkgstyle(io, :Downloaded, "artifact $name $(MiniProgressBars.pkg_format_bytes(bar.max))")
                         end
                     )
                 end
