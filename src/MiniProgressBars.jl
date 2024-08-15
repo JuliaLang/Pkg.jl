@@ -4,6 +4,18 @@ export MiniProgressBar, start_progress, end_progress, show_progress, print_progr
 
 using Printf
 
+# Until Base.format_bytes supports sigdigits
+function pkg_format_bytes(bytes; binary=true, sigdigits::Integer=3)
+    units = binary ? Base._mem_units : Base._cnt_units
+    factor = binary ? 1024 : 1000
+    bytes, mb = Base.prettyprint_getunits(bytes, length(units), Int64(factor))
+    if mb == 1
+        return string(Int(bytes), " ", Base._mem_units[mb], bytes==1 ? "" : "s")
+    else
+        return string(Base.Ryu.writefixed(Float64(bytes), sigdigits), binary ? " $(units[mb])" : "$(units[mb])B")
+    end
+end
+
 Base.@kwdef mutable struct MiniProgressBar
     max::Int = 1.0
     header::String = ""
@@ -16,6 +28,7 @@ Base.@kwdef mutable struct MiniProgressBar
     mode::Symbol = :percentage # :percentage :int :data
     always_reprint::Bool = false
     indent::Int = 4
+    main::Bool = true
 end
 
 const PROGRESS_BAR_TIME_GRANULARITY = Ref(1 / 30.0) # 30 fps
@@ -52,7 +65,7 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
     elseif p.mode == :int
         string(p.current, "/",  p.max)
     elseif p.mode == :data
-        lpad(string(Base.format_bytes(p.current), "/", Base.format_bytes(p.max)), 23)
+        lpad(string(pkg_format_bytes(p.current; sigdigits=1), "/", pkg_format_bytes(p.max; sigdigits=1)), 20)
     else
         error("Unknown mode $(p.mode)")
     end
@@ -60,12 +73,19 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
     max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
     n_filled = ceil(Int, max_progress_width * perc / 100)
     n_left = max_progress_width - n_filled
+    headers = split(p.header)
     to_print = sprint(; context=io) do io
         print(io, " "^p.indent)
-        printstyled(io, p.header, color=p.color, bold=true)
-        print(io, " [")
-        print(io, "="^n_filled, ">")
-        print(io, " "^n_left, "]  ", )
+        if p.main
+            printstyled(io, headers[1], " "; color=:light_green, bold=true)
+            printstyled(io, join(headers[2:end], ' '))
+        else
+            print(io, p.header)
+        end
+        print(io, " ")
+        printstyled(io, "━"^n_filled; color=p.color)
+        printstyled(io, perc >= 95 ? "━" : "╸"; color=p.color)
+        printstyled(io, "━"^n_left, " "; color=:light_black)
         print(io, progress_text)
         carriagereturn && print(io, "\r")
     end
@@ -84,10 +104,10 @@ end
 # prog = MiniProgressBar(...)
 # prog.end = n
 # for progress in 1:n
-#     print_progree_bottom(io)
+#     print_progress_bottom(io)
 #     println("stuff")
 #     prog.current = progress
-#     showproress(io, prog)
+#     showprogress(io, prog)
 #  end
 #
 function print_progress_bottom(io::IO)

@@ -849,7 +849,7 @@ function download_artifacts(ctx::Context;
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
                 is_done && break
-                bar = MiniProgressBar(; indent=2, color = Base.info_color(), mode=:data, always_reprint=true)
+                bar = MiniProgressBar(; main=false, indent=2, color = Base.info_color(), mode=:data, always_reprint=true)
                 progress = (total, current) -> (bar.max = total; bar.current = current)
                 # returns a string if exists, or function that downloads the artifact if not
                 ret = ensure_artifact_installed(name, artifacts[name], artifacts_toml;
@@ -1052,7 +1052,7 @@ function download_source(ctx::Context; readonly=true)
             end
         end
 
-        bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
+        bar = MiniProgressBar(; indent=2, header = "Downloading packages", color = Base.info_color(),
                                   mode=:int, always_reprint=true)
         bar.max = length(pkgs_to_install)
         fancyprint = can_fancyprint(ctx.io)
@@ -1283,7 +1283,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
     sort!(builds, by = build -> order[first(build)])
     max_name = maximum(build->textwidth(build[2]), builds; init=0)
 
-    bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
+    bar = MiniProgressBar(; indent=2, header = "Building packages", color = Base.info_color(),
                               mode=:int, always_reprint=true)
     bar.max = length(builds)
     fancyprint = can_fancyprint(ctx.io)
