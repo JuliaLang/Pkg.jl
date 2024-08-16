@@ -836,7 +836,7 @@ function download_artifacts(ctx::Context;
     end
     push!(pkg_roots, dirname(env.project_file))
     used_artifact_tomls = Set{String}()
-    download_jobs = Channel{Function}(Inf)
+    download_jobs = Function[]
 
     print_lock = Base.ReentrantLock() # for non-fancyprint printing
 
@@ -886,7 +886,6 @@ function download_artifacts(ctx::Context;
             push!(used_artifact_tomls, artifacts_toml)
         end
     end
-    close(download_jobs)
 
     if !isempty(download_jobs)
         longest_name = maximum(textwidth, keys(download_states))
@@ -909,7 +908,7 @@ function download_artifacts(ctx::Context;
                             n_printed = 1
                             show_progress(iostr, main_bar; carriagereturn=false)
                             println(iostr)
-                            for (name, dstate) in sort!(collect(download_states), by=kv->kv[2][2].max, rev=true)
+                            for (name, dstate) in sort!(collect(download_states), by=kv->kv[2].bar.max, rev=true)
                                 dstate.state == :running && dstate.bar.max > 1000 && dstate.bar.current > 0 || continue
                                 show_progress(iostr, dstate.bar; carriagereturn=false)
                                 println(iostr)
@@ -932,8 +931,9 @@ function download_artifacts(ctx::Context;
                 end
             end
             Base.errormonitor(t_print)
+        else
+            printpkgstyle(io, :Downloading, "$(length(download_jobs)) artifacts")
         end
-
         sema = Base.Semaphore(ctx.num_concurrent_downloads)
         interrupted = false
         @sync for f in download_jobs
@@ -949,7 +949,7 @@ function download_artifacts(ctx::Context;
             end
         end
         is_done = true
-        wait(t_print)
+        fancyprint && wait(t_print)
         close(errors)
 
         if !isempty(errors)
@@ -957,10 +957,10 @@ function download_artifacts(ctx::Context;
             str = sprint(context=io) do iostr
                 for e in all_errors
                     Base.showerror(iostr, e)
-                    length(all_errors) > 1 && print(io, "\n----------------\n")
+                    length(all_errors) > 1 && println(iostr)
                 end
             end
-            pkgerror("Failed to download some artifacts:\n\n$str")
+            pkgerror("Failed to download some artifacts:\n\n$(strip(str, '\n'))")
         end
     end
 
