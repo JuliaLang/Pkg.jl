@@ -308,9 +308,7 @@ end
     mktempdir() do dir
         with_artifacts_directory(dir) do
             @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml")) != nothing
-            @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
-                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
-            end
+            @test_throws r"Hash Mismatch!" ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
 
             artifact_toml = joinpath(badifact_dir, "doesnotexist.toml")
             @test_throws ErrorException ensure_artifact_installed("does_not_exist", artifact_toml)
