@@ -899,6 +899,7 @@ function download_artifacts(ctx::Context;
                     print(io, ansi_disablecursor)
                     first = true
                     timer = Timer(0, interval=1/10)
+                    # TODO: Implement as a new MiniMultiProgressBar
                     main_bar = MiniProgressBar(; indent=1, header = "Downloading artifacts", color = :green, mode = :int, always_reprint=true)
                     main_bar.max = length(download_states)
                     while !is_done
