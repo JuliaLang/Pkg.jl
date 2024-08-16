@@ -418,6 +418,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         if isnothing(progress) || verbose == true
             return try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, verbose, quiet_download, io)
         else
+            # if a custom progress handler is given it is taken to mean the caller wants to handle the download scheduling
             return () -> try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, quiet_download=true, io, progress)
         end
     else
