@@ -816,11 +816,18 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
     return artifacts_tomls
 end
 
-function download_artifacts(env::EnvCache;
+mutable struct DownloadState
+    state::Symbol
+    const bar::MiniProgressBar
+end
+
+function download_artifacts(ctx::Context;
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
-                            verbose::Bool=false,
-                            io::IO=stderr_f())
+                            verbose::Bool=false)
+    env = ctx.env
+    io = ctx.io
+    fancyprint = can_fancyprint(io)
     pkg_roots = String[]
     for (uuid, pkg) in env.manifest
         pkg = manifest_info(env.manifest, uuid)
@@ -828,15 +835,138 @@ function download_artifacts(env::EnvCache;
         pkg_root === nothing || push!(pkg_roots, pkg_root)
     end
     push!(pkg_roots, dirname(env.project_file))
+    used_artifact_tomls = Set{String}()
+    download_jobs = Function[]
+
+    print_lock = Base.ReentrantLock() # for non-fancyprint printing
+
+    # name -> (state, bar) where state is :ready, :running, :done, or :failed
+    download_states = Dict{String, DownloadState}()
+
+    errors = Channel{Any}(Inf)
+    is_done = false
+    ansi_moveup(n::Int) = string("\e[", n, "A")
+    ansi_movecol1 = "\e[1G"
+    ansi_cleartoend = "\e[0J"
+    ansi_cleartoendofline = "\e[0K"
+    ansi_enablecursor = "\e[?25h"
+    ansi_disablecursor = "\e[?25l"
+
+    longest_name_length = 0 # will be updated later
     for pkg_root in pkg_roots
         for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
             # For each Artifacts.toml, install each artifact we've collected from it
             for name in keys(artifacts)
-                ensure_artifact_installed(name, artifacts[name], artifacts_toml;
-                                            verbose, quiet_download=!(usable_io(io)), io=io)
+                bar = MiniProgressBar(; main=false, indent=2, color = Base.info_color(), mode=:data, always_reprint=true)
+                progress = (total, current) -> (bar.max = total; bar.current = current)
+                # returns a string if exists, or function that downloads the artifact if not
+                ret = ensure_artifact_installed(name, artifacts[name], artifacts_toml;
+                                            verbose, quiet_download=!(usable_io(io)), io, progress)
+                if ret isa Function
+                    download_states[name] = DownloadState(:ready, bar)
+                    push!(download_jobs,
+                        () -> begin
+                            try
+                                download_states[name].state = :running
+                                ret()
+                                if !fancyprint
+                                    rname = rpad(name, longest_name_length)
+                                    @lock print_lock printpkgstyle(io, :Downloaded, "artifact $rname $(MiniProgressBars.pkg_format_bytes(bar.max; sigdigits=1))")
+                                end
+                            catch
+                                download_states[name].state = :failed
+                                rethrow()
+                            else
+                                download_states[name].state = :done
+                            end
+                        end
+                    )
+                end
             end
-            write_env_usage(artifacts_toml, "artifact_usage.toml")
+            push!(used_artifact_tomls, artifacts_toml)
         end
+    end
+
+    if !isempty(download_jobs)
+        longest_name_length = maximum(textwidth, keys(download_states))
+        for (name, dstate) in download_states
+            dstate.bar.header = rpad(name, longest_name_length)
+        end
+
+        if fancyprint
+            t_print = Threads.@spawn begin
+                try
+                    print(io, ansi_disablecursor)
+                    first = true
+                    timer = Timer(0, interval=1/10)
+                    # TODO: Implement as a new MiniMultiProgressBar
+                    main_bar = MiniProgressBar(; indent=1, header = "Downloading artifacts", color = :green, mode = :int, always_reprint=true)
+                    main_bar.max = length(download_states)
+                    while !is_done
+                        main_bar.current = count(x -> x[2].state == :done, download_states)
+                        str = sprint(context=io) do iostr
+                            first || print(iostr, ansi_cleartoend)
+                            n_printed = 1
+                            show_progress(iostr, main_bar; carriagereturn=false)
+                            println(iostr)
+                            for (name, dstate) in sort!(collect(download_states), by=kv->kv[2].bar.max, rev=true)
+                                dstate.state == :running && dstate.bar.max > 1000 && dstate.bar.current > 0 || continue
+                                show_progress(iostr, dstate.bar; carriagereturn=false)
+                                println(iostr)
+                                n_printed += 1
+                            end
+                            is_done || print(iostr, ansi_moveup(n_printed), ansi_movecol1)
+                            first = false
+                        end
+                        print(io, str)
+                        wait(timer)
+                    end
+                    print(io, ansi_cleartoend)
+                    main_bar.current = count(x -> x[2].state == :done, download_states)
+                    show_progress(io, main_bar; carriagereturn=false)
+                    println(io)
+                catch e
+                    e isa InterruptException || rethrow()
+                finally
+                    print(io, ansi_enablecursor)
+                end
+            end
+            Base.errormonitor(t_print)
+        else
+            printpkgstyle(io, :Downloading, "$(length(download_jobs)) artifacts")
+        end
+        sema = Base.Semaphore(ctx.num_concurrent_downloads)
+        interrupted = false
+        @sync for f in download_jobs
+            interrupted && break
+            Base.acquire(sema)
+            Threads.@spawn try
+                f()
+            catch e
+                e isa InterruptException && (interrupted = true)
+                put!(errors, e)
+            finally
+                Base.release(sema)
+            end
+        end
+        is_done = true
+        fancyprint && wait(t_print)
+        close(errors)
+
+        if !isempty(errors)
+            all_errors = collect(errors)
+            str = sprint(context=io) do iostr
+                for e in all_errors
+                    Base.showerror(iostr, e)
+                    length(all_errors) > 1 && println(iostr)
+                end
+            end
+            pkgerror("Failed to download some artifacts:\n\n$(strip(str, '\n'))")
+        end
+    end
+
+    for f in used_artifact_tomls
+        write_env_usage(f, "artifact_usage.toml")
     end
 end
 
@@ -948,8 +1078,8 @@ function download_source(ctx::Context; readonly=true)
             end
         end
 
-        bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
-                                  percentage=false, always_reprint=true)
+        bar = MiniProgressBar(; indent=1, header = "Downloading packages", color = Base.info_color(),
+                                  mode=:int, always_reprint=true)
         bar.max = length(pkgs_to_install)
         fancyprint = can_fancyprint(ctx.io)
         try
@@ -1179,8 +1309,8 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
     sort!(builds, by = build -> order[first(build)])
     max_name = maximum(build->textwidth(build[2]), builds; init=0)
 
-    bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
-                              percentage=false, always_reprint=true)
+    bar = MiniProgressBar(; indent=2, header = "Building packages", color = Base.info_color(),
+                              mode=:int, always_reprint=true)
     bar.max = length(builds)
     fancyprint = can_fancyprint(ctx.io)
     fancyprint && start_progress(ctx.io, bar)
@@ -1509,7 +1639,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
 
         # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
         # and ensure they are all downloaded and unpacked as well:
-        download_artifacts(ctx.env, platform=platform, julia_version=ctx.julia_version, io=ctx.io)
+        download_artifacts(ctx, platform=platform, julia_version=ctx.julia_version)
 
         # if env is a package add compat entries
         if ctx.env.project.name !== nothing && ctx.env.project.uuid !== nothing
@@ -1553,7 +1683,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx.env)
-    download_artifacts(ctx.env; platform=platform, julia_version=ctx.julia_version, io=ctx.io)
+    download_artifacts(ctx; platform=platform, julia_version=ctx.julia_version)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)
     build_versions(ctx, union(new_apply, new_git))
@@ -1694,7 +1824,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx.env)
-    download_artifacts(ctx.env, julia_version=ctx.julia_version, io=ctx.io)
+    download_artifacts(ctx, julia_version=ctx.julia_version)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io, hidden_upgrades_info = true)
     build_versions(ctx, union(new_apply, new_git))
@@ -1740,7 +1870,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new = download_source(ctx)
     fixups_from_projectfile!(ctx.env)
-    download_artifacts(ctx.env; julia_version=ctx.julia_version, io=ctx.io)
+    download_artifacts(ctx; julia_version=ctx.julia_version)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)
     build_versions(ctx, new)
@@ -1788,7 +1918,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
         new = download_source(ctx)
         fixups_from_projectfile!(ctx.env)
-        download_artifacts(ctx.env, io=ctx.io)
+        download_artifacts(ctx)
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io=ctx.io)
         build_versions(ctx, new)
