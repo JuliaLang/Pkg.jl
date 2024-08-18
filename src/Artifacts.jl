@@ -98,8 +98,6 @@ function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
                 Base.uv_error("rename of $(repr(temp_dir)) to $(repr(new_path))", err)
             end
         end
-        chmod(new_path, filemode(dirname(new_path)))
-        set_readonly(new_path)
     end
 end
 
@@ -395,7 +393,12 @@ function download_artifact(
         return err
     finally
         # Always attempt to cleanup
-        rm(temp_dir; recursive=true, force=true)
+        try
+            rm(temp_dir; recursive=true, force=true)
+        catch e
+            e isa InterruptException && rethrow()
+            @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception=e)
+        end
     end
     return true
 end
