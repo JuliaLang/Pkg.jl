@@ -255,7 +255,8 @@ function download(
     verbose::Bool = false,
     headers::Vector{Pair{String,String}} = Pair{String,String}[],
     auth_header::Union{Pair{String,String}, Nothing} = nothing,
-    io::IO=stderr_f()
+    io::IO=stderr_f(),
+    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
 )
     if auth_header === nothing
         auth_header = get_auth_header(url, verbose=verbose)
@@ -268,7 +269,9 @@ function download(
     end
 
     do_fancy = verbose && can_fancyprint(io)
-    progress = if do_fancy
+    progress = if !isnothing(progress)
+        progress
+    elseif do_fancy
         bar = MiniProgressBar(header="Downloading", color=Base.info_color())
         start_progress(io, bar)
         let bar=bar
@@ -326,6 +329,7 @@ function download_verify(
     verbose::Bool = false,
     force::Bool = false,
     quiet_download::Bool = false,
+    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
 )
     # Whether the file existed in the first place
     file_existed = false
@@ -352,7 +356,7 @@ function download_verify(
     attempts = 3
     for i in 1:attempts
         try
-            download(url, dest; verbose=verbose || !quiet_download)
+            download(url, dest; verbose=verbose || !quiet_download, progress)
             break
         catch err
             @debug "download and verify failed on attempt $i/$attempts" url dest err
@@ -364,7 +368,8 @@ function download_verify(
             end
         end
     end
-    if hash !== nothing && !verify(dest, hash; verbose=verbose)
+    details = String[]
+    if hash !== nothing && !verify(dest, hash; verbose, details)
         # If the file already existed, it's possible the initially downloaded chunk
         # was bad.  If verification fails after downloading, auto-delete the file
         # and start over from scratch.
@@ -376,13 +381,15 @@ function download_verify(
 
             # Download and verify from scratch
             download(url, dest; verbose=verbose || !quiet_download)
-            if hash !== nothing && !verify(dest, hash; verbose=verbose)
-                error("Verification failed. Download does not match expected hash")
+            if hash !== nothing && !verify(dest, hash; verbose, details)
+                @goto verification_failed
             end
         else
+            @label verification_failed
             # If it didn't verify properly and we didn't resume, something is
             # very wrong and we must complain mightily.
-            error("Verification failed. Download does not match expected hash")
+            details_indented = join(map(s -> "      $s", split(join(details, "\n"), '\n')), "\n")
+            error("Verification failed:\n" * details_indented)
         end
     end
 
@@ -466,6 +473,7 @@ function download_verify_unpack(
     verbose::Bool = false,
     quiet_download::Bool = false,
     io::IO=stderr_f(),
+    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
 )
     # First, determine whether we should keep this tarball around
     remove_tarball = false
@@ -510,8 +518,7 @@ function download_verify_unpack(
 
     # Download the tarball; if it already existed and we needed to remove it
     # then we should remove the unpacked path as well
-    should_delete = !download_verify(url, hash, tarball_path;
-                                     force=force, verbose=verbose, quiet_download=quiet_download)
+    should_delete = !download_verify(url, hash, tarball_path; force, verbose, quiet_download, progress)
     if should_delete
         if verbose
             @info("Removing dest directory $(dest) as source tarball changed")
@@ -551,7 +558,8 @@ end
 
 """
     verify(path::AbstractString, hash::AbstractString;
-           verbose::Bool = false, report_cache_status::Bool = false)
+           verbose::Bool = false, report_cache_status::Bool = false,
+           details::Union{Vector{String},Nothing} = nothing)
 
 Given a file `path` and a `hash`, calculate the SHA256 of the file and compare
 it to `hash`.  This method caches verification results in a `"\$(path).sha256"`
@@ -567,9 +575,12 @@ If `report_cache_status` is set to `true`, then the return value will be a
 `Symbol` giving a granular status report on the state of the hash cache, in
 addition to the `true`/`false` signifying whether verification completed
 successfully.
+
+If `details` is provided, any pertinent detail will be pushed to it rather than logged.
 """
 function verify(path::AbstractString, hash::AbstractString; verbose::Bool = false,
-                report_cache_status::Bool = false, hash_path::AbstractString="$(path).sha256")
+                report_cache_status::Bool = false, hash_path::AbstractString="$(path).sha256",
+                details::Union{Vector{String},Nothing} = nothing)
 
     # Check hash string format
     if !occursin(r"^[0-9a-f]{64}$"i, hash)
@@ -639,7 +650,11 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
         msg  = "Hash Mismatch!\n"
         msg *= "  Expected sha256:   $hash\n"
         msg *= "  Calculated sha256: $calc_hash"
-        @error(msg)
+        if isnothing(details)
+            @error(msg)
+        else
+            push!(details, msg)
+        end
         if report_cache_status
             return false, :hash_mismatch
         else

@@ -1268,7 +1268,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Install all packages
     new_apply = Operations.download_source(ctx)
     # Install all artifacts
-    Operations.download_artifacts(ctx.env; platform, verbose, io=ctx.io)
+    Operations.download_artifacts(ctx; platform, verbose)
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
 
