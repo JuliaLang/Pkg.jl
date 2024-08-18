@@ -71,12 +71,16 @@ function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
         # However, `mv` defaults to `cp` if `rename` returns an error.
         # `cp` is not atomic, so avoid the potential of calling it.
         err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
-        # Ignore rename error, but ensure `new_path` exists.
-        if !isdir(new_path)
-            error("$(repr(new_path)) could not be made")
+        if err ≥ 0
+            # rename worked
+            chmod(new_path, filemode(dirname(new_path)))
+            set_readonly(new_path)
+        else
+            # Ignore rename error, if `new_path` exists.
+            if !isdir(new_path)
+                Base.uv_error("rename of $(repr(temp_dir)) to $(repr(new_path))", err)
+            end
         end
-        chmod(new_path, filemode(dirname(new_path)))
-        set_readonly(new_path)
     end
     nothing
 end
@@ -373,7 +377,12 @@ function download_artifact(
         return err
     finally
         # Always attempt to cleanup
-        rm(temp_dir; recursive=true, force=true)
+        try
+            rm(temp_dir; recursive=true, force=true)
+        catch e
+            e isa InterruptException && rethrow()
+            @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception=e)
+        end
     end
     return true
 end
