@@ -887,7 +887,7 @@ function download_artifacts(ctx::Context;
                             dstate.state = :running
                             ret()
                             if !fancyprint
-                                @lock print_lock printpkgstyle(io, :Downloaded, "artifact $rname $(MiniProgressBars.pkg_format_bytes(dstate.bar.max; sigdigits=1))")
+                                @lock print_lock printpkgstyle(io, :Installed, "artifact $rname $(MiniProgressBars.pkg_format_bytes(dstate.bar.max; sigdigits=1))")
                             end
                         catch
                             dstate.state = :failed
@@ -908,7 +908,7 @@ function download_artifacts(ctx::Context;
                     first = true
                     timer = Timer(0, interval=1/10)
                     # TODO: Implement as a new MiniMultiProgressBar
-                    main_bar = MiniProgressBar(; indent=1, header = "Downloading artifacts", color = :green, mode = :int, always_reprint=true)
+                    main_bar = MiniProgressBar(; indent=1, header = "Installing artifacts", color = :green, mode = :int, always_reprint=true)
                     main_bar.max = length(download_states)
                     while !is_done
                         main_bar.current = count(x -> x.state == :done, values(download_states))
@@ -920,7 +920,8 @@ function download_artifacts(ctx::Context;
                             for dstate in sort!(collect(values(download_states)), by=v->v.bar.max, rev=true)
                                 local status, status_update_time = lock(()->(dstate.status, dstate.status_update_time), dstate.status_lock)
                                 # only update the bar's status message if it is stalled for at least 0.5 s.
-                                if time_ns() - status_update_time > UInt64(500_000_000)
+                                # If the new status message is empty, go back to showing the bar without waiting.
+                                if isempty(status) || time_ns() - status_update_time > UInt64(500_000_000)
                                     dstate.bar.status = status
                                 end
                                 dstate.state == :running && (dstate.bar.max > 1000 || !isempty(dstate.bar.status)) || continue
@@ -946,7 +947,7 @@ function download_artifacts(ctx::Context;
             end
             Base.errormonitor(t_print)
         else
-            printpkgstyle(io, :Downloading, "$(length(download_jobs)) artifacts")
+            printpkgstyle(io, :Installing, "$(length(download_jobs)) artifacts")
         end
         sema = Base.Semaphore(ctx.num_concurrent_downloads)
         interrupted = false
@@ -974,7 +975,7 @@ function download_artifacts(ctx::Context;
                     length(all_errors) > 1 && println(iostr)
                 end
             end
-            pkgerror("Failed to download some artifacts:\n\n$(strip(str, '\n'))")
+            pkgerror("Failed to install some artifacts:\n\n$(strip(str, '\n'))")
         end
     end
 

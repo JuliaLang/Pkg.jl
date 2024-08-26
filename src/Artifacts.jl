@@ -369,7 +369,7 @@ function download_artifact(
             end
         end
         # Move it to the location we expected
-        isnothing(progress) || progress(10000, 10000; status="installing")
+        isnothing(progress) || progress(10000, 10000; status="moving to artifact store")
         _mv_temp_artifact_dir(temp_dir, dst)
     catch err
         @debug "download_artifact error" tree_hash tarball_url tarball_hash err
