@@ -17,11 +17,12 @@ function pkg_format_bytes(bytes; binary=true, sigdigits::Integer=3)
 end
 
 Base.@kwdef mutable struct MiniProgressBar
-    max::Int = 1.0
+    max::Int = 1
     header::String = ""
     color::Symbol = :nothing
     width::Int = 40
     current::Int = 0
+    status::String = "" # If not empty this string replaces the bar
     prev::Int = 0
     has_shown::Bool = false
     time_shown::Float64 = 0.0
@@ -83,10 +84,14 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
             print(io, p.header)
         end
         print(io, " ")
-        printstyled(io, "━"^n_filled; color=p.color)
-        printstyled(io, perc >= 95 ? "━" : "╸"; color=p.color)
-        printstyled(io, "━"^n_left, " "; color=:light_black)
-        print(io, progress_text)
+        if !isempty(p.status)
+            print(io, p.status)
+        else
+            printstyled(io, "━"^n_filled; color=p.color)
+            printstyled(io, perc >= 95 ? "━" : "╸"; color=p.color)
+            printstyled(io, "━"^n_left, " "; color=:light_black)
+            print(io, progress_text)
+        end
         carriagereturn && print(io, "\r")
     end
     # Print everything in one call

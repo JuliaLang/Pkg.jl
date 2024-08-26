@@ -817,7 +817,10 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
 end
 
 mutable struct DownloadState
-    state::Symbol
+    state::Symbol # is :ready, :running, :done, or :failed
+    status::String
+    status_update_time::UInt64 # ns
+    status_lock::Base.ReentrantLock
     const bar::MiniProgressBar
 end
 
@@ -835,13 +838,11 @@ function download_artifacts(ctx::Context;
         pkg_root === nothing || push!(pkg_roots, pkg_root)
     end
     push!(pkg_roots, dirname(env.project_file))
-    used_artifact_tomls = Set{String}()
-    download_jobs = Function[]
+    download_jobs = Dict{SHA1, Function}()
 
     print_lock = Base.ReentrantLock() # for non-fancyprint printing
 
-    # name -> (state, bar) where state is :ready, :running, :done, or :failed
-    download_states = Dict{String, DownloadState}()
+    download_states = Dict{SHA1, DownloadState}()
 
     errors = Channel{Any}(Inf)
     is_done = false
@@ -852,47 +853,54 @@ function download_artifacts(ctx::Context;
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
 
-    longest_name_length = 0 # will be updated later
-    for pkg_root in pkg_roots
-        for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
-            # For each Artifacts.toml, install each artifact we've collected from it
-            for name in keys(artifacts)
-                bar = MiniProgressBar(; main=false, indent=2, color = Base.info_color(), mode=:data, always_reprint=true)
-                progress = (total, current) -> (bar.max = total; bar.current = current)
-                # returns a string if exists, or function that downloads the artifact if not
-                ret = ensure_artifact_installed(name, artifacts[name], artifacts_toml;
-                                            verbose, quiet_download=!(usable_io(io)), io, progress)
-                if ret isa Function
-                    download_states[name] = DownloadState(:ready, bar)
-                    push!(download_jobs,
-                        () -> begin
-                            try
-                                download_states[name].state = :running
-                                ret()
-                                if !fancyprint
-                                    rname = rpad(name, longest_name_length)
-                                    @lock print_lock printpkgstyle(io, :Downloaded, "artifact $rname $(MiniProgressBars.pkg_format_bytes(bar.max; sigdigits=1))")
-                                end
-                            catch
-                                download_states[name].state = :failed
-                                rethrow()
-                            else
-                                download_states[name].state = :done
-                            end
-                        end
-                    )
+    all_collected_artifacts = reduce(vcat, map(pkg_root -> collect_artifacts(pkg_root; platform), pkg_roots))
+    used_artifact_tomls = Set{String}(map(first, all_collected_artifacts))
+    longest_name_length = maximum(all_collected_artifacts; init=0) do (artifacts_toml, artifacts)
+        maximum(textwidth, keys(artifacts); init=0)
+    end
+    for (artifacts_toml, artifacts) in all_collected_artifacts
+        # For each Artifacts.toml, install each artifact we've collected from it
+        for name in keys(artifacts)
+            local rname = rpad(name, longest_name_length)
+            local hash = SHA1(artifacts[name]["git-tree-sha1"])
+            local bar = MiniProgressBar(;header=rname, main=false, indent=2, color = Base.info_color(), mode=:data, always_reprint=true)
+            local dstate = DownloadState(:ready, "", time_ns(), Base.ReentrantLock(), bar)
+            function progress(total, current; status="")
+                local t = time_ns()
+                if isempty(status)
+                    dstate.bar.max = total
+                    dstate.bar.current = current
+                end
+                lock(dstate.status_lock) do
+                    dstate.status = status
+                    dstate.status_update_time = t
                 end
             end
-            push!(used_artifact_tomls, artifacts_toml)
+            # returns a string if exists, or function that downloads the artifact if not
+            local ret = ensure_artifact_installed(name, artifacts[name], artifacts_toml;
+                                        verbose, quiet_download=!(usable_io(io)), io, progress)
+            if ret isa Function
+                download_states[hash] = dstate
+                download_jobs[hash] =
+                    () -> begin
+                        try
+                            dstate.state = :running
+                            ret()
+                            if !fancyprint
+                                @lock print_lock printpkgstyle(io, :Downloaded, "artifact $rname $(MiniProgressBars.pkg_format_bytes(dstate.bar.max; sigdigits=1))")
+                            end
+                        catch
+                            dstate.state = :failed
+                            rethrow()
+                        else
+                            dstate.state = :done
+                        end
+                    end
+            end
         end
     end
 
     if !isempty(download_jobs)
-        longest_name_length = maximum(textwidth, keys(download_states))
-        for (name, dstate) in download_states
-            dstate.bar.header = rpad(name, longest_name_length)
-        end
-
         if fancyprint
             t_print = Threads.@spawn begin
                 try
@@ -903,14 +911,19 @@ function download_artifacts(ctx::Context;
                     main_bar = MiniProgressBar(; indent=1, header = "Downloading artifacts", color = :green, mode = :int, always_reprint=true)
                     main_bar.max = length(download_states)
                     while !is_done
-                        main_bar.current = count(x -> x[2].state == :done, download_states)
+                        main_bar.current = count(x -> x.state == :done, values(download_states))
                         str = sprint(context=io) do iostr
                             first || print(iostr, ansi_cleartoend)
                             n_printed = 1
                             show_progress(iostr, main_bar; carriagereturn=false)
                             println(iostr)
-                            for (name, dstate) in sort!(collect(download_states), by=kv->kv[2].bar.max, rev=true)
-                                dstate.state == :running && dstate.bar.max > 1000 && dstate.bar.current > 0 || continue
+                            for dstate in sort!(collect(values(download_states)), by=v->v.bar.max, rev=true)
+                                local status, status_update_time = lock(()->(dstate.status, dstate.status_update_time), dstate.status_lock)
+                                # only update the bar's status message if it is stalled for at least 0.5 s.
+                                if time_ns() - status_update_time > UInt64(500_000_000)
+                                    dstate.bar.status = status
+                                end
+                                dstate.state == :running && (dstate.bar.max > 1000 || !isempty(dstate.bar.status)) || continue
                                 show_progress(iostr, dstate.bar; carriagereturn=false)
                                 println(iostr)
                                 n_printed += 1
@@ -937,7 +950,7 @@ function download_artifacts(ctx::Context;
         end
         sema = Base.Semaphore(ctx.num_concurrent_downloads)
         interrupted = false
-        @sync for f in download_jobs
+        @sync for f in values(download_jobs)
             interrupted && break
             Base.acquire(sema)
             Threads.@spawn try

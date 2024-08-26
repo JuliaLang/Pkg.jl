@@ -540,6 +540,7 @@ function download_verify_unpack(
         if verbose
             @info("Unpacking $(tarball_path) into $(dest)...")
         end
+        progress(10000, 10000; status="unpacking")
         open(`$(exe7z()) x $tarball_path -so`) do io
             Tar.extract(io, dest, copy_symlinks = copy_symlinks())
         end

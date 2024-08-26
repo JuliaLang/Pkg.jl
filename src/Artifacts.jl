@@ -330,6 +330,7 @@ function download_artifact(
     try
         download_verify_unpack(tarball_url, tarball_hash, temp_dir;
                                 ignore_existence=true, verbose, quiet_download, io, progress)
+        progress(10000, 10000; status="verifying")
         calc_hash = SHA1(GitTools.tree_hash(temp_dir))
 
         # Did we get what we expected?  If not, freak out.
@@ -368,6 +369,7 @@ function download_artifact(
             end
         end
         # Move it to the location we expected
+        progress(10000, 10000; status="installing")
         _mv_temp_artifact_dir(temp_dir, dst)
     catch err
         @debug "download_artifact error" tree_hash tarball_url tarball_hash err
