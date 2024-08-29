@@ -78,11 +78,10 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
         print(io, " "^p.indent)
         if p.main
             printstyled(io, headers[1], " "; color=:green, bold=true)
-            printstyled(io, join(headers[2:end], ' '))
+            length(headers) > 1 && printstyled(io, join(headers[2:end], ' '), " ")
         else
-            print(io, p.header)
+            print(io, p.header, " ")
         end
-        print(io, " ")
         printstyled(io, "━"^n_filled; color=p.color)
         printstyled(io, perc >= 95 ? "━" : "╸"; color=p.color)
         printstyled(io, "━"^n_left, " "; color=:light_black)
