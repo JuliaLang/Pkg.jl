@@ -1166,14 +1166,14 @@ instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
                      platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true,
-                     workspace::Bool=false, kwargs...)
+                     workspace::Bool=false, julia_version_strict::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
     end
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
-        Types.check_warn_manifest_julia_version_compat(_manifest, ctx.env.manifest_file)
+        Types.check_manifest_julia_version_compat(_manifest, ctx.env.manifest_file; julia_version_strict)
         deps = Dict{String,String}()
         for (uuid, pkg) in _manifest
             if pkg.name in keys(deps)
@@ -1195,7 +1195,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
-    Types.check_warn_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file)
+    Types.check_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file; julia_version_strict)
 
     if Operations.is_manifest_current(ctx.env) === false
         @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
