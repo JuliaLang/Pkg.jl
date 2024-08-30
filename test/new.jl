@@ -716,6 +716,7 @@ end
             (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED"),
             (:debug, "tiered_resolve: trying PRESERVE_ALL"),
             min_level=Logging.Debug,
+            match_mode=:any,
             Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_TIERED_INSTALLED)
         )
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
@@ -726,18 +727,29 @@ end
         @test_logs(
             (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED"),
             min_level=Logging.Debug,
+            match_mode=:any,
             Pkg.add("Example"; preserve=Pkg.PRESERVE_TIERED_INSTALLED) # should only add v0.3.0 as it was installed earlier
         )
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
 
         withenv("JULIA_PKG_PRESERVE_TIERED_INSTALLED" => true) do
             Pkg.activate(temp=true)
-            @test_logs (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED") min_level=Logging.Debug Pkg.add(name="Example")
+            @test_logs(
+                (:debug, "tiered_resolve: trying PRESERVE_ALL_INSTALLED"),
+                min_level=Logging.Debug,
+                match_mode=:any,
+                Pkg.add(name="Example")
+            )
             @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         end
 
         Pkg.activate(temp=true)
-        @test_logs (:debug, "tiered_resolve: trying PRESERVE_ALL") min_level=Logging.Debug Pkg.add(name="Example") # default 'add' should serve a newer version
+        @test_logs(
+            (:debug, "tiered_resolve: trying PRESERVE_ALL"),
+            min_level=Logging.Debug,
+            match_mode=:any,
+            Pkg.add(name="Example") # default 'add' should serve a newer version
+        )
         @test Pkg.dependencies()[exuuid].version > v"0.3.0"
     end
     # - `tiered` is the default option.

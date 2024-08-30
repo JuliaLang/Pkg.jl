@@ -91,11 +91,13 @@ end
             m = Pkg.Types.read_manifest(env_manifest)
             m.julia_version = v"1.5.0"
             msg = r"The active manifest file has dependencies that were resolved with a different julia version"
-            @test_logs (:warn, msg) Pkg.Types.check_warn_manifest_julia_version_compat(m, env_manifest)
+            @test_logs (:warn, msg) Pkg.Types.check_manifest_julia_version_compat(m, env_manifest)
+            @test_throws Pkg.Types.PkgError Pkg.Types.check_manifest_julia_version_compat(m, env_manifest, julia_version_strict=true)
 
             m.julia_version = nothing
             msg = r"The active manifest file is missing a julia version entry"
-            @test_logs (:warn, msg) Pkg.Types.check_warn_manifest_julia_version_compat(m, env_manifest)
+            @test_logs (:warn, msg) Pkg.Types.check_manifest_julia_version_compat(m, env_manifest)
+            @test_throws Pkg.Types.PkgError Pkg.Types.check_manifest_julia_version_compat(m, env_manifest, julia_version_strict=true)
         end
     end
 

@@ -347,21 +347,36 @@ end
 # METADATA #
 ############
 
-function check_warn_manifest_julia_version_compat(manifest::Manifest, manifest_file::String)
+function check_manifest_julia_version_compat(manifest::Manifest, manifest_file::String; julia_version_strict::Bool = false)
     isempty(manifest.deps) && return
     if manifest.manifest_format < v"2"
-        @warn """The active manifest file is an older format with no julia version entry. Dependencies may have \
-        been resolved with a different julia version.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
-        return
+        msg = """The active manifest file is an older format with no julia version entry. Dependencies may have \
+        been resolved with a different julia version."""
+        if julia_version_strict
+            pkgerror(msg)
+        else
+            @warn msg maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+            return
+        end
     end
     v = manifest.julia_version
     if v === nothing
-        @warn """The active manifest file is missing a julia version entry. Dependencies may have \
-        been resolved with a different julia version.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
-        return
+        msg = """The active manifest file is missing a julia version entry. Dependencies may have \
+        been resolved with a different julia version."""
+        if julia_version_strict
+            pkgerror(msg)
+        else
+            @warn msg maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+            return
+        end
     end
     if Base.thisminor(v) != Base.thisminor(VERSION)
-        @warn """The active manifest file has dependencies that were resolved with a different julia \
-        version ($(manifest.julia_version)). Unexpected behavior may occur.""" maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+        msg = """The active manifest file has dependencies that were resolved with a different julia \
+        version ($(manifest.julia_version)). Unexpected behavior may occur."""
+        if julia_version_strict
+            pkgerror(msg)
+        else
+            @warn msg maxlog = 1 _file = manifest_file _line = 0 _module = nothing
+        end
     end
 end
