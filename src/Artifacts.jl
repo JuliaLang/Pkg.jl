@@ -65,7 +65,18 @@ Either rename the directory at `temp_dir` to `new_path` and set it to read-only
 or if `new_path` artifact already exists try to do nothing.
 """
 function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
-    if !isdir(new_path)
+    # Sometimes a rename can fail because the temp_dir is locked by
+    # anti-virus software scanning the new files.
+    # In this case we want to sleep and try again.
+    # I am using the list of error codes to retry from:
+    # https://github.com/isaacs/node-graceful-fs/blob/234379906b7d2f4c9cfeb412d2516f42b0fb4953/polyfills.js#L87
+    # Retry for up to about 60 seconds by retrying 20 times with exponential backoff.
+    retry = 0
+    max_num_retries = 20 # maybe this should be configurable?
+    sleep_amount = 0.01 # seconds
+    max_sleep_amount = 5.0 # seconds
+    while true
+        isdir(new_path) && return
         # This next step is like
         # `mv(temp_dir, new_path)`.
         # However, `mv` defaults to `cp` if `rename` returns an error.
@@ -75,14 +86,19 @@ function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
             # rename worked
             chmod(new_path, filemode(dirname(new_path)))
             set_readonly(new_path)
+            return
         else
-            # Ignore rename error, if `new_path` exists.
-            if !isdir(new_path)
+            # Ignore rename error if `new_path` exists.
+            isdir(new_path) && return
+            if retry < max_num_retries && err ∈ (Base.UV_EACCES, Base.UV_EPERM, Base.UV_EBUSY)
+                sleep(sleep_amount)
+                sleep_amount = min(sleep_amount*2.0, max_sleep_amount)
+                retry += 1
+            else
                 Base.uv_error("rename of $(repr(temp_dir)) to $(repr(new_path))", err)
             end
         end
     end
-    nothing
 end
 
 """
