@@ -364,6 +364,7 @@ Create a minimal project called `pkgname` in the current folder. For more featur
 ],
 PSA[:name => "precompile",
     :api => API.precompile,
+    :should_splat => false,
     :arg_count => 0 => Inf,
     :completions => complete_installed_packages,
     :description => "precompile all the project dependencies",
