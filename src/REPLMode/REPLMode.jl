@@ -2,6 +2,14 @@
 
 module REPLMode
 
+if isdefined(Base, :Experimental) &&
+   isdefined(Base.Experimental, Symbol("@compiler_options"))
+    # Without this, resolve() takes a couple of seconds, with, it takes 0.1 seconds.
+    # Maybe with better structured code or precompilation it's not necessary.
+    # Note: compile=min makes --code-coverage not work
+    @eval Base.Experimental.@compiler_options optimize = 0 infer = false compile=min
+end
+
 using Markdown, UUIDs, Dates
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
