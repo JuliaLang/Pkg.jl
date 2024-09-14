@@ -154,7 +154,7 @@ We can see that the `tutorial` environment now contains `Example` and `JSON`.
     If you have the same
     package (at the same version) installed in multiple environments, the package
     will only be downloaded and stored on the hard drive once. This makes environments
-    very lightweight and effectively free to create. Only using the default
+    very lightweight and effectively free to create. Using only the default
     environment with a huge number of packages in it is a common beginners mistake in
     Julia. Learning how to use environments effectively will improve your experience with
     Julia packages.
