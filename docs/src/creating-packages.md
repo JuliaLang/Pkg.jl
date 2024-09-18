@@ -448,6 +448,8 @@ end # module
 
 Extensions can have any arbitrary name (here `PlottingContourExt`), but using something similar to the format of
 this example that makes the extended functionality and dependency of the extension clear is likely a good idea.
+Encoding in the extension name both the name of the main package and of the package that triggers loading the
+extension can be very helpful especially when encountering and debugging errors.
 
 !!! compat
     Often you will put the extension dependencies into the `test` target so they are loaded when running e.g. `Pkg.test()`. On earlier Julia versions
