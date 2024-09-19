@@ -324,7 +324,7 @@ Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 # name of extension to the left
 # extension dependencies required to load the extension to the right
 # use a list for multiple extension dependencies
-PlottingContourExt = "Contour"
+ContourExt = "Contour"
 
 [compat]
 Contour = "0.6.2"
@@ -341,9 +341,9 @@ end
 end # module
 ```
 
-`ext/PlottingContourExt.jl` (can also be in `ext/PlottingContourExt/PlottingContourExt.jl`):
+`ext/ContourExt.jl` (can also be in `ext/ContourExt/ContourExt.jl`):
 ```julia
-module PlottingContourExt # Should be same name as the file (just like a normal package)
+module ContourExt # Should be same name as the file (just like a normal package)
 
 using Plotting, Contour
 
@@ -354,8 +354,8 @@ end
 end # module
 ```
 
-Extensions can have any arbitrary name (here `PlottingContourExt`), but using something similar to the format of
-this example that makes the extended functionality and dependency of the extension clear is likely a good idea.
+Extensions can have arbitrary names (here `ContourExt`), following the format of this example is likely a good idea for extensions with a single dependency.
+In `Pkg` output, extension names are always shown together with their parent package name.
 
 A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `PlottingContourExt` module.
 It is only when the `Contour` package actually gets loaded that the `PlottingContourExt` extension is loaded
@@ -396,7 +396,7 @@ This is done by making the following changes (using the example above):
 
   @static if !isdefined(Base, :get_extension)
   function __init__()
-      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
+      @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl")
   end
   end
   ```
@@ -410,11 +410,11 @@ This is done by making the following changes (using the example above):
       # Other init functionality here
 
       @static if !isdefined(Base, :get_extension)
-          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/PlottingContourExt.jl")
+          @require Contour = "d38c429a-6771-53c6-b99e-75d170b6e991" include("../ext/ContourExt.jl")
       end
   end
   ```
-- Make the following change in the conditionally-loaded code:
+- Make the following change in the conditionally-loaded code in `ContourExt.jl`:
   ```julia
   isdefined(Base, :get_extension) ? (using Contour) : (using ..Contour)
   ```
@@ -431,7 +431,7 @@ This is done by making the following changes (using the example above):
 - Add the following to your main package file (typically at the bottom):
   ```julia
   if !isdefined(Base, :get_extension)
-    include("../ext/PlottingContourExt.jl")
+    include("../ext/ContourExt.jl")
   end
   ```
 
