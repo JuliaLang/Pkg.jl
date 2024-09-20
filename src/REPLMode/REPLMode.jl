@@ -2,11 +2,7 @@
 
 module REPLMode
 
-if isdefined(Base, :Experimental) &&
-   isdefined(Base.Experimental, Symbol("@compiler_options"))
-    # Note: compile=min makes --code-coverage not work
-    @eval Base.Experimental.@compiler_options optimize = 1 infer = false  # compile=min
-end
+@eval Base.Experimental.@compiler_options optimize = 1
 
 using Markdown, UUIDs, Dates
 
