@@ -2,6 +2,8 @@
 
 module REPLMode
 
+@eval Base.Experimental.@compiler_options optimize = 1
+
 using Markdown, UUIDs, Dates
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
