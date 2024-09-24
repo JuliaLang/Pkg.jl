@@ -7,7 +7,7 @@ import .REPL: LineEdit, REPLCompletions, TerminalMenus
 
 import Pkg
 import .Pkg: linewrap, pathrepr, compat, can_fancyprint, printpkgstyle, PKGMODE_PROJECT
-using .Pkg: Types, Operations, API, Registry, Resolve, REPLMode
+using .Pkg: Types, Operations, API, Registry, Resolve, REPLMode, safe_realpath
 
 using .REPLMode: Statement, CommandSpec, Command, prepare_cmd, tokenize, core_parse, SPECS, api_options, parse_option, api_options, is_opt, wrap_option
 
@@ -47,7 +47,7 @@ function projname(project_file::String)
     end
     for depot in Base.DEPOT_PATH
         envdir = joinpath(depot, "environments")
-        if startswith(abspath(project_file), abspath(envdir))
+        if startswith(safe_realpath(project_file), safe_realpath(envdir))
             return "@" * name
         end
     end
