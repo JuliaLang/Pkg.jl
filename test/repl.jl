@@ -733,4 +733,14 @@ end
     end
 end
 
+@testset "JuliaLang/julia #55850" begin
+    tmp_55850 = mktempdir()
+    tmp_sym_link = joinpath(tmp_55850, "sym")
+    symlink(tmp_55850, tmp_sym_link; dir_target=true)
+    withenv("JULIA_DEPOT_PATH" => tmp_sym_link * (Sys.iswindows() ? ";" : ":"), "JULIA_LOAD_PATH" => nothing) do
+        prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
+        @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+    end
+end
+
 end # module
