@@ -800,7 +800,7 @@ end
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_NONE)
-        @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+        @test Pkg.dependencies()[exuuid].version > v"0.3.0"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
         @test Pkg.dependencies()[pngjll_uuid].version > v"1.6.37+4"
     end

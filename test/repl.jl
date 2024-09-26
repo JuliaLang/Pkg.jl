@@ -55,9 +55,10 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     tmp_pkg_path = mktempdir()
 
     pkg"activate ."
-    pkg"add Example@0.5"
+    pkg"add Example@0.5.3"
     @test isinstalled(TEST_PKG)
     v = Pkg.dependencies()[TEST_PKG.uuid].version
+    @test v == v"0.5.3"
     pkg"rm Example"
     pkg"add Example, Random"
     pkg"rm Example Random"
