@@ -85,7 +85,10 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
 
     pkg"test Example"
     @test isinstalled(TEST_PKG)
-    @test Pkg.dependencies()[TEST_PKG.uuid].version > v
+    # This test is disabled because it relied on Example.jl having a version
+    # number in the Project.toml file on master that wasn't released, which
+    # is no longer true.
+    # @test Pkg.dependencies()[TEST_PKG.uuid].version > v
 
     pkg2 = "UnregisteredWithProject"
     pkg2_uuid = UUID("58262bb0-2073-11e8-3727-4fe182c12249")
