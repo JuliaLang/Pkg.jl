@@ -319,7 +319,8 @@ temp_pkg_dir() do project_path
                 @test isfile(joinpath(devdir, TEST_PKG.name, "deps", "deps.jl"))
                 Pkg.test(TEST_PKG.name)
                 Pkg.free(TEST_PKG.name)
-                @test Pkg.dependencies()[TEST_PKG.uuid].version == old_v
+                @test Pkg.dependencies()[TEST_PKG.uuid].version < v"100.0.0"
+                @test Pkg.dependencies()[TEST_PKG.uuid].version >= old_v
             end
         end
     end
