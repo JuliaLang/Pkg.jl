@@ -269,7 +269,7 @@ temp_pkg_dir() do project_path
     end
 
     @testset "develop / freeing" begin
-        Pkg.add(TEST_PKG.name)
+        Pkg.add(name=TEST_PKG.name, version=v"0.5.3")
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
         Pkg.rm(TEST_PKG.name)
         mktempdir() do devdir
@@ -277,10 +277,7 @@ temp_pkg_dir() do project_path
                 @test_throws PkgError Pkg.develop(Pkg.PackageSpec(url="bleh", rev="blurg"))
                 Pkg.develop(TEST_PKG.name)
                 @test isinstalled(TEST_PKG)
-                # This test is disabled because it relied on Example.jl having a version
-                # number in the Project.toml file on master that wasn't released, which
-                # is no longer true.
-                # @test Pkg.dependencies()[TEST_PKG.uuid].version > old_v
+                @test Pkg.dependencies()[TEST_PKG.uuid].version > old_v
                 test_pkg_main_file = joinpath(devdir, TEST_PKG.name, "src", TEST_PKG.name * ".jl")
                 @test isfile(test_pkg_main_file)
                 # Pkg #152

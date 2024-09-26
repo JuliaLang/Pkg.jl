@@ -57,9 +57,10 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     tmp_pkg_path = mktempdir()
 
     pkg"activate ."
-    pkg"add Example@0.5"
+    pkg"add Example@0.5.3"
     @test isinstalled(TEST_PKG)
     v = Pkg.dependencies()[TEST_PKG.uuid].version
+    @test v == v"0.5.3"
     pkg"rm Example"
     pkg"add Example, Random"
     pkg"rm Example Random"
@@ -85,10 +86,7 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
 
     pkg"test Example"
     @test isinstalled(TEST_PKG)
-    # This test is disabled because it relied on Example.jl having a version
-    # number in the Project.toml file on master that wasn't released, which
-    # is no longer true.
-    # @test Pkg.dependencies()[TEST_PKG.uuid].version > v
+    @test Pkg.dependencies()[TEST_PKG.uuid].version > v
 
     pkg2 = "UnregisteredWithProject"
     pkg2_uuid = UUID("58262bb0-2073-11e8-3727-4fe182c12249")
