@@ -269,8 +269,9 @@ temp_pkg_dir() do project_path
     end
 
     @testset "develop / freeing" begin
-        Pkg.add(TEST_PKG.name)
+        Pkg.add(name=TEST_PKG.name, version=v"0.5.3")
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
+        @test old_v == v"0.5.3"
         Pkg.rm(TEST_PKG.name)
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
@@ -299,11 +300,27 @@ temp_pkg_dir() do project_path
                     touch("deps.jl")
                     """
                 )
+                exa_proj = joinpath(devdir, TEST_PKG.name, "Project.toml")
+                proj_str = read(exa_proj, String)
+                compat_onwards = split(proj_str, "[compat]")[2]
+                open(exa_proj, "w") do io
+                    println(io, """
+                    name = "Example"
+                    uuid = "$(TEST_PKG.uuid)"
+                    version = "100.0.0"
+
+                    [compat]
+                    $compat_onwards
+                    """)
+                end
+                Pkg.resolve()
+                @test Pkg.dependencies()[TEST_PKG.uuid].version == v"100.0.0"
                 Pkg.build(TEST_PKG.name)
                 @test isfile(joinpath(devdir, TEST_PKG.name, "deps", "deps.jl"))
                 Pkg.test(TEST_PKG.name)
                 Pkg.free(TEST_PKG.name)
-                @test Pkg.dependencies()[TEST_PKG.uuid].version == old_v
+                @test Pkg.dependencies()[TEST_PKG.uuid].version < v"100.0.0"
+                @test Pkg.dependencies()[TEST_PKG.uuid].version >= old_v
             end
         end
     end
