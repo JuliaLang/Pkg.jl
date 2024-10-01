@@ -611,7 +611,6 @@ end
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
-
     # require A, D, and lower version of Y
     reqs_data = Any[
         ["A", "*"],
@@ -629,6 +628,39 @@ end
         "G"=>v"2",
         "H"=>v"1",
         "I"=>v"1",
+    )
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
+
+    VERBOSE && @info("SCHEME 15")
+    ## DEPENDENCY SCHEME 15: A GRAPH WITH A WEAK DEPENDENCE
+    ## (REDUCED VERSION OF A REALISTIC SCHEME, ref Pkg.jl issue #4030)
+    deps_data = Any[
+        ["A", v"1"],
+        ["A", v"2", "C", "*"],
+        ["B", v"1", "D", "1", :weak],
+        ["C", v"1", "E", "*"],
+        ["C", v"2", "E", "*"],
+        ["C", v"2", "B", "1"],
+        ["E", v"1", "D", "1"],
+        ["E", v"2", "F", "1"],
+        ["F", v"1", "D", "*"],
+        ["D", v"1"],
+        ["D", v"2"],
+    ]
+
+    @test sanity_tst(deps_data)
+
+    reqs_data = Any[
+        ["A", "*"],
+    ]
+    want_data = Dict(
+        "A" => v"2",
+        "B" => v"1",
+        "C" => v"2",
+        "D" => v"1",
+        "E" => v"2",
+        "F" => v"1",
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
