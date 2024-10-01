@@ -362,6 +362,8 @@ function greedysolver(graph::Graph)
                     return (false, Int[])
                 elseif old_v1 == spp[p1]
                     sol[p1] = v1
+                    fill!(gconstr[p1], false)
+                    gconstr[p1][v1] = true
                     push!(staged_next, p1)
                 end
             end
