@@ -726,4 +726,15 @@ end
     end
 end
 
+@testset "JuliaLang/julia #55850" begin
+    tmp_55850 = mktempdir()
+    tmp_sym_link = joinpath(tmp_55850, "sym")
+    symlink(tmp_55850, tmp_sym_link; dir_target=true)
+    # DEPOT_PATH must stay only the temp directory otherwise the bug is hidden
+    withenv("JULIA_DEPOT_PATH" => tmp_sym_link, "JULIA_LOAD_PATH" => nothing) do
+        prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg: Pkg, REPLMode; Pkg.activate(io=devnull); print(REPLMode.promptf())"`)
+        @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+    end
+end
+
 end # module

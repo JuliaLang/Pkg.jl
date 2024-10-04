@@ -10,7 +10,7 @@ import REPL: TerminalMenus
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve
-import ..stdout_f, ..stderr_f
+import ..stdout_f, ..stderr_f, ..safe_realpath
 
 const TEST_MODE = Ref{Bool}(false)
 const PRINTED_REPL_WARNING = Ref{Bool}(false)
@@ -497,7 +497,7 @@ function projname(project_file::String)
     end
     for depot in Base.DEPOT_PATH
         envdir = joinpath(depot, "environments")
-        if startswith(abspath(project_file), abspath(envdir))
+        if startswith(safe_realpath(project_file), safe_realpath(envdir))
             return "@" * name
         end
     end
