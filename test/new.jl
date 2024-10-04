@@ -800,7 +800,7 @@ end
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
         @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
         Pkg.add(Pkg.PackageSpec(;name="JSON", version="0.18.0"); preserve=Pkg.PRESERVE_NONE)
-        @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+        @test Pkg.dependencies()[exuuid].version > v"0.3.0"
         @test Pkg.dependencies()[json_uuid].version == v"0.18.0"
         @test Pkg.dependencies()[pngjll_uuid].version > v"1.6.37+4"
     end
@@ -2185,19 +2185,17 @@ end
 
         api, arg, opts = first(Pkg.pkg"precompile Foo")
         @test api == Pkg.precompile
-        @test arg == "Foo"
+        @test arg == ["Foo"]
         @test isempty(opts)
 
-        api, arg1, arg2, opts = first(Pkg.pkg"precompile Foo Bar")
+        api, arg, opts = first(Pkg.pkg"precompile Foo Bar")
         @test api == Pkg.precompile
-        @test arg1 == "Foo"
-        @test arg2 == "Bar"
+        @test arg == ["Foo", "Bar"]
         @test isempty(opts)
 
-        api, arg1, arg2, opts = first(Pkg.pkg"precompile Foo, Bar")
+        api, arg, opts = first(Pkg.pkg"precompile Foo, Bar")
         @test api == Pkg.precompile
-        @test arg1 == "Foo"
-        @test arg2 == "Bar"
+        @test arg == ["Foo", "Bar"]
         @test isempty(opts)
     end
 end

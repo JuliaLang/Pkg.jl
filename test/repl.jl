@@ -55,9 +55,10 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     tmp_pkg_path = mktempdir()
 
     pkg"activate ."
-    pkg"add Example@0.5"
+    pkg"add Example@0.5.3"
     @test isinstalled(TEST_PKG)
     v = Pkg.dependencies()[TEST_PKG.uuid].version
+    @test v == v"0.5.3"
     pkg"rm Example"
     pkg"add Example, Random"
     pkg"rm Example Random"
@@ -120,6 +121,8 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     mktempdir() do tmp_dev_dir
     withenv("JULIA_PKG_DEVDIR" => tmp_dev_dir) do
         pkg"develop Example"
+        pkg"develop Example,PackageCompiler"
+        pkg"develop Example PackageCompiler"
 
         # Copy the manifest + project and see that we can resolve it in a new environment
         # and get all the packages installed
@@ -720,6 +723,17 @@ end
         withreply("y") do
             @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
         end
+    end
+end
+
+@testset "JuliaLang/julia #55850" begin
+    tmp_55850 = mktempdir()
+    tmp_sym_link = joinpath(tmp_55850, "sym")
+    symlink(tmp_55850, tmp_sym_link; dir_target=true)
+    # DEPOT_PATH must stay only the temp directory otherwise the bug is hidden
+    withenv("JULIA_DEPOT_PATH" => tmp_sym_link, "JULIA_LOAD_PATH" => nothing) do
+        prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg: Pkg, REPLMode; Pkg.activate(io=devnull); print(REPLMode.promptf())"`)
+        @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
     end
 end
 

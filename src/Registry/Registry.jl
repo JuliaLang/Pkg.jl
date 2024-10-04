@@ -429,6 +429,15 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                                     registry_update_log[string(reg.uuid)] = now()
                                     @label done_tarball_read
                                 else
+                                    if reg.name == "General" && Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true)
+                                        @info """
+                                            The General registry is installed via unpacked tarball.
+                                            Consider reinstalling it via the newer faster direct from
+                                            tarball format by running:
+                                              pkg> registry rm General; registry add General
+
+                                            """ maxlog=1
+                                    end
                                     mktempdir() do tmp
                                         try
                                             download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
@@ -447,6 +456,14 @@ function update(regs::Vector{RegistrySpec} = RegistrySpec[]; io::IO=stderr_f(), 
                         end
                     elseif isdir(joinpath(reg.path, ".git"))
                         printpkgstyle(io, :Updating, "registry at " * regpath)
+                        if reg.name == "General" && Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true)
+                            @info """
+                                The General registry is installed via git. Consider reinstalling it via
+                                the newer faster direct from tarball format by running:
+                                  pkg> registry rm General; registry add General
+
+                                """ maxlog=1
+                        end
                         LibGit2.with(LibGit2.GitRepo(reg.path)) do repo
                             if LibGit2.isdirty(repo)
                                 push!(errors, (regpath, "registry dirty"))
