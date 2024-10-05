@@ -144,7 +144,7 @@ projects = ["test", "docs", "benchmarks", "PrivatePackage"]
 
 This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding documentation or benchmarks to a package by including additional dependencies beyond those of the package itself.
 
-Workspace can be nested, that ism a project that itself defines a workspace can also be part of another workspace.
+Workspace can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
 ## `Manifest.toml`
