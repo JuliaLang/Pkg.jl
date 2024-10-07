@@ -72,8 +72,9 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
     end
     termwidth = @something termwidth displaysize(io)[2]
     max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
-    n_filled = ceil(Int, max_progress_width * perc / 100)
-    n_left = max_progress_width - n_filled
+    n_filled = floor(Int, max_progress_width * perc / 100)
+    partial_filled = (max_progress_width * perc / 100) - n_filled
+    n_left = max_progress_width - n_filled - 1
     headers = split(p.header)
     to_print = sprint(; context=io) do io
         print(io, " "^p.indent)
@@ -88,8 +89,15 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
             print(io, p.status)
         else
             printstyled(io, "━"^n_filled; color=p.color)
-            printstyled(io, perc >= 95 ? "━" : "╸"; color=p.color)
-            printstyled(io, "━"^n_left, " "; color=:light_black)
+            if n_left > 0
+                if partial_filled > 0.5
+                    printstyled(io, "╸"; color=p.color) # More filled, use ╸
+                else
+                    printstyled(io, "╺"; color=:light_black) # Less filled, use ╺
+                end
+                printstyled(io, "━"^n_left; color=:light_black)
+            end
+            printstyled(io, " "; color=:light_black)
             print(io, progress_text)
         end
         carriagereturn && print(io, "\r")
