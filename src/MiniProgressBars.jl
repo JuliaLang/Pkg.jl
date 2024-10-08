@@ -84,7 +84,6 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
         else
             print(io, p.header, " ")
         end
-        print(io, " ")
         if !isempty(p.status)
             print(io, p.status)
         else
