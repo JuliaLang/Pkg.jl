@@ -1319,7 +1319,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         ispath(buildfile(path)) && push!(builds, (uuid, name, path, version))
     end
     # toposort builds by dependencies
-    order = dependency_order_uuids(ctx.env, map(first, builds))
+    order = dependency_order_uuids(ctx.env, UUID[first(build) for build in builds])
     sort!(builds, by = build -> order[first(build)])
     max_name = maximum(build->textwidth(build[2]), builds; init=0)
 

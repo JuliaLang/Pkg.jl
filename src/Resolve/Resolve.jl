@@ -309,7 +309,7 @@ function greedysolver(graph::Graph)
     gconstr = graph.gconstr
 
     # initialize solution: all uninstalled
-    sol = [spp[p0] for p0 = 1:np]
+    sol = Int[spp[p0] for p0 = 1:np]
 
     # packages which are not allowed to be uninstalled
     # (NOTE: this is potentially a superset of graph.req_inds,
