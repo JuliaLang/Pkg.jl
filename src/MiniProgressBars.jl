@@ -87,14 +87,18 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
         if !isempty(p.status)
             print(io, p.status)
         else
+            hascolor = get(io, :color, false)::Bool
             printstyled(io, "━"^n_filled; color=p.color)
             if n_left > 0
-                if partial_filled > 0.5
-                    printstyled(io, "╸"; color=p.color) # More filled, use ╸
-                else
-                    printstyled(io, "╺"; color=:light_black) # Less filled, use ╺
+                if hascolor
+                    if partial_filled > 0.5
+                        printstyled(io, "╸"; color=p.color) # More filled, use ╸
+                    else
+                        printstyled(io, "╺"; color=:light_black) # Less filled, use ╺
+                    end
                 end
-                printstyled(io, "━"^(n_left-1); color=:light_black)
+                c = hascolor ? "━" : " "
+                printstyled(io, c^(n_left-1+!hascolor); color=:light_black)
             end
             printstyled(io, " "; color=:light_black)
             print(io, progress_text)
