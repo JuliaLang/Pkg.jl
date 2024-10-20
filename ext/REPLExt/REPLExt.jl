@@ -147,6 +147,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
                     end
                 else
                     LineEdit.edit_insert(s, ';')
+                    LineEdit.check_for_hint(s) && LineEdit.refresh_line(s)
                 end
             end
         end
@@ -173,6 +174,7 @@ function repl_init(repl::REPL.AbstractREPL)
                 end
             else
                 LineEdit.edit_insert(s, ']')
+                LineEdit.check_for_hint(s) && LineEdit.refresh_line(s)
             end
         end
     )
