@@ -5,7 +5,7 @@ function _shared_envs()
     possible = String[]
     for depot in Base.DEPOT_PATH
         envdir = joinpath(depot, "environments")
-        isdir(envdir) || continue
+        Base.isaccessibledir(envdir) || continue
         append!(possible, readdir(envdir))
     end
     return possible
@@ -38,15 +38,7 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
     cmp2 = cmp[2]
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
     completions = filter!(completions) do x
-        try
-            isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x)
-        catch e
-            if e isa Base.IOError && e.code == Base.UV_EACCES
-                return false
-            else
-                rethrow()
-            end
-        end
+        Base.isaccessibledir(s[1:prevind(s, first(cmp2)-i1+1)]*x)
     end
     if expanded_user
         if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
