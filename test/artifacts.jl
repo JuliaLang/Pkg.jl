@@ -733,8 +733,7 @@ end
 
         # Force Julia to re-load ArtifactOverrideLoading from scratch
         pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
-        delete!(Base.module_keys, Base.loaded_modules[pkgid])
-        delete!(Base.loaded_modules, pkgid)
+        Base.unreference_module(pkgid)
         touch(joinpath(depot_container, "ArtifactOverrideLoading", "src", "ArtifactOverrideLoading.jl"))
 
         # Verify that the hash-based overrides (and clears) worked
