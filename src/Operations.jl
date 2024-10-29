@@ -204,10 +204,6 @@ end
 function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
     manifest = env.manifest
     empty!(manifest)
-    # Is this copy needed?
-    pkgs = copy(pkgs)
-
-    pkg_uuids = Dict{UUID, Project}()
 
     for pkg in pkgs
         entry = PackageEntry(;name = pkg.name, version = pkg.version, pinned = pkg.pinned,
