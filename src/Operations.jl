@@ -254,6 +254,7 @@ function load_tree_hash!(registries::Vector{Registry.RegistryInstance}, pkg::Pac
     if is_stdlib(pkg.uuid, julia_version) && pkg.tree_hash !== nothing
         # manifests from newer julia versions might have stdlibs that are upgradable (FORMER_STDLIBS)
         # that have tree_hash recorded, which we need to clear for this version where they are not upgradable
+        # given regular stdlibs don't have tree_hash recorded
         pkg.tree_hash = nothing
         return pkg
     end
