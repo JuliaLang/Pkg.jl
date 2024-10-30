@@ -35,7 +35,7 @@ jobs:
         pkg-server:
           - "pkg.julialang.org" # Default to this for all except specific cases
         julia-version:
-          - 'nightly'
+          - '1.11'
         exclude:
           - os: ubuntu-latest
             julia-arch: aarch64
@@ -48,11 +48,11 @@ jobs:
         include:
           - os: ubuntu-latest
             julia-arch: 'x64'
-            julia-version: 'nightly'
+            julia-version: '1.11'
             pkg-server: ""
           - os: ubuntu-latest
             julia-arch: 'x64'
-            julia-version: 'nightly'
+            julia-version: '1.11'
             pkg-server: "pkg.julialang.org"
     steps:
       - name: Set git to use LF and fix TEMP on windows
@@ -93,7 +93,7 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           # version: '1.6'
-          version: 'nightly'
+          version: '1.11'
       - name: Generate docs
         run: |
           julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(PackageSpec(path = pwd()))'
