@@ -168,7 +168,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     return pkg_mode
 end
 
-function repl_init(repl::REPL.AbstractREPL)
+function repl_init(repl::REPL.LineEditREPL)
     main_mode = repl.interface.modes[1]
     pkg_mode = create_mode(repl, main_mode)
     push!(repl.interface.modes, pkg_mode)
@@ -311,7 +311,13 @@ end
 
 function __init__()
     if isdefined(Base, :active_repl)
-        repl_init(Base.active_repl)
+        if Base.active_repl isa REPL.LineEditREPL
+            repl_init(Base.active_repl)
+        else
+            # not sure what to do here..
+            # LineEditREPL Is the only type of REPL that has the `interface` field that
+            # init_repl accesses.
+        end
     else
         atreplinit() do repl
             if isinteractive() && repl isa REPL.LineEditREPL
