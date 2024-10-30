@@ -189,6 +189,13 @@ end
 ####################
 
 function load_tree_hash!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, julia_version)
+    if is_stdlib(pkg.uuid, julia_version) && pkg.tree_hash !== nothing
+        # manifests from newer julia versions might have stdlibs that are upgradable (FORMER_STDLIBS)
+        # that have tree_hash recorded, which we need to clear for this version where they are not upgradable
+        # given regular stdlibs don't have tree_hash recorded
+        pkg.tree_hash = nothing
+        return pkg
+    end
     tracking_registered_version(pkg, julia_version) || return pkg
     hash = nothing
     for reg in registries
@@ -233,19 +240,16 @@ function reset_all_compat!(proj::Project)
     return nothing
 end
 
-function collect_project(pkg::PackageSpec, path::String)
+function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
     project_file = projectfile_path(path; strict=true)
-    if project_file === nothing
-        pkgerror("could not find project file for package $(err_rep(pkg)) at `$path`")
-    end
-    project = read_package(project_file)
+    project = project_file === nothing ?  Project() : read_project(project_file)
     #=
     # TODO, this should either error or be quiet
     julia_compat = get_compat(project, "julia")
     if julia_compat !== nothing && !(VERSION in julia_compat)
-        println(io, "julia version requirement for package $(err_rep(pkg)) not satisfied")
+        println(io, "julia version requirement for package at `$path`"")
     end
     =#
     for (name, uuid) in project.deps
@@ -257,11 +261,13 @@ function collect_project(pkg::PackageSpec, path::String)
         push!(deps, PackageSpec(name, uuid, vspec))
         push!(weakdeps, uuid)
     end
-    if project.version !== nothing
-        pkg.version = project.version
-    else
-        # @warn("project file for $(pkg.name) is missing a `version` entry")
-        pkg.version = VersionNumber(0)
+    if pkg !== nothing
+        if project.version !== nothing
+            pkg.version = project.version
+        else
+            # @warn("project file for $(pkg.name) is missing a `version` entry")
+            pkg.version = VersionNumber(0)
+        end
     end
     return deps, weakdeps
 end
@@ -299,13 +305,13 @@ end
 function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     deps_map = Dict{UUID,Vector{PackageSpec}}()
     weak_map = Dict{UUID,Set{UUID}}()
-    if env.pkg !== nothing
-        pkg = env.pkg
-        deps, weakdeps = collect_project(pkg, dirname(env.project_file))
-        deps_map[pkg.uuid] = deps
-        weak_map[pkg.uuid] = weakdeps
-        names[pkg.uuid] = pkg.name
-    end
+
+    uuid = Types.project_uuid(env)
+    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file))
+    deps_map[uuid] = deps
+    weak_map[uuid] = weakdeps
+    names[uuid] = env.pkg === nothing ? "project" : env.pkg.name
+
     for pkg in pkgs
         path = project_rel_path(env, source_path(env.manifest_file, pkg))
         if !isdir(path)
@@ -330,7 +336,8 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
             fix_pkg = pkgs[idx]
         end
-        fixed[uuid] = Resolve.Fixed(fix_pkg.version, q, weak_map[uuid])
+        fixpkgversion = fix_pkg === nothing ? v"0.0.0" : fix_pkg.version
+        fixed[uuid] = Resolve.Fixed(fixpkgversion, q, weak_map[uuid])
     end
     return fixed
 end
@@ -1378,6 +1385,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     assert_can_add(ctx, pkgs)
     # load manifest data
     for (i, pkg) in pairs(pkgs)
+        delete!(ctx.env.project.weakdeps, pkg.name)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         is_dep = any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
         pkgs[i] = update_package_add(ctx, pkg, entry, is_dep)
@@ -1404,6 +1412,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     assert_can_add(ctx, pkgs)
     # no need to look at manifest.. dev will just nuke whatever is there before
     for pkg in pkgs
+        delete!(ctx.env.project.weakdeps, pkg.name)
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     # resolve & apply package versions
@@ -2200,6 +2209,7 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
     manifest = env.manifest
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
+    depses = manifest_info.deps
     weakdepses = manifest_info.weakdeps
     exts = manifest_info.exts
     if !isempty(weakdepses) && !isempty(exts)
@@ -2210,10 +2220,14 @@ function status_ext_info(pkg::PackageSpec, env::EnvCache)
             # Check if deps are loaded
             extdeps_info= Tuple{String, Bool}[]
             for extdep in extdeps
-                haskey(weakdepses, extdep) ||
-                    pkgerror(isnothing(pkg.name) ? "M" : "$(pkg.name) has a m",
-                             "alformed Project.toml, the extension package $extdep is not listed in [weakdeps]")
-                uuid = weakdepses[extdep]
+                if !(haskey(weakdepses, extdep) || haskey(depses, extdep))
+                    pkgerror(isnothing(pkg.name) ? "M" : "$(pkg.name) has a malformed Project.toml, ",
+                             "the extension package $extdep is not listed in [weakdeps] or [deps]")
+                end
+                uuid = get(weakdepses, extdep, nothing)
+                if uuid === nothing
+                    uuid = depses[extdep]
+                end
                 loaded = haskey(Base.loaded_modules, Base.PkgId(uuid, extdep))
                 push!(extdeps_info, (extdep, loaded))
             end
