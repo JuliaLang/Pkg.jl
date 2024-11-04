@@ -314,7 +314,7 @@ function __init__()
         if Base.active_repl isa REPL.LineEditREPL
             repl_init(Base.active_repl)
         else
-            # not sure what to do here..
+            # TODO: not sure what to do here..
             # LineEditREPL Is the only type of REPL that has the `interface` field that
             # init_repl accesses.
         end
