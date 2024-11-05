@@ -84,7 +84,11 @@ function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
         err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
         if err ≥ 0
             # rename worked
+            @info("Artifact pre", new_path)
+            run(`icacls $(new_path)`)
             chmod(new_path, filemode(dirname(new_path)))
+            @info("Artifact post")
+            run(`icacls $(new_path)`)
             set_readonly(new_path)
             return
         else
