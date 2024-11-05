@@ -823,4 +823,16 @@ end
     end
 end
 
+if Sys.iswindows()
+    @testset "filemode(dir) non-executable on windows" begin
+        mktempdir() do dir
+            touch(joinpath(dir, "foo"))
+            @test !isempty(readdir(dir))
+            # This technically should be true, the fact that it's not is
+            # a wrinkle of libuv, it would be nice to fix it and so if we
+            # do, this test will let us know.
+            @test filemode(dir) & 0o001 == 0
+        end
+    end
+end
 end # module
