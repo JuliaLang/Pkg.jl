@@ -275,7 +275,6 @@ project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
 function write_project(env::EnvCache)
-    mkpath(dirname(env.project_file))
     write_project(env.project, env.project_file)
 end
 write_project(project::Project, project_file::AbstractString) =
@@ -296,5 +295,6 @@ function write_project(io::IO, project::Dict)
 end
 function write_project(project::Dict, project_file::AbstractString)
     str = sprint(write_project, project)
+    mkpath(dirname(project_file))
     write(project_file, str)
 end

@@ -368,6 +368,7 @@ function write_manifest(io::IO, raw_manifest::Dict)
 end
 function write_manifest(raw_manifest::Dict, manifest_file::AbstractString)
     str = sprint(write_manifest, raw_manifest)
+    mkpath(dirname(manifest_file))
     write(manifest_file, str)
 end
 
