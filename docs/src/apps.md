@@ -3,6 +3,13 @@
 !!! note
     The app support in Pkg is currently considered experimental and some functionality and API may change.
 
+    Some inconveniences that can be encountered are:
+    - You need to manually make `~/.julia/bin` available on the PATH environment.
+    - The path to the julia executable used is the same as the one used to install the app. If this
+      julia installation gets removed, you might need to reinstall the app.
+      used by the app might not be found.
+    - You can only have one app installed
+
 Apps are Julia packages that are intended to be run as a "standalone programs" (by e.g. typing the name of the app in the terminal possibly together with some arguments or flags/options).
 This is in contrast to most Julia packages that are used as "libraries" and are loaded by other files or in the Julia REPL.
 
@@ -37,7 +44,6 @@ end # module
 [apps]
 reverse = {}
 ```
-
 The empty table `{}` is to allow for giving metadata about the app but it is currently unused.
 
 After installing this app one could run:
@@ -52,11 +58,3 @@ directly in the terminal.
 ## Installing Julia apps
 
 The installation of Julia apps are similar to installing julia libraries but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add` (`develop` is also available).
-
-!!! note
-    The path `.julia/bin` has to be added to your `PATH` in order for apps to be runnable after being installed.
-    Pkg currently does not do this for you.
-
-## Other information
-
-- The app will currently run with the same Julia executable as was used to install the app.

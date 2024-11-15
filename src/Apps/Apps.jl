@@ -77,6 +77,8 @@ function _resolve(manifest::Manifest, pkgname=nothing)
             continue
         end
         if pkg.path == nothing
+            # TODO: Just use a normal project file now since the project itself is part of the manifest now?
+
             projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
             sourcepath = source_path(app_manifest_file(), pkg)
             project = get_project(sourcepath)
@@ -84,16 +86,15 @@ function _resolve(manifest::Manifest, pkgname=nothing)
             mkpath(dirname(projectfile))
             write_project(project, projectfile)
             package_manifest_file = manifestfile_path(sourcepath; strict=true)
+            # Move manifest if it exists here.
             if package_manifest_file !== nothing
                 cp(package_manifest_file, joinpath(app_env_folder(), pkg.name, basename(package_manifest_file)); force=true)
             end
-            # Move manifest if it exists here.
 
             Pkg.activate(joinpath(app_env_folder(), pkg.name)) do
                 Pkg.instantiate()
             end
         else
-            # TODO: Not hardcode Project.toml
             projectfile = projectfile_path(source_path(app_manifest_file(), pkg))
         end
 
@@ -345,6 +346,7 @@ function bash_shim(pkgname, julia::String, env)
         $SHIM_HEADER
 
         export JULIA_LOAD_PATH=$(repr(env))
+        export JULIA_DEPOT_PATH=$(repr(join(DEPOT_PATH, ':')))
         exec $julia \\
             --startup-file=no \\
             -m $(pkgname) \\
@@ -356,6 +358,7 @@ function windows_shim(pkgname, julia::String, env)
     return """
         @echo off
         set JULIA_LOAD_PATH=$(repr(env))
+        set JULIA_DEPOT_PATH=$(repr(join(DEPOT_PATH, ';')))
 
         $julia ^
             --startup-file=no ^
