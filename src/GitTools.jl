@@ -11,6 +11,7 @@ import LibGit2
 using Printf
 
 use_cli_git() = Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
+const RESOLVING_DELTAS_HEADER = "Resolving Deltas:"
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
@@ -18,7 +19,10 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     bar = p[:transfer_progress]
     @assert typeof(bar) == MiniProgressBar
     if progress.total_deltas != 0
-        bar.header = "Resolving Deltas:"
+        if bar.header != RESOLVING_DELTAS_HEADER
+            bar.header = RESOLVING_DELTAS_HEADER
+            bar.prev = 0
+        end
         bar.max = progress.total_deltas
         bar.current = progress.indexed_deltas
     else
