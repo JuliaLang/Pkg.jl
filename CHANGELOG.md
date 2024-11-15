@@ -9,7 +9,7 @@ Pkg v1.11 Release Notes
 =======================
 
 - It is now possible to specify "sources" for packages in a `[sources]` section in Project.toml.
-  This can be used to add non-registered normal or test dependencies.
+  This can be used to add non-registered normal or test dependencies. ([#3783])
 - Pkg now obeys `[compat]` bounds for `julia` and raises an error if the version of the running Julia binary is incompatible with the bounds in `Project.toml`.
   Pkg has always obeyed this compat when working with Registry packages. This change affects mostly local packages. ([#3526])
 - `pkg> add` and `Pkg.add` will now add compat entries for new direct dependencies if the active environment is a
