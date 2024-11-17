@@ -103,7 +103,7 @@ Up to this point, we have covered basic package management: adding, updating, an
 
 You may have noticed the `(@v1.9)` in the REPL prompt.
 This lets us know that `v1.9` is the **active environment**.
-Different environments can have different totally different packages and versions installed from another environment.
+Different environments can have totally different packages and versions installed from another environment.
 The active environment is the environment that will be modified by Pkg commands such as `add`, `rm` and `update`.
 
 Let's set up a new environment so we may experiment.
