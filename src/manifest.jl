@@ -219,7 +219,11 @@ function read_manifest(f_or_io::Union{String, IO})
         rethrow()
     end
     if Base.is_v1_format_manifest(raw)
-        raw = convert_v1_format_manifest(raw)
+        if isempty(raw) # treat an empty Manifest file as v2 format for convenience
+            raw["manifest_format"] => "2.0.0"
+        else
+            raw = convert_v1_format_manifest(raw)
+        end
     end
     return Manifest(raw, f_or_io)
 end

@@ -44,6 +44,21 @@ end
         end
     end
 
+    @testset "Empty manifest file is automatically upgraded to v2" begin
+        isolate(loaded_depot=true) do
+            io = IOBuffer()
+            d = mktempdir()
+            manifest = joinpath(d, "Manifest.toml")
+            touch(manifest)
+            Pkg.activate(d; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*", output)
+            env_manifest = Pkg.Types.Context().env.manifest_file
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == true
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+        end
+    end
+
     @testset "v1.0: activate, change, maintain manifest format" begin
         reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
             io = IOBuffer()
