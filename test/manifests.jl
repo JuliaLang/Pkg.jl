@@ -54,8 +54,22 @@ end
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*", output)
             env_manifest = Pkg.Types.Context().env.manifest_file
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == true
+            @test env_manifest == manifest
+            # an empty manifest is still technically considered to be v1 manifest
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
             @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+
+            Pkg.add("Profile"; io=io)
+            env_manifest = Pkg.Types.Context().env.manifest_file
+            @test env_manifest == manifest
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+
+            # check that having a Project with deps, and an empty manifest file doesn't error
+            rm(manifest)
+            touch(manifest)
+            Pkg.activate(d; io=io)
+            Pkg.add("Example"; io=io)
         end
     end
 
