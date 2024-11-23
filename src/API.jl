@@ -1144,15 +1144,15 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
     end
 
-    # An extension effectively depends on another extension if it has all the the
-    # dependencies of that other extension
-    function expand_dependencies(depsmap)
+    # A package/extension effectively depends on another extension if it (transitively)
+    # has all the dependencies of that other extension
+    function expand_indirect_dependencies(direct_deps)
         function visit!(visited, node, all_deps)
             if node in visited
                 return
             end
             push!(visited, node)
-            for dep in get(Set{Base.PkgId}, depsmap, node)
+            for dep in get(Set{Base.PkgId}, direct_deps, node)
                 if !(dep in all_deps)
                     push!(all_deps, dep)
                     visit!(visited, dep, all_deps)
@@ -1160,43 +1160,48 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             end
         end
 
-        depsmap_transitive = Dict{Base.PkgId, Set{Base.PkgId}}()
-        for package in keys(depsmap)
+        indirect_deps = Dict{Base.PkgId, Set{Base.PkgId}}()
+        for package in keys(direct_deps)
             # Initialize a set to keep track of all dependencies for 'package'
             all_deps = Set{Base.PkgId}()
             visited = Set{Base.PkgId}()
             visit!(visited, package, all_deps)
-            # Update depsmap with the complete set of dependencies for 'package'
-            depsmap_transitive[package] = all_deps
+            # Update indirect_deps with the complete set of dependencies for 'package'
+            indirect_deps[package] = all_deps
         end
-        return depsmap_transitive
+        return indirect_deps
     end
 
-    depsmap_transitive = expand_dependencies(depsmap)
+    indirect_deps = expand_indirect_dependencies(depsmap)
 
-    for (_, extensions_1) in pkg_exts_map
-        for extension_1 in extensions_1
-            deps_ext_1 = depsmap_transitive[extension_1]
-            for (_, extensions_2) in pkg_exts_map
-                for extension_2 in extensions_2
-                    extension_1 == extension_2 && continue
-                    deps_ext_2 = depsmap_transitive[extension_2]
-                    if issubset(deps_ext_2, deps_ext_1)
-                        push!(depsmap[extension_1], extension_2)
-                    end
-                end
+    # this loop must be run after the full depsmap has been populated
+    ext_loadable_by = Dict{Base.PkgId,Set{Base.PkgId}}()
+    for ext in keys(exts)
+        ext_loadable_by[ext] = Set{Base.PkgId}()
+        for pkg in keys(depsmap)
+            pkg === ext && continue
+            is_trigger = in(pkg, depsmap[ext])
+            has_triggers = issubset(depsmap[ext], indirect_deps[pkg])
+            # In contrast to 1.11+, on 1.10 both "pkg → ext" and "ext → ext" dependency edges
+            # are implied based on transitive dependencies.
+            #
+            # This condition is inconsistent for "ext → ext" edges, leading to dependency
+            # cycles on 1.10, but this behavior is intentionally preserved for now to avoid
+            # breaking packages that depend on this (bad) implicit behavior.
+            #
+            # See https://github.com/JuliaLang/julia/issues/56204#issuecomment-2442652997
+            # for the improved behavior this was replaced with in 1.11
+            if has_triggers && !is_trigger
+                push!(ext_loadable_by[ext], pkg)
             end
         end
     end
-
-    # this loop must be run after the full depsmap has been populated
-    for (pkg, pkg_exts) in pkg_exts_map
-        # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
-        # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
-        for (_pkg, deps) in depsmap # for each manifest dep
-            if !in(_pkg, keys(exts)) && pkg in deps # if not an extension and depends on pkg
-                append!(deps, pkg_exts) # add the package extensions to deps
-                filter!(!isequal(pkg), deps) # remove the pkg from deps
+    for (ext, loadable_by) in ext_loadable_by
+        for pkg in loadable_by
+            if !any(in(loadable_by), depsmap[pkg])
+                # add an edge if the extension is loadable by pkg, and was not loadable in any
+                # of the pkg's dependencies
+                push!(depsmap[pkg], ext)
             end
         end
     end
