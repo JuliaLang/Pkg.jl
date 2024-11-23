@@ -1075,6 +1075,49 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
     end
 end
 
+function full_name(ext_to_parent::Dict{Base.PkgId, String}, pkg::Base.PkgId)
+    if haskey(ext_to_parent, pkg)
+        return string(ext_to_parent[pkg], " → ", pkg.name)
+    else
+        return pkg.name
+    end
+end
+
+function excluded_circular_deps_explanation(io::IOContext{<:IO}, ext_to_parent::Dict{Base.PkgId, String}, circular_deps, cycles)
+    outer_deps = copy(circular_deps)
+    cycles_names = ""
+    for cycle in cycles
+        filter!(!in(cycle), outer_deps)
+        cycle_str = ""
+        for (i, pkg) in enumerate(cycle)
+            j = max(0, i - 1)
+            if length(cycle) == 1
+                line = " ─ "
+            elseif i == 1
+                line = " ┌ "
+            elseif i < length(cycle)
+                line = " │ " * " " ^j
+            else
+                line = " └" * "─" ^j * " "
+            end
+            hascolor = get(io, :color, false)::Bool
+            line = _color_string(line, :light_black, hascolor) * full_name(ext_to_parent, pkg) * "\n"
+            cycle_str *= line
+        end
+        cycles_names *= cycle_str
+    end
+    plural1 = length(cycles) > 1 ? "these cycles" : "this cycle"
+    plural2 = length(cycles) > 1 ? "cycles" : "cycle"
+    msg = """Circular dependency detected.
+    Precompilation will be skipped for dependencies in $plural1:
+    $cycles_names"""
+    if !isempty(outer_deps)
+        msg *= "Precompilation will also be skipped for the following, which depend on the above $plural2:\n"
+        msg *= join(("  " * full_name(ext_to_parent, pkg) for pkg in outer_deps), "\n")
+    end
+    return msg
+end
+
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
                     _from_loading::Bool=false, kwargs...)
@@ -1089,7 +1132,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(default_num_tasks)))
     parallel_limiter = Base.Semaphore(num_tasks)
-    io = ctx.io
+    io = IOContext(ctx.io)
     fancyprint = can_fancyprint(io) && !timing
 
     hascolor = get(io, :color, false)::Bool
@@ -1249,39 +1292,58 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     precomp_prune_suspended!(pkg_specs)
 
     # find and guard against circular deps
-    circular_deps = Base.PkgId[]
-    # Three states
-    # !haskey -> never visited
-    # true -> cannot be compiled due to a cycle (or not yet determined)
-    # false -> not depending on a cycle
+    cycles = Vector{Base.PkgId}[]
+    # For every scanned package, true if pkg found to be in a cycle
+    # or depends on packages in a cycle and false otherwise.
     could_be_cycle = Dict{Base.PkgId, Bool}()
+    # temporary stack for the SCC-like algorithm below
+    stack = Base.PkgId[]
     function scan_pkg!(pkg, dmap)
-        did_visit_dep = true
-        inpath = get!(could_be_cycle, pkg) do
-            did_visit_dep = false
-            return true
+        if haskey(could_be_cycle, pkg)
+            return could_be_cycle[pkg]
+        else
+            return scan_deps!(pkg, dmap)
         end
-        if did_visit_dep ? inpath : scan_deps!(pkg, dmap)
-            # Found a cycle. Delete this and all parents
-            return true
-        end
-        return false
     end
     function scan_deps!(pkg, dmap)
+        push!(stack, pkg)
+        cycle = nothing
         for dep in dmap[pkg]
-            scan_pkg!(dep, dmap) && return true
+            if dep in stack
+                # Created fresh cycle
+                cycle′ = stack[findlast(==(dep), stack):end]
+                if cycle === nothing || length(cycle′) < length(cycle)
+                    cycle = cycle′ # try to report smallest cycle possible
+                end
+            elseif scan_pkg!(dep, dmap)
+                # Reaches an existing cycle
+                could_be_cycle[pkg] = true
+                pop!(stack)
+                return true
+            end
+        end
+        pop!(stack)
+        if cycle !== nothing
+            push!(cycles, cycle)
+            could_be_cycle[pkg] = true
+            return true
         end
         could_be_cycle[pkg] = false
         return false
     end
+    # set of packages that depend on a cycle (either because they are
+    # a part of a cycle themselves or because they transitively depend
+    # on a package in some cycle)
+    circular_deps = Base.PkgId[]
     for pkg in keys(depsmap)
+        @assert isempty(stack)
         if scan_pkg!(pkg, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
         end
     end
     if !isempty(circular_deps)
-        @warn """Circular dependency detected. Precompilation will be skipped for:\n  $(join(string.(circular_deps), "\n  "))"""
+        @warn excluded_circular_deps_explanation(io, exts, circular_deps, cycles)
     end
 
     # if a list of packages is given, restrict to dependencies of given packages
@@ -1441,7 +1503,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         end
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
-                            _name = haskey(exts, dep) ? string(exts[dep], " → ", dep.name) : dep.name
+                            _name = full_name(exts, dep)
                             name = dep in direct_deps ? _name : string(color_string(_name, :light_black))
                             line = if dep in precomperr_deps
                                 string(color_string("  ? ", Base.warn_color()), name)
@@ -1538,7 +1600,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     std_pipe = Base.link_pipe!(Pipe(); reader_supports_async=true, writer_supports_async=true)
                     t_monitor = @async monitor_std(pkg, std_pipe; single_requested_pkg)
 
-                    _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
+                    _name = full_name(exts, pkg)
                     name = is_direct_dep ? _name : string(color_string(_name, :light_black))
                     !fancyprint && lock(print_lock) do
                         isempty(pkg_queue) && printpkgstyle(io, :Precompiling, target)
