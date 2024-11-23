@@ -4,10 +4,12 @@ on:
     branches:
       - 'master'
       - 'release-*'
+      - 'backports-release-*'
   push:
     branches:
       - 'master'
       - 'release-*'
+      - 'backports-release-*'
     tags: '*'
 defaults:
   run:
