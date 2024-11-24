@@ -1075,6 +1075,49 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
     end
 end
 
+function full_name(ext_to_parent::Dict{Base.PkgId, String}, pkg::Base.PkgId)
+    if haskey(ext_to_parent, pkg)
+        return string(ext_to_parent[pkg], " → ", pkg.name)
+    else
+        return pkg.name
+    end
+end
+
+function excluded_circular_deps_explanation(io::IOContext{<:IO}, ext_to_parent::Dict{Base.PkgId, String}, circular_deps, cycles)
+    outer_deps = copy(circular_deps)
+    cycles_names = ""
+    for cycle in cycles
+        filter!(!in(cycle), outer_deps)
+        cycle_str = ""
+        for (i, pkg) in enumerate(cycle)
+            j = max(0, i - 1)
+            if length(cycle) == 1
+                line = " ─ "
+            elseif i == 1
+                line = " ┌ "
+            elseif i < length(cycle)
+                line = " │ " * " " ^j
+            else
+                line = " └" * "─" ^j * " "
+            end
+            hascolor = get(io, :color, false)::Bool
+            line = _color_string(line, :light_black, hascolor) * full_name(ext_to_parent, pkg) * "\n"
+            cycle_str *= line
+        end
+        cycles_names *= cycle_str
+    end
+    plural1 = length(cycles) > 1 ? "these cycles" : "this cycle"
+    plural2 = length(cycles) > 1 ? "cycles" : "cycle"
+    msg = """Circular dependency detected.
+    Precompilation will be skipped for dependencies in $plural1:
+    $cycles_names"""
+    if !isempty(outer_deps)
+        msg *= "Precompilation will also be skipped for the following, which depend on the above $plural2:\n"
+        msg *= join(("  " * full_name(ext_to_parent, pkg) for pkg in outer_deps), "\n")
+    end
+    return msg
+end
+
 function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
                     _from_loading::Bool=false, kwargs...)
@@ -1089,7 +1132,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     num_tasks = parse(Int, get(ENV, "JULIA_NUM_PRECOMPILE_TASKS", string(default_num_tasks)))
     parallel_limiter = Base.Semaphore(num_tasks)
-    io = ctx.io
+    io = IOContext(ctx.io)
     fancyprint = can_fancyprint(io) && !timing
 
     hascolor = get(io, :color, false)::Bool
@@ -1144,15 +1187,15 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         end
     end
 
-    # An extension effectively depends on another extension if it has all the the
-    # dependencies of that other extension
-    function expand_dependencies(depsmap)
+    # A package/extension effectively depends on another extension if it (transitively)
+    # has all the dependencies of that other extension
+    function expand_indirect_dependencies(direct_deps)
         function visit!(visited, node, all_deps)
             if node in visited
                 return
             end
             push!(visited, node)
-            for dep in get(Set{Base.PkgId}, depsmap, node)
+            for dep in get(Set{Base.PkgId}, direct_deps, node)
                 if !(dep in all_deps)
                     push!(all_deps, dep)
                     visit!(visited, dep, all_deps)
@@ -1160,43 +1203,48 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
             end
         end
 
-        depsmap_transitive = Dict{Base.PkgId, Set{Base.PkgId}}()
-        for package in keys(depsmap)
+        indirect_deps = Dict{Base.PkgId, Set{Base.PkgId}}()
+        for package in keys(direct_deps)
             # Initialize a set to keep track of all dependencies for 'package'
             all_deps = Set{Base.PkgId}()
             visited = Set{Base.PkgId}()
             visit!(visited, package, all_deps)
-            # Update depsmap with the complete set of dependencies for 'package'
-            depsmap_transitive[package] = all_deps
+            # Update indirect_deps with the complete set of dependencies for 'package'
+            indirect_deps[package] = all_deps
         end
-        return depsmap_transitive
+        return indirect_deps
     end
 
-    depsmap_transitive = expand_dependencies(depsmap)
+    indirect_deps = expand_indirect_dependencies(depsmap)
 
-    for (_, extensions_1) in pkg_exts_map
-        for extension_1 in extensions_1
-            deps_ext_1 = depsmap_transitive[extension_1]
-            for (_, extensions_2) in pkg_exts_map
-                for extension_2 in extensions_2
-                    extension_1 == extension_2 && continue
-                    deps_ext_2 = depsmap_transitive[extension_2]
-                    if issubset(deps_ext_2, deps_ext_1)
-                        push!(depsmap[extension_1], extension_2)
-                    end
-                end
+    # this loop must be run after the full depsmap has been populated
+    ext_loadable_by = Dict{Base.PkgId,Set{Base.PkgId}}()
+    for ext in keys(exts)
+        ext_loadable_by[ext] = Set{Base.PkgId}()
+        for pkg in keys(depsmap)
+            pkg === ext && continue
+            is_trigger = in(pkg, depsmap[ext])
+            has_triggers = issubset(depsmap[ext], indirect_deps[pkg])
+            # In contrast to 1.11+, on 1.10 both "pkg → ext" and "ext → ext" dependency edges
+            # are implied based on transitive dependencies.
+            #
+            # This condition is inconsistent for "ext → ext" edges, leading to dependency
+            # cycles on 1.10, but this behavior is intentionally preserved for now to avoid
+            # breaking packages that depend on this (bad) implicit behavior.
+            #
+            # See https://github.com/JuliaLang/julia/issues/56204#issuecomment-2442652997
+            # for the improved behavior this was replaced with in 1.11
+            if has_triggers && !is_trigger
+                push!(ext_loadable_by[ext], pkg)
             end
         end
     end
-
-    # this loop must be run after the full depsmap has been populated
-    for (pkg, pkg_exts) in pkg_exts_map
-        # find any packages that depend on the extension(s)'s deps and replace those deps in their deps list with the extension(s),
-        # basically injecting the extension into the precompile order in the graph, to avoid race to precompile extensions
-        for (_pkg, deps) in depsmap # for each manifest dep
-            if !in(_pkg, keys(exts)) && pkg in deps # if not an extension and depends on pkg
-                append!(deps, pkg_exts) # add the package extensions to deps
-                filter!(!isequal(pkg), deps) # remove the pkg from deps
+    for (ext, loadable_by) in ext_loadable_by
+        for pkg in loadable_by
+            if !any(in(loadable_by), depsmap[pkg])
+                # add an edge if the extension is loadable by pkg, and was not loadable in any
+                # of the pkg's dependencies
+                push!(depsmap[pkg], ext)
             end
         end
     end
@@ -1244,39 +1292,58 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     precomp_prune_suspended!(pkg_specs)
 
     # find and guard against circular deps
-    circular_deps = Base.PkgId[]
-    # Three states
-    # !haskey -> never visited
-    # true -> cannot be compiled due to a cycle (or not yet determined)
-    # false -> not depending on a cycle
+    cycles = Vector{Base.PkgId}[]
+    # For every scanned package, true if pkg found to be in a cycle
+    # or depends on packages in a cycle and false otherwise.
     could_be_cycle = Dict{Base.PkgId, Bool}()
+    # temporary stack for the SCC-like algorithm below
+    stack = Base.PkgId[]
     function scan_pkg!(pkg, dmap)
-        did_visit_dep = true
-        inpath = get!(could_be_cycle, pkg) do
-            did_visit_dep = false
-            return true
+        if haskey(could_be_cycle, pkg)
+            return could_be_cycle[pkg]
+        else
+            return scan_deps!(pkg, dmap)
         end
-        if did_visit_dep ? inpath : scan_deps!(pkg, dmap)
-            # Found a cycle. Delete this and all parents
-            return true
-        end
-        return false
     end
     function scan_deps!(pkg, dmap)
+        push!(stack, pkg)
+        cycle = nothing
         for dep in dmap[pkg]
-            scan_pkg!(dep, dmap) && return true
+            if dep in stack
+                # Created fresh cycle
+                cycle′ = stack[findlast(==(dep), stack):end]
+                if cycle === nothing || length(cycle′) < length(cycle)
+                    cycle = cycle′ # try to report smallest cycle possible
+                end
+            elseif scan_pkg!(dep, dmap)
+                # Reaches an existing cycle
+                could_be_cycle[pkg] = true
+                pop!(stack)
+                return true
+            end
+        end
+        pop!(stack)
+        if cycle !== nothing
+            push!(cycles, cycle)
+            could_be_cycle[pkg] = true
+            return true
         end
         could_be_cycle[pkg] = false
         return false
     end
+    # set of packages that depend on a cycle (either because they are
+    # a part of a cycle themselves or because they transitively depend
+    # on a package in some cycle)
+    circular_deps = Base.PkgId[]
     for pkg in keys(depsmap)
+        @assert isempty(stack)
         if scan_pkg!(pkg, depsmap)
             push!(circular_deps, pkg)
             notify(was_processed[pkg])
         end
     end
     if !isempty(circular_deps)
-        @warn """Circular dependency detected. Precompilation will be skipped for:\n  $(join(string.(circular_deps), "\n  "))"""
+        @warn excluded_circular_deps_explanation(io, exts, circular_deps, cycles)
     end
 
     # if a list of packages is given, restrict to dependencies of given packages
@@ -1436,7 +1503,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                         end
                         for dep in pkg_queue_show
                             loaded = warn_loaded && haskey(Base.loaded_modules, dep)
-                            _name = haskey(exts, dep) ? string(exts[dep], " → ", dep.name) : dep.name
+                            _name = full_name(exts, dep)
                             name = dep in direct_deps ? _name : string(color_string(_name, :light_black))
                             line = if dep in precomperr_deps
                                 string(color_string("  ? ", Base.warn_color()), name)
@@ -1533,7 +1600,7 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
                     std_pipe = Base.link_pipe!(Pipe(); reader_supports_async=true, writer_supports_async=true)
                     t_monitor = @async monitor_std(pkg, std_pipe; single_requested_pkg)
 
-                    _name = haskey(exts, pkg) ? string(exts[pkg], " → ", pkg.name) : pkg.name
+                    _name = full_name(exts, pkg)
                     name = is_direct_dep ? _name : string(color_string(_name, :light_black))
                     !fancyprint && lock(print_lock) do
                         isempty(pkg_queue) && printpkgstyle(io, :Precompiling, target)
