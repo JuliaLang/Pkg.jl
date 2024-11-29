@@ -1725,6 +1725,12 @@ function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryIns
     end
 end
 
+# A shared environment lives in the "environments" subdirectory of a depot.
+function is_shared_env(project_file::String)
+    parent_parent = dirname(dirname(project_file))
+    return basename(parent_parent) == "environments" && dirname(parent_parent) in Base.DEPOT_PATH
+end
+
 function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
              allow_autoprecomp::Bool=true, preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform(),
              target::Symbol=:deps)
@@ -1761,8 +1767,8 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
         # and ensure they are all downloaded and unpacked as well:
         download_artifacts(ctx, platform=platform, julia_version=ctx.julia_version)
 
-        # if env is a package add compat entries
-        if ctx.env.project.name !== nothing && ctx.env.project.uuid !== nothing
+        # If the environment isn't a shared one add compat entries
+        if !is_shared_env(ctx.env.project_file)
             compat_names = String[]
             for pkg in pkgs
                 haskey(ctx.env.project.compat, pkg.name) && continue
