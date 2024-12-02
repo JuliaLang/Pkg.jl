@@ -1,4 +1,4 @@
-# [**4.** Working with Environment](@id Working-with-Environments)
+# [**4.** Working with Environments](@id Working-with-Environments)
 
 The following discusses Pkg's interaction with environments. For more on the role, environments play in code loading, including the "stack" of environments from which code can be loaded, see [this section in the Julia manual](https://docs.julialang.org/en/v1/manual/code-loading/#Environments-1).
 
