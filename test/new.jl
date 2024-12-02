@@ -1585,7 +1585,7 @@ end
 
 @testset "why" begin
     isolate() do
-        Pkg.add(name = "StaticArrays", version = "1.5.0")
+        Pkg.add(name = "StaticArrays", version = "1.5.20")
 
         io = IOBuffer()
         Pkg.why("StaticArrays"; io)
