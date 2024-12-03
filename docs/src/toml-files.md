@@ -100,6 +100,7 @@ corresponding manifest file.
 ```toml
 [sources]
 Example = {url = "https://github.com/JuliaLang/Example.jl", rev = "custom_branch"}
+WithinMonorepo = {url = "https://github.org/author/BigProject", subdir = "SubPackage"}
 SomeDependency = {path = "deps/SomeDependency.jl"}
 ```
 
