@@ -3,7 +3,9 @@ module Precompilation
 
 using Base: PkgId, UUID, SHA1, parsed_toml, project_file_name_uuid, project_names,
             project_file_manifest_path, get_deps, preferences_names, isaccessibledir, isfile_casesensitive,
-            base_project, isdefined
+            isdefined
+using FileWatching
+using ..MiniProgressBars
 
 # This is currently only used for pkgprecompile but the plan is to use this in code loading in the future
 # see the `kc/codeloading2.0` branch
@@ -250,99 +252,6 @@ function ExplicitEnv(envpath::String=Base.active_project())
                        names, lookup_strategy, #=prefs, local_prefs=#)
 end
 
-## PROGRESS BAR
-
-# using Printf
-Base.@kwdef mutable struct MiniProgressBar
-    max::Int = 1.0
-    header::String = ""
-    color::Symbol = :nothing
-    width::Int = 40
-    current::Int = 0.0
-    prev::Int = 0.0
-    has_shown::Bool = false
-    time_shown::Float64 = 0.0
-    percentage::Bool = true
-    always_reprint::Bool = false
-    indent::Int = 4
-end
-
-const PROGRESS_BAR_TIME_GRANULARITY = Ref(1 / 30.0) # 30 fps
-const PROGRESS_BAR_PERCENTAGE_GRANULARITY = Ref(0.1)
-
-function start_progress(io::IO, _::MiniProgressBar)
-    ansi_disablecursor = "\e[?25l"
-    print(io, ansi_disablecursor)
-end
-
-function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagereturn=true)
-    if p.max == 0
-        perc = 0.0
-        prev_perc = 0.0
-    else
-        perc = p.current / p.max * 100
-        prev_perc = p.prev / p.max * 100
-    end
-    # Bail early if we are not updating the progress bar,
-    # Saves printing to the terminal
-    if !p.always_reprint && p.has_shown && !((perc - prev_perc) > PROGRESS_BAR_PERCENTAGE_GRANULARITY[])
-        return
-    end
-    t = time()
-    if !p.always_reprint && p.has_shown && (t - p.time_shown) < PROGRESS_BAR_TIME_GRANULARITY[]
-        return
-    end
-    p.time_shown = t
-    p.prev = p.current
-    p.has_shown = true
-
-    progress_text = if false # p.percentage
-        # @sprintf "%2.1f %%" perc
-    else
-        string(p.current, "/",  p.max)
-    end
-    termwidth = @something termwidth displaysize(io)[2]
-    max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
-    n_filled = floor(Int, max_progress_width * perc / 100)
-    partial_filled = (max_progress_width * perc / 100) - n_filled
-    n_left = max_progress_width - n_filled
-    headers = split(p.header, ' ')
-    to_print = sprint(; context=io) do io
-        print(io, " "^p.indent)
-        printstyled(io, headers[1], " "; color=:green, bold=true)
-        printstyled(io, join(headers[2:end], ' '))
-        print(io, " ")
-        printstyled(io, "━"^n_filled; color=p.color)
-        if n_left > 0
-            if partial_filled > 0.5
-                printstyled(io, "╸"; color=p.color) # More filled, use ╸
-            else
-                printstyled(io, "╺"; color=:light_black) # Less filled, use ╺
-            end
-            printstyled(io, "━"^(n_left-1); color=:light_black)
-        end
-        printstyled(io, " "; color=:light_black)
-        print(io, progress_text)
-        carriagereturn && print(io, "\r")
-    end
-    # Print everything in one call
-    print(io, to_print)
-end
-
-function end_progress(io, p::MiniProgressBar)
-    ansi_enablecursor = "\e[?25h"
-    ansi_clearline = "\e[2K"
-    print(io, ansi_enablecursor * ansi_clearline)
-end
-
-function print_progress_bottom(io::IO)
-    ansi_clearline = "\e[2K"
-    ansi_movecol1 = "\e[1G"
-    ansi_moveup(n::Int) = string("\e[", n, "A")
-    print(io, "\e[S" * ansi_moveup(1) * ansi_clearline * ansi_movecol1)
-end
-
-
 ############
 struct PkgPrecompileError <: Exception
     msg::String
@@ -423,7 +332,7 @@ function precompilepkgs(pkgs::Vector{String}=String[];
     # monomorphize this to avoid latency problems
     _precompilepkgs(pkgs, internal_call, strict, warn_loaded, timing, _from_loading,
                    configs isa Vector{Config} ? configs : [configs],
-                   IOContext{IO}(io), fancyprint, manifest)
+                   IOContext{IO}(Base.unwrapcontext(io)...), fancyprint, manifest)
 end
 
 function _precompilepkgs(pkgs::Vector{String},
@@ -919,7 +828,7 @@ function _precompilepkgs(pkgs::Vector{String},
                         wait(was_processed[(dep,config)])
                     end
                     circular = pkg in circular_deps
-                    is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, stale_cache, cachepath_cache, cachepaths, sourcepath, flags=cacheflags)
+                    is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, stale_cache #=, cachepath_cache=#, cachepaths, sourcepath #=, flags=cacheflags=#)
                     if !circular && is_stale
                         Base.acquire(parallel_limiter)
                         is_project_dep = pkg in project_deps
@@ -953,7 +862,7 @@ function _precompilepkgs(pkgs::Vector{String},
                                     # for packages, we may load any extension (all possible triggers are accounted for above)
                                     loadable_exts = haskey(ext_to_parent, pkg) ? filter((dep)->haskey(ext_to_parent, dep), direct_deps[pkg]) : nothing
                                     Base.compilecache(pkg, sourcepath, std_pipe, std_pipe, keep_loaded_modules;
-                                                      flags, cacheflags, loadable_exts)
+                                                      #=flags, cacheflags, loadable_exts=#)
                                 end
                             end
                             if ret isa Base.PrecompilableError
@@ -1132,16 +1041,13 @@ end
 
 # Can be merged with `maybe_cachefile_lock` in loading?
 function precompile_pkgs_maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLock, fancyprint::Bool, pkg_config, pkgspidlocked, hascolor)
-    if !(isdefined(Base, :mkpidlock_hook) && isdefined(Base, :trymkpidlock_hook) && Base.isdefined(Base, :parse_pidfile_hook))
-        return f()
-    end
     pkg, config = pkg_config
     flags, cacheflags = config
     stale_age = Base.compilecache_pidlock_stale_age
-    pidfile = Base.compilecache_pidfile_path(pkg, flags=cacheflags)
-    cachefile = @invokelatest Base.trymkpidlock_hook(f, pidfile; stale_age)
+    pidfile = Base.compilecache_pidfile_path(pkg)
+    cachefile = FileWatching.trymkpidlock(f, pidfile; stale_age)
     if cachefile === false
-        pid, hostname, age = @invokelatest Base.parse_pidfile_hook(pidfile)
+        pid, hostname, age = FileWatching.Pidfile.parse_pidfile(pidfile)
         pkgspidlocked[pkg_config] = if isempty(hostname) || hostname == gethostname()
             if pid == getpid()
                 "an async task in this process (pidfile: $pidfile)"
@@ -1155,16 +1061,15 @@ function precompile_pkgs_maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLo
             println(io, "    ", pkg.name, _color_string(" Being precompiled by $(pkgspidlocked[pkg_config])", Base.info_color(), hascolor))
         end
         # wait until the lock is available
-        @invokelatest Base.mkpidlock_hook(() -> begin
-                # double-check in case the other process crashed or the lock expired
-                if Base.isprecompiled(pkg; ignore_loaded=true, flags=cacheflags) # don't use caches for this as the env state will have changed
-                    return nothing # returning nothing indicates a process waited for another
-                else
-                    delete!(pkgspidlocked, pkg_config)
-                    return f() # precompile
-                end
-            end,
-            pidfile; stale_age)
+        FileWatching.mkpidlock(pidfile; stale_age) do
+            # double-check in case the other process crashed or the lock expired
+            if Base.isprecompiled(pkg; ignore_loaded=true, flags=cacheflags) # don't use caches for this as the env state will have changed
+                return nothing # returning nothing indicates a process waited for another
+            else
+                delete!(pkgspidlocked, pkg_config)
+                return f() # precompile
+            end
+        end
     end
     return cachefile
 end
