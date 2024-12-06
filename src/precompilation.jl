@@ -435,16 +435,8 @@ function _precompilepkgs(pkgs::Vector{String},
 
     @debug "precompile: deps collected"
 
-    # An extension effectively depends on another extension if it has a strict superset of its triggers
-    for ext_a in keys(ext_to_parent)
-        for ext_b in keys(ext_to_parent)
-            if triggers[ext_a] ⊋ triggers[ext_b]
-                push!(direct_deps[ext_a], ext_b)
-            end
-        end
-    end
-
-    # A package depends on an extension if it (indirectly) depends on all extension triggers
+    # A package/extension effectively depends on another extension if it (transitively)
+    # has all the dependencies of that other extension
     function expand_indirect_dependencies(direct_deps)
         function visit!(visited, node, all_deps)
             if node in visited
@@ -465,24 +457,39 @@ function _precompilepkgs(pkgs::Vector{String},
             all_deps = Set{Base.PkgId}()
             visited = Set{Base.PkgId}()
             visit!(visited, package, all_deps)
-            # Update direct_deps with the complete set of dependencies for 'package'
+            # Update indirect_deps with the complete set of dependencies for 'package'
             indirect_deps[package] = all_deps
         end
         return indirect_deps
     end
 
-    # this loop must be run after the full direct_deps map has been populated
     indirect_deps = expand_indirect_dependencies(direct_deps)
+
+    # this loop must be run after the full direct_deps has been populated
+    ext_loadable_by = Dict{Base.PkgId,Set{Base.PkgId}}()
     for ext in keys(ext_to_parent)
-        ext_loadable_in_pkg = Dict{Base.PkgId,Bool}()
+        ext_loadable_by[ext] = Set{Base.PkgId}()
         for pkg in keys(direct_deps)
+            pkg === ext && continue
             is_trigger = in(pkg, direct_deps[ext])
-            is_extension = in(pkg, keys(ext_to_parent))
             has_triggers = issubset(direct_deps[ext], indirect_deps[pkg])
-            ext_loadable_in_pkg[pkg] = !is_extension && has_triggers && !is_trigger
+            # In contrast to 1.11+, on 1.10 both "pkg → ext" and "ext → ext" dependency edges
+            # are implied based on transitive dependencies.
+            #
+            # This condition is inconsistent for "ext → ext" edges, leading to dependency
+            # cycles on 1.10, but this behavior is intentionally preserved for now to avoid
+            # breaking packages that depend on this (bad) implicit behavior.
+            #
+            # See https://github.com/JuliaLang/julia/issues/56204#issuecomment-2442652997
+            # for the improved behavior this was replaced with in 1.11
+            if has_triggers && !is_trigger
+                push!(ext_loadable_by[ext], pkg)
+            end
         end
-        for (pkg, ext_loadable) in ext_loadable_in_pkg
-            if ext_loadable && !any((dep)->ext_loadable_in_pkg[dep], direct_deps[pkg])
+    end
+    for (ext, loadable_by) in ext_loadable_by
+        for pkg in loadable_by
+            if !any(in(loadable_by), direct_deps[pkg])
                 # add an edge if the extension is loadable by pkg, and was not loadable in any
                 # of the pkg's dependencies
                 push!(direct_deps[pkg], ext)
