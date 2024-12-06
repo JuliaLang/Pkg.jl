@@ -2736,6 +2736,16 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
                 printstyled(io, pkg_str; color=Base.warn_color())
             end
         end
+        # show if loaded and version doesn't match
+        pkg_spec = something(pkg.new, pkg.old)
+        pkgid = Base.PkgId(pkg.uuid, pkg_spec.name)
+        m = get(Base.loaded_modules, pkgid, nothing)
+        if m isa Module && pkg_spec.version !== nothing
+            v = pkgversion(m)
+            if v !== pkg_spec.version
+                printstyled(io, " [different version loaded: v$v]"; color=:light_yellow)
+            end
+        end
 
         if extensions && !diff && pkg.extinfo !== nothing
             println(io)
