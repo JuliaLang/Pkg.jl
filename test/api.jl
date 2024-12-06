@@ -300,11 +300,11 @@ end
 
         Pkg.activate(temp=true)
         Pkg.precompile() # precompile an empty env should be a no-op
-        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
+        @test_throws ErrorException Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
 
         Pkg.add("Random")
-        @test_throws Pkg.Types.PkgError Pkg.precompile("Random") # Random is a dep but in the sysimage
-        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist")
+        @test_throws ErrorException Pkg.precompile("Random") # Random is a dep but in the sysimage
+        @test_throws ErrorException Pkg.precompile("DoesNotExist")
         Pkg.precompile() # should be a no-op
     end end
     @testset "Issue 3359: Recurring precompile" begin
