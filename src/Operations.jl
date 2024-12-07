@@ -2736,6 +2736,23 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
                 printstyled(io, pkg_str; color=Base.warn_color())
             end
         end
+        # show if loaded version and version in the manifest doesn't match
+        pkg_spec = something(pkg.new, pkg.old)
+        pkgid = Base.PkgId(pkg.uuid, pkg_spec.name)
+        m = get(Base.loaded_modules, pkgid, nothing)
+        if m isa Module && pkg_spec.version !== nothing
+            loaded_path = pathof(m)
+            env_path = Base.locate_package(pkgid) # nothing if not installed
+            if loaded_path !== nothing && env_path !== nothing &&!samefile(loaded_path, env_path)
+                loaded_version = pkgversion(m)
+                env_version = pkg_spec.version
+                if loaded_version !== env_version
+                    printstyled(io, " [different version loaded: v$loaded_version]"; color=:light_yellow)
+                else
+                    printstyled(io, " [different path loaded, but same version: `$loaded_path` expected `$env_path`]"; color=:light_yellow)
+                end
+            end
+        end
 
         if extensions && !diff && pkg.extinfo !== nothing
             println(io)
