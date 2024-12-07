@@ -2743,6 +2743,10 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         if m isa Module && pkg_spec.version !== nothing
             loaded_path = pathof(m)
             env_path = Base.locate_package(pkgid)
+            if loaded_path === nothing || env_path === nothing
+                @show pkgid pkg_spec m loaded_path env_path
+            end
+
             if !samefile(loaded_path, env_path)
                 loaded_version = pkgversion(m)
                 env_version = pkg_spec.version
