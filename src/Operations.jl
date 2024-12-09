@@ -2747,9 +2747,11 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
                 loaded_version = pkgversion(m)
                 env_version = pkg_spec.version
                 if loaded_version !== env_version
-                    printstyled(io, " [different version loaded: v$loaded_version]"; color=:light_yellow)
+                    printstyled(io, " [loaded: v$loaded_version]"; color=:light_yellow)
                 else
-                    printstyled(io, " [different path loaded, but same version: `$loaded_path` expected `$env_path`]"; color=:light_yellow)
+                    loaded_version_str = loaded_version === nothing ? "" : " (v$loaded_version)"
+                    env_version_str = env_version === nothing ? "" : " (v$env_version)"
+                    printstyled(io, " [loaded: `$loaded_path`$loaded_version_str expected `$env_path`$env_version_str]"; color=:light_yellow)
                 end
             end
         end
