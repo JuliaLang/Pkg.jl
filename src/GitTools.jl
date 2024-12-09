@@ -95,7 +95,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
-    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    bar = MiniProgressBar(header = "Cloning:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
         LibGit2.Callbacks(
@@ -141,7 +141,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
 end
 
-function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, refspecs=[""], kwargs...)
+function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, refspecs=[""], kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
@@ -163,9 +163,6 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
         LibGit2.Callbacks()
     end
     fancyprint && start_progress(io, bar)
-    if credentials === nothing
-        credentials = LibGit2.CachedCredentials()
-    end
     try
         if use_cli_git()
             let remoteurl=remoteurl
@@ -189,7 +186,6 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
             Pkg.Types.pkgerror("failed to fetch from $(remoteurl), error: $err")
         end
     finally
-        Base.shred!(credentials)
         fancyprint && end_progress(io, bar)
     end
 end
