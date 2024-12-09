@@ -33,6 +33,12 @@ temp_pkg_dir() do project_path
                 end
             end
 
+            cd(joinpath(dir, "WithSources", "TestMonorepo")) do
+                with_current_env() do
+                    Pkg.test()
+                end
+            end
+
             cd(joinpath(dir, "WithSources", "TestProject")) do
                 with_current_env() do
                     Pkg.test()
