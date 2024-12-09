@@ -3254,7 +3254,7 @@ end
         "`)
     iob = IOBuffer()
     run(pipeline(cmd, stderr=iob, stdout=iob))
-    out = String(take!(iob1))
+    out = String(take!(iob))
     @test occursin("[loaded: v0.5.4]", out)
 end
 
