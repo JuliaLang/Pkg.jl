@@ -562,10 +562,10 @@ duplicated into `[extras]`. This is an unfortunate duplication, but without
 doing this the project verifier under older Julia versions will throw an error
 if it finds packages under `[compat]` that is not listed in `[extras]`.
 
-## Package naming rules
+## Package naming guidelines
 
 Package names should be sensible to most Julia users, *even to those who are not domain experts*.
-The following rules apply to the `General` registry but may be useful for other package
+The following guidelines apply to the `General` registry but may be useful for other package
 registries as well.
 
 Since the `General` registry belongs to the entire community, people may have opinions about
@@ -575,8 +575,10 @@ may fit your package better.
 
 1. Avoid jargon. In particular, avoid acronyms unless there is minimal possibility of confusion.
 
-     * It's ok to say `USA` if you're talking about the USA.
-     * It's not ok to say `PMA`, even if you're talking about positive mental attitude.
+     * It's ok for package names to contain `DNA` if you're talking about the DNA, which has a universally agreed upon definition.
+     * It's more difficult to justify package names containing the acronym `CI` for instance, which may mean continuous integration, confidence interval, etc.
+     * If there is risk of confusion it may be best to disambiguate an acronym with additional words such as a lab group or field.
+     * If your acronym is unambiguous, easily searchable, and/or unlikely to be confused across domains a good justification is often enough for approval.
 2. Avoid using `Julia` in your package name or prefixing it with `Ju`.
 
      * It is usually clear from context and to your users that the package is a Julia package.
