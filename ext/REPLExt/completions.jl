@@ -156,6 +156,23 @@ function complete_add_dev(options, partial, i1, i2; hint::Bool)
     return comps, idx, !isempty(comps)
 end
 
+# TODO: Move
+import Pkg: Operations, Types, Apps
+function complete_installed_apps(options, partial; hint)
+    manifest = try
+        Types.read_manifest(joinpath(Apps.app_env_folder(), "AppManifest.toml"))
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    apps = String[]
+    for (uuid, entry) in manifest.deps
+        append!(apps, keys(entry.apps))
+        push!(apps, entry.name)
+    end
+    return unique!(apps)
+end
+
 ########################
 # COMPLETION INTERFACE #
 ########################

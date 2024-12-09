@@ -179,7 +179,7 @@ function projectfile_path(env_path::String; strict=false)
 end
 
 function manifestfile_path(env_path::String; strict=false)
-    for name in Base.manifest_names
+    for name in (Base.manifest_names..., "AppManifest.toml")
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
@@ -233,6 +233,12 @@ end
 Base.:(==)(t1::Compat, t2::Compat) = t1.val == t2.val
 Base.hash(t::Compat, h::UInt) = hash(t.val, h)
 
+struct AppInfo
+    name::String
+    julia_command::Union{String, Nothing}
+    julia_version::Union{VersionNumber, Nothing}
+    other::Dict{String,Any}
+end
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()
     # Fields
@@ -251,6 +257,7 @@ Base.@kwdef mutable struct Project
     exts::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     extras::Dict{String,UUID} = Dict{String,UUID}()
     targets::Dict{String,Vector{String}} = Dict{String,Vector{String}}()
+    apps::Dict{String, AppInfo} = Dict{String, AppInfo}()
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
     workspace::Dict{String, Any} = Dict{String, Any}()
@@ -272,6 +279,7 @@ Base.@kwdef mutable struct PackageEntry
     weakdeps::Dict{String,UUID} = Dict{String,UUID}()
     exts::Dict{String,Union{Vector{String}, String}} = Dict{String,String}()
     uuid::Union{Nothing, UUID} = nothing
+    apps::Dict{String, AppInfo} = Dict{String, AppInfo}() # used by AppManifest.toml
     other::Union{Dict,Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
@@ -284,7 +292,8 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.deps == t2.deps &&
     t1.weakdeps == t2.weakdeps &&
     t1.exts == t2.exts &&
-    t1.uuid == t2.uuid
+    t1.uuid == t2.uuid &&
+    t1.apps == t2.apps
     # omits `other`
 Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init=h)  # omits `other`
 
