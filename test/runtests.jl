@@ -31,7 +31,7 @@ if islogging
     Pkg.DEFAULT_IO[] = open(logfile, "a")
     @info "Pkg test output is being logged to file" logfile
 else
-    Pkg.DEFAULT_IO[] = stdout
+    Pkg.DEFAULT_IO[] = devnull # or stdout
 end
 
 include("utils.jl")

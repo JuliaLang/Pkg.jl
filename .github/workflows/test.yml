@@ -75,7 +75,7 @@ jobs:
           coverage: true
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
-          # JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
+          JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
