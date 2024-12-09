@@ -2998,7 +2998,7 @@ end
 @testset "relative depot path" begin
     isolate(loaded_depot=false) do
         mktempdir() do tmp
-            withenv("JULIA_DEPOT_PATH" => tmp) do
+            withenv("JULIA_DEPOT_PATH" => tmp * (Sys.iswindows() ? ";" : ":")) do
                 Base.init_depot_path()
                 cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
                 git_init_and_commit(joinpath(tmp, "BasicSandbox"))
