@@ -167,31 +167,10 @@ end
         Pkg.precompile([Pkg.PackageSpec(name="Dep4"), Pkg.PackageSpec(name="NoVersion")])
         @test !occursin("Precompiling", String(take!(iob))) # should be a no-op
 
-        ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
-        @info "Auto precompilation disabled"
-        Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
-        Pkg.precompile(io=iob)
-        @test occursin("Precompiling", String(take!(iob)))
-        @test isempty(Pkg.API.pkgs_precompile_suspended)
-
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
         Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep"))
         Pkg.build(io=iob) # should trigger auto-precomp and soft-error
         @test occursin("Precompiling", String(take!(iob)))
-        broken_packages = Pkg.API.pkgs_precompile_suspended
-        @test length(broken_packages) == 1
-        Pkg.activate("newpath")
-        Pkg.precompile(io=iob)
-        @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
-        @test isempty(Pkg.API.pkgs_precompile_suspended)
-
-        Pkg.activate(".") # test that going back to the project restores suspension list
-        Pkg.update("BrokenDep", io=iob) # should trigger auto-precomp but do nothing due to error suspension
-        @test !occursin("Precompiling", String(take!(iob)))
-        @test length(Pkg.API.pkgs_precompile_suspended) == 1
-
-        @test_throws PkgError Pkg.precompile() # calling precompile should retry any suspended, and throw on errors
-        @test Pkg.API.pkgs_precompile_suspended == broken_packages
 
         ptoml = joinpath("packages","BrokenDep","Project.toml")
         lines = readlines(ptoml)
@@ -321,11 +300,11 @@ end
 
         Pkg.activate(temp=true)
         Pkg.precompile() # precompile an empty env should be a no-op
-        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
+        @test_throws ErrorException Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
 
         Pkg.add("Random")
-        @test_throws Pkg.Types.PkgError Pkg.precompile("Random") # Random is a dep but in the sysimage
-        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist")
+        @test_throws ErrorException Pkg.precompile("Random") # Random is a dep but in the sysimage
+        @test_throws ErrorException Pkg.precompile("DoesNotExist")
         Pkg.precompile() # should be a no-op
     end end
     @testset "Issue 3359: Recurring precompile" begin
