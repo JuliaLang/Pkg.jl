@@ -248,8 +248,8 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
     #=
     # TODO, this should either error or be quiet
     julia_compat = get_compat(project, "julia")
-    if julia_compat !== nothing && !(VERSION in julia_compat)
-        println(io, "julia version requirement for package at `$path`"")
+    if !isnothing(julia_compat) && !(VERSION in julia_compat)
+        pkgerror("julia version requirement from Project.toml's compat section not satisfied for package at `$path`")
     end
     =#
     for (name, uuid) in project.deps
