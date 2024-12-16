@@ -160,6 +160,32 @@ let
             Base.precompile(Tuple{Type{Pkg.REPLMode.QString}, String, Bool})
             Base.precompile(Tuple{typeof(Pkg.REPLMode.parse_package), Array{Pkg.REPLMode.QString, 1}, Base.Dict{Symbol, Any}})
             Base.precompile(Tuple{Type{Pkg.REPLMode.Command}, Pkg.REPLMode.CommandSpec, Base.Dict{Symbol, Any}, Array{Pkg.Types.PackageSpec, 1}})
+
+            # Manually added from trace compiling Pkg.add
+            # Why needed? Something with constant prop overspecialization?
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:io, :update_cooldown), Tuple{Base.IOContext{IO}, Dates.Day}}, typeof(Pkg.Registry.update)})
+
+            Base.precompile(Tuple{Type{Memory{Pkg.Types.PackageSpec}}, UndefInitializer, Int64})
+            Base.precompile(Tuple{typeof(Base.hash), Tuple{String, UInt64}, UInt64})
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:context,), Tuple{Base.TTY}}, typeof(Base.sprint), Function, Tuple{Pkg.Versions.VersionSpec}})
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:context,), Tuple{Base.TTY}}, typeof(Base.sprint), Function, Tuple{String}})
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:context,), Tuple{Base.TTY}}, typeof(Base.sprint), Function, Tuple{Base.VersionNumber}})
+            Base.precompile(Tuple{typeof(Base.join), Base.IOContext{Base.GenericIOBuffer{Memory{UInt8}}}, Tuple{String, UInt64}, Char})
+            Base.precompile(Tuple{typeof(Base.vcat), Base.BitArray{2}, Base.BitArray{2}})
+            Base.precompile(Tuple{typeof(Base.vcat), Base.BitArray{2}})
+            Base.precompile(Tuple{typeof(Base.vcat), Base.BitArray{2}, Base.BitArray{2}, Base.BitArray{2}})
+            Base.precompile(Tuple{typeof(Base.vcat), Base.BitArray{2}, Base.BitArray{2}, Base.BitArray{2}, Vararg{Base.BitArray{2}}})
+            Base.precompile(Tuple{typeof(Base.vcat), Base.BitArray{1}, Base.BitArray{1}})
+            Base.precompile(Tuple{typeof(Base.vcat), Base.BitArray{1}, Base.BitArray{1}, Base.BitArray{1}, Vararg{Base.BitArray{1}}})
+            Base.precompile(Tuple{typeof(Base.:(==)), Base.Dict{String, Any}, Base.Dict{String, Any}})
+            Base.precompile(Tuple{typeof(Base.join), Base.GenericIOBuffer{Memory{UInt8}}, Tuple{String}, Char})
+            Base.precompile(Tuple{typeof(Base.values), Base.Dict{String, Array{Base.Dict{String, Any}, 1}}})
+            Base.precompile(Tuple{typeof(Base.all), Base.Generator{Base.ValueIterator{Base.Dict{String, Array{Base.Dict{String, Any}, 1}}}, TOML.Internals.Printer.var"#5#6"}})
+            Base.precompile(Tuple{typeof(TOML.Internals.Printer.is_array_of_tables), Array{Base.Dict{String, Any}, 1}})
+            Base.precompile(Tuple{Type{Array{Dates.DateTime, 1}}, UndefInitializer, Tuple{Int64}})
+            Base.precompile(Tuple{Type{Pair{A, B} where B where A}, String, Dates.DateTime})
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:internal_call, :strict, :warn_loaded, :timing, :_from_loading, :configs, :manifest, :io), Tuple{Bool, Bool, Bool, Bool, Bool, Pair{Base.Cmd, Base.CacheFlags}, Bool, Base.TTY}}, typeof(Base.Precompilation.precompilepkgs), Array{String, 1}})
+            ################
         end
         copy!(DEPOT_PATH, original_depot_path)
         copy!(LOAD_PATH, original_load_path)
