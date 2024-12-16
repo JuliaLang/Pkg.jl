@@ -195,6 +195,9 @@ function update_source_if_set(project, pkg)
     if pkg.path !== nothing
         source["path"] = pkg.path
     end
+    if pkg.subdir !== nothing
+        source["subdir"] = pkg.subdir
+    end
     path, repo = get_path_repo(project, pkg.name)
     if path !== nothing
         pkg.path = path
@@ -204,6 +207,9 @@ function update_source_if_set(project, pkg)
     end
     if repo.rev !== nothing
         pkg.repo.rev = repo.rev
+    end
+    if repo.subdir !== nothing
+        pkg.repo.subdir = repo.subdir
     end
 end
 
