@@ -118,6 +118,7 @@ let
                     Pkg.add(Pkg.PackageSpec(path = "TestPkg.jl/"))
                     Pkg.update(; update_registry = false)
                     Pkg.status()
+                    Pkg.Registry.update()
                     pkgs_path = pkgdir(Pkg, "test", "test_packages")
                     # Precompile a diverse set of test packages
                     # Check all test packages occasionally if anything has been missed
