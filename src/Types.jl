@@ -460,8 +460,8 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
-const FORMER_STDLIBS = ["DelimitedFiles", "Statistics"]
-const FORMER_STDLIBS_UUIDS = Set{UUID}()
+const UPGRADABLE_STDLIBS = ["DelimitedFiles", "Statistics"]
+const UPGRADABLE_STDLIBS_UUIDS = Set{UUID}()
 const STDLIB = Ref{DictStdLibs}()
 function load_stdlib()
     stdlib = DictStdLibs()
@@ -473,8 +473,8 @@ function load_stdlib()
         v_str = get(project, "version", nothing)::Union{String, Nothing}
         version = isnothing(v_str) ? nothing : VersionNumber(v_str)
         nothing === uuid && continue
-        if name in FORMER_STDLIBS
-            push!(FORMER_STDLIBS_UUIDS, UUID(uuid))
+        if name in UPGRADABLE_STDLIBS
+            push!(UPGRADABLE_STDLIBS_UUIDS, UUID(uuid))
             continue
         end
         deps = UUID.(values(get(project, "deps", Dict{String,Any}())))
@@ -499,7 +499,7 @@ end
 is_stdlib(uuid::UUID) = uuid in keys(stdlib_infos())
 # Includes former stdlibs
 function is_or_was_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothing})
-    return is_stdlib(uuid, julia_version) || uuid in FORMER_STDLIBS_UUIDS
+    return is_stdlib(uuid, julia_version) || uuid in UPGRADABLE_STDLIBS_UUIDS
 end
 
 

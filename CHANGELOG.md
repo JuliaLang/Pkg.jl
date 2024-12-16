@@ -4,6 +4,7 @@ Pkg v1.12 Release Notes
 - Pkg now has support for "workspaces" which is a way to resolve multiple project files into a single manifest.
   The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been updated
   to take a `workspace` option. Read more about this feature in the manual about the TOML-files.
+- `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
 
 Pkg v1.11 Release Notes
 =======================

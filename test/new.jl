@@ -1585,7 +1585,7 @@ end
 
 @testset "why" begin
     isolate() do
-        Pkg.add(name = "StaticArrays", version = "1.5.0")
+        Pkg.add(name = "StaticArrays", version = "1.5.20")
 
         io = IOBuffer()
         Pkg.why("StaticArrays"; io)
@@ -2998,7 +2998,7 @@ end
 @testset "relative depot path" begin
     isolate(loaded_depot=false) do
         mktempdir() do tmp
-            withenv("JULIA_DEPOT_PATH" => tmp) do
+            withenv("JULIA_DEPOT_PATH" => tmp * (Sys.iswindows() ? ";" : ":")) do
                 Base.init_depot_path()
                 cp(joinpath(@__DIR__, "test_packages", "BasicSandbox"), joinpath(tmp, "BasicSandbox"))
                 git_init_and_commit(joinpath(tmp, "BasicSandbox"))
@@ -3241,6 +3241,21 @@ end
             end
         end
     end
+end
+
+@testset "status showing incompatible loaded deps" begin
+    cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
+        using Pkg
+        Pkg.activate(temp=true)
+        Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.4\"))
+        using Example
+        Pkg.activate(temp=true)
+        Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.5\"))
+        "`)
+    iob = IOBuffer()
+    run(pipeline(cmd, stderr=iob, stdout=iob))
+    out = String(take!(iob))
+    @test occursin("[loaded: v0.5.4]", out)
 end
 
 end #module
