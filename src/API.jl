@@ -9,10 +9,10 @@ using Dates
 import LibGit2
 import Logging
 import FileWatching
-
+using TimerOutputs
 import Base: StaleCacheKey
 
-import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
+import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, ..TO
 import ..Operations, ..GitTools, ..Pkg, ..Registry
 import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH
 using ..Types, ..TOML
@@ -146,6 +146,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
         function $f(pkgs::Vector{PackageSpec}; io::IO=$(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
+            reset_timer!(TO)
             $(f != :precompile) && Registry.download_default_registries(io)
             ctx = Context()
             # Save initial environment for undo/redo functionality
@@ -159,6 +160,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
             ret = $f(ctx, pkgs; kwargs...)
             $(f in (:up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
+            print_timer(TO)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -259,7 +261,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     return
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
+@timeit TO function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
              platform::AbstractPlatform=HostPlatform(), target::Symbol=:deps, allow_autoprecomp::Bool=true, kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)

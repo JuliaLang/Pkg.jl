@@ -6,8 +6,9 @@ using UUIDs
 using Random: randstring
 import LibGit2, Dates, TOML
 
+using TimerOutputs
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
-import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
+import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry, ..TO
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
                     artifact_exists, select_downloadable_artifacts
 using Base.BinaryPlatforms
@@ -201,7 +202,7 @@ function is_instantiated(env::EnvCache, workspace::Bool=false; platform = HostPl
     return all(pkg -> is_package_downloaded(env.manifest_file, pkg; platform), pkgs)
 end
 
-function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
+@timeit TO function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
     manifest = env.manifest
     empty!(manifest)
 
@@ -352,7 +353,7 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
     end
 end
 
-function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
+@timeit TO function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     developed = PackageSpec[]
     for pkg in filter(is_tracking_path, pkgs)
         collect_developed!(env, pkg, developed)
@@ -360,7 +361,7 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     return developed
 end
 
-function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
+@timeit TO function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
     deps_map = Dict{UUID,Vector{PackageSpec}}()
     weak_map = Dict{UUID,Set{UUID}}()
 
@@ -438,7 +439,7 @@ end
 # sets version to a VersionNumber
 # adds any other packages which may be in the dependency graph
 # all versioned packages should have a `tree_hash`
-function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
+@timeit TO function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
                            installed_only::Bool)
     installed_only = installed_only || OFFLINE_MODE[]
     # compatibility
@@ -498,8 +499,8 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
     graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
-    Resolve.simplify_graph!(graph)
-    vers = Resolve.resolve(graph)
+    @timeit TO "Resolve.simplify_graph" Resolve.simplify_graph!(graph)
+    vers = @timeit TO "Resolve.resolve" Resolve.resolve(graph)
 
     # Fixup jlls that got their build numbers stripped
     vers_fix = copy(vers)
@@ -553,7 +554,7 @@ get_or_make!(d::Dict{K,V}, k::K) where {K,V} = get!(d, k) do; V() end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
-function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID,String},
+@timeit TO function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID,String},
                     reqs::Resolve.Requires, fixed::Dict{UUID,Resolve.Fixed}, julia_version,
                     installed_only::Bool)
     uuids = Set{UUID}()
@@ -666,7 +667,7 @@ function deps_graph(env::EnvCache, registries::Vector{Registry.RegistryInstance}
         end
     end
 
-    return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
+    return @timeit TO "Resolve.Graph" Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
            all_compat
 end
 
@@ -827,7 +828,7 @@ mutable struct DownloadState
     const bar::MiniProgressBar
 end
 
-function download_artifacts(ctx::Context;
+@timeit TO function download_artifacts(ctx::Context;
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
                             verbose::Bool=false)
@@ -1014,7 +1015,7 @@ function find_urls(registries::Vector{Registry.RegistryInstance}, uuid::UUID)
 end
 
 
-function download_source(ctx::Context; readonly=true)
+@timeit TO function download_source(ctx::Context; readonly=true)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{PackageEntry, Set{String}, String}}[]
     for pkg in values(ctx.env.manifest)
         tracking_registered_version(pkg, ctx.julia_version) || continue
@@ -1565,7 +1566,7 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     end
 end
 
-function tiered_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
+@timeit TO function tiered_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
                         try_all_installed::Bool)
     if try_all_installed
         try # do not modify existing subgraph and only add installed versions of the new packages
@@ -1597,7 +1598,7 @@ function tiered_resolve(env::EnvCache, registries::Vector{Registry.RegistryInsta
     return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
 end
 
-function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+@timeit TO function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     if preserve == PRESERVE_ALL || preserve == PRESERVE_ALL_INSTALLED
         pkgs = load_all_deps(env, pkgs; preserve)
     else
@@ -1609,7 +1610,7 @@ function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryIns
     return pkgs, deps_map
 end
 
-function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance},
+@timeit TO function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance},
                     pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     printpkgstyle(io, :Resolving, "package versions...")
     if preserve == PRESERVE_TIERED_INSTALLED
@@ -1621,7 +1622,7 @@ function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryIns
     end
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
+@timeit TO function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
              allow_autoprecomp::Bool=true, preserve::PreserveLevel=default_preserve(), platform::AbstractPlatform=HostPlatform(),
              target::Symbol=:deps)
     assert_can_add(ctx, pkgs)

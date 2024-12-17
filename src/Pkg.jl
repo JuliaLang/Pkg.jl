@@ -9,6 +9,7 @@ end
 import Random
 import TOML
 using Dates
+using TimerOutputs
 
 export @pkg_str
 export PackageSpec
@@ -42,6 +43,8 @@ const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
+
+const TO = TimerOutput()
 
 # See discussion in https://github.com/JuliaLang/julia/pull/52249
 function unstableio(@nospecialize(io::IO))
@@ -858,7 +861,7 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageSpec[]; warn_loaded = true, already_instantiated = false)
+@timeit TO function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageSpec[]; warn_loaded = true, already_instantiated = false)
     if should_autoprecompile()
         Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
