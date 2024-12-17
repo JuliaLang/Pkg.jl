@@ -606,9 +606,14 @@ function workspace_resolve_hash(env::EnvCache)
     return bytes2hex(sha1(str))
 end
 
-function write_env_usage(source_file::AbstractString, usage_filepath::AbstractString)
+
+write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =
+    write_env_usage([source_file], usage_filepath)
+
+function write_env_usage(source_files, usage_filepath::AbstractString)
     # Don't record ghost usage
-    !isfile(source_file) && return
+    source_files = filter(isfile, source_files)
+    isempty(source_files) && return
 
     # Ensure that log dir exists
     !ispath(logdir()) && mkpath(logdir())
@@ -630,7 +635,9 @@ function write_env_usage(source_file::AbstractString, usage_filepath::AbstractSt
         end
 
         # record new usage
-        usage[source_file] = [Dict("time" => timestamp)]
+        for source_file in source_files
+            usage[source_file] = [Dict("time" => timestamp)]
+        end
 
         # keep only latest usage info
         for k in keys(usage)
