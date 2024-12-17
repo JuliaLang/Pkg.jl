@@ -81,6 +81,20 @@ function read_deps(raw::Dict{String, Any})::Dict{String,UUID}
     return deps
 end
 
+read_apps(::Nothing) = Dict{String, AppInfo}()
+read_apps(::Any) = pkgerror("Expected `apps` field to be a Dict")
+function read_apps(apps::Dict)
+    appinfos = Dict{String, AppInfo}()
+    for (appname, app) in apps
+        appinfo = AppInfo(appname::String,
+                app["julia_command"]::String,
+                VersionNumber(app["julia_version"]::String),
+                app)
+        appinfos[appinfo.name] = appinfo
+    end
+    return appinfos
+end
+
 struct Stage1
     uuid::UUID
     entry::PackageEntry
@@ -182,6 +196,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     entry.uuid        = uuid
                     deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
+                    entry.apps = read_apps(get(info::Dict, "apps", nothing)::Union{Nothing, Dict{String, Any}})
                     entry.exts = get(Dict{String, String}, info, "extensions")
                 catch
                     # TODO: Should probably not unconditionally log something
@@ -310,6 +325,15 @@ function destructure(manifest::Manifest)::Dict
         if !isempty(entry.exts)
             entry!(new_entry, "extensions", entry.exts)
         end
+
+        if !isempty(entry.apps)
+            new_entry["apps"] = Dict{String,Any}()
+            for (appname, appinfo) in entry.apps
+                julia_command = @something appinfo.julia_command joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
+                julia_version = @something appinfo.julia_version VERSION
+                new_entry["apps"][appname] = Dict{String,Any}("julia_command" => julia_command, "julia_version" => julia_version)
+            end
+        end
         if manifest.manifest_format.major == 1
             push!(get!(raw, entry.name, Dict{String,Any}[]), new_entry)
         elseif manifest.manifest_format.major == 2
@@ -344,6 +368,7 @@ function write_manifest(io::IO, raw_manifest::Dict)
 end
 function write_manifest(raw_manifest::Dict, manifest_file::AbstractString)
     str = sprint(write_manifest, raw_manifest)
+    mkpath(dirname(manifest_file))
     write(manifest_file, str)
 end
 
