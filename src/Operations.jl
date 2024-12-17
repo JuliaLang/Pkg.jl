@@ -982,9 +982,8 @@ function download_artifacts(ctx::Context;
         end
     end
 
-    for f in used_artifact_tomls
-        write_env_usage(f, "artifact_usage.toml")
-    end
+
+    write_env_usage(used_artifact_tomls, "artifact_usage.toml")
 end
 
 function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform=HostPlatform())
