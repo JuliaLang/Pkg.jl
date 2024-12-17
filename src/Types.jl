@@ -613,7 +613,7 @@ write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =
 function write_env_usage(source_files, usage_filepath::AbstractString)
     # Don't record ghost usage
     source_files = filter(isfile, source_files)
-    !isempty(source_files) && return
+    isempty(source_files) && return
 
     # Ensure that log dir exists
     !ispath(logdir()) && mkpath(logdir())
