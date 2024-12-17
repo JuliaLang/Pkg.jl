@@ -160,6 +160,29 @@ let
             Base.precompile(Tuple{typeof(Pkg.REPLMode.parse_package), Array{Pkg.REPLMode.QString, 1}, Base.Dict{Symbol, Any}})
             Base.precompile(Tuple{Type{Pkg.REPLMode.Command}, Pkg.REPLMode.CommandSpec, Base.Dict{Symbol, Any}, Array{Pkg.Types.PackageSpec, 1}})
 
+            # Manually added from trace compiling Pkg.status.
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:color,), Tuple{Symbol}}, typeof(Base.printstyled), Base.IOContext{Base.GenericIOBuffer{Memory{UInt8}}}, Char})
+            Base.precompile(Tuple{typeof(Base.join), Base.GenericIOBuffer{Memory{UInt8}}, Tuple{UInt64}, Char})
+            Base.precompile(Tuple{typeof(Base.empty), Base.Dict{Any, Any}, Type{String}, Type{Base.UUID}})
+            Base.precompile(Tuple{typeof(Base.join), Base.GenericIOBuffer{Memory{UInt8}}, Tuple{UInt32}, Char})
+            Base.precompile(Tuple{typeof(Base.unsafe_read), Base.PipeEndpoint, Ptr{UInt8}, UInt64})
+            Base.precompile(Tuple{typeof(Base.readbytes!), Base.PipeEndpoint, Array{UInt8, 1}, Int64})
+            Base.precompile(Tuple{typeof(Base.closewrite), Base.PipeEndpoint})
+            Base.precompile(Tuple{typeof(Base.convert), Type{Base.Dict{String, Union{Array{String, 1}, String}}}, Base.Dict{String, Any}})
+            Base.precompile(Tuple{typeof(Base.map), Function, Array{Any, 1}})
+            Base.precompile(Tuple{Type{Array{Dates.DateTime, 1}}, UndefInitializer, Tuple{Int64}})
+            Base.precompile(Tuple{typeof(Base.maximum), Array{Dates.DateTime, 1}})
+            Base.precompile(Tuple{Type{Pair{A, B} where B where A}, String, Dates.DateTime})
+            Base.precompile(Tuple{typeof(Base.map), Function, Array{Base.Dict{String, Dates.DateTime}, 1}})
+            Base.precompile(Tuple{typeof(TOML.Internals.Printer.is_array_of_tables), Array{Base.Dict{String, Dates.DateTime}, 1}})
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:indent, :sorted, :by, :inline_tables), Tuple{Int64, Bool, typeof(Base.identity), Base.IdSet{Base.Dict{String, V} where V}}}, typeof(TOML.Internals.Printer.print_table), Nothing, Base.IOStream, Base.Dict{String, Dates.DateTime}, Array{String, 1}})
+            Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Base.UUID}, Base.IdDict{Any, Any}})
+            Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Union{Array{String, 1}, String}}, Base.IdDict{Any, Any}})
+            Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Array{String, 1}}, Base.IdDict{Any, Any}})
+            Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Base.Dict{String, String}}, Base.IdDict{Any, Any}})
+            Base.precompile(Tuple{typeof(Base.deepcopy_internal), Tuple{String}, Base.IdDict{Any, Any}})
+            Base.precompile(Tuple{Type{Memory{Pkg.Types.PackageSpec}}, UndefInitializer, Int64})
+
             # Manually added from trace compiling Pkg.add
             # Why needed? Something with constant prop overspecialization?
             Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:io, :update_cooldown), Tuple{Base.IOContext{IO}, Dates.Day}}, typeof(Pkg.Registry.update)})
