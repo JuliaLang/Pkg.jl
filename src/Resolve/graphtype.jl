@@ -268,12 +268,17 @@ mutable struct Graph
                 p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
                 # check conflicts instead of intersecting?
                 # (intersecting is used by fixed packages though...)
-                req_p1 = get!(VersionSpec, req, p1)
-                req[p1] = req_p1 ∩ vs
+                req_p1 = get(req, p1, nothing)
+                if req_p1 == nothing
+                    req[p1] = vs
+                else
+                    req[p1] = req_p1 ∩ vs
+                end
             end
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
             req_msk = Dict{Int,BitVector}()
+            sizehint!(req_msk, length(req))
             maybe_weak = haskey(compat_weak, uuid0) && haskey(compat_weak[uuid0], vn)
             for (p1, vs) in req
                 pv = pvers[p1]
