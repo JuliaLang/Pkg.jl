@@ -964,6 +964,16 @@ end
         @test Pkg.dependencies()[ordered_collections].version == v"1.0.1" # sanity check
         # SEMVER
         copy_test_package(tmp, "ShouldPreserveSemver"; use_pkg=false)
+
+        # Support julia versions before & after the MbedTLS > OpenSSL switch
+        OpenSSL_pkgid = Base.PkgId(Base.UUID("458c3c95-2e84-50aa-8efc-19380b2a3a95"), "OpenSSL_jll")
+        manifest_to_use = if haskey(Base.loaded_modules, OpenSSL_pkgid)
+            joinpath(tmp, "ShouldPreserveSemver", "Manifest_OpenSSL.toml")
+        else
+            joinpath(tmp, "ShouldPreserveSemver", "Manifest_MbedTLS.toml")
+        end
+        mv(manifest_to_use, joinpath(tmp, "ShouldPreserveSemver", "Manifest.toml"))
+
         Pkg.activate(joinpath(tmp, "ShouldPreserveSemver"))
         light_graphs = UUID("093fc24a-ae57-5d10-9952-331d41423f4d")
         meta_graphs = UUID("626554b9-1ddb-594c-aa3c-2596fe9399a5")
