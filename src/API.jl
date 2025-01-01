@@ -63,6 +63,11 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
     git_source = pkg.repo.source === nothing ? nothing :
         isurl(pkg.repo.source::String) ? pkg.repo.source::String :
         Operations.project_rel_path(env, pkg.repo.source::String)
+        _source_path = Operations.source_path(env.manifest_file, pkg)
+        if _source_path === nothing
+            @debug "Manifest file $(env.manifest_file) contents:\n$(read(env.manifest_file, String))"
+            pkgerror("could not find source path for package $(err_rep(pkg)) based on $(env.manifest_file)")
+        end
     info = PackageInfo(
         name                 = pkg.name,
         version              = pkg.version != VersionSpec() ? pkg.version : nothing,
@@ -74,7 +79,7 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
         is_tracking_registry = Operations.is_tracking_registry(pkg),
         git_revision         = pkg.repo.rev,
         git_source           = git_source,
-        source               = Operations.project_rel_path(env, Operations.source_path(env.manifest_file, pkg)),
+        source               = Operations.project_rel_path(env, _source_path),
         dependencies         = copy(entry.deps), #TODO is copy needed?
     )
     return info
