@@ -967,7 +967,7 @@ end
 
         # Support julia versions before & after the MbedTLS > OpenSSL switch
         OpenSSL_pkgid = Base.PkgId(Base.UUID("458c3c95-2e84-50aa-8efc-19380b2a3a95"), "OpenSSL_jll")
-        manifest_to_use = if haskey(Base.loaded_modules, OpenSSL_pkgid)
+        manifest_to_use = if Base.is_stdlib(OpenSSL_pkgid)
             joinpath(tmp, "ShouldPreserveSemver", "Manifest_OpenSSL.toml")
         else
             joinpath(tmp, "ShouldPreserveSemver", "Manifest_MbedTLS.toml")
