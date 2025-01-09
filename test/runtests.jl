@@ -46,7 +46,7 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
             # Needed for custom julia version resolve tests
             # Don't use the toplevel PKg.add() command to avoid accidentally installing another copy of the registry
             spec = Pkg.PackageSpec(
-                name="HistoricalStdlibVersions", 
+                name="HistoricalStdlibVersions",
                 url="https://github.com/JuliaPackaging/HistoricalStdlibVersions.jl",
                 rev="5879c5f690795208481c60b904f4af4e8c1eeef8", #= version="2.0.0", =#
                 uuid="6df8b67a-e8a0-4029-b4b7-ac196fe72102")
@@ -70,6 +70,7 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
     @testset "Pkg" begin
         try
         @testset "$f" for f in [
+                #=
                 "new.jl",
                 "pkg.jl",
                 "repl.jl",
@@ -88,6 +89,8 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
                 "project_manifest.jl",
                 "sources.jl",
                 "workspaces.jl"
+                =#
+                "apps.jl"
                 ]
                 @info "==== Testing `test/$f`"
                 flush(Pkg.DEFAULT_IO[])

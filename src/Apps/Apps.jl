@@ -1,6 +1,7 @@
 module Apps
 
 using Pkg
+using Pkg.Versions
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
                  pkgerror, projectfile_path, manifestfile_path
 using Pkg.Operations: print_single, source_path, update_package_add
@@ -70,32 +71,32 @@ end
 # Main Functions #
 ##################
 
-
 function _resolve(manifest::Manifest, pkgname=nothing)
     for (uuid, pkg) in manifest.deps
         if pkgname !== nothing && pkg.name !== pkgname
             continue
         end
-        if pkg.path == nothing
-            # TODO: Just use a normal project file now since the project itself is part of the manifest now?
 
-            projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
-            sourcepath = source_path(app_manifest_file(), pkg)
-            project = get_project(sourcepath)
-            project.entryfile = joinpath(sourcepath, "src", "$(project.name).jl")
-            mkpath(dirname(projectfile))
-            write_project(project, projectfile)
-            package_manifest_file = manifestfile_path(sourcepath; strict=true)
-            # Move manifest if it exists here.
-            if package_manifest_file !== nothing
-                cp(package_manifest_file, joinpath(app_env_folder(), pkg.name, basename(package_manifest_file)); force=true)
-            end
+        # TODO: JuliaProject.toml
+        projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
+        sourcepath = source_path(app_manifest_file(), pkg)
+        package_manifest_file = manifestfile_path(sourcepath; strict=true)
+        # Move manifest if it exists here.
+        if package_manifest_file !== nothing
+            @show package_manifest_file
+            @info "Here..."
+            mkpath(joinpath(app_env_folder(), pkg.name))
 
+            cp(package_manifest_file, joinpath(app_env_folder(), pkg.name, basename(package_manifest_file)); force=true)
+            # Need to rewrite paths relative to the project?
             Pkg.activate(joinpath(app_env_folder(), pkg.name)) do
                 Pkg.instantiate()
             end
         else
-            projectfile = projectfile_path(source_path(app_manifest_file(), pkg))
+            # Do not develop
+            Pkg.activate(joinpath(app_env_folder(), pkg.name)) do
+                Pkg.develop(; path=dirname(get_project(sourcepath)))
+            end
         end
 
         # TODO: Julia path
@@ -105,10 +106,12 @@ function _resolve(manifest::Manifest, pkgname=nothing)
     write_manifest(manifest, app_manifest_file())
 end
 
+#=
 function add(pkg::String)
     pkg = PackageSpec(pkg)
     add(pkg)
 end
+=#
 
 function add(pkg::Vector{PackageSpec})
     for p in pkg
@@ -147,12 +150,16 @@ function add(pkg::PackageSpec)
     manifest.deps[pkg.uuid] = entry
 
     _resolve(manifest, pkg.name)
+    precompile(pkg.name)
+
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
 end
 
+#=
 function develop(pkg::String)
     develop(PackageSpec(pkg))
 end
+=#
 
 function develop(pkg::Vector{PackageSpec})
     for p in pkg
@@ -184,6 +191,7 @@ function develop(pkg::PackageSpec)
     manifest.deps[pkg.uuid] = entry
 
     _resolve(manifest, pkg.name)
+    precompile(pkg.name)
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
 end
 
@@ -232,7 +240,7 @@ function status(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
     end
 end
 
-#=
+
 function precompile(pkg::Union{Nothing, String}=nothing)
     manifest = Pkg.Types.read_manifest(joinpath(app_env_folder(), "AppManifest.toml"))
     deps = Pkg.Operations.load_manifest_deps(manifest)
@@ -243,12 +251,13 @@ function precompile(pkg::Union{Nothing, String}=nothing)
             continue
         end
         Pkg.activate(joinpath(app_env_folder(), info.name)) do
-            @info "Precompiling $(info.name)..."
+            @info "Instantiating... $(joinpath(app_env_folder(), info.name))"
+            Pkg.instantiate()
             Pkg.precompile()
         end
     end
 end
-=#
+
 
 function require_not_empty(pkgs, f::Symbol)
     pkgs === nothing && return
@@ -304,6 +313,27 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
 
     Pkg.Types.write_manifest(manifest, app_manifest_file())
     return
+end
+
+for f in (:develop, :add)
+    @eval begin
+        $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
+        $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+        function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
+                      version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
+                      url=nothing, rev=nothing, path=nothing, subdir=nothing, kwargs...)
+            pkg = PackageSpec(; name, uuid, version, url, rev, path, subdir)
+            # Handle $f() case
+            if all(isnothing, [name,uuid,version,url,rev,path,subdir])
+                $f(PackageSpec[]; kwargs...)
+            else
+                $f(pkg; kwargs...)
+            end
+        end
+        function $f(pkgs::Vector{<:NamedTuple}; kwargs...)
+            $f([PackageSpec(;pkg...) for pkg in pkgs]; kwargs...)
+        end
+    end
 end
 
 

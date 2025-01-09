@@ -1277,6 +1277,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     end
 
     # Install all packages
+    @info "Installing packages"
     new_apply = Operations.download_source(ctx)
     # Install all artifacts
     Operations.download_artifacts(ctx; platform, verbose)

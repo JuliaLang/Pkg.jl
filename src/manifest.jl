@@ -194,6 +194,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     entry.repo.subdir = read_field("repo-subdir",   nothing, info, identity)
                     entry.tree_hash   = read_field("git-tree-sha1", nothing, info, safe_SHA1)
                     entry.uuid        = uuid
+                    entry.entryfile  = read_field("entryfile", nothing, info, identity)
                     deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     entry.apps = read_apps(get(info::Dict, "apps", nothing)::Union{Nothing, Dict{String, Any}})

@@ -99,7 +99,7 @@ mutable struct PackageSpec
     url::Union{Nothing, String}
     rev::Union{Nothing, String}
     subdir::Union{Nothing, String}
-
+    entryfile::Union{Nothing, String}
 end
 function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
                        uuid::Union{Nothing,UUID,AbstractString} = nothing,
@@ -110,9 +110,10 @@ function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
                        pinned::Bool = false,
                        url = nothing,
                        rev = nothing,
-                       subdir = nothing)
+                       subdir = nothing,
+                       entryfile = nothing)
     uuid = uuid === nothing ? nothing : UUID(uuid)
-    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
+    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir, entryfile)
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)::PackageSpec
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)::PackageSpec
