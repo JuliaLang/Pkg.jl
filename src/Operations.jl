@@ -510,7 +510,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             new_v = vers_fix[uuid]
             compat_map[uuid][old_v] = compat_map[uuid][new_v]
             vers_fix[uuid] = old_v
-            delete!(compat_map[uuid], new_v)
+            new_v != old_v && delete!(compat_map[uuid], new_v)
         end
     end
     vers = vers_fix
