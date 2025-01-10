@@ -510,11 +510,11 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
             new_v = vers_fix[uuid]
             if old_v != new_v
                 compat_map[uuid][old_v] = compat_map[uuid][new_v]
+                # Note that we don't delete!(compat_map[uuid], old_v) because we want to keep the compat info around
+                # in case there's JLL version confusion between the sysimage pkgorigins version and manifest
+                # but that issue hasn't been fully specified, so keep it to be cautious
             end
             vers_fix[uuid] = old_v
-            # Note that we don't delete!(compat_map[uuid], old_v) because we want to keep the compat info around
-            # in case there's JLL version confusion between the sysimage pkgorigins version and manifest
-            # but that issue hasn't been fully specified, so keep it to be cautious
         end
     end
     vers = vers_fix
