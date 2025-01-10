@@ -508,9 +508,9 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
         # We only fixup a JLL if the old major/minor/patch matches the new major/minor/patch
         if old_v !== nothing && Base.thispatch(old_v) == Base.thispatch(vers_fix[uuid])
             new_v = vers_fix[uuid]
-            compat_map[pkg.uuid][old_v] = compat_map[pkg.uuid][new_v]
+            compat_map[uuid][old_v] = compat_map[uuid][new_v]
             vers_fix[uuid] = old_v
-            delete!(compat_map[pkg.uuid], new_v)
+            delete!(compat_map[uuid], new_v)
         end
     end
     vers = vers_fix
