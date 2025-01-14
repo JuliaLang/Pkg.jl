@@ -148,9 +148,8 @@ end
 
 @testset "test resolve with tree hash" begin
     mktempdir() do dir
-        path = abspath(joinpath(@__DIR__, "../test", "test_packages", "WorkspaceTestInstantiate"))
-        cp(path, joinpath(dir, "WorkspaceTestInstantiate"))
-        cd(joinpath(dir, "WorkspaceTestInstantiate")) do
+        path = copy_test_package(dir, "WorkspaceTestInstantiate")
+        cd(path) do
             with_current_env() do
                 @test !isfile("Manifest.toml")
                 @test !isfile("test/Manifest.toml")
