@@ -7,9 +7,8 @@ using ..Utils
 temp_pkg_dir() do project_path
     @testset "test Project.toml [sources]" begin
         mktempdir() do dir
-            path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "WithSources"))
-            cp(path, joinpath(dir, "WithSources"))
-            cd(joinpath(dir, "WithSources")) do
+            path = copy_test_package(dir, "WithSources")
+            cd(path) do
                 with_current_env() do
                     Pkg.resolve()
                     @test !isempty(Pkg.project().sources["Example"])

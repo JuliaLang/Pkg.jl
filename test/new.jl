@@ -3224,9 +3224,8 @@ end
 temp_pkg_dir() do project_path
     @testset "test entryfile entries" begin
         mktempdir() do dir
-            path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "ProjectPath"))
-            cp(path, joinpath(dir, "ProjectPath"))
-            cd(joinpath(dir, "ProjectPath")) do
+            path = copy_test_package(dir, "ProjectPath")
+            cd(path) do
                 with_current_env() do
                     Pkg.resolve()
                     @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPath'`))
@@ -3238,9 +3237,8 @@ temp_pkg_dir() do project_path
 end
 @testset "test resolve with tree hash" begin
     mktempdir() do dir
-        path = abspath(joinpath(@__DIR__, "../test", "test_packages", "ResolveWithRev"))
-        cp(path, joinpath(dir, "ResolveWithRev"))
-        cd(joinpath(dir, "ResolveWithRev")) do
+        path = copy_test_package(dir, "ResolveWithRev")
+        cd(path) do
             with_current_env() do
                 @test !isfile("Manifest.toml")
                 @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))

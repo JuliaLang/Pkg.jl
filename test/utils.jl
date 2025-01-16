@@ -270,9 +270,21 @@ function git_init_package(tmp, path)
     return pkgpath
 end
 
+function ensure_test_package_user_writable(dir)
+    for (root, _, files) in walkdir(dir)
+        chmod(root, filemode(root) | 0o200 | 0o100)
+
+        for file in files
+            filepath = joinpath(root, file)
+            chmod(filepath, filemode(filepath) | 0o200)
+        end
+    end
+end
+
 function copy_test_package(tmpdir::String, name::String; use_pkg=true)
     target = joinpath(tmpdir, name)
     cp(joinpath(@__DIR__, "test_packages", name), target)
+    ensure_test_package_user_writable(target)
     use_pkg || return target
 
     # The known Pkg UUID, and whatever UUID we're currently using for testing
