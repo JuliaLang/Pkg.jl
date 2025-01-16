@@ -33,7 +33,7 @@ packagetoken(word::String)::PackageToken =
 """
 Parser for PackageSpec objects.
 """
-function parse_package(args::Vector{QString}, _options; add_or_dev=false)::Vector{PackageSpec}
+function parse_package(args::Vector{QString}, _; add_or_dev=false)::Vector{PackageSpec}
     words′ = package_lex(args)
     words = String[]
     for word in words′
