@@ -7,8 +7,7 @@
     - You need to manually make `~/.julia/bin` available on the PATH environment.
     - The path to the julia executable used is the same as the one used to install the app. If this
       julia installation gets removed, you might need to reinstall the app.
-      used by the app might not be found.
-    - You can only have one app installed
+    - You can only have one app installed per package.
 
 Apps are Julia packages that are intended to be run as a "standalone programs" (by e.g. typing the name of the app in the terminal possibly together with some arguments or flags/options).
 This is in contrast to most Julia packages that are used as "libraries" and are loaded by other files or in the Julia REPL.
@@ -17,7 +16,7 @@ This is in contrast to most Julia packages that are used as "libraries" and are 
 
 A Julia app is structured similar to a standard Julia library with the following additions:
 
-- A `@main` entry point in the package module (see the Julia help on `@main` for details)
+- A `@main` entry point in the package module (see the [Julia help on `@main`](https://docs.julialang.org/en/v1/manual/command-line-interface/#The-Main.main-entry-point) for details)
 - An `[app]` section in the `Project.toml` file listing the executable names that the package provides.
 
 A very simple example of an app that prints the reversed input arguments would be:
