@@ -370,8 +370,12 @@ end
 function windows_shim(pkgname, julia::String, env)
     return """
         @echo off
-        set JULIA_LOAD_PATH=$(repr(env))
-        set JULIA_DEPOT_PATH=$(repr(join(DEPOT_PATH, ';')))
+
+        $SHIM_HEADER
+
+        setlocal
+        set JULIA_LOAD_PATH=$env
+        set JULIA_DEPOT_PATH=$(join(DEPOT_PATH, ';'))
 
         $julia ^
             --startup-file=no ^
