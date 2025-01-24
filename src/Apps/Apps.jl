@@ -17,7 +17,7 @@ app_context() = Context(env=EnvCache(joinpath(app_env_folder(), "Project.toml"))
 
 
 function rm_shim(name; kwargs...)
-    Base.rm(joinpath(julia_bin_path(), name); kwargs...)
+    Base.rm(joinpath(julia_bin_path(), name * (Sys.iswindows() ? ".bat" : "")); kwargs...)
 end
 
 function get_project(sourcepath)
