@@ -1020,9 +1020,11 @@ function find_urls(registries::Vector{Registry.RegistryInstance}, uuid::UUID)
 end
 
 
-function download_source(ctx::Context; readonly=true)
-    pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{PackageEntry, Set{String}, String}}[]
-    for pkg in values(ctx.env.manifest)
+download_source(ctx::Context; readonly=true) = download_source(ctx, values(ctx.env.manifest); readonly)
+
+function download_source(ctx::Context, pkgs; readonly=true)
+    pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
+    for pkg in pkgs
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
@@ -1107,7 +1109,7 @@ function download_source(ctx::Context; readonly=true)
         fancyprint = can_fancyprint(ctx.io)
         try
             for i in 1:length(pkgs_to_install)
-                pkg::PackageEntry, exc_or_success, bt_or_pathurls = take!(results)
+                pkg::eltype(pkgs), exc_or_success, bt_or_pathurls = take!(results)
                 exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
                                                         sprint(Base.showerror, exc_or_success, bt_or_pathurls))
                 success, (urls, path) = exc_or_success, bt_or_pathurls
@@ -1138,7 +1140,6 @@ function download_source(ctx::Context; readonly=true)
     # Use LibGit2 to download any remaining packages #
     ##################################################
     for (pkg, urls, path) in missed_packages
-        uuid = pkg.uuid
         install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
         readonly && set_readonly(path)
         vstr = if pkg.version !== nothing
@@ -1491,8 +1492,8 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     show_update(ctx.env, ctx.registries; io=ctx.io)
 end
 
-update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, is_dep::Bool) = pkg
-function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, is_dep::Bool)
+update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
+function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.pinned
         if pkg.version == VersionSpec()
             println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
@@ -1636,8 +1637,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
         delete!(ctx.env.project.weakdeps, pkg.name)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         is_dep = any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
-        source_path, source_repo = get_path_repo(ctx.env.project, pkg.name)
-        pkgs[i] = update_package_add(ctx, pkg, entry, source_path, source_repo, is_dep)
+        pkgs[i] = update_package_add(ctx, pkg, entry, is_dep)
     end
 
     names = (p.name for p in pkgs)
