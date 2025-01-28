@@ -783,8 +783,6 @@ This function can be used in tests to verify that the manifest is synchronized w
 const is_manifest_current = API.is_manifest_current
 
 function __init__()
-    DEFAULT_IO[] = nothing
-    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
     if !isassigned(Base.PKG_PRECOMPILE_HOOK)
         # allows Base to use Pkg.precompile during loading
         # disable via `Base.PKG_PRECOMPILE_HOOK[] = Returns(nothing)`
@@ -866,5 +864,10 @@ function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageS
 end
 
 include("precompile.jl")
+
+# Reset globals that might have been mutated during precompilation.
+DEFAULT_IO[] = nothing
+Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
+PREV_ENV_PATH[] = ""
 
 end # module
