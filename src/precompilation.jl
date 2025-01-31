@@ -324,15 +324,12 @@ function precompilepkgs(pkgs::Vector{String}=String[];
                         warn_loaded::Bool = true,
                         timing::Bool = false,
                         _from_loading::Bool=false,
-                        configs::Union{Config,Vector{Config}}=(``=>Base.CacheFlags()),
                         io::IO=stderr,
                         # asking for timing disables fancy mode, as timing is shown in non-fancy mode
                         fancyprint::Bool = can_fancyprint(io) && !timing,
                         manifest::Bool=false,)
     # monomorphize this to avoid latency problems
-    _precompilepkgs(pkgs, internal_call, strict, warn_loaded, timing, _from_loading,
-                   configs isa Vector{Config} ? configs : [configs],
-                   IOContext{IO}(Base.unwrapcontext(io)...), fancyprint, manifest)
+    _precompilepkgs(pkgs, internal_call, strict, warn_loaded, timing, _from_loading, IOContext{IO}(Base.unwrapcontext(io)...), fancyprint, manifest)
 end
 
 function _precompilepkgs(pkgs::Vector{String},
@@ -341,11 +338,13 @@ function _precompilepkgs(pkgs::Vector{String},
                          warn_loaded::Bool,
                          timing::Bool,
                          _from_loading::Bool,
-                         configs::Vector{Config},
                          io::IOContext{IO},
                          fancyprint::Bool,
                          manifest::Bool)
     requested_pkgs = copy(pkgs) # for understanding user intent
+
+    # this isn't configurable on 1.10 but leave the code in so it's easier to backport fixes
+    configs = [``=>Base.CacheFlags()]
 
     time_start = time_ns()
 
@@ -835,7 +834,7 @@ function _precompilepkgs(pkgs::Vector{String},
                         wait(was_processed[(dep,config)])
                     end
                     circular = pkg in circular_deps
-                    is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, stale_cache #=, cachepath_cache=#, cachepaths, sourcepath #=, flags=cacheflags=#)
+                    is_stale = !Base.isprecompiled(pkg; ignore_loaded=true, stale_cache #=, cachepath_cache=#, cachepaths, sourcepath)
                     if !circular && is_stale
                         Base.acquire(parallel_limiter)
                         is_project_dep = pkg in project_deps
@@ -1070,7 +1069,7 @@ function precompile_pkgs_maybe_cachefile_lock(f, io::IO, print_lock::ReentrantLo
         # wait until the lock is available
         FileWatching.mkpidlock(pidfile; stale_age) do
             # double-check in case the other process crashed or the lock expired
-            if Base.isprecompiled(pkg; ignore_loaded=true, flags=cacheflags) # don't use caches for this as the env state will have changed
+            if Base.isprecompiled(pkg; ignore_loaded=true) # don't use caches for this as the env state will have changed
                 return nothing # returning nothing indicates a process waited for another
             else
                 delete!(pkgspidlocked, pkg_config)
