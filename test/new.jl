@@ -2021,16 +2021,41 @@ end
             path = copy_test_package(dir, "TestThreads")
             cd(path) do
                 with_current_env() do
-                    default_nthreads = Threads.nthreads()
-                    other_nthreads = default_nthreads == 1 ? 2 : 1
+                    default_nthreads_default = Threads.nthreads(:default)
+                    default_nthreads_interactive = Threads.nthreads(:interactive)
+                    other_nthreads_default = default_nthreads_default == 1 ? 2 : 1
+                    other_nthreads_interactive = default_nthreads_interactive == 0 ? 1 : 0
                     @testset "default" begin
-                        Pkg.test("TestThreads"; julia_args=Cmd(``; env=Dict("EXPECTED_NTHREADS" => "$default_nthreads")))
+                        Pkg.test("TestThreads"; julia_args=Cmd(``; env=Dict(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "$default_nthreads_default",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$default_nthreads_interactive",
+                        )))
                     end
-                    @testset "JULIA_NUM_THREADS=other_nthreads" begin
-                        Pkg.test("TestThreads"; julia_args=Cmd(``; env=Dict("EXPECTED_NTHREADS" => "$other_nthreads", "JULIA_NUM_THREADS" => "$other_nthreads")))
+                    @testset "JULIA_NUM_THREADS=other_nthreads_default" begin
+                        Pkg.test("TestThreads"; julia_args=Cmd(``; env=Dict(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$default_nthreads_interactive",
+                            "JULIA_NUM_THREADS" => "$other_nthreads_default",
+                        )))
                     end
-                    @testset "--threads=other_nthreads" begin
-                        Pkg.test("TestThreads"; julia_args=Cmd(` --threads=$other_nthreads`; env=Dict("EXPECTED_NTHREADS" => "$other_nthreads")))
+                    @testset "JULIA_NUM_THREADS=other_nthreads_default,other_nthreads_interactive" begin
+                        Pkg.test("TestThreads"; julia_args=Cmd(``; env=Dict(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$other_nthreads_interactive",
+                            "JULIA_NUM_THREADS" => "$other_nthreads_default,$other_nthreads_interactive",
+                        )))
+                    end
+                    @testset "--threads=other_nthreads_default" begin
+                        Pkg.test("TestThreads"; julia_args=Cmd(` --threads=$other_nthreads_default`; env=Dict(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$default_nthreads_interactive",
+                        )))
+                    end
+                    @testset "--threads=other_nthreads_default,other_nthreads_interactive" begin
+                        Pkg.test("TestThreads"; julia_args=Cmd(` --threads=$other_nthreads_default,$other_nthreads_interactive`; env=Dict(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$other_nthreads_interactive",
+                        )))
                     end
                 end
             end
