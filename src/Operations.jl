@@ -1971,7 +1971,7 @@ function get_threads_spec()
     end
 end
 
-function gen_subprocess_flags(source_path::String; coverage, julia_args)
+function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
     coverage_arg = if coverage isa Bool
         # source_path is the package root, not "src" so "ext" etc. is included
         coverage ? string("@", source_path) : "none"
@@ -1989,7 +1989,7 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args)
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
-        $(julia_args)
+        $(julia_args.exec)
     ```
 end
 
@@ -2276,7 +2276,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            cmd = `$(Base.julia_cmd()) $(flags) --eval $code`
+            cmd = Cmd(`$(Base.julia_cmd()) $(flags) --eval $code`; env = julia_args.env)
 
             path_sep = Sys.iswindows() ? ';' : ':'
             p, interrupted = withenv("JULIA_LOAD_PATH" => "@$(path_sep)$(testdir(source_path))", "JULIA_PROJECT" => nothing) do
@@ -2309,7 +2309,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
-            flags = gen_subprocess_flags(source_path; coverage,julia_args)
+            flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
@@ -2319,7 +2319,9 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            cmd = `$(Base.julia_cmd()) --threads=$(get_threads_spec()) $(flags) --eval $code`
+            julia_args_defines_threads = any(startswith("--threads"), julia_args.exec) || (!isnothing(julia_args.env) && any(startswith("JULIA_NUM_THREADS"), julia_args.env))
+            threads_arg = julia_args_defines_threads ? `` : `--threads=$(get_threads_spec())`
+            cmd = Cmd(`$(Base.julia_cmd()) $threads_arg $(flags) --eval $code`; env = julia_args.env)
             p, interrupted = subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")

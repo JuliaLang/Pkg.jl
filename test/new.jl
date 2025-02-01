@@ -2015,6 +2015,27 @@ end
         Pkg.test("TestArguments"; test_args=`a b`, julia_args=`--quiet --check-bounds=no`)
         Pkg.test("TestArguments"; test_args=["a", "b"], julia_args=["--quiet", "--check-bounds=no"])
     end end
+
+    @testset "threads" begin
+        mktempdir() do dir
+            path = copy_test_package(dir, "TestThreads")
+            cd(path) do
+                with_current_env() do
+                    default_nthreads = Threads.nthreads()
+                    other_nthreads = default_nthreads == 1 ? 2 : 1
+                    @testset "default" begin
+                        Pkg.test("TestThreads"; julia_args=Cmd(``; env=Dict("EXPECTED_NTHREADS" => "$default_nthreads")))
+                    end
+                    @testset "JULIA_NUM_THREADS=other_nthreads" begin
+                        Pkg.test("TestThreads"; julia_args=Cmd(``; env=Dict("EXPECTED_NTHREADS" => "$other_nthreads", "JULIA_NUM_THREADS" => "$other_nthreads")))
+                    end
+                    @testset "--threads=other_nthreads" begin
+                        Pkg.test("TestThreads"; julia_args=Cmd(` --threads=$other_nthreads`; env=Dict("EXPECTED_NTHREADS" => "$other_nthreads")))
+                    end
+                end
+            end
+        end
+    end    
 end
 
 #
