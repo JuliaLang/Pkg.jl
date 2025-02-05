@@ -427,7 +427,7 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 
 const FORMER_STDLIBS = ["DelimitedFiles", "Statistics"]
 const FORMER_STDLIBS_UUIDS = Set{UUID}()
-const STDLIB = Ref{DictStdLibs}()
+const STDLIB = Ref{Union{DictStdLibs, Nothing}}(nothing)
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
@@ -448,7 +448,7 @@ function load_stdlib()
 end
 
 function stdlibs()
-    if !isassigned(STDLIB)
+    if STDLIB[] === nothing
         STDLIB[] = load_stdlib()
     end
     return STDLIB[]
