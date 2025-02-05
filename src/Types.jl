@@ -471,7 +471,7 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 
 const UPGRADABLE_STDLIBS = ["DelimitedFiles", "Statistics"]
 const UPGRADABLE_STDLIBS_UUIDS = Set{UUID}()
-const STDLIB = Ref{DictStdLibs}()
+const STDLIB = Ref{Union{DictStdLibs, Nothing}}(nothing)
 function load_stdlib()
     stdlib = DictStdLibs()
     for name in readdir(stdlib_dir())
@@ -500,7 +500,7 @@ function stdlibs()
     return Dict(uuid => (info.name, info.version) for (uuid, info) in stdlib_infos())
 end
 function stdlib_infos()
-    if !isassigned(STDLIB)
+    if STDLIB[] === nothing
         STDLIB[] = load_stdlib()
     end
     return STDLIB[]
