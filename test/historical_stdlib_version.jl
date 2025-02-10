@@ -1,11 +1,198 @@
 module HistoricalStdlibVersionsTests
 using ..Pkg
+using Pkg.Types: is_stdlib
+using Pkg.Artifacts: artifact_meta, artifact_path
+using Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using Test
+using TOML
+
+ENV["HISTORICAL_STDLIB_VERSIONS_AUTO_REGISTER"]="false"
 using HistoricalStdlibVersions
-append!(Pkg.Types.STDLIBS_BY_VERSION, HistoricalStdlibVersions.STDLIBS_BY_VERSION)
 
 include("utils.jl")
 using .Utils
+
+@testset "is_stdlib() across versions" begin
+    HistoricalStdlibVersions.register!()
+
+    networkoptions_uuid = Base.UUID("ca575930-c2e3-43a9-ace4-1e988b2c1908")
+    pkg_uuid = Base.UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
+
+    # Test NetworkOptions across multiple versions (It became an stdlib in v1.6+, and was registered)
+    @test is_stdlib(networkoptions_uuid)
+    @test is_stdlib(networkoptions_uuid, v"1.6")
+    @test !is_stdlib(networkoptions_uuid, v"1.5")
+    @test !is_stdlib(networkoptions_uuid, v"1.0.0")
+    @test !is_stdlib(networkoptions_uuid, v"0.7")
+    @test !is_stdlib(networkoptions_uuid, nothing)
+
+    # Pkg is an unregistered stdlib and has always been an stdlib
+    @test is_stdlib(pkg_uuid)
+    @test is_stdlib(pkg_uuid, v"1.0")
+    @test is_stdlib(pkg_uuid, v"1.6")
+    @test is_stdlib(pkg_uuid, v"999.999.999")
+    @test is_stdlib(pkg_uuid, v"0.7")
+    @test is_stdlib(pkg_uuid, nothing)
+
+    HistoricalStdlibVersions.unregister!()
+    # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
+    # but that we throw a PkgError if we ask for a particular julia version.
+    @test is_stdlib(networkoptions_uuid)
+    @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
+end
+
+
+@testset "Pkg.add() with julia_version" begin
+    HistoricalStdlibVersions.register!()
+
+    # A package with artifacts that went from normal package -> stdlib
+    gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
+    # A package that has always only ever been an stdlib
+    linalg_uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+    # A package that went from normal package - >stdlib
+    networkoptions_uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
+
+    function get_manifest_block(name)
+        manifest_path = joinpath(dirname(Base.active_project()), "Manifest.toml")
+        @test isfile(manifest_path)
+        deps = Base.get_deps(TOML.parsefile(manifest_path))
+        @test haskey(deps, name)
+        return only(deps[name])
+    end
+
+    isolate(loaded_depot=true) do
+        # Next, test that if we ask for `v1.5` it DOES have a version, and that GMP_jll installs v6.1.X
+        Pkg.add(["NetworkOptions", "GMP_jll"]; julia_version=v"1.5")
+        no_block = get_manifest_block("NetworkOptions")
+        @test haskey(no_block, "uuid")
+        @test no_block["uuid"] == networkoptions_uuid
+        @test haskey(no_block, "version")
+
+        gmp_block = get_manifest_block("GMP_jll")
+        @test haskey(gmp_block, "uuid")
+        @test gmp_block["uuid"] == gmp_jll_uuid
+        @test haskey(gmp_block, "version")
+        @test startswith(gmp_block["version"], "6.1.2")
+
+        # Test that the artifact of GMP_jll contains the right library
+        @test haskey(gmp_block, "git-tree-sha1")
+        gmp_jll_dir = Pkg.Operations.find_installed("GMP_jll", Base.UUID(gmp_jll_uuid), Base.SHA1(gmp_block["git-tree-sha1"]))
+        @test isdir(gmp_jll_dir)
+        artifacts_toml = joinpath(gmp_jll_dir, "Artifacts.toml")
+        @test isfile(artifacts_toml)
+        meta = artifact_meta("GMP", artifacts_toml)
+
+        # `meta` can be `nothing` on some of our newer platforms; we _know_ this should
+        # not be the case on the following platforms, so we check these explicitly to
+        # ensure that we haven't accidentally broken something, and then we gate some
+        # following tests on whether or not `meta` is `nothing`:
+        for arch in ("x86_64", "i686"), os in ("linux", "mac", "windows")
+            if platforms_match(HostPlatform(), Platform(arch, os))
+                @test meta !== nothing
+            end
+        end
+
+        # These tests require a matching platform artifact for this old version of GMP_jll,
+        # which is not the case on some of our newer platforms.
+        if meta !== nothing
+            gmp_artifact_path = artifact_path(Base.SHA1(meta["git-tree-sha1"]))
+            @test isdir(gmp_artifact_path)
+
+            # On linux, we can check the filename to ensure it's grabbing the correct library
+            if Sys.islinux()
+                libgmp_filename = joinpath(gmp_artifact_path, "lib", "libgmp.so.10.3.2")
+                @test isfile(libgmp_filename)
+            end
+        end
+    end
+
+    # Next, test that if we ask for `v1.6`, GMP_jll gets `v6.2.0`, and for `v1.7`, it gets `v6.2.1`
+    function do_gmp_test(julia_version, gmp_version)
+        isolate(loaded_depot=true) do
+            Pkg.add("GMP_jll"; julia_version)
+            gmp_block = get_manifest_block("GMP_jll")
+            @test haskey(gmp_block, "uuid")
+            @test gmp_block["uuid"] == gmp_jll_uuid
+            @test haskey(gmp_block, "version")
+            @test startswith(gmp_block["version"], string(gmp_version))
+        end
+    end
+    do_gmp_test(v"1.6", v"6.2.0")
+    do_gmp_test(v"1.7", v"6.2.1")
+
+    isolate(loaded_depot=true) do
+        # Next, test that if we ask for `nothing`, NetworkOptions has a `version` but `LinearAlgebra` does not.
+        Pkg.add(["LinearAlgebra", "NetworkOptions"]; julia_version=nothing)
+        no_block = get_manifest_block("NetworkOptions")
+        @test haskey(no_block, "uuid")
+        @test no_block["uuid"] == networkoptions_uuid
+        @test haskey(no_block, "version")
+        linalg_block = get_manifest_block("LinearAlgebra")
+        @test haskey(linalg_block, "uuid")
+        @test linalg_block["uuid"] == linalg_uuid
+        @test !haskey(linalg_block, "version")
+    end
+
+    isolate(loaded_depot=true) do
+        # Next, test that stdlibs do not get dependencies from the registry
+        # NOTE: this test depends on the fact that in Julia v1.6+ we added
+        # "fake" JLLs that do not depend on Pkg while the "normal" p7zip_jll does.
+        # A future p7zip_jll in the registry may not depend on Pkg, so be sure
+        # to verify your assumptions when updating this test.
+        Pkg.add("p7zip_jll")
+        p7zip_jll_uuid = Base.UUID("3f19e933-33d8-53b3-aaab-bd5110c3b7a0")
+        @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
+    end
+
+    HistoricalStdlibVersions.unregister!()
+end
+
+@testset "Resolving for another version of Julia" begin
+    HistoricalStdlibVersions.register!()
+    temp_pkg_dir() do dir
+        function find_by_name(versions, name)
+            idx = findfirst(p -> p.name == name, versions)
+            if idx === nothing
+                return nothing
+            end
+            return versions[idx]
+        end
+
+        # First, we're going to resolve for specific versions of Julia, ensuring we get the right dep versions:
+        Pkg.Registry.download_default_registries(Pkg.stdout_f())
+        ctx = Pkg.Types.Context(;julia_version=v"1.5")
+        versions, deps = Pkg.Operations._resolve(ctx.io, ctx.env, ctx.registries, [
+            Pkg.Types.PackageSpec(name="MPFR_jll", uuid=Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3")),
+        ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version)
+        gmp = find_by_name(versions, "GMP_jll")
+        @test gmp !== nothing
+        @test gmp.version.major == 6 && gmp.version.minor == 1
+        ctx = Pkg.Types.Context(;julia_version=v"1.6")
+        versions, deps = Pkg.Operations._resolve(ctx.io, ctx.env, ctx.registries, [
+            Pkg.Types.PackageSpec(name="MPFR_jll", uuid=Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3")),
+        ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version)
+        gmp = find_by_name(versions, "GMP_jll")
+        @test gmp !== nothing
+        @test gmp.version.major == 6 && gmp.version.minor == 2
+
+        # We'll also test resolving an "impossible" manifest; one that requires two package versions that
+        # are not both loadable by the same Julia:
+        ctx = Pkg.Types.Context(;julia_version=nothing)
+        versions, deps = Pkg.Operations._resolve(ctx.io, ctx.env, ctx.registries, [
+            # This version of GMP only works on Julia v1.6
+            Pkg.Types.PackageSpec(name="GMP_jll", uuid=Base.UUID("781609d7-10c4-51f6-84f2-b8444358ff6d"), version=v"6.2.0"),
+            # This version of MPFR only works on Julia v1.5
+            Pkg.Types.PackageSpec(name="MPFR_jll", uuid=Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3"), version=v"4.0.2"),
+        ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version)
+        gmp = find_by_name(versions, "GMP_jll")
+        @test gmp !== nothing
+        @test gmp.version.major == 6 && gmp.version.minor == 2
+        mpfr = find_by_name(versions, "MPFR_jll")
+        @test mpfr !== nothing
+        @test mpfr.version.major == 4 && mpfr.version.minor == 0
+    end
+    HistoricalStdlibVersions.unregister!()
+end
 
 HelloWorldC_jll_UUID = Base.UUID("dca1746e-5efc-54fc-8249-22745bc95a49")
 GMP_jll_UUID = Base.UUID("781609d7-10c4-51f6-84f2-b8444358ff6d")
@@ -15,9 +202,8 @@ libblastrampoline_jll_UUID = Base.UUID("8e850b90-86db-534c-a0d3-1478176c7d93")
 
 isolate(loaded_depot=true) do
     Pkg.activate(temp=true)
-
-    @testset "Elliot and Mosè's mini Pkg test suite" begin
-
+    @testset "Elliot and Mosè's mini Pkg test suite" begin # https://github.com/JuliaPackaging/JLLPrefixes.jl/issues/6
+        HistoricalStdlibVersions.register!()
         @testset "HelloWorldC_jll" begin
             # Standard add (non-stdlib, flexible version)
             Pkg.add(; name="HelloWorldC_jll")
@@ -91,6 +277,8 @@ isolate(loaded_depot=true) do
             @test v"0.3.14" > Pkg.dependencies()[OpenBLAS_jll_UUID].version >= v"0.3.13"
             @test v"5.1.2" > Pkg.dependencies()[libblastrampoline_jll_UUID].version >= v"5.1.1"
         end
+        HistoricalStdlibVersions.unregister!()
     end
 end
+
 end # module
