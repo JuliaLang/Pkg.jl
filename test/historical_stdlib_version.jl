@@ -262,6 +262,19 @@ isolate(loaded_depot=true) do
             @test Pkg.dependencies()[GMP_jll_UUID].version >= v"6.3.0+2" # v1.13.0-DEV
 
             Pkg.activate(temp=true)
+            # issue https://github.com/JuliaLang/Pkg.jl/issues/2930
+            # Make sure the source of GMP_jll is installed
+            Pkg.add([PackageSpec("GMP_jll")]; julia_version=v"1.6")
+            src = Pkg.Operations.find_installed(
+                "GMP_jll",
+                Base.UUID("781609d7-10c4-51f6-84f2-b8444358ff6d"),
+                Base.SHA1("40388878122d491a2e55b0e730196098595d8a90")
+            )
+            @test src isa String
+            @test isdir(src)
+            @test isfile(joinpath(src, "Artifacts.toml"))
+
+            Pkg.activate(temp=true)
             # Stdlib add (other julia version)
             Pkg.add(; name="GMP_jll", julia_version=v"1.7")
             @test Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+1"
