@@ -67,29 +67,37 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
 
     Utils.check_init_reg()
 
+    test_files = [
+        "new.jl",
+        "pkg.jl",
+        "repl.jl",
+        "api.jl",
+        "registry.jl",
+        "subdir.jl",
+        "extensions.jl",
+        "artifacts.jl",
+        "binaryplatforms.jl",
+        "platformengines.jl",
+        "sandbox.jl",
+        "resolve.jl",
+        "misc.jl",
+        "force_latest_compatible_version.jl",
+        "manifests.jl",
+        "project_manifest.jl",
+        "sources.jl",
+        "workspaces.jl",
+        "apps.jl",
+        ]
+
+    # Only test these if the test deps are available (they aren't typically via `Base.runtests`)
+    Aqua_pkgid = Base.PkgId(Base.UUID("4c88cf16-eb10-579e-8560-4a9242c79595"), "Aqua")
+    if Base.locate_package(Aqua_pkgid) !== nothing
+        push!(test_files, "aqua.jl")
+    end
+
     @testset "Pkg" begin
         try
-        @testset "$f" for f in [
-                "new.jl",
-                "pkg.jl",
-                "repl.jl",
-                "api.jl",
-                "registry.jl",
-                "subdir.jl",
-                "extensions.jl",
-                "artifacts.jl",
-                "binaryplatforms.jl",
-                "platformengines.jl",
-                "sandbox.jl",
-                "resolve.jl",
-                "misc.jl",
-                "force_latest_compatible_version.jl",
-                "manifests.jl",
-                "project_manifest.jl",
-                "sources.jl",
-                "workspaces.jl",
-                "apps.jl",
-                ]
+        @testset "$f" for f in test_files
                 @info "==== Testing `test/$f`"
                 flush(Pkg.DEFAULT_IO[])
                 include(f)

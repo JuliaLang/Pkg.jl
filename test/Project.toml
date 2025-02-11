@@ -1,4 +1,5 @@
 [deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 HistoricalStdlibVersions = "6df8b67a-e8a0-4029-b4b7-ac196fe72102"
 LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
@@ -15,4 +16,5 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [compat]
+Aqua = "0.8.10"
 HistoricalStdlibVersions = "2"
