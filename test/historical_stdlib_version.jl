@@ -245,7 +245,14 @@ isolate(loaded_depot=true) do
 
             Pkg.activate(temp=true)
             Pkg.add(; name="libcxxwrap_julia_jll", version=v"0.8.8+1", julia_version=v"1.9")
-            @test Pkg.dependencies()[libcxxwrap_julia_jll_UUID].version === v"0.8.8+1"
+            # FIXME? Pkg.dependencies() complains here that mbedtls_jll isn't installed so can't be used here.
+            # Perhaps Pkg.dependencies() should just return state and not error if source isn't installed?
+            @test_skip Pkg.dependencies()[libcxxwrap_julia_jll_UUID].version === v"0.9.4+0"
+            for pkgspec in Pkg.Operations.load_all_deps_loadable(Pkg.Types.Context().env)
+                if pkgspec.uuid == libcxxwrap_julia_jll_UUID
+                    @test pkgspec.version === v"0.8.8+1"
+                end
+            end
         end
 
         @testset "Stdlib add" begin
