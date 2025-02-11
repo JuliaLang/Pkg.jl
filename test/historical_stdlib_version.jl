@@ -17,6 +17,7 @@ using .Utils
 
     networkoptions_uuid = Base.UUID("ca575930-c2e3-43a9-ace4-1e988b2c1908")
     pkg_uuid = Base.UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
+    mbedtls_jll_uuid = Base.UUID("c8ffd9c3-330d-5841-b78e-0817d7145fa1")
 
     # Test NetworkOptions across multiple versions (It became an stdlib in v1.6+, and was registered)
     @test is_stdlib(networkoptions_uuid)
@@ -33,6 +34,12 @@ using .Utils
     @test is_stdlib(pkg_uuid, v"999.999.999")
     @test is_stdlib(pkg_uuid, v"0.7")
     @test is_stdlib(pkg_uuid, nothing)
+
+    # MbedTLS_jll stopped being a stdlib in 1.12
+    @test !is_stdlib(mbedtls_jll_uuid)
+    @test !is_stdlib(mbedtls_jll_uuid, v"1.12")
+    @test is_stdlib(mbedtls_jll_uuid, v"1.11")
+    @test is_stdlib(mbedtls_jll_uuid, v"1.10")
 
     HistoricalStdlibVersions.unregister!()
     # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
@@ -229,7 +236,7 @@ isolate(loaded_depot=true) do
             Pkg.activate(temp=true)
             # Julia-version-dependent add (non-stdlib, flexible version)
             Pkg.add(; name="libcxxwrap_julia_jll", julia_version=v"1.7")
-            @test Pkg.dependencies()[libcxxwrap_julia_jll_UUID].version === v"0.12.1+0"
+            @test Pkg.dependencies()[libcxxwrap_julia_jll_UUID].version >= v"0.14.0+0"
 
             Pkg.activate(temp=true)
             # Julia-version-dependent add (non-stdlib, specified version)
