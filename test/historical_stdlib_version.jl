@@ -204,7 +204,7 @@ isolate(loaded_depot=true) do
     Pkg.activate(temp=true)
     @testset "Elliot and Mosè's mini Pkg test suite" begin # https://github.com/JuliaPackaging/JLLPrefixes.jl/issues/6
         HistoricalStdlibVersions.register!()
-        @testset "HelloWorldC_jll" begin
+        @testset "Standard add" begin
             # Standard add (non-stdlib, flexible version)
             Pkg.add(; name="HelloWorldC_jll")
             @test haskey(Pkg.dependencies(), HelloWorldC_jll_UUID)
@@ -222,8 +222,7 @@ isolate(loaded_depot=true) do
             @test Pkg.dependencies()[Base.UUID("dca1746e-5efc-54fc-8249-22745bc95a49")].version === v"1.0.10+1"
         end
 
-        @testset "libcxxwrap_julia_jll" begin
-
+        @testset "Julia-version-dependent add" begin
             # Julia-version-dependent add (non-stdlib, flexible version)
             Pkg.add(; name="libcxxwrap_julia_jll", julia_version=v"1.7")
             @test Pkg.dependencies()[libcxxwrap_julia_jll_UUID].version === v"0.12.1+0"
@@ -236,7 +235,7 @@ isolate(loaded_depot=true) do
             @test Pkg.dependencies()[libcxxwrap_julia_jll_UUID].version === v"0.8.8+1"
         end
 
-        @testset "GMP_jll" begin
+        @testset "Stdlib add" begin
             # Stdlib add (current julia version)
             Pkg.add(; name="GMP_jll")
             @test Pkg.dependencies()[GMP_jll_UUID].version >= v"6.3.0+2" # v1.13.0-DEV
@@ -265,7 +264,7 @@ isolate(loaded_depot=true) do
             @test_broken Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+1"
         end
 
-        @testset "Julia Version = Nothing" begin
+        @testset "julia_version = nothing" begin
             # Stdlib add (impossible constraints due to julia version compat, so
             # must pass `julia_version=nothing`). In this case, we always fully
             # specify versions, but if we don't, it's okay to just give us whatever
