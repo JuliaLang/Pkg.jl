@@ -84,7 +84,14 @@ function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
         err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
         if err ≥ 0
             # rename worked
-            chmod(new_path, filemode(dirname(new_path)))
+            new_path_mode = filemode(dirname(new_path))
+            if Sys.iswindows()
+                # If this is Windows, ensure the directory mode is executable,
+                # as `filemode()` is incomplete.  Some day, that may not be the
+                # case, there exists a test that will fail if this is changes.
+                new_path_mode |= 0o111
+            end
+            chmod(new_path, new_path_mode)
             set_readonly(new_path)
             return
         else
