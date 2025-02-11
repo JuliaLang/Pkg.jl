@@ -226,7 +226,11 @@ function fixups_from_projectfile!(env::EnvCache)
     for pkg in values(env.manifest)
         # isfile_casesenstive within locate_project_file used to error on Windows if given a
         # relative path so abspath it to be extra safe https://github.com/JuliaLang/julia/pull/55220
-        project_file = Base.locate_project_file(abspath(source_path(env.manifest_file, pkg)))
+        sourcepath = source_path(env.manifest_file, pkg)
+        if sourcepath === nothing
+            pkgerror("could not find source path for package $(pkg.name) based on manifest $(env.manifest_file)")
+        end
+        project_file = Base.locate_project_file(abspath(sourcepath))
         if project_file isa String && isfile(project_file)
             p = Types.read_project(project_file)
             pkg.weakdeps = p.weakdeps
