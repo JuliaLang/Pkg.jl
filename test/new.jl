@@ -2775,8 +2775,8 @@ for v in (nothing, "true")
                     end
                     @testset "failures" begin
                         doesnotexist = "https://github.com/DoesNotExist/DoesNotExist.jl"
-                        @test_warn r"remote: Repository not found." @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
-                        @test_warn r"remote: Repository not found." @test_throws Pkg.Types.PkgError Pkg.Registry.add(url=doesnotexist)
+                        @test_warn r"Repository not found" @test_throws Pkg.Types.PkgError Pkg.add(url=doesnotexist, use_git_for_all_downloads=true)
+                        @test_warn r"Repository not found" @test_throws Pkg.Types.PkgError Pkg.Registry.add(url=doesnotexist)
                     end
                 end
                 @testset "tarball downloads" begin
