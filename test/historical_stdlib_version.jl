@@ -239,7 +239,7 @@ isolate(loaded_depot=true) do
         @testset "GMP_jll" begin
             # Stdlib add (current julia version)
             Pkg.add(; name="GMP_jll")
-            @test Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+6"
+            @test Pkg.dependencies()[GMP_jll_UUID].version >= v"6.3.0+2" # v1.13.0-DEV
 
             # Stdlib add (other julia version)
             Pkg.add(; name="GMP_jll", julia_version=v"1.7")
