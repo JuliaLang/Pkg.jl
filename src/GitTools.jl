@@ -105,7 +105,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
         if use_cli_git()
             cmd = `git clone --quiet $url $source_path`
             try
-                run(pipeline(cmd; stdout=devnull, stderr=stderr))
+                run(pipeline(cmd; stdout=devnull))
             catch err
                 Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
             end
@@ -172,7 +172,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
                 cd(LibGit2.path(repo)) do
                     cmd = `git fetch -q $remoteurl $(only(refspecs))`
                     try
-                        run(pipeline(cmd; stdout=devnull, stderr=stderr))
+                        run(pipeline(cmd; stdout=devnull))
                     catch err
                         Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
                     end
