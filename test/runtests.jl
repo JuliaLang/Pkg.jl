@@ -76,6 +76,7 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
     end
 
     @testset "Pkg" begin
+        Pkg.activate(; temp=true) # make sure we're in an active project and that it's clean
         try
         @testset "$f" for f in test_files
                 @info "==== Testing `test/$f`"
