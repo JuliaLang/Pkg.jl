@@ -317,16 +317,18 @@ isolate(loaded_depot=true) do
             end
             @testset "non-stdlib JLL add" begin
                 platform = Platform("x86_64", "linux"; libc="musl")
-                @testset "with a specific version" begin
-                    dependencies = [PackageSpec(; name="CMake_jll", version = v"3.24.3+0")]
-                    Pkg.activate(temp=true)
-                    Pkg.add(deepcopy(dependencies); platform, julia_version=nothing)
-                end
-                @testset "with a compat spec" begin
-                    # note the string spec and lack of a `+0` here
-                    dependencies = [PackageSpec(; name="CMake_jll", version = "3.24.3")]
-                    Pkg.activate(temp=true)
-                    Pkg.add(deepcopy(dependencies); platform, julia_version=nothing)
+                # specific version vs. compat spec
+                @testset for version in (v"3.24.3+0", "3.24.3")
+                    dependencies = [PackageSpec(; name="CMake_jll", version = version)]
+                    @testset "with context" begin
+                        Pkg.activate(temp=true)
+                        ctx = Pkg.Types.Context(; julia_version=nothing)
+                        Pkg.add(ctx, deepcopy(dependencies); platform)
+                    end
+                    @testset "with julia_version" begin
+                        Pkg.activate(temp=true)
+                        Pkg.add(deepcopy(dependencies); platform, julia_version=nothing)
+                    end
                 end
             end
         end
