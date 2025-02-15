@@ -302,17 +302,33 @@ isolate(loaded_depot=true) do
         end
 
         @testset "julia_version = nothing" begin
-            Pkg.activate(temp=true)
-            # Stdlib add (impossible constraints due to julia version compat, so
-            # must pass `julia_version=nothing`). In this case, we always fully
-            # specify versions, but if we don't, it's okay to just give us whatever
-            # the resolver prefers
-            Pkg.add([
-                PackageSpec(;name="OpenBLAS_jll",  version=v"0.3.13"),
-                PackageSpec(;name="libblastrampoline_jll", version=v"5.1.1"),
-            ]; julia_version=nothing)
-            @test v"0.3.14" > Pkg.dependencies()[OpenBLAS_jll_UUID].version >= v"0.3.13"
-            @test v"5.1.2" > Pkg.dependencies()[libblastrampoline_jll_UUID].version >= v"5.1.1"
+            @testset "stdlib add" begin
+                Pkg.activate(temp=true)
+                # Stdlib add (impossible constraints due to julia version compat, so
+                # must pass `julia_version=nothing`). In this case, we always fully
+                # specify versions, but if we don't, it's okay to just give us whatever
+                # the resolver prefers
+                Pkg.add([
+                    PackageSpec(;name="OpenBLAS_jll",  version=v"0.3.13"),
+                    PackageSpec(;name="libblastrampoline_jll", version=v"5.1.1"),
+                ]; julia_version=nothing)
+                @test v"0.3.14" > Pkg.dependencies()[OpenBLAS_jll_UUID].version >= v"0.3.13"
+                @test v"5.1.2" > Pkg.dependencies()[libblastrampoline_jll_UUID].version >= v"5.1.1"
+            end
+            @testset "non-stdlib add" begin
+                dependencies = [PackageSpec(; name="CMake_jll", version = v"3.24.3")]
+                platform = Platform("x86_64", "linux"; libc="musl")
+
+                @testset "with julia_version directly" begin
+                    Pkg.activate(temp=true)
+                    Pkg.add(deepcopy(dependencies); platform, julia_version=nothing)
+                end
+                @testset "with an already resolved context" begin
+                    Pkg.activate(temp=true)
+                    ctx = Pkg.Types.Context(;julia_version=nothing)
+                    Pkg.add(ctx, deepcopy(dependencies); platform)
+                end
+            end
         end
         HistoricalStdlibVersions.unregister!()
     end
