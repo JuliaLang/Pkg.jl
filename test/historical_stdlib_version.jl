@@ -320,10 +320,12 @@ isolate(loaded_depot=true) do
                 # specific version vs. compat spec
                 @testset for version in (v"3.24.3+0", "3.24.3")
                     dependencies = [PackageSpec(; name="CMake_jll", version = version)]
-                    @testset "with context" begin
+                    @testset "with context (using private Pkg.add method)" begin
                         Pkg.activate(temp=true)
                         ctx = Pkg.Types.Context(; julia_version=nothing)
-                        Pkg.add(ctx, deepcopy(dependencies); platform)
+                        mydeps = deepcopy(dependencies)
+                        foreach(Pkg.API.handle_package_input!, mydeps)
+                        Pkg.add(ctx, mydeps; platform)
                     end
                     @testset "with julia_version" begin
                         Pkg.activate(temp=true)
