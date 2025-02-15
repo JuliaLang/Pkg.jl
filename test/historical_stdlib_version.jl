@@ -315,18 +315,18 @@ isolate(loaded_depot=true) do
                 @test v"0.3.14" > Pkg.dependencies()[OpenBLAS_jll_UUID].version >= v"0.3.13"
                 @test v"5.1.2" > Pkg.dependencies()[libblastrampoline_jll_UUID].version >= v"5.1.1"
             end
-            @testset "non-stdlib add" begin
-                dependencies = [PackageSpec(; name="CMake_jll", version = v"3.24.3")]
+            @testset "non-stdlib JLL add" begin
                 platform = Platform("x86_64", "linux"; libc="musl")
-
-                @testset "with julia_version directly" begin
+                @testset "with a specific version" begin
+                    dependencies = [PackageSpec(; name="CMake_jll", version = v"3.24.3+0")]
                     Pkg.activate(temp=true)
                     Pkg.add(deepcopy(dependencies); platform, julia_version=nothing)
                 end
-                @testset "with an already resolved context" begin
+                @testset "with a compat spec" begin
+                    # note the string spec and lack of a `+0` here
+                    dependencies = [PackageSpec(; name="CMake_jll", version = "3.24.3")]
                     Pkg.activate(temp=true)
-                    ctx = Pkg.Types.Context(;julia_version=nothing)
-                    Pkg.add(ctx, deepcopy(dependencies); platform)
+                    Pkg.add(deepcopy(dependencies); platform, julia_version=nothing)
                 end
             end
         end
