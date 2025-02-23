@@ -2,6 +2,7 @@
 
 module Operations
 
+using FileWatching: FileWatching
 using UUIDs
 using Random: randstring
 import LibGit2, Dates, TOML
@@ -1056,7 +1057,10 @@ function download_source(ctx::Context, pkgs; readonly=true)
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
-        ispath(path) && continue
+        mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
+        FileWatching.mkpidlock(path * ".pid", stale_age = 3) do
+            ispath(path)
+        end && continue
         urls = find_urls(ctx.registries, pkg.uuid)
         push!(pkgs_to_install, (;pkg, urls, path))
     end
@@ -1092,40 +1096,46 @@ function download_source(ctx::Context, pkgs; readonly=true)
         for i in 1:ctx.num_concurrent_downloads
             @async begin
                 for (pkg, urls, path) in jobs
-                    if ctx.use_git_for_all_downloads
-                        put!(results, (pkg, false, (urls, path)))
-                        continue
-                    end
-                    try
-                        archive_urls = Pair{String,Bool}[]
-                        # Check if the current package is available in one of the registries being tracked by the pkg server
-                        # In that case, download from the package server
-                        if server_registry_info !== nothing
-                            server, registry_info = server_registry_info
-                            for reg in ctx.registries
-                                if reg.uuid in keys(registry_info)
-                                    if haskey(reg, pkg.uuid)
-                                        url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
-                                        push!(archive_urls, url => true)
-                                        break
+                    ispath(path) && continue
+                    mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
+                    FileWatching.mkpidlock(path * ".pid", stale_age = 3) do
+                        ispath(path) && @goto done
+                        if ctx.use_git_for_all_downloads
+                            put!(results, (pkg, false, (urls, path)))
+                            @goto done
+                        end
+                        try
+                            archive_urls = Pair{String,Bool}[]
+                            # Check if the current package is available in one of the registries being tracked by the pkg server
+                            # In that case, download from the package server
+                            if server_registry_info !== nothing
+                                server, registry_info = server_registry_info
+                                for reg in ctx.registries
+                                    if reg.uuid in keys(registry_info)
+                                        if haskey(reg, pkg.uuid)
+                                            url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
+                                            push!(archive_urls, url => true)
+                                            break
+                                        end
                                     end
                                 end
                             end
+                            for repo_url in urls
+                                url = get_archive_url_for_version(repo_url, pkg.tree_hash)
+                                url !== nothing && push!(archive_urls, url => false)
+                            end
+                            success = install_archive(archive_urls, pkg.tree_hash, path, io=ctx.io)
+                            if success && readonly
+                                set_readonly(path) # In add mode, files should be read-only
+                            end
+                            if ctx.use_only_tarballs_for_downloads && !success
+                                pkgerror("failed to get tarball from $(urls)")
+                            end
+                            put!(results, (pkg, success, (urls, path)))
+                        catch err
+                            put!(results, (pkg, err, catch_backtrace()))
                         end
-                        for repo_url in urls
-                            url = get_archive_url_for_version(repo_url, pkg.tree_hash)
-                            url !== nothing && push!(archive_urls, url => false)
-                        end
-                        success = install_archive(archive_urls, pkg.tree_hash, path, io=ctx.io)
-                        if success && readonly
-                            set_readonly(path) # In add mode, files should be read-only
-                        end
-                        if ctx.use_only_tarballs_for_downloads && !success
-                            pkgerror("failed to get tarball from $(urls)")
-                        end
-                        put!(results, (pkg, success, (urls, path)))
-                    catch err
-                        put!(results, (pkg, err, catch_backtrace()))
+                        @label done
                     end
                 end
             end
