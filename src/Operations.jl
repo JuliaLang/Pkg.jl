@@ -750,15 +750,12 @@ function install_archive(
             unpacked = joinpath(dir, dirs[1])
         end
         # Assert that the tarball unpacked to the tree sha we wanted
-        # TODO: Enable on Windows when tree_hash handles
-        # executable bits correctly, see JuliaLang/julia #33212.
-        if !Sys.iswindows()
-            if SHA1(GitTools.tree_hash(unpacked)) != hash
-                @warn "tarball content does not match git-tree-sha1"
-                url_success = false
-            end
-            url_success || continue
+        if SHA1(GitTools.tree_hash(unpacked)) != hash
+            @warn "tarball content does not match git-tree-sha1"
+            url_success = false
         end
+        url_success || continue
+
         # Move content to version path
         !isdir(version_path) && mkpath(version_path)
         mv(unpacked, version_path; force=true)
