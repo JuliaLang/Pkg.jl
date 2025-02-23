@@ -758,7 +758,17 @@ function install_archive(
 
         # Move content to version path
         !isdir(version_path) && mkpath(version_path)
-        mv(unpacked, version_path; force=true)
+        unpacked_tree_hash = GitTools.tree_hash(unpacked)
+        try # protect against interrupted moves
+            mv(unpacked, version_path; force=true)
+        finally
+            if GitTools.tree_hash(version_path) != unpacked_tree_hash
+                @warn "failed to move unpacked content to version path. Tree hash was different after moving."
+                Base.rm(version_path; force=true, recursive=true)
+                url_success = false
+                continue
+            end
+        end
         break # successful install
     end
     # Clean up and exit
