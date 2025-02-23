@@ -70,12 +70,19 @@ jobs:
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
+
+      # needed for git cli tests, otherwise auth hangs/prints. See `JULIA_PKG_TESTS_GIT_CLI_AUTHORIZED`
+      - uses: de-vri-es/setup-git-credentials@5e1f18da68b7039c7f824408d170811aaec93ca8 # v2.1.2
+        with:
+          credentials: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com
+
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: true
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
+          JULIA_PKG_TESTS_GIT_CLI_AUTHORIZED: true
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
