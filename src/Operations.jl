@@ -2276,7 +2276,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            cmd = Cmd(`$(Base.julia_cmd()) $(flags) --eval $code`; env = julia_args.env)
+            cmd = `$(Base.julia_cmd()) $(flags) --eval $code`
 
             path_sep = Sys.iswindows() ? ';' : ':'
             p, interrupted = withenv("JULIA_LOAD_PATH" => "@$(path_sep)$(testdir(source_path))", "JULIA_PROJECT" => nothing) do
@@ -2319,9 +2319,9 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            julia_args_defines_threads = any(startswith("--threads"), julia_args.exec) || (!isnothing(julia_args.env) && any(startswith("JULIA_NUM_THREADS"), julia_args.env))
+            julia_args_defines_threads = any(startswith("--threads"), julia_args.exec)
             threads_arg = julia_args_defines_threads ? `` : `--threads=$(get_threads_spec())`
-            cmd = Cmd(`$(Base.julia_cmd()) $threads_arg $(flags) --eval $code`; env = julia_args.env)
+            cmd = `$(Base.julia_cmd()) $threads_arg $(flags) --eval $code`
             p, interrupted = subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
