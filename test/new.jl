@@ -1831,6 +1831,8 @@ end
         Pkg.dependencies(exuuid) do pkg
             @test pkg.version > v"0.3.0"
         end
+
+        @test_throws PkgError("`repo` is a private field of PackageSpec and should not be set directly") Pkg.add([PackageSpec(;repo=LibGit2.GitRepo(url="someurl"))])
     end
 end
 
@@ -2069,7 +2071,7 @@ end
                 end
             end
         end
-    end    
+    end
 end
 
 #
