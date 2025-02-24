@@ -1557,7 +1557,10 @@ end
 
 function handle_package_input!(pkg::PackageSpec)
     if pkg.path !== nothing && pkg.url !== nothing
-        pkgerror("`path` and `url` are conflicting specifications")
+        pkgerror("PackageSpec fields `path` and `url` both set, resulting in conflicting specifications")
+    end
+    if pkg.repo.source !== nothing || pkg.repo.rev !== nothing || pkg.repo.subdir !== nothing
+        pkgerror("The PackageSpec field `repo` is private and should not be set directly")
     end
     pkg.repo = Types.GitRepo(rev = pkg.rev, source = pkg.url !== nothing ? pkg.url : pkg.path,
                          subdir = pkg.subdir)
