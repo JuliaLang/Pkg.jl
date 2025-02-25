@@ -1832,7 +1832,7 @@ end
             @test pkg.version > v"0.3.0"
         end
 
-        @test_throws PkgError("`repo` is a private field of PackageSpec and should not be set directly") Pkg.add([PackageSpec(;repo=LibGit2.GitRepo(url="someurl"))])
+        @test_throws PkgError("`repo` is a private field of PackageSpec and should not be set directly") Pkg.add([PackageSpec(;repo=Pkg.Types.GitRepo(url="someurl"))])
     end
 end
 
