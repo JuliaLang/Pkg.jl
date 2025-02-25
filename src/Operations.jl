@@ -1748,14 +1748,18 @@ end
 
 
 function get_threads_spec()
-    if Threads.nthreads(:interactive) > 0
+    if haskey(ENV, "JULIA_NUM_THREADS")
+        # if set, prefer JULIA_NUM_THREADS because this is passed to the test worker via --threads
+        # which takes precedence in the worker
+        ENV["JULIA_NUM_THREADS"]
+    elseif Threads.nthreads(:interactive) > 0
         "$(Threads.nthreads(:default)),$(Threads.nthreads(:interactive))"
     else
         "$(Threads.nthreads(:default))"
     end
 end
 
-function gen_subprocess_flags(source_path::String; coverage, julia_args)
+function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
     coverage_arg = if coverage isa Bool
         coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
