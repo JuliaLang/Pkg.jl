@@ -166,9 +166,10 @@ end
 # corrupting the depot and being able to load the package. Only one process will do each of these, others will wait on
 # the specific action for the specific thing:
 # - Install the default registries
-# - Install a package and deps
-# - Precompile a package and deps
-# - Load package
+# - Install source of package and deps
+# - Install artifacts
+# - Precompile package and deps
+# - Load & use package
 @testset "Concurrent setup/installation/precompilation across processes" begin
     @testset for test in 1:2
         mktempdir() do tmp
@@ -183,10 +184,11 @@ end
                 Pkg.add("FFMPEG") # a package with a lot of deps but fast to load
                 using FFMPEG
                 @showtime FFMPEG.exe("-version")
-                @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test
+                @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test (~10ms)
                 """
                 cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`
-                did_install = Threads.Atomic{Int}(0)
+                did_install_package = Threads.Atomic{Int}(0)
+                did_install_artifact = Threads.Atomic{Int}(0)
                 t = @elapsed @sync begin
                     # All but 1 process should be waiting, so should be ok to run many
                     for i in 1:3
@@ -198,7 +200,10 @@ end
                             end
                             str = String(take!(iob))
                             if occursin(r"Installed FFMPEG ─", str)
-                                Threads.atomic_add!(did_install, 1)
+                                Threads.atomic_add!(did_install_package, 1)
+                            end
+                            if occursin(r"Installed artifact FFMPEG ", str)
+                                Threads.atomic_add!(did_install_artifact, 1)
                             end
                             println("test $test: $i\n", str)
                             @test success(p)
@@ -206,8 +211,9 @@ end
                     end
                 end
                 println("test $test done in $t seconds")
-                # only 1 should have actually installed Example
-                @test did_install[] == 1
+                # only 1 should have actually installed FFMPEG
+                @test did_install_package[] == 1
+                @test did_install_artifact[] == 1
             end
         end
     end
