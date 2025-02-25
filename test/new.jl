@@ -178,7 +178,7 @@ end
             withenv("JULIA_DEPOT_PATH" => string(tmp, pathsep)) do
                 script = """
                 import Pkg
-                samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg: \$(repr(pkgdir(Pkg))) expected \\"$(Pkg_dir)\\"")
+                samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
                 Pkg.activate(temp=true)
                 Pkg.add("FFMPEG") # a package with a lot of deps but fast to load
                 using FFMPEG
