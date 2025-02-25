@@ -141,6 +141,76 @@ Pkg._auto_gc_enabled[] = false
     end
 end
 
+function copy_this_pkg_cache(new_depot)
+    source = joinpath(Base.DEPOT_PATH[1], "compiled", "v$(VERSION.major).$(VERSION.minor)", "Pkg")
+    dest = joinpath(new_depot, "compiled", "v$(VERSION.major).$(VERSION.minor)", "Pkg")
+    mkpath(dirname(dest))
+    cp(source, dest)
+end
+
+function kill_with_info(p)
+    if Sys.islinux()
+        SIGINFO = 10
+    elseif Sys.isbsd()
+        SIGINFO = 29
+    end
+    if @isdefined(SIGINFO)
+        kill(p, SIGINFO)
+        timedwait(()->process_exited(p), 20) # Allow time for profile to collect and print before killing
+    end
+    kill(p)
+    nothing
+end
+
+# This test tests that multiple julia processes can do the install within same depot, at the same time without
+# corrupting the depot and being able to succeed. Only one process will do each of these, others will wait on
+# the specific action for the specific thing:
+# - Install the default registries
+# - Install a package
+# - Precompile a package
+# - Load package
+@testset "Concurrent setup/installation/precompilation across processes" begin
+    @testset for test in 1:2
+        mktempdir() do tmp
+            copy_this_pkg_cache(tmp)
+            pathsep = Sys.iswindows() ? ";" : ":"
+            Pkg_dir = dirname(@__DIR__)
+            withenv("JULIA_DEPOT_PATH" => string(tmp, pathsep)) do
+                script = """
+                import Pkg
+                samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg: \$(repr(pkgdir(Pkg))) expected \\"$(Pkg_dir)\\"")
+                Pkg.activate(temp=true)
+                Pkg.add("Example")
+                using Example
+                """
+                cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`
+                did_install = Threads.Atomic{Int}(0)
+                t = @elapsed @sync begin
+                    # All but 1 process should be waiting, so should be ok to run many
+                    for i in 1:3
+                        Threads.@spawn begin
+                            iob = IOBuffer()
+                            p = run(pipeline(cmd, stdout=iob, stderr=iob), wait=false)
+                            if timedwait(() -> process_exited(p), 5*60; pollint = 1.0) === :timed_out
+                                kill_with_info(p)
+                            end
+                            str = String(take!(iob))
+                            if occursin(r"Installed Example ─", str)
+                                Threads.atomic_add!(did_install, 1)
+                            end
+                            println("test $test: $i\n", str)
+                            @test success(p)
+                        end
+                    end
+                end
+                println("test $test done in $t seconds")
+                # only 1 should have actually installed Example
+                @test did_install[] == 1
+            end
+        end
+    end
+end
+
 #
 # ## Sandboxing
 #
@@ -2069,7 +2139,7 @@ end
                 end
             end
         end
-    end    
+    end
 end
 
 #
