@@ -925,7 +925,7 @@ function download_artifacts(ctx::Context;
                         try
                             dstate.state = :running
                             ret()
-                            if !fancyprint
+                            if !fancyprint && dstate.bar.max > 1 # if another process downloaded, then max is never set greater than 1
                                 @lock print_lock printpkgstyle(io, :Installed, "artifact $rname $(MiniProgressBars.pkg_format_bytes(dstate.bar.max; sigdigits=1))")
                             end
                         catch
