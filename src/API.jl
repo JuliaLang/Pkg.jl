@@ -190,15 +190,26 @@ end
 function update_source_if_set(project, pkg)
     source = get(project.sources, pkg.name, nothing)
     source === nothing && return
-    # This should probably not modify the dicts directly...
-    if pkg.repo.source !== nothing
-        source["url"] = pkg.repo.source
-    end
-    if pkg.repo.rev !== nothing
-        source["rev"] = pkg.repo.rev
-    end
-    if pkg.path !== nothing
-        source["path"] = pkg.path
+    if pkg.repo == GitRepo()
+        delete!(project.sources, pkg.name)
+    else
+        # This should probably not modify the dicts directly...
+        if pkg.repo.source !== nothing
+            source["url"] = pkg.repo.source
+            delete!(source, "path")
+        end
+        if pkg.repo.rev !== nothing
+            source["rev"] = pkg.repo.rev
+            delete!(source, "path")
+        end
+        if pkg.repo.subdir !== nothing
+            source["subdir"] = pkg.repo.subdir
+        end
+        if pkg.path !== nothing
+            source["path"] = pkg.path
+            delete!(source, "url")
+            delete!(source, "rev")
+        end
     end
     if pkg.subdir !== nothing
         source["subdir"] = pkg.subdir
@@ -427,6 +438,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
                 pkgerror("pinning a package requires a single version, not a versionrange")
             end
         end
+        update_source_if_set(ctx.env.project, pkg)
     end
 
     project_deps_resolve!(ctx.env, pkgs)
