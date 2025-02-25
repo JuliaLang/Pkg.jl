@@ -182,6 +182,8 @@ end
                 Pkg.activate(temp=true)
                 Pkg.add("FFMPEG") # a package with a lot of deps but fast to load
                 using FFMPEG
+                @showtime FFMPEG.exe("-version")
+                @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test
                 """
                 cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`
                 did_install = Threads.Atomic{Int}(0)
