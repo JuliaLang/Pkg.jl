@@ -11,7 +11,7 @@ isolate(loaded_depot=true) do
     sep = Sys.iswindows() ? ';' : ':'
     Pkg.Apps.develop(path=joinpath(@__DIR__, "test_packages", "Rot13.jl"))
     current_path = ENV["PATH"]
-    exename = Sys.iswindows() ? "rot13.bat" : "rot13"
+    exename = Sys.iswindows() ? "juliarot13.bat" : "juliarot13"
     withenv("PATH" => string(joinpath(first(DEPOT_PATH), "bin"), sep, current_path)) do
         @test contains(Sys.which("$exename"), first(DEPOT_PATH))
         @test read(`$exename test`, String) == "grfg\n"
@@ -25,7 +25,7 @@ isolate(loaded_depot=true) do
         sep = Sys.iswindows() ? ';' : ':'
         path = git_init_package(tmpdir, joinpath(@__DIR__, "test_packages", "Rot13.jl"))
         Pkg.Apps.add(path=path)
-        exename = Sys.iswindows() ? "rot13.bat" : "rot13"
+        exename = Sys.iswindows() ? "juliarot13.bat" : "juliarot13"
         current_path = ENV["PATH"]
         withenv("PATH" => string(joinpath(first(DEPOT_PATH), "bin"), sep, current_path)) do
             @test contains(Sys.which(exename), first(DEPOT_PATH))

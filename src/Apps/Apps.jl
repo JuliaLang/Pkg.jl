@@ -243,21 +243,19 @@ end
 
 
 function require_not_empty(pkgs, f::Symbol)
-    pkgs === nothing && return
-    isempty(pkgs) && pkgerror("app $f requires at least one package")
+
+    if pkgs == nothing || isempty(pkgs)
+        pkgerror("app $f requires at least one package")
+    end
 end
 
 rm(pkgs_or_apps::String) = rm([pkgs_or_apps])
-function rm(pkgs_or_apps::Union{Vector, Nothing})
-    if pkgs_or_apps === nothing
-        rm(nothing)
-    else
-        for pkg_or_app in pkgs_or_apps
-            if pkg_or_app isa String
-                pkg_or_app = PackageSpec(pkg_or_app)
-            end
-            rm(pkg_or_app)
+function rm(pkgs_or_apps::Vector)
+    for pkg_or_app in pkgs_or_apps
+        if pkg_or_app isa String
+            pkg_or_app = PackageSpec(pkg_or_app)
         end
+        rm(pkg_or_app)
     end
 end
 
