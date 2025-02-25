@@ -3,6 +3,7 @@ module Artifacts
 using Artifacts, Base.BinaryPlatforms, SHA
 using ..MiniProgressBars, ..PlatformEngines
 using Tar: can_symlink
+using FileWatching: FileWatching
 
 import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
        ..stderr_f, ..printpkgstyle
@@ -330,87 +331,102 @@ function download_artifact(
     io::IO=stderr_f(),
     progress::Union{Function, Nothing} = nothing,
 )
-    if artifact_exists(tree_hash)
+    _artifact_paths = Artifacts.artifact_paths(tree_hash)
+    pidfile = _artifact_paths[1] * ".pid"
+    mkpath(dirname(pidfile))
+    t_wait_msg = Timer(2) do t
+        if progress === nothing
+            @info "downloading $tarball_url ($hex) in another process"
+        else
+            progress(0, 0; status="downloading in another process")
+        end
+    end
+    ret = FileWatching.mkpidlock(pidfile, stale_age = 3) do
+        close(t_wait_msg)
+        if artifact_exists(tree_hash)
+            return true
+        end
+
+        # Ensure the `artifacts` directory exists in our default depot
+        artifacts_dir = first(artifacts_dirs())
+        mkpath(artifacts_dir)
+        # expected artifact path
+        dst = joinpath(artifacts_dir, bytes2hex(tree_hash.bytes))
+
+        # We download by using a temporary directory.  We do this because the download may
+        # be corrupted or even malicious; we don't want to clobber someone else's artifact
+        # by trusting the tree hash that has been given to us; we will instead download it
+        # to a temporary directory, calculate the true tree hash, then move it to the proper
+        # location only after knowing what it is, and if something goes wrong in the process,
+        # everything should be cleaned up.
+
+        # Temporary directory where we'll do our creation business
+        temp_dir = mktempdir(artifacts_dir)
+
+        try
+            download_verify_unpack(tarball_url, tarball_hash, temp_dir;
+                                    ignore_existence=true, verbose, quiet_download, io, progress)
+            isnothing(progress) || progress(10000, 10000; status="verifying")
+            calc_hash = SHA1(GitTools.tree_hash(temp_dir))
+
+            # Did we get what we expected?  If not, freak out.
+            if calc_hash.bytes != tree_hash.bytes
+                msg = """
+                Tree Hash Mismatch!
+                Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
+                Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))
+                """
+                # Since tree hash calculation is rather fragile and file system dependent,
+                # we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the error and move
+                # the artifact to the expected location and return true
+                ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
+                if ignore_hash_env_set
+                    ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+                    ignore_hash === nothing && @error(
+                        "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
+                        ENV["JULIA_PKG_IGNORE_HASHES"],
+                    )
+                    ignore_hash = something(ignore_hash, false)
+                else
+                    # default: false except Windows users who can't symlink
+                    ignore_hash = Sys.iswindows() &&
+                        !mktempdir(can_symlink, artifacts_dir)
+                end
+                if ignore_hash
+                    desc = ignore_hash_env_set ?
+                        "Environment variable \$JULIA_PKG_IGNORE_HASHES is true" :
+                        "System is Windows and user cannot create symlinks"
+                    msg *= "\n$desc: \
+                        ignoring hash mismatch and moving \
+                        artifact to the expected location"
+                    @error(msg)
+                else
+                    error(msg)
+                end
+            end
+            # Move it to the location we expected
+            isnothing(progress) || progress(10000, 10000; status="moving to artifact store")
+            _mv_temp_artifact_dir(temp_dir, dst)
+        catch err
+            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
+            if isa(err, InterruptException)
+                rethrow(err)
+            end
+            # If something went wrong during download, return the error
+            return err
+        finally
+            # Always attempt to cleanup
+            try
+                rm(temp_dir; recursive=true, force=true)
+            catch e
+                e isa InterruptException && rethrow()
+                @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception=e)
+            end
+        end
         return true
     end
 
-    # Ensure the `artifacts` directory exists in our default depot
-    artifacts_dir = first(artifacts_dirs())
-    mkpath(artifacts_dir)
-    # expected artifact path
-    dst = joinpath(artifacts_dir, bytes2hex(tree_hash.bytes))
-
-    # We download by using a temporary directory.  We do this because the download may
-    # be corrupted or even malicious; we don't want to clobber someone else's artifact
-    # by trusting the tree hash that has been given to us; we will instead download it
-    # to a temporary directory, calculate the true tree hash, then move it to the proper
-    # location only after knowing what it is, and if something goes wrong in the process,
-    # everything should be cleaned up.
-
-    # Temporary directory where we'll do our creation business
-    temp_dir = mktempdir(artifacts_dir)
-
-    try
-        download_verify_unpack(tarball_url, tarball_hash, temp_dir;
-                                ignore_existence=true, verbose, quiet_download, io, progress)
-        isnothing(progress) || progress(10000, 10000; status="verifying")
-        calc_hash = SHA1(GitTools.tree_hash(temp_dir))
-
-        # Did we get what we expected?  If not, freak out.
-        if calc_hash.bytes != tree_hash.bytes
-            msg = """
-            Tree Hash Mismatch!
-              Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
-              Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))
-            """
-            # Since tree hash calculation is rather fragile and file system dependent,
-            # we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the error and move
-            # the artifact to the expected location and return true
-            ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
-            if ignore_hash_env_set
-                ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
-                ignore_hash === nothing && @error(
-                    "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
-                    ENV["JULIA_PKG_IGNORE_HASHES"],
-                )
-                ignore_hash = something(ignore_hash, false)
-            else
-                # default: false except Windows users who can't symlink
-                ignore_hash = Sys.iswindows() &&
-                    !mktempdir(can_symlink, artifacts_dir)
-            end
-            if ignore_hash
-                desc = ignore_hash_env_set ?
-                    "Environment variable \$JULIA_PKG_IGNORE_HASHES is true" :
-                    "System is Windows and user cannot create symlinks"
-                msg *= "\n$desc: \
-                    ignoring hash mismatch and moving \
-                    artifact to the expected location"
-                @error(msg)
-            else
-                error(msg)
-            end
-        end
-        # Move it to the location we expected
-        isnothing(progress) || progress(10000, 10000; status="moving to artifact store")
-        _mv_temp_artifact_dir(temp_dir, dst)
-    catch err
-        @debug "download_artifact error" tree_hash tarball_url tarball_hash err
-        if isa(err, InterruptException)
-            rethrow(err)
-        end
-        # If something went wrong during download, return the error
-        return err
-    finally
-        # Always attempt to cleanup
-        try
-            rm(temp_dir; recursive=true, force=true)
-        catch e
-            e isa InterruptException && rethrow()
-            @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception=e)
-        end
-    end
-    return true
+    return ret
 end
 
 """
