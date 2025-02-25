@@ -1993,7 +1993,7 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
-        $(julia_args.exec)
+        $(julia_args)
     ```
 end
 
