@@ -162,12 +162,12 @@ function kill_with_info(p)
     nothing
 end
 
-# This test tests that multiple julia processes can do the install within same depot, at the same time without
-# corrupting the depot and being able to succeed. Only one process will do each of these, others will wait on
+# This test tests that multiple julia processes can install within same depot concurrently without
+# corrupting the depot and being able to load the package. Only one process will do each of these, others will wait on
 # the specific action for the specific thing:
 # - Install the default registries
-# - Install a package
-# - Precompile a package
+# - Install a package and deps
+# - Precompile a package and deps
 # - Load package
 @testset "Concurrent setup/installation/precompilation across processes" begin
     @testset for test in 1:2
@@ -180,8 +180,8 @@ end
                 import Pkg
                 samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg: \$(repr(pkgdir(Pkg))) expected \\"$(Pkg_dir)\\"")
                 Pkg.activate(temp=true)
-                Pkg.add("Example")
-                using Example
+                Pkg.add("FFMPEG") # a package with a lot of deps but fast to load
+                using FFMPEG
                 """
                 cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`
                 did_install = Threads.Atomic{Int}(0)
@@ -195,7 +195,7 @@ end
                                 kill_with_info(p)
                             end
                             str = String(take!(iob))
-                            if occursin(r"Installed Example ─", str)
+                            if occursin(r"Installed FFMPEG ─", str)
                                 Threads.atomic_add!(did_install, 1)
                             end
                             println("test $test: $i\n", str)
