@@ -1098,7 +1098,7 @@ function download_source(ctx::Context, pkgs; readonly=true)
                 for (pkg, urls, path) in jobs
                     ispath(path) && continue
                     mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
-                    @info "mkpidlock for $path"
+                    yield()
                     FileWatching.mkpidlock(path * ".pid", stale_age = 3) do
                         @info "acquired mkpidlock for $path"
                         ispath(path) && @goto done
