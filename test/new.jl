@@ -189,6 +189,8 @@ end
                 cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`
                 did_install_package = Threads.Atomic{Int}(0)
                 did_install_artifact = Threads.Atomic{Int}(0)
+                any_failed = Threads.Atomic{Bool}(false)
+                outputs = fill("", 3)
                 t = @elapsed @sync begin
                     # All but 1 process should be waiting, so should be ok to run many
                     for i in 1:3
@@ -206,11 +208,20 @@ end
                                 Threads.atomic_add!(did_install_artifact, 1)
                             end
                             # println("test $test: $i\n", str)
+                            outputs[i] = string("=== test $test, process $i ===\n", str)
                             @test success(p)
+                            if !success(p)
+                                Threads.atomic_cas!(any_failed, false, true)
+                            end
                         end
                     end
                 end
-                # println("test $test done in $t seconds")
+                if any_failed[]
+                    println("=== Concurrent Pkg.add test $test failed after $t seconds ===")
+                    for i in 1:3
+                        println(outputs[i])
+                    end
+                end
                 # only 1 should have actually installed FFMPEG
                 @test did_install_package[] == 1
                 @test did_install_artifact[] == 1
