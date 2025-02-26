@@ -61,11 +61,11 @@ function create_artifact(f::Function)
 end
 
 """
-    mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
+    mv_temp_artifact_dir(temp_dir::String, new_path::String; set_permissions::Bool=true)::Nothing
 Either rename the directory at `temp_dir` to `new_path` and set it to read-only
 or if `new_path` artifact already exists try to do nothing.
 """
-function mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
+function mv_temp_artifact_dir(temp_dir::String, new_path::String; set_permissions::Bool=true)::Nothing
     # Sometimes a rename can fail because the temp_dir is locked by
     # anti-virus software scanning the new files.
     # In this case we want to sleep and try again.
@@ -84,16 +84,18 @@ function mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
         # `cp` is not atomic, so avoid the potential of calling it.
         err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
         if err ≥ 0
-            # rename worked
-            new_path_mode = filemode(dirname(new_path))
-            if Sys.iswindows()
-                # If this is Windows, ensure the directory mode is executable,
-                # as `filemode()` is incomplete.  Some day, that may not be the
-                # case, there exists a test that will fail if this is changes.
-                new_path_mode |= 0o111
+            if set_permissions
+                # rename worked
+                new_path_mode = filemode(dirname(new_path))
+                if Sys.iswindows()
+                    # If this is Windows, ensure the directory mode is executable,
+                    # as `filemode()` is incomplete.  Some day, that may not be the
+                    # case, there exists a test that will fail if this is changes.
+                    new_path_mode |= 0o111
+                end
+                chmod(new_path, new_path_mode)
+                set_readonly(new_path)
             end
-            chmod(new_path, new_path_mode)
-            set_readonly(new_path)
             return
         else
             # Ignore rename error if `new_path` exists.

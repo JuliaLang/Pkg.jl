@@ -759,7 +759,7 @@ function install_archive(
 
         # Move content to version path
         !isdir(dirname(version_path)) && mkpath(dirname(version_path))
-        mv_temp_artifact_dir(unpacked, version_path)
+        mv_temp_artifact_dir(unpacked, version_path; set_permissions = false)
 
         break # successful install
     end
