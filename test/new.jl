@@ -170,7 +170,7 @@ end
 # - Install artifacts
 # - Precompile package and deps
 # - Load & use package
-@testset "Concurrent setup/installation/precompilation across processes" begin
+@testset "Concurrent setup/installation/precompilation across processes" verbose=verbose begin
     @testset for test in 1:1 # increase for stress testing
         mktempdir() do tmp
             copy_this_pkg_cache(tmp)
