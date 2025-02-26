@@ -202,11 +202,9 @@ end
                             if timedwait(() -> process_exited(p), 5*60; pollint = 1.0) === :timed_out
                                 kill_with_info(p)
                             end
-                            @test success(p)
                             if !success(p)
                                 Threads.atomic_cas!(any_failed, false, true)
                             end
-
                             str = String(take!(iob))
                             if occursin(r"Installed FFMPEG ─", str)
                                 Threads.atomic_add!(did_install_package, 1)
@@ -226,6 +224,7 @@ end
                     end
                 end
                 # only 1 should have actually installed FFMPEG
+                @test !any_failed[]
                 @test did_install_package[] == 1
                 @test did_install_artifact[] == 1
             end
