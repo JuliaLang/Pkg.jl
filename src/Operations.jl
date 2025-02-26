@@ -1058,9 +1058,7 @@ function download_source(ctx::Context, pkgs; readonly=true)
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
         mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
-        FileWatching.mkpidlock(path * ".pid", stale_age = 3) do
-            ispath(path)
-        end && continue
+        FileWatching.mkpidlock(() -> ispath(path), path * ".pid", stale_age = 20) && continue
         urls = find_urls(ctx.registries, pkg.uuid)
         push!(pkgs_to_install, (;pkg, urls, path))
     end
@@ -1099,7 +1097,7 @@ function download_source(ctx::Context, pkgs; readonly=true)
                     ispath(path) && continue
                     mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
                     yield()
-                    FileWatching.mkpidlock(path * ".pid", stale_age = 3) do
+                    FileWatching.mkpidlock(path * ".pid", stale_age = 20) do
                         @info "acquired mkpidlock for $path"
                         ispath(path) && @goto done
                         if ctx.use_git_for_all_downloads

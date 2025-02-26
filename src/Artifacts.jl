@@ -341,7 +341,7 @@ function download_artifact(
             progress(0, 0; status="downloading in another process")
         end
     end
-    ret = FileWatching.mkpidlock(pidfile, stale_age = 3) do
+    ret = FileWatching.mkpidlock(pidfile, stale_age = 20) do
         close(t_wait_msg)
         if artifact_exists(tree_hash)
             return true
