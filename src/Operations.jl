@@ -1096,9 +1096,7 @@ function download_source(ctx::Context, pkgs; readonly=true)
                 for (pkg, urls, path) in jobs
                     ispath(path) && continue
                     mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
-                    yield()
                     FileWatching.mkpidlock(path * ".pid", stale_age = 20) do
-                        @info "acquired mkpidlock for $path"
                         ispath(path) && @goto done
                         if ctx.use_git_for_all_downloads
                             put!(results, (pkg, false, (urls, path)))
@@ -1693,13 +1691,9 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
 
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
-        @info "_resolve"
         man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-        @info "update_manifest!"
         update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version)
-        @info "download_source"
         new_apply = download_source(ctx)
-        @info "fixups_from_projectfile!"
         fixups_from_projectfile!(ctx)
 
         # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
