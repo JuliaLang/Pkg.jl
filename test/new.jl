@@ -171,7 +171,7 @@ end
 # - Precompile package and deps
 # - Load & use package
 @testset "Concurrent setup/installation/precompilation across processes" begin
-    @testset for test in 1:2
+    @testset for test in 1:1 # increase for stress testing
         mktempdir() do tmp
             copy_this_pkg_cache(tmp)
             pathsep = Sys.iswindows() ? ";" : ":"
@@ -181,7 +181,7 @@ end
                 import Pkg
                 samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
                 Pkg.activate(temp=true)
-                Pkg.add("FFMPEG") # a package with a lot of deps but fast to load
+                Pkg.add(name="FFMPEG", version="0.4") # a package with a lot of deps but fast to load
                 using FFMPEG
                 @showtime FFMPEG.exe("-version")
                 @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test (~10ms)
@@ -205,12 +205,12 @@ end
                             if occursin(r"Installed artifact FFMPEG ", str)
                                 Threads.atomic_add!(did_install_artifact, 1)
                             end
-                            println("test $test: $i\n", str)
+                            # println("test $test: $i\n", str)
                             @test success(p)
                         end
                     end
                 end
-                println("test $test done in $t seconds")
+                # println("test $test done in $t seconds")
                 # only 1 should have actually installed FFMPEG
                 @test did_install_package[] == 1
                 @test did_install_artifact[] == 1
