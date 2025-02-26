@@ -159,6 +159,7 @@ function kill_with_info(p)
         timedwait(()->process_exited(p), 20) # Allow time for profile to collect and print before killing
     end
     kill(p)
+    wait(p)
     nothing
 end
 
@@ -170,7 +171,7 @@ end
 # - Install artifacts
 # - Precompile package and deps
 # - Load & use package
-@testset "Concurrent setup/installation/precompilation across processes" verbose=verbose begin
+@testset "Concurrent setup/installation/precompilation across processes" begin
     @testset for test in 1:1 # increase for stress testing
         mktempdir() do tmp
             copy_this_pkg_cache(tmp)
@@ -196,10 +197,16 @@ end
                     for i in 1:3
                         Threads.@spawn begin
                             iob = IOBuffer()
+                            start = time()
                             p = run(pipeline(cmd, stdout=iob, stderr=iob), wait=false)
                             if timedwait(() -> process_exited(p), 5*60; pollint = 1.0) === :timed_out
                                 kill_with_info(p)
                             end
+                            @test success(p)
+                            if !success(p)
+                                Threads.atomic_cas!(any_failed, false, true)
+                            end
+
                             str = String(take!(iob))
                             if occursin(r"Installed FFMPEG ─", str)
                                 Threads.atomic_add!(did_install_package, 1)
@@ -207,17 +214,13 @@ end
                             if occursin(r"Installed artifact FFMPEG ", str)
                                 Threads.atomic_add!(did_install_artifact, 1)
                             end
-                            # println("test $test: $i\n", str)
-                            outputs[i] = string("=== test $test, process $i ===\n", str)
-                            @test success(p)
-                            if !success(p)
-                                Threads.atomic_cas!(any_failed, false, true)
-                            end
+                            outputs[i] = string("=== test $test, process $i. Took $(time() - start) seconds.\n", str)
                         end
                     end
                 end
+                println("=== Concurrent Pkg.add test $test took $t seconds ===")
                 if any_failed[]
-                    println("=== Concurrent Pkg.add test $test failed after $t seconds ===")
+                    println("=== Concurrent Pkg.add test $test failed")
                     for i in 1:3
                         println(outputs[i])
                     end
