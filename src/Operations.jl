@@ -10,7 +10,7 @@ import LibGit2, Dates, TOML
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
-                    artifact_exists, select_downloadable_artifacts, mv_temp_artifact_dir
+                    artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
@@ -759,7 +759,7 @@ function install_archive(
 
         # Move content to version path
         !isdir(dirname(version_path)) && mkpath(dirname(version_path))
-        mv_temp_artifact_dir(unpacked, version_path; set_permissions = false)
+        mv_temp_dir_retries(unpacked, version_path; set_permissions = false)
 
         break # successful install
     end
