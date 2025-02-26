@@ -1088,10 +1088,10 @@ function download_source(ctx::Context, pkgs; readonly=true)
                     ispath(path) && continue
                     mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
                     FileWatching.mkpidlock(path * ".pid", stale_age = 20) do
-                        ispath(path) && @goto done
+                        ispath(path) && return
                         if ctx.use_git_for_all_downloads
                             put!(results, (pkg, false, (urls, path)))
-                            @goto done
+                            return
                         end
                         try
                             archive_urls = Pair{String,Bool}[]
@@ -1124,7 +1124,6 @@ function download_source(ctx::Context, pkgs; readonly=true)
                         catch err
                             put!(results, (pkg, err, catch_backtrace()))
                         end
-                        @label done
                     end
                 end
             end
