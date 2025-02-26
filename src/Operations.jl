@@ -10,7 +10,7 @@ import LibGit2, Dates, TOML
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
-                    artifact_exists, select_downloadable_artifacts
+                    artifact_exists, select_downloadable_artifacts, mv_temp_artifact_dir
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
@@ -758,18 +758,9 @@ function install_archive(
         url_success || continue
 
         # Move content to version path
-        !isdir(version_path) && mkpath(version_path)
-        unpacked_tree_hash = GitTools.tree_hash(unpacked)
-        try # protect against interrupted moves
-            mv(unpacked, version_path; force=true)
-        finally
-            if GitTools.tree_hash(version_path) != unpacked_tree_hash
-                @warn "failed to move unpacked content to version path. Tree hash was different after moving."
-                Base.rm(version_path; force=true, recursive=true)
-                url_success = false
-                continue
-            end
-        end
+        !isdir(dirname(version_path)) && mkpath(dirname(version_path))
+        mv_temp_artifact_dir(unpacked, version_path)
+
         break # successful install
     end
     # Clean up and exit

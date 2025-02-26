@@ -50,7 +50,7 @@ function create_artifact(f::Function)
         # as something that was foolishly overridden.  This should be virtually impossible
         # unless the user has been very unwise, but let's be cautious.
         new_path = artifact_path(artifact_hash; honor_overrides=false)
-        _mv_temp_artifact_dir(temp_dir, new_path)
+        mv_temp_artifact_dir(temp_dir, new_path)
 
         # Give the people what they want
         return artifact_hash
@@ -61,11 +61,11 @@ function create_artifact(f::Function)
 end
 
 """
-    _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
+    mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
 Either rename the directory at `temp_dir` to `new_path` and set it to read-only
 or if `new_path` artifact already exists try to do nothing.
 """
-function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
+function mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
     # Sometimes a rename can fail because the temp_dir is locked by
     # anti-virus software scanning the new files.
     # In this case we want to sleep and try again.
@@ -406,7 +406,7 @@ function download_artifact(
             end
             # Move it to the location we expected
             isnothing(progress) || progress(10000, 10000; status="moving to artifact store")
-            _mv_temp_artifact_dir(temp_dir, dst)
+            mv_temp_artifact_dir(temp_dir, dst)
         catch err
             @debug "download_artifact error" tree_hash tarball_url tarball_hash err
             if isa(err, InterruptException)
