@@ -144,7 +144,7 @@ For the details, see [`Pkg.instantiate`](@ref).
 
 ### Different Manifests for Different Julia versions
 
-Starting from Julia v1.11, there is an option to name manifest files in the format `Manifest-v{major}.{minor}.toml`.
+Starting from Julia v1.10.8, there is an option to name manifest files in the format `Manifest-v{major}.{minor}.toml`.
 Julia will then preferentially use the version-specific manifest file if available.
 For example, if both `Manifest-v1.11.toml` and `Manifest.toml` exist, Julia 1.11 will prioritize using `Manifest-v1.11.toml`.
 However, Julia versions 1.10, 1.12, and all others will default to using `Manifest.toml`.
