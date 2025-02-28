@@ -219,9 +219,8 @@ end
                         end
                     end
                 end
-                println("=== Concurrent Pkg.add test $test took $t seconds ===")
                 if any_failed[]
-                    println("=== Concurrent Pkg.add test $test failed")
+                    println("=== Concurrent Pkg.add test $test failed after $t seconds")
                     for i in 1:3
                         printstyled(stdout, outputs[i]; color=(:blue, :green, :yellow)[i])
                     end
