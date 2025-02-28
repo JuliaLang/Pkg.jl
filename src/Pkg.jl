@@ -2,6 +2,11 @@
 
 module Pkg
 
+# In Pkg tests we want to avoid Pkg being re-precompiled by subprocesses, so this is enabled in the test suite
+if Base.get_bool_env("JULIA_PKG_DISALLOW_PKG_PRECOMPILATION", false) == true
+    error("Precompililing Pkg is disallowed. JULIA_PKG_DISALLOW_PKG_PRECOMPILATION=$(ENV["JULIA_PKG_DISALLOW_PKG_PRECOMPILATION"])")
+end
+
 if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
     @eval Base.Experimental.@max_methods 1
 end
