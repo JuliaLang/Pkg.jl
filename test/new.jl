@@ -223,7 +223,7 @@ end
                 if any_failed[]
                     println("=== Concurrent Pkg.add test $test failed")
                     for i in 1:3
-                        println(outputs[i])
+                        printstyled(stdout, outputs[i]; color=(:blue, :green, :yellow)[i])
                     end
                 end
                 # only 1 should have actually installed FFMPEG
