@@ -1043,13 +1043,14 @@ end
 download_source(ctx::Context; readonly=true) = download_source(ctx, values(ctx.env.manifest); readonly)
 
 function download_source(ctx::Context, pkgs; readonly=true)
+    pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
     for pkg in pkgs
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
         mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
-        FileWatching.mkpidlock(() -> ispath(path), path * ".pid", stale_age = 20) && continue
+        FileWatching.mkpidlock(() -> ispath(path), path * ".pid", stale_age = pidfile_stale_age) && continue
         urls = find_urls(ctx.registries, pkg.uuid)
         push!(pkgs_to_install, (;pkg, urls, path))
     end
@@ -1087,7 +1088,7 @@ function download_source(ctx::Context, pkgs; readonly=true)
             @async begin
                 for (pkg, urls, path) in jobs
                     mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
-                    FileWatching.mkpidlock(path * ".pid", stale_age = 20) do
+                    FileWatching.mkpidlock(path * ".pid", stale_age = pidfile_stale_age) do
                         ispath(path) && return
                         if ctx.use_git_for_all_downloads
                             put!(results, (pkg, false, (urls, path)))
