@@ -1093,26 +1093,26 @@ function download_source(ctx::Context, pkgs; readonly=true)
                             put!(results, (pkg, false, (urls, path)))
                             return
                         end
-                        try
-                            archive_urls = Pair{String,Bool}[]
-                            # Check if the current package is available in one of the registries being tracked by the pkg server
-                            # In that case, download from the package server
-                            if server_registry_info !== nothing
-                                server, registry_info = server_registry_info
-                                for reg in ctx.registries
-                                    if reg.uuid in keys(registry_info)
-                                        if haskey(reg, pkg.uuid)
-                                            url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
-                                            push!(archive_urls, url => true)
-                                            break
-                                        end
+                        archive_urls = Pair{String,Bool}[]
+                        # Check if the current package is available in one of the registries being tracked by the pkg server
+                        # In that case, download from the package server
+                        if server_registry_info !== nothing
+                            server, registry_info = server_registry_info
+                            for reg in ctx.registries
+                                if reg.uuid in keys(registry_info)
+                                    if haskey(reg, pkg.uuid)
+                                        url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
+                                        push!(archive_urls, url => true)
+                                        break
                                     end
                                 end
                             end
-                            for repo_url in urls
-                                url = get_archive_url_for_version(repo_url, pkg.tree_hash)
-                                url !== nothing && push!(archive_urls, url => false)
-                            end
+                        end
+                        for repo_url in urls
+                            url = get_archive_url_for_version(repo_url, pkg.tree_hash)
+                            url !== nothing && push!(archive_urls, url => false)
+                        end
+                        try
                             success = install_archive(archive_urls, pkg.tree_hash, path, io=ctx.io)
                             if success && readonly
                                 set_readonly(path) # In add mode, files should be read-only
