@@ -1084,12 +1084,15 @@ function download_source(ctx::Context, pkgs; readonly=true)
             end
         end
 
-        for i in 1:ctx.num_concurrent_downloads
+        for i in 1:ctx.num_concurrent_downloads # (default 8)
             @async begin
                 for (pkg, urls, path) in jobs
                     mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
                     FileWatching.mkpidlock(path * ".pid", stale_age = pidfile_stale_age) do
-                        ispath(path) && return
+                        if ispath(path)
+                            put!(results, (pkg, nothing, (urls, path)))
+                            return
+                        end
                         if ctx.use_git_for_all_downloads
                             put!(results, (pkg, false, (urls, path)))
                             return
@@ -1136,10 +1139,15 @@ function download_source(ctx::Context, pkgs; readonly=true)
         fancyprint = can_fancyprint(ctx.io)
         try
             for i in 1:length(pkgs_to_install)
-                pkg::eltype(pkgs), exc_or_success, bt_or_pathurls = take!(results)
-                exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
-                                                        sprint(Base.showerror, exc_or_success, bt_or_pathurls))
-                success, (urls, path) = exc_or_success, bt_or_pathurls
+                pkg::eltype(pkgs), exc_or_success_or_nothing, bt_or_pathurls = take!(results)
+                if exc_or_success_or_nothing isa Exception
+                    exc = exc_or_success_or_nothing
+                    pkgerror("Error when installing package $(pkg.name):\n", sprint(Base.showerror, exc, bt_or_pathurls))
+                end
+                if exc_or_success_or_nothing === nothing
+                    continue # represents when another process did the install
+                end
+                success, (urls, path) = exc_or_success_or_nothing, bt_or_pathurls
                 success || push!(missed_packages, (; pkg, urls, path))
                 bar.current = i
                 str = sprint(; context=ctx.io) do io
