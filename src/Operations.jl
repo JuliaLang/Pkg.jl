@@ -1175,15 +1175,18 @@ function download_source(ctx::Context, pkgs; readonly=true)
     # Use LibGit2 to download any remaining packages #
     ##################################################
     for (pkg, urls, path) in missed_packages
-        install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
-        readonly && set_readonly(path)
-        vstr = if pkg.version !== nothing
-            "v$(pkg.version)"
-        else
-            short_treehash = string(pkg.tree_hash)[1:16]
-            "[$short_treehash]"
+        FileWatching.mkpidlock(path * ".pid", stale_age = pidfile_stale_age) do
+            ispath(path) && return
+            install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
+            readonly && set_readonly(path)
+            vstr = if pkg.version !== nothing
+                "v$(pkg.version)"
+            else
+                short_treehash = string(pkg.tree_hash)[1:16]
+                "[$short_treehash]"
+            end
+            printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
         end
-        printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
 
     return Set{UUID}(entry.pkg.uuid for entry in pkgs_to_install)
