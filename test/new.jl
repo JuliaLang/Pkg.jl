@@ -156,7 +156,7 @@ function kill_with_info(p)
     end
     if @isdefined(SIGINFO)
         kill(p, SIGINFO)
-        timedwait(()->process_exited(p), 20) # Allow time for profile to collect and print before killing
+        timedwait(()->process_exited(p), 20; pollint = 1.0) # Allow time for profile to collect and print before killing
     end
     kill(p)
     wait(p)
@@ -179,6 +179,8 @@ end
             Pkg_dir = dirname(@__DIR__)
             withenv("JULIA_DEPOT_PATH" => string(tmp, pathsep)) do
                 script = """
+                using Dates
+                t = Timer(t->println(Dates.now()), 0; interval = 30)
                 import Pkg
                 samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
                 Pkg.activate(temp=true)
@@ -186,6 +188,7 @@ end
                 using FFMPEG
                 @showtime FFMPEG.exe("-version")
                 @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test (~10ms)
+                close(t)
                 """
                 cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`
                 did_install_package = Threads.Atomic{Int}(0)
