@@ -1085,7 +1085,6 @@ function download_source(ctx::Context, pkgs; readonly=true)
         for i in 1:ctx.num_concurrent_downloads
             @async begin
                 for (pkg, urls, path) in jobs
-                    ispath(path) && continue
                     mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
                     FileWatching.mkpidlock(path * ".pid", stale_age = 20) do
                         ispath(path) && return
