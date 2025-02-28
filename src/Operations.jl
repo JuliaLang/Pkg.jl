@@ -1072,7 +1072,8 @@ function download_source(ctx::Context, pkgs; readonly=true)
         nothing
     end
 
-    @sync begin
+    # use eager throw version
+    Base.Experimental.@sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
         results = Channel(ctx.num_concurrent_downloads)
 
