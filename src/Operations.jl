@@ -717,10 +717,13 @@ function install_archive(
     version_path::String;
     io::IO=stderr_f()
 )::Bool
+    depot_temp = mkpath(joinpath(dirname(dirname(dirname(version_path))), "tmp"))
     tmp_objects = String[]
     url_success = false
     for (url, top) in urls
-        path = tempname() * randstring(6)
+        # the temp dir should be in the same depot because the `rename` operation in `mv_temp_dir_retries`
+        # is possible only if the source and destination are on the same filesystem
+        path = tempname(depot_temp) * randstring(6)
         push!(tmp_objects, path) # for cleanup
         url_success = true
         try
