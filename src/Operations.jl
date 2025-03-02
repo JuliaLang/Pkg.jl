@@ -721,9 +721,7 @@ function install_archive(
     tmp_objects = String[]
     url_success = false
     for (url, top) in urls
-        # the temp dir should be in the same depot because the `rename` operation in `mv_temp_dir_retries`
-        # is possible only if the source and destination are on the same filesystem
-        path = tempname(depot_temp) * randstring(6)
+        path = tempname() * randstring(6)
         push!(tmp_objects, path) # for cleanup
         url_success = true
         try
@@ -733,7 +731,9 @@ function install_archive(
             url_success = false
         end
         url_success || continue
-        dir = joinpath(tempdir(), randstring(12))
+        # the temp dir should be in the same depot because the `rename` operation in `mv_temp_dir_retries`
+        # is possible only if the source and destination are on the same filesystem
+        dir = tempname(depot_temp) * randstring(6)
         push!(tmp_objects, dir) # for cleanup
         # Might fail to extract an archive (https://github.com/JuliaPackaging/PkgServer.jl/issues/126)
         try
