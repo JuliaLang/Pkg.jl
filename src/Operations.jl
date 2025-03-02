@@ -717,7 +717,7 @@ function install_archive(
     version_path::String;
     io::IO=stderr_f()
 )::Bool
-    depot_temp = mkpath(joinpath(dirname(dirname(dirname(version_path))), "tmp"))
+    depot_temp = mkpath(joinpath(dirname(dirname(dirname(version_path))), "temp"))
     tmp_objects = String[]
     url_success = false
     for (url, top) in urls
