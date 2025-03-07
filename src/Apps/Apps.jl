@@ -89,9 +89,9 @@ function _resolve(manifest::Manifest, pkgname=nothing)
             end
             if isempty(ctx.env.manifest)
                 ctx.env.manifest.deps[uuid] = pkg
-                Pkg.resolve(ctx)
+                Pkg.API._resolve(ctx)
             else
-                Pkg.instantiate(ctx)
+                Pkg.API._instantiate(ctx)
             end
         end
 
