@@ -717,7 +717,11 @@ function install_archive(
     version_path::String;
     io::IO=stderr_f()
 )::Bool
-    depot_temp = mkpath(joinpath(dirname(dirname(dirname(version_path))), "temp"))
+    # Because we use `mv_temp_dir_retries` which uses `rename` not `mv` it can fail if the temp
+    # files are on a different fs. So use a temp dir in the same depot dir as some systems might
+    # be serving different parts of the depot on different filesystems via links i.e. pkgeval does this.
+    depot_temp = mkpath(joinpath(dirname(dirname(version_path)), "temp")) # .julia/packages/temp
+
     tmp_objects = String[]
     url_success = false
     for (url, top) in urls
