@@ -52,7 +52,7 @@ given-names = "Baz"
 family-names = "Qux"
 email = "bazqux@example.com"
 orcid = "https://orcid.org/0000-0000-0000-0000"
-website = "https://github.com/bazqux"}
+website = "https://github.com/bazqux"
 ```
 
 ### The `name` field
