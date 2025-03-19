@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>11. REPL Mode Reference · Pkg.jl</title><meta name="title" content="11. REPL Mode Reference · Pkg.jl"/><meta property="og:title" content="11. REPL Mode Reference · Pkg.jl"/><meta property="twitter:title" content="11. REPL Mode Reference · Pkg.jl"/><meta name="description" content="Documentation for Pkg.jl."/><meta property="og:description" content="Documentation for Pkg.jl."/><meta property="twitter:description" content="Documentation for Pkg.jl."/><meta property="og:url" content="https://julialang.github.io/Pkg.jl/v1/repl/"/><meta property="twitter:url" content="https://julialang.github.io/Pkg.jl/v1/repl/"/><link rel="canonical" href="https://julialang.github.io/Pkg.jl/v1/repl/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="Pkg.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Pkg.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../"><strong>1.</strong> Introduction</a></li><li><a class="tocitem" href="../getting-started/"><strong>2.</strong> Getting Started</a></li><li><a class="tocitem" href="../managing-packages/"><strong>3.</strong> Managing Packages</a></li><li><a class="tocitem" href="../environments/"><strong>4.</strong> Working with Environment</a></li><li><a class="tocitem" href="../creating-packages/"><strong>5.</strong> Creating Packages</a></li><li><a class="tocitem" href="../compatibility/"><strong>6.</strong> Compatibility</a></li><li><a class="tocitem" href="../registries/"><strong>7.</strong> Registries</a></li><li><a class="tocitem" href="../artifacts/"><strong>8.</strong> Artifacts</a></li><li><a class="tocitem" href="../glossary/"><strong>9.</strong> Glossary</a></li><li><a class="tocitem" href="../toml-files/"><strong>10.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></a></li><li class="is-active"><a class="tocitem" href><strong>11.</strong> REPL Mode Reference</a><ul class="internal"><li><a class="tocitem" href="#package-commands"><span><code>package</code> commands</span></a></li><li><a class="tocitem" href="#registry-commands"><span><code>registry</code> commands</span></a></li><li><a class="tocitem" href="#Other-commands"><span>Other commands</span></a></li></ul></li><li><a class="tocitem" href="../api/"><strong>12.</strong> API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href><strong>11.</strong> REPL Mode Reference</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href><strong>11.</strong> REPL Mode Reference</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaLang/Pkg.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/repl.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="REPL-Mode-Reference"><a class="docs-heading-anchor" href="#REPL-Mode-Reference"><strong>11.</strong> REPL Mode Reference</a><a id="REPL-Mode-Reference-1"></a><a class="docs-heading-anchor-permalink" href="#REPL-Mode-Reference" title="Permalink"></a></h1><p>This section describes available commands in the Pkg REPL. The Pkg REPL mode is mostly meant for interactive use, and for non-interactive use it is recommended to use the functional API, see <a href="../api/#API-Reference">API Reference</a>.</p><h2 id="package-commands"><a class="docs-heading-anchor" href="#package-commands"><code>package</code> commands</a><a id="package-commands-1"></a><a class="docs-heading-anchor-permalink" href="#package-commands" title="Permalink"></a></h2><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-add" href="#repl-add">
+            <code>add</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">add [--preserve=&lt;opt&gt;] [-w|--weak] [-e|--extra] pkg[=uuid] [@version] [#rev] ...</code></pre><p>Add package <code>pkg</code> to the current project file. If <code>pkg</code> could refer to multiple different packages, specifying <code>uuid</code> allows you to disambiguate. <code>@version</code> optionally allows specifying which versions of packages to add. Version specifications are of the form <code>@1</code>, <code>@1.2</code> or <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. A git revision can be specified by <code>#branch</code> or <code>#commit</code>.</p><p>If the active environment is a package (the Project has both <code>name</code> and <code>uuid</code> fields) compat entries will be added automatically with a lower bound of the added version.</p><p>If a local path is used as an argument to <code>add</code>, the path needs to be a git repository. The project will then track that git repository just like it would track a remote repository online. If the package is not located at the top of the git repository, a subdirectory can be specified with <code>path:subdir/path</code>.</p><p><code>Pkg</code> resolves the set of packages in your environment using a tiered approach. The <code>--preserve</code> command line option allows you to key into a specific tier in the resolve algorithm. The following table describes the command line arguments to <code>--preserve</code> (in order of strictness).</p><table><tr><th style="text-align: left">Argument</th><th style="text-align: left">Description</th></tr><tr><td style="text-align: left"><code>installed</code></td><td style="text-align: left">Like <code>all</code> except also only add versions that are already installed</td></tr><tr><td style="text-align: left"><code>all</code></td><td style="text-align: left">Preserve the state of all existing dependencies (including recursive dependencies)</td></tr><tr><td style="text-align: left"><code>direct</code></td><td style="text-align: left">Preserve the state of all existing direct dependencies</td></tr><tr><td style="text-align: left"><code>semver</code></td><td style="text-align: left">Preserve semver-compatible versions of direct dependencies</td></tr><tr><td style="text-align: left"><code>none</code></td><td style="text-align: left">Do not attempt to preserve any version information</td></tr><tr><td style="text-align: left"><code>tiered_installed</code></td><td style="text-align: left">Like <code>tiered</code> except first try to add only installed versions</td></tr><tr><td style="text-align: left"><strong><code>tiered</code></strong></td><td style="text-align: left">Use the tier that will preserve the most version information while</td></tr><tr><td style="text-align: left"></td><td style="text-align: left">allowing version resolution to succeed (this is the default)</td></tr></table><p>Note: To make the default strategy <code>tiered_installed</code> set the env var <code>JULIA_PKG_PRESERVE_TIERED_INSTALLED</code> to true.</p><p>After the installation of new packages the project will be precompiled. For more information see <code>pkg&gt; ?precompile</code>.</p><p>With the <code>installed</code> strategy the newly added packages will likely already be precompiled, but if not this may be because either the combination of package versions resolved in this environment has not been resolved and precompiled before, or the precompile cache has been deleted by the LRU cache storage (see <code>JULIA_MAX_NUM_PRECOMPILE_FILES</code>).</p><p><strong>Examples</strong></p><pre><code class="nohighlight hljs">pkg&gt; add Example
+pkg&gt; add --preserve=all Example
+pkg&gt; add --weak Example
+pkg&gt; add --extra Example
+pkg&gt; add Example@0.5
+pkg&gt; add Example#master
+pkg&gt; add Example#c37b675
+pkg&gt; add https://github.com/JuliaLang/Example.jl#master
+pkg&gt; add git@github.com:JuliaLang/Example.jl.git
+pkg&gt; add &quot;git@github.com:JuliaLang/Example.jl.git&quot;#master
+pkg&gt; add https://github.com/Company/MonoRepo:juliapkgs/Package.jl
+pkg&gt; add Example=7876af07-990d-54b4-ab0e-23690620f79a</code></pre>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-build" href="#repl-build">
+            <code>build</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">build [-v|--verbose] pkg[=uuid] ...</code></pre><p>Run the build script in <code>deps/build.jl</code> for <code>pkg</code> and all of its dependencies in depth-first recursive order. If no packages are given, run the build scripts for all packages in the manifest. The <code>-v</code>/<code>--verbose</code> option redirects build output to <code>stdout</code>/<code>stderr</code> instead of the <code>build.log</code> file. The <code>startup.jl</code> file is disabled during building unless julia is started with <code>--startup-file=yes</code>.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-compat" href="#repl-compat">
+            <code>compat</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">compat [pkg] [compat_string]</code></pre><p>Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments. When directly editing use tab to complete the package name and any existing compat entry. Specifying a package with a blank compat entry will remove the entry. After changing compat entries a <code>resolve</code> will be attempted to check whether the current environment is compliant with the new compat rules.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-develop" href="#repl-develop">
+            <code>develop</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">[dev|develop] [--preserve=&lt;opt&gt;] [--shared|--local] pkg[=uuid] ...
+[dev|develop] [--preserve=&lt;opt&gt;] path</code></pre><p>Make a package available for development. If <code>pkg</code> is an existing local path, that path will be recorded in the manifest and used. Otherwise, a full git clone of <code>pkg</code> is made. The location of the clone is controlled by the <code>--shared</code> (default) and <code>--local</code> arguments. The <code>--shared</code> location defaults to <code>~/.julia/dev</code>, but can be controlled with the <code>JULIA_PKG_DEVDIR</code> environment variable.</p><p>When <code>--local</code> is given, the clone is placed in a <code>dev</code> folder in the current project. This is not supported for paths, only registered packages.</p><p>This operation is undone by <code>free</code>.</p><p>The preserve strategies offered by <code>add</code> are also available via the <code>preserve</code> argument. See <code>add</code> for more information.</p><p><strong>Examples</strong></p><pre><code class="language-jl hljs">pkg&gt; develop Example
+pkg&gt; develop https://github.com/JuliaLang/Example.jl
+pkg&gt; develop ~/mypackages/Example
+pkg&gt; develop --local Example</code></pre>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-free" href="#repl-free">
+            <code>free</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">free pkg[=uuid] ...
+free [--all]</code></pre><p>Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see <code>help develop</code>) then this command makes the package no longer being checked out. Specifying <code>--all</code> will free all dependencies (direct and indirect).</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-generate" href="#repl-generate">
+            <code>generate</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">generate pkgname</code></pre><p>Create a minimal project called <code>pkgname</code> in the current folder. For more featureful package creation, please see <code>PkgTemplates.jl</code>.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-pin" href="#repl-pin">
+            <code>pin</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">pin pkg[=uuid] ...
+pin [--all]</code></pre><p>Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded. A pinned package has the symbol <code>⚲</code> next to its version in the status list.. Specifying <code>--all</code> will pin all dependencies (direct and indirect).</p><p><strong>Examples</strong></p><pre><code class="nohighlight hljs">pkg&gt; pin Example
+pkg&gt; pin Example@0.5.0
+pkg&gt; pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
+pkg&gt; pin --all</code></pre>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-remove" href="#repl-remove">
+            <code>remove</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">[rm|remove] [-p|--project] pkg[=uuid] ...
+[rm|remove] [-p|--project] [--all]</code></pre><p>Remove package <code>pkg</code> from the project file. Since the name <code>pkg</code> can only refer to one package in a project this is unambiguous, but you can specify a <code>uuid</code> anyway, and the command is ignored, with a warning, if package name and UUID do not match. When a package is removed from the project file, it may still remain in the manifest if it is required by some other package in the project. Project mode operation is the default, so passing <code>-p</code> or <code>--project</code> is optional unless it is preceded by the <code>-m</code> or <code>--manifest</code> options at some earlier point. All packages can be removed by passing <code>--all</code>.</p><pre><code class="nohighlight hljs">[rm|remove] [-m|--manifest] pkg[=uuid] ...
+[rm|remove] [-m|--manifest] [--all]</code></pre><p>Remove package <code>pkg</code> from the manifest file. If the name <code>pkg</code> refers to multiple packages in the manifest, <code>uuid</code> disambiguates it. Removing a package from the manifest forces the removal of all packages that depend on it, as well as any no-longer-necessary manifest packages due to project package removals. All packages can be removed by passing <code>--all</code>.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-test" href="#repl-test">
+            <code>test</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">test [--coverage] pkg[=uuid] ...</code></pre><p>Run the tests for package <code>pkg</code>. This is done by running the file <code>test/runtests.jl</code> in the package directory. The option <code>--coverage</code> can be used to run the tests with coverage enabled. The <code>startup.jl</code> file is disabled during testing unless julia is started with <code>--startup-file=yes</code>.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-update" href="#repl-update">
+            <code>update</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">[up|update] [-p|--project]  [opts] pkg[=uuid] [@version] ...
+[up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
+
+opts: --major | --minor | --patch | --fixed
+      --preserve=&lt;all/direct/none&gt;</code></pre><p>Update <code>pkg</code> within the constraints of the indicated version specifications. These specifications are of the form <code>@1</code>, <code>@1.2</code> or <code>@1.2.3</code>, allowing any version with a prefix that matches, or ranges thereof, such as <code>@1.2-3.4.5</code>. In <code>--project</code> mode, package specifications only match project packages, while in <code>--manifest</code> mode they match any manifest package. Bound level options force the following packages to be upgraded only within the current major, minor, patch version; if the <code>--fixed</code> upgrade level is given, then the following packages will not be upgraded at all.</p><p>After any package updates the project will be precompiled. For more information see <code>pkg&gt; ?precompile</code>.</p>    </section>
+</article><h2 id="registry-commands"><a class="docs-heading-anchor" href="#registry-commands"><code>registry</code> commands</a><a id="registry-commands-1"></a><a class="docs-heading-anchor-permalink" href="#registry-commands" title="Permalink"></a></h2><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-registry-add" href="#repl-registry-add">
+            <code>registry add</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">registry add reg...</code></pre><p>Add package registries <code>reg...</code> to the user depot. Without arguments it adds known registries, i.e. the General registry and registries served by the configured package server.</p><p><strong>Examples</strong></p><pre><code class="nohighlight hljs">pkg&gt; registry add General
+pkg&gt; registry add https://www.my-custom-registry.com
+pkg&gt; registry add</code></pre>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-registry-remove" href="#repl-registry-remove">
+            <code>registry remove</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">registry [rm|remove] reg...</code></pre><p>Remove package registries <code>reg...</code>.</p><p><strong>Examples</strong></p><pre><code class="nohighlight hljs">pkg&gt; registry [rm|remove] General</code></pre>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-registry-status" href="#repl-registry-status">
+            <code>registry status</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">registry [st|status]</code></pre><p>Display information about installed registries.</p><p><strong>Examples</strong></p><pre><code class="nohighlight hljs">pkg&gt; registry status</code></pre>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-registry-update" href="#repl-registry-update">
+            <code>registry update</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">registry [up|update]
+registry [up|update] reg...</code></pre><p>Update package registries <code>reg...</code>. If no registries are specified all registries will be updated.</p><p><strong>Examples</strong></p><pre><code class="nohighlight hljs">pkg&gt; registry up
+pkg&gt; registry up General</code></pre>    </section>
+</article><h2 id="Other-commands"><a class="docs-heading-anchor" href="#Other-commands">Other commands</a><a id="Other-commands-1"></a><a class="docs-heading-anchor-permalink" href="#Other-commands" title="Permalink"></a></h2><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-activate" href="#repl-activate">
+            <code>activate</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">activate
+activate [--shared] path
+activate --temp
+activate - (activates the previously active environment)</code></pre><p>Activate the environment at the given <code>path</code>, or use the first project found in <code>LOAD_PATH</code> (ignoring <code>&quot;@&quot;</code>) if no <code>path</code> is specified. In the latter case, for the default value of <code>LOAD_PATH</code>, the result is to activate the <code>@v#.#</code> environment. The active environment is the environment that is modified by executing package commands. When the option <code>--shared</code> is given, <code>path</code> will be assumed to be a directory name and searched for in the <code>environments</code> folders of the depots in the depot stack. In case no such environment exists in any of the depots, it will be placed in the first depot of the stack. Use the <code>--temp</code> option to create temporary environments which are removed when the julia process is exited. Use a single <code>-</code> to activate the previously active environment.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-gc" href="#repl-gc">
+            <code>gc</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">gc [-v|--verbose] [--all]</code></pre><p>Free disk space by garbage collecting packages not used for a significant time. The <code>--all</code> option will garbage collect all packages which can not be immediately reached from any existing project. Use verbose mode for detailed output.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-help" href="#repl-help">
+            <code>help</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">[?|help]</code></pre><p>List available commands along with short descriptions.</p><pre><code class="nohighlight hljs">[?|help] cmd</code></pre><p>If <code>cmd</code> is a partial command, display help for all subcommands. If <code>cmd</code> is a full command, display help for <code>cmd</code>.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-instantiate" href="#repl-instantiate">
+            <code>instantiate</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">instantiate [-v|--verbose]
+instantiate [-v|--verbose] [-m|--manifest]
+instantiate [-v|--verbose] [-p|--project]</code></pre><p>Download all the dependencies for the current project at the version given by the project&#39;s manifest. If no manifest exists or the <code>--project</code> option is given, resolve and download the dependencies compatible with the project.</p><p>After packages have been installed the project will be precompiled. For more information see <code>pkg&gt; ?precompile</code>.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-precompile" href="#repl-precompile">
+            <code>precompile</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">precompile
+precompile pkgs...</code></pre><p>Precompile all or specified dependencies of the project in parallel. The <code>startup.jl</code> file is disabled during precompilation unless julia is started with <code>--startup-file=yes</code>.</p><p>Errors will only throw when precompiling the top-level dependencies, given that not all manifest dependencies may be loaded by the top-level dependencies on the given system.</p><p>This method is called automatically after any Pkg action that changes the manifest. Any packages that have previously errored during precompilation won&#39;t be retried in auto mode until they have changed. To disable automatic precompilation set the environment variable <code>JULIA_PKG_PRECOMPILE_AUTO=0</code>. To manually control the number of tasks used set the environment variable <code>JULIA_NUM_PRECOMPILE_TASKS</code>.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-resolve" href="#repl-resolve">
+            <code>resolve</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">resolve</code></pre><p>Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed packages have changed causing the current Manifest to be out of sync.</p>    </section>
+</article><article class="docstring">
+    <header>
+        <a class="docstring-binding" id="repl-status" href="#repl-status">
+            <code>status</code>
+        </a>
+        —
+        <span class="docstring-category">REPL command</span>
+    </header>
+    <section><pre><code class="nohighlight hljs">[st|status] [-d|--diff] [-o|--outdated] [pkgs...]
+[st|status] [-d|--diff] [-o|--outdated] [-p|--project] [pkgs...]
+[st|status] [-d|--diff] [-o|--outdated] [-m|--manifest] [pkgs...]
+[st|status] [-d|--diff] [-e|--extensions] [-p|--project] [pkgs...]
+[st|status] [-d|--diff] [-e|--extensions] [-m|--manifest] [pkgs...]
+[st|status] [-c|--compat] [pkgs...]</code></pre><p>Show the status of the current environment. Packages marked with <code>⌃</code> have new versions that may be installed, e.g. via <code>pkg&gt; up</code>. Those marked with <code>⌅</code> have new versions available, but cannot be installed due to compatibility constraints. To see why use <code>pkg&gt; status --outdated</code> which shows any packages that are not at their latest version and if any packages are holding them back.</p><p>Use <code>pkg&gt; status --extensions</code> to show dependencies with extensions and what extension dependencies of those that are currently loaded.</p><p>In <code>--project</code> mode (default), the status of the project file is summarized. In <code>--manifest</code> mode the output also includes the recursive dependencies of added packages given in the manifest. If there are any packages listed as arguments the output will be limited to those packages. The <code>--diff</code> option will, if the environment is in a git repository, limit the output to the difference as compared to the last git commit. The <code>--compat</code> option alone shows project compat entries.</p><div class="admonition is-compat"><header class="admonition-header">Julia 1.8</header><div class="admonition-body"><p>The <code>⌃</code> and <code>⌅</code> indicators were added in Julia 1.8. The <code>--outdated</code> and <code>--compat</code> options require at least Julia 1.8.</p></div></div>    </section>
+</article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../toml-files/">« <strong>10.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></a><a class="docs-footer-nextpage" href="../api/"><strong>12.</strong> API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.9.0 on <span class="colophon-date" title="Wednesday 19 March 2025 20:10">Wednesday 19 March 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
