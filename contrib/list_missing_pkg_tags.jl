@@ -43,9 +43,9 @@ function get_commit_hash_for_pkg_version(repo, tag)
             println("Warning: Pkg.version file missing for tag $tag")
             return nothing
         end
-    catch e
-        println("Error processing tag $tag: ", e)
-        return nothing
+    catch
+        println("Error processing tag $tag")
+        rethrow()
     end
 end
 
