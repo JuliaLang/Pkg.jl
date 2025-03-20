@@ -1731,8 +1731,32 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
     else
         record_project_hash(ctx.env)
         write_env(ctx.env)
-        names_str = join(names, ", ")
+        names_str = join(names, ", ", " and ")
         printpkgstyle(ctx.io, :Added, "$names_str to [$(target)]")
+    end
+    if target == :weakdeps
+        possible_extension_name = join(names) * "Ext"
+        if !haskey(ctx.env.project.exts, possible_extension_name)
+            plural = length(names) > 1 ? "these weak dependencies" : "this weak dependency"
+            printpkgstyle(
+                ctx.io,
+                :Option,
+                "Would you like to create a new entry for extension `$possible_extension_name` with $(plural)? ",
+                color=Base.info_color(),
+                newline=false
+            )
+            ans = if isinteractive()
+                Base.prompt(stdin, ctx.io, "[Y/n]")
+            else
+                "y"
+            end
+            if lowercase(ans) in ("y", "")
+                ctx.env.project.exts[possible_extension_name] = collect(names)
+                record_project_hash(ctx.env)
+                write_env(ctx.env)
+                printpkgstyle(ctx.io, :Created, "extension $possible_extension_name")
+            end
+        end
     end
     return
 end
