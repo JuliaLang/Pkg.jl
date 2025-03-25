@@ -1,4 +1,4 @@
-# [**7.** Artifacts](@id Artifacts)
+# [**8.** Artifacts](@id Artifacts)
 
 `Pkg` can install and manage containers of data that are not Julia packages.  These containers can contain platform-specific binaries, datasets, text, or any other kind of data that would be convenient to place within an immutable, life-cycled datastore.
 These containers, (called "Artifacts") can be created locally, hosted anywhere, and automatically downloaded and unpacked upon installation of your Julia package.

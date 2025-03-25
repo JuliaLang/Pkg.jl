@@ -103,7 +103,7 @@ Up to this point, we have covered basic package management: adding, updating, an
 
 You may have noticed the `(@v1.9)` in the REPL prompt.
 This lets us know that `v1.9` is the **active environment**.
-Different environments can have different totally different packages and versions installed from another environment.
+Different environments can have totally different packages and versions installed from another environment.
 The active environment is the environment that will be modified by Pkg commands such as `add`, `rm` and `update`.
 
 Let's set up a new environment so we may experiment.
@@ -154,7 +154,7 @@ We can see that the `tutorial` environment now contains `Example` and `JSON`.
     If you have the same
     package (at the same version) installed in multiple environments, the package
     will only be downloaded and stored on the hard drive once. This makes environments
-    very lightweight and effectively free to create. Only using the default
+    very lightweight and effectively free to create. Using only the default
     environment with a huge number of packages in it is a common beginners mistake in
     Julia. Learning how to use environments effectively will improve your experience with
     Julia packages.

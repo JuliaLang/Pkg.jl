@@ -73,14 +73,22 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         withenv("JULIA_PROJECT" => nothing,
                 "JULIA_LOAD_PATH" => nothing,
                 "JULIA_PKG_DEVDIR" => nothing) do
-            target_depot = nothing
+            target_depot = realpath(mktempdir())
+            push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
+            push!(DEPOT_PATH, target_depot)
+            Base.append_bundled_depot_path!(DEPOT_PATH)
+            loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
+            depot_mtimes = Dict(d => mtime(d) for d in DEPOT_PATH if isdir(d))
             try
-                target_depot = realpath(mktempdir())
-                push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
-                push!(DEPOT_PATH, target_depot)
-                loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
                 fn()
             finally
+                for (d, t) in depot_mtimes
+                    d == target_depot && continue # tests allowed to modify target depot
+                    isdir(d) || continue
+                    if mtime(d) != t
+                        error("shared depot $d was modified during isolated test: readdir(depot) = $(readdir(d))")
+                    end
+                end
                 if !haskey(ENV, "CI") && target_depot !== nothing && isdir(target_depot)
                     try
                         Base.rm(target_depot; force=true, recursive=true)
@@ -107,7 +115,7 @@ end
 
 function isolate_and_pin_registry(fn::Function; registry_url::String, registry_commit::String)
     isolate(loaded_depot = false, linked_reg = true) do
-        this_gen_reg_path = joinpath(last(Base.DEPOT_PATH), "registries", "General")
+        this_gen_reg_path = joinpath(first(Base.DEPOT_PATH), "registries", "General")
         rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
         cmd = `git clone $(registry_url) $(this_gen_reg_path)`
         run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
@@ -146,6 +154,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
             try
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
                 fn(env_dir)
             finally
                 if rm && !haskey(ENV, "CI")
@@ -261,9 +270,21 @@ function git_init_package(tmp, path)
     return pkgpath
 end
 
+function ensure_test_package_user_writable(dir)
+    for (root, _, files) in walkdir(dir)
+        chmod(root, filemode(root) | 0o200 | 0o100)
+
+        for file in files
+            filepath = joinpath(root, file)
+            chmod(filepath, filemode(filepath) | 0o200)
+        end
+    end
+end
+
 function copy_test_package(tmpdir::String, name::String; use_pkg=true)
     target = joinpath(tmpdir, name)
     cp(joinpath(@__DIR__, "test_packages", name), target)
+    ensure_test_package_user_writable(target)
     use_pkg || return target
 
     # The known Pkg UUID, and whatever UUID we're currently using for testing

@@ -238,8 +238,8 @@ end
 
         # Test platform-specific binding and providing download_info
         download_info = [
-            ("http://google.com/hello_world", "0"^64),
-            ("http://microsoft.com/hello_world", "a"^64),
+            ArtifactDownloadInfo("http://google.com/hello_world", "0"^64),
+            ArtifactDownloadInfo("http://microsoft.com/hello_world", "a"^64, 1),
         ]
 
         # First, test the binding of things with various platforms and overwriting and such works properly
@@ -249,8 +249,8 @@ end
         @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash
         @test artifact_hash("foo_txt", artifacts_toml; platform=Platform("x86_64", "macos")) == nothing
         @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64)
-        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
         bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=win32)
+        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
         @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash2
         @test artifact_hash("foo_txt", artifacts_toml; platform=win32) == hash
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=linux64) == artifact_path(hash2)
@@ -259,7 +259,9 @@ end
         # Next, check that we can get the download_info properly:
         meta = artifact_meta("foo_txt", artifacts_toml; platform=win32)
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
+        @test !haskey(meta["download"][1], "size")
         @test meta["download"][2]["sha256"] == "a"^64
+        @test meta["download"][2]["size"] == 1
 
         rm(artifacts_toml)
 
@@ -308,9 +310,7 @@ end
     mktempdir() do dir
         with_artifacts_directory(dir) do
             @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml")) != nothing
-            @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
-                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
-            end
+            @test_throws r"Hash Mismatch!" ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
 
             artifact_toml = joinpath(badifact_dir, "doesnotexist.toml")
             @test_throws ErrorException ensure_artifact_installed("does_not_exist", artifact_toml)
@@ -421,11 +421,12 @@ end
         )
         disengaged_platform = HostPlatform()
         disengaged_platform["flooblecrank"] = "disengaged"
+        disengaged_adi = ArtifactDownloadInfo(disengaged_url, disengaged_sha256)
         Pkg.Artifacts.bind_artifact!(
             artifacts_toml,
             "gooblebox",
             disengaged_hash;
-            download_info = [(disengaged_url, disengaged_sha256)],
+            download_info = [disengaged_adi],
             platform = disengaged_platform,
         )
     end
@@ -471,7 +472,7 @@ end
 
             # Test that if we load the package, it knows how to find its own artifact,
             # because it feeds the right `Platform` object through to `@artifact_str()`
-            cmd = setenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
+            cmd = addenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
                          "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
                          "FLOOBLECRANK" => flooblecrank_status)
             using_output = chomp(String(read(cmd)))
@@ -652,6 +653,7 @@ end
         old_depot_path = copy(DEPOT_PATH)
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, [depot1, depot2, depot3])
+        Base.append_bundled_depot_path!(DEPOT_PATH)
 
         # First sanity check; does our depot path searching code actually work properly?
         @test startswith(artifact_path(foo_hash), depot3)
@@ -695,7 +697,6 @@ end
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
             copy_test_package(depot_container, "ArtifactOverrideLoading")
-            add_this_pkg()
             Pkg.develop(Pkg.Types.PackageSpec(
                 name="ArtifactOverrideLoading",
                 uuid=aol_uuid,
@@ -733,8 +734,7 @@ end
 
         # Force Julia to re-load ArtifactOverrideLoading from scratch
         pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
-        delete!(Base.module_keys, Base.loaded_modules[pkgid])
-        delete!(Base.loaded_modules, pkgid)
+        Base.unreference_module(pkgid)
         touch(joinpath(depot_container, "ArtifactOverrideLoading", "src", "ArtifactOverrideLoading.jl"))
 
         # Verify that the hash-based overrides (and clears) worked
@@ -783,6 +783,7 @@ end
         # reset DEPOT_PATH and force Pkg to reload what it knows about artifact overrides
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.Artifacts.load_overrides(;force=true)
     end
 end
@@ -825,4 +826,16 @@ end
     end
 end
 
+if Sys.iswindows()
+    @testset "filemode(dir) non-executable on windows" begin
+        mktempdir() do dir
+            touch(joinpath(dir, "foo"))
+            @test !isempty(readdir(dir))
+            # This technically should be true, the fact that it's not is
+            # a wrinkle of libuv, it would be nice to fix it and so if we
+            # do, this test will let us know.
+            @test filemode(dir) & 0o001 == 0
+        end
+    end
+end
 end # module

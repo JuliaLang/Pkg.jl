@@ -4,18 +4,32 @@ export MiniProgressBar, start_progress, end_progress, show_progress, print_progr
 
 using Printf
 
+# Until Base.format_bytes supports sigdigits
+function pkg_format_bytes(bytes; binary=true, sigdigits::Integer=3)
+    units = binary ? Base._mem_units : Base._cnt_units
+    factor = binary ? 1024 : 1000
+    bytes, mb = Base.prettyprint_getunits(bytes, length(units), Int64(factor))
+    if mb == 1
+        return string(Int(bytes), " ", Base._mem_units[mb], bytes==1 ? "" : "s")
+    else
+        return string(Base.Ryu.writefixed(Float64(bytes), sigdigits), binary ? " $(units[mb])" : "$(units[mb])B")
+    end
+end
+
 Base.@kwdef mutable struct MiniProgressBar
-    max::Int = 1.0
+    max::Int = 1
     header::String = ""
     color::Symbol = :nothing
     width::Int = 40
-    current::Int = 0.0
-    prev::Int = 0.0
+    current::Int = 0
+    status::String = "" # If not empty this string replaces the bar
+    prev::Int = 0
     has_shown::Bool = false
     time_shown::Float64 = 0.0
-    percentage::Bool = true
+    mode::Symbol = :percentage # :percentage :int :data
     always_reprint::Bool = false
     indent::Int = 4
+    main::Bool = true
 end
 
 const PROGRESS_BAR_TIME_GRANULARITY = Ref(1 / 30.0) # 30 fps
@@ -40,29 +54,55 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
         return
     end
     t = time()
-    if p.has_shown && (t - p.time_shown) < PROGRESS_BAR_TIME_GRANULARITY[]
+    if !p.always_reprint && p.has_shown && (t - p.time_shown) < PROGRESS_BAR_TIME_GRANULARITY[]
         return
     end
     p.time_shown = t
     p.prev = p.current
     p.has_shown = true
 
-    progress_text = if p.percentage
+    progress_text = if p.mode == :percentage
         @sprintf "%2.1f %%" perc
-    else
+    elseif p.mode == :int
         string(p.current, "/",  p.max)
+    elseif p.mode == :data
+        lpad(string(pkg_format_bytes(p.current; sigdigits=1), "/", pkg_format_bytes(p.max; sigdigits=1)), 20)
+    else
+        error("Unknown mode $(p.mode)")
     end
     termwidth = @something termwidth displaysize(io)[2]
     max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
-    n_filled = ceil(Int, max_progress_width * perc / 100)
+    n_filled = floor(Int, max_progress_width * perc / 100)
+    partial_filled = (max_progress_width * perc / 100) - n_filled
     n_left = max_progress_width - n_filled
+    headers = split(p.header)
     to_print = sprint(; context=io) do io
         print(io, " "^p.indent)
-        printstyled(io, p.header, color=p.color, bold=true)
-        print(io, " [")
-        print(io, "="^n_filled, ">")
-        print(io, " "^n_left, "]  ", )
-        print(io, progress_text)
+        if p.main
+            printstyled(io, headers[1], " "; color=:green, bold=true)
+            length(headers) > 1 && printstyled(io, join(headers[2:end], ' '), " ")
+        else
+            print(io, p.header, " ")
+        end
+        if !isempty(p.status)
+            print(io, p.status)
+        else
+            hascolor = get(io, :color, false)::Bool
+            printstyled(io, "━"^n_filled; color=p.color)
+            if n_left > 0
+                if hascolor
+                    if partial_filled > 0.5
+                        printstyled(io, "╸"; color=p.color) # More filled, use ╸
+                    else
+                        printstyled(io, "╺"; color=:light_black) # Less filled, use ╺
+                    end
+                end
+                c = hascolor ? "━" : " "
+                printstyled(io, c^(n_left-1+!hascolor); color=:light_black)
+            end
+            printstyled(io, " "; color=:light_black)
+            print(io, progress_text)
+        end
         carriagereturn && print(io, "\r")
     end
     # Print everything in one call
@@ -80,10 +120,10 @@ end
 # prog = MiniProgressBar(...)
 # prog.end = n
 # for progress in 1:n
-#     print_progree_bottom(io)
+#     print_progress_bottom(io)
 #     println("stuff")
 #     prog.current = progress
-#     showproress(io, prog)
+#     showprogress(io, prog)
 #  end
 #
 function print_progress_bottom(io::IO)

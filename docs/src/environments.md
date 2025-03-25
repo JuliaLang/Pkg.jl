@@ -1,4 +1,4 @@
-# [**4.** Working with Environment](@id Working-with-Environments)
+# [**4.** Working with Environments](@id Working-with-Environments)
 
 The following discusses Pkg's interaction with environments. For more on the role, environments play in code loading, including the "stack" of environments from which code can be loaded, see [this section in the Julia manual](https://docs.julialang.org/en/v1/manual/code-loading/#Environments-1).
 
@@ -66,12 +66,12 @@ shell> git clone https://github.com/JuliaLang/Example.jl.git
 Cloning into 'Example.jl'...
 ...
 
-(@v1.9) pkg> activate Example.jl
+(@v1.12) pkg> activate Example.jl
 Activating project at `~/Example.jl`
 
 (Example) pkg> instantiate
-  No Changes to `~/Example.jl/Project.toml`
-  No Changes to `~/Example.jl/Manifest.toml`
+  No packages added to or removed from `~/Example.jl/Project.toml`
+  No packages added to or removed from `~/Example.jl/Manifest.toml`
 ```
 
 If the project contains a manifest, this will install the packages in the same state that is given by that manifest.
@@ -191,6 +191,14 @@ automatically tries and will skip that package with a brief warning. Manual prec
 force these packages to be retried, as `pkg> precompile` will always retry all packages.
 
 To disable the auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
+
+The indicators next to the package names displayed during precompilation
+indicate the status of that package's precompilation. 
+
+- `[◐, ◓, ◑, ◒]` Animated "clock" characters indicate that the package is currently being precompiled.
+- `✓` A green checkmark indicates that the package has been successfully precompiled (after which that package will disappear from the list). If the checkmark is yellow it means that the package is currently loaded so the session will need to be restarted to access the version that was just precompiled.
+- `?` A question mark character indicates that a `PrecompilableError` was thrown, indicating that precompilation was disallowed, i.e. `__precompile__(false)` in that package.
+- `✗` A cross indicates that the package failed to precompile.
 
 ### Precompiling new versions of loaded packages
 

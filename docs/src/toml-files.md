@@ -1,4 +1,4 @@
-# [**9.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
+# [**10.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
 
 Two files that are central to Pkg are `Project.toml` and `Manifest.toml`. `Project.toml`
 and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (hence the
@@ -22,13 +22,38 @@ are described below.
 
 ### The `authors` field
 
-For a package, the optional `authors` field is a list of strings describing the
-package authors, in the form `NAME <EMAIL>`. For example:
+For a package, the optional `authors` field is a TOML array describing the package authors. 
+Entries in the array can either be a string in the form `"NAME"` or `"NAME <EMAIL>"`, or a table keys following the [Citation File Format schema](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md) for either a
+[`person`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsperson) or an[`entity`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsentity).
+
+For example:
 ```toml
-authors = ["Some One <someone@email.com>",
-           "Foo Bar <foo@bar.com>"]
+authors = [
+  "Some One <someone@email.com>",
+  "Foo Bar <foo@bar.com>",
+  {given-names = "Baz", family-names = "Qux", email = "bazqux@example.com", orcid = "https://orcid.org/0000-0000-0000-0000", website = "https://github.com/bazqux"},
+]
 ```
 
+If all authors are specified by tables, it is possible to use [the TOML Array of Tables syntax](https://toml.io/en/v1.0.0#array-of-tables)
+```toml
+[[authors]]
+given-names = "Some"
+family-names = "One"
+email = "someone@email.com"
+
+[[authors]]
+given-names = "Foo"
+family-names = "Bar"
+email = "foo@bar.com"
+
+[[authors]]
+given-names = "Baz"
+family-names = "Qux"
+email = "bazqux@example.com"
+orcid = "https://orcid.org/0000-0000-0000-0000"
+website = "https://github.com/bazqux"
+```
 
 ### The `name` field
 
@@ -39,8 +64,8 @@ name = "Example"
 The name must be a valid [identifier](https://docs.julialang.org/en/v1/base/base/#Base.isidentifier)
 (a sequence of Unicode characters that does not start with a number and is neither `true` nor `false`).
 For packages, it is recommended to follow the
-[package naming guidelines](https://docs.julialang.org/en/v1/tutorials/creating-packages/#Package-naming-guidelines).
-The `name` field is mandatory for packages.
+[package naming rules](@ref Package-naming-rules). The `name` field is mandatory
+for packages.
 
 
 ### The `uuid` field
@@ -91,6 +116,20 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Typically it is not needed to manually add entries to the `[deps]` section; this is instead
 handled by Pkg operations such as `add`.
 
+### The `[sources]` section
+
+Specifiying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
+These are especially useful for controlling unregistered dependencies without having to bundle a
+corresponding manifest file.
+
+```toml
+[sources]
+Example = {url = "https://github.com/JuliaLang/Example.jl", rev = "custom_branch"}
+WithinMonorepo = {url = "https://github.org/author/BigProject", subdir = "SubPackage"}
+SomeDependency = {path = "deps/SomeDependency.jl"}
+```
+
+Note that this information is only used when this environment is active, i.e. it is not used if this project is a package that is being used as a dependency.
 
 ### The `[compat]` section
 
@@ -115,6 +154,24 @@ constraints in detail. It is also possible to list constraints on `julia` itself
 julia = "1.1"
 ```
 
+### The `[workspace]` section
+
+A project file can define a workspace by giving a set of projects that is part of that workspace.
+Each project in a workspace can include their own dependencies, compatibility information, and even function as full packages.
+
+When the package manager resolves dependencies, it considers the requirements of all the projects in the workspace. The compatible versions identified during this process are recorded in a single manifest file located next to the base project file.
+
+A workspace is defined in the base project by giving a list of the projects in it:
+
+```toml
+[workspace]
+projects = ["test", "docs", "benchmarks", "PrivatePackage"]
+```
+
+This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding documentation or benchmarks to a package by including additional dependencies beyond those of the package itself.
+
+Workspace can be nested: a project that itself defines a workspace can also be part of another workspace.
+In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
 ## `Manifest.toml`
 
@@ -127,6 +184,17 @@ For the details, see [`Pkg.instantiate`](@ref).
 !!! note
     The `Manifest.toml` file is generated and maintained by Pkg and, in general, this file
     should *never* be modified manually.
+
+### Different Manifests for Different Julia versions
+
+Starting from Julia v1.10.8, there is an option to name manifest files in the format `Manifest-v{major}.{minor}.toml`.
+Julia will then preferentially use the version-specific manifest file if available.
+For example, if both `Manifest-v1.11.toml` and `Manifest.toml` exist, Julia 1.11 will prioritize using `Manifest-v1.11.toml`.
+However, Julia versions 1.10, 1.12, and all others will default to using `Manifest.toml`.
+This feature allows for easier management of different instantiated versions of dependencies for various Julia versions.
+Note that there can only be one `Project.toml` file. While `Manifest-v{major}.{minor}.toml` files are not automatically
+created by Pkg, users can manually rename a `Manifest.toml` file to match
+the versioned format, and Pkg will subsequently maintain it through its operations.
 
 
 ### `Manifest.toml` entries
