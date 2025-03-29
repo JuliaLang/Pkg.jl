@@ -1,4 +1,4 @@
-module BinaryPlatforms
+module BinaryPlatformsCompat
 
 export platform_key_abi, platform_dlext, valid_dl_path, arch, libc,
        libgfortran_version, libstdcxx_version, cxxstring_abi, parse_dl_name_version,
@@ -145,4 +145,6 @@ function valid_dl_path(path::AbstractString, platform::AbstractPlatform)
     end
 end
 
-end # module BinaryPlatforms
+end # module BinaryPlatformsCompat
+
+const BinaryPlatforms = BinaryPlatformsCompat

@@ -809,7 +809,7 @@ end
             cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
             Pkg.activate(tmpdir)
             cts_real_hash = create_artifact() do dir
-                local meta = Artifacts.artifact_meta("collapse_the_symlink", artifacts_toml)
+                local meta = Pkg.Artifacts.artifact_meta("collapse_the_symlink", artifacts_toml)
                 local collapse_url = meta["download"][1]["url"]
                 local collapse_hash = meta["download"][1]["sha256"]
                 # Because "BINARYPROVIDER_COPYDEREF"=>"true", this will copy symlinks.
