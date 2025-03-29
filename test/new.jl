@@ -220,7 +220,7 @@ end
                         end
                     end
                 end
-                if any_failed[]
+                if any_failed[] || did_install_package[] != 1 || did_install_artifact[] != 1
                     println("=== Concurrent Pkg.add test $test failed after $t seconds")
                     for i in 1:3
                         printstyled(stdout, outputs[i]; color=(:blue, :green, :yellow)[i])
