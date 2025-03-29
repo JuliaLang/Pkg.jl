@@ -257,18 +257,19 @@ function destructure(project::Project)::Dict
         should_delete(src) ? delete!(raw, key) : (raw[key] = src)
     end
 
-    entry!("name",     project.name)
-    entry!("uuid",     project.uuid)
-    entry!("version",  project.version)
+    entry!("name",      project.name)
+    entry!("uuid",      project.uuid)
+    entry!("version",   project.version)
     entry!("workspace", project.workspace)
-    entry!("manifest", project.manifest)
-    entry!("entryfile",     project.entryfile)
-    entry!("deps",     merge(project.deps, project._deps_weak))
-    entry!("weakdeps", project.weakdeps)
-    entry!("sources",  project.sources)
-    entry!("extras",   project.extras)
-    entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
-    entry!("targets",  project.targets)
+    entry!("manifest",  project.manifest)
+    entry!("entryfile", project.entryfile)
+    entry!("deps",      merge(project.deps, project._deps_weak))
+    entry!("weakdeps",  project.weakdeps)
+    entry!("sources",   project.sources)
+    entry!("extras",    project.extras)
+    entry!("compat",    Dict(name => x.str for (name, x) in project.compat))
+    entry!("targets",   project.targets)
+    entry!("extensions", project.exts)
     return raw
 end
 
