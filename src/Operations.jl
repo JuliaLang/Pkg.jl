@@ -222,19 +222,40 @@ end
 # This has to be done after the packages have been downloaded
 # since we need access to the Project file to read the information
 # about extensions
-function fixups_from_projectfile!(env::EnvCache)
+function fixups_from_projectfile!(ctx::Context)
+    env = ctx.env
     for pkg in values(env.manifest)
-        # isfile_casesenstive within locate_project_file used to error on Windows if given a
-        # relative path so abspath it to be extra safe https://github.com/JuliaLang/julia/pull/55220
-        project_file = Base.locate_project_file(abspath(source_path(env.manifest_file, pkg)))
-        if project_file isa String && isfile(project_file)
-            p = Types.read_project(project_file)
-            pkg.weakdeps = p.weakdeps
-            pkg.exts = p.exts
-            pkg.entryfile = p.entryfile
-            for (name, _) in p.weakdeps
+        if ctx.julia_version !== VERSION && is_stdlib(pkg.uuid, ctx.julia_version)
+            # Special handling for non-current julia_version resolving given the source for historical stdlibs
+            # isn't available at this stage as Pkg thinks it should not be needed, so rely on STDLIBS_BY_VERSION
+            stdlibs = Types.get_last_stdlibs(ctx.julia_version)
+            p = stdlibs[pkg.uuid]
+            pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in p.weakdeps)
+            # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
+            # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
+            for (name, _) in pkg.weakdeps
                 if !haskey(p.deps, name)
                     delete!(pkg.deps, name)
+                end
+            end
+        else
+            # normal mode based on project files.
+            # isfile_casesenstive within locate_project_file used to error on Windows if given a
+            # relative path so abspath it to be extra safe https://github.com/JuliaLang/julia/pull/55220
+            sourcepath = source_path(env.manifest_file, pkg)
+            if sourcepath === nothing
+                pkgerror("could not find source path for package $(pkg.name) based on manifest $(env.manifest_file)")
+            end
+            project_file = Base.locate_project_file(abspath(sourcepath))
+            if project_file isa String && isfile(project_file)
+                p = Types.read_project(project_file)
+                pkg.weakdeps = p.weakdeps
+                pkg.exts = p.exts
+                pkg.entryfile = p.entryfile
+                for (name, _) in p.weakdeps
+                    if !haskey(p.deps, name)
+                        delete!(pkg.deps, name)
+                    end
                 end
             end
         end
@@ -1658,7 +1679,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
         man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
         update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version)
         new_apply = download_source(ctx)
-        fixups_from_projectfile!(ctx.env)
+        fixups_from_projectfile!(ctx)
 
         # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
         # and ensure they are all downloaded and unpacked as well:
@@ -1705,7 +1726,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}, new_git::Set{UUID};
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixups_from_projectfile!(ctx.env)
+    fixups_from_projectfile!(ctx)
     download_artifacts(ctx; platform=platform, julia_version=ctx.julia_version)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1846,7 +1867,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
-    fixups_from_projectfile!(ctx.env)
+    fixups_from_projectfile!(ctx)
     download_artifacts(ctx, julia_version=ctx.julia_version)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io, hidden_upgrades_info = true)
@@ -1892,7 +1913,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
 
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new = download_source(ctx)
-    fixups_from_projectfile!(ctx.env)
+    fixups_from_projectfile!(ctx)
     download_artifacts(ctx; julia_version=ctx.julia_version)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1940,7 +1961,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free=true)
 
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
         new = download_source(ctx)
-        fixups_from_projectfile!(ctx.env)
+        fixups_from_projectfile!(ctx)
         download_artifacts(ctx)
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io=ctx.io)
@@ -1964,14 +1985,18 @@ end
 
 
 function get_threads_spec()
-    if Threads.nthreads(:interactive) > 0
+    if haskey(ENV, "JULIA_NUM_THREADS")
+        # if set, prefer JULIA_NUM_THREADS because this is passed to the test worker via --threads
+        # which takes precedence in the worker
+        ENV["JULIA_NUM_THREADS"]
+    elseif Threads.nthreads(:interactive) > 0
         "$(Threads.nthreads(:default)),$(Threads.nthreads(:interactive))"
     else
         "$(Threads.nthreads(:default))"
     end
 end
 
-function gen_subprocess_flags(source_path::String; coverage, julia_args)
+function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
     coverage_arg = if coverage isa Bool
         # source_path is the package root, not "src" so "ext" etc. is included
         coverage ? string("@", source_path) : "none"
@@ -2309,7 +2334,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
-            flags = gen_subprocess_flags(source_path; coverage,julia_args)
+            flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
@@ -2319,7 +2344,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            cmd = `$(Base.julia_cmd()) $(flags) --threads=$(get_threads_spec()) --eval $code`
+            cmd = `$(Base.julia_cmd()) --threads=$(get_threads_spec()) $(flags) --eval $code`
             p, interrupted = subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
@@ -2549,8 +2574,7 @@ end
 
 function is_package_downloaded(manifest_file::String, pkg::PackageSpec; platform=HostPlatform())
     sourcepath = source_path(manifest_file, pkg)
-    identifier = pkg.name !== nothing ? pkg.name : pkg.uuid
-    (sourcepath === nothing) && pkgerror("Could not locate the source code for the $(identifier) package. Are you trying to use a manifest generated by a different version of Julia?")
+    sourcepath === nothing && return false
     isdir(sourcepath) || return false
     check_artifacts_downloaded(sourcepath; platform) || return false
     return true

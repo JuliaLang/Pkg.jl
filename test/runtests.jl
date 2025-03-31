@@ -20,7 +20,6 @@ if realpath(dirname(dirname(Base.pathof(Pkg)))) != realpath(dirname(@__DIR__))
 end
 
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
-ENV["HISTORICAL_STDLIB_VERSIONS_AUTO_REGISTER"]="false"
 
 logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
 ### Send all Pkg output to a file called Pkg.log
@@ -37,29 +36,6 @@ end
 include("utils.jl")
 Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.ConsoleLogger(Pkg.DEFAULT_IO[]) : Logging.current_logger()) do
 
-    # Because julia CI doesn't run stdlib tests via `Pkg.test` test deps must be manually installed if missing
-    if Base.find_package("HistoricalStdlibVersions") === nothing
-        @debug "Installing HistoricalStdlibVersions for Pkg tests"
-        iob = IOBuffer()
-        Pkg.activate(; temp = true)
-        try
-            # Needed for custom julia version resolve tests
-            # Don't use the toplevel PKg.add() command to avoid accidentally installing another copy of the registry
-            spec = Pkg.PackageSpec(
-                name="HistoricalStdlibVersions", 
-                url="https://github.com/JuliaPackaging/HistoricalStdlibVersions.jl",
-                rev="5879c5f690795208481c60b904f4af4e8c1eeef8", #= version="2.0.0", =#
-                uuid="6df8b67a-e8a0-4029-b4b7-ac196fe72102")
-            Pkg.API.handle_package_input!(spec)
-            Pkg.add(Pkg.API.Context(), [spec], io=iob)
-        catch
-            println(String(take!(iob)))
-            rethrow()
-        end
-    end
-
-    @eval import HistoricalStdlibVersions
-
     if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
         s = read(`curl -sLI $(server)`, String);
         @info "Pkg Server metadata:\n$s"
@@ -67,29 +43,41 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
 
     Utils.check_init_reg()
 
+    test_files = [
+        "new.jl",
+        "pkg.jl",
+        "repl.jl",
+        "api.jl",
+        "registry.jl",
+        "subdir.jl",
+        "extensions.jl",
+        "artifacts.jl",
+        "binaryplatforms.jl",
+        "platformengines.jl",
+        "sandbox.jl",
+        "resolve.jl",
+        "misc.jl",
+        "force_latest_compatible_version.jl",
+        "manifests.jl",
+        "project_manifest.jl",
+        "sources.jl",
+        "workspaces.jl",
+        "apps.jl",
+        ]
+
+    # Only test these if the test deps are available (they aren't typically via `Base.runtests`)
+    HSV_pkgid = Base.PkgId(Base.UUID("6df8b67a-e8a0-4029-b4b7-ac196fe72102"), "HistoricalStdlibVersions")
+    if Base.locate_package(HSV_pkgid) !== nothing
+        push!(test_files, "historical_stdlib_version.jl")
+    end
+    Aqua_pkgid = Base.PkgId(Base.UUID("4c88cf16-eb10-579e-8560-4a9242c79595"), "Aqua")
+    if Base.locate_package(Aqua_pkgid) !== nothing
+        push!(test_files, "aqua.jl")
+    end
+
     @testset "Pkg" begin
         try
-        @testset "$f" for f in [
-                "new.jl",
-                "pkg.jl",
-                "repl.jl",
-                "api.jl",
-                "registry.jl",
-                "subdir.jl",
-                "extensions.jl",
-                "artifacts.jl",
-                "binaryplatforms.jl",
-                "platformengines.jl",
-                "sandbox.jl",
-                "resolve.jl",
-                "misc.jl",
-                "force_latest_compatible_version.jl",
-                "manifests.jl",
-                "project_manifest.jl",
-                "sources.jl",
-                "workspaces.jl",
-                "apps.jl",
-                ]
+        @testset "$f" for f in test_files
                 @info "==== Testing `test/$f`"
                 flush(Pkg.DEFAULT_IO[])
                 include(f)

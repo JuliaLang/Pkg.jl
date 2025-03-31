@@ -869,5 +869,6 @@ include("precompile.jl")
 DEFAULT_IO[] = nothing
 Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
 PREV_ENV_PATH[] = ""
+Types.STDLIB[] = nothing
 
 end # module
