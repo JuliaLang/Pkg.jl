@@ -97,16 +97,6 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
-    callbacks = if fancyprint
-        LibGit2.Callbacks(
-            :transfer_progress => (
-                @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
-                bar,
-            )
-        )
-    else
-        LibGit2.Callbacks()
-    end
     fancyprint && start_progress(io, bar)
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
@@ -121,6 +111,16 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
             end
             return LibGit2.GitRepo(source_path)
         else
+            callbacks = if fancyprint
+                LibGit2.Callbacks(
+                    :transfer_progress => (
+                        @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
+                        bar,
+                    )
+                )
+            else
+                LibGit2.Callbacks()
+            end
             mkpath(source_path)
             return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
         end
