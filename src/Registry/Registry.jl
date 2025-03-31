@@ -482,7 +482,7 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                         printpkgstyle(io, :Updating, "registry at " * regpath)
                         if reg.name == "General" &&
                                 Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true) &&
-                                get(ENV, "JULIA_PKG_SERVER", "") == ""
+                                get(ENV, "JULIA_PKG_SERVER", "") != ""
                             @info """
                                 The General registry is installed via git. Consider reinstalling it via
                                 the newer faster direct from tarball format by running:
