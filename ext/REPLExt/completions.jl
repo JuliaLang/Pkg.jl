@@ -54,9 +54,9 @@ end
 
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
-function complete_remote_package(partial; hint::Bool)
-    found_match = false
-    isempty(partial) && return String[]
+function complete_remote_package!(comps, partial; hint::Bool)
+    isempty(partial) && return true # true means returned early
+    found_match = !isempty(comps)
     cmp = Set{String}()
     for reg in Registry.reachable_registries()
         for (uuid, regpkg) in reg
@@ -80,9 +80,9 @@ function complete_remote_package(partial; hint::Bool)
                     if is_julia_compat === nothing || is_julia_compat
                         push!(cmp, name)
                         # In hint mode the result is only used if there is a single matching entry
-                        # so we abort the search
+                        # so we can return no matches in case of more than one match
                         if hint && found_match
-                            return sort!(collect(cmp))
+                            return true # true means returned early
                         end
                         found_match = true
                         break
@@ -91,7 +91,8 @@ function complete_remote_package(partial; hint::Bool)
             end
         end
     end
-    return sort!(collect(cmp))
+    append!(comps, sort!(collect(cmp)))
+    return false # false means performed full search
 end
 
 function complete_help(options, partial; hint::Bool)
@@ -149,8 +150,9 @@ function complete_add_dev(options, partial, i1, i2; hint::Bool)
     if occursin(Base.Filesystem.path_separator_re, partial)
         return comps, idx, !isempty(comps)
     end
-    comps = vcat(comps, sort(complete_remote_package(partial; hint)))
-    if !isempty(partial)
+    returned_early = complete_remote_package!(comps, partial; hint)
+    # returning early means that no further search should be done here
+    if !returned_early
         append!(comps, filter!(startswith(partial), first.(values(Types.stdlibs()))))
     end
     return comps, idx, !isempty(comps)

@@ -1748,14 +1748,18 @@ end
 
 
 function get_threads_spec()
-    if Threads.nthreads(:interactive) > 0
+    if haskey(ENV, "JULIA_NUM_THREADS")
+        # if set, prefer JULIA_NUM_THREADS because this is passed to the test worker via --threads
+        # which takes precedence in the worker
+        ENV["JULIA_NUM_THREADS"]
+    elseif Threads.nthreads(:interactive) > 0
         "$(Threads.nthreads(:default)),$(Threads.nthreads(:interactive))"
     else
         "$(Threads.nthreads(:default))"
     end
 end
 
-function gen_subprocess_flags(source_path::String; coverage, julia_args)
+function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
     coverage_arg = if coverage isa Bool
         coverage ? string("@", source_path) : "none"
     elseif coverage isa AbstractString
@@ -2060,7 +2064,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
-            flags = gen_subprocess_flags(source_path; coverage,julia_args)
+            flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
@@ -2072,7 +2076,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            cmd = `$(Base.julia_cmd()) $(flags) --threads=$(get_threads_spec()) --eval $code`
+            cmd = `$(Base.julia_cmd()) --threads=$(get_threads_spec()) $(flags) --eval $code`
             p, interrupted = subprocess_handler(cmd, ctx, sandbox_ctx, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
