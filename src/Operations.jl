@@ -2064,10 +2064,10 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
-            precompile_julia_args = Cmd(filter(!startswith("--threads"), julia_args.exec)) # precompilation with threads is not supported
-            precompile_flags = gen_subprocess_flags(source_path; coverage, julia_args = precompile_julia_args)
 
             if should_autoprecompile()
+                precompile_julia_args = Cmd(filter(!startswith("--threads"), julia_args.exec)) # precompilation with threads is not supported
+                precompile_flags = gen_subprocess_flags(source_path; coverage, julia_args = precompile_julia_args)
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(precompile_flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
                 Pkg.activate(sandbox_ctx.env.project_file; #=io=devnull=#) do
                     Pkg.precompile(sandbox_ctx; io=sandbox_ctx.io, configs = precompile_flags => cacheflags)
