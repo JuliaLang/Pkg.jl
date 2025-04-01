@@ -10,25 +10,28 @@ The most frequently used is `add` and its usage is described first.
 In the Pkg REPL, packages can be added with the `add` command followed by the name of the package, for example:
 
 ```julia-repl
-(@v1.8) pkg> add JSON
-  Installing known registries into `~/`
+(@v1.11) pkg> add JSON
    Resolving package versions...
-   Installed Parsers ─ v2.4.0
-   Installed JSON ──── v0.21.3
-    Updating `~/.julia/environments/v1.8/Project.toml`
-  [682c06a0] + JSON v0.21.3
-    Updating `~/environments/v1.9/Manifest.toml`
-  [682c06a0] + JSON v0.21.3
-  [69de0a69] + Parsers v2.4.0
-  [ade2ca70] + Dates
-  [a63ad114] + Mmap
-  [de0858da] + Printf
-  [4ec0a83e] + Unicode
-Precompiling environment...
-  2 dependencies successfully precompiled in 2 seconds
+    Updating `~/.julia/environments/v1.11/Project.toml`
+  [682c06a0] + JSON v0.21.4
+    Updating `~/.julia/environments/v1.11/Manifest.toml`
+  [682c06a0] + JSON v0.21.4
+  [69de0a69] + Parsers v2.8.1
+  [aea7be01] + PrecompileTools v1.2.1
+  [21216c6a] + Preferences v1.4.3
+  [ade2ca70] + Dates v1.11.0
+  [a63ad114] + Mmap v1.11.0
+  [de0858da] + Printf v1.11.0
+  [9a3f8284] + Random v1.11.0
+  [ea8e919c] + SHA v0.7.0
+  [fa267f1f] + TOML v1.0.3
+  [cf7118a7] + UUIDs v1.11.0
+  [4ec0a83e] + Unicode v1.11.0
+Precompiling project...
+  2 dependencies successfully precompiled in 10 seconds. 8 already precompiled.
 ```
 
-Here we added the package `JSON` to the current environment (which is the default `@v1.8` environment).
+Here we added the package `JSON` to the current environment (which is the default `@v1.11` environment).
 In this example, we are using a fresh Julia installation,
 and this is our first time adding a package using Pkg. By default, Pkg installs the General registry
 and uses this registry to look up packages requested for inclusion in the current environment.
@@ -41,42 +44,80 @@ The status output contains the packages you have added yourself, in this case, `
 
 ```julia-repl
 (@v1.11) pkg> st
-    Status `~/.julia/environments/v1.8/Project.toml`
-  [682c06a0] JSON v0.21.3
+Status `~/.julia/environments/v1.11/Project.toml`
+  [682c06a0] JSON v0.21.4
 ```
 
 The manifest status shows all the packages in the environment, including recursive dependencies:
 
 ```julia-repl
 (@v1.11) pkg> st -m
-Status `~/environments/v1.9/Manifest.toml`
-  [682c06a0] JSON v0.21.3
-  [69de0a69] Parsers v2.4.0
-  [ade2ca70] Dates
-  [a63ad114] Mmap
-  [de0858da] Printf
-  [4ec0a83e] Unicode
+Status `~/.julia/environments/v1.11/Manifest.toml`
+  [682c06a0] JSON v0.21.4
+  [69de0a69] Parsers v2.8.1
+  [aea7be01] PrecompileTools v1.2.1
+  [21216c6a] Preferences v1.4.3
+  [ade2ca70] Dates v1.11.0
+  [a63ad114] Mmap v1.11.0
+  [de0858da] Printf v1.11.0
+  [9a3f8284] Random v1.11.0
+  [ea8e919c] SHA v0.7.0
+  [fa267f1f] TOML v1.0.3
+  [cf7118a7] UUIDs v1.11.0
+  [4ec0a83e] Unicode v1.11.0
 ```
 
-Since standard libraries (e.g. ` Dates`) are shipped with Julia, they do not have a version.
-
-To specify that you want a particular version (or set of versions) of a package, use the `compat` command. For example,
-to require any patch release of the v0.21 series of JSON after v0.21.4, call `compat JSON 0.21.4`:
+A specific version of a package can be installed by appending a version after a `@` symbol to the package name:
 
 ```julia-repl
-(@1.11) pkg> compat JSON 0.21.4
+(@v1.11) pkg> add JSON@0.21.1
+   Resolving package versions...
+    Updating `~/.julia/environments/v1.11/Project.toml`
+⌃ [682c06a0] ↓ JSON v0.21.4 ⇒ v0.21.1
+    Updating `~/.julia/environments/v1.11/Manifest.toml`
+⌃ [682c06a0] ↓ JSON v0.21.4 ⇒ v0.21.1
+⌅ [69de0a69] ↓ Parsers v2.8.1 ⇒ v1.1.2
+  [aea7be01] - PrecompileTools v1.2.1
+  [21216c6a] - Preferences v1.4.3
+  [9a3f8284] - Random v1.11.0
+  [ea8e919c] - SHA v0.7.0
+  [fa267f1f] - TOML v1.0.3
+  [cf7118a7] - UUIDs v1.11.0
+        Info Packages marked with ⌃ and ⌅ have new versions available. Those with ⌃ may be upgradable, but those with ⌅ are restricted by compatibility constraints from upgrading. To see why use `status --outdated -m`
+Precompiling project...
+  2 dependencies successfully precompiled in 3 seconds. 4 already precompiled.
+```
+
+As seen above, Pkg gives some information when a package is not installed at its latest version.
+
+If not all three numbers are given for the version, for example, `0.21`, then the latest registered version of `0.21.x` would be installed.
+
+To specify that you want a particular version (or set of versions) of a package, use the `compat` command. For example,
+to require any patch release of the v0.21 series of JSON after v0.21.5, call `compat JSON 0.21.5`:
+
+```julia-repl
+(@v1.11) pkg> compat JSON 0.21.4
       Compat entry set:
   JSON = "0.21.4"
      Resolve checking for compliance with the new compat rules...
-       Error empty intersection between JSON@0.21.3 and project compatibility 0.21.4 - 0.21
+       Error empty intersection between JSON@0.21.1 and project compatibility 0.21.4 - 0.21
   Suggestion Call `update` to attempt to meet the compatibility requirements.
 
-(@1.11) pkg> update
+(@v1.11) pkg> update
     Updating registry at `~/.julia/registries/General.toml`
-    Updating `~/.julia/environments/1.11/Project.toml`
-  [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
-    Updating `~/.julia/environments/1.11/Manifest.toml`
-  [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
+    Updating `~/.julia/environments/v1.11/Project.toml`
+  [682c06a0] ↑ JSON v0.21.1 ⇒ v0.21.4
+    Updating `~/.julia/environments/v1.11/Manifest.toml`
+  [682c06a0] ↑ JSON v0.21.1 ⇒ v0.21.4
+  [69de0a69] ↑ Parsers v1.1.2 ⇒ v2.8.1
+  [aea7be01] + PrecompileTools v1.2.1
+  [21216c6a] + Preferences v1.4.3
+  [9a3f8284] + Random v1.11.0
+  [ea8e919c] + SHA v0.7.0
+  [fa267f1f] + TOML v1.0.3
+  [cf7118a7] + UUIDs v1.11.0
+Precompiling project...
+  2 dependencies successfully precompiled in 9 seconds. 8 already precompiled.
 ```
 
 See the section on [Compatibility](@ref) for more on using the compat system.
@@ -93,26 +134,7 @@ julia> JSON.json(Dict("foo" => [1, "bar"])) |> print
 !!! note
     Only packages that have been added with `add` can be loaded (which are packages that are shown when using `st` in the Pkg REPL). Packages that are pulled in only as dependencies (for example the `Parsers` package above) can not be loaded.
 
-A specific version of a package can be installed by appending a version after a `@` symbol to the package name:
 
-```julia-repl
-(@v1.8) pkg> add JSON@0.21.1
-   Resolving package versions...
-    Updating `~/.julia/environments/v1.8/Project.toml`
-⌃ [682c06a0] + JSON v0.21.1
-    Updating `~/environments/v1.9/Manifest.toml`
-⌃ [682c06a0] + JSON v0.21.1
-⌅ [69de0a69] + Parsers v1.1.2
-  [ade2ca70] + Dates
-  [a63ad114] + Mmap
-  [de0858da] + Printf
-  [4ec0a83e] + Unicode
-        Info Packages marked with ⌃ and ⌅ have new versions available, but those with ⌅ are restricted by compatibility constraints from upgrading. To see why use `status --outdated -m`
-```
-
-As seen above, Pkg gives some information when a package is not installed at its latest version.
-
-If not all three numbers are given for the version, for example, `0.21`, then the latest registered version of `0.21.x` would be installed.
 
 If a branch (or a certain commit) of `Example` has a hotfix that is not yet included in a registered version,
 we can explicitly track that branch (or commit) by appending `#branchname` (or `#commitSHA1`) to the package name:
