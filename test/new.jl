@@ -181,7 +181,7 @@ end
             withenv("JULIA_DEPOT_PATH" => string(tmp, pathsep)) do
                 script = """
                 using Dates
-                t = Timer(t->println(Dates.now()), 0; interval = 30)
+                t = Timer(t->println(stderr, Dates.now()), 4*60; interval = 10)
                 import Pkg
                 samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
                 Pkg.activate(temp=true)
