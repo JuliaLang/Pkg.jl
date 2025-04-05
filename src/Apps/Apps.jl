@@ -341,7 +341,7 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
     content = if Sys.iswindows()
         windows_shim(pkgname, julia, env)
     else
-        bash_shim(pkgname, julia, env)
+        shell_shim(pkgname, julia, env)
     end
     overwrite_file_if_different(julia_bin_filename, content)
     if Sys.isunix()
@@ -350,9 +350,9 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function bash_shim(pkgname, julia::String, env)
+function shell_shim(pkgname, julia::String, env)
     return """
-        #!/usr/bin/env bash
+        #!/bin/sh
 
         $SHIM_HEADER
 
