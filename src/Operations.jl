@@ -358,18 +358,22 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
     source = project_rel_path(env, source_path(env.manifest_file, pkg))
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_project_deps(source_env.project, source_env.project_file, source_env.manifest, source_env.manifest_file)
-    for pkg in filter(is_tracking_path, pkgs)
+    for pkg in pkgs
         if any(x -> x.uuid == pkg.uuid, developed)
             continue
         end
-        # normalize path
-        # TODO: If path is collected from project, it is relative to the project file
-        # otherwise relative to manifest file....
-        pkg.path = Types.relative_project_path(env.manifest_file,
-                   project_rel_path(source_env,
-                   source_path(source_env.manifest_file, pkg)))
-        push!(developed, pkg)
-        collect_developed!(env, pkg, developed)
+        if is_tracking_path(pkg)
+            # normalize path
+            # TODO: If path is collected from project, it is relative to the project file
+             # otherwise relative to manifest file....
+            pkg.path = Types.relative_project_path(env.manifest_file,
+                    project_rel_path(source_env,
+                    source_path(source_env.manifest_file, pkg)))
+            push!(developed, pkg)
+            collect_developed!(env, pkg, developed)
+        elseif is_tracking_repo(pkg)
+            push!(developed, pkg)
+        end
     end
 end
 
