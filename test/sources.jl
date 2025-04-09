@@ -44,6 +44,12 @@ temp_pkg_dir() do project_path
                     Pkg.test()
                 end
             end
+
+            cd(joinpath(dir, "WithSources", "URLSourceInDevvedPackage")) do
+                with_current_env() do
+                    Pkg.test()
+                end
+            end
         end
     end
 end
