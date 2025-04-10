@@ -95,6 +95,16 @@ function read_apps(apps::Dict)
     return appinfos
 end
 
+read_exts(::Nothing) = Dict{String, Union{String, Vector{String}}}()
+function read_exts(raw::Dict{String, Any})
+    exts = Dict{String, Union{String, Vector{String}}}()
+    for (key, val) in raw
+        val isa Union{String, Vector{String}} || pkgerror("Expected `ext` entry to be a `Union{String, Vector{String}}`.")
+        exts[key] = val
+    end
+    return exts
+end
+
 struct Stage1
     uuid::UUID
     entry::PackageEntry
@@ -197,7 +207,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     entry.apps = read_apps(get(info::Dict, "apps", nothing)::Union{Nothing, Dict{String, Any}})
-                    entry.exts = get(Dict{String, String}, info, "extensions")
+                    entry.exts = read_exts(get(info, "extensions", nothing))
                 catch
                     # TODO: Should probably not unconditionally log something
                     # @debug "Could not parse manifest entry for `$name`" f_or_io
