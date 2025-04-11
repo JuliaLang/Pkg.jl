@@ -218,6 +218,7 @@ end
 #
 function parse_activate(args::Vector{QString}, options)
     isempty(args) && return [] # nothing to do
+    args = filter(a -> !in(a.raw, ("--test", "--build")), args)
     if length(args) == 1
         x = first(args)
         if x.isquoted
