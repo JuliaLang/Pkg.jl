@@ -181,7 +181,7 @@ end
             withenv("JULIA_DEPOT_PATH" => string(tmp, pathsep)) do
                 script = """
                 using Dates
-                t = Timer(t->println(Dates.now()), 0; interval = 30)
+                t = Timer(t->println(stderr, Dates.now()), 4*60; interval = 10)
                 import Pkg
                 samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
                 Pkg.activate(temp=true)
@@ -220,7 +220,7 @@ end
                         end
                     end
                 end
-                if any_failed[]
+                if any_failed[] || did_install_package[] != 1 || did_install_artifact[] != 1
                     println("=== Concurrent Pkg.add test $test failed after $t seconds")
                     for i in 1:3
                         printstyled(stdout, outputs[i]; color=(:blue, :green, :yellow)[i])
