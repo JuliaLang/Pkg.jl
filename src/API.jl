@@ -90,12 +90,15 @@ function dependencies(env::EnvCache)
     pkgs = Operations.load_all_deps_loadable(env)
     return Dict(pkg.uuid::UUID => package_info(env, pkg) for pkg in pkgs)
 end
-function dependencies(fn::Function, uuid::UUID)
+function dependencies(uuid::UUID)
     dep = get(dependencies(), uuid, nothing)
     if dep === nothing
         pkgerror("dependency with UUID `$uuid` does not exist")
     end
-    fn(dep)
+    return dep
+end
+function dependencies(fn::Function, uuid::UUID)
+    return fn(dependencies(uuid))
 end
 
 
