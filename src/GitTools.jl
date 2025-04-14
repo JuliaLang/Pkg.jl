@@ -169,13 +169,11 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     try
         if use_cli_git()
             let remoteurl=remoteurl
-                cd(LibGit2.path(repo)) do
-                    cmd = `git fetch -q $remoteurl $(only(refspecs))`
-                    try
-                        run(pipeline(cmd; stdout=devnull))
-                    catch err
-                        Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
-                    end
+                cmd = `git -C $(LibGit2.path(repo)) fetch -q $remoteurl $(only(refspecs))`
+                try
+                    run(pipeline(cmd; stdout=devnull))
+                catch err
+                    Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
                 end
             end
         else

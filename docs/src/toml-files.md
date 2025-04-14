@@ -22,13 +22,38 @@ are described below.
 
 ### The `authors` field
 
-For a package, the optional `authors` field is a list of strings describing the
-package authors, in the form `NAME <EMAIL>`. For example:
+For a package, the optional `authors` field is a TOML array describing the package authors. 
+Entries in the array can either be a string in the form `"NAME"` or `"NAME <EMAIL>"`, or a table keys following the [Citation File Format schema](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md) for either a
+[`person`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsperson) or an[`entity`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsentity).
+
+For example:
 ```toml
-authors = ["Some One <someone@email.com>",
-           "Foo Bar <foo@bar.com>"]
+authors = [
+  "Some One <someone@email.com>",
+  "Foo Bar <foo@bar.com>",
+  {given-names = "Baz", family-names = "Qux", email = "bazqux@example.com", orcid = "https://orcid.org/0000-0000-0000-0000", website = "https://github.com/bazqux"},
+]
 ```
 
+If all authors are specified by tables, it is possible to use [the TOML Array of Tables syntax](https://toml.io/en/v1.0.0#array-of-tables)
+```toml
+[[authors]]
+given-names = "Some"
+family-names = "One"
+email = "someone@email.com"
+
+[[authors]]
+given-names = "Foo"
+family-names = "Bar"
+email = "foo@bar.com"
+
+[[authors]]
+given-names = "Baz"
+family-names = "Qux"
+email = "bazqux@example.com"
+orcid = "https://orcid.org/0000-0000-0000-0000"
+website = "https://github.com/bazqux"
+```
 
 ### The `name` field
 
@@ -162,7 +187,7 @@ For the details, see [`Pkg.instantiate`](@ref).
 
 ### Different Manifests for Different Julia versions
 
-Starting from Julia v1.11, there is an option to name manifest files in the format `Manifest-v{major}.{minor}.toml`.
+Starting from Julia v1.10.8, there is an option to name manifest files in the format `Manifest-v{major}.{minor}.toml`.
 Julia will then preferentially use the version-specific manifest file if available.
 For example, if both `Manifest-v1.11.toml` and `Manifest.toml` exist, Julia 1.11 will prioritize using `Manifest-v1.11.toml`.
 However, Julia versions 1.10, 1.12, and all others will default to using `Manifest.toml`.

@@ -2,6 +2,7 @@
 
 module Operations
 
+using FileWatching: FileWatching
 using UUIDs
 using Random: randstring
 import LibGit2, Dates, TOML
@@ -9,7 +10,7 @@ import LibGit2, Dates, TOML
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
-                    artifact_exists, select_downloadable_artifacts
+                    artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
@@ -358,18 +359,22 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
     source = project_rel_path(env, source_path(env.manifest_file, pkg))
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_project_deps(source_env.project, source_env.project_file, source_env.manifest, source_env.manifest_file)
-    for pkg in filter(is_tracking_path, pkgs)
+    for pkg in pkgs
         if any(x -> x.uuid == pkg.uuid, developed)
             continue
         end
-        # normalize path
-        # TODO: If path is collected from project, it is relative to the project file
-        # otherwise relative to manifest file....
-        pkg.path = Types.relative_project_path(env.manifest_file,
-                   project_rel_path(source_env,
-                   source_path(source_env.manifest_file, pkg)))
-        push!(developed, pkg)
-        collect_developed!(env, pkg, developed)
+        if is_tracking_path(pkg)
+            # normalize path
+            # TODO: If path is collected from project, it is relative to the project file
+             # otherwise relative to manifest file....
+            pkg.path = Types.relative_project_path(env.manifest_file,
+                    project_rel_path(source_env,
+                    source_path(source_env.manifest_file, pkg)))
+            push!(developed, pkg)
+            collect_developed!(env, pkg, developed)
+        elseif is_tracking_repo(pkg)
+            push!(developed, pkg)
+        end
     end
 end
 
@@ -716,6 +721,11 @@ function install_archive(
     version_path::String;
     io::IO=stderr_f()
 )::Bool
+    # Because we use `mv_temp_dir_retries` which uses `rename` not `mv` it can fail if the temp
+    # files are on a different fs. So use a temp dir in the same depot dir as some systems might
+    # be serving different parts of the depot on different filesystems via links i.e. pkgeval does this.
+    depot_temp = mkpath(joinpath(dirname(dirname(version_path)), "temp")) # .julia/packages/temp
+
     tmp_objects = String[]
     url_success = false
     for (url, top) in urls
@@ -729,7 +739,9 @@ function install_archive(
             url_success = false
         end
         url_success || continue
-        dir = joinpath(tempdir(), randstring(12))
+        # the temp dir should be in the same depot because the `rename` operation in `mv_temp_dir_retries`
+        # is possible only if the source and destination are on the same filesystem
+        dir = tempname(depot_temp) * randstring(6)
         push!(tmp_objects, dir) # for cleanup
         # Might fail to extract an archive (https://github.com/JuliaPackaging/PkgServer.jl/issues/126)
         try
@@ -750,18 +762,16 @@ function install_archive(
             unpacked = joinpath(dir, dirs[1])
         end
         # Assert that the tarball unpacked to the tree sha we wanted
-        # TODO: Enable on Windows when tree_hash handles
-        # executable bits correctly, see JuliaLang/julia #33212.
-        if !Sys.iswindows()
-            if SHA1(GitTools.tree_hash(unpacked)) != hash
-                @warn "tarball content does not match git-tree-sha1"
-                url_success = false
-            end
-            url_success || continue
+        if SHA1(GitTools.tree_hash(unpacked)) != hash
+            @warn "tarball content does not match git-tree-sha1"
+            url_success = false
         end
+        url_success || continue
+
         # Move content to version path
-        !isdir(version_path) && mkpath(version_path)
-        mv(unpacked, version_path; force=true)
+        !isdir(dirname(version_path)) && mkpath(dirname(version_path))
+        mv_temp_dir_retries(unpacked, version_path; set_permissions = false)
+
         break # successful install
     end
     # Clean up and exit
@@ -917,7 +927,7 @@ function download_artifacts(ctx::Context;
                         try
                             dstate.state = :running
                             ret()
-                            if !fancyprint
+                            if !fancyprint && dstate.bar.max > 1 # if another process downloaded, then max is never set greater than 1
                                 @lock print_lock printpkgstyle(io, :Installed, "artifact $rname $(MiniProgressBars.pkg_format_bytes(dstate.bar.max; sigdigits=1))")
                             end
                         catch
@@ -1044,12 +1054,14 @@ end
 download_source(ctx::Context; readonly=true) = download_source(ctx, values(ctx.env.manifest); readonly)
 
 function download_source(ctx::Context, pkgs; readonly=true)
+    pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
     for pkg in pkgs
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
-        ispath(path) && continue
+        mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
+        FileWatching.mkpidlock(() -> ispath(path), path * ".pid", stale_age = pidfile_stale_age) && continue
         urls = find_urls(ctx.registries, pkg.uuid)
         push!(pkgs_to_install, (;pkg, urls, path))
     end
@@ -1072,7 +1084,8 @@ function download_source(ctx::Context, pkgs; readonly=true)
         nothing
     end
 
-    @sync begin
+    # use eager throw version
+    Base.Experimental.@sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
         results = Channel(ctx.num_concurrent_downloads)
 
@@ -1082,14 +1095,19 @@ function download_source(ctx::Context, pkgs; readonly=true)
             end
         end
 
-        for i in 1:ctx.num_concurrent_downloads
+        for i in 1:ctx.num_concurrent_downloads # (default 8)
             @async begin
                 for (pkg, urls, path) in jobs
-                    if ctx.use_git_for_all_downloads
-                        put!(results, (pkg, false, (urls, path)))
-                        continue
-                    end
-                    try
+                    mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
+                    FileWatching.mkpidlock(path * ".pid", stale_age = pidfile_stale_age) do
+                        if ispath(path)
+                            put!(results, (pkg, nothing, (urls, path)))
+                            return
+                        end
+                        if ctx.use_git_for_all_downloads
+                            put!(results, (pkg, false, (urls, path)))
+                            return
+                        end
                         archive_urls = Pair{String,Bool}[]
                         # Check if the current package is available in one of the registries being tracked by the pkg server
                         # In that case, download from the package server
@@ -1109,16 +1127,18 @@ function download_source(ctx::Context, pkgs; readonly=true)
                             url = get_archive_url_for_version(repo_url, pkg.tree_hash)
                             url !== nothing && push!(archive_urls, url => false)
                         end
-                        success = install_archive(archive_urls, pkg.tree_hash, path, io=ctx.io)
-                        if success && readonly
-                            set_readonly(path) # In add mode, files should be read-only
+                        try
+                            success = install_archive(archive_urls, pkg.tree_hash, path, io=ctx.io)
+                            if success && readonly
+                                set_readonly(path) # In add mode, files should be read-only
+                            end
+                            if ctx.use_only_tarballs_for_downloads && !success
+                                pkgerror("failed to get tarball from $(urls)")
+                            end
+                            put!(results, (pkg, success, (urls, path)))
+                        catch err
+                            put!(results, (pkg, err, catch_backtrace()))
                         end
-                        if ctx.use_only_tarballs_for_downloads && !success
-                            pkgerror("failed to get tarball from $(urls)")
-                        end
-                        put!(results, (pkg, success, (urls, path)))
-                    catch err
-                        put!(results, (pkg, err, catch_backtrace()))
                     end
                 end
             end
@@ -1130,10 +1150,15 @@ function download_source(ctx::Context, pkgs; readonly=true)
         fancyprint = can_fancyprint(ctx.io)
         try
             for i in 1:length(pkgs_to_install)
-                pkg::eltype(pkgs), exc_or_success, bt_or_pathurls = take!(results)
-                exc_or_success isa Exception && pkgerror("Error when installing package $(pkg.name):\n",
-                                                        sprint(Base.showerror, exc_or_success, bt_or_pathurls))
-                success, (urls, path) = exc_or_success, bt_or_pathurls
+                pkg::eltype(pkgs), exc_or_success_or_nothing, bt_or_pathurls = take!(results)
+                if exc_or_success_or_nothing isa Exception
+                    exc = exc_or_success_or_nothing
+                    pkgerror("Error when installing package $(pkg.name):\n", sprint(Base.showerror, exc, bt_or_pathurls))
+                end
+                if exc_or_success_or_nothing === nothing
+                    continue # represents when another process did the install
+                end
+                success, (urls, path) = exc_or_success_or_nothing, bt_or_pathurls
                 success || push!(missed_packages, (; pkg, urls, path))
                 bar.current = i
                 str = sprint(; context=ctx.io) do io
@@ -1161,15 +1186,18 @@ function download_source(ctx::Context, pkgs; readonly=true)
     # Use LibGit2 to download any remaining packages #
     ##################################################
     for (pkg, urls, path) in missed_packages
-        install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
-        readonly && set_readonly(path)
-        vstr = if pkg.version !== nothing
-            "v$(pkg.version)"
-        else
-            short_treehash = string(pkg.tree_hash)[1:16]
-            "[$short_treehash]"
+        FileWatching.mkpidlock(path * ".pid", stale_age = pidfile_stale_age) do
+            ispath(path) && return
+            install_git(ctx.io, pkg.uuid, pkg.name, pkg.tree_hash, urls, path)
+            readonly && set_readonly(path)
+            vstr = if pkg.version !== nothing
+                "v$(pkg.version)"
+            else
+                short_treehash = string(pkg.tree_hash)[1:16]
+                "[$short_treehash]"
+            end
+            printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
         end
-        printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
     end
 
     return Set{UUID}(entry.pkg.uuid for entry in pkgs_to_install)
@@ -1985,14 +2013,18 @@ end
 
 
 function get_threads_spec()
-    if Threads.nthreads(:interactive) > 0
+    if haskey(ENV, "JULIA_NUM_THREADS")
+        # if set, prefer JULIA_NUM_THREADS because this is passed to the test worker via --threads
+        # which takes precedence in the worker
+        ENV["JULIA_NUM_THREADS"]
+    elseif Threads.nthreads(:interactive) > 0
         "$(Threads.nthreads(:default)),$(Threads.nthreads(:interactive))"
     else
         "$(Threads.nthreads(:default))"
     end
 end
 
-function gen_subprocess_flags(source_path::String; coverage, julia_args)
+function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
     coverage_arg = if coverage isa Bool
         # source_path is the package root, not "src" so "ext" etc. is included
         coverage ? string("@", source_path) : "none"
@@ -2330,7 +2362,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(;io=ctx.io)
             status(sandbox_ctx.env, sandbox_ctx.registries; mode=PKGMODE_COMBINED, io=sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
-            flags = gen_subprocess_flags(source_path; coverage,julia_args)
+            flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
@@ -2340,7 +2372,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
             code = gen_test_code(source_path; test_args)
-            cmd = `$(Base.julia_cmd()) $(flags) --threads=$(get_threads_spec()) --eval $code`
+            cmd = `$(Base.julia_cmd()) --threads=$(get_threads_spec()) $(flags) --eval $code`
             p, interrupted = subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")

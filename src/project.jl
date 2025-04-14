@@ -62,19 +62,21 @@ function read_project_deps(raw, section_name::String)
     pkgerror("Expected `$(section_name)` section to be a key-value list")
 end
 
-read_project_targets(::Nothing, project::Project) = Dict{String,Any}()
+read_project_targets(::Nothing, project::Project) = Dict{String,Vector{String}}()
 function read_project_targets(raw::Dict{String,Any}, project::Project)
+    targets = Dict{String,Vector{String}}()
     for (target, deps) in raw
         deps isa Vector{String} || pkgerror("""
             Expected value for target `$target` to be a list of dependency names.
         """)
+        targets[target] = deps
     end
-    return raw
+    return targets
 end
 read_project_targets(raw, project::Project) =
     pkgerror("Expected `targets` section to be a key-value list")
 
-read_project_apps(::Nothing, project::Project) = Dict{String,Any}()
+read_project_apps(::Nothing, project::Project) = Dict{String,AppInfo}()
 function read_project_apps(raw::Dict{String,Any}, project::Project)
     other = raw
     appinfos = Dict{String,AppInfo}()
@@ -103,10 +105,10 @@ end
 read_project_compat(raw, project::Project) =
     pkgerror("Expected `compat` section to be a key-value list")
 
-read_project_sources(::Nothing, project::Project) = Dict{String,Any}()
+read_project_sources(::Nothing, project::Project) = Dict{String,Dict{String,String}}()
 function read_project_sources(raw::Dict{String,Any}, project::Project)
     valid_keys = ("path", "url", "rev", "subdir")
-    sources = Dict{String,Any}()
+    sources = Dict{String,Dict{String,String}}()
     for (name, source) in raw
         if !(source isa AbstractDict)
             pkgerror("Expected `source` section to be a table")
