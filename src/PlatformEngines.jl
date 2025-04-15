@@ -289,7 +289,7 @@ function download(
         nothing
     end
     try
-        Downloads.download(url, dest; headers, progress)
+        Downloads.download(url, dest; headers=headers, progress=progress, downloader=Downloads.DOWNLOADER[])
     finally
         do_fancy && end_progress(io, bar)
     end
