@@ -886,7 +886,7 @@ function download_artifacts(ctx::Context;
     download_states = Dict{SHA1, DownloadState}()
 
     errors = Channel{Any}(Inf)
-    is_done = false
+    is_done = Ref{Bool}(false)
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
     ansi_cleartoend = "\e[0J"
@@ -903,8 +903,8 @@ function download_artifacts(ctx::Context;
         # For each Artifacts.toml, install each artifact we've collected from it
         for name in keys(artifacts)
             local rname = rpad(name, longest_name_length)
-            local hash = SHA1(artifacts[name]["git-tree-sha1"])
-            local bar = MiniProgressBar(;header=rname, main=false, indent=2, color = Base.info_color(), mode=:data, always_reprint=true)
+            local hash = SHA1(artifacts[name]["git-tree-sha1"]::String)
+            local bar = MiniProgressBar(;header=rname, main=false, indent=2, color = Base.info_color()::Symbol, mode=:data, always_reprint=true)
             local dstate = DownloadState(:ready, "", time_ns(), Base.ReentrantLock(), bar)
             function progress(total, current; status="")
                 local t = time_ns()
@@ -951,9 +951,9 @@ function download_artifacts(ctx::Context;
                     # TODO: Implement as a new MiniMultiProgressBar
                     main_bar = MiniProgressBar(; indent=2, header = "Installing artifacts", color = :green, mode = :int, always_reprint=true)
                     main_bar.max = length(download_states)
-                    while !is_done
+                    while !is_done[]
                         main_bar.current = count(x -> x.state == :done, values(download_states))
-                        str = sprint(context=io) do iostr
+                        local str = sprint(context=io) do iostr
                             first || print(iostr, ansi_cleartoend)
                             n_printed = 1
                             show_progress(iostr, main_bar; carriagereturn=false)
@@ -970,7 +970,7 @@ function download_artifacts(ctx::Context;
                                 println(iostr)
                                 n_printed += 1
                             end
-                            is_done || print(iostr, ansi_moveup(n_printed), ansi_movecol1)
+                            is_done[] || print(iostr, ansi_moveup(n_printed), ansi_movecol1)
                             first = false
                         end
                         print(io, str)
@@ -991,26 +991,26 @@ function download_artifacts(ctx::Context;
             printpkgstyle(io, :Installing, "$(length(download_jobs)) artifacts")
         end
         sema = Base.Semaphore(ctx.num_concurrent_downloads)
-        interrupted = false
+        interrupted = Ref{Bool}(false)
         @sync for f in values(download_jobs)
-            interrupted && break
+            interrupted[] && break
             Base.acquire(sema)
             Threads.@spawn try
                 f()
             catch e
-                e isa InterruptException && (interrupted = true)
+                e isa InterruptException && (interrupted[] = true)
                 put!(errors, e)
             finally
                 Base.release(sema)
             end
         end
-        is_done = true
+        is_done[] = true
         fancyprint && wait(t_print)
         close(errors)
 
         if !isempty(errors)
             all_errors = collect(errors)
-            str = sprint(context=io) do iostr
+            local str = sprint(context=io) do iostr
                 for e in all_errors
                     Base.showerror(iostr, e)
                     length(all_errors) > 1 && println(iostr)
