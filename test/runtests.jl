@@ -20,6 +20,7 @@ if realpath(dirname(dirname(Base.pathof(Pkg)))) != realpath(dirname(@__DIR__))
 end
 
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
+ENV["JULIA_PKG_DISALLOW_PKG_PRECOMPILATION"]=1
 
 logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
 ### Send all Pkg output to a file called Pkg.log
