@@ -3248,16 +3248,18 @@ temp_pkg_dir() do project_path
     end
 end
 @testset "test resolve with tree hash" begin
-    mktempdir() do dir
-        path = copy_test_package(dir, "ResolveWithRev")
-        cd(path) do
-            with_current_env() do
-                @test !isfile("Manifest.toml")
-                @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
-                Pkg.resolve()
-                @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
-                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
-                Pkg.resolve()
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "ResolveWithRev")
+            cd(path) do
+                with_current_env() do
+                    @test !isfile("Manifest.toml")
+                    @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                    Pkg.resolve()
+                    @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                    rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive=true)
+                    Pkg.resolve()
+                end
             end
         end
     end
