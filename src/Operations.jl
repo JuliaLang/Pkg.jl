@@ -747,7 +747,7 @@ function install_archive(
         try
             unpack(path, dir; verbose=false)
         catch e
-            e isa InterruptException && rethrow()
+            e isa ProcessFailedException || rethrow()
             @warn "failed to extract archive downloaded from $(url)"
             url_success = false
         end
