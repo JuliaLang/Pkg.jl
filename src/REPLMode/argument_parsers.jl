@@ -196,10 +196,11 @@ function parse_registry(word::AbstractString; add=false)::RegistrySpec
         registry.name = String(something(m.captures[1]))
         registry.uuid = UUID(something(m.captures[2]))
     elseif add
-        # Guess it is a url then
+        # Guess it is a url then.
         registry.url = String(word)
     else
-        pkgerror("`$word` cannot be parsed as a registry")
+        # Guess it is a name then.
+        registry.name = String(word)
     end
     return registry
 end
