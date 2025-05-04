@@ -1,0 +1,7 @@
+name = "FooDep"
+uuid = "22d90790-ba35-49ef-9cc5-1d4fefcbe869"
+authors = ["Carsten Bauer <crstnbr@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
