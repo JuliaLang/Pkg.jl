@@ -147,6 +147,7 @@ end
 
 # Provide some convenience calls
 for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :precompile)
+    f_under = Symbol("_", f)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
@@ -161,12 +162,12 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
             kwargs = merge((;kwargs...), (:io => io,))
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
-            ret = $f(ctx, pkgs; kwargs...)
+            ret = $f_under(ctx, pkgs; kwargs...) # note the underscore for private entrypoint
             $(f in (:up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
             $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
             return ret
         end
-        $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
+        $f_under(ctx::Context; kwargs...) = $f_under(ctx, PackageSpec[]; kwargs...)
         function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
                       version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
                       url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
@@ -229,7 +230,7 @@ function update_source_if_set(project, pkg)
     end
 end
 
-function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
+function _develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
                  preserve::PreserveLevel=Operations.default_preserve(), platform::AbstractPlatform=HostPlatform(), kwargs...)
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
@@ -275,7 +276,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
     return
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
+function _add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
              platform::AbstractPlatform=HostPlatform(), target::Symbol=:deps, allow_autoprecomp::Bool=true, kwargs...)
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
@@ -329,7 +330,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
     return
 end
 
-function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_pkgs::Bool=false, kwargs...)
+function _rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_pkgs::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -375,7 +376,7 @@ function append_all_pkgs!(pkgs, ctx, mode)
     return
 end
 
-function up(ctx::Context, pkgs::Vector{PackageSpec};
+function _up(ctx::Context, pkgs::Vector{PackageSpec};
             level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
             preserve::Union{Nothing,PreserveLevel}= isempty(pkgs) ? nothing : PRESERVE_ALL,
             update_registry::Bool=true,
@@ -405,13 +406,13 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(; io::IO=stderr_f(), kwargs...) = resolve(Context(;io); kwargs...)
-function resolve(ctx::Context; skip_writing_project::Bool=false, kwargs...)
-    up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, skip_writing_project, kwargs...)
+resolve(; io::IO=stderr_f(), kwargs...) = _resolve(Context(;io); kwargs...)
+function _resolve(ctx::Context; skip_writing_project::Bool=false, kwargs...)
+    _up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, skip_writing_project, kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function _pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -447,7 +448,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function _free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -474,7 +475,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     return
 end
 
-function test(ctx::Context, pkgs::Vector{PackageSpec};
+function _test(ctx::Context, pkgs::Vector{PackageSpec};
               coverage=false, test_fn=nothing,
               julia_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
               test_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
@@ -538,7 +539,11 @@ admin privileges depending on the setup).
 
 Use verbose mode (`verbose=true`) for detailed output.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, force=false, kwargs...)
+function gc(; collect_delay::Period=Day(7), verbose=false, force=false, kwargs...)
+    ctx = Context()
+    return _gc(ctx; collect_delay, verbose, force, kwargs...)
+end
+function _gc(ctx::Context; collect_delay::Period=Day(7), verbose::Bool=false, force::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     env = ctx.env
 
@@ -1109,7 +1114,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     return
 end
 
-function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
+function _build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
@@ -1146,13 +1151,13 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
     end
 end
 
-function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
+function _precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
                     strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
                     _from_loading::Bool=false, configs::Union{Base.Precompilation.Config,Vector{Base.Precompilation.Config}}=(``=>Base.CacheFlags()),
                     workspace::Bool=false, kwargs...)
     Context!(ctx; kwargs...)
     if !already_instantiated
-        instantiate(ctx; allow_autoprecomp=false, kwargs...)
+        _instantiate(ctx; allow_autoprecomp=false, kwargs...)
         @debug "precompile: instantiated"
     end
 
@@ -1185,8 +1190,8 @@ function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
     return nothing
 end
 
-instantiate(; kwargs...) = instantiate(Context(); kwargs...)
-function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
+instantiate(; kwargs...) = _instantiate(Context(); kwargs...)
+function _instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
                      update_registry::Bool=true, verbose::Bool=false,
                      platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true,
                      workspace::Bool=false, julia_version_strict::Bool=false, kwargs...)
@@ -1206,12 +1211,12 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             deps[pkg.name] = string(uuid)
         end
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
-        return instantiate(Context(); manifest=manifest, update_registry=update_registry, allow_autoprecomp=allow_autoprecomp, verbose=verbose, platform=platform, kwargs...)
+        return _instantiate(Context(); manifest=manifest, update_registry=update_registry, allow_autoprecomp=allow_autoprecomp, verbose=verbose, platform=platform, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
-        up(ctx; update_registry = update_registry && allow_registry_update)
+        _up(ctx; update_registry = update_registry && allow_registry_update)
         allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
@@ -1301,7 +1306,7 @@ end
 
 @deprecate status(mode::PackageMode) status(mode=mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, workspace::Bool=false, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
+function _status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, workspace::Bool=false, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
@@ -1404,7 +1409,7 @@ function activate(f::Function, new_project::AbstractString)
     end
 end
 
-function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io = nothing, kwargs...)
+function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io = nothing, kwargs...)
     io = something(io, ctx.io)
     pkg = pkg == "Julia" ? "julia" : pkg
     isnothing(compat_str) || (compat_str = string(strip(compat_str, '"')))
@@ -1419,7 +1424,7 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         end
         printpkgstyle(io, :Resolve, "checking for compliance with the new compat rules...")
         try
-            resolve(ctx)
+            _resolve(ctx)
         catch e
             if e isa ResolverError || e isa ResolverTimeoutError
                 printpkgstyle(io, :Error, string(e.msg), color = Base.warn_color())
@@ -1434,14 +1439,14 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
     end
 end
 compat(pkg::String; kwargs...) = compat(pkg, nothing; kwargs...)
-compat(pkg::String, compat_str::Union{Nothing,String}; kwargs...) = compat(Context(), pkg, compat_str; kwargs...)
-compat(;kwargs...) = compat(Context(); kwargs...)
+compat(pkg::String, compat_str::Union{Nothing,String}; kwargs...) = _compat(Context(), pkg, compat_str; kwargs...)
+compat(;kwargs...) = _compat(Context(); kwargs...)
 
 #######
 # why #
 #######
 
-function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool=false, kwargs...)
+function _why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool=false, kwargs...)
     require_not_empty(pkgs, :why)
 
     manifest_resolve!(ctx.env.manifest, pkgs)
