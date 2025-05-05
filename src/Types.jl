@@ -1230,6 +1230,14 @@ function write_env(env::EnvCache; update_undo=true,
                 @assert entry.repo.subdir == repo.subdir
             end
         end
+        if entry.path !== nothing
+            env.project.sources[pkg] = Dict("path" => entry.path)
+        elseif entry.repo != GitRepo()
+            d = Dict("url" => entry.repo.source)
+            entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
+            entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
+            env.project.sources[pkg] = d
+        end
     end
 
     if (env.project != env.original_project) && (!skip_writing_project)
