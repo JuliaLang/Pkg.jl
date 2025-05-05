@@ -15,7 +15,7 @@ import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, ar
 import ..Types: write_env_usage, parse_toml
 
 
-export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
+export Artifacts, create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
        find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
        select_downloadable_artifacts, ArtifactDownloadInfo
