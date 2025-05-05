@@ -57,7 +57,7 @@ stdout_f() = something(DEFAULT_IO[], unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
-can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
+can_fancyprint(io::IO) = @something get(io, :Pkg_force_fancyprint, nothing) (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
 
 include("utils.jl")
