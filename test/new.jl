@@ -3184,4 +3184,6 @@ end
     @test occursin("[loaded: v0.5.4]", out)
 end
 
+@test allunique(unique([Pkg.PackageSpec(path="foo"), Pkg.PackageSpec(path="foo")]))
+
 end #module
