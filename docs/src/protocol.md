@@ -1,8 +1,6 @@
-# [**13.** Package and Storage Server Protocol Reference](@id Pkg-Storage-Protocol)
+# [**13.** Package and Storage Server Protocol Reference](@id Pkg-Server-Protocols)
 
-The Julia programming language has garnered significant attention in the scientific and technical computing domains, owing to its high performance and ease of use. A crucial aspect of any modern programming ecosystem is its package management system, which allows users to easily discover, install, and manage external libraries and tools. 
-
-The Julialang Package Server Protocol (Pkg Protocol) and the Package Storage Server Protocol (Storage Protocol) define how Julia's package manager, Pkg, obtains and manages packages and their associated resources. They aim at enhancing the Julia package ecosystem, making it more efficient, reliable, and user-friendly, avoiding potential points of failure, and ensuring the permanent availability of package versions and artifacts which is paramount for the stability and reproducibility of Julia projects.
+The Julia Package Server Protocol (Pkg Protocol) and the Package Storage Server Protocol (Storage Protocol) define how Julia's package manager, Pkg, obtains and manages packages and their associated resources. They aim at enhancing the Julia package ecosystem, making it more efficient, reliable, and user-friendly, avoiding potential points of failure, and ensuring the permanent availability of package versions and artifacts which is paramount for the stability and reproducibility of Julia projects.
 
 The Pkg client, by default, gets all resources over HTTPS from a single open source service run by the Julia community. This service for serving packages is additionally backed by multiple independent storage services which interface with proprietary origin services (GitHub, etc.) and guarantee persitent availabilty of resources into the future.
 
