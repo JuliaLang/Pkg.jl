@@ -142,12 +142,12 @@ Pkg.PlatformEngines.deregister_auth_error_handler(urlscheme::Union{AbstractStrin
 
 The client can make GET or HEAD requests to the following resources:
 
-- `/registry`: map of registry uuids at this server to their current tree hashes
+- `/registries`: map of registry uuids at this server to their current tree hashes, each line of the response data is of the form `/registry/$uuid/$hash` representing a resource pointing to particular version of a registry
 - `/registry/$uuid/$hash`: tarball of registry uuid at the given tree hash
 - `/package/$uuid/$hash`: tarball of package uuid at the given tree hash
 - `/artifact/$hash`: tarball of an artifact with the given tree hash
 
-Only the `/registry` changes - all other resources can be cached forever and the server will indicate this with the appropriate HTTP headers.
+Only the `/registries` changes - all other resources can be cached forever and the server will indicate this with the appropriate HTTP headers.
 
 ### Diffs
 
