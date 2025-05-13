@@ -103,19 +103,11 @@ If the access token is expired and there are `refresh_token` and `refresh_url` f
 
 Checking for access token expiry and refreshing `auth.toml` is done before each Pkg client request to a Pkg server, and if the auth file is updated the new access token is used, so the token should in theory always be up to date. Practice is different from theory, of course, and if the Pkg server considers the access token expired, it may return an HTTP 401 Unauthorized response, and the Pkg client should attempt to refresh the auth token. If, after attempting to refresh the access token, the server still returns HTTP 401 Unauthorized, the Pkg client server will present the body of the error response to the user or user agent (IDE).
 
-A mechanism to register a hook at the client is provided to allow the user agent to handle an auth failure, e.g. by presenting a login page to get a new auth token.
+## Authentication Hooks
+A mechanism to register a hook at the client is provided to allow the user agent to handle an auth failure. It can, for example, present a login page and take the user through the necessary authentication flow to get a new auth token and store it in `auth.toml`.
 
-To register a handler, use the following function:
-
-`register_auth_error_handler(urlscheme::Union{AbstractString, Regex}, f)`
-
-It registers `f` as the topmost handler for failures in package server authentication. A handler is only invoked if the URL that Pkg is trying to download from, and the one that needs authentication, matches the what was handler was registered.
-
-`f` must be a function that takes three input arguments `(url, pkgserver, err)`, where `url` is the URL currently being downloaded, `pkgserver = Pkg.pkg_server()` the current package server, and `err` is one of `no-auth-file`, `insecure-connection`, `malformed-file`, `no-access-token`, `no-refresh-key` or `insecure-refresh-url`.
-
-The handler `f` needs to return a tuple of `Bool`s `(handled, should_retry)`. If `handled` is `false`, the next handler in the stack will be called, otherwise handling terminates; `get_auth_header` is called again if `should_retry` is `true`.
-
-`register_auth_error_handler` returns a zero-arg function that can be called to deregister the handler. E.g.:
+- A handler can also be registered using [`register_auth_error_handler`](@ref Pkg.PlatformEngines.register_auth_error_handler). It returns a function that can be called to deregister the handler.
+- A handler can also be deregistered using [`deregister_auth_error_handler`](@ref Pkg.PlatformEngines.deregister_auth_error_handler).
 
 Example:
 
@@ -130,12 +122,8 @@ end)
 
 # deregister the handler
 dispose()
-```
-
-A handler can also be deregistered by calling the following function:
-
-```julia
-Pkg.PlatformEngines.deregister_auth_error_handler(urlscheme::Union{AbstractString, Regex}, f)
+# or
+Pkg.PlatformEngines.deregister_auth_error_handler(url, svr)
 ```
 
 ### Resources
