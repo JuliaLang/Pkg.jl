@@ -2013,7 +2013,7 @@ end
 
 
 function get_threads_spec()
-    if haskey(ENV, "JULIA_NUM_THREADS") && !isempty(ENV["JULIA_NUM_THREADS"])
+    if haskey(ENV, "JULIA_NUM_THREADS")
         # if set, prefer JULIA_NUM_THREADS because this is passed to the test worker via --threads
         # which takes precedence in the worker
         ENV["JULIA_NUM_THREADS"]
