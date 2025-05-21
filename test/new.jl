@@ -439,6 +439,12 @@ end
         arg = args[1]
         @test arg.url == "https://github.com/JuliaLang/Pkg.jl"
         @test arg.rev == "aa/gitlab"
+
+        api, args, opts = first(Pkg.pkg"add https://github.com/TimG1964/XLSX.jl#Bug-fixing-post-#289:subdir")
+        arg = args[1]
+        @test arg.url == "https://github.com/TimG1964/XLSX.jl"
+        @test arg.rev == "Bug-fixing-post-#289"
+        @test arg.subdir == "subdir"
     end
 end
 
