@@ -2014,6 +2014,9 @@ end
 
 function get_threads_spec()
     if haskey(ENV, "JULIA_NUM_THREADS")
+        if isempty(ENV["JULIA_NUM_THREADS"])
+            throw(ArgumentError("JULIA_NUM_THREADS is set to an empty string. It is not clear what Pkg.test should set for `-t` on the test worker."))
+        end
         # if set, prefer JULIA_NUM_THREADS because this is passed to the test worker via --threads
         # which takes precedence in the worker
         ENV["JULIA_NUM_THREADS"]
