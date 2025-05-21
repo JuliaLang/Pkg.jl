@@ -742,7 +742,7 @@ end
         depot_path = tmp_sym_link * (Sys.iswindows() ? ";" : ":")
         # include the symlink in the depot path and include the regular default depot so we don't precompile this Pkg again
         withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing, "JULIA_DEBUG" => "loading") do
-            prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
+            prompt = readchomp(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
             @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
         end
     end
