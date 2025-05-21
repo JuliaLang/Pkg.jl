@@ -5,8 +5,7 @@ Pkg v1.12 Release Notes
   The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been updated
   to take a `workspace` option. Read more about this feature in the manual about the TOML-files.
 - `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
-- It is now possible to specify "sources" for packages in a `[sources]` section in Project.toml.
-  This can be used to add non-registered normal or test dependencies. Packages are also automatically added to `[sources]` when they are added by url or devved.
+- Packages are also automatically added to `[sources]` when they are added by url or devved.
 
 Pkg v1.11 Release Notes
 =======================
