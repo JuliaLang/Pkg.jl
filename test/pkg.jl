@@ -401,12 +401,12 @@ temp_pkg_dir() do project_path
         Sys.CPU_THREADS == 1 && error("Cannot test for atomic usage log file interaction effectively with only Sys.CPU_THREADS=1")
         # Precompile Pkg given we're in a different depot
         # and make sure the General registry is installed
-        Utils.show_output_if_command_errors(`$(Base.julia_cmd()[1]) --project="$(pkgdir(Pkg))" -e "import Pkg; isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add()"`)
+        Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg; isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add()"`)
         flag_start_dir = tempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
         flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
         for i in 1:Sys.CPU_THREADS
             iob = IOBuffer()
-            t = @async run(pipeline(`$(Base.julia_cmd()[1]) --project="$(pkgdir(Pkg))"
+            t = @async run(pipeline(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
                 -e "import Pkg;
                 Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
                 Pkg.activate(temp = true);
