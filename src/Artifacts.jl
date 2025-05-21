@@ -1,4 +1,4 @@
-module Artifacts
+module PkgArtifacts
 
 using Artifacts, Base.BinaryPlatforms, SHA
 using ..MiniProgressBars, ..PlatformEngines
@@ -14,8 +14,8 @@ import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, ar
                   query_override, with_artifacts_directory, load_overrides
 import ..Types: write_env_usage, parse_toml
 
-
-export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
+const Artifacts = PkgArtifacts # This is to preserve compatability for folks who depend on the internals of this module
+export Artifacts, create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
        find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
        select_downloadable_artifacts, ArtifactDownloadInfo
@@ -328,7 +328,7 @@ function download_artifact(
     io::IO=stderr_f(),
     progress::Union{Function, Nothing} = nothing,
 )
-    _artifact_paths = Artifacts.artifact_paths(tree_hash)
+    _artifact_paths = artifact_paths(tree_hash)
     pidfile = _artifact_paths[1] * ".pid"
     mkpath(dirname(pidfile))
     t_wait_msg = Timer(2) do t
@@ -664,4 +664,6 @@ ensure_all_artifacts_installed(artifacts_toml::AbstractString; kwargs...) =
 extract_all_hashes(artifacts_toml::AbstractString; kwargs...) =
     extract_all_hashes(string(artifacts_toml)::String; kwargs...)
 
-end # module Artifacts
+end # module PkgArtifacts
+
+const Artifacts = PkgArtifacts

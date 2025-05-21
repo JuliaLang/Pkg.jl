@@ -5,6 +5,7 @@ Pkg v1.12 Release Notes
   The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been updated
   to take a `workspace` option. Read more about this feature in the manual about the TOML-files.
 - `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
+- Packages are also automatically added to `[sources]` when they are added by url or devved.
 
 Pkg v1.11 Release Notes
 =======================
@@ -22,7 +23,7 @@ Pkg v1.10 Release Notes
 =======================
 
 Pkg v1.9 Release Notes
-=======================
+======================
 
 - New functionality: `Pkg.why` and `pkg> why` to show why a package is inside the environment (shows all "paths" to a package starting at the direct dependencies).
 - When code coverage tracking is enabled for `Pkg.test` the new path-specific code-coverage option is used to limit coverage
