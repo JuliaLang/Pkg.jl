@@ -738,7 +738,7 @@ end
     tmp_55850 = mktempdir()
     tmp_sym_link = joinpath(tmp_55850, "sym")
     symlink(tmp_55850, tmp_sym_link; dir_target=true)
-    depot_path = join([tmp_sym_link, Base.DEPOT_PATH...], Sys.iswindows() ? ";" : ":")
+    depot_path = tmp_sym_link * (Sys.iswindows() ? ";" : ":")
     # include the symlink in the depot path and include the regular default depot so we don't precompile this Pkg again
     withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing) do
         prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
