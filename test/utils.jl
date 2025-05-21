@@ -24,9 +24,10 @@ const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 
 function copy_this_pkg_cache(new_depot)
     for p in ("Pkg", "REPLExt")
-        source = joinpath(Base.DEPOT_PATH[1], "compiled", "v$(VERSION.major).$(VERSION.minor)", p)
+        subdir = joinpath("compiled", "v$(VERSION.major).$(VERSION.minor)")
+        source = joinpath(Base.DEPOT_PATH[1], subdir, p)
         isdir(source) || continue # doesn't exist if using shipped Pkg (e.g. Julia CI)
-        dest = joinpath(new_depot, "compiled", "v$(VERSION.major).$(VERSION.minor)", p)
+        dest = joinpath(new_depot, subdir, p)
         mkpath(dirname(dest))
         cp(source, dest)
     end
