@@ -142,11 +142,13 @@ Pkg._auto_gc_enabled[] = false
 end
 
 function copy_this_pkg_cache(new_depot)
-    source = joinpath(Base.DEPOT_PATH[1], "compiled", "v$(VERSION.major).$(VERSION.minor)", "Pkg")
-    isdir(source) || return # doesn't exist if using shipped Pkg (e.g. Julia CI)
-    dest = joinpath(new_depot, "compiled", "v$(VERSION.major).$(VERSION.minor)", "Pkg")
-    mkpath(dirname(dest))
-    cp(source, dest)
+    for p in ("Pkg", "REPLExt")
+        source = joinpath(Base.DEPOT_PATH[1], "compiled", "v$(VERSION.major).$(VERSION.minor)", p)
+        isdir(source) || continue # doesn't exist if using shipped Pkg (e.g. Julia CI)
+        dest = joinpath(new_depot, "compiled", "v$(VERSION.major).$(VERSION.minor)", p)
+        mkpath(dirname(dest))
+        cp(source, dest)
+    end
 end
 
 function kill_with_info(p)

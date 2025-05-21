@@ -735,14 +735,16 @@ end
 end
 
 @testset "JuliaLang/julia #55850" begin
-    tmp_55850 = mktempdir()
-    tmp_sym_link = joinpath(tmp_55850, "sym")
-    symlink(tmp_55850, tmp_sym_link; dir_target=true)
-    depot_path = tmp_sym_link * (Sys.iswindows() ? ";" : ":")
-    # include the symlink in the depot path and include the regular default depot so we don't precompile this Pkg again
-    withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing) do
-        prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
-        @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+    mktempdir() do tmp
+        copy_this_pkg_cache(tmp)
+        tmp_sym_link = joinpath(tmp, "sym")
+        symlink(tmp, tmp_sym_link; dir_target=true)
+        depot_path = tmp_sym_link * (Sys.iswindows() ? ";" : ":")
+        # include the symlink in the depot path and include the regular default depot so we don't precompile this Pkg again
+        withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing) do
+            prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
+            @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+        end
     end
 end
 
