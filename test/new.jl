@@ -141,16 +141,6 @@ Pkg._auto_gc_enabled[] = false
     end
 end
 
-function copy_this_pkg_cache(new_depot)
-    for p in ("Pkg", "REPLExt")
-        source = joinpath(Base.DEPOT_PATH[1], "compiled", "v$(VERSION.major).$(VERSION.minor)", p)
-        isdir(source) || continue # doesn't exist if using shipped Pkg (e.g. Julia CI)
-        dest = joinpath(new_depot, "compiled", "v$(VERSION.major).$(VERSION.minor)", p)
-        mkpath(dirname(dest))
-        cp(source, dest)
-    end
-end
-
 function kill_with_info(p)
     if Sys.islinux()
         SIGINFO = 10
