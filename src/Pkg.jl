@@ -73,7 +73,7 @@ include("Versions.jl")
 include("Registry/Registry.jl")
 include("Resolve/Resolve.jl")
 include("Types.jl")
-include("BinaryPlatforms_compat.jl")
+include("BinaryPlatformsCompat.jl")
 include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
@@ -297,7 +297,7 @@ Otherwise a feasible set of packages is resolved and installed.
 During the tests, test-specific dependencies are active, which are
 given in the project file as e.g.
 
-```
+```toml
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
@@ -311,20 +311,20 @@ Inlining of functions during testing can be disabled (for better coverage accura
 by starting julia with `--inline=no`. The tests can be run as if different command line arguments were
 passed to julia by passing the arguments instead to the `julia_args` keyword argument, e.g.
 
-```
+```julia
 Pkg.test("foo"; julia_args=["--inline"])
 ```
 
 To pass some command line arguments to be used in the tests themselves, pass the arguments to the
 `test_args` keyword argument. These could be used to control the code being tested, or to control the
 tests in some way. For example, the tests could have optional additional tests:
-```
+```julia
 if "--extended" in ARGS
     @test some_function()
 end
 ```
 which could be enabled by testing with
-```
+```julia
 Pkg.test("foo"; test_args=["--extended"])
 ```
 """
@@ -479,14 +479,14 @@ Request a `ProjectInfo` struct which contains information about the active proje
 
 # `ProjectInfo` fields
 
-| Field        | Description                                                                                 |
-|:-------------|:--------------------------------------------------------------------------------------------|
-| name         | The project's name                                                                          |
-| uuid         | The project's UUID                                                                          |
-| version      | The project's version                                                                       |
-| ispackage    | Whether the project is a package (has a name and uuid)                                      |
-| dependencies | The project's direct dependencies as a `Dict` which maps dependency name to dependency UUID |
-| path         | The location of the project file which defines the active project                           |
+| Field          | Description                                                                                 |
+|:---------------|:--------------------------------------------------------------------------------------------|
+| `name`         | The project's name                                                                          |
+| `uuid`         | The project's UUID                                                                          |
+| `version`      | The project's version                                                                       |
+| `ispackage`    | Whether the project is a package (has a name and uuid)                                      |
+| `dependencies` | The project's direct dependencies as a `Dict` which maps dependency name to dependency UUID |
+| `path`         | The location of the project file which defines the active project                           |
 """
 const project = API.project
 
@@ -610,7 +610,7 @@ If no argument is given to `activate`, then use the first project found in `LOAD
 `@v#.#` environment.
 
 # Examples
-```
+```julia
 Pkg.activate()
 Pkg.activate("local/path")
 Pkg.activate("MyDependency")

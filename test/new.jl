@@ -439,6 +439,12 @@ end
         arg = args[1]
         @test arg.url == "https://github.com/JuliaLang/Pkg.jl"
         @test arg.rev == "aa/gitlab"
+
+        api, args, opts = first(Pkg.pkg"add https://github.com/TimG1964/XLSX.jl#Bug-fixing-post-#289:subdir")
+        arg = args[1]
+        @test arg.url == "https://github.com/TimG1964/XLSX.jl"
+        @test arg.rev == "Bug-fixing-post-#289"
+        @test arg.subdir == "subdir"
     end
 end
 
@@ -3248,16 +3254,18 @@ temp_pkg_dir() do project_path
     end
 end
 @testset "test resolve with tree hash" begin
-    mktempdir() do dir
-        path = copy_test_package(dir, "ResolveWithRev")
-        cd(path) do
-            with_current_env() do
-                @test !isfile("Manifest.toml")
-                @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
-                Pkg.resolve()
-                @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
-                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
-                Pkg.resolve()
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "ResolveWithRev")
+            cd(path) do
+                with_current_env() do
+                    @test !isfile("Manifest.toml")
+                    @test !isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                    Pkg.resolve()
+                    @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
+                    rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive=true)
+                    Pkg.resolve()
+                end
             end
         end
     end
@@ -3277,5 +3285,7 @@ end
     out = String(take!(iob))
     @test occursin("[loaded: v0.5.4]", out)
 end
+
+@test allunique(unique([Pkg.PackageSpec(path="foo"), Pkg.PackageSpec(path="foo")]))
 
 end #module

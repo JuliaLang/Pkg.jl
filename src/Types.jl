@@ -85,7 +85,8 @@ end
 
 Base.:(==)(r1::GitRepo, r2::GitRepo) =
     r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
-
+Base.hash(r::GitRepo, h::UInt) =
+    foldr(hash, [r.source, r.rev, r.subdir], init=h)
 
 mutable struct PackageSpec
     name::Union{Nothing,String}
@@ -119,10 +120,14 @@ PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uui
 PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)::PackageSpec
 PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)::PackageSpec
 
+# XXX: These definitions are a bit fishy. It seems to be used in an `==` call in status printing
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
     a.pinned == b.pinned
+end
+function Base.hash(a::PackageSpec, h::UInt)
+    return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned], init=h)
 end
 
 function err_rep(pkg::PackageSpec)
@@ -1229,6 +1234,14 @@ function write_env(env::EnvCache; update_undo=true,
             if entry.repo.subdir !== nothing
                 @assert entry.repo.subdir == repo.subdir
             end
+        end
+        if entry.path !== nothing
+            env.project.sources[pkg] = Dict("path" => entry.path)
+        elseif entry.repo != GitRepo()
+            d = Dict("url" => entry.repo.source)
+            entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
+            entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
+            env.project.sources[pkg] = d
         end
     end
 
