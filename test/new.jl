@@ -2128,6 +2128,7 @@ end
                         withenv(
                             "EXPECTED_NUM_THREADS_DEFAULT" => "$default_nthreads_default",
                             "EXPECTED_NUM_THREADS_INTERACTIVE" => "$default_nthreads_interactive",
+                            "JULIA_NUM_THREADS" => nothing,
                         ) do
                             Pkg.test("TestThreads")
                         end
@@ -2154,6 +2155,7 @@ end
                         withenv(
                             "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
                             "EXPECTED_NUM_THREADS_INTERACTIVE" => "$default_nthreads_interactive",
+                            "JULIA_NUM_THREADS" => nothing,
                         ) do
                             Pkg.test("TestThreads"; julia_args=`--threads=$other_nthreads_default`)
                         end
@@ -2162,6 +2164,7 @@ end
                         withenv(
                             "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
                             "EXPECTED_NUM_THREADS_INTERACTIVE" => "$other_nthreads_interactive",
+                            "JULIA_NUM_THREADS" => nothing,
                         ) do
                             Pkg.test("TestThreads"; julia_args=`--threads=$other_nthreads_default,$other_nthreads_interactive`)
                         end
