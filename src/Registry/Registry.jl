@@ -469,6 +469,7 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                                             download_verify_unpack(url, nothing, tmp, ignore_existence = true, io=io)
                                             registry_update_log[string(reg.uuid)] = now()
                                         catch err
+                                            throw_on_error && rethrow()
                                             push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
                                             @goto done_tarball_unpack
                                         end
@@ -511,6 +512,7 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                                 GitTools.fetch(io, repo; refspecs=["+refs/heads/$branch:refs/remotes/origin/$branch"])
                             catch e
                                 e isa Pkg.Types.PkgError || rethrow()
+                                throw_on_error && rethrow()
                                 push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
                                 @goto done_git
                             end
@@ -526,6 +528,7 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                                     sleep(1)
                                     @goto merge
                                 elseif e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND
+                                    throw_on_error && rethrow()
                                     push!(errors, (reg.path, "branch origin/$branch not found"))
                                     @goto done_git
                                 else
@@ -538,6 +541,7 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                                 try LibGit2.rebase!(repo, "origin/$branch")
                                 catch e
                                     e isa LibGit2.GitError || rethrow()
+                                    throw_on_error && rethrow()
                                     push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
                                     @goto done_git
                                 end
