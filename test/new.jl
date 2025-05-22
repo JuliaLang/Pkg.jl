@@ -2154,7 +2154,7 @@ end
                     end
                     @testset "--threads=other_nthreads_default,other_nthreads_interactive" begin
                         withenv(
-                          /   "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
                             "EXPECTED_NUM_THREADS_INTERACTIVE" => "$other_nthreads_interactive",
                             "JULIA_NUM_THREADS" => nothing,
                         ) do
