@@ -849,7 +849,7 @@ function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     if curr_time - DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] > delay_secs
         printpkgstyle(ctx.io, :Info, "We haven't cleaned this depot up for a bit, running Pkg.gc()...", color = Base.info_color())
         try
-            Pkg.gc(ctx; collect_delay)
+            Pkg.API._gc(ctx; collect_delay)
             DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = curr_time
         catch ex
             @error("GC failed", exception=ex)
@@ -864,7 +864,7 @@ end
 
 function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageSpec[]; warn_loaded = true, already_instantiated = false)
     if should_autoprecompile()
-        Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        Pkg.API._precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
 
