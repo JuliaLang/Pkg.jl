@@ -2111,57 +2111,67 @@ end
         mktempdir() do dir
             path = copy_test_package(dir, "TestThreads")
             cd(path) do
-                with_current_env() do
-                    default_nthreads_default = Threads.nthreads(:default)
-                    default_nthreads_interactive = Threads.nthreads(:interactive)
-                    other_nthreads_default = default_nthreads_default == 1 ? 2 : 1
-                    other_nthreads_interactive = default_nthreads_interactive == 0 ? 1 : 0
-                    @testset "default" begin
+                # Do this all in a subprocess to protect against the parent having non-default threadpool sizes.
+                script = """
+                    using Pkg, Test
+                    @testset "JULIA_NUM_THREADS=1" begin
                         withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "$default_nthreads_default",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$default_nthreads_interactive",
-                            "JULIA_NUM_THREADS" => nothing,
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "1",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
+                            "JULIA_NUM_THREADS" => "1",
                         ) do
                             Pkg.test("TestThreads")
                         end
                     end
-                    @testset "JULIA_NUM_THREADS=other_nthreads_default" begin
+                    @testset "JULIA_NUM_THREADS=2" begin
                         withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$default_nthreads_interactive",
-                            "JULIA_NUM_THREADS" => "$other_nthreads_default",
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
+                            "JULIA_NUM_THREADS" => "2",
                         ) do
                             Pkg.test("TestThreads")
                         end
                     end
-                    @testset "JULIA_NUM_THREADS=other_nthreads_default,other_nthreads_interactive" begin
+                    @testset "JULIA_NUM_THREADS=2,0" begin
                         withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$other_nthreads_interactive",
-                            "JULIA_NUM_THREADS" => "$other_nthreads_default,$other_nthreads_interactive",
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
+                            "JULIA_NUM_THREADS" => "2,0",
                         ) do
                             Pkg.test("TestThreads")
                         end
                     end
-                    @testset "--threads=other_nthreads_default" begin
+
+                    @testset "--threads=1" begin
                         withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$default_nthreads_interactive",
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "1",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
                             "JULIA_NUM_THREADS" => nothing,
                         ) do
-                            Pkg.test("TestThreads"; julia_args=`--threads=$other_nthreads_default`)
+                            Pkg.test("TestThreads"; julia_args=`--threads=1`)
                         end
                     end
-                    @testset "--threads=other_nthreads_default,other_nthreads_interactive" begin
+                    @testset "--threads=2" begin
                         withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "$other_nthreads_default",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "$other_nthreads_interactive",
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
                             "JULIA_NUM_THREADS" => nothing,
                         ) do
-                            Pkg.test("TestThreads"; julia_args=`--threads=$other_nthreads_default,$other_nthreads_interactive`)
+                            Pkg.test("TestThreads"; julia_args=`--threads=2`)
+                        end
+                    end
+                    @testset "--threads=2,0" begin
+                        withenv(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
+                            "JULIA_NUM_THREADS" => nothing,
+                        ) do
+                            Pkg.test("TestThreads"; julia_args=`--threads=2,0`)
                         end
                     end
                 end
+                """
+                @test show_output_if_command_errors(`$(Base.julia_cmd()) --project=$(path) --startup-file=no -e '$script'`)
             end
         end
     end
