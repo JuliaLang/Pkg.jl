@@ -2171,7 +2171,7 @@ end
                     end
                 end
                 """
-                @test show_output_if_command_errors(`$(Base.julia_cmd()) --project=$(path) --startup-file=no -e '$script'`)
+                @test Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project=$(path) --startup-file=no -e '$script'`)
             end
         end
     end
