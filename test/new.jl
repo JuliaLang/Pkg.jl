@@ -2169,9 +2169,8 @@ end
                             Pkg.test("TestThreads"; julia_args=`--threads=2,0`)
                         end
                     end
-                end
                 """
-                @test Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project=$(path) --startup-file=no -e '$script'`)
+                @test Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project=$(path) --startup-file=no -e "$script"`)
             end
         end
     end
