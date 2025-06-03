@@ -368,6 +368,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::RegistryInstance)
     end
     println(io, "  packages: ", length(r.pkgs))
 end
+Base.show(io::IO, r::RegistryInstance) = Base.show(io, MIME"text/plain"(), r)
 
 function uuids_from_name(r::RegistryInstance, name::String)
     create_name_uuid_mapping!(r)
