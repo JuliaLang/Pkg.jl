@@ -335,7 +335,7 @@ function show_output_if_command_errors(cmd::Cmd)
         println(read(out, String))
         Base.pipeline_error(proc)
     end
-    return nothing
+    return true
 end
 
 function recursive_rm_cov_files(rootdir::String)
