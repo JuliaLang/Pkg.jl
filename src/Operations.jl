@@ -1290,7 +1290,7 @@ end
 
 function build(ctx::Context, uuids::Set{UUID}, verbose::Bool)
     if any_package_not_installed(ctx.env.manifest) || !isfile(ctx.env.manifest_file)
-        Pkg.instantiate(ctx, allow_build = false, allow_autoprecomp = false)
+        Pkg.API._instantiate(ctx, allow_build = false, allow_autoprecomp = false)
     end
     all_uuids = get_deps(ctx.env, uuids)
     build_versions(ctx, all_uuids; verbose)
@@ -2180,14 +2180,14 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
             end
 
             try
-                Pkg.resolve(temp_ctx; io=devnull, skip_writing_project=true)
+                Pkg.API._resolve(temp_ctx; io=devnull, skip_writing_project=true)
                 @debug "Using _parent_ dep graph"
             catch err# TODO
                 err isa Resolve.ResolverError || rethrow()
                 allow_reresolve || rethrow()
                 @debug err
                 printpkgstyle(ctx.io, :Test, "Could not use exact versions of packages in manifest. Re-resolving dependencies", color=Base.warn_color())
-                Pkg.update(temp_ctx; skip_writing_project=true, update_registry=false, io=ctx.io)
+                Pkg.API._up(temp_ctx; skip_writing_project=true, update_registry=false, io=ctx.io)
                 printpkgstyle(ctx.io, :Test, "Successfully re-resolved")
                 @debug "Using _clean_ dep graph"
             end
@@ -2279,7 +2279,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
               force_latest_compatible_version::Bool=false,
               allow_earlier_backwards_compatible_versions::Bool=true,
               allow_reresolve::Bool=true)
-    Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
+    Pkg.API._instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
     # load manifest data
     for pkg in pkgs
@@ -2320,7 +2320,7 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
             proj = Base.locate_project_file(abspath(testdir(source_path)))
             env = EnvCache(proj)
             # Instantiate test env
-            Pkg.instantiate(Context(env=env); allow_autoprecomp = false)
+            Pkg.API._instantiate(Context(env=env); allow_autoprecomp = false)
             status(env, ctx.registries; mode=PKGMODE_COMBINED, io=ctx.io, ignore_indent = false, show_usagetips = false)
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
