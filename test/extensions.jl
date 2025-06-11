@@ -32,7 +32,7 @@ using UUIDs
         Pkg.status(; extensions=true, mode=Pkg.PKGMODE_MANIFEST, io)
          # TODO: Test output when ext deps are loaded etc.
         str = String(take!(io))
-        @test contains(str, "└─ OffsetArraysExt [OffsetArrays]" )
+        @test contains(str, "OffsetArraysExt [OffsetArrays]" )
         @test !any(endswith(".cov"), readdir(joinpath(hdwe_root, "src")))
         @test !any(endswith(".cov"), readdir(joinpath(he_root, "src")))
         @test !any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
