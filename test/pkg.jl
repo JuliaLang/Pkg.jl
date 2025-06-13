@@ -90,6 +90,7 @@ import Pkg.Types: semver_spec, VersionSpec
     @test !(v"1.2.2" in semver_spec(">=1.2.3"))
 
     @test_throws ErrorException semver_spec("0.1.0-0.2.2")
+    @test semver_spec("0.0.0") == VersionSpec("0.0.0-0.0.0")
     @test semver_spec("0.1.0 - 0.2.2") == VersionSpec("0.1.0 - 0.2.2")
     @test semver_spec("1.2.3 - 4.5.6") == semver_spec("1.2.3  - 4.5.6") == semver_spec("1.2.3 -  4.5.6") == semver_spec("1.2.3  -  4.5.6")
     @test semver_spec("0.0.1 - 0.0.2") == VersionSpec("0.0.1 - 0.0.2")
@@ -144,7 +145,6 @@ import Pkg.Types: semver_spec, VersionSpec
 
     @test_throws ErrorException semver_spec("^^0.2.3")
     @test_throws ErrorException semver_spec("^^0.2.3.4")
-    @test_throws ErrorException semver_spec("0.0.0")
     @test_throws ErrorException semver_spec("0.7 1.0")
 
     @test Pkg.Types.isjoinable(Pkg.Types.VersionBound((1,5)), Pkg.Types.VersionBound((1,6)))
