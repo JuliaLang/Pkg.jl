@@ -78,7 +78,6 @@ function _resolve(manifest::Manifest, pkgname=nothing)
         end
 
         projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
-        sourcepath = source_path(app_manifest_file(), pkg)
 
         # TODO: Add support for existing manifest
         # Create a manifest with the manifest entry
@@ -87,12 +86,8 @@ function _resolve(manifest::Manifest, pkgname=nothing)
             if isempty(ctx.env.project.deps)
                 ctx.env.project.deps[pkg.name] = uuid
             end
-            if isempty(ctx.env.manifest)
-                ctx.env.manifest.deps[uuid] = pkg
-                Pkg.resolve(ctx)
-            else
-                Pkg.instantiate(ctx)
-            end
+            ctx.env.manifest.deps[uuid] = pkg
+            Pkg.resolve(ctx)
         end
 
         # TODO: Julia path
