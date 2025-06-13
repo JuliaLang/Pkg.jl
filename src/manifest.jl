@@ -298,6 +298,9 @@ function destructure(manifest::Manifest)::Dict
     end
 
     for (uuid, entry) in manifest
+        # https://github.com/JuliaLang/Pkg.jl/issues/4086
+        @assert !(entry.tree_hash !== nothing && entry.path !== nothing)
+
         new_entry = something(entry.other, Dict{String,Any}())
         new_entry["uuid"] = string(uuid)
         entry!(new_entry, "version", entry.version)
