@@ -9,12 +9,11 @@ The protocols also aim to address some of the limitations that existed prior to 
 - **Vanishing Resources.** It is possible for authors to delete code repositories of registered Julia packages. Without some kind of package server, no one can install a package which has been deleted. If someone happens to have a current fork of a deleted package, that can be made the new official repository for the package, but chances of them having no or outdated forks is high. An even worse situation could happen for artifacts since they tend not to be kept in version control and are much more likely to be served from "random" web servers at a fixed URL with content changing over time. Artifact publishers are unlikely to retain all past versions of artifacts, so old versions of packages that depend on specific artifact content will not be reproducible in the future unless we do something to ensure that they are kept around after the publisher has stopped hosting them. By storing all package versions and artifacts in a single place, we can ensure that they are available forever.
 - **Usage Insights.** It is valuable for the Julia community to know how many people are using Julia or what the relative popularity of different packages and operating systems is. Julia uses GitHub to host it's ecosystem. GitHub - a commercial, proprietary service - has this information but does not make it available to the Julia community. We are of course using GitHub for free, so we can't complain, but it seems unfortunate that a commercial entity has this vauable information while the open source community remains in the dark. The Julia community really could use insight into who is using Julia and how, so that we can prioritize packages and platforms, and give real numbers when people ask "how many people are using Julia?"
 - **Decoupling from Git and GitHub.** Prior to this, Julia package ecosystem was very deeply coupled to git and was even specialized on GitHub specifically in may ways. The Pkg and Storage Protocols allowed us to decouple ourselves from git as the primary mechanism for getting packages. Now Julia continues to support using git, but does not require it just to install packages from the default public registry anymore. This decoupling also paves the way for supporting other version control systems in the future, making git no longer so special. Special treatment of GitHub will also go away since we get the benefits of specializing for GitHub (fast tarball downloads) directly from the Pkg protocols.
-- **Performance on the table.** Package installation got much faster since Julia 1.0, in large part because the new design allowed packages to be downloaded as tarballs, rather than requiring a git clone of the entire repository for each package. But we're still forced to download complete packages and artifacts when we update them, no matter how small the changes may be. What if we could get the best of both worlds? That is, download tarballs for installations and use tiny diffs for updates. This would massively accelerate package updates. This could be a game changer in certain cases. We could also do much better at serving resources to the world: since all our resources are immutable and content-addressed, global distribution and caching should be a breeze.
 - **Firewall problems.** Prior to this, Pkg's need to connect to arbitrary servers using a miscellany of protocols caused several problems with firewalls. A large set of protocols and an unbounded list of servers needed to be whitelisted just to support default Pkg operation. If Pkg only needed to talk to a single service over a single, secure protocol (i.e. HTTPS), then whitelisting Pkg for standard use would be dead simple.
 
 ## Protocols & Services
 
-1. **Pkg Protocol:** what Julia Pkg Clients speak to Pkg Servers. The Pkg Server serves all resources that Pkg Clients need to install and use registered packages, including registry data, packages and artifacts. It can send diffs to reduce the size of updates and bundles to reduce the number of requests that clients need to make to receive a set of updates. It is designed to be easily horizontally scalable and not to have any hard operational requirements: if service is slow, just start more servers; if a Pkg Server crashes, forget it and boot up a new one.  
+1. **Pkg Protocol:** what Julia Pkg Clients speak to Pkg Servers. The Pkg Server serves all resources that Pkg Clients need to install and use registered packages, including registry data, packages and artifacts. It is designed to be easily horizontally scalable and not to have any hard operational requirements: if service is slow, just start more servers; if a Pkg Server crashes, forget it and boot up a new one.  
 2. **Storage Protocol:** what Pkg Servers speak to get resources from Storage Services. Julia clients do not interact with Storage services directly and multiple independent Storage Services can symmetrically (all are treated equally) provide their service to a given Pkg Server. Since Pkg Servers cache what they serve to Clients and handle convenient content presentation, Storage Services can expose a much simpler protocol: all they do is serve up complete versions of registries, packages and artifacts, while guaranteeing persistence and completeness. Persistence means: once a version of a resource has been served, that version can be served forever. Completeness means: if the service serves a registry, it can serve all package versions referenced by that registry; if it serves a package version, it can serve all artifacts used by that package.
 
 Both protocols work over HTTPS, using only GET and HEAD requests. As is normal for HTTP, HEAD requests are used to get information about a resource, including whether it would be served, without actually downloading it. As described in what follows, the Pkg Protocol is client-to-server and may be unauthenticated, use basic auth, or OpenID; the Storage Protocol is server-to-server only and uses mutual authentication with TLS certificates.
@@ -85,7 +84,7 @@ This section descibes the protocol used by Pkg Clients to get resources from Pkg
 
 The authentication scheme between a Pkg client and server will be HTTP authorization with bearer tokens, as standardized in RFC6750. This means that authenticated access is accomplished by the client by making an HTTPS request including a `Authorization: Bearer $access_token` header.
 
-The format of the token, its contents and validation mechanism are not specified by the Pkg Protocol. They are left to the server to define. The server is expected to validate the token and determine whether the client is authorized to access the requested resource. Similarly at the client side, the implementation of the token acquisition is not specified by the Pkg Protocol. However Pkg provides hooks that can be implemented at the client side to trigger the token acquisition process. Tokens thus acquired are expected to be stored in a local file, the format of which is specified by the Pkg Protocol. Pkg will be able to read the token from this file and include it in the request to the server. Pkg can also, optionally, detect when the token is about to expire and trigger a refresh. The Pkg client also supports automatic token refresh, since bearer tokens are recommended to be short-lived (no more than a day).
+The format of the token, its contents and validation mechanism are not specified by the Pkg Protocol. They are left to the server to define. The server is expected to validate the token and determine whether the client is authorized to access the requested resource. Similarly at the client side, the implementation of the token acquisition is not specified by the Pkg Protocol. However Pkg provides [hooks](#Authentication-Hooks) that can be implemented at the client side to trigger the token acquisition process. Tokens thus acquired are expected to be stored in a local file, the format of which is specified by the Pkg Protocol. Pkg will be able to read the token from this file and include it in the request to the server. Pkg can also, optionally, detect when the token is about to expire and trigger a refresh. The Pkg client also supports automatic token refresh, since bearer tokens are recommended to be short-lived (no more than a day).
 
 The authorization information is saved locally in `$(DEPOT_PATH[1])/servers/$server/auth.toml` which is a TOML file with the following fields:
 
@@ -137,46 +136,13 @@ The client can make GET or HEAD requests to the following resources:
 
 Only the `/registries` changes - all other resources can be cached forever and the server will indicate this with the appropriate HTTP headers.
 
-### Diffs
-
-It is often benefical for the client to download a diff from a previous version of the registry, a package or an artifact. The following URL schemas allow the client to request a diff from a older version of each of these kinds of resources:
-
-- `/registry/$uuid/$hash-$old`
-- `/package/$uuid/$hash-$old`
-- `/artifact/$hash-$old`
-
-As with individual resources, these diff URLs are permanently cacheable. When the client requests a diff, if the server cannot compute the diff or decides it is not worth using a diff, the server replies with an HTTP 307 Temporary Redirect to the absolute version. For example, this is the sequence of requests and responses for a registry where it's better to just send a full new registry than to send a diff:
-
-1. client ➝ server: `GET /registry/$uuid/$hash-$old`
-2. server ➝ client: `307 /registry/$uuid/$hash`
-3. client ➝ server: `GET /registry/$uuid/$hash`
-4. server ➝ client: `200` (sends full regsitry tarball)
-
-Further evaluation is needed before a diff format is picked. Two likely options are [vcdiff](https://en.wikipedia.org/wiki/VCDIFF) (likely computed by [xdelta](http://xdelta.org/)) or [bsdiff](https://github.com/mendsley/bsdiff) applied to uncompressed resource tarballs; the diff itself will then be compressed. The vcdiff format is standardized and fast to both compute and apply. The bsdiff format is not standardized, but is widely used and gets substantially better compression, especially of binaries, but is more computationally challenging to compute.
-
-### Bundles
-
-We can speed up batch operations by having the client request a bundle of resources at the same time. The bundle feature allows this using the following scheme:
-
-- `/bundle/$hash`: a tarball of all the things you need to instantiate a manifest
-
-When a GET request is made to `/bundle/$hash` the body of the GET request is a sorted, unique list of the resources that the client wants to receive. The hash value is a hash of this list. (If the body is not sorted, not unique, or if any of the items is invalid then the server response should be an error.) Although it is unusual for HTTP GET requests to have a body, it's not a violation of the standard (in spirit or in letter) as long as the same resource URL always gets the same response, which is guaranteed by the fact that the URL is determined by hashing the request body. As with resources and diffs, bundle URLs are permanently cacheable.
-
-The list of resources in a bundle request can include diffs as well as full items. If the server would respond with a 307 redirect for any of the diffs requested, then it will respond with a 307 request for the entire bundle request, where the redirect response body contains the set of resources that the client should request instead and the resource name is the hash of that replacement resource list. The client then requests and uses the replacement bundle instead.
-
-The body of a 200 response to a bundle request is a single tarball containing all of the requested resources with paths within the tarball corresponding to resource paths. For full resources, the directory at the location of that resource can be moved into the right place after the tarball is unpacked. For diff resources, the uncompressed diff of the resource will be at the resource location and can be applied to the old resource.
-
-If the set of resources that a client requests is deemed too large by the server, it may respond with a "413 Payload Too Large" status code and the client should split the request into individual get requests or smaller bundle requests.
-
-### Incremental Implementation
-
-There is a straightforward approach to incrementally adding functionality to the Pkg Server protocol: first implement direct resource serving, then diffs and/or bundles independently. As long as the server speaks at least as recent a version of the protocol as the client, everything will work smoothly. Thus, if someone is running a Pkg Service, they must ensure that they have upgraded their service before any of the users of the service have upgraded their clients.
+### Reference Implementation
 
 A reference implementation of the Pkg Server protocol is available at [PkgServer.jl](https://github.com/JuliaPackaging/PkgServer.jl).
 
 ## The Storage Protocol
 
-This section descibes the protocol used by Pkg Servers to get resources from Storage Servers, including the latest versions of registries, packages source trees, and artifacts. Unlike in the Pkg Protocol, there is no support for diffs or bundles. The Pkg Server requests each type of resource when it needs it and caches it for as long as it can, so Storage Services should not have to serve the same resources to the same Pkg Server instance many times.
+This section descibes the protocol used by Pkg Servers to get resources from Storage Servers, including the latest versions of registries, packages source trees, and artifacts. The Pkg Server requests each type of resource when it needs it and caches it for as long as it can, so Storage Services should not have to serve the same resources to the same Pkg Server instance many times.
 
 ### Authentication
 
@@ -184,7 +150,7 @@ Since the Storage protocol is a server-to-server protocol, it uses certificate-b
 
 ### Resources
 
-The Storage Protocol is a simple sub-protocol of the Pkg Protocol, limited to only requesting the list of current registry hashes and full resource tarballs:
+The Storage Protocol is simmilar to the Pkg Protocol:
 
 - `/registries`: map of registry uuids at this server to their current tree hashes
 - `/registry/$uuid/$hash`: tarball of registry uuid at the given tree hash
