@@ -1185,6 +1185,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
 end
 
+function precompile(f, args...; kwargs...)
+    Base.ScopedValues.@with _autoprecompilation_enabled_scoped => false begin
+        f()
+        Pkg.precompile(args...; kwargs...)
+    end
+end
+
 function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
     try
         return LibGit2.GitObject(repo, tree_hash)
