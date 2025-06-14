@@ -1055,4 +1055,39 @@ end
     Pkg.activate(prev_project)
 end
 
+@testset "check_registered error paths" begin
+        # Test the "no registries have been installed" error path
+        isolate(loaded_depot=false, linked_reg=false) do
+            with_temp_env() do
+                # Ensure we have no registries available
+                @test isempty(Pkg.Registry.reachable_registries())
+
+                # Should install General registry automatically
+                Pkg.add("Example")
+
+                Pkg.Registry.rm("General")
+                @test isempty(Pkg.Registry.reachable_registries())
+
+                @test_throws r"no registries have been installed\. Cannot resolve the following packages:" begin
+                    Pkg.resolve()
+                end
+            end
+        end
+
+        # Test the "expected package to be registered" error path with a custom unregistered package
+        isolate(loaded_depot=true) do; mktempdir() do tempdir
+            with_temp_env() do
+                # Create a fake package with a manifest that references an unregistered UUID
+                fake_pkg_path = copy_test_package(tempdir, "UnregisteredUUID")
+                Pkg.activate(fake_pkg_path)
+
+                # This should fail with "expected package to be registered" error
+                @test_throws r"expected package.*to be registered" begin
+                    Pkg.add("JSON")  # This will fail because Example UUID in manifest is unregistered
+                end
+            end
+        end
+    end
+end
+
 end # module

@@ -1586,6 +1586,12 @@ function is_all_registered(registries::Vector{Registry.RegistryInstance}, pkgs::
 end
 
 function check_registered(registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec})
+    if isempty(registries) && !isempty(pkgs)
+        registry_pkgs = filter(tracking_registered_version, pkgs)
+        if !isempty(registry_pkgs)
+            pkgerror("no registries have been installed. Cannot resolve the following packages:\n$(join(map(pkg -> "  " * err_rep(pkg), registry_pkgs), "\n"))")
+        end
+    end
     pkg = is_all_registered(registries, pkgs)
     if pkg isa PackageSpec
         pkgerror("expected package $(err_rep(pkg)) to be registered")
