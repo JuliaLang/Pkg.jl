@@ -79,3 +79,10 @@ Pkg.Artifacts.ensure_artifact_installed
 Pkg.Artifacts.ensure_all_artifacts_installed
 Pkg.Artifacts.archive_artifact
 ```
+
+## [Package Server Authentication Hooks](@id Package-Server-Authentication-Hooks)
+
+```@docs
+Pkg.PlatformEngines.register_auth_error_handler
+Pkg.PlatformEngines.deregister_auth_error_handler
+```
