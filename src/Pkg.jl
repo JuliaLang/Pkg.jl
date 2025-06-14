@@ -70,7 +70,20 @@ const PREV_ENV_PATH = Ref{String}("")
 
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
 can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
-should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
+
+_autoprecompilation_enabled::Bool = true
+_autoprecompilation_enabled_scoped = ScopedValue{Bool}(true)
+autoprecompilation_enabled(state::Bool) = (autoprecompilation_enabled = state)
+function should_autoprecompile()
+    if Base.JLOptions().use_compiled_modules == 1 &&
+        _autoprecompilation_enabled &&
+        _autoprecompilation_enabled_scoped[] &&
+        Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
+        return true
+    else
+        return false
+    end
+end
 
 """
     in_repl_mode()
