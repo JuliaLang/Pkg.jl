@@ -400,7 +400,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
-
+    for pkg in pkgs
+        update_source_if_set(ctx.env.project, pkg)
+    end
     Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
     return
 end
