@@ -1745,7 +1745,9 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
     entry.version !== nothing || return false # no version to set
     if entry.pinned || level == UPLEVEL_FIXED
         pkg.version = entry.version
-        pkg.tree_hash = entry.tree_hash
+        if pkg.path === nothing
+            pkg.tree_hash = entry.tree_hash
+        end
     elseif entry.repo.source !== nothing || source_repo.source !== nothing # repo packages have a version but are treated specially
         if source_repo.source !== nothing
             pkg.repo = source_repo
