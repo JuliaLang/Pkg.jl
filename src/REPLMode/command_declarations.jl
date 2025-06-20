@@ -647,6 +647,21 @@ pkg> app develop ~/mypackages/Example
 pkg> app develop --local Example
 ```
 """
+],
+PSA[:name => "update",
+    :short_name => "up",
+    :api => Apps.update,
+    :completions => :complete_installed_apps,
+    :should_splat => false,
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_package,
+    :description => "update app",
+    :help => md"""
+    app update pkg
+
+Updates the apps for packages `pkg...` or apps `app...`.
+```
+""",
 ], # app
 ]
 ] #command_declarations
