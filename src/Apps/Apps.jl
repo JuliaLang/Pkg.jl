@@ -111,7 +111,6 @@ function _resolve(manifest::Manifest, pkgname=nothing)
         # TODO: Julia path
         generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), joinpath(Sys.BINDIR, "julia"))
     end
-
     write_manifest(manifest, app_manifest_file())
 end
 
@@ -145,10 +144,12 @@ function add(pkg::PackageSpec)
         new = Pkg.Operations.download_source(ctx, pkgs)
     end
 
+    # Run Pkg.build()?
+
+    Base.rm(joinpath(app_env_folder(), pkg.name); force=true, recursive=true)
     sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = get_project(sourcepath)
     # TODO: Wrong if package itself has a sourcepath?
-
     entry = PackageEntry(;apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid)
     manifest.deps[pkg.uuid] = entry
 
@@ -191,6 +192,50 @@ function develop(pkg::PackageSpec)
     _resolve(manifest, pkg.name)
     precompile(pkg.name)
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
+end
+
+
+update(pkgs_or_apps::String) = update([pkgs_or_apps])
+function update(pkgs_or_apps::Vector)
+    for pkg_or_app in pkgs_or_apps
+        if pkg_or_app isa String
+            pkg_or_app = PackageSpec(pkg_or_app)
+        end
+        update(pkg_or_app)
+    end
+end
+
+function update(pkg::Union{PackageSpec, Nothing}=nothing)
+    ctx = app_context()
+    manifest = ctx.env.manifest
+    deps = Pkg.Operations.load_manifest_deps(manifest)
+    for dep in deps
+        info = manifest.deps[dep.uuid]
+        if pkg === nothing || info.name !== pkg.name
+            continue
+        end
+        Pkg.activate(joinpath(app_env_folder(), info.name)) do
+            # precompile only after updating all apps?
+            if pkg !== nothing
+                Pkg.update(pkg)
+            else
+                Pkg.update()
+            end
+        end
+        sourcepath = abspath(source_path(ctx.env.manifest_file, info))
+        project = get_project(sourcepath)
+        # Get the tree hash from the project file
+        manifest_file = manifestfile_path(joinpath(app_env_folder(), info.name))
+        manifest_app = Pkg.Types.read_manifest(manifest_file)
+        manifest_entry = manifest_app.deps[info.uuid]
+
+        entry = PackageEntry(;apps = project.apps, name = manifest_entry.name, version = manifest_entry.version, tree_hash = manifest_entry.tree_hash,
+                             path = manifest_entry.path, repo = manifest_entry.repo, uuid = manifest_entry.uuid)
+
+        manifest.deps[dep.uuid] = entry
+        Pkg.Types.write_manifest(manifest, app_manifest_file())
+    end
+    return
 end
 
 function status(pkgs_or_apps::Vector)
@@ -257,8 +302,7 @@ end
 
 
 function require_not_empty(pkgs, f::Symbol)
-
-    if pkgs == nothing || isempty(pkgs)
+    if pkgs === nothing || isempty(pkgs)
         pkgerror("app $f requires at least one package")
     end
 end
@@ -306,7 +350,7 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
             end
         end
     end
-
+    # XXX: What happens if something fails above and we do not write out the updated manifest?
     Pkg.Types.write_manifest(manifest, app_manifest_file())
     return
 end
