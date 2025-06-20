@@ -249,7 +249,7 @@ function fixups_from_projectfile!(ctx::Context)
             # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
             # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
             for (name, _) in pkg.weakdeps
-                if !haskey(p.deps, name)
+                if !(name in p.deps)
                     delete!(pkg.deps, name)
                 end
             end
