@@ -331,9 +331,6 @@ function semver_interval(m::RegexMatch)
     major =                           parse(Int, _major)
     minor = (n_significant < 2) ? 0 : parse(Int, _minor)
     patch = (n_significant < 3) ? 0 : parse(Int, _patch)
-    if n_significant == 3 && major == 0 && minor == 0 && patch == 0
-        error("invalid version: \"0.0.0\"")
-    end
     # Default type is :caret
     vertyp = (typ == "" || typ == "^") ? :caret : :tilde
     v0 = VersionBound((major, minor, patch))
@@ -368,15 +365,16 @@ function inequality_interval(m::RegexMatch)
     major =                           parse(Int, _major)
     minor = (n_significant < 2) ? 0 : parse(Int, _minor)
     patch = (n_significant < 3) ? 0 : parse(Int, _patch)
-    if n_significant == 3 && major == 0 && minor == 0 && patch == 0
-        error("invalid version: 0.0.0")
-    end
     v = VersionBound(major, minor, patch)
     if occursin(r"^<\s*$", typ)
         nil = VersionBound(0, 0, 0)
         if v[3] == 0
             if v[2] == 0
-                v1 = VersionBound(v[1]-1)
+                if v[1] == 0
+                    error("invalid version specifier: \"<0.0.0\"")
+                else
+                    v1 = VersionBound(v[1]-1)
+                end
             else
                 v1 = VersionBound(v[1], v[2]-1)
             end
