@@ -220,7 +220,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
             meta = artifact_dict[name]
             if !isa(meta, Vector)
                 error("Mapping for '$name' within $(artifacts_toml) already exists!")
-            elseif any(isequal(platform), unpack_platform(x, name, artifacts_toml) for x in meta)
+            elseif any(p -> platforms_match(platform, p), unpack_platform(x, name, artifacts_toml) for x in meta)
                 error("Mapping for '$name'/$(triplet(platform)) within $(artifacts_toml) already exists!")
             end
         end
