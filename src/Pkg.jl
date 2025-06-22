@@ -505,6 +505,8 @@ dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
 After packages have been installed the project will be precompiled.
+The automatic precompilation can be disabled by setting the environment variable
+`JULIA_PKG_PRECOMPILE_AUTO=0`.
 See more at [Environment Precompilation](@ref).
 
 !!! compat "Julia 1.12"
