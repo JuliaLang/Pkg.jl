@@ -26,10 +26,14 @@ public activate, add, build, compat, develop, free, gc, generate, instantiate,
        pin, precompile, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
-function depots1()
-    d = depots()
-    isempty(d) && Pkg.Types.pkgerror("no depots found in DEPOT_PATH")
-    return d[1]
+function depots1(depot_list::Union{String, Vector{String}}=depots())
+    # Get the first depot from a list, with proper error handling
+    if depot_list isa String
+        return depot_list
+    else
+        isempty(depot_list) && Pkg.Types.pkgerror("no depots provided")
+        return depot_list[1]
+    end
 end
 
 function pkg_server()
