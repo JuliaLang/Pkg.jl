@@ -215,7 +215,8 @@ temp_pkg_dir() do project_path
                 errstr = sprint(showerror, e)
                 @test occursin("expected package `Example [00000000]` to be registered", errstr)
                 @test occursin("You may have provided the wrong UUID for package Example.", errstr)
-                @test occursin("Found the following UUIDs for that name: 7876af07-990d-54b4-ab0e-23690620f79a", errstr)
+                @test occursin("Found the following UUIDs for that name:", errstr)
+                @test occursin("- 7876af07-990d-54b4-ab0e-23690620f79a from registry: General", errstr)
             end
         end
         # Missing uuid
