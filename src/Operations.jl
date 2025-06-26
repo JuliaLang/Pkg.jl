@@ -1594,7 +1594,15 @@ function check_registered(registries::Vector{Registry.RegistryInstance}, pkgs::V
     end
     pkg = is_all_registered(registries, pkgs)
     if pkg isa PackageSpec
-        pkgerror("expected package $(err_rep(pkg)) to be registered")
+        msg = "expected package $(err_rep(pkg)) to be registered"
+        # check if the name exists in the registry with a different uuid
+        if pkg.name !== nothing
+            uuids = Types.registered_uuids(registries, pkg.name)
+            if !isempty(uuids)
+                msg *= "\n You may have provided the wrong UUID for package $(pkg.name).\n Found the following UUIDs for that name: $(join(uuids, ", "))"
+            end
+        end
+        pkgerror(msg)
     end
     return nothing
 end
