@@ -1398,12 +1398,22 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
     io = something(io, ctx.io)
     pkg = pkg == "Julia" ? "julia" : pkg
     isnothing(compat_str) || (compat_str = string(strip(compat_str, '"')))
+    existing_compat = Operations.get_compat_str(ctx.env.project, pkg)
+    # Double check before deleting a compat entry issue/3567
+    if isinteractive() && (isnothing(compat_str) || isempty(compat_str))
+        if !isnothing(existing_compat)
+            ans = Base.prompt(stdin, ctx.io, "No compat string was given. Delete existing compat entry `$pkg = $(repr(existing_compat))`? [y]/n", default = "y")
+            if lowercase(ans) !== "y"
+                return
+            end
+        end
+    end
     if haskey(ctx.env.project.deps, pkg) || pkg == "julia"
         success = Operations.set_compat(ctx.env.project, pkg, isnothing(compat_str) ? nothing : isempty(compat_str) ? nothing : compat_str)
         success === false && pkgerror("invalid compat version specifier \"$(compat_str)\"")
         write_env(ctx.env)
         if isnothing(compat_str) || isempty(compat_str)
-            printpkgstyle(io, :Compat, "entry removed for $(pkg)")
+            printpkgstyle(io, :Compat, "entry removed:\n  $pkg = $(repr(existing_compat))")
         else
             printpkgstyle(io, :Compat, "entry set:\n  $(pkg) = $(repr(compat_str))")
         end
