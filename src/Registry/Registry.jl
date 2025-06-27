@@ -1,7 +1,7 @@
 module Registry
 
 import ..Pkg
-using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
+using ..Pkg: depots, depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
              GitTools
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z, verify_archive_tree_hash
 using UUIDs, LibGit2, TOML, Dates
@@ -48,11 +48,11 @@ function add(; name=nothing, uuid=nothing, url=nothing, path=nothing, linked=not
         add([RegistrySpec(; name, uuid, url, path, linked)]; kwargs...)
     end
 end
-function add(regs::Vector{RegistrySpec}; io::IO=stderr_f(), depot=depots1())
+function add(regs::Vector{RegistrySpec}; io::IO=stderr_f(), depots::Union{String, Vector{String}}=depots())
     if isempty(regs)
-        download_default_registries(io, only_if_empty = false; depot)
+        download_default_registries(io, only_if_empty = false; depots=depots)
     else
-        download_registries(io, regs, depot)
+        download_registries(io, regs, depots)
     end
 end
 
@@ -103,12 +103,15 @@ end
 
 pkg_server_url_hash(url::String) = Base.SHA1(split(url, '/')[end])
 
-function download_default_registries(io::IO; only_if_empty::Bool = true, depot=depots1())
-    installed_registries = reachable_registries()
+function download_default_registries(io::IO; only_if_empty::Bool = true, depots::Union{String, Vector{String}}=depots())
+    # Check the specified depots for installed registries
+    installed_registries = reachable_registries(; depots)
     # Only clone if there are no installed registries, unless called
     # with false keyword argument.
     if isempty(installed_registries) || !only_if_empty
-        printpkgstyle(io, :Installing, "known registries into $(pathrepr(depot))")
+        # Install to the first depot in the list
+        target_depot = depots1(depots)
+        printpkgstyle(io, :Installing, "known registries into $(pathrepr(target_depot))")
         registries = copy(DEFAULT_REGISTRIES)
         for uuid in keys(pkg_server_registry_urls())
             if !(uuid in (reg.uuid for reg in registries))
@@ -116,7 +119,7 @@ function download_default_registries(io::IO; only_if_empty::Bool = true, depot=d
             end
         end
         filter!(reg -> !(reg.uuid in installed_registries), registries)
-        download_registries(io, registries, depot)
+        download_registries(io, registries, depots)
         return true
     end
     return false
@@ -168,14 +171,16 @@ function check_registry_state(reg)
     return nothing
 end
 
-function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
+function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{String, Vector{String}}=depots())
+    # Use the first depot as the target
+    target_depot = depots1(depots)
     populate_known_registries_with_urls!(regs)
-    regdir = joinpath(depot, "registries")
+    regdir = joinpath(target_depot, "registries")
     isdir(regdir) || mkpath(regdir)
     # only allow one julia process to download and install registries at a time
     FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
         # once we're pidlocked check if another process has installed any of the registries
-        reachable_uuids = map(r -> r.uuid, reachable_registries())
+        reachable_uuids = map(r -> r.uuid, reachable_registries(; depots))
         filter!(r -> !in(r.uuid, reachable_uuids), regs)
 
         registry_urls = pkg_server_registry_urls()
