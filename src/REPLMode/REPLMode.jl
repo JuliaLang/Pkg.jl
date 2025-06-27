@@ -282,7 +282,7 @@ function core_parse(words::Vector{QString}; only_cmd=false)
 end
 
 parse(input::String) =
-    map(Base.Iterators.filter(!isempty, tokenize(input))) do words
+    map(Base.Iterators.filter(!isempty, tokenize(strip(input)))) do words
         statement, input_word = core_parse(words)
         statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. Type ? for help with available commands")
         statement.options = map(parse_option, statement.options)
