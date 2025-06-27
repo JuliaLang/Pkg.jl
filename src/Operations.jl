@@ -1754,7 +1754,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}, new_git=Set{UUID}();
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io=ctx.io)
         build_versions(ctx, union(new_apply, new_git))
-        allow_autoprecomp && Pkg._auto_precompile(ctx)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, pkgs)
     else
         record_project_hash(ctx.env)
         write_env(ctx.env)
