@@ -141,11 +141,15 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
 end
 
+function geturl(repo)
+    return LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
+        LibGit2.url(remote)
+    end
+end
+
 function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, refspecs=[""], kwargs...)
     if remoteurl === nothing
-        remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
-            LibGit2.url(remote)
-        end
+        remoteurl = geturl(repo)
     end
     fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
@@ -341,7 +345,7 @@ tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing) = tree_h
 function check_valid_HEAD(repo)
     try LibGit2.head(repo)
     catch err
-        Pkg.Types.pkgerror("invalid git HEAD ($(err.msg))")
+        Pkg.Types.pkgerror("invalid git HEAD in $(geturl(repo)) ($(err.msg))")
     end
 end
 
