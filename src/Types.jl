@@ -804,7 +804,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         new = true
     end
     if !has_uuid(pkg)
-        resolve_projectfile!(pkg, dev_path)
+        resolve_projectfile!(pkg, joinpath(dev_path, pkg.repo.subdir === nothing ? "" : pkg.repo.subdir))
     end
     error_if_in_sysimage(pkg)
     pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)

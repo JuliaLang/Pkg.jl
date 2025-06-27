@@ -241,6 +241,8 @@ end
         pkgstr("add $(packages_dir):dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
+        pkg"dev Dep" # 4269
+        @test isinstalled("Dep")
         pkg"rm Dep"
 
         # Add from path at branch.
