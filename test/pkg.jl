@@ -207,6 +207,18 @@ temp_pkg_dir() do project_path
 
     @testset "package with wrong UUID" begin
         @test_throws PkgError Pkg.add(PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
+        @testset "package with wrong UUID but correct name" begin
+            try
+                Pkg.add(PackageSpec(name="Example", uuid=UUID(UInt128(2))))
+            catch e
+                @test e isa PkgError
+                errstr = sprint(showerror, e)
+                @test occursin("expected package `Example [00000000]` to be registered", errstr)
+                @test occursin("You may have provided the wrong UUID for package Example.", errstr)
+                @test occursin("Found the following UUIDs for that name:", errstr)
+                @test occursin("- 7876af07-990d-54b4-ab0e-23690620f79a from registry: General", errstr)
+            end
+        end
         # Missing uuid
         @test_throws PkgError Pkg.add(PackageSpec(uuid = uuid4()))
     end
