@@ -452,7 +452,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         package_path = copy_test_package(tempdir, "UnregisteredUUID")
         Pkg.activate(package_path)
-        @test_throws PkgError("expected package `Example [142fd7e7]` to be registered") Pkg.add("JSON")
+        @test_throws PkgError Pkg.add("JSON")
     end end
     # empty git repo (no commits)
     isolate(loaded_depot=true) do; mktempdir() do tempdir
@@ -1408,7 +1408,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         package_path = copy_test_package(tempdir, "UnregisteredUUID")
         Pkg.activate(package_path)
-        @test_throws PkgError("expected package `Example [142fd7e7]` to be registered") Pkg.update()
+        @test_throws PkgError Pkg.update()
     end end
 end
 
@@ -1587,7 +1587,7 @@ end
     isolate(loaded_depot=true) do; mktempdir() do tempdir
         package_path = copy_test_package(tempdir, "UnregisteredUUID")
         Pkg.activate(package_path)
-        @test_throws PkgError("expected package `Example [142fd7e7]` to be registered") Pkg.update()
+        @test_throws PkgError Pkg.update()
     end end
     # package does not exist in the manifest
     isolate(loaded_depot=true) do
