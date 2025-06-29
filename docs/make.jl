@@ -42,6 +42,7 @@ makedocs(
         "toml-files.md",
         "repl.md",
         "api.md",
+        "protocol.md",
     ],
 )
 
