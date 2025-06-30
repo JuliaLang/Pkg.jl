@@ -89,7 +89,6 @@ function read_apps(apps::Dict)
         submodule = get(app, "submodule", nothing)
         appinfo = AppInfo(appname::String,
                 app["julia_command"]::String,
-                VersionNumber(app["julia_version"]::String),
                 submodule,
                 app)
         appinfos[appinfo.name] = appinfo
@@ -345,8 +344,7 @@ function destructure(manifest::Manifest)::Dict
             new_entry["apps"] = Dict{String,Any}()
             for (appname, appinfo) in entry.apps
                 julia_command = @something appinfo.julia_command joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
-                julia_version = @something appinfo.julia_version VERSION
-                app_dict = Dict{String,Any}("julia_command" => julia_command, "julia_version" => julia_version)
+                app_dict = Dict{String,Any}("julia_command" => julia_command)
                 if appinfo.submodule !== nothing
                     app_dict["submodule"] = appinfo.submodule
                 end

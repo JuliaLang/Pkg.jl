@@ -85,7 +85,7 @@ function read_project_apps(raw::Dict{String,Any}, project::Project)
             Expected value for app `$name` to be a dictionary.
         """)
         submodule = get(info, "submodule", nothing)
-        appinfos[name] = AppInfo(name, nothing, nothing, submodule, other)
+        appinfos[name] = AppInfo(name, nothing, submodule, other)
     end
     return appinfos
 end
