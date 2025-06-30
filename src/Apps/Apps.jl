@@ -38,6 +38,18 @@ function overwrite_file_if_different(file, content)
     end
 end
 
+function check_apps_in_path(apps)
+    for app_name in keys(apps)
+        if Sys.which(app_name) === nothing
+            @warn """
+            App '$app_name' was installed but is not available in PATH.
+            Consider adding '$(julia_bin_path())' to your PATH environment variable.
+            """ maxlog=1
+            break  # Only show warning once per installation
+        end
+    end
+end
+
 function get_max_version_register(pkg::PackageSpec, regs)
     max_v = nothing
     tree_hash = nothing
@@ -139,6 +151,7 @@ function add(pkg::PackageSpec)
     precompile(pkg.name)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
+    check_apps_in_path(project.apps)
 end
 
 function develop(pkg::Vector{PackageSpec})
@@ -173,6 +186,7 @@ function develop(pkg::PackageSpec)
     _resolve(manifest, pkg.name)
     precompile(pkg.name)
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
+    check_apps_in_path(project.apps)
 end
 
 
