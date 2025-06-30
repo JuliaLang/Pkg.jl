@@ -257,7 +257,7 @@ end
         @test isempty(Registry.reachable_registries(; depots=[depot_off_path]))
 
         # After this, we have depots only in the depot that's off the path
-        Registry.add("General"; depot=depot_off_path)
+        Registry.add("General"; depots=depot_off_path)
         @test isempty(Registry.reachable_registries())
         @test length(Registry.reachable_registries(; depots=[depot_off_path])) == 1
 
