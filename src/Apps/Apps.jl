@@ -15,8 +15,45 @@ julia_bin_path() = joinpath(first(DEPOT_PATH), "bin")
 
 app_context() = Context(env=EnvCache(joinpath(app_env_folder(), "Project.toml")))
 
+function validate_app_name(name::AbstractString)
+    if isempty(name)
+        error("App name cannot be empty")
+    end
+    if length(name) > 64
+        error("App name is too long (max 64 characters)")
+    end
+    if !occursin(r"^[a-zA-Z][a-zA-Z0-9_-]*$", name)
+        error("App name must start with a letter and contain only letters, numbers, underscores, and hyphens")
+    end
+    if occursin(r"\.\.", name) || occursin(r"[/\\]", name)
+        error("App name cannot contain path traversal sequences or path separators")
+    end
+end
+
+function validate_package_name(name::AbstractString)
+    if isempty(name)
+        error("Package name cannot be empty")
+    end
+
+    if !occursin(r"^[a-zA-Z][a-zA-Z0-9_]*$", name)
+        error("Package name must start with a letter and contain only letters, numbers, and underscores")
+    end
+end
+
+function validate_submodule_name(name::Union{AbstractString,Nothing})
+    if name !== nothing
+        if isempty(name)
+            error("Submodule name cannot be empty")
+        end
+        if !occursin(r"^[a-zA-Z][a-zA-Z0-9_]*$", name)
+            error("Submodule name must start with a letter and contain only letters, numbers, and underscores")
+        end
+    end
+end
+
 
 function rm_shim(name; kwargs...)
+    validate_app_name(name)
     Base.rm(joinpath(julia_bin_path(), name * (Sys.iswindows() ? ".bat" : "")); kwargs...)
 end
 
@@ -388,13 +425,21 @@ function generate_shims_for_apps(pkgname, apps, env, julia)
 end
 
 function generate_shim(pkgname, app::AppInfo, env, julia)
+    validate_package_name(pkgname)
+    validate_app_name(app.name)
+    validate_submodule_name(app.submodule)
+
+    module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
+    julia_escaped = Base.shell_escape(julia)
+    module_spec_escaped = Base.shell_escape(module_spec)
+
     filename = app.name * (Sys.iswindows() ? ".bat" : "")
     julia_bin_filename = joinpath(julia_bin_path(), filename)
-    mkpath(dirname(filename))
+    mkpath(dirname(julia_bin_filename))
     content = if Sys.iswindows()
-        windows_shim(pkgname, app, julia, env)
+        windows_shim(julia_escaped, module_spec_escaped, env)
     else
-        bash_shim(pkgname, app, julia, env)
+        bash_shim(julia_escaped, module_spec_escaped, env)
     end
     overwrite_file_if_different(julia_bin_filename, content)
     if Sys.isunix()
@@ -403,9 +448,7 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function bash_shim(pkgname, app::AppInfo, julia::String, env)
-    module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
-    julia_escaped = Base.shell_escape(julia)
+function bash_shim(julia_escaped::String, module_spec_escaped::String, env)
     return """
         #!/usr/bin/env bash
 
@@ -415,14 +458,12 @@ function bash_shim(pkgname, app::AppInfo, julia::String, env)
         export JULIA_DEPOT_PATH=$(repr(join(DEPOT_PATH, ':')))
         exec $julia_escaped \\
             --startup-file=no \\
-            -m $(module_spec) \\
+            -m $module_spec_escaped \\
             "\$@"
         """
 end
 
-function windows_shim(pkgname, app::AppInfo, julia::String, env)
-    module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
-    julia_escaped = Base.shell_escape(julia)
+function windows_shim(julia_escaped::String, module_spec_escaped::String, env)
     return """
         @echo off
 
@@ -434,7 +475,7 @@ function windows_shim(pkgname, app::AppInfo, julia::String, env)
 
         $julia_escaped ^
             --startup-file=no ^
-            -m $(module_spec) ^
+            -m $module_spec_escaped ^
             %*
         """
 end
