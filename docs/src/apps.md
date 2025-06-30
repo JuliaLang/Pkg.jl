@@ -1,4 +1,4 @@
-# [**?.** Apps](@id Apps)
+# [**6.** Apps](@id Apps)
 
 !!! note
     The app support in Pkg is currently considered experimental and some functionality and API may change.
@@ -97,4 +97,4 @@ This will create two executables:
 
 ## Installing Julia apps
 
-The installation of Julia apps is similar to installing Julia libraries but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add` (`develop` is also available).
+The installation of Julia apps is similar to [installing Julia libraries](@ref Managing-Packages) but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add` (`develop` is also available).

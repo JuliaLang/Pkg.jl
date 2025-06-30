@@ -177,5 +177,5 @@ You can ask for more detailed help by specifying a command:
 ```
 
 This guide should help you get started with `Pkg`.
-`Pkg` has much more to offer in terms of powerful package management,
-read the full manual to learn more!
+`Pkg` has much more to offer in terms of powerful package management.
+For more advanced topics, see [Managing Packages](@ref Managing-Packages), [Working with Environments](@ref Working-with-Environments), and [Creating Packages](@ref creating-packages-tutorial).

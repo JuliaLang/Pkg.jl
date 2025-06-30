@@ -1,4 +1,4 @@
-# [**6.** Compatibility](@id Compatibility)
+# [**7.** Compatibility](@id Compatibility)
 
 Compatibility refers to the ability to restrict the versions of the dependencies that your project is compatible with.
 If the compatibility for a dependency is not given, the project is assumed to be compatible with all versions of that dependency.
@@ -164,7 +164,7 @@ PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```
 
 
-## Fixing conflicts
+## [Fixing conflicts](@id Fixing-conflicts)
 
 Version conflicts were introduced previously with an [example](@ref conflicts)
 of a conflict arising in a package `D` used by two other packages, `B` and `C`.

@@ -214,7 +214,7 @@ from that local repo are pulled when packages are updated.
 By only using `add` your environment always has a "reproducible state", in other words, as long as the repositories and registries used are still accessible
 it is possible to retrieve the exact state of all the dependencies in the environment. This has the advantage that you can send your environment (`Project.toml`
 and `Manifest.toml`) to someone else and they can [`Pkg.instantiate`](@ref) that environment in the same state as you had it locally.
-However, when you are developing a package, it is more convenient to load packages at their current state at some path. For this reason, the `dev` command exists.
+However, when you are [developing a package](@ref developing), it is more convenient to load packages at their current state at some path. For this reason, the `dev` command exists.
 
 Let's try to `dev` a registered package:
 
@@ -486,7 +486,7 @@ To fix such errors, you have a number of options:
 - remove either `A` or `B` from your environment. Perhaps `B` is left over from something you were previously working on, and you don't need it anymore. If you don't need `A` and `B` at the same time, this is the easiest way to fix the problem.
 - try reporting your conflict. In this case, we were able to deduce that `B` requires an outdated version of `D`. You could thus report an issue in the development repository of `B.jl` asking for an updated version.
 - try fixing the problem yourself.
-  This becomes easier once you understand `Project.toml` files and how they declare their compatibility requirements. We'll return to this example in [Fixing conflicts](@ref).
+  This becomes easier once you understand `Project.toml` files and how they declare their compatibility requirements. We'll return to this example in [Fixing conflicts](@ref Fixing-conflicts).
 
 ## Garbage collecting old, unused packages
 
