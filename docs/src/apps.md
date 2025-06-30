@@ -44,6 +44,15 @@ reverse = {}
 ```
 The empty table `{}` is to allow for giving metadata about the app but it is currently unused.
 
+After installing this app one could run:
+
+```
+$ reverse some input string
+ emos tupni gnirts
+```
+
+directly in the terminal.
+
 ## Multiple Apps per Package
 
 A single package can define multiple apps by using submodules. Each app can have its own entry point in a different submodule of the package.
@@ -85,15 +94,6 @@ cli-app = { submodule = "CLI" }
 This will create two executables:
 - `main-app` that runs `julia -m MyMultiApp`
 - `cli-app` that runs `julia -m MyMultiApp.CLI`
-
-After installing this app one could run:
-
-```
-$ reverse some input string
-emos tupni gnirts
-```
-
-directly in the terminal.
 
 ## Installing Julia apps
 
