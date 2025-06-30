@@ -66,6 +66,9 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"rm Example Random"
     pkg"add Example,Random"
     pkg"rm Example,Random"
+    # Test leading whitespace handling (issue #4239)
+    pkg"    add Example, Random"
+    pkg"rm Example Random"
     pkg"add Example#master"
     pkg"rm Example"
     pkg"add https://github.com/JuliaLang/Example.jl#master"
