@@ -223,7 +223,7 @@ function lex(cmd::String)::Vector{QString}
     return filter(x->!isempty(x.raw), qstrings)
 end
 
-function tokenize(cmd::String)
+function tokenize(cmd::AbstractString)
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ") # for multiline commands
     qstrings = lex(cmd)
     statements = foldl(qstrings; init=[QString[]]) do collection, next
