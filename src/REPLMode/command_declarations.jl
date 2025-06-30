@@ -16,7 +16,7 @@ PSA[:name => "test",
     test [--coverage] [pkg[=uuid]] ...
 
 Run the tests for package `pkg`, or for the current project (which thus needs to be
-a package) if `pkg` is ommitted.  This is done by running the file `test/runtests.jl`
+a package) if `pkg` is omitted.  This is done by running the file `test/runtests.jl`
 in the package directory. The option `--coverage` can be used to run the tests with
 coverage enabled. The `startup.jl` file is disabled during testing unless
 julia is started with `--startup-file=yes`.
@@ -592,7 +592,10 @@ pkg> registry status
     :completions => :complete_installed_apps,
     :description => "show status of apps",
     :help => md"""
-    show status of apps
+    app status [pkg[=uuid]] ...
+
+Show the status of installed apps. If packages are specified, only show
+apps for those packages.
     """
 ],
 PSA[:name => "add",
@@ -603,9 +606,15 @@ PSA[:name => "add",
     :completions => :complete_add_dev,
     :description => "add app",
     :help => md"""
-    app add pkg
+    app add pkg[=uuid] ...
 
-Adds the apps for packages `pkg...` or apps `app...`.
+Add apps provided by packages `pkg...`. This will make the apps available
+as executables in `~/.julia/bin` (which should be added to PATH).
+
+**Examples**
+```
+pkg> app add Example
+pkg> app add Example@0.5.0
 ```
 """,
 ],
@@ -616,12 +625,17 @@ PSA[:name => "remove",
     :arg_count => 0 => Inf,
     :arg_parser => parse_package,
     :completions => :complete_installed_apps,
-    :description => "remove packages from project or manifest",
+    :description => "remove apps",
     :help => md"""
-    app [rm|remove] pkg ...
-    app [rm|remove] app ...
+    app [rm|remove] pkg[=uuid] ...
 
-    Remove the apps for package `pkg`.
+Remove apps provided by packages `pkg...`. This will remove the executables
+from `~/.julia/bin`.
+
+**Examples**
+```
+pkg> app rm Example
+```
     """
 ],
 PSA[:name => "develop",
@@ -657,9 +671,14 @@ PSA[:name => "update",
     :arg_parser => parse_package,
     :description => "update app",
     :help => md"""
-    app update pkg
+    app [up|update] [pkg[=uuid]] ...
 
-Updates the apps for packages `pkg...` or apps `app...`.
+Update apps for packages `pkg...`. If no packages are specified, all apps will be updated.
+
+**Examples**
+```
+pkg> app update
+pkg> app update Example
 ```
 """,
 ], # app
