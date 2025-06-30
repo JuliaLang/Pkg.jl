@@ -73,12 +73,24 @@ end
 
 function check_apps_in_path(apps)
     for app_name in keys(apps)
-        if Sys.which(app_name) === nothing
+        which_result = Sys.which(app_name)
+        if which_result === nothing
             @warn """
             App '$app_name' was installed but is not available in PATH.
             Consider adding '$(julia_bin_path())' to your PATH environment variable.
             """ maxlog=1
             break  # Only show warning once per installation
+        else
+            # Check for collisions
+            expected_path = joinpath(julia_bin_path(), app_name * (Sys.iswindows() ? ".bat" : ""))
+            if which_result != expected_path
+                @warn """
+                App '$app_name' collision detected:
+                Expected: $expected_path
+                Found: $which_result
+                Another application with the same name exists in PATH.
+                """
+            end
         end
     end
 end
@@ -252,6 +264,7 @@ function update(pkgs_or_apps::Vector)
     end
 end
 
+# XXX: Is updating an app ever different from rm-ing and adding it from scratch?
 function update(pkg::Union{PackageSpec, Nothing}=nothing)
     ctx = app_context()
     manifest = ctx.env.manifest
