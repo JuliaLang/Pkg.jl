@@ -5,3 +5,5 @@ version = "0.1.0"
 [apps]
 juliarot13 = {}
 juliarot13cli = { submodule = "CLI" }
+pathedrot13 = { path = "pathed_app" }
+pathedrot13cli = { path = "pathed_app", submodule = "CLI" }

@@ -242,7 +242,8 @@ struct AppInfo
     name::String
     julia_command::Union{String, Nothing}
     submodule::Union{String, Nothing}
-    other::Dict{String,Any}
+    path::Union{String, Nothing}
+    other::Dict{String, Any}
 end
 Base.@kwdef mutable struct Project
     other::Dict{String,Any} = Dict{String,Any}()

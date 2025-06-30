@@ -22,9 +22,21 @@ isolate(loaded_depot=true) do
         @test contains(Sys.which("$cliexename"), first(DEPOT_PATH))
         @test read(`$cliexename test`, String) == "CLI: grfg\n"
 
+        # Test pathed apps
+        pathedexename = Sys.iswindows() ? "pathedrot13.bat" : "pathedrot13"
+        pathedcliexename = Sys.iswindows() ? "pathedrot13cli.bat" : "pathedrot13cli"
+        @test contains(Sys.which("$pathedexename"), first(DEPOT_PATH))
+        @test read(`$pathedexename test`, String) == "tset\n"  # reverse of "test"
+        
+        # Test pathed app with submodule
+        @test contains(Sys.which("$pathedcliexename"), first(DEPOT_PATH))
+        @test read(`$pathedcliexename test`, String) == "PathedCLI: tset\n"
+
         Pkg.Apps.rm("Rot13")
         @test Sys.which(exename) == nothing
         @test Sys.which(cliexename) == nothing
+        @test Sys.which(pathedexename) == nothing
+        @test Sys.which(pathedcliexename) == nothing
     end
 end
 
@@ -45,9 +57,21 @@ isolate(loaded_depot=true) do
             @test contains(Sys.which(cliexename), first(DEPOT_PATH))
             @test read(`$cliexename test`, String) == "CLI: grfg\n"
 
+            # Test pathed apps
+            pathedexename = Sys.iswindows() ? "pathedrot13.bat" : "pathedrot13"
+            pathedcliexename = Sys.iswindows() ? "pathedrot13cli.bat" : "pathedrot13cli"
+            @test contains(Sys.which(pathedexename), first(DEPOT_PATH))
+            @test read(`$pathedexename test`, String) == "tset\n"  # reverse of "test"
+            
+            # Test pathed app with submodule
+            @test contains(Sys.which(pathedcliexename), first(DEPOT_PATH))
+            @test read(`$pathedcliexename test`, String) == "PathedCLI: tset\n"
+
             Pkg.Apps.rm("Rot13")
             @test Sys.which(exename) == nothing
             @test Sys.which(cliexename) == nothing
+            @test Sys.which(pathedexename) == nothing
+            @test Sys.which(pathedcliexename) == nothing
         end
 
         # https://github.com/JuliaLang/Pkg.jl/issues/4258

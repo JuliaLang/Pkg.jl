@@ -87,9 +87,11 @@ function read_apps(apps::Dict)
     appinfos = Dict{String, AppInfo}()
     for (appname, app) in apps
         submodule = get(app, "submodule", nothing)
+        path = get(app, "path", nothing)
         appinfo = AppInfo(appname::String,
                 app["julia_command"]::String,
                 submodule,
+                path,
                 app)
         appinfos[appinfo.name] = appinfo
     end
