@@ -391,6 +391,7 @@ end
 
 function bash_shim(pkgname, app::AppInfo, julia::String, env)
     module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
+    julia_escaped = Base.shell_escape(julia)
     return """
         #!/usr/bin/env bash
 
@@ -398,7 +399,7 @@ function bash_shim(pkgname, app::AppInfo, julia::String, env)
 
         export JULIA_LOAD_PATH=$(repr(env))
         export JULIA_DEPOT_PATH=$(repr(join(DEPOT_PATH, ':')))
-        exec $julia \\
+        exec $julia_escaped \\
             --startup-file=no \\
             -m $(module_spec) \\
             "\$@"
@@ -407,6 +408,7 @@ end
 
 function windows_shim(pkgname, app::AppInfo, julia::String, env)
     module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
+    julia_escaped = Base.shell_escape(julia)
     return """
         @echo off
 
@@ -416,7 +418,7 @@ function windows_shim(pkgname, app::AppInfo, julia::String, env)
         set JULIA_LOAD_PATH=$env
         set JULIA_DEPOT_PATH=$(join(DEPOT_PATH, ';'))
 
-        $julia ^
+        $julia_escaped ^
             --startup-file=no ^
             -m $(module_spec) ^
             %*
