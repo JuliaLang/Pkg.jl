@@ -77,15 +77,33 @@ function _resolve(manifest::Manifest, pkgname=nothing)
             continue
         end
 
+        # TODO: Add support for existing manifest
+
         projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
 
-        # TODO: Add support for existing manifest
+        sourcepath = source_path(app_manifest_file(), pkg)
+        original_project_file = projectfile_path(sourcepath)
+
+        mkpath(dirname(projectfile))
+
+        if isfile(original_project_file)
+            cp(original_project_file, projectfile; force=true)
+            chmod(projectfile, 0o644)  # Make the copied project file writable
+
+            # Add entryfile stanza pointing to the package entry file
+            # TODO: What if project file has its own entryfile?
+            project_data = TOML.parsefile(projectfile)
+            project_data["entryfile"] = joinpath(sourcepath, "src", "$(pkg.name).jl")
+            open(projectfile, "w") do io
+                TOML.print(io, project_data)
+            end
+        else
+            error("could not find project file for package $pkg")
+        end
+
         # Create a manifest with the manifest entry
         Pkg.activate(joinpath(app_env_folder(), pkg.name)) do
             ctx = Context()
-            if isempty(ctx.env.project.deps)
-                ctx.env.project.deps[pkg.name] = uuid
-            end
             ctx.env.manifest.deps[uuid] = pkg
             Pkg.resolve(ctx)
         end
@@ -153,6 +171,7 @@ function develop(pkg::PackageSpec)
     handle_package_input!(pkg)
     ctx = app_context()
     handle_repo_develop!(ctx, pkg, #=shared =# true)
+    Base.rm(joinpath(app_env_folder(), pkg.name); force=true, recursive=true)
     sourcepath = abspath(source_path(ctx.env.manifest_file, pkg))
     project = get_project(sourcepath)
 
