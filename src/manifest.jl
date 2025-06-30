@@ -86,9 +86,11 @@ read_apps(::Any) = pkgerror("Expected `apps` field to be a Dict")
 function read_apps(apps::Dict)
     appinfos = Dict{String, AppInfo}()
     for (appname, app) in apps
+        submodule = get(app, "submodule", nothing)
         appinfo = AppInfo(appname::String,
                 app["julia_command"]::String,
                 VersionNumber(app["julia_version"]::String),
+                submodule,
                 app)
         appinfos[appinfo.name] = appinfo
     end
@@ -334,7 +336,11 @@ function destructure(manifest::Manifest)::Dict
             for (appname, appinfo) in entry.apps
                 julia_command = @something appinfo.julia_command joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
                 julia_version = @something appinfo.julia_version VERSION
-                new_entry["apps"][appname] = Dict{String,Any}("julia_command" => julia_command, "julia_version" => julia_version)
+                app_dict = Dict{String,Any}("julia_command" => julia_command, "julia_version" => julia_version)
+                if appinfo.submodule !== nothing
+                    app_dict["submodule"] = appinfo.submodule
+                end
+                new_entry["apps"][appname] = app_dict
             end
         end
         if manifest.manifest_format.major == 1

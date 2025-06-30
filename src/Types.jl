@@ -242,6 +242,7 @@ struct AppInfo
     name::String
     julia_command::Union{String, Nothing}
     julia_version::Union{VersionNumber, Nothing}
+    submodule::Union{String, Nothing}
     other::Dict{String,Any}
 end
 Base.@kwdef mutable struct Project
