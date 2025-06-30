@@ -397,9 +397,9 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
     julia_bin_filename = joinpath(julia_bin_path(), filename)
     mkpath(dirname(filename))
     content = if Sys.iswindows()
-        windows_shim(pkgname, julia, env)
+        windows_shim(pkgname, app, julia, env)
     else
-        bash_shim(pkgname, julia, env)
+        bash_shim(pkgname, app, julia, env)
     end
     overwrite_file_if_different(julia_bin_filename, content)
     if Sys.isunix()
@@ -408,7 +408,8 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function bash_shim(pkgname, julia::String, env)
+function bash_shim(pkgname, app::AppInfo, julia::String, env)
+    module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
     return """
         #!/usr/bin/env bash
 
@@ -418,12 +419,13 @@ function bash_shim(pkgname, julia::String, env)
         export JULIA_DEPOT_PATH=$(repr(join(DEPOT_PATH, ':')))
         exec $julia \\
             --startup-file=no \\
-            -m $(pkgname) \\
+            -m $(module_spec) \\
             "\$@"
         """
 end
 
-function windows_shim(pkgname, julia::String, env)
+function windows_shim(pkgname, app::AppInfo, julia::String, env)
+    module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
     return """
         @echo off
 
@@ -435,7 +437,7 @@ function windows_shim(pkgname, julia::String, env)
 
         $julia ^
             --startup-file=no ^
-            -m $(pkgname) ^
+            -m $(module_spec) ^
             %*
         """
 end
