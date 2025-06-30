@@ -11,7 +11,7 @@
 To generate the bare minimum files for a new package, use `pkg> generate`.
 
 ```julia-repl
-(@v1.8) pkg> generate HelloWorld
+(@v1.10) pkg> generate HelloWorld
 ```
 
 This creates a new project `HelloWorld` in a subdirectory by the same name, with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
