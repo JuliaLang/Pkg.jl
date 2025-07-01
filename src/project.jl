@@ -213,6 +213,7 @@ function Project(raw::Dict; file=nothing)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
     project.workspace = read_project_workspace(get(raw, "workspace", nothing), project)
     project.apps     = read_project_apps(get(raw, "apps", nothing), project)
+    project.readonly = get(raw, "readonly", false)::Bool
 
     # Handle deps in both [deps] and [weakdeps]
     project._deps_weak = Dict(intersect(project.deps, project.weakdeps))
@@ -270,14 +271,25 @@ function destructure(project::Project)::Dict
     entry!("extras",   project.extras)
     entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
     entry!("targets",  project.targets)
+    
+    # Only write readonly if it's true (not the default false)
+    if project.readonly
+        raw["readonly"] = true
+    else
+        delete!(raw, "readonly")
+    end
+    
     return raw
 end
 
-const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "workspace", "deps", "weakdeps", "sources", "extensions", "compat"]
+const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "readonly", "workspace", "deps", "weakdeps", "sources", "extensions", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
 function write_project(env::EnvCache)
+    if env.project.readonly
+        pkgerror("Cannot write to readonly project file at $(env.project_file)")
+    end
     write_project(env.project, env.project_file)
 end
 write_project(project::Project, project_file::AbstractString) =

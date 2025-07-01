@@ -266,6 +266,7 @@ Base.@kwdef mutable struct Project
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
     workspace::Dict{String, Any} = Dict{String, Any}()
+    readonly::Bool = false
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
@@ -1245,6 +1246,11 @@ function write_env(env::EnvCache; update_undo=true,
         end
     end
 
+    # Check if the environment is readonly before attempting to write
+    if env.project.readonly
+        pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
+    end
+    
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end

@@ -3292,4 +3292,31 @@ end
 
 @test allunique(unique([Pkg.PackageSpec(path="foo"), Pkg.PackageSpec(path="foo")]))
 
+# Test the readonly functionality
+@testset "Readonly Environment Tests" begin
+    mktempdir() do dir
+        project_file = joinpath(dir, "Project.toml")
+
+        # Test that normal environment works
+        cd(dir) do
+            # Activate the environment
+            Pkg.activate(".")
+
+            # This should work fine
+            Pkg.add("Test")  # Add Test package
+
+            # Now make it readonly
+            project_data = Dict("readonly" => true)
+            open(project_file, "w") do io
+                TOML.print(io, project_data)
+            end
+
+            # Now these should fail
+            @test_throws Pkg.Types.PkgError Pkg.add("Dates")
+            @test_throws Pkg.Types.PkgError Pkg.rm("Test")
+            @test_throws Pkg.Types.PkgError Pkg.update()
+        end
+    end
+end
+
 end #module

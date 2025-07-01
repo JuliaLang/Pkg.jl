@@ -102,6 +102,18 @@ Note that Pkg.jl deviates from the SemVer specification when it comes to version
 the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 
 
+### The `readonly` field
+
+The `readonly` field is a boolean that, when set to `true`, marks the environment as read-only. This prevents any modifications to the environment, including adding, removing, or updating packages. For example:
+
+```toml
+readonly = true
+```
+
+When an environment is marked as readonly, Pkg will throw an error if any operation that would modify the environment is attempted.
+If the `readonly` field is not present or set to `false` (the default), the environment can be modified normally.
+
+
 ### The `[deps]` section
 
 All dependencies of the package/project are listed in the `[deps]` section. Each dependency
