@@ -371,8 +371,13 @@ To get updates from the origin path or remote repository the package must first 
 
 # Examples
 ```julia
+# Pin a package to its current version
 Pkg.pin("Example")
+
+# Pin a package to a specific version
 Pkg.pin(name="Example", version="0.3.1")
+
+# Pin all packages in the project
 Pkg.pin(all_pkgs = true)
 ```
 """
@@ -391,7 +396,13 @@ To free all dependencies set `all_pkgs=true`.
 
 # Examples
 ```julia
+# Free a single package (remove pin or stop tracking path)
 Pkg.free("Package")
+
+# Free multiple packages
+Pkg.free(["PackageA", "PackageB"])
+
+# Free all packages in the project
 Pkg.free(all_pkgs = true)
 ```
 
@@ -702,7 +713,17 @@ Other choices for `protocol` are `"https"` or `"git"`.
 ```julia-repl
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
 
+# Use HTTPS for GitHub (default, good for most users)  
+julia> Pkg.setprotocol!(domain = "github.com", protocol = "https")
+
+# Reset to default (let package developer decide)
+julia> Pkg.setprotocol!(domain = "github.com", protocol = nothing)
+
+# Set protocol for custom domain without specifying protocol
 julia> Pkg.setprotocol!(domain = "gitlab.mycompany.com")
+
+# Use Git protocol for a custom domain
+julia> Pkg.setprotocol!(domain = "gitlab.mycompany.com", protocol = "git")
 ```
 """
 const setprotocol! = API.setprotocol!
@@ -777,8 +798,11 @@ If the manifest doesn't have the project hash recorded, or if there is no manife
 
 This function can be used in tests to verify that the manifest is synchronized with the project file:
 
-    using Pkg, Test, Package
-    @test Pkg.is_manifest_current(pkgdir(Package))
+```julia
+using Pkg, Test
+@test Pkg.is_manifest_current(pwd())  # Check current project
+@test Pkg.is_manifest_current("/path/to/project")  # Check specific project
+```
 """
 const is_manifest_current = API.is_manifest_current
 

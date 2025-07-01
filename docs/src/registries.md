@@ -1,4 +1,4 @@
-# **7.** Registries
+# **8.** Registries
 
 Registries contain information about packages, such as
 available releases and dependencies, and where they can be downloaded.
