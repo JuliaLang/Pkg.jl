@@ -138,7 +138,9 @@ function populate_known_registries_with_urls!(registries::Vector{RegistrySpec})
         elseif reg.name !== nothing
             if reg.name == known.name
                 named_regs = filter(r -> r.name == reg.name, known_registries)
-                if !all(r -> r.uuid == first(named_regs).uuid, named_regs)
+                if isempty(named_regs)
+                    Pkg.Types.pkgerror("registry with name `$(reg.name)` not found in known registries.")
+                elseif !all(r -> r.uuid == first(named_regs).uuid, named_regs)
                     Pkg.Types.pkgerror("multiple registries with name `$(reg.name)`, please specify with uuid.")
                 end
                 reg.uuid = known.uuid
@@ -340,7 +342,9 @@ function find_installed_registries(io::IO,
             elseif needle.name !== nothing
                 if needle.name == candidate.name
                     named_regs = filter(r -> r.name == needle.name, haystack)
-                    if !all(r -> r.uuid == first(named_regs).uuid, named_regs)
+                    if isempty(named_regs)
+                        Pkg.Types.pkgerror("registry with name `$(needle.name)` not found in reachable registries.")
+                    elseif !all(r -> r.uuid == first(named_regs).uuid, named_regs)
                         Pkg.Types.pkgerror("multiple registries with name `$(needle.name)`, please specify with uuid.")
                     end
                     push!(output, candidate)
