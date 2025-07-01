@@ -85,7 +85,8 @@ end
 
 Base.:(==)(r1::GitRepo, r2::GitRepo) =
     r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
-
+Base.hash(r::GitRepo, h::UInt) =
+    foldr(hash, [r.source, r.rev, r.subdir], init=h)
 
 mutable struct PackageSpec
     name::Union{Nothing,String}
@@ -119,10 +120,14 @@ PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uui
 PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)::PackageSpec
 PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)::PackageSpec
 
+# XXX: These definitions are a bit fishy. It seems to be used in an `==` call in status printing
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
     a.pinned == b.pinned
+end
+function Base.hash(a::PackageSpec, h::UInt)
+    return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned], init=h)
 end
 
 function err_rep(pkg::PackageSpec)
@@ -236,7 +241,7 @@ Base.hash(t::Compat, h::UInt) = hash(t.val, h)
 struct AppInfo
     name::String
     julia_command::Union{String, Nothing}
-    julia_version::Union{VersionNumber, Nothing}
+    submodule::Union{String, Nothing}
     other::Dict{String,Any}
 end
 Base.@kwdef mutable struct Project
@@ -261,6 +266,7 @@ Base.@kwdef mutable struct Project
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
     workspace::Dict{String, Any} = Dict{String, Any}()
+    readonly::Bool = false
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
@@ -799,7 +805,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         new = true
     end
     if !has_uuid(pkg)
-        resolve_projectfile!(pkg, dev_path)
+        resolve_projectfile!(pkg, joinpath(dev_path, pkg.repo.subdir === nothing ? "" : pkg.repo.subdir))
     end
     error_if_in_sysimage(pkg)
     pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
@@ -1230,8 +1236,21 @@ function write_env(env::EnvCache; update_undo=true,
                 @assert entry.repo.subdir == repo.subdir
             end
         end
+        if entry.path !== nothing
+            env.project.sources[pkg] = Dict("path" => entry.path)
+        elseif entry.repo != GitRepo()
+            d = Dict("url" => entry.repo.source)
+            entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
+            entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
+            env.project.sources[pkg] = d
+        end
     end
 
+    # Check if the environment is readonly before attempting to write
+    if env.project.readonly
+        pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
+    end
+    
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end

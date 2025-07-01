@@ -187,35 +187,57 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
     end
 end
 
-function update_source_if_set(project, pkg)
+function update_source_if_set(env, pkg)
+    project = env.project
     source = get(project.sources, pkg.name, nothing)
-    source === nothing && return
-    # This should probably not modify the dicts directly...
-    if pkg.repo.source !== nothing
-        source["url"] = pkg.repo.source
+    if source !== nothing
+        if pkg.repo == GitRepo()
+            delete!(project.sources, pkg.name)
+        else
+            # This should probably not modify the dicts directly...
+            if pkg.repo.source !== nothing
+                source["url"] = pkg.repo.source
+                delete!(source, "path")
+            end
+            if pkg.repo.rev !== nothing
+                source["rev"] = pkg.repo.rev
+                delete!(source, "path")
+            end
+            if pkg.repo.subdir !== nothing
+                source["subdir"] = pkg.repo.subdir
+            end
+            if pkg.path !== nothing
+                source["path"] = pkg.path
+                delete!(source, "url")
+                delete!(source, "rev")
+            end
+        end
+        if pkg.subdir !== nothing
+            source["subdir"] = pkg.subdir
+        end
+        path, repo = get_path_repo(project, pkg.name)
+        if path !== nothing
+            pkg.path = path
+        end
+        if repo.source !== nothing
+            pkg.repo.source = repo.source
+        end
+        if repo.rev !== nothing
+            pkg.repo.rev = repo.rev
+        end
+        if repo.subdir !== nothing
+            pkg.repo.subdir = repo.subdir
+        end
     end
-    if pkg.repo.rev !== nothing
-        source["rev"] = pkg.repo.rev
+
+    # Packages in manifest should have their paths set to the path in the manifest
+    for (path, wproj) in env.workspace
+        if wproj.uuid == pkg.uuid
+            pkg.path = Types.relative_project_path(env.manifest_file, dirname(path))
+            break
+        end
     end
-    if pkg.path !== nothing
-        source["path"] = pkg.path
-    end
-    if pkg.subdir !== nothing
-        source["subdir"] = pkg.subdir
-    end
-    path, repo = get_path_repo(project, pkg.name)
-    if path !== nothing
-        pkg.path = path
-    end
-    if repo.source !== nothing
-        pkg.repo.source = repo.source
-    end
-    if repo.rev !== nothing
-        pkg.repo.rev = repo.rev
-    end
-    if repo.subdir !== nothing
-        pkg.repo.subdir = repo.subdir
-    end
+    return
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
@@ -257,7 +279,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
-        update_source_if_set(ctx.env.project, pkg)
+        update_source_if_set(ctx.env, pkg)
     end
 
     Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
@@ -311,7 +333,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
         if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
-        update_source_if_set(ctx.env.project, pkg)
+        update_source_if_set(ctx.env, pkg)
     end
 
     Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target)
@@ -389,7 +411,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
-
+    for pkg in pkgs
+        update_source_if_set(ctx.env, pkg)
+    end
     Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
     return
 end
@@ -427,6 +451,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
                 pkgerror("pinning a package requires a single version, not a versionrange")
             end
         end
+        update_source_if_set(ctx.env, pkg)
     end
 
     project_deps_resolve!(ctx.env, pkgs)
@@ -1396,12 +1421,22 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
     io = something(io, ctx.io)
     pkg = pkg == "Julia" ? "julia" : pkg
     isnothing(compat_str) || (compat_str = string(strip(compat_str, '"')))
+    existing_compat = Operations.get_compat_str(ctx.env.project, pkg)
+    # Double check before deleting a compat entry issue/3567
+    if isinteractive() && (isnothing(compat_str) || isempty(compat_str))
+        if !isnothing(existing_compat)
+            ans = Base.prompt(stdin, ctx.io, "No compat string was given. Delete existing compat entry `$pkg = $(repr(existing_compat))`? [y]/n", default = "y")
+            if lowercase(ans) !== "y"
+                return
+            end
+        end
+    end
     if haskey(ctx.env.project.deps, pkg) || pkg == "julia"
         success = Operations.set_compat(ctx.env.project, pkg, isnothing(compat_str) ? nothing : isempty(compat_str) ? nothing : compat_str)
         success === false && pkgerror("invalid compat version specifier \"$(compat_str)\"")
         write_env(ctx.env)
         if isnothing(compat_str) || isempty(compat_str)
-            printpkgstyle(io, :Compat, "entry removed for $(pkg)")
+            printpkgstyle(io, :Compat, "entry removed:\n  $pkg = $(repr(existing_compat))")
         else
             printpkgstyle(io, :Compat, "entry set:\n  $(pkg) = $(repr(compat_str))")
         end

@@ -1,11 +1,12 @@
-module Artifacts
+module PkgArtifacts
 
 using Artifacts, Base.BinaryPlatforms, SHA
 using ..MiniProgressBars, ..PlatformEngines
 using Tar: can_symlink
+using FileWatching: FileWatching
 
 import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
-       ..stderr_f, ..printpkgstyle
+       ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries
 
 import Base: get, SHA1
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
@@ -13,11 +14,11 @@ import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, ar
                   query_override, with_artifacts_directory, load_overrides
 import ..Types: write_env_usage, parse_toml
 
-
-export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
+const Artifacts = PkgArtifacts # This is to preserve compatability for folks who depend on the internals of this module
+export Artifacts, create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
        find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
-       select_downloadable_artifacts
+       select_downloadable_artifacts, ArtifactDownloadInfo
 
 """
     create_artifact(f::Function)
@@ -49,62 +50,13 @@ function create_artifact(f::Function)
         # as something that was foolishly overridden.  This should be virtually impossible
         # unless the user has been very unwise, but let's be cautious.
         new_path = artifact_path(artifact_hash; honor_overrides=false)
-        _mv_temp_artifact_dir(temp_dir, new_path)
+        mv_temp_dir_retries(temp_dir, new_path)
 
         # Give the people what they want
         return artifact_hash
     finally
         # Always attempt to cleanup
         rm(temp_dir; recursive=true, force=true)
-    end
-end
-
-"""
-    _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
-Either rename the directory at `temp_dir` to `new_path` and set it to read-only
-or if `new_path` artifact already exists try to do nothing.
-"""
-function _mv_temp_artifact_dir(temp_dir::String, new_path::String)::Nothing
-    # Sometimes a rename can fail because the temp_dir is locked by
-    # anti-virus software scanning the new files.
-    # In this case we want to sleep and try again.
-    # I am using the list of error codes to retry from:
-    # https://github.com/isaacs/node-graceful-fs/blob/234379906b7d2f4c9cfeb412d2516f42b0fb4953/polyfills.js#L87
-    # Retry for up to about 60 seconds by retrying 20 times with exponential backoff.
-    retry = 0
-    max_num_retries = 20 # maybe this should be configurable?
-    sleep_amount = 0.01 # seconds
-    max_sleep_amount = 5.0 # seconds
-    while true
-        isdir(new_path) && return
-        # This next step is like
-        # `mv(temp_dir, new_path)`.
-        # However, `mv` defaults to `cp` if `rename` returns an error.
-        # `cp` is not atomic, so avoid the potential of calling it.
-        err = ccall(:jl_fs_rename, Int32, (Cstring, Cstring), temp_dir, new_path)
-        if err ≥ 0
-            # rename worked
-            new_path_mode = filemode(dirname(new_path))
-            if Sys.iswindows()
-                # If this is Windows, ensure the directory mode is executable,
-                # as `filemode()` is incomplete.  Some day, that may not be the
-                # case, there exists a test that will fail if this is changes.
-                new_path_mode |= 0o111
-            end
-            chmod(new_path, new_path_mode)
-            set_readonly(new_path)
-            return
-        else
-            # Ignore rename error if `new_path` exists.
-            isdir(new_path) && return
-            if retry < max_num_retries && err ∈ (Base.UV_EACCES, Base.UV_EPERM, Base.UV_EBUSY)
-                sleep(sleep_amount)
-                sleep_amount = min(sleep_amount*2.0, max_sleep_amount)
-                retry += 1
-            else
-                Base.uv_error("rename of $(repr(temp_dir)) to $(repr(new_path))", err)
-            end
-        end
     end
 end
 
@@ -187,6 +139,56 @@ function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Boo
 end
 
 """
+    ArtifactDownloadInfo
+
+Auxilliary information about an artifact to be used with `bind_artifact!()` to give
+a download location for that artifact, as well as the hash and size of that artifact.
+"""
+struct ArtifactDownloadInfo
+    # URL the artifact is available at as a gzip-compressed tarball
+    url::String
+
+    # SHA256 hash of the tarball
+    hash::Vector{UInt8}
+
+    # Size in bytes of the tarball.  `size <= 0` means unknown.
+    size::Int64
+
+    function ArtifactDownloadInfo(url, hash::AbstractVector, size = 0)
+        valid_hash_len = SHA.digestlen(SHA256_CTX)
+        hash_len = length(hash)
+        if hash_len != valid_hash_len
+            throw(ArgumentError("Invalid hash length '$(hash_len)', must be $(valid_hash_len)"))
+        end
+        return new(
+            String(url),
+            Vector{UInt8}(hash),
+            Int64(size),
+        )
+    end
+end
+
+# Convenience constructor for string hashes
+ArtifactDownloadInfo(url, hash::AbstractString, args...) = ArtifactDownloadInfo(url, hex2bytes(hash), args...)
+
+# Convenience constructor for legacy Tuple representation
+ArtifactDownloadInfo(args::Tuple) = ArtifactDownloadInfo(args...)
+
+ArtifactDownloadInfo(adi::ArtifactDownloadInfo) = adi
+
+# Make the dict that will be embedded in the TOML
+function make_dict(adi::ArtifactDownloadInfo)
+    ret = Dict{String,Any}(
+        "url" => adi.url,
+        "sha256" => bytes2hex(adi.hash),
+    )
+    if adi.size > 0
+        ret["size"] = adi.size
+    end
+    return ret
+end
+
+"""
     bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                    platform::Union{AbstractPlatform,Nothing} = nothing,
                    download_info::Union{Vector{Tuple},Nothing} = nothing,
@@ -207,7 +209,7 @@ downloaded until it is accessed via the `artifact"name"` syntax, or
 """
 function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         platform::Union{AbstractPlatform,Nothing} = nothing,
-                        download_info::Union{Vector{<:Tuple},Nothing} = nothing,
+                        download_info::Union{Vector{<:Tuple},Vector{<:ArtifactDownloadInfo},Nothing} = nothing,
                         lazy::Bool = false,
                         force::Bool = false)
     # First, check to see if this artifact is already bound:
@@ -236,15 +238,11 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
         meta["lazy"] = true
     end
 
-    # Integrate download info, if it is given.  We represent the download info as a
-    # vector of dicts, each with its own `url` and `sha256`, since different tarballs can
-    # expand to the same tree hash.
+    # Integrate download info, if it is given.  Note that there can be multiple
+    # download locations, each with its own tarball with its own hash, but which
+    # expands to the same content/treehash.
     if download_info !== nothing
-        meta["download"] = [
-            Dict("url" => dl[1],
-                 "sha256" => dl[2],
-            ) for dl in download_info
-        ]
+        meta["download"] = make_dict.(ArtifactDownloadInfo.(download_info))
     end
 
     if platform === nothing
@@ -330,87 +328,102 @@ function download_artifact(
     io::IO=stderr_f(),
     progress::Union{Function, Nothing} = nothing,
 )
-    if artifact_exists(tree_hash)
+    _artifact_paths = artifact_paths(tree_hash)
+    pidfile = _artifact_paths[1] * ".pid"
+    mkpath(dirname(pidfile))
+    t_wait_msg = Timer(2) do t
+        if progress === nothing
+            @info "downloading $tarball_url ($hex) in another process"
+        else
+            progress(0, 0; status="downloading in another process")
+        end
+    end
+    ret = FileWatching.mkpidlock(pidfile, stale_age = 20) do
+        close(t_wait_msg)
+        if artifact_exists(tree_hash)
+            return true
+        end
+
+        # Ensure the `artifacts` directory exists in our default depot
+        artifacts_dir = first(artifacts_dirs())
+        mkpath(artifacts_dir)
+        # expected artifact path
+        dst = joinpath(artifacts_dir, bytes2hex(tree_hash.bytes))
+
+        # We download by using a temporary directory.  We do this because the download may
+        # be corrupted or even malicious; we don't want to clobber someone else's artifact
+        # by trusting the tree hash that has been given to us; we will instead download it
+        # to a temporary directory, calculate the true tree hash, then move it to the proper
+        # location only after knowing what it is, and if something goes wrong in the process,
+        # everything should be cleaned up.
+
+        # Temporary directory where we'll do our creation business
+        temp_dir = mktempdir(artifacts_dir)
+
+        try
+            download_verify_unpack(tarball_url, tarball_hash, temp_dir;
+                                    ignore_existence=true, verbose, quiet_download, io, progress)
+            isnothing(progress) || progress(10000, 10000; status="verifying")
+            calc_hash = SHA1(GitTools.tree_hash(temp_dir))
+
+            # Did we get what we expected?  If not, freak out.
+            if calc_hash.bytes != tree_hash.bytes
+                msg = """
+                Tree Hash Mismatch!
+                Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
+                Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))
+                """
+                # Since tree hash calculation is rather fragile and file system dependent,
+                # we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the error and move
+                # the artifact to the expected location and return true
+                ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
+                if ignore_hash_env_set
+                    ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+                    ignore_hash === nothing && @error(
+                        "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
+                        ENV["JULIA_PKG_IGNORE_HASHES"],
+                    )
+                    ignore_hash = something(ignore_hash, false)
+                else
+                    # default: false except Windows users who can't symlink
+                    ignore_hash = Sys.iswindows() &&
+                        !mktempdir(can_symlink, artifacts_dir)
+                end
+                if ignore_hash
+                    desc = ignore_hash_env_set ?
+                        "Environment variable \$JULIA_PKG_IGNORE_HASHES is true" :
+                        "System is Windows and user cannot create symlinks"
+                    msg *= "\n$desc: \
+                        ignoring hash mismatch and moving \
+                        artifact to the expected location"
+                    @error(msg)
+                else
+                    error(msg)
+                end
+            end
+            # Move it to the location we expected
+            isnothing(progress) || progress(10000, 10000; status="moving to artifact store")
+            mv_temp_dir_retries(temp_dir, dst)
+        catch err
+            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
+            if isa(err, InterruptException)
+                rethrow(err)
+            end
+            # If something went wrong during download, return the error
+            return err
+        finally
+            # Always attempt to cleanup
+            try
+                rm(temp_dir; recursive=true, force=true)
+            catch e
+                e isa InterruptException && rethrow()
+                @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception=e)
+            end
+        end
         return true
     end
 
-    # Ensure the `artifacts` directory exists in our default depot
-    artifacts_dir = first(artifacts_dirs())
-    mkpath(artifacts_dir)
-    # expected artifact path
-    dst = joinpath(artifacts_dir, bytes2hex(tree_hash.bytes))
-
-    # We download by using a temporary directory.  We do this because the download may
-    # be corrupted or even malicious; we don't want to clobber someone else's artifact
-    # by trusting the tree hash that has been given to us; we will instead download it
-    # to a temporary directory, calculate the true tree hash, then move it to the proper
-    # location only after knowing what it is, and if something goes wrong in the process,
-    # everything should be cleaned up.
-
-    # Temporary directory where we'll do our creation business
-    temp_dir = mktempdir(artifacts_dir)
-
-    try
-        download_verify_unpack(tarball_url, tarball_hash, temp_dir;
-                                ignore_existence=true, verbose, quiet_download, io, progress)
-        isnothing(progress) || progress(10000, 10000; status="verifying")
-        calc_hash = SHA1(GitTools.tree_hash(temp_dir))
-
-        # Did we get what we expected?  If not, freak out.
-        if calc_hash.bytes != tree_hash.bytes
-            msg = """
-            Tree Hash Mismatch!
-              Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
-              Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))
-            """
-            # Since tree hash calculation is rather fragile and file system dependent,
-            # we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the error and move
-            # the artifact to the expected location and return true
-            ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
-            if ignore_hash_env_set
-                ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
-                ignore_hash === nothing && @error(
-                    "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
-                    ENV["JULIA_PKG_IGNORE_HASHES"],
-                )
-                ignore_hash = something(ignore_hash, false)
-            else
-                # default: false except Windows users who can't symlink
-                ignore_hash = Sys.iswindows() &&
-                    !mktempdir(can_symlink, artifacts_dir)
-            end
-            if ignore_hash
-                desc = ignore_hash_env_set ?
-                    "Environment variable \$JULIA_PKG_IGNORE_HASHES is true" :
-                    "System is Windows and user cannot create symlinks"
-                msg *= "\n$desc: \
-                    ignoring hash mismatch and moving \
-                    artifact to the expected location"
-                @error(msg)
-            else
-                error(msg)
-            end
-        end
-        # Move it to the location we expected
-        isnothing(progress) || progress(10000, 10000; status="moving to artifact store")
-        _mv_temp_artifact_dir(temp_dir, dst)
-    catch err
-        @debug "download_artifact error" tree_hash tarball_url tarball_hash err
-        if isa(err, InterruptException)
-            rethrow(err)
-        end
-        # If something went wrong during download, return the error
-        return err
-    finally
-        # Always attempt to cleanup
-        try
-            rm(temp_dir; recursive=true, force=true)
-        catch e
-            e isa InterruptException && rethrow()
-            @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception=e)
-        end
-    end
-    return true
+    return ret
 end
 
 """
@@ -651,4 +664,6 @@ ensure_all_artifacts_installed(artifacts_toml::AbstractString; kwargs...) =
 extract_all_hashes(artifacts_toml::AbstractString; kwargs...) =
     extract_all_hashes(string(artifacts_toml)::String; kwargs...)
 
-end # module Artifacts
+end # module PkgArtifacts
+
+const Artifacts = PkgArtifacts

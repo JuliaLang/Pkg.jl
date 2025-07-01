@@ -11,7 +11,7 @@ using UUIDs
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
        with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
        git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-       list_tarball_files, recursive_rm_cov_files
+       list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache
 
 const CACHE_DIRECTORY = realpath(mktempdir(; cleanup = true))
 
@@ -21,6 +21,17 @@ const REGISTRY_DEPOT = joinpath(CACHE_DIRECTORY, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
+
+function copy_this_pkg_cache(new_depot)
+    for p in ("Pkg", "REPLExt")
+        subdir = joinpath("compiled", "v$(VERSION.major).$(VERSION.minor)")
+        source = joinpath(Base.DEPOT_PATH[1], subdir, p)
+        isdir(source) || continue # doesn't exist if using shipped Pkg (e.g. Julia CI)
+        dest = joinpath(new_depot, subdir, p)
+        mkpath(dirname(dest))
+        cp(source, dest)
+    end
+end
 
 function check_init_reg()
     isfile(joinpath(REGISTRY_DIR, "Registry.toml")) && return
@@ -335,7 +346,7 @@ function show_output_if_command_errors(cmd::Cmd)
         println(read(out, String))
         Base.pipeline_error(proc)
     end
-    return nothing
+    return true
 end
 
 function recursive_rm_cov_files(rootdir::String)

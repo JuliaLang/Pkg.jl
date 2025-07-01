@@ -20,6 +20,7 @@ if realpath(dirname(dirname(Base.pathof(Pkg)))) != realpath(dirname(@__DIR__))
 end
 
 ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0
+ENV["JULIA_PKG_DISALLOW_PKG_PRECOMPILATION"]=1
 
 logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
 ### Send all Pkg output to a file called Pkg.log
@@ -75,10 +76,11 @@ Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.Console
         push!(test_files, "aqua.jl")
     end
 
-    @testset "Pkg" begin
+    verbose = true
+    @testset "Pkg" verbose=verbose begin
         Pkg.activate(; temp=true) # make sure we're in an active project and that it's clean
         try
-        @testset "$f" for f in test_files
+        @testset "$f" verbose=verbose for f in test_files
                 @info "==== Testing `test/$f`"
                 flush(Pkg.DEFAULT_IO[])
                 include(f)

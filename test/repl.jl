@@ -66,6 +66,9 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     pkg"rm Example Random"
     pkg"add Example,Random"
     pkg"rm Example,Random"
+    # Test leading whitespace handling (issue #4239)
+    pkg"    add Example, Random"
+    pkg"rm Example Random"
     pkg"add Example#master"
     pkg"rm Example"
     pkg"add https://github.com/JuliaLang/Example.jl#master"
@@ -735,14 +738,16 @@ end
 end
 
 @testset "JuliaLang/julia #55850" begin
-    tmp_55850 = mktempdir()
-    tmp_sym_link = joinpath(tmp_55850, "sym")
-    symlink(tmp_55850, tmp_sym_link; dir_target=true)
-    depot_path = join([tmp_sym_link, Base.DEPOT_PATH...], Sys.iswindows() ? ";" : ":")
-    # include the symlink in the depot path and include the regular default depot so we don't precompile this Pkg again
-    withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing) do
-        prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
-        @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+    mktempdir() do tmp
+        copy_this_pkg_cache(tmp)
+        tmp_sym_link = joinpath(tmp, "sym")
+        symlink(tmp, tmp_sym_link; dir_target=true)
+        depot_path = tmp_sym_link * (Sys.iswindows() ? ";" : ":")
+        # include the symlink in the depot path and include the regular default depot so we don't precompile this Pkg again
+        withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing) do
+            prompt = readchomp(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
+            @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+        end
     end
 end
 

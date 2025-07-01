@@ -2,6 +2,11 @@
 
 module Pkg
 
+# In Pkg tests we want to avoid Pkg being re-precompiled by subprocesses, so this is enabled in the test suite
+if Base.get_bool_env("JULIA_PKG_DISALLOW_PKG_PRECOMPILATION", false) == true
+    error("Precompililing Pkg is disallowed. JULIA_PKG_DISALLOW_PKG_PRECOMPILATION=$(ENV["JULIA_PKG_DISALLOW_PKG_PRECOMPILATION"])")
+end
+
 if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
     @eval Base.Experimental.@max_methods 1
 end
@@ -21,10 +26,14 @@ public activate, add, build, compat, develop, free, gc, generate, instantiate,
        pin, precompile, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
-function depots1()
-    d = depots()
-    isempty(d) && Pkg.Types.pkgerror("no depots found in DEPOT_PATH")
-    return d[1]
+function depots1(depot_list::Union{String, Vector{String}}=depots())
+    # Get the first depot from a list, with proper error handling
+    if depot_list isa String
+        return depot_list
+    else
+        isempty(depot_list) && Pkg.Types.pkgerror("no depots provided")
+        return depot_list[1]
+    end
 end
 
 function pkg_server()
@@ -68,7 +77,7 @@ include("Versions.jl")
 include("Registry/Registry.jl")
 include("Resolve/Resolve.jl")
 include("Types.jl")
-include("BinaryPlatforms_compat.jl")
+include("BinaryPlatformsCompat.jl")
 include("Artifacts.jl")
 include("Operations.jl")
 include("API.jl")
@@ -292,7 +301,7 @@ Otherwise a feasible set of packages is resolved and installed.
 During the tests, test-specific dependencies are active, which are
 given in the project file as e.g.
 
-```
+```toml
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
@@ -306,20 +315,20 @@ Inlining of functions during testing can be disabled (for better coverage accura
 by starting julia with `--inline=no`. The tests can be run as if different command line arguments were
 passed to julia by passing the arguments instead to the `julia_args` keyword argument, e.g.
 
-```
+```julia
 Pkg.test("foo"; julia_args=["--inline"])
 ```
 
 To pass some command line arguments to be used in the tests themselves, pass the arguments to the
 `test_args` keyword argument. These could be used to control the code being tested, or to control the
 tests in some way. For example, the tests could have optional additional tests:
-```
+```julia
 if "--extended" in ARGS
     @test some_function()
 end
 ```
 which could be enabled by testing with
-```
+```julia
 Pkg.test("foo"; test_args=["--extended"])
 ```
 """
@@ -371,8 +380,13 @@ To get updates from the origin path or remote repository the package must first 
 
 # Examples
 ```julia
+# Pin a package to its current version
 Pkg.pin("Example")
+
+# Pin a package to a specific version
 Pkg.pin(name="Example", version="0.3.1")
+
+# Pin all packages in the project
 Pkg.pin(all_pkgs = true)
 ```
 """
@@ -391,7 +405,13 @@ To free all dependencies set `all_pkgs=true`.
 
 # Examples
 ```julia
+# Free a single package (remove pin or stop tracking path)
 Pkg.free("Package")
+
+# Free multiple packages
+Pkg.free(["PackageA", "PackageB"])
+
+# Free all packages in the project
 Pkg.free(all_pkgs = true)
 ```
 
@@ -474,14 +494,14 @@ Request a `ProjectInfo` struct which contains information about the active proje
 
 # `ProjectInfo` fields
 
-| Field        | Description                                                                                 |
-|:-------------|:--------------------------------------------------------------------------------------------|
-| name         | The project's name                                                                          |
-| uuid         | The project's UUID                                                                          |
-| version      | The project's version                                                                       |
-| ispackage    | Whether the project is a package (has a name and uuid)                                      |
-| dependencies | The project's direct dependencies as a `Dict` which maps dependency name to dependency UUID |
-| path         | The location of the project file which defines the active project                           |
+| Field          | Description                                                                                 |
+|:---------------|:--------------------------------------------------------------------------------------------|
+| `name`         | The project's name                                                                          |
+| `uuid`         | The project's UUID                                                                          |
+| `version`      | The project's version                                                                       |
+| `ispackage`    | Whether the project is a package (has a name and uuid)                                      |
+| `dependencies` | The project's direct dependencies as a `Dict` which maps dependency name to dependency UUID |
+| `path`         | The location of the project file which defines the active project                           |
 """
 const project = API.project
 
@@ -605,7 +625,7 @@ If no argument is given to `activate`, then use the first project found in `LOAD
 `@v#.#` environment.
 
 # Examples
-```
+```julia
 Pkg.activate()
 Pkg.activate("local/path")
 Pkg.activate("MyDependency")
@@ -702,7 +722,17 @@ Other choices for `protocol` are `"https"` or `"git"`.
 ```julia-repl
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
 
+# Use HTTPS for GitHub (default, good for most users)  
+julia> Pkg.setprotocol!(domain = "github.com", protocol = "https")
+
+# Reset to default (let package developer decide)
+julia> Pkg.setprotocol!(domain = "github.com", protocol = nothing)
+
+# Set protocol for custom domain without specifying protocol
 julia> Pkg.setprotocol!(domain = "gitlab.mycompany.com")
+
+# Use Git protocol for a custom domain
+julia> Pkg.setprotocol!(domain = "gitlab.mycompany.com", protocol = "git")
 ```
 """
 const setprotocol! = API.setprotocol!
@@ -777,8 +807,11 @@ If the manifest doesn't have the project hash recorded, or if there is no manife
 
 This function can be used in tests to verify that the manifest is synchronized with the project file:
 
-    using Pkg, Test, Package
-    @test Pkg.is_manifest_current(pkgdir(Package))
+```julia
+using Pkg, Test
+@test Pkg.is_manifest_current(pwd())  # Check current project
+@test Pkg.is_manifest_current("/path/to/project")  # Check specific project
+```
 """
 const is_manifest_current = API.is_manifest_current
 

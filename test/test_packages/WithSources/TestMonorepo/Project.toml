@@ -3,11 +3,15 @@ uuid = "864d8eef-2526-4817-933e-34008eadd182"
 authors = ["KristofferC <kristoffer.carlsson@juliacomputing.com>"]
 version = "0.1.0"
 
+[deps]
+Unregistered = "dcb67f36-efa0-11e8-0cef-2fc465ed98ae"
+
 [extras]
 Example = "d359f271-ef68-451f-b4fc-6b43e571086c"
 
 [sources]
 Example = {url = "https://github.com/JuliaLang/Pkg.jl", subdir = "test/test_packages/Example"}
+Unregistered = {url = "https://github.com/00vareladavid/Unregistered.jl", rev = "1b7a462"}
 
 [targets]
 test = ["Example"]

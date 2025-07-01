@@ -21,7 +21,7 @@ temp_pkg_dir() do project_path
                     cp("Project.toml.bak", "Project.toml"; force=true)
                     cp("BadManifest.toml", "Manifest.toml"; force=true)
                     Pkg.resolve()
-                    @test Pkg.project().sources["Example"] == Dict("url" => "https://github.com/JuliaLang/Example.jl")
+                    @test Pkg.project().sources["Example"] == Dict("rev" => "master", "url" => "https://github.com/JuliaLang/Example.jl")
                     @test Pkg.project().sources["LocalPkg"] == Dict("path" => "LocalPkg")
                 end
             end
@@ -39,6 +39,12 @@ temp_pkg_dir() do project_path
             end
 
             cd(joinpath(dir, "WithSources", "TestProject")) do
+                with_current_env() do
+                    Pkg.test()
+                end
+            end
+
+            cd(joinpath(dir, "WithSources", "URLSourceInDevvedPackage")) do
                 with_current_env() do
                     Pkg.test()
                 end

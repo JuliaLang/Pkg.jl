@@ -1,4 +1,4 @@
-# [**10.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
+# [**11.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
 
 Two files that are central to Pkg are `Project.toml` and `Manifest.toml`. `Project.toml`
 and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (hence the
@@ -22,13 +22,38 @@ are described below.
 
 ### The `authors` field
 
-For a package, the optional `authors` field is a list of strings describing the
-package authors, in the form `NAME <EMAIL>`. For example:
+For a package, the optional `authors` field is a TOML array describing the package authors.
+Entries in the array can either be a string in the form `"NAME"` or `"NAME <EMAIL>"`, or a table keys following the [Citation File Format schema](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md) for either a
+[`person`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsperson) or an[`entity`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsentity).
+
+For example:
 ```toml
-authors = ["Some One <someone@email.com>",
-           "Foo Bar <foo@bar.com>"]
+authors = [
+  "Some One <someone@email.com>",
+  "Foo Bar <foo@bar.com>",
+  {given-names = "Baz", family-names = "Qux", email = "bazqux@example.com", orcid = "https://orcid.org/0000-0000-0000-0000", website = "https://github.com/bazqux"},
+]
 ```
 
+If all authors are specified by tables, it is possible to use [the TOML Array of Tables syntax](https://toml.io/en/v1.0.0#array-of-tables)
+```toml
+[[authors]]
+given-names = "Some"
+family-names = "One"
+email = "someone@email.com"
+
+[[authors]]
+given-names = "Foo"
+family-names = "Bar"
+email = "foo@bar.com"
+
+[[authors]]
+given-names = "Baz"
+family-names = "Qux"
+email = "bazqux@example.com"
+orcid = "https://orcid.org/0000-0000-0000-0000"
+website = "https://github.com/bazqux"
+```
 
 ### The `name` field
 
@@ -77,6 +102,18 @@ Note that Pkg.jl deviates from the SemVer specification when it comes to version
 the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 
 
+### The `readonly` field
+
+The `readonly` field is a boolean that, when set to `true`, marks the environment as read-only. This prevents any modifications to the environment, including adding, removing, or updating packages. For example:
+
+```toml
+readonly = true
+```
+
+When an environment is marked as readonly, Pkg will throw an error if any operation that would modify the environment is attempted.
+If the `readonly` field is not present or set to `false` (the default), the environment can be modified normally.
+
+
 ### The `[deps]` section
 
 All dependencies of the package/project are listed in the `[deps]` section. Each dependency
@@ -96,6 +133,15 @@ handled by Pkg operations such as `add`.
 Specifiying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
 These are especially useful for controlling unregistered dependencies without having to bundle a
 corresponding manifest file.
+
+Each entry in the `[sources]` section supports the following keys:
+
+- **`url`**: The URL of the Git repository. Cannot be used with `path`.
+- **`rev`**: The Git revision (branch name, tag, or commit hash) to use. Only valid with `url`.
+- **`subdir`**: A subdirectory within the repository containing the package.
+- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`.
+
+This might in practice look something like:
 
 ```toml
 [sources]
@@ -162,7 +208,7 @@ For the details, see [`Pkg.instantiate`](@ref).
 
 ### Different Manifests for Different Julia versions
 
-Starting from Julia v1.11, there is an option to name manifest files in the format `Manifest-v{major}.{minor}.toml`.
+Starting from Julia v1.10.8, there is an option to name manifest files in the format `Manifest-v{major}.{minor}.toml`.
 Julia will then preferentially use the version-specific manifest file if available.
 For example, if both `Manifest-v1.11.toml` and `Manifest.toml` exist, Julia 1.11 will prioritize using `Manifest-v1.11.toml`.
 However, Julia versions 1.10, 1.12, and all others will default to using `Manifest.toml`.

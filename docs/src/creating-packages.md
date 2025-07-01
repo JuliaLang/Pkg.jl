@@ -11,7 +11,7 @@
 To generate the bare minimum files for a new package, use `pkg> generate`.
 
 ```julia-repl
-(@v1.8) pkg> generate HelloWorld
+(@v1.10) pkg> generate HelloWorld
 ```
 
 This creates a new project `HelloWorld` in a subdirectory by the same name, with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
@@ -118,7 +118,7 @@ describe about public symbols. A public symbol is a symbol that is exported from
 package with the `export` keyword or marked as public with the `public` keyword. When you
 change the behavior of something that was previously public so that the new
 version no longer conforms to the specifications provided in the old version, you should
-adjust your package version number according to [Julia's variant on SemVer](#Version-specifier-format).
+adjust your package version number according to [Julia's variant on SemVer](@ref Version-specifier-format).
 If you would like to include a symbol in your public API without exporting it into the
 global namespace of folks who call `using YourPackage`, you should mark that symbol as
 public with `public that_symbol`. Symbols marked as public with the `public` keyword are
@@ -593,6 +593,7 @@ may fit your package better.
 4. Err on the side of clarity, even if clarity seems long-winded to you.
 
      * `RandomMatrices` is a less ambiguous name than `RndMat` or `RMT`, even though the latter are shorter.
+     *  Generally package names should be at least 5 characters long not including the `.jl` extension
 5. A less systematic name may suit a package that implements one of several possible approaches to
    its domain.
 
@@ -621,9 +622,12 @@ may fit your package better.
        there's no copyright or trademark infringement etc.)
 
 9. Packages should follow the [Stylistic Conventions](https://docs.julialang.org/en/v1/manual/variables/#Stylistic-Conventions).
-     * The package name begin with a capital letter and word separation is shown with upper camel case
+     * The package name should begin with a capital letter and word separation is shown with upper camel case
      * Packages that provide the functionality of a project from another language should use the Julia convention
-     * Packages that [provide pre-built libraries and executables](https://docs.binarybuilder.org/stable/jll/) can keep orignal name, but should get `_jll`as a suffix. For example `pandoc_jll` wraps pandoc. However, note that the generation and release of most JLL packages is handled by the [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil) system. 
+     * Packages that [provide pre-built libraries and executables](https://docs.binarybuilder.org/stable/jll/) can keep their original name, but should get `_jll`as a suffix. For example `pandoc_jll` wraps pandoc. However, note that the generation and release of most JLL packages is handled by the [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil) system.
+  
+10. For the complete list of rules for automatic merging into the General registry, see [these guidelines](https://juliaregistries.github.io/RegistryCI.jl/stable/guidelines/).
+
 
 ## Registering packages
 
@@ -649,3 +653,10 @@ To support the various use cases in the Julia package ecosystem, the Pkg develop
 * [`Preferences.jl`](https://github.com/JuliaPackaging/Preferences.jl) allows packages to read and write preferences to the top-level `Project.toml`.
   These preferences can be read at runtime or compile-time, to enable or disable different aspects of package behavior.
   Packages previously would write out files to their own package directories to record options set by the user or environment, but this is highly discouraged now that `Preferences` is available.
+
+## See Also
+
+- [Managing Packages](@ref Managing-Packages) - Learn how to add, update, and manage package dependencies
+- [Working with Environments](@ref Working-with-Environments) - Understand environments and reproducible development
+- [Compatibility](@ref Compatibility) - Specify version constraints for dependencies
+- [API Reference](@ref) - Functional API for non-interactive package management

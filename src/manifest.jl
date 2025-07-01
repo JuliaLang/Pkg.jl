@@ -86,13 +86,24 @@ read_apps(::Any) = pkgerror("Expected `apps` field to be a Dict")
 function read_apps(apps::Dict)
     appinfos = Dict{String, AppInfo}()
     for (appname, app) in apps
+        submodule = get(app, "submodule", nothing)
         appinfo = AppInfo(appname::String,
                 app["julia_command"]::String,
-                VersionNumber(app["julia_version"]::String),
+                submodule,
                 app)
         appinfos[appinfo.name] = appinfo
     end
     return appinfos
+end
+
+read_exts(::Nothing) = Dict{String, Union{String, Vector{String}}}()
+function read_exts(raw::Dict{String, Any})
+    exts = Dict{String, Union{String, Vector{String}}}()
+    for (key, val) in raw
+        val isa Union{String, Vector{String}} || pkgerror("Expected `ext` entry to be a `Union{String, Vector{String}}`.")
+        exts[key] = val
+    end
+    return exts
 end
 
 struct Stage1
@@ -197,7 +208,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     entry.apps = read_apps(get(info::Dict, "apps", nothing)::Union{Nothing, Dict{String, Any}})
-                    entry.exts = get(Dict{String, String}, info, "extensions")
+                    entry.exts = read_exts(get(info, "extensions", nothing))
                 catch
                     # TODO: Should probably not unconditionally log something
                     # @debug "Could not parse manifest entry for `$name`" f_or_io
@@ -288,6 +299,9 @@ function destructure(manifest::Manifest)::Dict
     end
 
     for (uuid, entry) in manifest
+        # https://github.com/JuliaLang/Pkg.jl/issues/4086
+        @assert !(entry.tree_hash !== nothing && entry.path !== nothing)
+
         new_entry = something(entry.other, Dict{String,Any}())
         new_entry["uuid"] = string(uuid)
         entry!(new_entry, "version", entry.version)
@@ -330,8 +344,11 @@ function destructure(manifest::Manifest)::Dict
             new_entry["apps"] = Dict{String,Any}()
             for (appname, appinfo) in entry.apps
                 julia_command = @something appinfo.julia_command joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
-                julia_version = @something appinfo.julia_version VERSION
-                new_entry["apps"][appname] = Dict{String,Any}("julia_command" => julia_command, "julia_version" => julia_version)
+                app_dict = Dict{String,Any}("julia_command" => julia_command)
+                if appinfo.submodule !== nothing
+                    app_dict["submodule"] = appinfo.submodule
+                end
+                new_entry["apps"][appname] = app_dict
             end
         end
         if manifest.manifest_format.major == 1
@@ -344,6 +361,9 @@ function destructure(manifest::Manifest)::Dict
 end
 
 function write_manifest(env::EnvCache)
+    if env.project.readonly
+        pkgerror("Cannot write to readonly manifest file at $(env.manifest_file)")
+    end
     mkpath(dirname(env.manifest_file))
     write_manifest(env.manifest, env.manifest_file)
 end

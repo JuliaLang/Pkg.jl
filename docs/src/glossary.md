@@ -1,4 +1,4 @@
-# [**9.** Glossary](@id Glossary)
+# [**10.** Glossary](@id Glossary)
 
 **Project:** a source tree with a standard layout, including a `src` directory
 for the main body of Julia code, a `test` directory for testing the project,
@@ -46,7 +46,7 @@ since that could conflict with the configuration of the main application.
 
 **Environment:** the combination of the top-level name map provided by a project
 file combined with the dependency graph and map from packages to their entry points
-provided by a manifest file. For more detail see the manual section on code loading.
+provided by a manifest file. For more detail see the [manual section on code loading](https://docs.julialang.org/en/v1/manual/code-loading/).
 
 - **Explicit environment:** an environment in the form of an explicit project
   file and an optional corresponding manifest file together in a directory. If the

@@ -1,0 +1,10 @@
+name = "URLSourceInDevvedPackage"
+uuid = "78d3b172-12ec-4a7f-9187-8bf78594552a"
+version = "0.1.0"
+authors = ["Kristoffer <kcarlsson89@gmail.com>"]
+
+[deps]
+TestMonorepo = "864d8eef-2526-4817-933e-34008eadd182"
+
+[sources]
+TestMonorepo = {path = "../TestMonorepo"}
